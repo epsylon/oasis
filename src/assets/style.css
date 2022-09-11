@@ -1,0 +1,746 @@
+:root {
+  /*
+   * according to https://www.color-blindness.com/color-name-hue/
+   *
+   * amber
+   * chartreuse
+   * free-speech-green (lime)
+   * aqua
+   * blue
+   * electric-indigo
+   * hot-magenta
+   */
+  --red: var(--base08);
+  --orange: var(--base09);
+  --yellow: var(--base0A);
+  --green: var(--base0B);
+  --cyan: var(--base0C);
+  --blue: var(--base0D);
+  --violet: var(--base0E);
+  --magenta: var(--base0F);
+
+  /* convenience */
+  --bg: var(--base00);
+  --bg-status: var(--base01);
+  --bg-selection: var(--base02);
+  --fg-alt: var(--base03);
+  --fg-status: var(--base04);
+  --fg: var(--base05);
+  --fg-light: var(--base06);
+  --bg-light: var(--base07);
+
+  /* size (2^n) */
+  --size-3: 8rem;
+  --size-2: 4rem;
+  --size-1: 2rem;
+  --size-0: 1rem;
+  --size--1: 0.5rem;
+  --size--2: 0.25rem;
+  --size--3: 0.125rem;
+  --size--4: 0.0625rem;
+
+  /* size */
+  --common-radius: var(--size--2);
+  --measure: 36rem;
+  --line: 1.5rem;
+  --code-size: 85%;
+}
+
+* {
+  scrollbar-color: var(--fg-status) var(--bg);
+}
+
+::selection {
+  background-color: var(--bg-selection);
+  color: var(--fg-light);
+}
+
+html {
+  display: flex;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
+  justify-content: center;
+  font-size: 12pt;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+  overflow-y: scroll;
+}
+
+main {
+  margin: 0;
+  margin-bottom: var(--size-0);
+}
+
+/* https://www.desmos.com/calculator/3elcf5cwhn */
+h1 {
+  font-size: 133%;
+} /*     4 / 3 */
+h2 {
+  font-size: 115%;
+} /*     8 / 7 */
+h3 {
+  font-size: 105%;
+} /*   16 / 15 */
+h4 {
+  font-size: 103%;
+} /*   32 / 31 */
+h5 {
+  font-size: 101%;
+} /*   64 / 63 */
+h6 {
+  font-size: 100%;
+} /* 128 / 127 */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: var(--bg-light);
+  margin: var(--size-0) 0;
+}
+
+ul,
+ol {
+  padding-left: var(--size-0);
+  margin-left: var(--size--3);
+}
+
+a {
+  color: var(--fg-light);
+}
+
+button,
+.file-button {
+  cursor: pointer;
+  background: var(--fg);
+  color: var(--bg);
+  border: var(--size--4) solid var(--fg);
+  padding: var(--size--1) var(--size-0);
+  border-radius: var(--common-radius);
+  font-size: 8pt;
+}
+
+.file-button {
+  float: right;
+  margin: 0;
+  background: transparent;
+  color: var(--fg);
+}
+
+#blob {
+  visibility: hidden;
+  height: 0;
+  padding: 0;
+  margin: 0;
+}
+
+section header a {
+  display: flex;
+  color: var(--fg-status);
+  text-decoration: none;
+  margin-right: var(--size--2);
+  margin-left: var(--size--2);
+  font-weight: bold;
+}
+
+/* For use with elements specific for
+ * rendering in a text browser and intended
+ * to be hidden in a graphical browser. */
+.text-browser {
+  display: none;
+}
+
+section > footer > div > a,
+section > footer > div > form > button {
+  color: var(--fg-status);
+  font-weight: bold;
+}
+
+section > footer > div > form > button {
+  display: inline-block;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+select,
+input {
+  background: var(--bg);
+  color: var(--fg);
+  border: var(--size--4) solid var(--bg-selection);
+  padding: var(--size--1);
+  margin: var(--size-0) 0;
+  -moz-appearance: none;
+  appearance: none;
+  border-radius: var(--common-radius);
+  display: block;
+}
+
+.contentWarning {
+  background-color: var(--bg);
+  box-sizing: border-box;
+  display: block;
+  font-size: var(--size-0);
+  padding: var(--size-0);
+  width: 100%;
+  margin: var(--size-0) 0;
+  border: var(--size--4) solid var(--bg-selection);
+  border-radius: var(--common-radius);
+  color: var(--fg);
+}
+
+textarea {
+  background-color: var(--bg);
+  box-sizing: border-box;
+  display: block;
+  font-size: var(--size-0);
+  padding: var(--size-0);
+  resize: vertical;
+  width: 100%;
+  margin: var(--size-0) 0;
+  height: 12rem;
+  border: var(--size--4) solid var(--bg-selection);
+  border-radius: var(--common-radius);
+  color: var(--fg);
+}
+
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--blue);
+}
+
+/* Prevent button styles being applied to heart button */
+button:focus,
+button:hover {
+  background-color: var(--fg-light);
+}
+
+section > footer > div > form > button:hover,
+section > footer > div > form > button:focus {
+  background-color: transparent;
+}
+
+pre {
+  overflow-x: auto;
+  background-color: var(--bg);
+  padding: var(--size--1);
+  font-size: 92%;
+  border-radius: var(--common-radius);
+  border: var(--size--4) solid var(--bg-status);
+}
+
+section code {
+  max-width: 100%;
+  overflow-wrap: break-word;
+  padding: 0.125em 0.25em;
+  margin: 0;
+  font-size: var(--code-size);
+  background-color: var(--bg);
+  border-radius: var(--common-radius);
+  border: var(--size--4) solid var(--bg-status);
+}
+
+section pre code {
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  font-size: 100%;
+  background-color: initial;
+  border: initial;
+  border-radius: initial;
+}
+
+section blockquote {
+  margin-left: 0;
+  border-left: var(--size--1) solid var(--bg-status);
+  padding-left: var(--size-0);
+}
+
+section img,
+section video {
+  max-width: 100%;
+  max-height: 100vh;
+  border-radius: var(--common-radius);
+  box-sizing: border-box;
+}
+
+section > h1 {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.profile > img,
+.profile > h1 {
+  display: inline-block;
+}
+
+section > header.profile {
+  height: auto;
+  justify-content: left;
+}
+
+.profile > img {
+  width: 4rem;
+  height: 4rem;
+  margin-right: var(--size-0);
+  border-radius: var(--common-radius);
+}
+
+.private {
+  border-left: var(--size--1) solid var(--violet);
+  border-color: var(--violet);
+}
+
+section.thread-target {
+  border: var(--size--4) solid var(--blue);
+  box-shadow: 0 0 var(--size--2) var(--blue);
+}
+
+section.thread-target.private {
+  border: var(--size--4) solid var(--violet);
+  border-left: var(--size--1) solid var(--violet);
+  border-color: var(--violet);
+  box-shadow: 0 0 var(--size--2) var(--violet);
+}
+
+section audio {
+  width: 100%;
+}
+
+@media screen {
+  html {
+    min-height: 100%;
+    color: var(--fg);
+    background-color: var(--bg-status);
+  }
+
+  body {
+    width: 100%;
+    max-width: var(--measure);
+    margin: 0;
+  }
+}
+
+nav {
+  margin: var(--size-0) 0;
+  margin-left: 20px;
+}
+
+nav > ul > li > a {
+  margin-left: 10px;
+  margin-right: 0px;
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.author-action > a {
+  text-decoration: underline;
+}
+
+section header a:hover {
+  text-decoration: underline;
+}
+
+nav > ul > li > a:hover {
+  text-decoration: underline;
+}
+
+nav > ul > li > a.current {
+  font-weight: bold;
+}
+
+section {
+  padding: var(--size-0);
+  border-radius: var(--common-radius);
+  margin: var(--size-0) 0;
+  word-wrap: break-word;
+  background: var(--bg);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.indent section,
+.thread-container section {
+  margin: unset;
+  border-radius: unset;
+  border-bottom: var(--fg-alt) solid 1px;
+}
+
+.indent details[open] {
+  border-bottom: var(--fg-alt) solid 1px;
+}
+
+.indent section:last-of-type,
+.thread-container section:last-of-type {
+  border-bottom: unset;
+}
+
+.mentions-container {
+  display: grid;
+  grid-template-columns: 4rem auto;
+  grid-column-gap: 1rem;
+  margin-bottom: var(--size-0);
+}
+
+section > header {
+  background: var(--bg);
+  color: var(--fg-status);
+  margin-bottom: calc(-1 * var(--size--1));
+  margin-top: calc(-1 * var(--size--1));
+  padding-bottom: var(--size--1);
+  padding-top: var(--size--1);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+section > header > div {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+section header a > .avatar {
+  width: var(--line);
+  height: var(--line);
+  border-radius: var(--common-radius);
+  margin-right: var(--size--2);
+}
+
+section header span {
+  display: inline-flex;
+}
+
+/*
+ * HACK: centered-footer
+ *
+ * When someone likes a message we want to submit the form and then redirect
+ * them back to the original page. Unfortunately when you link to anchor tags
+ * that scrolls the browser so that they're at the *top* of the page, not the
+ * center of the page. In our view we have an empty div with an appropriate
+ * anchor tag, so here we use CSS to center it on the screen.
+ *
+ * The code below creates padding-top that takes up 50% of the height of the
+ * viewport and then gets rid of it with negative margin. This has no effect
+ * on the display of the item, but means that when we link to the anchor tag
+ * it centers this empty element vertically on the screen.
+ *
+ * We also use `pointer-events: none` to ensure that this invisible div doesn't
+ * capture cursor events (clicks, drags, etc) on surrounding elements, because
+ * otherwise we could have a problem where someone clicks above the invisible
+ * div but the browser picogs they're clicking the gigantic amount of padding.
+ */
+section > .centered-footer {
+  padding-top: 50vh;
+  margin-top: -50vh;
+  pointer-events: none;
+}
+
+section > footer {
+  color: var(--fg-status);
+}
+
+section > footer br {
+  display: none;
+}
+
+section > footer > div {
+  display: flex;
+  justify-content: space-between;
+}
+
+section > footer > div > * {
+  text-decoration: none;
+}
+
+section > footer > div > form > button:first-of-type {
+  font-size: 100%;
+}
+
+section > footer > div > form > button.liked {
+  color: var(--red);
+}
+
+label {
+  display: block;
+  margin: 0;
+}
+
+nav > ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin: 0;
+  padding: 0;
+}
+
+nav > ul > li {
+  list-style: none;
+  margin-right: var(--size--1);
+}
+
+.profile {
+  display: flex;
+  margin-bottom: var(--size-0);
+}
+
+progress {
+  display: block;
+  width: 100%;
+}
+
+progress::-moz-progress-bar,
+progress::-webkit-progress-value,
+progress {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+summary {
+  padding: var(--size--1);
+  margin: var(--size-0) 0;
+  cursor: pointer;
+  background: var(--bg);
+  border-radius: var(--common-radius);
+  list-style-type: "+ ";
+  border: var(--size--4) dashed var(--fg-status);
+}
+
+details[open] > summary {
+  list-style-type: "− ";
+}
+
+.indent > details > summary {
+  border: none;
+}
+
+.md-mention {
+  -moz-user-select: all;
+  -ms-user-select: all;
+  -webkit-user-select: all;
+  user-select: all;
+  background: none;
+  overflow: hidden;
+}
+
+table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+td,
+th {
+  padding: var(--size--1);
+  outline: var(--size--4) solid var(--bg-status);
+}
+
+th {
+  text-align: left;
+  background-color: var(--bg-status);
+}
+
+input[type="search"] {
+  width: 100%;
+  margin: var(--size-0) 0;
+}
+
+.image-search-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-gap: var(--size-0);
+}
+
+.image-search-grid .image-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--size--1) 0;
+  background: var(--bg);
+  border-radius: var(--common-radius);
+}
+
+.image-search-grid .image-result .result-text {
+  hyphens: auto;
+  text-align: center;
+}
+
+hr {
+  border: var(--size--4) solid var(--fg-alt);
+}
+
+.form-button-group {
+  display: flex;
+  justify-content: space-between;
+  margin: var(--size-0) 0;
+}
+
+/* sidebar only appears on big screens */
+@media (min-width: calc(45rem)) {
+  body > nav > ul {
+    justify-content: right;
+    flex-direction: column;
+    margin-right: var(--size-1);
+    position: sticky;
+    top: var(--size-0);
+  }
+  body > nav > ul > li {
+    margin-bottom: var(--size-0);
+  }
+  main {
+    width: 100%;
+    max-width: var(--measure);
+  }
+  body {
+    display: flex;
+    justify-content: center;
+    max-width: none;
+  }
+}
+
+/* Use the browser's default font rendering instead of using our fancy
+ * font-family above. This resolves a problem where some emoji were being
+ * rendered in the system-ui font, which is rarely what we want.
+ */
+.emoji {
+  font-family: initial;
+}
+
+/* This indent is used on the summaries page to create an indent of 1. It might
+ * be wise to nest these recursively on the thread view, which would make it so
+ * that we don't need any inline CSS anymore.
+ */
+.indent {
+  padding-left: 1rem;
+  border-left: var(--size--2) solid var(--bg-selection);
+}
+
+.mentions-image {
+  grid-row: 1 / span 2;
+}
+.mentions-image > img {
+  border: var(--fg) solid 1px;
+}
+.mentions-container .emoji {
+  font-size: 1.5rem;
+}
+
+.mentions-name {
+  font-size: 1.25rem;
+  text-decoration: unset;
+}
+
+.mentions-name:hover {
+  text-decoration: underline;
+}
+
+.emo-rel {
+  display: inline-grid;
+  align-items: center;
+  grid-template-columns: 2rem auto;
+  grid-column-gap: 0.25rem;
+}
+
+.mentions-listing {
+  display: inline;
+  background-color: var(--bg);
+  padding: var(--size--1);
+  border-radius: var(--common-radius);
+  border: var(--size--4) solid var(--bg-status);
+  user-select: all;
+  font-size: var(--size--1);
+  overflow-x: auto;
+  width: 24rem;
+}
+
+section.post-preview {
+  padding-top: 0;
+  background: var(--bg-selection);
+  border: var(--fg-alt) solid 1px;
+}
+
+section.post-preview > section > footer {
+  display: none;
+}
+
+section.post.blocked {
+  font-style: italic;
+}
+
+section > footer > div > a:hover,
+section > footer > div > form > button:hover {
+  text-decoration: underline;
+}
+
+.author-action {
+  flex-grow: 1;
+}
+
+section header .author > a:first-child {
+  margin-left: 0;
+  color: var(--fg-light);
+  font-weight: bold;
+}
+
+.theme-preview {
+  width: calc(100% / 15);
+  height: var(--size-0);
+  margin-top: var(--size-0);
+  display: inline-block;
+}
+
+.theme-preview-00 {
+  background-color: var(--base00);
+}
+.theme-preview-01 {
+  background-color: var(--base01);
+}
+.theme-preview-02 {
+  background-color: var(--base02);
+}
+.theme-preview-03 {
+  background-color: var(--base03);
+}
+.theme-preview-04 {
+  background-color: var(--base04);
+}
+.theme-preview-05 {
+  background-color: var(--base05);
+}
+.theme-preview-06 {
+  background-color: var(--base06);
+}
+.theme-preview-07 {
+  background-color: var(--base07);
+}
+.theme-preview-08 {
+  background-color: var(--base08);
+}
+.theme-preview-09 {
+  background-color: var(--base09);
+}
+.theme-preview-0A {
+  background-color: var(--base0A);
+}
+.theme-preview-0B {
+  background-color: var(--base0B);
+}
+.theme-preview-0C {
+  background-color: var(--base0C);
+}
+.theme-preview-0D {
+  background-color: var(--base0D);
+}
+.theme-preview-0E {
+  background-color: var(--base0E);
+}
+.theme-preview-0F {
+  background-color: var(--base0F);
+}
