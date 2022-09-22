@@ -387,7 +387,7 @@ const {
   topicsView,
   summaryView,
   threadsView,
-  clonedView,
+  spreadedView,
 } = require("./views");
 
 let sharp;
@@ -486,7 +486,6 @@ router
   })
   .get("/author/:feed", async (ctx) => {
     const { feed } = ctx.params;
-
     const gt = Number(ctx.request.query["gt"] || -1);
     const lt = Number(ctx.request.query["lt"] || -1);
 
@@ -1048,8 +1047,13 @@ router
     ctx.redirect("/peers");
   })
   .post("/settings/invite/accept", koaBody(), async (ctx) => {
-    const invite = String(ctx.request.body.invite);
-    await meta.acceptInvite(invite);
+    try {
+      const invite = String(ctx.request.body.invite);
+      await meta.acceptInvite(invite);
+      } catch (e) {
+          // Just in case it's an invalid invite code. :(
+          debug(e);
+      }
     ctx.redirect("/invites");
   })
   .post("/settings/rebuild", async (ctx) => {

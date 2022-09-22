@@ -38,6 +38,7 @@ const i18n = {
       " from inhabitants you support and your extended network, sorted by recency. Select the timestamp of any post to see the rest of the thread.",
     ],
     profile: "Avatar",
+    inhabitants: "Inhabitants", 
     manualMode: "Manual Mode",
     mentions: "Mentions",
     mentionsDescription: [
@@ -81,7 +82,7 @@ const i18n = {
     relationshipBlockingPost: "Blocked post",
     // spreads view
     viewLikes: "View spreads",
-    clonedDescription: "List of posts spread by the inhabitant.",
+    spreadedDescription: "List of posts spread by the inhabitant.",
     likedBy: " -> Spreads",
     // composer
     attachFiles: "Attach files",
@@ -199,6 +200,7 @@ const i18n = {
   es: {
     latest: "Novedades",
     profile: "Avatar",
+    inhabitants: "Habitantes",
     search: "Buscar",
     imageSearch: "Buscar Imágenes",
     settings: "Configuración",
@@ -277,7 +279,7 @@ const i18n = {
     noNewerPosts: "No se han recibido nuevos posts aún.",
     // spreads view
     viewLikes: "Ver difusiones",
-    clonedDescription: "Listado de posts difundidos del habitante.",
+    spreadedDescription: "Listado de posts difundidos del habitante.",
     likedBy: " -> Difusiones",
     // composer
     attachFiles: "Agregar archivos",

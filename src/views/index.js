@@ -127,22 +127,22 @@ const template = (titlePrefix, ...elements) => {
     body(
       nav(
         ul(
-          navLink({ href: "/search", emoji: "✦", text: i18n.search }),
           //navLink({ href: "/imageSearch", emoji: "✧", text: i18n.imageSearch }),
-          navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
           navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.extended }),
+          navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
           navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads }),
           navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest }),
           navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }),
           navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries }),
+          navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
         )
       ),
       main({ id: "content" }, elements),
       nav(
         ul(
-          navLink({ href: "/publish", emoji: "✍",text: i18n.publish }),
+          navLink({ href: "/publish", emoji: "❂",text: i18n.publish }),
+          navLink({ href: "/search", emoji: "✦", text: i18n.search }),
           navLink({ href: "/inbox", emoji: "☂", text: i18n.private }),
-          navLink({ href: "/mentions", emoji: "☏", text: i18n.mentions }),
           navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
           navLink({ href: "/invites", emoji: "❄", text: i18n.invites }),
           navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
@@ -930,15 +930,15 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
                 let relationship = { emoji: "", desc: "" };
                 if (m.rel.followsMe && m.rel.following) {
                   // mutuals get the handshake emoji
-                  relationship.emoji = "🤝";
+                  relationship.emoji = "☍";
                   relationship.desc = i18n.relationshipMutuals;
                 } else if (m.rel.following) {
                   // if we're following that's an eyes emoji
-                  relationship.emoji = "👀";
+                  relationship.emoji = "☌";
                   relationship.desc = i18n.relationshipFollowing;
                 } else if (m.rel.followsMe) {
                   // follower has waving-hand emoji
-                  relationship.emoji = "👋";
+                  relationship.emoji = "⚼";
                   relationship.desc = i18n.relationshipTheyFollow;
                 } else {
                   // no relationship has question mark emoji
@@ -1181,7 +1181,7 @@ exports.likesView = async ({ messages, feed, name }) => {
     ["@", name, i18n.likedBy],
     viewInfoBox({
       viewTitle: span(authorLink, i18n.likedBy),
-      viewDescription: span(i18n.clonedDescription)
+      viewDescription: span(i18n.spreadedDescription)
     }),
     messages.map((msg) => post({ msg }))
   );
@@ -1245,11 +1245,11 @@ exports.summaryView = ({ messages }) => {
   });
 };
 
-exports.clonedView = ({ messages }) => {
-  return clonedListView({
+exports.spreadedView = ({ messages }) => {
+  return spreadedListView({
     messages,
-    viewTitle: i18n.cloned,
-    viewDescription: i18n.clonedDescription,
+    viewTitle: i18n.spreaded,
+    viewDescription: i18n.spreadedDescription,
   });
 };
 
