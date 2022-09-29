@@ -330,7 +330,7 @@ section audio {
 
 nav {
   margin: var(--size-0) 0;
-  margin-left: 20px;
+  margin-left: 40px;
 }
 
 nav > ul > li > a {
@@ -363,7 +363,7 @@ section {
   margin: var(--size-0) 0;
   word-wrap: break-word;
   background: var(--bg);
-  width: 100%;
+  width: 105%;
   box-sizing: border-box;
 }
 
@@ -479,6 +479,7 @@ nav > ul {
   flex-wrap: wrap;
   justify-content: space-between;
   margin: 0;
+  margin-right: 30px;
   padding: 0;
 }
 

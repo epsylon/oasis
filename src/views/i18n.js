@@ -151,9 +151,14 @@ const i18n = {
     setLanguage: "Set language",
     status: "Status",
     peerConnections: "Peers",
-    connectionsIntro:
-      "Your device is syncing data with these other devices:",
+    online: "Online",
+    supported: "Supported",
+    recommended: "Recommended", 
+    blocked: "Blocked",
     noConnections: "No peers connected.",
+    noSupportedConnections: "No peers supported.",
+    noBlockedConnections: "No peers blocked.",
+    noRecommendedConnections: "No peers recommended.",
     connectionActionIntro:
       "",
     startNetworking: "Start networking",
@@ -339,9 +344,14 @@ const i18n = {
     setLanguage: "Seleccionar idioma",
     status: "Estado",
     peerConnections: "Enlaces",
-    connectionsIntro:
-      "Tu dispositivo está sincronizando datos con los siguientes dispositivos:",
+    online: "Online",
+    supported: "Soportados",
+    recommended: "Recomendados",
+    blocked: "Bloqueados",
     noConnections: "Sin enlaces conectados.",
+    noSupportedConnections: "Sin enlaces soportados.",
+    noBlockedConnections: "Sin enlaces bloqueados.",
+    noRecommendedConnections: "Sin enlaces recomendados.",
     connectionActionIntro:
       "",
     startNetworking: "Iniciar red",

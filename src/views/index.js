@@ -4,6 +4,9 @@ const path = require("path");
 const envPaths = require("env-paths");
 const fs = require("fs");
 
+const homedir = require('os').homedir();
+const supportingPath = path.join(homedir, ".ssb/flume/contacts2.json");
+
 const debug = require("debug")("oasis");
 const highlightJs = require("highlight.js");
 
@@ -47,6 +50,8 @@ const {
   title,
   ul,
 } = require("hyperaxe");
+
+const { about, blob, vote } = require("../models")({});
 
 const lodash = require("lodash");
 const markdown = require("./markdown");
@@ -929,19 +934,15 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
               matches.map((m) => {
                 let relationship = { emoji: "", desc: "" };
                 if (m.rel.followsMe && m.rel.following) {
-                  // mutuals get the handshake emoji
                   relationship.emoji = "☍";
                   relationship.desc = i18n.relationshipMutuals;
                 } else if (m.rel.following) {
-                  // if we're following that's an eyes emoji
                   relationship.emoji = "☌";
                   relationship.desc = i18n.relationshipFollowing;
                 } else if (m.rel.followsMe) {
-                  // follower has waving-hand emoji
                   relationship.emoji = "⚼";
                   relationship.desc = i18n.relationshipTheyFollow;
                 } else {
-                  // no relationship has question mark emoji
                   relationship.emoji = "❓";
                   relationship.desc = i18n.relationshipNotFollowing;
                 }
@@ -1011,7 +1012,8 @@ exports.previewView = ({ previewData, contentWarning }) => {
   return exports.publishView(preview, previewData.text, contentWarning);
 };
 
-exports.peersView =  ({ peers }) => {
+exports.peersView = async ({ peers }) => {
+
  const startButton = form(
     { action: "/settings/conn/start", method: "post" },
     button({ type: "submit" }, i18n.startNetworking)
@@ -1050,20 +1052,95 @@ exports.peersView =  ({ peers }) => {
       );
    });
 
+  const supportedList = (supporting)
+    var supporting = JSON.parse(fs.readFileSync(supportingPath, "utf8")).value;
+    var arr = [];
+    var keys = Object.keys(supporting);
+      var data = Object.entries(supporting[keys[0]]);
+       Object.entries(data).forEach(([key, value]) => {
+         if (value[1]===1){
+          var supported = (value[0])
+           if (!arr.includes(supported)) {
+              arr.push(
+               li(
+                 a(
+                  { href: `/author/${encodeURIComponent(supported)}` }, 
+                  supported
+                 )
+               )
+              );
+           }
+         }
+      });
+  var supports = arr;
+
+  const blockedList = (supporting)
+    var supporting = JSON.parse(fs.readFileSync(supportingPath, "utf8")).value;
+    var arr = [];
+    var keys = Object.keys(supporting);
+      var data = Object.entries(supporting[keys[0]]);
+       Object.entries(data).forEach(([key, value]) => {
+         if (value[1]===-1){
+          var blocked = (value[0])
+           if (!arr.includes(blocked)) {
+              arr.push(
+               li(
+                 a(
+                  { href: `/author/${encodeURIComponent(blocked)}` }, 
+                  blocked
+                 )
+               )
+              );
+           }
+         }
+      });
+  var blocks = arr;
+
+  const recommendedList = (supporting)
+    var supporting = JSON.parse(fs.readFileSync(supportingPath, "utf8")).value;
+    var arr = [];
+    var keys = Object.keys(supporting);
+      var data = Object.entries(supporting[keys[0]]);
+       Object.entries(data).forEach(([key, value]) => {
+         if (value[1]===-2){
+          var recommended = (value[0])
+           if (!arr.includes(recommended)) {
+              arr.push(
+               li(
+                 a(
+                  { href: `/author/${encodeURIComponent(recommended)}` }, 
+                  recommended
+                 )
+               )
+              );
+           }
+         }
+      });
+ var recommends = arr;
+
  return template(
   i18n.peers,
     section(
       { class: "message" },
       h1(i18n.peerConnections),
       connButtons,
-      p(i18n.connectionsIntro),
+      h1(i18n.online, " (", peerList.length, ")"),
       peerList.length > 0 ? ul(peerList) : i18n.noConnections,
+      p(i18n.connectionActionIntro),
+      h1(i18n.supported, " (", supports.length, ")"),
+      supports.length > 0 ? ul(supports): i18n.noSupportedConnections,
+      p(i18n.connectionActionIntro),
+      h1(i18n.recommended, " (", recommends.length, ")"),
+      recommends.length > 0 ? ul(recommends): i18n.noRecommendedConnections,
+      p(i18n.connectionActionIntro),
+      h1(i18n.blocked, " (", blocks.length, ")"),
+      blocks.length > 0 ? ul(blocks): i18n.noBlockedConnections,
       p(i18n.connectionActionIntro),
       )
     );
 };
 
-exports.invitesView =  ({ invites }) => {
+exports.invitesView = ({ invites }) => {
  return template(
   i18n.invites,
     section(
