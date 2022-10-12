@@ -6,6 +6,7 @@ const fs = require("fs");
 
 const homedir = require('os').homedir();
 const supportingPath = path.join(homedir, ".ssb/flume/contacts2.json");
+const offsetPath = path.join(homedir, ".ssb/flume/log.offset");
 
 const debug = require("debug")("oasis");
 const highlightJs = require("highlight.js");
@@ -1116,7 +1117,7 @@ exports.peersView = async ({ peers }) => {
            }
          }
       });
- var recommends = arr;
+  var recommends = arr;
 
  return template(
   i18n.peers,
@@ -1141,6 +1142,44 @@ exports.peersView = async ({ peers }) => {
 };
 
 exports.invitesView = ({ invites }) => {
+  const pubsList = (pub)
+    var pubs = fs.readFileSync(offsetPath, "utf8");
+    var arr = pubs.split(/[{,}]/);
+    const arr2 = [];
+    const arr3 = [];
+    var host = [];
+    var id = [];
+    for(var i in arr){
+        arr.push(arr[i]);
+    }
+    for(var i=0; i<arr.length; i++){
+      if (arr[i] === '"address":') {
+      host = arr[i+1].split(':').pop().split(';')[0].split('"')[1];
+      id = arr[i+3].split(':').pop().split(';')[0].split('"')[1];
+      }
+
+      if (!arr2.includes(host + ":" + id)){
+         arr2.push(host + ":" + id)
+      }
+      var f = arr2.filter(function (el) {
+         return el != "" & el != ":";
+      });
+    }
+    for(const v of f){
+         var h = v.split(":")[0];
+         var i = v.split(":")[1];
+         arr3.push(
+               li(
+                "PUB: " + h, br, 
+                 a(
+                  { href: `/author/${encodeURIComponent(i)}` }, 
+                  i
+                 ), br, br
+               )
+         );
+    }
+    var pub = arr3;
+
  return template(
   i18n.invites,
     section(
@@ -1150,7 +1189,9 @@ exports.invitesView = ({ invites }) => {
       form(
         { action: "/settings/invite/accept", method: "post" },
         input({ name: "invite", type: "text", autofocus: true, required: true }),
-        button({ type: "submit" }, i18n.acceptInvite)
+        button({ type: "submit" }, i18n.acceptInvite),
+        h1(i18n.acceptedInvites, " (", pub.length, ")"),
+        pub.length > 0 ? ul(pub): i18n.noInvites,
       ),
      )
    );

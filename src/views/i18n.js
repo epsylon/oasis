@@ -172,6 +172,8 @@ const i18n = {
     invitesDescription:
       "Use the PUB's invite codes here.",
     acceptInvite: "Accept invite",
+    acceptedInvites: "Accepted",
+    noInvites: "No invites accepted.",
     // search page
     searchLabel: "Seek inhabitants and keywords, among the posts you have downloaded.",
     // image search page
@@ -364,7 +366,9 @@ const i18n = {
     invites: "Invitaciones",
     invitesDescription:
       "Utiliza los códigos de invitación de los PUBs aquí.",
-    acceptInvite: "Aceptar la invitación",
+    acceptInvite: "Aceptar invitación",
+    acceptedInvites: "Aceptadas",
+    noInvites: "Sin invitaciones aceptadas.",
     // search page
     searchLabel:
       "Busca habitantes y palabras clave, entre los posts que tienes descargados.",
