@@ -14,6 +14,14 @@ const highlightJs = require("highlight.js");
 const MarkdownIt = require("markdown-it");
 const prettyMs = require("pretty-ms");
 
+const updater = require("../updater.js");
+global.updaterequired = "";
+global.ck = updater.getRemoteVersion(async function(checkversion){
+  if (checkversion === "required"){
+    ck = "required";
+  }
+});
+
 const {
   a,
   article,
@@ -68,11 +76,7 @@ exports.setLanguage = (language) => {
 };
 
 const markdownUrl = "https://commonmark.org/help/";
-
-// SNH-docs 
-const snhUrl = "https://solarnethub.com";
-const projectUrl = "https://solarnethub.com/socialnet/start";
-const roleUrl = "https://solarnethub.com/socialnet/roleplaying";
+const snhUrl = "https://solarnethub.com/";
 
 const doctypeString = "<!DOCTYPE html>";
 
@@ -1242,14 +1246,20 @@ exports.settingsView = ({ theme, themeNames, version }) => {
     button({ type: "submit" }, i18n.rebuildName)
   );
 
+  if (ck === "required"){
+    updaterequired = form(
+      { action: "/update", method: "post" },
+      button({ type: "submit"}, i18n.updateit)
+    );
+  };
+
   return template(
     i18n.settings,
     section(
       { class: "message" },
       h1(i18n.settings),
-      p(i18n.settingsIntro({ version })),
-      h2(i18n.info),
-      p(i18n.docsUrls({ snhUrl, projectUrl, roleUrl })),
+      p(a({ href:snhUrl, target: "_blank" }, i18n.settingsIntro({ version }))),
+      p(updaterequired),
       h2(i18n.theme),
       p(i18n.themeIntro),
       form(

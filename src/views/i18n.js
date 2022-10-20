@@ -128,18 +128,10 @@ const i18n = {
       " instead. Preview shows attached media.",
     ],
     // settings
-    versionIntro: "Version",
+    updateit: "Get updates",
     info: "Info",
     settingsIntro: ({ version }) => [
-      `SNH-Oasis: ${version}...`,
-    ],
-    // SNH
-    docsUrls: ({ snhUrl, projectUrl, roleUrl }) => [
-      a({ href: snhUrl }, "Website"),
-      " | ",
-      a({ href: projectUrl }, "The Project Network"),
-      " | ",
-      a({ href: roleUrl }, "Role-playing"),
+      `SNH-Oasis: [${version}]`,
     ],
     theme: "Theme",
     themeIntro:
@@ -323,18 +315,10 @@ const i18n = {
       "RECUERDA: Debido a la tecnología blockchain, una vez publicados los posts, no podrán ser editados o borrados.",
     ],
     // settings-es
-    versionIntro: "Versión",
+    updateit: "Obtener actualizaciones",
     info: "Info",
     settingsIntro: ({ version }) => [
-      `SNH-Oasis: ${version}...`,
-    ],
-    // SNH
-    docsUrls: ({ snhUrl, projectUrl, roleUrl }) => [
-      a({ href: snhUrl }, "Website"),
-      " | ",
-      a({ href: projectUrl }, "The Project Network"),
-      " | ",
-      a({ href: roleUrl }, "Role-playing"),
+      `SNH-Oasis: [${version}]`,
     ],
     theme: "Tema",
     themeIntro:

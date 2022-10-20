@@ -4,8 +4,19 @@
 
 ## Description:
 
-Oasis is a **free, open-source, peer-to-peer project networking application** 
+SNH-Oasis is a **free, open-source, encrypted, peer-to-peer**... project networking application 
 that helps you follow interesting content and discover new ones.
+
+  ![SNH](https://solarnethub.com/_media/socialnet/snh-oasis_profile-2.png "SolarNET.HuB")
+
+ +  No browser JavaScript!. Just pure HTML+CSS.
+ +  Use your favorite web browser to read and write messages to the people you care about.
+ +  Strong cryptography in every single point of the network.
+ +  You are the center of your own distributed network. Online or offline, it works anywhere that you are.
+ +  Initial identities are randomnly generated (no username or password required).
+ +  No personal profile generated (no questions about gender, age, location, etc …).
+ +  No email or associated mobile phone required.
+ +  Automatic exif stripping (such as GPS coordinates) on images for better privacy.
 
 ----------
 

@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "SNH-Oasis Project Network GUI",
   "repository": {
     "type": "git",
@@ -44,6 +44,7 @@
     "pull-paramap": "^1.2.2",
     "pull-sort": "^1.0.2",
     "pull-stream": "^3.6.12",
+    "request": "^2.88.2",
     "require-style": "^1.1.0",
     "secret-stack": "^6.3.0",
     "sharp": "^0.28.0",

@@ -1018,6 +1018,16 @@ router
     ctx.body = await like({ messageKey, voteValue });
     ctx.redirect(referer.href);
   })
+  .post("/update", koaBody(), async (ctx) => {
+    const util = require('node:util');
+    const exec = util.promisify(require('node:child_process').exec);
+    async function updateTool() {
+      const { stdout, stderr } = await exec('git pull && npm -g install . && nodemon .');
+    }
+    updateTool();
+    const referer = new URL(ctx.request.header.referer);
+    ctx.redirect(referer.href);
+  })
   .post("/theme.css", koaBody(), async (ctx) => {
     const theme = String(ctx.request.body.theme);
     ctx.cookies.set("theme", theme);
