@@ -1022,7 +1022,7 @@ router
     const util = require('node:util');
     const exec = util.promisify(require('node:child_process').exec);
     async function updateTool() {
-      const { stdout, stderr } = await exec('git pull && npm install .');
+      const { stdout, stderr } = await exec('git reset --hard && git pull && npm install .');
       console.log("updating SNH-Oasis");
       console.log(stdout);
       console.log(stderr);
