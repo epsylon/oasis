@@ -1,11 +1,9 @@
 const request = require("request");
 const fs = require("fs");
 const path = require("path");
-
 const
   promisify = require('util').promisify,
   cb = promisify(request);
-
 const localpackage = path.join("package.json");
 const remoteUrl = "https://code.03c8.net/KrakensLab/oasis/src/master/package.json" // Official SNH-Oasis
 const remoteUrl2 = "https://github.com/epsylon/oasis/blob/main/package.json" // Mirror SNH-Oasis
@@ -14,6 +12,7 @@ let requestInstance;
 
 exports.getRemoteVersion = function(callback){
 (async () => {
+  if (fs.existsSync(".git")) {
     requestInstance = await cb(remoteUrl, function(error, response, body) {
       if (error != null){
         checkMirror(); 
@@ -39,5 +38,6 @@ exports.getRemoteVersion = function(callback){
       };
     callback(checkversion);
     };
+  };
 })();
 };
