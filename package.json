@@ -24,7 +24,7 @@
   "dependencies": {
     "@fraction/base16-css": "^1.1.0",
     "@koa/router": "^10.0.0",
-    "debug": "^4.1.1",
+    "debug": "^4.3.4",
     "env-paths": "^2.2.0",
     "file-type": "^16.0.1",
     "highlight.js": "^11.0.0",
@@ -86,7 +86,7 @@
     "yargs": "^17.0.0"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.5",
+    "@types/debug": "^4.1.7",
     "@types/koa": "^2.11.3",
     "@types/koa__router": "^8.0.2",
     "@types/koa-mount": "^4.0.0",
