@@ -363,7 +363,7 @@ section {
   margin: var(--size-0) 0;
   word-wrap: break-word;
   background: var(--bg);
-  width: 105%;
+  width: 100%;
   box-sizing: border-box;
 }
 

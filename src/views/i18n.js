@@ -225,17 +225,17 @@ const i18n = {
     topics: "Temáticas",
     topicsDescription: [
       strong("Temáticas"),
-      " tuyas y de habitantes que apoyas, ordenadas por las más recientes. Selecciona la hora de una publicación para leer el hilo completo.",
+      " tuyas y de habitantes que apoyas, ordenadas por las más recientes. Selecciona la hora de publicación para leer el hilo completo.",
     ],
     summaries: "Resumen",
     summariesDescription: [
       strong("Temáticas y algunos comentarios"),
-      " tuyos y de habitantes que apoyas, ordenado por lo más reciente. Selecciona la hora de una publicación para leer el hilo completo.",
+      " tuyos y de habitantes que apoyas, ordenado por lo más reciente. Selecciona la hora de publicación para leer el hilo completo.",
     ],
     threads: "Hilos",
     threadsDescription: [
       strong("Posts que tienen comentarios"),
-      " de habitantes que apoyas y de tu red extendida, ordenados por los más recientes. Selecciona la hora de una publicación para leer el hilo completo.",
+      " de habitantes que apoyas y de tu red extendida, ordenados por los más recientes. Selecciona la hora de publicación para leer el hilo completo.",
     ],
     manualMode: "Modo manual",
     mentions: "Menciones",
@@ -248,7 +248,7 @@ const i18n = {
     privateDescription: [
       "Los comentarios más recientes de ",
       strong("hilos privados que te incluyen"),
-      ". Las publicaciones privadas están cifradas para ti, y contienen un máximo de 7 destinatarios. No se podrán añadir nuevos destinarios después de que empieze el hilo. Selecciona la hora de una publicación para leer el hilo completo.",
+      ". Las publicaciones privadas están cifradas para ti, y contienen un máximo de 7 destinatarios. No se podrán añadir nuevos destinarios después de que empieze el hilo. Selecciona la hora de publicación para leer el hilo completo.",
     ],
     // post actions
     comment: "Comentar",

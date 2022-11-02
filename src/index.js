@@ -793,7 +793,6 @@ router
   .get("/mentions", async (ctx) => {
     const mentions = async () => {
       const messages = await post.mentionsMe();
-
       return mentionsView({ messages });
     };
     ctx.body = await mentions();
@@ -803,7 +802,6 @@ router
     const thread = async (message) => {
       const messages = await post.fromThread(message);
       debug("got %i messages", messages.length);
-
       return threadView({ messages });
     };
 
@@ -1023,7 +1021,7 @@ router
     const exec = util.promisify(require('node:child_process').exec);
     async function updateTool() {
       const { stdout, stderr } = await exec('git reset --hard && git pull && npm install .');
-      console.log("updating SNH-Oasis");
+      console.log("updating Oasis");
       console.log(stdout);
       console.log(stderr);
     }

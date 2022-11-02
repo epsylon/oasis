@@ -5,6 +5,7 @@ const envPaths = require("env-paths");
 const fs = require("fs");
 
 const homedir = require('os').homedir();
+
 const supportingPath = path.join(homedir, ".ssb/flume/contacts2.json");
 const offsetPath = path.join(homedir, ".ssb/flume/log.offset");
 
@@ -138,13 +139,13 @@ const template = (titlePrefix, ...elements) => {
       nav(
         ul(
           //navLink({ href: "/imageSearch", emoji: "✧", text: i18n.imageSearch }),
+          navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
+          navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
+          navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest }),
+          navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries }),
+          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }),
           navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.extended }),
           navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads }),
-          navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
-          navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest }),
-          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }),
-          navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries }),
-          navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
         )
       ),
       main({ id: "content" }, elements),
@@ -432,8 +433,8 @@ const post = ({ msg, aside = false }) => {
           { class: "content" },
           pre({
             innerHTML: highlightJs.highlight(
-              "json",
-              JSON.stringify(msg, null, 2)
+              JSON.stringify(msg, null, 2),
+              {language: "json", ignoreIllegals: true}
             ).value,
           })
         )
@@ -579,7 +580,7 @@ exports.authorView = ({
   relationship,
 }) => {
   const mention = `[@${name}](${feedId})`;
-  const markdownMention = highlightJs.highlight("markdown", mention).value;
+  const markdownMention = highlightJs.highlight(mention, {language: "markdown", ignoreIllegals: true}).value;
 
   const contactForms = [];
 
@@ -1058,11 +1059,17 @@ exports.peersView = async ({ peers }) => {
    });
 
   const supportedList = (supporting)
-    var supporting = JSON.parse(fs.readFileSync(supportingPath, "utf8")).value;
+  try{
+    var supporting = JSON.parse(fs.readFileSync(supportingPath, {encoding:'utf8', flag:'r'})).value;
+    var supportingValue = "true";
+  }catch{
+    var supportingValue = "false";
+  }
+  if (supportingValue === "true") {
     var arr = [];
     var keys = Object.keys(supporting);
-      var data = Object.entries(supporting[keys[0]]);
-       Object.entries(data).forEach(([key, value]) => {
+        var data = Object.entries(supporting[keys[0]]);
+        Object.entries(data).forEach(([key, value]) => {
          if (value[1]===1){
           var supported = (value[0])
            if (!arr.includes(supported)) {
@@ -1077,10 +1084,12 @@ exports.peersView = async ({ peers }) => {
            }
          }
       });
+  }else{
+    var arr = [];
+  }
   var supports = arr;
 
-  const blockedList = (supporting)
-    var supporting = JSON.parse(fs.readFileSync(supportingPath, "utf8")).value;
+  if (supportingValue === "true") {
     var arr = [];
     var keys = Object.keys(supporting);
       var data = Object.entries(supporting[keys[0]]);
@@ -1099,10 +1108,12 @@ exports.peersView = async ({ peers }) => {
            }
          }
       });
+  }else{
+    var arr = [];
+  }
   var blocks = arr;
 
-  const recommendedList = (supporting)
-    var supporting = JSON.parse(fs.readFileSync(supportingPath, "utf8")).value;
+  if (supportingValue === "true") {
     var arr = [];
     var keys = Object.keys(supporting);
       var data = Object.entries(supporting[keys[0]]);
@@ -1121,6 +1132,9 @@ exports.peersView = async ({ peers }) => {
            }
          }
       });
+  }else{
+    var arr = [];
+  }
   var recommends = arr;
 
  return template(

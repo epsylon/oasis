@@ -12,8 +12,8 @@ For a GNU/Linux based system, execute the following steps (from a shell):
     sudo apt-get install -y nodejs
     git clone https://code.03c8.net/KrakensLab/oasis
     cd oasis
-    npm -g install .
-    node .
+    npm install .
+    npm run start
 
 --------------
 

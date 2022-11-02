@@ -76,7 +76,6 @@ module.exports = ({ cooler, isPublic }) => {
    */
   const getAbout = async ({ key, feedId }) => {
     const ssb = await cooler.open();
-
     const source = ssb.backlinks.read({
       reverse: true,
       query: [
@@ -625,7 +624,6 @@ module.exports = ({ cooler, isPublic }) => {
     filter = null,
   }) => {
     const options = configure({ query, index: "DTA" }, customOptions);
-
     const source = ssb.backlinks.read(options);
     const basicSocialFilter = await socialFilter();
 
@@ -1346,7 +1344,6 @@ module.exports = ({ cooler, isPublic }) => {
 
       const now = new Date();
       const earliest = Number(now) - 1000 * 60 * 60 * 24 * periodDict[period];
-
       const source = ssb.query.read(
         configure({
           query: [
