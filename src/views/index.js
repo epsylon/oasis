@@ -1058,12 +1058,20 @@ exports.peersView = async ({ peers }) => {
       );
    });
 
-  const supportedList = (supporting)
   try{
-    var supporting = JSON.parse(fs.readFileSync(supportingPath, {encoding:'utf8', flag:'r'})).value;
-    var supportingValue = "true";
+      var supporting = JSON.parse(fs.readFileSync(supportingPath, {encoding:'utf8', flag:'r'})).value;
   }catch{
-    var supportingValue = "false";
+      var supporting = undefined;
+  }
+  if (supporting == undefined) {
+        var supportingValue = "false";
+  }else{
+        var keys = Object.keys(supporting);
+        if (keys[0] === undefined){
+          var supportingValue = "false";
+        }else{
+          var supportingValue = "true";
+        }
   }
   if (supportingValue === "true") {
     var arr = [];

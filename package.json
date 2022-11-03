@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "SNH-Oasis Project Network GUI",
   "repository": {
     "type": "git",
@@ -63,6 +63,8 @@
     "ssb-invite": "^3.0.1",
     "ssb-keys": "^8.0.0",
     "ssb-lan": "^1.0.0",
+    "ssb-links": "^3.0.10",
+    "ssb-local": "^1.0.0",
     "ssb-logging": "^1.0.0",
     "ssb-markdown": "^6.0.7",
     "ssb-master": "^1.0.3",
@@ -79,12 +81,12 @@
     "ssb-replicate": "^1.3.0",
     "ssb-room": "^1.3.0",
     "ssb-search": "^1.3.0",
+    "ssb-server": "^15.3.0",
     "ssb-tangle": "^1.0.1",
     "ssb-thread-schema": "^1.1.1",
     "ssb-unix-socket": "^1.0.0",
     "ssb-ws": "^6.2.3",
     "ssb-gossip": "^1.1.1",
-    "ssb-server": "^15.3.0",
     "ssb-tunnel": "^2.0.0",
     "yargs": "^17.0.0"
   },

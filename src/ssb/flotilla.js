@@ -6,13 +6,9 @@ const ssbConfig = require("ssb-config");
 const plugins = [
   // Authentication often hooked for authentication.
   require("ssb-master"),
-  // Methods often used during init().
   require("ssb-db"),
-  // Method `replicate()` often hooked for improvements.
   require("ssb-replicate"),
-  // Required by ssb-about, ssb-tangle, etc.
   require("ssb-backlinks"),
-  // Required by ssb-room
   require("ssb-conn"),
   shuffle([
     require("ssb-about"),
@@ -39,8 +35,6 @@ const plugins = [
 
 module.exports = (config) => {
   const server = stack();
-
-  // TODO: Move this out of the main function.
   const walk = (input) => {
     if (Array.isArray(input)) {
       input.forEach(walk);
