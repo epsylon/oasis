@@ -74,7 +74,7 @@
     "ssb-conn": "^6.0.3",
     "ssb-db": "^20.3.0",
     "ssb-ebt": "^9.1.2",
-    "ssb-friends": "^4.4.7",
+    "ssb-friends": "^5.1.7",
     "ssb-invite": "^3.0.1",
     "ssb-keys": "^8.0.0",
     "ssb-lan": "^1.0.0",
