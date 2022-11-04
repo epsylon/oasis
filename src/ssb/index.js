@@ -46,7 +46,6 @@ const connect = (options) =>
     const onSuccess = (ssb) => {
       resolve(ssb);
     };
-
     ssbClient(process.env.OASIS_TEST ? ssbConfig.keys : null, options)
       .then(onSuccess)
       .catch(reject);
