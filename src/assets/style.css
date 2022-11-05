@@ -361,9 +361,9 @@ section {
   padding: var(--size-0);
   border-radius: var(--common-radius);
   margin: var(--size-0) 0;
-  word-wrap: break-word;
+  #word-wrap: break-word;
   background: var(--bg);
-  width: 100%;
+  width: 106%;
   box-sizing: border-box;
 }
 
@@ -665,6 +665,7 @@ section.post-preview {
   padding-top: 0;
   background: var(--bg-selection);
   border: var(--fg-alt) solid 1px;
+  padding-right: 50px;
 }
 
 section.post-preview > section > footer {
