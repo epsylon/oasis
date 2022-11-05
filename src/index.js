@@ -430,7 +430,7 @@ router
     return next();
   })
   .get("/", async (ctx) => {
-    ctx.redirect("/public/popular/day");
+    ctx.redirect("/public/latest");
   })
   .get("/robots.txt", (ctx) => {
     ctx.body = "User-agent: *\nDisallow: /";

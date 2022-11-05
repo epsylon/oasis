@@ -661,19 +661,26 @@ module.exports = ({ cooler, isPublic }) => {
     following = null,
     blocking = false,
     me = null,
-  } = {}) => {
+    } = {}) => {
     const ssb = await cooler.open();
     const { id } = ssb;
-    const relationshipObject = await ssb.friends.get({
-      source: id,
+
+    const relationshipObject = await new Promise((resolve, reject) => {
+      ssb.friends.graph((err, graph) => {
+        if (err) {
+          console.error(err);
+          reject(err);
+        }
+        resolve(graph[id] || {});
+      });
     });
 
     const followingList = Object.entries(relationshipObject)
-      .filter(([, val]) => val === true)
+      .filter(([, val]) => val >= 0)
       .map(([key]) => key);
 
     const blockingList = Object.entries(relationshipObject)
-      .filter(([, val]) => val === false)
+      .filter(([, val]) => val === -1)
       .map(([key]) => key);
 
     return pull.filter((message) => {

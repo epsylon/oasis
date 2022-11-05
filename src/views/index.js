@@ -139,13 +139,13 @@ const template = (titlePrefix, ...elements) => {
       nav(
         ul(
           //navLink({ href: "/imageSearch", emoji: "✧", text: i18n.imageSearch }),
-          navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
           navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
           navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest }),
           navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries }),
-          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }),
+          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }), 
           navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.extended }),
           navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads }),
+          navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
         )
       ),
       main({ id: "content" }, elements),
