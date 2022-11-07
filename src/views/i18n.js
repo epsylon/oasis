@@ -164,7 +164,7 @@ const i18n = {
     invitesDescription:
       "Use the PUB's invite codes here.",
     acceptInvite: "Accept invite",
-    acceptedInvites: "Accepted",
+    acceptedInvites: "Federated Networks",
     noInvites: "No invites accepted.",
     // search page
     searchLabel: "Seek inhabitants and keywords, among the posts you have downloaded.",
@@ -351,7 +351,7 @@ const i18n = {
     invitesDescription:
       "Utiliza los códigos de invitación de los PUBs aquí.",
     acceptInvite: "Aceptar invitación",
-    acceptedInvites: "Aceptadas",
+    acceptedInvites: "Redes Federadas",
     noInvites: "Sin invitaciones aceptadas.",
     // search page
     searchLabel:

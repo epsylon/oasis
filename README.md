@@ -4,7 +4,7 @@
 
 ## Description:
 
-SNH-Oasis is a **free, open-source, encrypted, peer-to-peer**... project networking application 
+SNH-Oasis is a **free, open-source, encrypted, peer-to-peer, decentralized & federated**... project networking application 
 that helps you follow interesting content and discover new ones.
 
   ![SNH](https://solarnethub.com/_media/socialnet/snh-oasis_profile-2.png "SolarNET.HuB")

@@ -14,9 +14,3 @@ For a GNU/Linux based system, execute the following steps (from a shell):
     cd oasis
     npm install .
     npm run start
-
---------------
-
-If you want to run it in the background, see [`with-systemd.md`](./with-systemd.md).
-
-If you want to run it in a container, see [`with-docker.md`](./with-docker.md).
