@@ -107,7 +107,7 @@
     "ssb-gossip": "^1.1.1",
     "ssb-tunnel": "^2.0.0",
     "ssb-legacy-conn": "^2.0.0",
-    "ssb-db2": "^6.1.1",
+    "ssb-db2": "^6.2.7",
     "ssb-box": "^1.0.1",
     "ssb-threads": "^10.0.4",
     "ssb-conn-db": "^1.0.5",
