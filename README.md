@@ -28,13 +28,13 @@ Follow ['INSTALL.md'](docs/install.md) to build and install it on your device.
 
 ## Setup:
 
-Visit ['Settings'](https://solarnethub.com/socialnet/snh#settings_minimal) to configurate your network & avatar.
+Visit ['Settings'](https://solarnethub.com/socialnet/snh#settings_minimal) to choose your language, set a theme & configure your avatar.
 
 ----------
 
 ## Networking:
 
-Join ['PUB: "La Plaza"'](https://solarnethub.com/socialnet/engineering#snhla_plaza) to start to be connected with other projects.
+Join ['PUB: "La Plaza"'](https://solarnethub.com/socialnet/engineering#snhla_plaza) to start to be connected with other interesting projects in the Multiverse.
 
   ![SNH](https://solarnethub.com/_media/socialnet/snh-federated-networks.png "SolarNET.HuB")
 
@@ -42,7 +42,7 @@ Join ['PUB: "La Plaza"'](https://solarnethub.com/socialnet/engineering#snhla_pla
 
 ## Roadmap:
 
-Review ['Roadmap'](https://solarnethub.com/socialnet/roadmap) to know what are some of the functionalities that are interesting to be implemented.
+Review ['Roadmap'](https://solarnethub.com/socialnet/roadmap) to know about some required functionalities that can be implemented.
 
 ----------
 
