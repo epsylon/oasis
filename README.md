@@ -28,7 +28,7 @@ Follow ['INSTALL.md'](docs/install.md) to build and install it on your device.
 
 ## Setup:
 
-Visit ['Settings'](https://solarnethub.com/socialnet/snh#settings_minimal) to choose your language, set a theme & configure your avatar.
+Visit ['Settings'](https://solarnethub.com/socialnet/snh#settings_minimal) to learn how to choose your language, set a theme & configure your avatar.
 
 ----------
 
