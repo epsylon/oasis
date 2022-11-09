@@ -4,7 +4,7 @@
 
 ## Description:
 
-SNH-Oasis is a **free, open-source, encrypted, peer-to-peer, decentralized & federated**... project networking application 
+SNH-Oasis is a **free, open-source, encrypted, peer-to-peer, distributed & federated**... project networking application 
 that helps you follow interesting content and discover new ones.
 
   ![SNH](https://solarnethub.com/_media/socialnet/snh-oasis_profile-2.png "SolarNET.HuB")
@@ -26,15 +26,29 @@ Follow ['INSTALL.md'](docs/install.md) to build and install it on your device.
 
 ----------
 
-## Development:
+## Setup:
 
-Review ['Call 4 Hackers'](https://solarnethub.com/community/hackers) to start contributing with developments.
+Visit ['Settings'](https://solarnethub.com/socialnet/snh#settings_minimal) to configurate your network & avatar.
+
+----------
+
+## Networking:
+
+Join ['PUB: "La Plaza"'](https://solarnethub.com/socialnet/engineering#snhla_plaza) to start to be connected with other projects.
+
+  ![SNH](https://solarnethub.com/_media/socialnet/snh-federated-networks.png "SolarNET.HuB")
 
 ----------
 
 ## Roadmap:
 
-Visit ['Roadmap'](https://solarnethub.com/socialnet/roadmap) to know what are some of the functionalities that are interesting to be implemented.
+Review ['Roadmap'](https://solarnethub.com/socialnet/roadmap) to know what are some of the functionalities that are interesting to be implemented.
+
+----------
+
+## Development:
+
+Check ['Call 4 Hackers'](https://solarnethub.com/community/hackers) for contributing with developments.
 
 ----------
 
