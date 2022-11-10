@@ -1168,7 +1168,22 @@ exports.peersView = async ({ peers }) => {
 };
 
 exports.invitesView = ({ invites }) => {
-  const pubsList = (pub)
+  try{
+    var pubs = fs.readFileSync(offsetPath, "utf8");
+  }catch{
+      var pubs = undefined;
+  }
+  if (pubs == undefined) {
+        var pubsValue = "false";
+  }else{
+        var keys = Object.keys(pubs);
+        if (keys[0] === undefined){
+          var pubsValue = "false";
+        }else{
+          var pubsValue = "true";
+        }
+  }
+  if (pubsValue === "true") {
     var pubs = fs.readFileSync(offsetPath, "utf8");
     var pubs = JSON.parse(pubs);
     const arr2 = [];
@@ -1185,6 +1200,9 @@ exports.invitesView = ({ invites }) => {
       );
     }
     var pub = arr2;
+  }else{
+    var pub = [];
+  }
 
  return template(
   i18n.invites,
