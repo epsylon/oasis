@@ -361,9 +361,9 @@ section {
   padding: var(--size-0);
   border-radius: var(--common-radius);
   margin: var(--size-0) 0;
-  #word-wrap: break-word;
+  word-wrap: break-word;
   background: var(--bg);
-  width: 106%;
+  width: 108%;
   box-sizing: border-box;
 }
 
@@ -480,7 +480,7 @@ nav > ul {
   justify-content: space-between;
   margin: 0;
   margin-right: 30px;
-  padding: 0;
+  #padding: 0;
 }
 
 nav > ul > li {
