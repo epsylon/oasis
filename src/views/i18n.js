@@ -3,7 +3,7 @@ const { a, em, strong } = require("hyperaxe");
 const i18n = {
   en: {
     // navbar items
-    extended: "Extended",
+    extended: "Multiverse",
     extendedDescription: [
       "When you support someone you may download posts from the inhabitants they support, and those posts show up here, sorted by recency.",
     ],
@@ -35,7 +35,7 @@ const i18n = {
     threads: "Threads",
     threadsDescription: [
       strong("Posts that have comments"),
-      " from inhabitants you support and your extended network, sorted by recency. Select the timestamp of any post to see the rest of the thread.",
+      " from inhabitants you support and your multiverse, sorted by recency. Select the timestamp of any post to see the rest of the thread.",
     ],
     profile: "Avatar",
     inhabitants: "Inhabitants", 
@@ -55,6 +55,9 @@ const i18n = {
     search: "Search",
     imageSearch: "Image Search",
     settings: "Settings",
+    continueReading: "continue reading",
+    moreComments: "more comment",
+    readThread: "read the rest of the thread",
     // post actions
     comment: "Comment",
     subtopic: "Subtopic",
@@ -88,8 +91,9 @@ const i18n = {
     attachFiles: "Attach files",
     mentionsMatching: "Matching mentions",
     preview: "Preview",
-    publish: "Publish",
+    publish: "Write",
     contentWarningPlaceholder: "Add a subject to the post (optional)",
+    privateWarningPlaceholder: "Add inhabitants to send a private post (ex: @bob @alice) (optional)",
     publishWarningPlaceholder: "...",
     publishCustomDescription: [
       "REMEMBER: Due to blockchain technology, once a post is published it cannot be edited or deleted.",
@@ -109,15 +113,15 @@ const i18n = {
     ],
     publishCustomInfo: ({ href }) => [
       "If you have experience, you can also ",
-      a({ href }, "publish an advanced post"),
+      a({ href }, "write an advanced post"),
       ".",
     ],
     publishBasicInfo: ({ href }) => [
       "If you have not experience, you should ",
-      a({ href }, "publish a post"),
+      a({ href }, "write a post"),
       ".",
     ],
-    publishCustom: "Publish advanced post",
+    publishCustom: "Write advanced post",
     subtopicLabel: ({ markdownUrl }) => [
       "Create a ",
       strong("public subtopic"),
@@ -203,8 +207,11 @@ const i18n = {
     search: "Buscar",
     imageSearch: "Buscar Imágenes",
     settings: "Configuración",
+    continueReading: "continuar leyendo",
+    moreComments: "comentario",
+    readThread: "leer el resto del hilo",
     // navbar items
-    extended: "Extendida",
+    extended: "Multiverso",
     extendedDescription: [
       "Cuando apoyes a alguien, podrás descargar publicaciones de habitantes que apoye, y esas publicaciones aparecerán aquí, ordenadas por las más recientes.",
     ],
@@ -235,7 +242,7 @@ const i18n = {
     threads: "Hilos",
     threadsDescription: [
       strong("Posts que tienen comentarios"),
-      " de habitantes que apoyas y de tu red extendida, ordenados por los más recientes. Selecciona la hora de publicación para leer el hilo completo.",
+      " de habitantes que apoyas y de tu multiverso, ordenados por los más recientes. Selecciona la hora de publicación para leer el hilo completo.",
     ],
     manualMode: "Modo manual",
     mentions: "Menciones",
@@ -284,8 +291,9 @@ const i18n = {
     attachFiles: "Agregar archivos",
     mentionsMatching: "Menciones coincidentes",
     preview: "Vista previa",
-    publish: "Publicar",
+    publish: "Escribir",
     contentWarningPlaceholder: "Añade un asunto al post (opcional)",
+    privateWarningPlaceholder: "Añade habitantes para enviar un post privado (ej: @bob @alice) (opcional)",
     publishWarningPlaceholder: "...",
     publishCustomDescription: [
       "RECUERDA: Debido a la tecnología blockchain, una vez publicado un post, no podrá ser editado o borrado.",
@@ -302,15 +310,15 @@ const i18n = {
     ],
     publishCustomInfo: ({ href }) => [
       "Si tienes experiencia, también puedes ",
-      a({ href }, "publicar un post avanzado"),
+      a({ href }, "escribir un post avanzado"),
       ".",
     ],
     publishBasicInfo: ({ href }) => [
       "Si no tienes experiencia, lo mejor es ",
-      a({ href }, "publicar un post normal"),
+      a({ href }, "escribir un post normal"),
       ".",
     ],
-    publishCustom: "Publicar post avanzado",
+    publishCustom: "Escribir post avanzado",
     replyLabel: ({ markdownUrl }) => [
       "RECUERDA: Debido a la tecnología blockchain, una vez publicados los posts, no podrán ser editados o borrados.",
     ],

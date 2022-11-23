@@ -430,7 +430,7 @@ router
     return next();
   })
   .get("/", async (ctx) => {
-    ctx.redirect("/public/latest");
+    ctx.redirect("/mentions");
   })
   .get("/robots.txt", (ctx) => {
     ctx.body = "User-agent: *\nDisallow: /";
@@ -544,7 +544,6 @@ router
   })
   .get("/imageSearch", async (ctx) => {
     const { query } = ctx.query;
-
     const blobs = query ? await blob.search({ query }) : {};
 
     ctx.body = await imageSearchView({ blobs, query });
@@ -552,7 +551,6 @@ router
   .get("/inbox", async (ctx) => {
     const inbox = async () => {
       const messages = await post.inbox();
-
       return privateView({ messages });
     };
     ctx.body = await inbox();
@@ -577,7 +575,6 @@ router
   })
   .get("/profile", async (ctx) => {
     const myFeedId = await meta.myFeedId();
-
     const gt = Number(ctx.request.query["gt"] || -1);
     const lt = Number(ctx.request.query["lt"] || -1);
 
@@ -757,10 +754,10 @@ router
      value.name = await about.name(value.key);
      return [key, value];
      }))
-      return peersView({
-       peers: peersWithNames,
-      });
-    };
+    return peersView({
+      peers: peersWithNames,
+    });
+   };
     ctx.body = await getMeta({ theme });
    })
   .get("/invites", async (ctx) => {
@@ -804,17 +801,14 @@ router
       debug("got %i messages", messages.length);
       return threadView({ messages });
     };
-
     ctx.body = await thread(message);
   })
   .get("/subtopic/:message", async (ctx) => {
     const { message } = ctx.params;
     const rootMessage = await post.get(message);
     const myFeedId = await meta.myFeedId();
-
     debug("%O", rootMessage);
     const messages = [rootMessage];
-
     ctx.body = await subtopicView({ messages, myFeedId });
   })
   .get("/publish", async (ctx) => {

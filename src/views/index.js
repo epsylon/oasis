@@ -3,19 +3,19 @@
 const path = require("path");
 const envPaths = require("env-paths");
 const fs = require("fs");
-
 const homedir = require('os').homedir();
-
-const supportingPath = path.join(homedir, ".ssb/flume/contacts2.json");
-const offsetPath = path.join(homedir, ".ssb/gossip.json");
-
+const gossipPath = path.join(homedir, ".ssb/gossip.json");
 const debug = require("debug")("oasis");
 const highlightJs = require("highlight.js");
-
 const MarkdownIt = require("markdown-it");
 const prettyMs = require("pretty-ms");
 
 const updater = require("../updater.js");
+
+const supports = require("../supports.js").supporting;
+const blocks = require("../supports.js").blocking;
+const recommends = require("../supports.js").recommending;
+
 global.updaterequired = "";
 global.ck = updater.getRemoteVersion(async function(checkversion){
   if (checkversion === "required"){
@@ -60,8 +60,6 @@ const {
   title,
   ul,
 } = require("hyperaxe");
-
-const { about, blob, vote } = require("../models")({});
 
 const lodash = require("lodash");
 const markdown = require("./markdown");
@@ -142,10 +140,10 @@ const template = (titlePrefix, ...elements) => {
           navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
           navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest }),
           navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries }),
-          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }), 
+          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }),
           navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.extended }),
-          navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads }),
           navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
+          navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads }),
         )
       ),
       main({ id: "content" }, elements),
@@ -288,11 +286,11 @@ const continueThreadComponent = (thread, isComment) => {
     continueLink = `/thread/${encoded.parent}#${encoded.next}`;
     return a(
       { href: continueLink },
-      `continue reading ${left} more comment${left === 1 ? "" : "s"}`
+      i18n.continueReading, ` ${left} `, i18n.moreComments+`${left === 1 ? "" : "s"}`
     );
   } else {
     continueLink = `/thread/${encoded.parent}`;
-    return a({ href: continueLink }, "read the rest of the thread");
+    return a({ href: continueLink }, i18n.readThread);
   }
 };
 
@@ -896,9 +894,6 @@ exports.publishView = (preview, text, contentWarning) => {
 
 const generatePreview = ({ previewData, contentWarning, action }) => {
   const { authorMeta, text, mentions } = previewData;
-
-  // craft message that looks like it came from the db
-  // cb: this kinda fragile imo? this is for getting a proper post styling ya?
   const msg = {
     key: "%non-existent.preview",
     value: {
@@ -949,8 +944,13 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
                   relationship.emoji = "⚼";
                   relationship.desc = i18n.relationshipTheyFollow;
                 } else {
-                  relationship.emoji = "❓";
-                  relationship.desc = i18n.relationshipNotFollowing;
+                  if (m.rel.me = true){
+                    relationship.emoji = "#";
+                    relationship.desc = i18n.relationshipYou;
+                  } else {
+                    relationship.emoji = "❓";
+                    relationship.desc = i18n.relationshipNotFollowing;
+                  }
                 }
                 return div(
                   { class: "mentions-container" },
@@ -1058,93 +1058,6 @@ exports.peersView = async ({ peers }) => {
       );
    });
 
-  try{
-      var supporting = JSON.parse(fs.readFileSync(supportingPath, {encoding:'utf8', flag:'r'})).value;
-  }catch{
-      var supporting = undefined;
-  }
-  if (supporting == undefined) {
-        var supportingValue = "false";
-  }else{
-        var keys = Object.keys(supporting);
-        if (keys[0] === undefined){
-          var supportingValue = "false";
-        }else{
-          var supportingValue = "true";
-        }
-  }
-  if (supportingValue === "true") {
-    var arr = [];
-    var keys = Object.keys(supporting);
-        var data = Object.entries(supporting[keys[0]]);
-        Object.entries(data).forEach(([key, value]) => {
-         if (value[1]===1){
-          var supported = (value[0])
-           if (!arr.includes(supported)) {
-              arr.push(
-               li(
-                 a(
-                  { href: `/author/${encodeURIComponent(supported)}` }, 
-                  supported
-                 )
-               )
-              );
-           }
-         }
-      });
-  }else{
-    var arr = [];
-  }
-  var supports = arr;
-
-  if (supportingValue === "true") {
-    var arr = [];
-    var keys = Object.keys(supporting);
-      var data = Object.entries(supporting[keys[0]]);
-       Object.entries(data).forEach(([key, value]) => {
-         if (value[1]===-1){
-          var blocked = (value[0])
-           if (!arr.includes(blocked)) {
-              arr.push(
-               li(
-                 a(
-                  { href: `/author/${encodeURIComponent(blocked)}` }, 
-                  blocked
-                 )
-               )
-              );
-           }
-         }
-      });
-  }else{
-    var arr = [];
-  }
-  var blocks = arr;
-
-  if (supportingValue === "true") {
-    var arr = [];
-    var keys = Object.keys(supporting);
-      var data = Object.entries(supporting[keys[0]]);
-       Object.entries(data).forEach(([key, value]) => {
-         if (value[1]===-2){
-          var recommended = (value[0])
-           if (!arr.includes(recommended)) {
-              arr.push(
-               li(
-                 a(
-                  { href: `/author/${encodeURIComponent(recommended)}` }, 
-                  recommended
-                 )
-               )
-              );
-           }
-         }
-      });
-  }else{
-    var arr = [];
-  }
-  var recommends = arr;
-
  return template(
   i18n.peers,
     section(
@@ -1154,13 +1067,13 @@ exports.peersView = async ({ peers }) => {
       h1(i18n.online, " (", peerList.length, ")"),
       peerList.length > 0 ? ul(peerList) : i18n.noConnections,
       p(i18n.connectionActionIntro),
-      h1(i18n.supported, " (", supports.length, ")"),
+      h1(i18n.supported, " (", supports.length/2, ")"),
       supports.length > 0 ? ul(supports): i18n.noSupportedConnections,
       p(i18n.connectionActionIntro),
-      h1(i18n.recommended, " (", recommends.length, ")"),
+      h1(i18n.recommended, " (", recommends.length/2, ")"),
       recommends.length > 0 ? ul(recommends): i18n.noRecommendedConnections,
       p(i18n.connectionActionIntro),
-      h1(i18n.blocked, " (", blocks.length, ")"),
+      h1(i18n.blocked, " (", blocks.length/2, ")"),
       blocks.length > 0 ? ul(blocks): i18n.noBlockedConnections,
       p(i18n.connectionActionIntro),
       )
@@ -1169,7 +1082,7 @@ exports.peersView = async ({ peers }) => {
 
 exports.invitesView = ({ invites }) => {
   try{
-    var pubs = fs.readFileSync(offsetPath, "utf8");
+    var pubs = fs.readFileSync(gossipPath, "utf8");
   }catch{
       var pubs = undefined;
   }
@@ -1184,7 +1097,6 @@ exports.invitesView = ({ invites }) => {
         }
   }
   if (pubsValue === "true") {
-    var pubs = fs.readFileSync(offsetPath, "utf8");
     var pubs = JSON.parse(pubs);
     const arr2 = [];
     const arr3 = [];
