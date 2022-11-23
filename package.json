@@ -29,7 +29,7 @@
     "await-exec": "^0.1.2",
     "broadcast-stream": "^0.2.1",
     "debug": "^4.3.1",
-    "env-paths": "^2.2.0",
+    "env-paths": "^3.0.0",
     "epidemic-broadcast-trees": "^9.0.4",
     "file-type": "^16.0.1",
     "has-network": "0.0.1",
