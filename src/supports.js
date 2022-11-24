@@ -59,6 +59,7 @@ async function getNameByIdRecommended(recommended){
           var supportingValue = "true";
         }
     }
+
     if (supportingValue === "true") {
       var arr = [];
       var keys = Object.keys(supporting);

@@ -12,10 +12,6 @@ const prettyMs = require("pretty-ms");
 
 const updater = require("../updater.js");
 
-const supports = require("../supports.js").supporting;
-const blocks = require("../supports.js").blocking;
-const recommends = require("../supports.js").recommending;
-
 global.updaterequired = "";
 global.ck = updater.getRemoteVersion(async function(checkversion){
   if (checkversion === "required"){
@@ -1018,7 +1014,7 @@ exports.previewView = ({ previewData, contentWarning }) => {
   return exports.publishView(preview, previewData.text, contentWarning);
 };
 
-exports.peersView = async ({ peers }) => {
+exports.peersView = async ({ peers, supports, blocks, recommends }) => {
 
  const startButton = form(
     { action: "/settings/conn/start", method: "post" },
@@ -1051,9 +1047,10 @@ exports.peersView = async ({ peers }) => {
     .filter(([, data]) => data.state === "connected")
     .map(([, data]) => {
       return li(
+          data.name, br,
         a(
           { href: `/author/${encodeURIComponent(data.key)}` },
-          data.name || data.host || data.key
+          data.key, br, br
         )
       );
    });

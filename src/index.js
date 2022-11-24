@@ -748,6 +748,9 @@ router
   .get("/peers", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
     const getMeta = async ({ theme }) => {
+    const supports = require("./supports.js").supporting;
+    const blocks = require("./supports.js").blocking;
+    const recommends = require("./supports.js").recommending;
     const peers = await meta.connectedPeers();
     const peersWithNames = await Promise.all(
     peers.map(async ([key, value]) => {
@@ -756,6 +759,9 @@ router
      }))
     return peersView({
       peers: peersWithNames,
+      supports: supports,
+      blocks: blocks,
+      recommends: recommends,
     });
    };
     ctx.body = await getMeta({ theme });
