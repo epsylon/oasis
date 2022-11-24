@@ -9,6 +9,10 @@ const cli = require("./cli");
 const fs = require("fs");
 const exif = require("piexifjs");
 
+const supports = require("./supports.js").supporting;
+const blocks = require("./supports.js").blocking;
+const recommends = require("./supports.js").recommending;
+
 const defaultConfig = {};
 const defaultConfigFile = path.join(
   envPaths("oasis", { suffix: "" }).config,
@@ -748,9 +752,6 @@ router
   .get("/peers", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
     const getMeta = async ({ theme }) => {
-    const supports = require("./supports.js").supporting;
-    const blocks = require("./supports.js").blocking;
-    const recommends = require("./supports.js").recommending;
     const peers = await meta.connectedPeers();
     const peersWithNames = await Promise.all(
     peers.map(async ([key, value]) => {

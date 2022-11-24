@@ -142,14 +142,14 @@
     "changelog-version": "^2.0.0",
     "common-good": "^4.0.3",
     "husky": "^7.0.1",
-    "mkdirp": "^1.0.4",
     "nodemon": "^2.0.3",
     "stylelint-config-recommended": "^5.0.0",
     "supertest": "^6.0.1",
     "tap": "^14.10.7"
   },
   "optionalDependencies": {
-    "sharp": "^0.31.1"
+    "sharp": "^0.31.1",
+    "fsevents": "^2.3.2"
   },
   "bugs": {
     "url": "https://code.03c8.net/KrakensLab/snh-oasis/issues"
