@@ -58,7 +58,7 @@
     "packet-stream": "^2.0.6",
     "packet-stream-codec": "^1.2.0",
     "piexifjs": "^1.0.4",
-    "pretty-ms": "^7.0.1",
+    "pretty-ms": "^8.0.0",
     "pull-abortable": "^4.1.1",
     "pull-cat": "~1.1.5",
     "pull-file": "^1.0.0",
