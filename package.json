@@ -116,7 +116,7 @@
     "ssb-search": "^1.3.0",
     "ssb-search2": "^2.1.3",
     "ssb-server": "^15.3.0",
-    "ssb-tangle": "^1.0.1",
+    "ssb-tangle": "^3.0.4",
     "ssb-thread-schema": "^1.1.1",
     "ssb-threads": "^10.0.4",
     "ssb-tribes": "^3.1.1",
