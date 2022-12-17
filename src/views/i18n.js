@@ -366,8 +366,8 @@ const i18n = {
       "Busca habitantes y palabras clave, entre los posts que tienes descargados.",
     // posts and comments
     commentDescription: ({ parentUrl }) => [
-      " comentó en el hilo ",
-      a({ href: parentUrl }, ""),
+      " comentó en el",
+      a({ href: parentUrl }, " hilo"),
     ],
     replyDescription: ({ parentUrl }) => [
       " respondido al ",

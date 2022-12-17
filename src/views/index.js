@@ -412,7 +412,6 @@ const post = ({ msg, aside = false }) => {
     messageClasses.push("thread-target");
   }
 
-  // TODO: Refactor to stop using strings and use constants/symbols.
   const postOptions = {
     post: null,
     comment: i18n.commentDescription({ parentUrl: url.parent }),
