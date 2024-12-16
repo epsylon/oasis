@@ -13,7 +13,7 @@ If everything is working correctly, it's likely that:
 
 It's important to know that this is not a silver bullet:
 
-- Your public messages can be read by anyone on the Secure Scuttlebutt network.
+- Your public messages can be read by anyone on the network.
 - Your IP address can be seen by anyone that peers with you.
 - Your private messages can be read by anyone with access to your private key.
 

@@ -7,7 +7,6 @@ const homedir = require('os').homedir();
 const gossipPath = path.join(homedir, ".ssb/gossip.json");
 const debug = require("debug")("oasis");
 const highlightJs = require("highlight.js");
-const MarkdownIt = require("markdown-it");
 const prettyMs = require("pretty-ms");
 
 const updater = require("../updater.js");

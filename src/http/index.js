@@ -1,6 +1,6 @@
 const Koa = require("koa");
 const koaStatic = require("koa-static");
-const path = require("path");
+const { join } = require("path");
 const mount = require("koa-mount");
 
 /**
@@ -10,7 +10,7 @@ const mount = require("koa-mount");
  */
 module.exports = ({ host, port, middleware, allowHost }) => {
   const assets = new Koa();
-  assets.use(koaStatic(path.join(__dirname, "assets")));
+  assets.use(koaStatic(join(__dirname, "..", "assets")));
 
   const app = new Koa();
 

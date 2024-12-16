@@ -3,7 +3,7 @@
 set -ex
 
 BASEDIR="$(dirname "$0")"
-TARGET_VERSION="0.1.2"
+TARGET_VERSION="22.12.0"
 
 cd "$BASEDIR/.."
 

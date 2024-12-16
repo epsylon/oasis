@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-const fs = require("fs");
+const { readFileSync } = require("fs");
+const { join } =require("path");
+
 const path = require("path");
 const homedir = require('os').homedir();
 const supportingPath = path.join(homedir, ".ssb/flume/contacts2.json");
@@ -11,11 +13,12 @@ const {
 } = require("hyperaxe");
 
 const envPaths = require("env-paths");
-const cli = require("./cli");
+const {cli} = require("./cli");
 const ssb = require("./ssb");
+
 const defaultConfig = {};
-const defaultConfigFile = path.join(
-  envPaths("oasis", { suffix: "" }).config,
+const defaultConfigFile = join(
+  envPaths.default("oasis", { suffix: "" }).config,
   "/default.json"
 );
 
@@ -24,13 +27,16 @@ if (config.debug) {
   process.env.DEBUG = "oasis,oasis:*";
 }
 const cooler = ssb({ offline: config.offline });
-const { about} = require("./models")({
+
+const models = require("./models.js");
+
+const { about } = models({
   cooler,
   isPublic: config.public,
 });
 
 async function getNameByIdSupported(supported){
-  name_supported = await about.name(supported);
+  const name_supported = await about.name(supported);
   return name_supported
 }
 
@@ -45,7 +51,7 @@ async function getNameByIdRecommended(recommended){
 }
 
   try{
-      var supporting = JSON.parse(fs.readFileSync(supportingPath, {encoding:'utf8', flag:'r'})).value;
+      var supporting = JSON.parse(readFileSync(supportingPath, {encoding:'utf8', flag:'r'})).value;
     }catch{
       var supporting = undefined;
     }
@@ -70,7 +76,7 @@ async function getNameByIdRecommended(recommended){
            if (!arr.includes(supported)) {
               getNameSupported(supported);
               async function getNameSupported(supported){
-                 name_supported = await getNameByIdSupported(supported);
+                 const name_supported = await getNameByIdSupported(supported);
               arr.push(
                li(
                  name_supported,br,
@@ -149,4 +155,4 @@ async function getNameByIdRecommended(recommended){
 
 module.exports.supporting = supports;
 module.exports.blocking = blocks;
-module.exports.recommending = recommends;
+module.exports.recommending = recommends

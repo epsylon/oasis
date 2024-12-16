@@ -4,7 +4,6 @@
 // to call methods over MuxRPC. It's a thin wrapper around SSB-Client, which is
 // a thin wrapper around the MuxRPC module.
 
-const { promisify } = require("util");
 const ssbClient = require("ssb-client");
 const ssbConfig = require("ssb-config");
 const ssbKeys = require("ssb-keys");

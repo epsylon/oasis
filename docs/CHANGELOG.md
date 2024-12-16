@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.3.0 - 2024-12-15
+
+### Changed
+
+- Migration to Node.js v22.12.0 (LTS)
+
 ## v0.2.3 - 2022-11-05
 
 ### Added

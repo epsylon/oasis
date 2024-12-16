@@ -1,6 +1,8 @@
-const stack = require("secret-stack");
+const SecretStack = require("secret-stack");
 const debug = require("debug")("oasis");
 const ssbConfig = require("ssb-config");
+
+const caps = require('ssb-caps')
 
 const plugins = [
   // Authentication often hooked for authentication.
@@ -31,8 +33,9 @@ const plugins = [
 ];
 
 module.exports = (config) => {
-  const server = stack();
+  const server = SecretStack({caps});
   const walk = (input) => {
+
     if (Array.isArray(input)) {
       input.forEach(walk);
     } else {
@@ -45,3 +48,4 @@ module.exports = (config) => {
 
   return server({ ...ssbConfig, ...config });
 };
+

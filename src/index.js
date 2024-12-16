@@ -5,9 +5,11 @@
 // Minimum required to get config
 const path = require("path");
 const envPaths = require("env-paths");
-const cli = require("./cli");
+const {cli} = require("./cli");
 const fs = require("fs");
-const exif = require("piexifjs");
+
+const promisesFs = require("fs").promises;
+
 
 const supports = require("./supports.js").supporting;
 const blocks = require("./supports.js").blocking;
@@ -18,7 +20,9 @@ const defaultConfigFile = path.join(
   envPaths("oasis", { suffix: "" }).config,
   "/default.json"
 );
+
 let haveConfig;
+
 try {
   const defaultConfigOverride = fs.readFileSync(defaultConfigFile, "utf8");
   Object.entries(JSON.parse(defaultConfigOverride)).forEach(([key, value]) => {
@@ -57,7 +61,8 @@ try {
   }
 }
 
-const nodeHttp = require("http");
+const { get } = require("node:http");
+
 const debug = require("debug")("oasis");
 
 const log = (formatter, ...args) => {
@@ -97,7 +102,7 @@ const oasisCheckPath = "/.well-known/oasis";
 process.on("uncaughtException", function (err) {
   // This isn't `err.code` because TypeScript doesn't like that.
   if (err["code"] === "EADDRINUSE") {
-    nodeHttp.get(url + oasisCheckPath, (res) => {
+    get(url + oasisCheckPath, (res) => {
       let rawData = "";
       res.on("data", (chunk) => {
         rawData += chunk;
@@ -146,15 +151,13 @@ process.argv = [];
 
 const http = require("./http");
 
-const koaBody = require("koa-body");
+const {koaBody} = require("koa-body");
 const { nav, ul, li, a } = require("hyperaxe");
 const open = require("open");
 const pull = require("pull-stream");
-const requireStyle = require("require-style");
 const koaRouter = require("@koa/router");
 const ssbMentions = require("ssb-mentions");
-const ssbRef = require("ssb-ref");
-const isSvg = require("is-svg");
+const isSvg = require('is-svg');
 const { themeNames } = require("@fraction/base16-css");
 const { isFeed, isMsg, isBlob } = require("ssb-ref");
 
@@ -166,7 +169,9 @@ const router = new koaRouter();
 // This handle is passed to the models for their convenience.
 const cooler = ssb({ offline: config.offline });
 
-const { about, blob, friend, meta, post, vote } = require("./models")({
+const models = require("./models");
+
+const { about, blob, friend, meta, post, vote } = models({
   cooler,
   isPublic: config.public,
 });
@@ -258,7 +263,7 @@ const handleBlobUpload = async function (ctx) {
     return "";
   }
 
-  let data = await fs.promises.readFile(blobUpload.path);
+  let data = await promisesFs.readFile(blobUpload.filepath);
   if (data.length == 0) {
     return "";
   }
@@ -272,15 +277,15 @@ const handleBlobUpload = async function (ctx) {
 
   try {
     const removeExif = (fileData) => {
-      const exifOrientation = exif.load(fileData);
-      const orientation = exifOrientation["0th"][exif.ImageIFD.Orientation];
-      const clean = exif.remove(fileData);
+      const exifOrientation = load(fileData);
+      const orientation = exifOrientation["0th"][ImageIFD.Orientation];
+      const clean = remove(fileData);
       if (orientation !== undefined) {
         // preserve img orientation
         const exifData = { "0th": {} };
-        exifData["0th"][exif.ImageIFD.Orientation] = orientation;
-        const exifStr = exif.dump(exifData);
-        return exif.insert(exifStr, clean);
+        exifData["0th"][ImageIFD.Orientation] = orientation;
+        const exifStr = dump(exifData);
+        return insert(exifStr, clean);
       } else {
         return clean;
       }
@@ -373,7 +378,6 @@ const {
   likesView,
   threadView,
   hashtagView,
-  markdownView,
   mentionsView,
   popularView,
   previewView,
@@ -391,8 +395,11 @@ const {
   topicsView,
   summaryView,
   threadsView,
-  spreadedView,
-} = require("./views");
+} = require("./views/index.js");
+
+const ssbRef = require("ssb-ref");
+
+const markdownView = require("./views/markdown.js");
 
 let sharp;
 
@@ -445,16 +452,21 @@ router
   .get("/public/popular/:period", async (ctx) => {
     const { period } = ctx.params;
     const publicPopular = async ({ period }) => {
-    const messages = await post.popular({ period });
-    const selectedLanguage = ctx.cookies.get("language") || "en";
-    const i18nBase = require("./views/i18n");
-    let i18n = i18nBase[selectedLanguage];
-    exports.setLanguage = (language) => {
-    selectedLanguage = language;
-    i18n = Object.assign({}, i18nBase.en, i18nBase[language]);
-    };
+      const messages = await post.popular({ period });
+      const selectedLanguage = ctx.cookies.get("language") || "en";
+      const i18nBase = require("./views/i18n");
+      let i18n = i18nBase[selectedLanguage];
+      exports.setLanguage = (language) => {
+        selectedLanguage = language;
+        i18n = Object.assign({}, i18nBase.en, i18nBase[language]);
+      };
       const prefix = nav(
-        ul(a({ href: "./day" }, i18n.day), a({ href: "./week" }, i18n.week), a({ href: "./month" }, i18n.month), a({ href: "./year" }, i18n.year))
+        ul(
+          a({ href: "./day" }, i18n.day),
+          a({ href: "./week" }, i18n.week),
+          a({ href: "./month" }, i18n.month),
+          a({ href: "./year" }, i18n.year)
+        )
       );
       return popularView({
         messages,
@@ -565,17 +577,49 @@ router
 
     ctx.body = await hashtagView({ hashtag, messages });
   })
-  .get("/theme.css", (ctx) => {
-    const theme = ctx.cookies.get("theme") || config.theme;
 
+  .get("/theme.css", async (ctx) => {
+    const theme = ctx.cookies.get("theme") || config.theme;
+  
     const packageName = "@fraction/base16-css";
-    const filePath = `${packageName}/src/base16-${theme}.css`;
-    ctx.type = "text/css";
-    ctx.body = requireStyle(filePath);
+    const filePath = path.resolve(
+      "node_modules",
+      packageName,
+      "src",
+      `base16-${theme}.css`
+    );
+  
+    try {
+      
+      // await the css content
+      const cssContent = await promisesFs.readFile(filePath, { encoding: "utf8" });
+  
+      ctx.type = "text/css"; // Set the Content-Type header
+      ctx.body = cssContent; // Serve the CSS content
+
+    } catch (err) {
+      console.error("Error reading CSS file:", err.message);
+  
+      ctx.status = 404; // Return a 404 status if the file is not found
+      ctx.body = "Theme not found.";
+    }
   })
-  .get("/custom-style.css", (ctx) => {
+  
+  .get("/custom-style.css", async (ctx) => {
     ctx.type = "text/css";
-    ctx.body = requireStyle(customStyleFile);
+    try {
+
+      // Read the CSS file
+      const cssContent = await fs.readFileSync(customStyleFile, "utf8");
+
+      ctx.type = "text/css"; // Set the Content-Type header
+      ctx.body = cssContent; // Serve the CSS content
+    } catch (err) {
+      console.error("Error reading custom style file:", err.message);
+
+      ctx.status = 404; // Return a 404 status if the file is not found
+      ctx.body = "Custom style not found.";
+    }
   })
   .get("/profile", async (ctx) => {
     const myFeedId = await meta.myFeedId();
@@ -620,7 +664,8 @@ router
     const name = String(ctx.request.body.name);
     const description = String(ctx.request.body.description);
 
-    const image = await fs.promises.readFile(ctx.request.files.image.path);
+    const image = await promisesFs.readFile(ctx.request.files.image.filepath);
+
     ctx.body = await post.publishProfileEdit({
       name,
       description,
@@ -748,33 +793,33 @@ router
       });
     };
     ctx.body = await getMeta({ theme });
-   })
+  })
   .get("/peers", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
     const getMeta = async ({ theme }) => {
-    const peers = await meta.connectedPeers();
-    const peersWithNames = await Promise.all(
-    peers.map(async ([key, value]) => {
-     value.name = await about.name(value.key);
-     return [key, value];
-     }))
-    return peersView({
-      peers: peersWithNames,
-      supports: supports,
-      blocks: blocks,
-      recommends: recommends,
-    });
-   };
-    ctx.body = await getMeta({ theme });
-   })
-  .get("/invites", async (ctx) => {
-    const theme = ctx.cookies.get("theme") || config.theme;
-    const getMeta = async ({ theme }) => {
-      return invitesView({
+      const peers = await meta.connectedPeers();
+      const peersWithNames = await Promise.all(
+        peers.map(async ([key, value]) => {
+          value.name = await about.name(value.key);
+          return [key, value];
+        })
+      );
+      return peersView({
+        peers: peersWithNames,
+        supports: supports,
+        blocks: blocks,
+        recommends: recommends,
       });
     };
     ctx.body = await getMeta({ theme });
-   })
+  })
+  .get("/invites", async (ctx) => {
+    const theme = ctx.cookies.get("theme") || config.theme;
+    const getMeta = async ({ theme }) => {
+      return invitesView({});
+    };
+    ctx.body = await getMeta({ theme });
+  })
   .get("/likes/:feed", async (ctx) => {
     const { feed } = ctx.params;
     const likes = async ({ feed }) => {
@@ -822,11 +867,8 @@ router
     ctx.body = await publishView();
   })
   .get("/comment/:message", async (ctx) => {
-    const {
-      messages,
-      myFeedId,
-      parentMessage,
-    } = await resolveCommentComponents(ctx);
+    const { messages, myFeedId, parentMessage } =
+      await resolveCommentComponents(ctx);
     ctx.body = await commentView({ messages, myFeedId, parentMessage });
   })
   .post(
@@ -878,12 +920,8 @@ router
     "/comment/preview/:message",
     koaBody({ multipart: true }),
     async (ctx) => {
-      const {
-        messages,
-        contentWarning,
-        myFeedId,
-        parentMessage,
-      } = await resolveCommentComponents(ctx);
+      const { messages, contentWarning, myFeedId, parentMessage } =
+        await resolveCommentComponents(ctx);
 
       const previewData = await preparePreview(ctx);
 
@@ -1018,10 +1056,12 @@ router
     ctx.redirect(referer.href);
   })
   .post("/update", koaBody(), async (ctx) => {
-    const util = require('node:util');
-    const exec = util.promisify(require('node:child_process').exec);
+    const util = require("node:util");
+    const exec = util.promisify(require("node:child_process").exec);
     async function updateTool() {
-      const { stdout, stderr } = await exec('git reset --hard && git pull && npm install .');
+      const { stdout, stderr } = await exec(
+        "git reset --hard && git pull && npm install ."
+      );
       console.log("updating Oasis");
       console.log(stdout);
       console.log(stderr);
@@ -1062,10 +1102,10 @@ router
     try {
       const invite = String(ctx.request.body.invite);
       await meta.acceptInvite(invite);
-      } catch (e) {
-          // Just in case it's an invalid invite code. :(
-          debug(e);
-      }
+    } catch (e) {
+      // Just in case it's an invalid invite code. :(
+      debug(e);
+    }
     ctx.redirect("/invites");
   })
   .post("/settings/rebuild", async (ctx) => {

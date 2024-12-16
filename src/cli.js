@@ -1,14 +1,18 @@
 "use strict";
 
 const yargs = require("yargs");
+const { hideBin } = require("yargs/helpers"); // Helper to parse arguments
 const _ = require("lodash");
+
+const moduleAlias = require('module-alias');
+moduleAlias.addAlias('punycode', 'punycode/');
 
 /**
  * @param {object} presets
  * @param {string} defaultConfigFile
  */
-module.exports = (presets, defaultConfigFile) =>
-  yargs
+const cli = (presets, defaultConfigFile) =>
+  yargs(hideBin(process.argv))
     .scriptName("oasis")
     .env("OASIS")
     .help("h")
@@ -59,3 +63,5 @@ module.exports = (presets, defaultConfigFile) =>
       type: "string",
     })
     .epilog(`The defaults can be configured in ${defaultConfigFile}.`).argv;
+
+module.exports = { cli };

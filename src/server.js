@@ -1,8 +1,11 @@
 #! /usr/bin/env node
 
+const moduleAlias = require('module-alias');
+moduleAlias.addAlias('punycode', 'punycode/');
+
 var fs = require('fs')
 var path = require('path')
-var SecretStack = require('secret-stack')
+const SecretStack = require('secret-stack')
 var caps = require('ssb-caps')
 var SSB = require('ssb-db')
 var Client       = require('ssb-client')
@@ -170,4 +173,3 @@ if(process.stdout.isTTY && (config.logging.level != 'info'))
     muxrpcli(argv, manifest, rpc, config.verbose)
   })
 }
-

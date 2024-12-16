@@ -28,17 +28,17 @@ Follow ['INSTALL.md'](docs/install.md) to build and install it on your device.
 
 ## Setup:
 
-Visit ['Settings'](https://solarnethub.com/socialnet/snh#settings_minimal) to learn how to choose your language, set a theme & configure your avatar.
+Visit ['Settings'](https://wiki.solarnethub.com/socialnet/snh#settings_minimal) to learn how to choose your language, set a theme & configure your avatar.
 
 ----------
 
 ## Multiverse:
 
-Join ['PUB: "La Plaza"'](https://solarnethub.com/socialnet/snh-pub) to start to be connected with other interesting projects in the Multiverse.
+Join ['PUB: "La Plaza"'](https://wiki.solarnethub.com/socialnet/snh-pub) to start to be connected with other interesting projects in the Multiverse.
 
   ![SNH](https://solarnethub.com/_media/socialnet/snh-oasis_federation-2.png "SolarNET.HuB")
   
-This allows you to communicate and access content from outside the [project network](https://solarnethub.com/socialnet/overview). 
+This allows you to communicate and access content from outside the [project network](https://wiki.solarnethub.com/socialnet/overview). 
 
   ![SNH](https://solarnethub.com/_media/socialnet/snh-multiverse.png "SolarNET.HuB")
 
@@ -46,7 +46,7 @@ This allows you to communicate and access content from outside the [project netw
 
 ## SNH-Hub:
 
-The public content of the ['PUB: "La Plaza"'](https://solarnethub.com/socialnet/snh-pub) can be visited from outside the [project network](https://solarnethub.com/socialnet/overview), through the [World Wide Web](https://en.wikipedia.org/wiki/World_Wide_Web) (aka [Clearnet](https://en.wikipedia.org/wiki/Clearnet_(networking))).
+The public content of the ['PUB: "La Plaza"'](https://wiki.solarnethub.com/socialnet/snh-pub) can be visited from outside the [project network](https://wiki.solarnethub.com/socialnet/overview), through the [World Wide Web](https://en.wikipedia.org/wiki/World_Wide_Web) (aka [Clearnet](https://en.wikipedia.org/wiki/Clearnet_(networking))).
 
   ![SNH](https://solarnethub.com/_media/socialnet/snh-pub-feed.png "SolarNET.HuB") 
   
@@ -58,13 +58,13 @@ Just visit: https://pub.solarnethub.com/
 
 ## Roadmap:
 
-Review ['Roadmap'](https://solarnethub.com/project/roadmap#the_project_network) to know about some required functionalities that can be implemented.
+Review ['Roadmap'](https://wiki.solarnethub.com/project/roadmap#the_project_network) to know about some required functionalities that can be implemented.
 
 ----------
 
 ## Development:
 
-Check ['Call 4 Hackers'](https://solarnethub.com/community/hackers) for contributing with developments.
+Check ['Call 4 Hackers'](https://wiki.solarnethub.com/community/hackers) for contributing with developments.
 
 ----------
 
@@ -72,10 +72,10 @@ Check ['Call 4 Hackers'](https://solarnethub.com/community/hackers) for contribu
 
  + SNH Website: https://solarnethub.com
  + Kräkens.Lab: https://krakenslab.com
- + Research: https://solarnethub.com/docs/research
- + Code of Conduct: https://solarnethub.com/docs/code_of_conduct
- + The KIT: https://solarnethub.com/kit/overview
- + Ecosystem: https://solarnethub.com/socialnet/ecosystem
- + Project Network: https://solarnethub.com/socialnet/snh#the_project_network
- + Role-playing: https://solarnethub.com/socialnet/roleplaying
- + Warehouse: https://solarnethub.com/stock/submit_request
+ + Research: https://wiki.solarnethub.com/docs/research
+ + Code of Conduct: https://wiki.solarnethub.com/docs/code_of_conduct
+ + The KIT: https://wiki.solarnethub.com/kit/overview
+ + Ecosystem: https://wiki.solarnethub.com/socialnet/ecosystem
+ + Project Network: https://wiki.solarnethub.com/socialnet/snh#the_project_network
+ + Role-playing: https://wiki.solarnethub.com/socialnet/roleplaying
+ + Warehouse: https://wiki.solarnethub.com/stock/submit_request

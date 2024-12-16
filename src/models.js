@@ -310,6 +310,8 @@ module.exports = ({ cooler, isPublic }) => {
               dirty = true;
               feeds_to_name[feed] = newEntry;
             }
+          }, (err) => {
+            console.error(err);
           })
         );
       });

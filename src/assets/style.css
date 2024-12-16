@@ -480,7 +480,8 @@ nav > ul {
   justify-content: space-between;
   margin: 0;
   margin-right: 30px;
-  #padding: 0;
+  margin-left: 30px;
+  padding: 0;
 }
 
 nav > ul > li {
