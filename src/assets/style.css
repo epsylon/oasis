@@ -584,6 +584,12 @@ hr {
   margin: var(--size-0) 0;
 }
 
+.form-button-group-center {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+}
+
 /* sidebar only appears on big screens */
 @media (min-width: calc(45rem)) {
   body > nav > ul {
@@ -660,6 +666,67 @@ hr {
   font-size: var(--size--1);
   overflow-x: auto;
   width: 24rem;
+}
+
+.button-like-link {
+	background: var(--fg);
+	border: var(--size--4) solid var(--fg);
+	border-radius: var(--common-radius);
+	color: var(--bg);
+	cursor: pointer;
+	font-size: 8pt;
+	padding: var(--size--1) var(--size-0);
+  text-decoration: none;
+}
+
+.button-like-link:hover {
+  background: var(--fg-light);
+}
+
+.div-center {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.qr-code svg {
+  margin-top: 1em;
+  width: 60%;
+}
+
+.wallet-balance {
+  display: block;
+  font-size: var(--size-1);
+  margin-bottom: 0.25em;
+}
+
+.wallet-status-error ul li {
+  color: var(--red);
+}
+
+.wallet-status-error ul li::marker {
+  color: var(--fg);
+}
+
+.tcell-ellipsis {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.full-center,
+.full-center th,
+.full-center td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.col-10 {
+  width: 10%;
+}
+
+.col-30{
+  width: 30%;
 }
 
 section.post-preview {

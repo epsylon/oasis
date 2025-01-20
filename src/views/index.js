@@ -10,13 +10,22 @@ const highlightJs = require("highlight.js");
 const prettyMs = require("pretty-ms");
 
 const updater = require("../updater.js");
-
-global.updaterequired = "";
-global.ck = updater.getRemoteVersion(async function(checkversion){
-  if (checkversion === "required"){
-    ck = "required";
+async function checkForUpdate() {
+  try {
+    await updater.getRemoteVersion();
+    if (global.ck === "required") {
+      global.updaterequired = form(
+        { action: "/update", method: "post" },
+        button({ type: "submit" }, i18n.updateit)
+      );
+    } else {
+      console.log("\noasis@version: no updates required.\n");
+    }
+  } catch (error) {
+    console.error("\noasis@version: error fetching package.json:", error.message, "\n");
   }
-});
+}
+checkForUpdate();
 
 const {
   a,
@@ -51,8 +60,14 @@ const {
   select,
   span,
   summary,
+  table,
+  tbody,
+  td,
   textarea,
+  th,
+  thead,
   title,
+  tr,
   ul,
 } = require("hyperaxe");
 
@@ -133,12 +148,14 @@ const template = (titlePrefix, ...elements) => {
         ul(
           //navLink({ href: "/imageSearch", emoji: "✧", text: i18n.imageSearch }),
           navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
-          navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest }),
-          navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries }),
-          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }),
-          navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.extended }),
           navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
+          hr,
+          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }),
+          navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries }),
+          navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest }),
           navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads }),
+          hr,
+          navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.extended }),
         )
       ),
       main({ id: "content" }, elements),
@@ -147,9 +164,12 @@ const template = (titlePrefix, ...elements) => {
           navLink({ href: "/publish", emoji: "❂",text: i18n.publish }),
           navLink({ href: "/search", emoji: "✦", text: i18n.search }),
           navLink({ href: "/inbox", emoji: "☂", text: i18n.private }),
+          hr,
           navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
-          navLink({ href: "/invites", emoji: "❄", text: i18n.invites }),
+          navLink({ href: "/wallet", emoji: "❄", text: i18n.wallet }),
+          navLink({ href: "/invites", emoji: "ꔹ", text: i18n.invites }),
           navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
+          hr,
           navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
         )
       )
@@ -1128,7 +1148,7 @@ exports.invitesView = ({ invites }) => {
    );
 };
 
-exports.settingsView = ({ theme, themeNames, version }) => { 
+exports.settingsView = ({ theme, themeNames, version, walletUrl, walletUser, walletFee }) => {
  const themeElements = themeNames.map((cur) => {
     const isCurrentTheme = cur === theme;
     if (isCurrentTheme) {
@@ -1173,20 +1193,14 @@ exports.settingsView = ({ theme, themeNames, version }) => {
     button({ type: "submit" }, i18n.rebuildName)
   );
 
-  if (ck === "required"){
-    updaterequired = form(
-      { action: "/update", method: "post" },
-      button({ type: "submit"}, i18n.updateit)
-    );
-  };
-
   return template(
     i18n.settings,
     section(
       { class: "message" },
       h1(i18n.settings),
       p(a({ href:snhUrl, target: "_blank" }, i18n.settingsIntro({ version }))),
-      p(updaterequired),
+      p(global.updaterequired),
+      hr,
       h2(i18n.theme),
       p(i18n.themeIntro),
       form(
@@ -1194,6 +1208,7 @@ exports.settingsView = ({ theme, themeNames, version }) => {
          select({ name: "theme" }, ...themeElements),
          button({ type: "submit" }, i18n.setTheme)
        ),
+      hr,
       h2(i18n.language),
       p(i18n.languageDescription),
       form(
@@ -1207,6 +1222,25 @@ exports.settingsView = ({ theme, themeNames, version }) => {
         ]),
         button({ type: "submit" }, i18n.setLanguage)
       ),
+      hr,
+      h2(i18n.wallet),
+      p(i18n.walletSettingsDescription),
+      form(
+        { action: "/settings/wallet", method: "POST" },
+        label({ for: "wallet_url" }, i18n.walletAddress),
+        input({ type: "text", id: "wallet_url", name: "wallet_url", placeholder: walletUrl, value: walletUrl }),
+        label({ for: "wallet_user" }, i18n.walletUser),
+        input({ type: "text", id: "wallet_user", name: "wallet_user", placeholder: walletUser, value: walletUser }),
+
+        label({ for: "wallet_pass" }, i18n.walletPass),
+        input({ type: "password", id: "wallet_pass", name: "wallet_pass" }),
+
+        label({ for: "wallet_fee" }, i18n.walletFee),
+        input({ type: "text", id: "wallet_fee", name: "wallet_fee", placeholder: walletFee, value: walletFee }),
+
+        button({ type: "submit" }, i18n.walletConfiguration)
+      ),
+      hr,
       h2(i18n.indexes),
       p(i18n.indexesDescription),
       rebuildButton,
@@ -1546,3 +1580,182 @@ exports.indexingView = ({ percent }) => {
 
   return result;
 };
+
+const walletViewRender = (balance, ...elements) => {
+  return template(
+    i18n.walletTitle,
+    section(
+      h1(i18n.walletTitle),
+      p(i18n.walletDescription),
+    ),
+    section(
+      div(
+        {class: "div-center"},
+        span(
+          {class: "wallet-balance"},
+          i18n.walletBalanceLine({ balance })
+        ),
+        span(
+          { class: "form-button-group-center" },
+          a({ href: "/wallet/send", class: "button-like-link" }, i18n.walletSend),
+          a({ href: "/wallet/receive", class: "button-like-link" }, i18n.walletReceive),
+          a({ href: "/wallet/history", class: "button-like-link" }, i18n.walletHistory),
+        )
+      ),
+    ),
+    elements.length > 0 ? section(...elements) : null
+  )
+};
+
+exports.walletView = async (balance) => {
+  return walletViewRender(balance)
+}
+
+exports.walletHistoryView = async (balance, transactions) => {
+  return walletViewRender(
+    balance,
+    table(
+      { class: "wallet-history" },
+      thead(
+        tr(
+          { class: "full-center" },
+          th({ class: "col-10" }, i18n.walletCnfrs),
+          th(i18n.walletDate),
+          th(i18n.walletType),
+          th(i18n.walletAmount),
+          th({ class: "col-30" }, i18n.walletTxId)
+        )
+      ),
+      tbody(
+        ...transactions.map((tx) => {
+          const date = new Date(tx.time * 1000);
+          const amount = Number(tx.amount);
+          const fee = Number(tx.fee) || 0;
+          const totalAmount = Number(amount + fee);
+
+          return tr(
+            td({ class: "full-center" }, tx.confirmations),
+            td(date.toLocaleDateString(), br(), date.toLocaleTimeString()),
+            td(tx.category),
+            td(totalAmount.toFixed(2)),
+            td({ width: "30%", class: "tcell-ellipsis" },
+              a({
+                href: `https://ecoin.03c8.net/blockexplorer/search?q=${tx.txid}`,
+                target: "_blank",
+              }, tx.txid)
+            )
+          )
+        })
+      )
+    )
+  )
+}
+
+exports.walletReceiveView = async (balance, address) => {
+  const QRCode = require('qrcode');
+  const qrImage = await QRCode.toString(address, { type: 'svg' });
+  const qrContainer = address + qrImage
+
+  return walletViewRender(
+    balance,
+    div(
+      {class: 'div-center qr-code', innerHTML: qrContainer},
+    ),
+  )
+}
+
+exports.walletSendFormView = async (balance, destination, amount, fee, statusMessages) => {
+  const { type, title, messages } = statusMessages || {};
+  const statusBlock = div({ class: `wallet-status-${type}` },);
+
+  if (messages?.length > 0) {
+    statusBlock.appendChild(
+      span(
+        i18n.walletStatusMessages[title]
+      )
+    )
+    statusBlock.appendChild(
+      ul(
+        ...messages.map(error => li(i18n.walletStatusMessages[error]))
+      )
+    )
+  }
+
+  return walletViewRender(
+    balance,
+    div(
+      {class: "div-center"},
+      messages?.length > 0 ? statusBlock : null,
+      form(
+        { action: '/wallet/send', method: 'POST' },
+        label({ for: 'destination' }, i18n.walletAddress),
+        input({ type: 'text', id: 'destination', name: 'destination', placeholder: 'ELH8RJGy3s7sCPqQUyN8on2gD5Fdn3BpyC', value: destination }),
+        label({ for: 'amount' }, i18n.walletAmount),
+        input({ type: 'text', id: 'amount', name: 'amount', placeholder: '0.25', value: amount }),
+        label({ for: 'fee' }, i18n.walletFee),
+        input({ type: 'text', id: 'fee', name: 'fee', placeholder: '0.01', value: fee }),
+        input({ type: 'hidden', name: 'action', value: 'confirm' }),
+        div({ class: 'form-button-group-center' },
+          button({ type: 'submit' }, i18n.walletSend),
+          button({ type: 'reset' }, i18n.walletReset)
+        )
+      )
+    )
+  )
+}
+
+exports.walletSendConfirmView = async (balance, destination, amount, fee) => {
+  const totalCost = amount + fee;
+
+  return walletViewRender(
+    balance,
+    p(
+      i18n.walletAddressLine({ address: destination }), br(),
+      i18n.walletAmountLine({ amount }), br(),
+      i18n.walletFeeLine({ fee }), br(),
+      i18n.walletTotalCostLine({ totalCost }),
+    ),
+    form(
+      { action: '/wallet/send', method: 'POST' },
+      input({ type: 'hidden', name: 'action', value: 'send' }),
+      input({ type: 'hidden', name: 'destination', value: destination }),
+      input({ type: 'hidden', name: 'amount', value: amount }),
+      input({ type: 'hidden', name: 'fee', value: fee }),
+      div({ class: 'form-button-group-center' },
+        button({ type: 'submit' }, i18n.walletConfirm),
+        a ({ href: `/wallet/send`, class: "button-like-link" }, i18n.walletBack),
+      )
+    ),
+  )
+}
+
+exports.walletErrorView = async (error) => {
+  return template(
+    i18n.walletTitle,
+    section(
+      h1(i18n.walletTitle),
+      p(i18n.walletDescription),
+    ),
+    section(
+      h2(i18n.walletStatus),
+      p(i18n.walletDisconnected),
+    )
+  )
+}
+
+exports.walletSendResultView = async (balance, destination, amount, txId) => {
+  return walletViewRender(
+    balance,
+    p(
+      i18n.walletSentToLine({ destination, amount }), br(),
+      `${i18n.walletTransactionId}: `,
+      a(
+        {
+          href: `https://ecoin.03c8.net/blockexplorer/search?q=${txId}`,
+          target: "_blank",
+        },
+        txId
+      ),
+    ),
+  )
+}

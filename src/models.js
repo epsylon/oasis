@@ -9,6 +9,10 @@ const pullParallelMap = require("pull-paramap");
 const pull = require("pull-stream");
 const pullSort = require("pull-sort");
 const ssbRef = require("ssb-ref");
+const {
+  RequestManager,
+  HTTPTransport,
+  Client } = require("@open-rpc/client-js");
 
 const isEncrypted = (message) => typeof message.value.content === "string";
 const isNotEncrypted = (message) => isEncrypted(message) === false;
@@ -1914,6 +1918,53 @@ module.exports = ({ cooler, isPublic }) => {
       });
     },
   };
+
+  models.wallet = {
+    client: async (url, user, pass) => {
+      const transport = new HTTPTransport(url, {
+        headers: {
+          'Authorization': 'Basic ' + btoa(`${user}:${pass}`)
+        }
+      });
+      return new Client(new RequestManager([transport]));
+    },
+    execute: async (url, user, pass, method, params = []) => {
+      try {
+        const client = await models.wallet.client(url, user, pass);
+        return await client.request({ method, params });
+      } catch (error) {
+        throw new Error(
+          "ECOin wallet disconnected. " +
+          "Check your wallet settings or connection status."
+        );
+      }
+    },
+    getBalance: async (url, user, pass) => {
+      return await models.wallet.execute(url, user, pass, "getbalance");
+    },
+    getAddress: async (url, user, pass) => {
+      const addresses = await models.wallet.execute(url, user, pass, "getaddressesbyaccount", ['']);
+      return addresses[0]  // TODO: Handle multiple addresses
+    },
+    listTransactions: async (url, user, pass) => {
+      return await models.wallet.execute(url, user, pass, "listtransactions", ["", 1000000, 0]);
+    },
+    sendToAddress: async (url, user, pass, address, amount) => {
+      return await models.wallet.execute(url, user, pass, "sendtoaddress", [address, amount]);
+    },
+    validateSend: async (url, user, pass, address, amount, fee) => {
+      let isValid = false
+      const errors = [];
+      const addressValid = await models.wallet.execute(url, user, pass, "validateaddress", [address]);
+      const amountValid = amount > 0;
+      const feeValid = fee > 0;
+      if (!addressValid.isvalid) { errors.push("invalid_dest") }
+      if (!amountValid) { errors.push("invalid_amount") }
+      if (!feeValid) { errors.push("invalid_fee") }
+      if (errors.length == 0) { isValid = true }
+      return { isValid, errors }
+    }
+  }
 
   return models;
 };

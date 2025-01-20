@@ -10,7 +10,6 @@ const fs = require("fs");
 
 const promisesFs = require("fs").promises;
 
-
 const supports = require("./supports.js").supporting;
 const blocks = require("./supports.js").blocking;
 const recommends = require("./supports.js").recommending;
@@ -78,20 +77,6 @@ delete config.$0;
 const { host } = config;
 const { port } = config;
 const url = `http://${host}:${port}`;
-
-if (haveConfig) {
-  log(`Configuration read defaults from ${defaultConfigFile}`);
-} else {
-  log(
-    `No configuration file found at ${defaultConfigFile}, using built-in default values.`
-  );
-}
-
-if (!haveCustomStyle) {
-  log(
-    `No custom style file found at ${customStyleFile}, ignoring this stylesheet.`
-  );
-}
 
 debug("Current configuration: %O", config);
 debug(`You can save the above to ${defaultConfigFile} to make \
@@ -171,7 +156,7 @@ const cooler = ssb({ offline: config.offline });
 
 const models = require("./models");
 
-const { about, blob, friend, meta, post, vote } = models({
+const { about, blob, friend, meta, post, vote, wallet } = models({
   cooler,
   isPublic: config.public,
 });
@@ -395,6 +380,13 @@ const {
   topicsView,
   summaryView,
   threadsView,
+  walletView,
+  walletErrorView,
+  walletHistoryView,
+  walletReceiveView,
+  walletSendFormView,
+  walletSendConfirmView,
+  walletSendResultView,
 } = require("./views/index.js");
 
 const ssbRef = require("ssb-ref");
@@ -785,11 +777,18 @@ router
   })
   .get("/settings", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
-    const getMeta = async ({ theme }) => {
+    const walletUrl = ctx.cookies.get("wallet_url") || config.walletUrl;
+    const walletUser = ctx.cookies.get("wallet_user") || config.walletUser;
+    const walletFee = ctx.cookies.get("wallet_fee") || config.walletFee;
+
+   const getMeta = async ({ theme }) => {
       return settingsView({
         theme,
         themeNames,
         version: version.toString(),
+        walletUrl,
+        walletUser,
+        walletFee
       });
     };
     ctx.body = await getMeta({ theme });
@@ -870,6 +869,53 @@ router
     const { messages, myFeedId, parentMessage } =
       await resolveCommentComponents(ctx);
     ctx.body = await commentView({ messages, myFeedId, parentMessage });
+  })
+  .get("/wallet", async (ctx) => {
+    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
+    const user = ctx.cookies.get("wallet_user") || config.walletUser;
+    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
+    try {
+      const balance = await wallet.getBalance(url, user, pass);
+      ctx.body = await walletView(balance);
+    } catch (error) {
+      ctx.body = await walletErrorView(error);
+    }
+  })
+  .get("/wallet/history", async (ctx) => {
+    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
+    const user = ctx.cookies.get("wallet_user") || config.walletUser;
+    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
+    try {
+      const balance = await wallet.getBalance(url, user, pass);
+      const transactions = await wallet.listTransactions(url, user, pass);
+      ctx.body = await walletHistoryView(balance, transactions);
+    } catch (error) {
+      ctx.body = await walletErrorView(error);
+    }
+  })
+  .get("/wallet/receive", async (ctx) => {
+    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
+    const user = ctx.cookies.get("wallet_user") || config.walletUser;
+    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
+    try {
+    const balance = await wallet.getBalance(url, user, pass);
+    const address = await wallet.getAddress(url, user, pass);
+    ctx.body = await walletReceiveView(balance, address);
+    } catch (error) {
+      ctx.body = await walletErrorView(error);
+    }
+  })
+  .get("/wallet/send", async (ctx) => {
+    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
+    const user = ctx.cookies.get("wallet_user") || config.walletUser;
+    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
+    const fee = ctx.cookies.get("wallet_fee") || config.walletFee;
+    try {
+      const balance = await wallet.getBalance(url, user, pass);
+      ctx.body = await walletSendFormView(balance, null, null, fee, null);
+    } catch (error) {
+      ctx.body = await walletErrorView(error);
+    }
   })
   .post(
     "/subtopic/preview/:message",
@@ -1055,18 +1101,17 @@ router
     ctx.body = await like({ messageKey, voteValue });
     ctx.redirect(referer.href);
   })
+
   .post("/update", koaBody(), async (ctx) => {
     const util = require("node:util");
     const exec = util.promisify(require("node:child_process").exec);
     async function updateTool() {
-      const { stdout, stderr } = await exec(
-        "git reset --hard && git pull && npm install ."
-      );
-      console.log("updating Oasis");
+      const { stdout, stderr } = await exec("git reset --hard && git pull && npm install .");
+      console.log("oasis@version: updating Oasis...");
       console.log(stdout);
       console.log(stderr);
     }
-    updateTool();
+    await updateTool();
     const referer = new URL(ctx.request.header.referer);
     ctx.redirect(referer.href);
   })
@@ -1112,6 +1157,67 @@ router
     // Do not wait for rebuild to finish.
     meta.rebuild();
     ctx.redirect("/settings");
+  })
+  .post("/settings/wallet", koaBody(), async (ctx) => {
+    const url = String(ctx.request.body.wallet_url);
+    const user = String(ctx.request.body.wallet_user);
+    const pass = String(ctx.request.body.wallet_pass);
+    const fee = String(ctx.request.body.wallet_fee);
+
+    url && url.trim() !== "" && ctx.cookies.set("wallet_url", url);
+    user && user.trim() !== "" && ctx.cookies.set("wallet_user", user);
+    pass && pass.trim() !== "" && ctx.cookies.set("wallet_pass", pass);
+    fee && fee > 0 && ctx.cookies.set("wallet_fee", fee);
+    const referer = new URL(ctx.request.header.referer);
+    ctx.redirect(referer.href);
+  })
+  .post("/wallet/send", koaBody(), async (ctx) => {
+    const action = String(ctx.request.body.action);
+    const destination = String(ctx.request.body.destination);
+    const amount = Number(ctx.request.body.amount);
+    const fee = Number(ctx.request.body.fee);
+    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
+    const user = ctx.cookies.get("wallet_user") || config.walletUser;
+    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
+    let balance = null
+
+    try {
+      balance = await wallet.getBalance(url, user, pass);
+    } catch (error) {
+      ctx.body = await walletErrorView(error);
+    }
+
+    switch (action) {
+      case 'confirm':
+        const validation = await wallet.validateSend(url, user, pass, destination, amount, fee);
+        if (validation.isValid) {
+          try {
+            ctx.body = await walletSendConfirmView(balance, destination, amount, fee);
+          } catch (error) {
+            ctx.body = await walletErrorView(error);
+          }
+        } else {
+          try {
+            const statusMessages = {
+              type: 'error',
+              title: 'validation_errors',
+              messages: validation.errors,
+            }
+            ctx.body = await walletSendFormView(balance, destination, amount, fee, statusMessages);
+          } catch (error) {
+            ctx.body = await walletErrorView(error);
+          }
+        }
+        break;
+      case 'send':
+        try {
+          const txId = await wallet.sendToAddress(url, user, pass, destination, amount);
+          ctx.body = await walletSendResultView(balance, destination, amount, txId);
+        } catch (error) {
+          ctx.body = await walletErrorView(error);
+        }
+        break;
+    }
   });
 
 const routes = router.routes();
@@ -1168,8 +1274,6 @@ app._close = () => {
 };
 
 module.exports = app;
-
-log(`Listening on ${url}`);
 
 if (config.open === true) {
   open(url);

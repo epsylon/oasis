@@ -62,6 +62,26 @@ const cli = (presets, defaultConfigFile) =>
       default: _.get(presets, "theme", "classic-light"),
       type: "string",
     })
+    .options("wallet-url", {
+      describe: "The URL of the remote ECOin wallet",
+      default: _.get(presets, "walletUrl", "http://localhost:7474"),
+      type: "string",
+    })
+    .options("wallet-user", {
+      describe: "The username of the remote ECOin wallet",
+      default: _.get(presets, "walletUser", "ecoinrpc"),
+      type: "string",
+    })
+    .options("wallet-pass", {
+      describe: "The password of the remote ECOin wallet",
+      default: _.get(presets, "walletPass", "ecoinrpc"),
+      type: "string",
+    })
+    .options("wallet-fee", {
+      describe: "The fee to pay for ECOin transactions",
+      default: _.get(presets, "walletFee", "0.01"),
+      type: "string",
+    })
     .epilog(`The defaults can be configured in ${defaultConfigFile}.`).argv;
 
 module.exports = { cli };

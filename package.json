@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "SNH-Oasis Project Network GUI",
   "repository": {
     "type": "git",
@@ -27,6 +27,7 @@
   "dependencies": {
     "@fraction/base16-css": "^1.1.0",
     "@koa/router": "^13.1.0",
+    "@open-rpc/client-js": "^1.8.1",
     "abstract-level": "^2.0.1",
     "await-exec": "^0.1.2",
     "axios": "^1.7.9",
@@ -73,6 +74,7 @@
     "pull-sort": "^1.0.2",
     "pull-stream": "^3.7.0",
     "punycode.js": "^2.3.1",
+    "qrcode": "^1.5.4",
     "remark-html": "^16.0.1",
     "require-style": "^1.1.0",
     "scuttle-poll": "^1.0.3",
