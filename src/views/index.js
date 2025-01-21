@@ -18,8 +18,6 @@ async function checkForUpdate() {
         { action: "/update", method: "post" },
         button({ type: "submit" }, i18n.updateit)
       );
-    } else {
-      console.log("\noasis@version: no updates required.\n");
     }
   } catch (error) {
     console.error("\noasis@version: error fetching package.json:", error.message, "\n");
@@ -99,86 +97,138 @@ const toAttributes = (obj) =>
 // non-breaking space
 const nbsp = "\xa0";
 
-const template = (titlePrefix, ...elements) => {
-  const navLink = ({ href, emoji, text }) =>
-    li(
-      a(
-        { href, class: titlePrefix === text ? "current" : "" },
-        span({ class: "emoji" }, emoji),
-        nbsp,
-        text
-      )
-    );
+const { saveConfig, getConfig } = require('../modules-config');
+const configMods = getConfig();
+const navLink = ({ href, emoji, text, current }) =>
+  li(
+    a(
+      { href, class: current ? "current" : "" },
+      span({ class: "emoji" }, emoji),
+      nbsp,
+      text
+    )
+  );
 
-  const customCSS = (filename) => {
-    const customStyleFile = path.join(
-      envPaths("oasis", { suffix: "" }).config,
-      filename
-    );
-    try {
-      if (fs.existsSync(customStyleFile)) {
-        return link({ rel: "stylesheet", href: filename });
-      }
-    } catch (error) {
-      return "";
+const customCSS = (filename) => {
+  const customStyleFile = path.join(
+    envPaths("oasis", { suffix: "" }).config,
+    filename
+  );
+  try {
+    if (fs.existsSync(customStyleFile)) {
+      return link({ rel: "stylesheet", href: filename });
     }
-  };
+  } catch (error) {
+    return "";
+  }
+};
 
+const renderPopularLink = () => {
+  const popularMod = getConfig().popularMod === 'on';
+  return popularMod 
+    ? navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular, class: "popular-link enabled" }) 
+    : ''; 
+};
+const renderTopicsLink = () => {
+  const topicsMod = getConfig().topicsMod === 'on';
+  return topicsMod 
+    ? navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics, class: "topics-link enabled" }) 
+    : ''; 
+};
+const renderSummariesLink = () => {
+  const summariesMod = getConfig().summariesMod === 'on';
+  return summariesMod 
+    ? navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries, class: "summaries-link enabled" }) 
+    : ''; 
+};
+const renderLatestLink = () => {
+  const latestMod = getConfig().latestMod === 'on';
+  return latestMod 
+    ? navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest, class: "latest-link enabled" }) 
+    : ''; 
+};
+const renderThreadsLink = () => {
+  const threadsMod = getConfig().threadsMod === 'on';
+  return threadsMod 
+    ? navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads, class: "threads-link enabled" }) 
+    : ''; 
+};
+const renderMultiverseLink = () => {
+  const multiverseMod = getConfig().multiverseMod === 'on';
+  return multiverseMod 
+    ? navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.multiverse, class: "multiverse-link enabled" }) 
+    : ''; 
+};
+const renderInboxLink = () => {
+  const inboxMod = getConfig().inboxMod === 'on';
+  return inboxMod 
+    ? navLink({ href: "/inbox", emoji: "☂", text: i18n.inbox, class: "inbox-link enabled" }) 
+    : ''; 
+};
+const renderInvitesLink = () => {
+  const invitesMod = getConfig().invitesMod === 'on';
+  return invitesMod 
+    ? navLink({ href: "/invites", emoji: "ꔹ", text: i18n.invites, class: "invites-link enabled" }) 
+    : ''; 
+};
+const renderWalletLink = () => {
+  const walletMod = getConfig().walletMod === 'on';
+  if (walletMod) {
+    return [
+      navLink({ href: "/wallet", emoji: "❄", text: i18n.wallet, class: "wallet-link enabled" }),
+      hr()
+    ];
+  }
+  return ''; 
+};
+
+const template = (titlePrefix, ...elements) => {
   const nodes = html(
     { lang: "en" },
     head(
-      title(titlePrefix, " | SNH-Oasis"),
+      title(titlePrefix, " | Oasis"),
       link({ rel: "stylesheet", href: "/theme.css" }),
       link({ rel: "stylesheet", href: "/assets/style.css" }),
       link({ rel: "stylesheet", href: "/assets/highlight.css" }),
       customCSS("/custom-style.css"),
       link({ rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg" }),
       meta({ charset: "utf-8" }),
-      meta({
-        name: "description",
-        content: i18n.oasisDescription,
-      }),
-      meta({
-        name: "viewport",
-        content: toAttributes({ width: "device-width", "initial-scale": 1 }),
-      })
+      meta({ name: "description", content: i18n.oasisDescription }),
+      meta({ name: "viewport", content: toAttributes({ width: "device-width", "initial-scale": 1 }) })
     ),
     body(
       nav(
         ul(
-          //navLink({ href: "/imageSearch", emoji: "✧", text: i18n.imageSearch }),
           navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
-          navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular }),
+          renderPopularLink(),
           hr,
-          navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics }),
-          navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries }),
-          navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest }),
-          navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads }),
+          renderTopicsLink(),
+          renderSummariesLink(),
+          renderLatestLink(),
+          renderThreadsLink(),
           hr,
-          navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.extended }),
+          renderMultiverseLink()
         )
       ),
       main({ id: "content" }, elements),
       nav(
         ul(
-          navLink({ href: "/publish", emoji: "❂",text: i18n.publish }),
+          navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
+          renderInboxLink(),
           navLink({ href: "/search", emoji: "✦", text: i18n.search }),
-          navLink({ href: "/inbox", emoji: "☂", text: i18n.private }),
           hr,
+          renderWalletLink(),
           navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
-          navLink({ href: "/wallet", emoji: "❄", text: i18n.wallet }),
-          navLink({ href: "/invites", emoji: "ꔹ", text: i18n.invites }),
           navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
           hr,
-          navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
+          navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
+          navLink({ href: "/modules", emoji: "ꗣ", text: i18n.modules }),
+          renderInvitesLink(),
         )
-      )
+      ),
     )
   );
-
-  const result = doctypeString + nodes.outerHTML;
-
-  return result;
+  return doctypeString + nodes.outerHTML;
 };
 
 const thread = (messages) => {
@@ -1095,44 +1145,50 @@ exports.peersView = async ({ peers, supports, blocks, recommends }) => {
     );
 };
 
-exports.invitesView = ({ invites }) => {
-  try{
-    var pubs = fs.readFileSync(gossipPath, "utf8");
-  }catch{
-      var pubs = undefined;
-  }
-  if (pubs == undefined) {
-        var pubsValue = "false";
-  }else{
-        var keys = Object.keys(pubs);
-        if (keys[0] === undefined){
-          var pubsValue = "false";
-        }else{
-          var pubsValue = "true";
-        }
-  }
-  if (pubsValue === "true") {
-    var pubs = JSON.parse(pubs);
-    const arr2 = [];
-    const arr3 = [];
-    for(var i=0; i<pubs.length; i++){
-      arr2.push(
-        li("PUB: " + pubs[i].host, br, 
-            i18n.inhabitants + ": " + pubs[i].announcers, br, 
-            a(
-             { href: `/author/${encodeURIComponent(pubs[i].key)}` }, 
-              pubs[i].key
-             ), br, br
-        )               
-      );
-    }
-    var pub = arr2;
-  }else{
-    var pub = [];
+exports.invitesView = ({ invitesEnabled }) => {
+  let pubs = [];
+  let pubsValue = "false";
+
+  try {
+    pubs = fs.readFileSync(gossipPath, "utf8");
+  } catch (error) {
+    pubs = undefined;
   }
 
- return template(
-  i18n.invites,
+  if (pubs) {
+    try {
+      pubs = JSON.parse(pubs);
+      if (pubs && pubs.length > 0) {
+        pubsValue = "true";
+      } else {
+        pubsValue = "false";
+      }
+    } catch (error) {
+      pubsValue = "false";
+    }
+  }
+
+  let pub = [];
+  if (pubsValue === "true") {
+    const arr2 = pubs.map(pubItem => {
+      return li(
+        `PUB: ${pubItem.host}`,
+        br,
+        `${i18n.inhabitants}: ${pubItem.announcers}`,
+        br,
+        a(
+          { href: `/author/${encodeURIComponent(pubItem.key)}` },
+          pubItem.key
+        ),
+        br,
+        br
+      );
+    });
+    pub = arr2;
+  }
+
+  return template(
+    i18n.invites,
     section(
       { class: "message" },
       h1(i18n.invites),
@@ -1142,10 +1198,140 @@ exports.invitesView = ({ invites }) => {
         input({ name: "invite", type: "text", autofocus: true, required: true }),
         button({ type: "submit" }, i18n.acceptInvite),
         h1(i18n.acceptedInvites, " (", pub.length, ")"),
-        pub.length > 0 ? ul(pub): i18n.noInvites,
-      ),
-     )
-   );
+        pub.length > 0 ? ul(pub) : i18n.noInvites
+      )
+    )
+  );
+};
+ 
+exports.modulesView = () => {
+  const config = getConfig();
+  const popularMod = config.popularMod === 'on' ? 'on' : 'off';
+  const topicsMod = config.topicsMod === 'on' ? 'on' : 'off';
+  const summariesMod = config.summariesMod === 'on' ? 'on' : 'off';
+  const latestMod = config.latestMod === 'on' ? 'on' : 'off';
+  const threadsMod = config.threadsMod === 'on' ? 'on' : 'off';
+  const multiverseMod = config.multiverseMod === 'on' ? 'on' : 'off';
+  const inboxMod = config.inboxMod === 'on' ? 'on' : 'off';
+  const invitesMod = config.invitesMod === 'on' ? 'on' : 'off';
+  const walletMod = config.walletMod === 'on' ? 'on' : 'off';
+  
+  return template(
+    i18n.modulesView,
+    section(
+      { class: "modules-view" },
+      h1(i18n.modulesViewTitle),
+      p(i18n.modulesViewDescription)
+    ),
+    section(
+      form(
+        { action: "/save-modules", method: "post" },
+        table(
+          { class: "module-table" },
+          tr(
+            td(i18n.popularLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "popularMod",
+                name: "popularForm",
+                class: "input-checkbox",
+                checked: popularMod === 'on' ? true : undefined
+              })
+            ),
+            td(i18n.latestLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "latestMod",
+                name: "latestForm",
+                class: "input-checkbox",
+                checked: latestMod === 'on' ? true : undefined
+              })
+            ),
+            td(i18n.walletLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "walletMod",
+                name: "walletForm",
+                class: "input-checkbox",
+                checked: walletMod === 'on' ? true : undefined
+              })
+            )
+          ),
+          tr(
+            td(i18n.topicsLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "topicsMod",
+                name: "topicsForm",
+                class: "input-checkbox",
+                checked: topicsMod === 'on' ? true : undefined
+              })
+            ),
+            td(i18n.threadsLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "threadsMod",
+                name: "threadsForm",
+                class: "input-checkbox",
+                checked: threadsMod === 'on' ? true : undefined
+              })
+            ),
+            td(i18n.inboxLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "inboxMod",
+                name: "inboxForm",
+                class: "input-checkbox",
+                checked: inboxMod === 'on' ? true : undefined
+              })
+            )
+          ),
+          tr(
+            td(i18n.summariesLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "summariesMod",
+                name: "summariesForm",
+                class: "input-checkbox",
+                checked: summariesMod === 'on' ? true : undefined
+              })
+            ),
+            td(i18n.multiverseLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "multiverseMod",
+                name: "multiverseForm",
+                class: "input-checkbox",
+                checked: multiverseMod === 'on' ? true : undefined
+              })
+            ),
+            td(i18n.invitesLabel),
+            td(
+              input({
+                type: "checkbox",
+                id: "invitesMod",
+                name: "invitesForm",
+                class: "input-checkbox",
+                checked: invitesMod === 'on' ? true : undefined
+              })
+            )
+          )
+        ),
+        div(
+          { class: "save-button-container" },
+          button({ type: "submit", class: "submit-button" }, i18n.saveSettings)
+        )
+      )
+    )
+  );
 };
 
 exports.settingsView = ({ theme, themeNames, version, walletUrl, walletUser, walletFee }) => {
@@ -1689,7 +1875,7 @@ exports.walletSendFormView = async (balance, destination, amount, fee, statusMes
       form(
         { action: '/wallet/send', method: 'POST' },
         label({ for: 'destination' }, i18n.walletAddress),
-        input({ type: 'text', id: 'destination', name: 'destination', placeholder: 'ELH8RJGy3s7sCPqQUyN8on2gD5Fdn3BpyC', value: destination }),
+        input({ type: 'text', id: 'destination', name: 'destination', placeholder: 'ETQ17sBv8QFoiCPGKDQzNcDJeXmB2317HX', value: destination }),
         label({ for: 'amount' }, i18n.walletAmount),
         input({ type: 'text', id: 'amount', name: 'amount', placeholder: '0.25', value: amount }),
         label({ for: 'fee' }, i18n.walletFee),

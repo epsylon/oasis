@@ -82,6 +82,8 @@ debug("Current configuration: %O", config);
 debug(`You can save the above to ${defaultConfigFile} to make \
 these settings the default. See the readme for details.`);
 
+const { saveConfig, getConfig } = require('./modules-config');
+
 const oasisCheckPath = "/.well-known/oasis";
 
 process.on("uncaughtException", function (err) {
@@ -126,12 +128,6 @@ Alternatively, you can set the default port in ${defaultConfigFile} with:
   }
 });
 
-// HACK: We must get the CLI config and then delete environment variables.
-// This hides arguments from other upstream modules who might parse them.
-//
-// Unfortunately some modules think that our CLI options are meant for them,
-// and since there's no way to disable that behavior (!) we have to hide them
-// manually by setting the args property to an empty array.
 process.argv = [];
 
 const http = require("./http");
@@ -375,6 +371,7 @@ const {
   imageSearchView,
   setLanguage,
   settingsView,
+  modulesView,
   peersView,
   invitesView,
   topicsView,
@@ -442,7 +439,12 @@ router
     ctx.body = "oasis";
   })
   .get("/public/popular/:period", async (ctx) => {
-    const { period } = ctx.params;
+    const { period } = ctx.params; 
+    const popularMod = ctx.cookies.get("popularMod") || 'on';
+    if (popularMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
     const publicPopular = async ({ period }) => {
       const messages = await post.popular({ period });
       const selectedLanguage = ctx.cookies.get("language") || "en";
@@ -468,14 +470,29 @@ router
     ctx.body = await publicPopular({ period });
   })
   .get("/public/latest", async (ctx) => {
+    const latestMod = ctx.cookies.get("latestMod") || 'on';
+    if (latestMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
     const messages = await post.latest();
     ctx.body = await latestView({ messages });
   })
   .get("/public/latest/extended", async (ctx) => {
+    const extendedMod = ctx.cookies.get("extendedMod") || 'on';
+    if (extendedMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
     const messages = await post.latestExtended();
     ctx.body = await extendedView({ messages });
   })
   .get("/public/latest/topics", async (ctx) => {
+    const topicsMod = ctx.cookies.get("topicsMod") || 'on';
+    if (topicsMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
     const messages = await post.latestTopics();
     const channels = await post.channels();
     const list = channels.map((c) => {
@@ -485,10 +502,20 @@ router
     ctx.body = await topicsView({ messages, prefix });
   })
   .get("/public/latest/summaries", async (ctx) => {
-    const messages = await post.latestSummaries();
-    ctx.body = await summaryView({ messages });
+  const summariesMod = ctx.cookies.get("summariesMod") || 'on';
+  if (summariesMod !== 'on') {
+    ctx.redirect('/modules');
+    return;
+  }
+  const messages = await post.latestSummaries();
+  ctx.body = await summaryView({ messages });
   })
   .get("/public/latest/threads", async (ctx) => {
+    const threadsMod = ctx.cookies.get("threadsMod") || 'on';
+    if (threadsMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
     const messages = await post.latestThreads();
     ctx.body = await threadsView({ messages });
   })
@@ -557,19 +584,24 @@ router
     ctx.body = await imageSearchView({ blobs, query });
   })
   .get("/inbox", async (ctx) => {
-    const inbox = async () => {
+    const theme = ctx.cookies.get("theme") || config.theme;
+    const inboxMod = ctx.cookies.get("inboxMod") || 'on';
+
+    if (inboxMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    const inboxMessages = async () => {
       const messages = await post.inbox();
       return privateView({ messages });
     };
-    ctx.body = await inbox();
+    ctx.body = await inboxMessages();
   })
   .get("/hashtag/:hashtag", async (ctx) => {
     const { hashtag } = ctx.params;
     const messages = await post.fromHashtag(hashtag);
-
     ctx.body = await hashtagView({ hashtag, messages });
   })
-
   .get("/theme.css", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
   
@@ -775,6 +807,19 @@ router
     };
     ctx.body = await image({ blobId, imageSize: Number(imageSize) });
   })
+  .get("/modules", async (ctx) => {
+    const configMods = getConfig();
+    const popularMod = ctx.cookies.get('popularMod', { signed: false }) || configMods.popularMod;
+    const topicsMod = ctx.cookies.get('topicsMod', { signed: false }) || configMods.topicsMod;
+    const summariesMod = ctx.cookies.get('summariesMod', { signed: false }) || configMods.summariesMod;
+    const latestMod = ctx.cookies.get('latestMod', { signed: false }) || configMods.latestMod;
+    const threadsMod = ctx.cookies.get('threadsMod', { signed: false }) || configMods.threadsMod;
+    const multiverseMod = ctx.cookies.get('multiverseMod', { signed: false }) || configMods.multiverseMod;
+    const inboxMod = ctx.cookies.get('inboxMod', { signed: false }) || configMods.inboxMod;
+    const invitesMod = ctx.cookies.get('invitesMod', { signed: false }) || configMods.invitesMod;
+    const walletMod = ctx.cookies.get('walletMod', { signed: false }) || configMods.walletMod;
+    ctx.body = modulesView({ popularMod, topicsMod, summariesMod, latestMod, threadsMod, multiverseMod, inboxMod, invitesMod, walletMod });
+  })
   .get("/settings", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
     const walletUrl = ctx.cookies.get("wallet_url") || config.walletUrl;
@@ -814,6 +859,11 @@ router
   })
   .get("/invites", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
+    const invitesMod = ctx.cookies.get("invitesMod") || 'on'; 
+    if (invitesMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
     const getMeta = async ({ theme }) => {
       return invitesView({});
     };
@@ -871,6 +921,11 @@ router
     ctx.body = await commentView({ messages, myFeedId, parentMessage });
   })
   .get("/wallet", async (ctx) => {
+    const walletMod = ctx.cookies.get("walletMod") || 'on';
+    if (walletMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
     const url = ctx.cookies.get("wallet_url") || config.walletUrl;
     const user = ctx.cookies.get("wallet_user") || config.walletUser;
     const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
@@ -1154,16 +1209,46 @@ router
     ctx.redirect("/invites");
   })
   .post("/settings/rebuild", async (ctx) => {
-    // Do not wait for rebuild to finish.
     meta.rebuild();
     ctx.redirect("/settings");
+  })
+  .post("/save-modules", koaBody(), async (ctx) => {
+    const popularMod = ctx.request.body.popularForm === 'on' ? 'on' : 'off';
+    const topicsMod = ctx.request.body.topicsForm === 'on' ? 'on' : 'off';
+    const summariesMod = ctx.request.body.summariesForm === 'on' ? 'on' : 'off';
+    const latestMod = ctx.request.body.latestForm === 'on' ? 'on' : 'off';
+    const threadsMod = ctx.request.body.threadsForm === 'on' ? 'on' : 'off';
+    const multiverseMod = ctx.request.body.multiverseForm === 'on' ? 'on' : 'off';
+    const inboxMod = ctx.request.body.inboxForm === 'on' ? 'on' : 'off';
+    const invitesMod = ctx.request.body.invitesForm === 'on' ? 'on' : 'off';
+    const walletMod = ctx.request.body.walletForm === 'on' ? 'on' : 'off';
+    ctx.cookies.set("popularMod", popularMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("topicsMod", topicsMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("summariesMod", summariesMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("latestMod", latestMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("threadsMod", threadsMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("multiverseMod", multiverseMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("inboxMod", inboxMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("invitesMod", invitesMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("walletMod", walletMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    const currentConfig = getConfig();
+    currentConfig.popularMod = popularMod;
+    currentConfig.topicsMod = topicsMod;
+    currentConfig.summariesMod = summariesMod;
+    currentConfig.latestMod = latestMod;
+    currentConfig.threadsMod = threadsMod;
+    currentConfig.multiverseMod = multiverseMod;
+    currentConfig.inboxMod = inboxMod;
+    currentConfig.invitesMod = invitesMod;
+    currentConfig.walletMod = walletMod;
+    saveConfig(currentConfig);
+    ctx.redirect(`/modules`);
   })
   .post("/settings/wallet", koaBody(), async (ctx) => {
     const url = String(ctx.request.body.wallet_url);
     const user = String(ctx.request.body.wallet_user);
     const pass = String(ctx.request.body.wallet_pass);
     const fee = String(ctx.request.body.wallet_fee);
-
     url && url.trim() !== "" && ctx.cookies.set("wallet_url", url);
     user && user.trim() !== "" && ctx.cookies.set("wallet_user", user);
     pass && pass.trim() !== "" && ctx.cookies.set("wallet_pass", pass);
