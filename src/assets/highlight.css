@@ -49,7 +49,6 @@
 .hljs {
   display: block;
   overflow-x: auto;
-  background: white;
   color: var(--base05);
   padding: 0.5em;
 }
@@ -60,4 +59,9 @@
 
 .hljs-strong {
   font-weight: bold;
+}
+
+.hljs-string, .hljs-link {
+  background: #FFA500;
+  user-select: text;
 }

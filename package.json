@@ -1,7 +1,7 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.3.2",
-  "description": "SNH-Oasis Project Network GUI",
+  "version": "0.3.3",
+  "description": "SNH-Oasis Project Networking GUI",
   "repository": {
     "type": "git",
     "url": "git+ssh://git@code.03c8.net/krakenlabs/oasis.git"
@@ -25,14 +25,15 @@
     "version": "mv docs/CHANGELOG.md ./ && changelog-version && mv CHANGELOG.md docs/ && git add docs/CHANGELOG.md"
   },
   "dependencies": {
-    "@fraction/base16-css": "^1.1.0",
     "@koa/router": "^13.1.0",
     "@open-rpc/client-js": "^1.8.1",
     "abstract-level": "^2.0.1",
+    "archiver": "^7.0.1",
     "await-exec": "^0.1.2",
     "axios": "^1.7.9",
     "broadcast-stream": "^0.2.1",
     "caller-path": "^4.0.0",
+    "crypto": "^1.0.1",
     "debug": "^4.3.1",
     "env-paths": "^2.2.1",
     "epidemic-broadcast-trees": "^9.0.4",
@@ -45,6 +46,7 @@
     "is-valid-domain": "^0.1.6",
     "koa": "^2.7.0",
     "koa-body": "^6.0.1",
+    "koa-bodyparser": "^4.4.1",
     "koa-mount": "^4.0.0",
     "koa-static": "^5.0.0",
     "lodash": "^4.17.21",
@@ -77,7 +79,6 @@
     "qrcode": "^1.5.4",
     "remark-html": "^16.0.1",
     "require-style": "^1.1.0",
-    "scuttle-poll": "^1.0.3",
     "secret-stack": "^6.3.1",
     "ssb-about": "^2.0.1",
     "ssb-backlinks": "^2.1.1",
@@ -131,6 +132,7 @@
     "ssb-tunnel": "^2.0.0",
     "ssb-unix-socket": "^1.0.0",
     "ssb-ws": "^6.2.3",
+    "unzipper": "^0.12.3",
     "yargs": "^17.7.2"
   },
   "overrides": {

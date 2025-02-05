@@ -1,5 +1,0 @@
-ignores: [
-  "@types/*",
-  "husky",
-  "stylelint-config-recommended"
-]

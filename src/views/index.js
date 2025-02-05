@@ -25,6 +25,12 @@ async function checkForUpdate() {
 }
 checkForUpdate();
 
+const crypto = require('crypto');
+
+function generateRandomPassword(length = 32) {
+  return crypto.randomBytes(length).toString('hex').slice(0, length); 
+}
+
 const {
   a,
   article,
@@ -97,8 +103,8 @@ const toAttributes = (obj) =>
 // non-breaking space
 const nbsp = "\xa0";
 
-const { saveConfig, getConfig } = require('../modules-config');
-const configMods = getConfig();
+const { saveConfig, getConfig } = require('../config');
+const configMods = getConfig().modules;
 const navLink = ({ href, emoji, text, current }) =>
   li(
     a(
@@ -124,59 +130,80 @@ const customCSS = (filename) => {
 };
 
 const renderPopularLink = () => {
-  const popularMod = getConfig().popularMod === 'on';
+  const popularMod = getConfig().modules.popularMod === 'on';
   return popularMod 
     ? navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular, class: "popular-link enabled" }) 
     : ''; 
 };
 const renderTopicsLink = () => {
-  const topicsMod = getConfig().topicsMod === 'on';
+  const topicsMod = getConfig().modules.topicsMod === 'on';
   return topicsMod 
     ? navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics, class: "topics-link enabled" }) 
     : ''; 
 };
 const renderSummariesLink = () => {
-  const summariesMod = getConfig().summariesMod === 'on';
+  const summariesMod = getConfig().modules.summariesMod === 'on';
   return summariesMod 
     ? navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries, class: "summaries-link enabled" }) 
     : ''; 
 };
 const renderLatestLink = () => {
-  const latestMod = getConfig().latestMod === 'on';
+  const latestMod = getConfig().modules.latestMod === 'on';
   return latestMod 
     ? navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest, class: "latest-link enabled" }) 
     : ''; 
 };
 const renderThreadsLink = () => {
-  const threadsMod = getConfig().threadsMod === 'on';
+  const threadsMod = getConfig().modules.threadsMod === 'on';
   return threadsMod 
     ? navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads, class: "threads-link enabled" }) 
     : ''; 
 };
-const renderMultiverseLink = () => {
-  const multiverseMod = getConfig().multiverseMod === 'on';
-  return multiverseMod 
-    ? navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.multiverse, class: "multiverse-link enabled" }) 
-    : ''; 
-};
+
 const renderInboxLink = () => {
-  const inboxMod = getConfig().inboxMod === 'on';
+  const inboxMod = getConfig().modules.inboxMod === 'on';
   return inboxMod 
     ? navLink({ href: "/inbox", emoji: "☂", text: i18n.inbox, class: "inbox-link enabled" }) 
     : ''; 
 };
 const renderInvitesLink = () => {
-  const invitesMod = getConfig().invitesMod === 'on';
+  const invitesMod = getConfig().modules.invitesMod === 'on';
   return invitesMod 
     ? navLink({ href: "/invites", emoji: "ꔹ", text: i18n.invites, class: "invites-link enabled" }) 
     : ''; 
 };
+const renderMultiverseLink = () => {
+  const multiverseMod = getConfig().modules.multiverseMod === 'on';
+  return multiverseMod 
+    ? [
+        hr(),
+        navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.multiverse, class: "multiverse-link enabled" }) 
+      ]
+    : '';
+};
 const renderWalletLink = () => {
-  const walletMod = getConfig().walletMod === 'on';
+  const walletMod = getConfig().modules.walletMod === 'on';
   if (walletMod) {
     return [
       navLink({ href: "/wallet", emoji: "❄", text: i18n.wallet, class: "wallet-link enabled" }),
-      hr()
+    ];
+  }
+  return ''; 
+};
+const renderLegacyLink = () => {
+  const legacyMod = getConfig().modules.legacyMod === 'on';
+  if (legacyMod) {
+    return [
+      navLink({ href: "/legacy", emoji: "ꖸ", text: i18n.legacy, class: "legacy-link enabled" }),
+    ];
+  }
+  return ''; 
+};
+const renderCipherLink = () => {
+  const cipherMod = getConfig().modules.cipherMod === 'on';
+  if (cipherMod) {
+    return [
+      navLink({ href: "/cipher", emoji: "ꗄ", text: i18n.cipher, class: "cipher-link enabled" }),
     ];
   }
   return ''; 
@@ -187,54 +214,70 @@ const template = (titlePrefix, ...elements) => {
     { lang: "en" },
     head(
       title(titlePrefix, " | Oasis"),
-      link({ rel: "stylesheet", href: "/theme.css" }),
       link({ rel: "stylesheet", href: "/assets/style.css" }),
-      link({ rel: "stylesheet", href: "/assets/highlight.css" }),
-      customCSS("/custom-style.css"),
-      link({ rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg" }),
+      link({ rel: "icon", href: "/assets/favicon.svg" }),
       meta({ charset: "utf-8" }),
       meta({ name: "description", content: i18n.oasisDescription }),
       meta({ name: "viewport", content: toAttributes({ width: "device-width", "initial-scale": 1 }) })
     ),
     body(
-      nav(
-        ul(
-          navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
-          renderPopularLink(),
-          hr,
-          renderTopicsLink(),
-          renderSummariesLink(),
-          renderLatestLink(),
-          renderThreadsLink(),
-          hr,
-          renderMultiverseLink()
+      div(
+        { class: "header" },      
+          a(
+            {
+             class: "logo-icon",
+             href: "https://solarnethub.com",
+            },
+             img({ class: "logo-icon", src: "/assets/snh-oasis.jpg" })
+           ),
+        nav(
+          ul(
+            navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
+            renderInboxLink(),
+            renderCipherLink(),
+            navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
+            renderInvitesLink(),
+            navLink({ href: "/modules", emoji: "ꗣ", text: i18n.modules }),
+            renderLegacyLink(),
+            navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
+            renderWalletLink()
+          )
         )
       ),
-      main({ id: "content" }, elements),
-      nav(
-        ul(
-          navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
-          renderInboxLink(),
-          navLink({ href: "/search", emoji: "✦", text: i18n.search }),
-          hr,
-          renderWalletLink(),
-          navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
-          navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
-          hr,
-          navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
-          navLink({ href: "/modules", emoji: "ꗣ", text: i18n.modules }),
-          renderInvitesLink(),
+      div(
+        { class: "main-content" },
+        div(
+          { class: "sidebar-left" },
+          nav(
+            ul(
+              navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
+              hr,
+              renderPopularLink(),
+              renderTopicsLink(),
+              renderSummariesLink(),
+              renderLatestLink(),
+              renderThreadsLink(),
+              renderMultiverseLink()
+            )
+          )
+        ),
+        main({ id: "content", class: "main-column" }, elements),
+        div(
+          { class: "sidebar-right" },
+          nav(
+            ul(
+              navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
+              navLink({ href: "/search", emoji: "ꔅ", text: i18n.search }),
+            )
+          )
         )
-      ),
+      )
     )
   );
   return doctypeString + nodes.outerHTML;
 };
 
 const thread = (messages) => {
-  // this first loop is preprocessing to enable auto-expansion of forks when a
-  // message in the fork is linked to
-
   let lookingForTarget = true;
   let shallowest = Infinity;
 
@@ -266,8 +309,6 @@ const thread = (messages) => {
     const nextMsg = messages[j];
 
     const depth = (msg) => {
-      // will be undefined when checking depth(nextMsg) when currentMsg is the
-      // last message in the thread
       if (msg === undefined) return 0;
       return lodash.get(msg, "value.meta.thread.depth", 0);
     };
@@ -279,7 +320,7 @@ const thread = (messages) => {
         lodash.get(currentMsg, "value.meta.thread.ancestorOfTarget", false)
       );
       const isBlocked = Boolean(nextMsg.value.meta.blocking);
-      msgList.push(`<div class="indent"><details ${isAncestor ? "open" : ""}>`);
+      msgList.push(`<details ${isAncestor ? "open" : ""}>`);
 
       const nextAuthor = lodash.get(nextMsg, "value.meta.author.name");
       const nextSnippet = postSnippet(
@@ -319,8 +360,6 @@ const postSnippet = (text) => {
   const max = 40;
 
   text = text.trim().split("\n", 3).join("\n");
-  // this is taken directly from patchwork. i'm not entirely sure what this
-  // regex is doing
   text = text.replace(/_|`|\*|#|^\[@.*?]|\[|]|\(\S*?\)/g, "").trim();
   text = text.replace(/:$/, "");
   text = text.trim().split("\n", 1)[0].trim();
@@ -395,7 +434,7 @@ const postAside = ({ key, value }) => {
     fragments.push(section(continueThreadComponent(thread, isComment)));
   }
 
-  return div({ class: "indent" }, fragments);
+  return fragments;
 };
 
 const post = ({ msg, aside = false }) => {
@@ -429,8 +468,8 @@ const post = ({ msg, aside = false }) => {
   const { name } = msg.value.meta.author;
 
   const ts_received = msg.value.meta.timestamp.received;
-  const timeAgo = ts_received.since.replace("~", "");
-  const timeAbsolute = ts_received.iso8601.split(".")[0].replace("T", " ");
+  const timeAgo = ts_received.since.replace("~");
+  const timeAbsolute = ts_received.iso8601.split(".")[0].replace("T");
 
   const markdownContent = markdown(
     msg.value.content.text,
@@ -524,39 +563,25 @@ const post = ({ msg, aside = false }) => {
     },
     header(
       div(
+        { class: "header-content" },
         span(
           { class: "author" },
-          a(
-            { href: url.author },
-            img({ class: "avatar", src: url.avatar, alt: "" }),
+          a({ href: url.author },
+            img({ class: "avatar-profile", src: url.avatar, alt: "" }),
             name
-          )
-        ),
+          ),
         span({ class: "author-action" }, postOptions[msg.value.meta.postType]),
-        span(
-          {
-            class: "time",
-            title: timeAbsolute,
-          },
+        label(i18n.sendTime),
+          { class: "time", title: timeAbsolute },
           isPrivate ? "🔒" : null,
           isPrivate ? recps : null,
-          a({ href: url.link }, nbsp, timeAgo)
-        )
+          a({ href: url.link }, timeAgo)
+        ),
+        label(i18n.timeAgo)
       )
     ),
     articleContent,
-
-    // HACK: centered-footer
-    //
-    // Here we create an empty div with an anchor tag that can be linked to.
-    // In our CSS we ensure that this gets centered on the screen when we
-    // link to this anchor tag.
-    //
-    // This is used for redirecting users after they like a post, when we
-    // want the like button that they just clicked to remain close-ish to
-    // where it was before they clicked the button.
-    div({ id: `centered-footer-${encoded.key}`, class: "centered-footer" }),
-
+    br,
     footer(
       div(
         form(
@@ -576,13 +601,12 @@ const post = ({ msg, aside = false }) => {
         isPrivate || isRoot || isFork
           ? null
           : a({ href: url.subtopic }, nbsp, i18n.subtopic),
-        a({ href: url.json }, nbsp, i18n.json)
       ),
       br()
     )
   );
 
-  const threadSeparator = [div({ class: "text-browser" }, hr(), br())];
+  const threadSeparator = [br()];
 
   if (aside) {
     return [fragment, postAside(msg), isRoot ? threadSeparator : null];
@@ -701,30 +725,32 @@ exports.authorView = ({
     }
   })();
 
-  const prefix = section(
-    { class: "message" },
-    div(
-      { class: "profile" },
+const prefix = section(
+  { class: "message" },
+  div(
+    { class: "profile" },
+    div({ class: "avatar-container" },
       img({ class: "avatar", src: avatarUrl }),
-      h1(name)
+      h1({ class: "name" }, name)
     ),
     pre({
       class: "md-mention",
       innerHTML: markdownMention,
-    }),
-    description !== "" ? article({ innerHTML: markdown(description) }) : null,
-    footer(
-      div(
-        a({ href: `/likes/${encodeURIComponent(feedId)}` }, i18n.viewLikes),
-        span(nbsp, relationshipText),
-        ...contactForms,
-        relationship.me
-          ? a({ href: `/profile/edit` }, nbsp, i18n.editProfile)
-          : null
-      ),
-      br()
-    )
-  );
+    })
+  ),
+  description !== "" ? article({ innerHTML: markdown(description) }) : null,
+  footer(
+  div(
+      { class: "profile" },
+    ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
+    span(nbsp, relationshipText),
+    relationship.me
+      ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
+      : span(i18n.relationshipNotFollowing),
+  a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes)
+  )
+  )
+);
 
   const linkUrl = relationship.me
     ? "/profile/"
@@ -744,31 +770,31 @@ exports.authorView = ({
         )
       );
     }
-  } else {
-    const highestSeqNum = messages[0].value.sequence;
-    const lowestSeqNum = messages[messages.length - 1].value.sequence;
-    let newerPostsLink;
-    if (lastPost !== undefined && highestSeqNum < lastPost.value.sequence)
-      newerPostsLink = a(
-        { href: `${linkUrl}?gt=${highestSeqNum}` },
-        i18n.newerPosts
-      );
-    else newerPostsLink = span(i18n.newerPosts, { title: i18n.noNewerPosts });
-    let olderPostsLink;
-    if (lowestSeqNum > firstPost.value.sequence)
-      olderPostsLink = a(
-        { href: `${linkUrl}?lt=${lowestSeqNum}` },
-        i18n.olderPosts
-      );
-    else
-      olderPostsLink = span(i18n.olderPosts, { title: i18n.beginningOfFeed });
-    const pagination = section(
-      { class: "message" },
-      footer(div(newerPostsLink, olderPostsLink), br())
-    );
-    items.unshift(pagination);
-    items.push(pagination);
-  }
+  } //else {
+    //const highestSeqNum = messages[0].value.sequence;
+    //const lowestSeqNum = messages[messages.length - 1].value.sequence;
+    //let newerPostsLink;
+    //if (lastPost !== undefined && highestSeqNum < lastPost.value.sequence)
+    //  newerPostsLink = a(
+    //    { href: `${linkUrl}?gt=${highestSeqNum}` },
+    //    i18n.newerPosts
+    //  );
+    //else newerPostsLink = span(i18n.newerPosts, { title: i18n.noNewerPosts });
+   // let olderPostsLink;
+   // if (lowestSeqNum > firstPost.value.sequence)
+   //   olderPostsLink = a(
+   //     { href: `${linkUrl}?lt=${lowestSeqNum}` },
+   //     i18n.olderPosts
+    //  );
+   // else
+  //    olderPostsLink = span(i18n.olderPosts, { title: i18n.beginningOfFeed });
+  //  const pagination = section(
+  //    { class: "message" },
+  //    footer(div(newerPostsLink, olderPostsLink), br())
+  //  );
+  //  items.unshift(pagination);
+  //  items.push(pagination);
+  //}
 
   return template(i18n.profile, prefix, items);
 };
@@ -932,7 +958,7 @@ exports.publishView = (preview, text, contentWarning) => {
           method: "post",
           enctype: "multipart/form-data",
         },
-        label(
+        p(
           i18n.publishLabel({ markdownUrl, linkTarget: "_blank" }),
         label(
           i18n.contentWarningLabel,
@@ -946,9 +972,10 @@ exports.publishView = (preview, text, contentWarning) => {
         ),
           textarea({ required: true, name: "text", placeholder: i18n.publishWarningPlaceholder }, text ? text : "")
         ),
+        input({ type: "file", id: "blob", name: "blob" }),
+        br,
+        br,
         button({ type: "submit" }, i18n.preview),
-        label({ class: "file-button", for: "blob" }, i18n.attachFiles),
-        input({ type: "file", id: "blob", name: "blob" })
       )
     ),
     preview ? preview : "",
@@ -1051,8 +1078,6 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
     section(
       { class: "post-preview" },
       post({ msg }),
-
-      // doesn't need blobs, preview adds them to the text
       form(
         { action, method: "post" },
         input({
@@ -1084,7 +1109,7 @@ exports.previewView = ({ previewData, contentWarning }) => {
 
 exports.peersView = async ({ peers, supports, blocks, recommends }) => {
 
- const startButton = form(
+  const startButton = form(
     { action: "/settings/conn/start", method: "post" },
     button({ type: "submit" }, i18n.startNetworking)
   );
@@ -1115,35 +1140,36 @@ exports.peersView = async ({ peers, supports, blocks, recommends }) => {
     .filter(([, data]) => data.state === "connected")
     .map(([, data]) => {
       return li(
-          data.name, br,
+        data.name, br,
         a(
           { href: `/author/${encodeURIComponent(data.key)}` },
           data.key, br, br
         )
       );
-   });
+    });
 
- return template(
-  i18n.peers,
+  return template(
+    i18n.peers,
     section(
-      { class: "message" },
+      { class: "viewInfo" },
       h1(i18n.peerConnections),
-      connButtons,
+      p(i18n.peerConnectionsIntro),
+      div({ class: "conn-buttons" }, connButtons),
       h1(i18n.online, " (", peerList.length, ")"),
-      peerList.length > 0 ? ul(peerList) : i18n.noConnections,
+      p(peerList.length > 0 ? ul(peerList) : i18n.noConnections),
       p(i18n.connectionActionIntro),
-      h1(i18n.supported, " (", supports.length/2, ")"),
-      supports.length > 0 ? ul(supports): i18n.noSupportedConnections,
+      h1(i18n.supported, " (", supports.length / 2, ")"),
+      p(supports.length > 0 ? ul(supports) : i18n.noSupportedConnections),
       p(i18n.connectionActionIntro),
-      h1(i18n.recommended, " (", recommends.length/2, ")"),
-      recommends.length > 0 ? ul(recommends): i18n.noRecommendedConnections,
+      h1(i18n.recommended, " (", recommends.length / 2, ")"),
+      p(recommends.length > 0 ? ul(recommends) : i18n.noRecommendedConnections),
       p(i18n.connectionActionIntro),
-      h1(i18n.blocked, " (", blocks.length/2, ")"),
-      blocks.length > 0 ? ul(blocks): i18n.noBlockedConnections,
-      p(i18n.connectionActionIntro),
-      )
-    );
-};
+      h1(i18n.blocked, " (", blocks.length / 2, ")"),
+      p(blocks.length > 0 ? ul(blocks) : i18n.noBlockedConnections),
+      p(i18n.connectionActionIntro)
+    )
+  );
+}; 
 
 exports.invitesView = ({ invitesEnabled }) => {
   let pubs = [];
@@ -1172,10 +1198,8 @@ exports.invitesView = ({ invitesEnabled }) => {
   if (pubsValue === "true") {
     const arr2 = pubs.map(pubItem => {
       return li(
-        `PUB: ${pubItem.host}`,
-        br,
-        `${i18n.inhabitants}: ${pubItem.announcers}`,
-        br,
+        p(`PUB: ${pubItem.host}`),
+        p(`${i18n.inhabitants}: ${pubItem.announcers}`),
         a(
           { href: `/author/${encodeURIComponent(pubItem.key)}` },
           pubItem.key
@@ -1190,13 +1214,14 @@ exports.invitesView = ({ invitesEnabled }) => {
   return template(
     i18n.invites,
     section(
-      { class: "message" },
+      { class: "viewInfo" },
       h1(i18n.invites),
       p(i18n.invitesDescription),
       form(
         { action: "/settings/invite/accept", method: "post" },
         input({ name: "invite", type: "text", autofocus: true, required: true }),
         button({ type: "submit" }, i18n.acceptInvite),
+        hr,
         h1(i18n.acceptedInvites, " (", pub.length, ")"),
         pub.length > 0 ? ul(pub) : i18n.noInvites
       )
@@ -1205,7 +1230,7 @@ exports.invitesView = ({ invitesEnabled }) => {
 };
  
 exports.modulesView = () => {
-  const config = getConfig();
+  const config = getConfig().modules;
   const popularMod = config.popularMod === 'on' ? 'on' : 'off';
   const topicsMod = config.topicsMod === 'on' ? 'on' : 'off';
   const summariesMod = config.summariesMod === 'on' ? 'on' : 'off';
@@ -1215,9 +1240,11 @@ exports.modulesView = () => {
   const inboxMod = config.inboxMod === 'on' ? 'on' : 'off';
   const invitesMod = config.invitesMod === 'on' ? 'on' : 'off';
   const walletMod = config.walletMod === 'on' ? 'on' : 'off';
+  const legacyMod = config.legacyMod === 'on' ? 'on' : 'off';
+  const cipherMod = config.cipherMod === 'on' ? 'on' : 'off';
   
   return template(
-    i18n.modulesView,
+    i18n.modules,
     section(
       { class: "modules-view" },
       h1(i18n.modulesViewTitle),
@@ -1323,7 +1350,29 @@ exports.modulesView = () => {
                 checked: invitesMod === 'on' ? true : undefined
               })
             )
+          ),
+         tr(
+          td(i18n.legacyLabel),
+          td(
+           input({
+            type: "checkbox",
+            id: "legacyMod",
+            name: "legacyForm",
+            class: "input-checkbox",
+            checked: legacyMod === 'on' ? true : undefined
+           })
+          ),
+          td(i18n.cipherLabel),
+          td(
+           input({
+            type: "checkbox",
+            id: "cipherMod",
+            name: "cipherForm",
+            class: "input-checkbox",
+            checked: cipherMod === 'on' ? true : undefined
+           })
           )
+         )       
         ),
         div(
           { class: "save-button-container" },
@@ -1334,42 +1383,17 @@ exports.modulesView = () => {
   );
 };
 
-exports.settingsView = ({ theme, themeNames, version, walletUrl, walletUser, walletFee }) => {
- const themeElements = themeNames.map((cur) => {
-    const isCurrentTheme = cur === theme;
-    if (isCurrentTheme) {
-      return option({ value: cur, selected: true }, cur);
-    } else {
-      return option({ value: cur }, cur);
-    }
-  });
+exports.settingsView = ({ theme, version }) => {
+    const currentConfig = getConfig();
+    const walletUrl = currentConfig.wallet.url
+    const walletUser = currentConfig.wallet.user
+    const walletFee = currentConfig.wallet.fee
 
-  const base16 = [
-    // '00', removed because this is the background
-    "01",
-    "02",
-    "03",
-    "04",
-    "05",
-    "06",
-    "07",
-    "08",
-    "09",
-    "0A",
-    "0B",
-    "0C",
-    "0D",
-    "0E",
-    "0F",
+  const themeElements = [
+    option({ value: "SNH-Oasis", selected: true }, "SNH-Oasis"),
   ];
 
-  const base16Elements = base16.map((base) =>
-    div({
-      class: `theme-preview theme-preview-${base}`,
-    })
-  );
-
-  const languageOption = (longName, shortName) =>
+  const languageOption = (longName, shortName, selectedLanguage) =>
     shortName === selectedLanguage
       ? option({ value: shortName, selected: true }, longName)
       : option({ value: shortName }, longName);
@@ -1382,30 +1406,31 @@ exports.settingsView = ({ theme, themeNames, version, walletUrl, walletUser, wal
   return template(
     i18n.settings,
     section(
-      { class: "message" },
+      { class: "viewInfo" },
       h1(i18n.settings),
-      p(a({ href:snhUrl, target: "_blank" }, i18n.settingsIntro({ version }))),
-      p(global.updaterequired),
+      p(a({ href: snhUrl, target: "_blank" }, i18n.settingsIntro({ version }))),
       hr,
       h2(i18n.theme),
       p(i18n.themeIntro),
       form(
-         { action: "/theme.css", method: "post" },
-         select({ name: "theme" }, ...themeElements),
-         button({ type: "submit" }, i18n.setTheme)
-       ),
+        { action: "/theme.css", method: "post" },
+        select({ name: "theme" }, ...themeElements),
+        br,
+        br,
+        button({ type: "submit" }, i18n.setTheme)
+      ),
       hr,
       h2(i18n.language),
       p(i18n.languageDescription),
       form(
         { action: "/language", method: "post" },
         select({ name: "language" }, [
-          // Languages are sorted alphabetically by their 'long name'.
-          /* spell-checker:disable */
-          languageOption("English", "en"),
-          languageOption("Español", "es"),
-          /* spell-checker:enable */
+          languageOption("English", "en", selectedLanguage),
+          languageOption("Español", "es", selectedLanguage),
+          languageOption("Français", "fr", selectedLanguage),
         ]),
+        br,
+        br,
         button({ type: "submit" }, i18n.setLanguage)
       ),
       hr,
@@ -1429,7 +1454,7 @@ exports.settingsView = ({ theme, themeNames, version, walletUrl, walletUser, wal
       hr,
       h2(i18n.indexes),
       p(i18n.indexesDescription),
-      rebuildButton,
+      rebuildButton
     )
   );
 };
@@ -1626,12 +1651,6 @@ exports.searchView = ({ messages, query }) => {
     type: "search",
     value: query,
   });
-
-  // - Minimum length of 3 because otherwise SSB-Search hangs forever. :)
-  //   https://github.com/ssbc/ssb-search/issues/8
-  // - Using `setAttribute()` because HyperScript (the HyperAxe dependency has
-  //   a bug where the `minlength` property is being ignored. No idea why.
-  //   https://github.com/hyperhype/hyperscript/issues/91
   searchInput.setAttribute("minlength", 3);
 
   return template(
@@ -1640,7 +1659,9 @@ exports.searchView = ({ messages, query }) => {
       h1(i18n.search),
       form(
         { action: "/search", method: "get" },
-        label(i18n.searchLabel, searchInput),
+        p(i18n.searchLabel, searchInput),
+        br,
+        br,
         button(
           {
             type: "submit",
@@ -1689,12 +1710,6 @@ exports.imageSearchView = ({ blobs, query }) => {
     type: "search",
     value: query,
   });
-
-  // - Minimum length of 3 because otherwise SSB-Search hangs forever. :)
-  //   https://github.com/ssbc/ssb-search/issues/8
-  // - Using `setAttribute()` because HyperScript (the HyperAxe dependency has
-  //   a bug where the `minlength` property is being ignored. No idea why.
-  //   https://github.com/hyperhype/hyperscript/issues/91
   searchInput.setAttribute("minlength", 3);
 
   return template(
@@ -1775,17 +1790,27 @@ const walletViewRender = (balance, ...elements) => {
       p(i18n.walletDescription),
     ),
     section(
+    h1(i18n.walletBalanceTitle),
       div(
         {class: "div-center"},
         span(
           {class: "wallet-balance"},
           i18n.walletBalanceLine({ balance })
         ),
+        ),
+        div(
+        {class: "div-center"},
         span(
-          { class: "form-button-group-center" },
-          a({ href: "/wallet/send", class: "button-like-link" }, i18n.walletSend),
-          a({ href: "/wallet/receive", class: "button-like-link" }, i18n.walletReceive),
-          a({ href: "/wallet/history", class: "button-like-link" }, i18n.walletHistory),
+          { class: "wallet-form-button-group-center" },
+           form({ action: "/wallet/send", method: "get" },
+            button({ type: 'submit' }, i18n.walletSend)
+           ),
+           form({ action: "/wallet/receive", method: "get" },
+            button({ type: 'submit' }, i18n.walletReceive)
+            ),
+           form({ action: "/wallet/history", method: "get" },
+            button({ type: 'submit' }, i18n.walletHistory)
+           )
         )
       ),
     ),
@@ -1800,6 +1825,7 @@ exports.walletView = async (balance) => {
 exports.walletHistoryView = async (balance, transactions) => {
   return walletViewRender(
     balance,
+    h1(i18n.walletHistoryTitle),
     table(
       { class: "wallet-history" },
       thead(
@@ -1844,6 +1870,7 @@ exports.walletReceiveView = async (balance, address) => {
 
   return walletViewRender(
     balance,
+    h1(i18n.walletReceiveTitle),
     div(
       {class: 'div-center qr-code', innerHTML: qrContainer},
     ),
@@ -1869,6 +1896,7 @@ exports.walletSendFormView = async (balance, destination, amount, fee, statusMes
 
   return walletViewRender(
     balance,
+    h1(i18n.walletWalletSendTitle),
     div(
       {class: "div-center"},
       messages?.length > 0 ? statusBlock : null,
@@ -1945,3 +1973,134 @@ exports.walletSendResultView = async (balance, destination, amount, txId) => {
     ),
   )
 }
+
+exports.legacyView = async () => {
+  const randomPassword = generateRandomPassword();
+  
+  return template(
+    `${i18n.legacyTitle}`,
+    section(
+      h1(i18n.legacyTitle),
+      p(i18n.legacyDescription)
+    ),
+    p({ class: "generated-password", id: "randomPassword" }, `${i18n.randomPassword}: ${randomPassword}`),
+    section(
+      div(
+        { class: "div-center" },
+        label(i18n.exportTitle),
+        p(i18n.exportDescription),
+        form(
+          { 
+            action: "/legacy/export", 
+            method: "POST", 
+            id: "exportForm" 
+          },
+          label(i18n.exportPasswordLabel),
+          input({ 
+            type: "password", 
+            name: "password", 
+            id: "password", 
+            required: true, 
+            placeholder: i18n.exportPasswordPlaceholder, 
+            minlength: 32
+          }),
+          p({ class: "file-info" }, i18n.fileInfo),
+          button({ type: "submit" }, i18n.legacyExportButton)
+        ),
+        br,
+        label(i18n.importTitle),
+        p(i18n.importDescription),
+        form(
+          { action: "/legacy/import", method: "POST", enctype: "multipart/form-data" },
+          input({ type: "file", name: "uploadedFile", required: true }),
+          br,
+          p(i18n.passwordImport),
+          input({ 
+            type: "password", 
+            name: "importPassword", 
+            required: true, 
+            placeholder: i18n.importPasswordPlaceholder,
+            minlength: 32
+          }),
+          button({ type: "submit" }, i18n.legacyImportButton)
+        )
+      )
+    )
+  );
+};
+
+exports.cipherView = async (encryptedText = "", decryptedText = "", iv = "", password = "") => {
+  const randomPassword = generateRandomPassword();
+
+  const view = template(
+    `${i18n.cipherTitle}`,
+    section(
+      h1(i18n.cipherTitle),
+      p(i18n.cipherDescription)
+    ),
+    p({ class: "generated-password", id: "randomPassword" }, `${i18n.randomPassword}: ${randomPassword}`),
+    section(
+      div(
+        { class: "div-center" },
+        label(i18n.cipherEncryptTitle),
+        p(i18n.cipherEncryptDescription),
+        form(
+          { 
+            action: "/cipher/encrypt", 
+            method: "POST", 
+            id: "encryptForm" 
+          },
+          label(i18n.cipherTextLabel),
+          textarea({
+            name: "text",
+            id: "text",
+            required: true,
+            placeholder: i18n.cipherTextPlaceholder,
+            rows: 4
+          }),
+          label(i18n.cipherPasswordLabel),
+          input({
+            type: "password",
+            name: "password",
+            id: "password",
+            required: true,
+            placeholder: i18n.cipherPasswordPlaceholder,
+            minlength: 32
+          }),
+          button({ type: "submit" }, i18n.cipherEncryptButton)
+        ),
+        encryptedText ? div({ class: "cipher-result visible encrypted-result" }, `${encryptedText}`) : div({ class: "cipher-result" }),
+        encryptedText ? div({ class: "cipher-result visible encrypted-result" }, `${password}`) : div({ class: "cipher-result" }),
+        encryptedText ? input({ type: "hidden", name: "iv", value: iv }) : "",
+        label(i18n.cipherDecryptTitle),
+        p(i18n.cipherDecryptDescription),
+        form(
+          { action: "/cipher/decrypt", method: "POST", id: "decryptForm" },
+          label(i18n.cipherEncryptedTextLabel),
+          textarea({
+            name: "encryptedText",
+            id: "encryptedText",
+            required: true,
+            placeholder: i18n.cipherEncryptedTextPlaceholder,
+            rows: 4,
+            value: encryptedText
+          }),
+          label(i18n.cipherPasswordLabel),
+          input({
+            type: "password",
+            name: "password",
+            id: "password",
+            required: true,
+            placeholder: i18n.cipherPasswordPlaceholder,
+            minlength: 32
+          }),
+          input({ type: "hidden", name: "iv", value: iv }),
+          button({ type: "submit" }, i18n.cipherDecryptButton)
+        ),
+        decryptedText ? div({ class: "cipher-result visible decrypted-result" }, `${decryptedText}`) : div({ class: "cipher-result" }),
+        decryptedText ? div({ class: "cipher-result visible decrypted-result" }, `${password}`) : div({ class: "cipher-result" }),
+      )
+    )
+  );
+  return view;
+};

@@ -1,12 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 
-const configFilePath = path.join(__dirname, 'modules.json');
+const configFilePath = path.join(__dirname, 'config.json');
 
 if (!fs.existsSync(configFilePath)) {
   const defaultConfig = {
-    invitesMod: 'on',
-    walletMod: 'on',
+    modules: {
+      invitesMod: 'on',
+      walletMod: 'on',
+    },
+    wallet: {
+      url: 'http://localhost:7474',
+      user: 'ecoinrpc',
+      pass: 'ecoinrpc',
+      fee: 0.01,
+    }
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
 }

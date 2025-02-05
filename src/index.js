@@ -7,7 +7,7 @@ const path = require("path");
 const envPaths = require("env-paths");
 const {cli} = require("./cli");
 const fs = require("fs");
-
+const os = require('os');
 const promisesFs = require("fs").promises;
 
 const supports = require("./supports.js").supporting;
@@ -82,7 +82,7 @@ debug("Current configuration: %O", config);
 debug(`You can save the above to ${defaultConfigFile} to make \
 these settings the default. See the readme for details.`);
 
-const { saveConfig, getConfig } = require('./modules-config');
+const { saveConfig, getConfig } = require('./config');
 
 const oasisCheckPath = "/.well-known/oasis";
 
@@ -139,46 +139,26 @@ const pull = require("pull-stream");
 const koaRouter = require("@koa/router");
 const ssbMentions = require("ssb-mentions");
 const isSvg = require('is-svg');
-const { themeNames } = require("@fraction/base16-css");
 const { isFeed, isMsg, isBlob } = require("ssb-ref");
 
 const ssb = require("./ssb");
 
 const router = new koaRouter();
-
-// Create "cooler"-style interface from SSB connection.
-// This handle is passed to the models for their convenience.
 const cooler = ssb({ offline: config.offline });
 
 const models = require("./models");
 
-const { about, blob, friend, meta, post, vote, wallet } = models({
+const { about, blob, friend, meta, post, vote, wallet, legacy, cipher } = models({
   cooler,
   isPublic: config.public,
 });
 
 const nameWarmup = about._startNameWarmup();
-
-// enhance the users' input text by expanding @name to [@name](@feedPub.key)
-// and slurps up blob uploads and appends a markdown link for it to the text (see handleBlobUpload)
 const preparePreview = async function (ctx) {
   let text = String(ctx.request.body.text);
-
-  // find all the @mentions that are not inside a link already
-  // stores name:[matches...]
-  // TODO: sort by relationship
   const mentions = {};
-
-  // This matches for @string followed by a space or other punctuations like ! , or .
-  // The idea here is to match a plain @name but not [@name](...)
-  // also: re.exec has state => regex is consumed and thus needs to be re-instantiated for each call
-  //
-  // Change this link when the regex changes: https://regex101.com/r/j5rzSv/2
+  // TODO: sort by relationship
   const rex = /(^|\s)(?!\[)@([a-zA-Z0-9-]+)([\s.,!?)~]{1}|$)/g;
-  //                                        ^ sentence ^
-  //                                         delimiters
-
-  // find @mentions using rex and use about.named() to get the info for them
   let m;
   while ((m = rex.exec(text)) !== null) {
     const name = m[2];
@@ -189,7 +169,6 @@ const preparePreview = async function (ctx) {
       mentions[name] = found;
     }
   }
-
   // filter the matches depending on the follow relation
   Object.keys(mentions).forEach((name) => {
     let matches = mentions[name];
@@ -249,11 +228,11 @@ const handleBlobUpload = async function (ctx) {
     return "";
   }
 
-  // 5 MiB check
-  const mebibyte = Math.pow(2, 20);
-  const maxSize = 5 * mebibyte;
+  // 25 MiB check
+  const megabyte = Math.pow(2, 20);
+  const maxSize = 25 * megabyte;
   if (data.length > maxSize) {
-    throw new Error("Blob file is too big, maximum size is 5 mebibytes");
+    throw new Error("File is too big, maximum size is 25 megabytes");
   }
 
   try {
@@ -384,10 +363,11 @@ const {
   walletSendFormView,
   walletSendConfirmView,
   walletSendResultView,
+  legacyView,
+  cipherView,
 } = require("./views/index.js");
 
 const ssbRef = require("ssb-ref");
-
 const markdownView = require("./views/markdown.js");
 
 let sharp;
@@ -563,18 +543,14 @@ router
     if (isBlob(query)) {
       return ctx.redirect(`/blob/${encodeURIComponent(query)}`);
     }
-
     if (typeof query === "string") {
-      // https://github.com/ssbc/ssb-search/issues/7
       query = query.toLowerCase();
       if (query.length > 1 && query.startsWith("#")) {
         const hashtag = query.slice(1);
         return ctx.redirect(`/hashtag/${encodeURIComponent(hashtag)}`);
       }
     }
-
     const messages = await post.search({ query });
-
     ctx.body = await searchView({ messages, query });
   })
   .get("/imageSearch", async (ctx) => {
@@ -601,50 +577,7 @@ router
     const { hashtag } = ctx.params;
     const messages = await post.fromHashtag(hashtag);
     ctx.body = await hashtagView({ hashtag, messages });
-  })
-  .get("/theme.css", async (ctx) => {
-    const theme = ctx.cookies.get("theme") || config.theme;
-  
-    const packageName = "@fraction/base16-css";
-    const filePath = path.resolve(
-      "node_modules",
-      packageName,
-      "src",
-      `base16-${theme}.css`
-    );
-  
-    try {
-      
-      // await the css content
-      const cssContent = await promisesFs.readFile(filePath, { encoding: "utf8" });
-  
-      ctx.type = "text/css"; // Set the Content-Type header
-      ctx.body = cssContent; // Serve the CSS content
-
-    } catch (err) {
-      console.error("Error reading CSS file:", err.message);
-  
-      ctx.status = 404; // Return a 404 status if the file is not found
-      ctx.body = "Theme not found.";
-    }
-  })
-  
-  .get("/custom-style.css", async (ctx) => {
-    ctx.type = "text/css";
-    try {
-
-      // Read the CSS file
-      const cssContent = await fs.readFileSync(customStyleFile, "utf8");
-
-      ctx.type = "text/css"; // Set the Content-Type header
-      ctx.body = cssContent; // Serve the CSS content
-    } catch (err) {
-      console.error("Error reading custom style file:", err.message);
-
-      ctx.status = 404; // Return a 404 status if the file is not found
-      ctx.body = "Custom style not found.";
-    }
-  })
+   })
   .get("/profile", async (ctx) => {
     const myFeedId = await meta.myFeedId();
     const gt = Number(ctx.request.query["gt"] || -1);
@@ -808,7 +741,7 @@ router
     ctx.body = await image({ blobId, imageSize: Number(imageSize) });
   })
   .get("/modules", async (ctx) => {
-    const configMods = getConfig();
+    const configMods = getConfig().modules;
     const popularMod = ctx.cookies.get('popularMod', { signed: false }) || configMods.popularMod;
     const topicsMod = ctx.cookies.get('topicsMod', { signed: false }) || configMods.topicsMod;
     const summariesMod = ctx.cookies.get('summariesMod', { signed: false }) || configMods.summariesMod;
@@ -818,22 +751,16 @@ router
     const inboxMod = ctx.cookies.get('inboxMod', { signed: false }) || configMods.inboxMod;
     const invitesMod = ctx.cookies.get('invitesMod', { signed: false }) || configMods.invitesMod;
     const walletMod = ctx.cookies.get('walletMod', { signed: false }) || configMods.walletMod;
-    ctx.body = modulesView({ popularMod, topicsMod, summariesMod, latestMod, threadsMod, multiverseMod, inboxMod, invitesMod, walletMod });
+    const legacyMod = ctx.cookies.get('legacyMod', { signed: false }) || configMods.legacyMod;
+    const cipherMod = ctx.cookies.get('cipherMod', { signed: false }) || configMods.cipherMod;
+    ctx.body = modulesView({ popularMod, topicsMod, summariesMod, latestMod, threadsMod, multiverseMod, inboxMod, invitesMod, walletMod, legacyMod, cipherMod });
   })
   .get("/settings", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
-    const walletUrl = ctx.cookies.get("wallet_url") || config.walletUrl;
-    const walletUser = ctx.cookies.get("wallet_user") || config.walletUser;
-    const walletFee = ctx.cookies.get("wallet_fee") || config.walletFee;
-
-   const getMeta = async ({ theme }) => {
+    const getMeta = async ({ theme }) => {
       return settingsView({
         theme,
-        themeNames,
         version: version.toString(),
-        walletUrl,
-        walletUser,
-        walletFee
       });
     };
     ctx.body = await getMeta({ theme });
@@ -895,6 +822,30 @@ router
     };
     ctx.body = await mentions();
   })
+  .get('/legacy', async (ctx) => {
+    const legacyMod = ctx.cookies.get("legacyMod") || 'on';
+    if (legacyMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    try {
+      ctx.body = await legacyView();
+    } catch (error) {
+      ctx.body = { error: error.message };
+    }
+  }) 
+  .get('/cipher', async (ctx) => {
+    const cipherMod = ctx.cookies.get("cipherMod") || 'on';
+    if (cipherMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    try {
+      ctx.body = await cipherView();
+    } catch (error) {
+      ctx.body = { error: error.message };
+    }
+  })  
   .get("/thread/:message", async (ctx) => {
     const { message } = ctx.params;
     const thread = async (message) => {
@@ -921,14 +872,12 @@ router
     ctx.body = await commentView({ messages, myFeedId, parentMessage });
   })
   .get("/wallet", async (ctx) => {
+    const { url, user, pass } = getConfig().wallet;
     const walletMod = ctx.cookies.get("walletMod") || 'on';
     if (walletMod !== 'on') {
       ctx.redirect('/modules');
       return;
     }
-    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
-    const user = ctx.cookies.get("wallet_user") || config.walletUser;
-    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
     try {
       const balance = await wallet.getBalance(url, user, pass);
       ctx.body = await walletView(balance);
@@ -937,9 +886,7 @@ router
     }
   })
   .get("/wallet/history", async (ctx) => {
-    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
-    const user = ctx.cookies.get("wallet_user") || config.walletUser;
-    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
+    const { url, user, pass } = getConfig().wallet;
     try {
       const balance = await wallet.getBalance(url, user, pass);
       const transactions = await wallet.listTransactions(url, user, pass);
@@ -949,22 +896,17 @@ router
     }
   })
   .get("/wallet/receive", async (ctx) => {
-    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
-    const user = ctx.cookies.get("wallet_user") || config.walletUser;
-    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
+    const { url, user, pass } = getConfig().wallet;
     try {
-    const balance = await wallet.getBalance(url, user, pass);
-    const address = await wallet.getAddress(url, user, pass);
-    ctx.body = await walletReceiveView(balance, address);
+      const balance = await wallet.getBalance(url, user, pass);
+      const address = await wallet.getAddress(url, user, pass);
+      ctx.body = await walletReceiveView(balance, address);
     } catch (error) {
       ctx.body = await walletErrorView(error);
     }
   })
   .get("/wallet/send", async (ctx) => {
-    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
-    const user = ctx.cookies.get("wallet_user") || config.walletUser;
-    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
-    const fee = ctx.cookies.get("wallet_fee") || config.walletFee;
+    const { url, user, pass, fee } = getConfig().wallet;
     try {
       const balance = await wallet.getBalance(url, user, pass);
       ctx.body = await walletSendFormView(balance, null, null, fee, null);
@@ -972,8 +914,7 @@ router
       ctx.body = await walletErrorView(error);
     }
   })
-  .post(
-    "/subtopic/preview/:message",
+  .post("/subtopic/preview/:message",
     koaBody({ multipart: true }),
     async (ctx) => {
       const { message } = ctx.params;
@@ -1017,8 +958,7 @@ router
     ctx.body = await publishSubtopic({ message, text });
     ctx.redirect(`/thread/${encodeURIComponent(message)}`);
   })
-  .post(
-    "/comment/preview/:message",
+  .post("/comment/preview/:message",
     koaBody({ multipart: true }),
     async (ctx) => {
       const { messages, contentWarning, myFeedId, parentMessage } =
@@ -1058,8 +998,6 @@ router
   })
   .post("/publish/preview", koaBody({ multipart: true }), async (ctx) => {
     const rawContentWarning = String(ctx.request.body.contentWarning).trim();
-
-    // Only submit content warning if it's a string with non-zero length.
     const contentWarning =
       rawContentWarning.length > 0 ? rawContentWarning : undefined;
 
@@ -1069,8 +1007,6 @@ router
   .post("/publish", koaBody(), async (ctx) => {
     const text = String(ctx.request.body.text);
     const rawContentWarning = String(ctx.request.body.contentWarning);
-
-    // Only submit content warning if it's a string with non-zero length.
     const contentWarning =
       rawContentWarning.length > 0 ? rawContentWarning : undefined;
 
@@ -1156,7 +1092,95 @@ router
     ctx.body = await like({ messageKey, voteValue });
     ctx.redirect(referer.href);
   })
-
+  .post('/legacy/export', koaBody(), async (ctx) => {
+    const password = ctx.request.body.password;
+    if (!password || password.length < 32) {
+      ctx.redirect('/legacy'); 
+      return;
+    }
+    try {
+      const encryptedFilePath = await legacy.exportData({ password });
+      ctx.body = {
+        message: 'Data exported successfully!',
+        file: encryptedFilePath
+      };
+      ctx.redirect('/legacy');
+    } catch (error) {
+      ctx.status = 500;
+      ctx.body = { error: `Error: ${error.message}` };
+      ctx.redirect('/legacy');
+    }
+  })
+  .post('/legacy/import', koaBody({ 
+    multipart: true, 
+    formidable: { 
+      keepExtensions: true, 
+      uploadDir: '/tmp', 
+      } 
+    }), async (ctx) => {
+    const uploadedFile = ctx.request.files?.uploadedFile;
+    const password = ctx.request.body.importPassword;
+    if (!uploadedFile) {
+      ctx.body = { error: 'No file uploaded' };
+      ctx.redirect('/legacy');
+      return;
+    }
+    if (!password || password.length < 32) {
+      ctx.body = { error: 'Password is too short or missing.' };
+      ctx.redirect('/legacy');
+      return;
+    }
+    try {
+      await legacy.importData({ filePath: uploadedFile.filepath, password });
+      ctx.body = { message: 'Data imported successfully!' };
+      ctx.redirect('/legacy');
+    } catch (error) {
+      ctx.body = { error: error.message };
+      ctx.redirect('/legacy');
+    }
+  })
+  .post('/cipher/encrypt', koaBody(), async (ctx) => {
+    const { text, password } = ctx.request.body;
+    if (!text || !password) {
+      ctx.body = { error: 'Text or password not provided.' };
+      ctx.redirect('/cipher');
+      return;
+    }
+    if (password.length < 32) {
+      ctx.body = { error: 'Password is too short or missing.' };
+      ctx.redirect('/cipher');
+      return;
+    }
+    try {
+      const { encryptedText, iv } = cipher.encryptData(text, password);
+      const view = await cipherView(encryptedText, "", iv, password); 
+      ctx.body = view;
+    } catch (error) {
+      ctx.body = { error: error.message };
+      ctx.redirect('/cipher');
+    }
+  })
+  .post('/cipher/decrypt', koaBody(), async (ctx) => {
+    const { encryptedText, password, iv } = ctx.request.body;
+    if (!encryptedText || !password || !iv) {
+      ctx.body = { error: 'Text, password, or iv not provided.' };
+      ctx.redirect('/cipher');
+      return;
+    }
+    if (password.length < 32) {
+      ctx.body = { error: 'Password is too short or missing.' };
+      ctx.redirect('/cipher');
+      return;
+    }
+    try {
+      const decryptedText = cipher.decryptData(encryptedText, password, iv);
+      const view = await cipherView("", decryptedText, iv, password);
+      ctx.body = view;
+    } catch (error) {
+      ctx.body = { error: error.message };
+      ctx.redirect('/cipher');
+    }
+  })
   .post("/update", koaBody(), async (ctx) => {
     const util = require("node:util");
     const exec = util.promisify(require("node:child_process").exec);
@@ -1171,10 +1195,10 @@ router
     ctx.redirect(referer.href);
   })
   .post("/theme.css", koaBody(), async (ctx) => {
-    const theme = String(ctx.request.body.theme);
-    ctx.cookies.set("theme", theme);
+    const theme = "SNH-Oasis"; 
+    ctx.cookies.set("theme", theme);  
     const referer = new URL(ctx.request.header.referer);
-    ctx.redirect(referer.href);
+    ctx.redirect(referer.href);  
   })
   .post("/language", koaBody(), async (ctx) => {
     const language = String(ctx.request.body.language);
@@ -1222,6 +1246,8 @@ router
     const inboxMod = ctx.request.body.inboxForm === 'on' ? 'on' : 'off';
     const invitesMod = ctx.request.body.invitesForm === 'on' ? 'on' : 'off';
     const walletMod = ctx.request.body.walletForm === 'on' ? 'on' : 'off';
+    const legacyMod = ctx.request.body.legacyForm === 'on' ? 'on' : 'off';
+    const cipherMod = ctx.request.body.cipherForm === 'on' ? 'on' : 'off';
     ctx.cookies.set("popularMod", popularMod, { httpOnly: true, maxAge: 86400000, path: '/' });
     ctx.cookies.set("topicsMod", topicsMod, { httpOnly: true, maxAge: 86400000, path: '/' });
     ctx.cookies.set("summariesMod", summariesMod, { httpOnly: true, maxAge: 86400000, path: '/' });
@@ -1231,16 +1257,20 @@ router
     ctx.cookies.set("inboxMod", inboxMod, { httpOnly: true, maxAge: 86400000, path: '/' });
     ctx.cookies.set("invitesMod", invitesMod, { httpOnly: true, maxAge: 86400000, path: '/' });
     ctx.cookies.set("walletMod", walletMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("legacyMod", legacyMod, { httpOnly: true, maxAge: 86400000, path: '/' });
+    ctx.cookies.set("cipherMod", cipherMod, { httpOnly: true, maxAge: 86400000, path: '/' });
     const currentConfig = getConfig();
-    currentConfig.popularMod = popularMod;
-    currentConfig.topicsMod = topicsMod;
-    currentConfig.summariesMod = summariesMod;
-    currentConfig.latestMod = latestMod;
-    currentConfig.threadsMod = threadsMod;
-    currentConfig.multiverseMod = multiverseMod;
-    currentConfig.inboxMod = inboxMod;
-    currentConfig.invitesMod = invitesMod;
-    currentConfig.walletMod = walletMod;
+    currentConfig.modules.popularMod = popularMod;
+    currentConfig.modules.topicsMod = topicsMod;
+    currentConfig.modules.summariesMod = summariesMod;
+    currentConfig.modules.latestMod = latestMod;
+    currentConfig.modules.threadsMod = threadsMod;
+    currentConfig.modules.multiverseMod = multiverseMod;
+    currentConfig.modules.inboxMod = inboxMod;
+    currentConfig.modules.invitesMod = invitesMod;
+    currentConfig.modules.walletMod = walletMod;
+    currentConfig.modules.legacyMod = legacyMod;
+    currentConfig.modules.cipherMod = cipherMod;
     saveConfig(currentConfig);
     ctx.redirect(`/modules`);
   })
@@ -1249,10 +1279,12 @@ router
     const user = String(ctx.request.body.wallet_user);
     const pass = String(ctx.request.body.wallet_pass);
     const fee = String(ctx.request.body.wallet_fee);
-    url && url.trim() !== "" && ctx.cookies.set("wallet_url", url);
-    user && user.trim() !== "" && ctx.cookies.set("wallet_user", user);
-    pass && pass.trim() !== "" && ctx.cookies.set("wallet_pass", pass);
-    fee && fee > 0 && ctx.cookies.set("wallet_fee", fee);
+    const currentConfig = getConfig();
+    if (url) currentConfig.wallet.url = url;
+    if (user) currentConfig.wallet.user = user;
+    if (pass) currentConfig.wallet.pass = pass;
+    if (fee) currentConfig.wallet.fee = fee;
+    saveConfig(currentConfig);
     const referer = new URL(ctx.request.header.referer);
     ctx.redirect(referer.href);
   })
@@ -1261,9 +1293,7 @@ router
     const destination = String(ctx.request.body.destination);
     const amount = Number(ctx.request.body.amount);
     const fee = Number(ctx.request.body.fee);
-    const url = ctx.cookies.get("wallet_url") || config.walletUrl;
-    const user = ctx.cookies.get("wallet_user") || config.walletUser;
-    const pass = ctx.cookies.get("wallet_pass") || config.walletPass;
+    const { url, user, pass } = getConfig().wallet;
     let balance = null
 
     try {
@@ -1334,7 +1364,6 @@ const middleware = [
 
     const left = totalTarget - totalCurrent;
 
-    // Weird trick to get percentage with 1 decimal place (e.g. 78.9)
     const percent = Math.floor((totalCurrent / totalTarget) * 1000) / 10;
     const mebibyte = 1024 * 1024;
 
@@ -1350,9 +1379,6 @@ const middleware = [
 const { allowHost } = config;
 const app = http({ host, port, middleware, allowHost });
 
-// HACK: This lets us close the database once tests finish.
-// If we close the database after each test it throws lots of really fun "parent
-// stream closing" errors everywhere and breaks the tests. :/
 app._close = () => {
   nameWarmup.close();
   cooler.close();

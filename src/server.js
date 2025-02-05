@@ -52,7 +52,6 @@ var conn_query = require('ssb-conn-query')
 var conn_hub = require('ssb-conn-hub')
 var conn_staging = require('ssb-conn-staging')
 var device_address = require('ssb-device-address')
-var poll = require('scuttle-poll')
 var gossip = require('ssb-gossip')
 var master = require('ssb-master')
 var logging = require('ssb-logging')
@@ -66,7 +65,7 @@ var links = require('ssb-links')
 
 // create ssb server
 function createSsbServer () {
-  return SecretStack({ caps }).use(SSB, gossip, tribes, conn, db2, master, ebt, box, threads, invite, conn_db, search2, friend_pub, invite_client, tunnel, config, conn_query, conn_hub, conn_staging, device_address, poll, friends, logging, replication_scheduler, partial_replication, about, onion, unix, auth, backlinks, links)
+  return SecretStack({ caps }).use(SSB, gossip, tribes, conn, db2, master, ebt, box, threads, invite, conn_db, search2, friend_pub, invite_client, tunnel, config, conn_query, conn_hub, conn_staging, device_address, friends, logging, replication_scheduler, partial_replication, about, onion, unix, auth, backlinks, links)
 }
 
 // add other required plugins (+flotilla) by SNH-Oasis (client) (plugin order is required!)

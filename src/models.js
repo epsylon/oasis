@@ -9,6 +9,7 @@ const pullParallelMap = require("pull-paramap");
 const pull = require("pull-stream");
 const pullSort = require("pull-sort");
 const ssbRef = require("ssb-ref");
+
 const {
   RequestManager,
   HTTPTransport,
@@ -63,21 +64,6 @@ const configure = (...customOptions) =>
 
 module.exports = ({ cooler, isPublic }) => {
   const models = {};
-
-  /**
-   * The SSB-About plugin is a thin wrapper around the SSB-Social-Index plugin.
-   * Unfortunately, this plugin has two problems that make it incompatible with
-   * our needs:
-   *
-   * - We want to get the latest value from an author, like what someone calls
-   *   themselves, **not what other people call them**.
-   * - The plugin has a bug where `false` isn't handled correctly, which is very
-   *   important since we use `publicWebHosting`, a boolean field.
-   *
-   * It feels very silly to have to maintain an alternative implementation of
-   * SSB-About, but this is much smaller code and doesn't have either of the
-   * above problems. Maybe this should be moved somewhere else in the future?
-   */
   const getAbout = async ({ key, feedId }) => {
     const ssb = await cooler.open();
     const source = ssb.backlinks.read({
@@ -114,17 +100,7 @@ module.exports = ({ cooler, isPublic }) => {
       )
     );
   };
-
-  // build a @mentions lookup cache
-  // ==============================
-  // one gotcha with ssb-query is: if we add `name: "my name"` to that query below,
-  // it can trigger a full-scan of the database instead of better query planing
-  // also doing multiple of those can be very slow (5 to 30s on my machine).
-  // gotcha two is: there is no way to express (where msg.author == msg.value.content.about) so we need to do it as a pull.filter()
-  // one drawback: is, it gives us all the about messages from forever, not just the latest
   // TODO: an alternative would be using ssb.names if available and just loading this as a fallback
-
-  // Two lookup tables to remove old and duplicate names
   const feeds_to_name = {};
   let all_the_names = {};
 
@@ -1699,11 +1675,11 @@ module.exports = ({ cooler, isPublic }) => {
     publishProfileEdit: async ({ name, description, image }) => {
       const ssb = await cooler.open();
       if (image.length > 0) {
-        // 5 MiB check
-        const mebibyte = Math.pow(2, 20);
-        const maxSize = 5 * mebibyte;
+        // 25 MiB check
+        const megabyte = Math.pow(2, 20);
+        const maxSize = 25 * megabyte;
         if (image.length > maxSize) {
-          throw new Error("Image file is too big, maximum size is 5 mebibytes");
+          throw new Error("File is too big, maximum size is 25 megabytes");
         }
 
         return new Promise((resolve, reject) => {
@@ -1901,8 +1877,7 @@ module.exports = ({ cooler, isPublic }) => {
   };
   models.post = post;
 
-  models.vote = {
-    /** @param {{messageKey: string, value: {}, recps: []}} input */
+models.vote = {
     publish: async ({ messageKey, value, recps }) => {
       const ssb = await cooler.open();
       const branch = await ssb.tangle.branch(messageKey);
@@ -1919,7 +1894,7 @@ module.exports = ({ cooler, isPublic }) => {
     },
   };
 
-  models.wallet = {
+models.wallet = {
     client: async (url, user, pass) => {
       const transport = new HTTPTransport(url, {
         headers: {
@@ -1966,5 +1941,138 @@ module.exports = ({ cooler, isPublic }) => {
     }
   }
 
-  return models;
+//legacy: export/import .ssb secret (private key)
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
+
+function encryptFile(filePath, password) {
+  if (typeof password === 'object' && password.password) {
+    password = password.password;
+  }
+  const key = Buffer.from(password, 'utf-8');
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  const homeDir = os.homedir();
+  const encryptedFilePath = path.join(homeDir, 'oasis.enc');
+  const output = fs.createWriteStream(encryptedFilePath);
+  const input = fs.createReadStream(filePath);
+  input.pipe(cipher).pipe(output);
+  return new Promise((resolve, reject) => {
+    output.on('finish', () => {
+      resolve(encryptedFilePath);
+    });
+    output.on('error', (err) => {
+      reject(err);
+    });
+  });
+}
+
+function decryptFile(filePath, password) {
+  if (typeof password === 'object' && password.password) {
+    password = password.password;
+  } 
+  const key = Buffer.from(password, 'utf-8');
+  const iv = crypto.randomBytes(16);
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv); 
+  const homeDir = os.homedir();
+  const decryptedFilePath = path.join(homeDir, 'secret');
+  const output = fs.createWriteStream(decryptedFilePath);
+  const input = fs.createReadStream(filePath);
+  input.pipe(decipher).pipe(output);
+  return new Promise((resolve, reject) => {
+    output.on('finish', () => {
+      resolve(decryptedFilePath);
+    });
+    output.on('error', (err) => {
+      console.error('Error deciphering data:', err);
+      reject(err);
+    });
+  });
+}
+
+models.legacy = {
+  exportData: async (password) => {
+    try {
+      const homeDir = os.homedir();
+      const secretFilePath = path.join(homeDir, '.ssb', 'secret');
+      
+      if (!fs.existsSync(secretFilePath)) {
+        throw new Error(".ssb/secret file doesn't exist");
+      }
+      const encryptedFilePath = await encryptFile(secretFilePath, password);   
+      fs.unlinkSync(secretFilePath);
+      return encryptedFilePath;
+    } catch (error) {
+      throw new Error("Error exporting data: " + error.message);
+    }
+  },
+  importData: async ({ filePath, password }) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        throw new Error('Encrypted file not found.');
+      }
+      const decryptedFilePath = await decryptFile(filePath, password);
+
+      if (!fs.existsSync(decryptedFilePath)) {
+        throw new Error("Decryption failed.");
+      }
+
+      fs.unlinkSync(filePath);
+      return decryptedFilePath;
+
+    } catch (error) {
+      throw new Error("Error importing data: " + error.message);
+    }
+  }
+};
+
+//cipher: encrypt/decrypt text at client side
+function encryptText(text, password) {
+  if (typeof password === 'object' && password.password) {
+    password = password.password;
+  }
+  const key = Buffer.from(password, 'utf-8');
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  let encryptedText = cipher.update(text, 'utf-8', 'hex');
+  encryptedText += cipher.final('hex');
+  const ivHex = iv.toString('hex');
+  return { encryptedText, iv: ivHex }; 
+}
+
+function decryptText(encryptedText, password, ivHex) {
+  if (typeof password === 'object' && password.password) {
+    password = password.password;
+  }
+  const key = Buffer.from(password, 'utf-8');
+  const iv = Buffer.from(ivHex, 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  let decryptedText = decipher.update(encryptedText, 'hex', 'utf-8');
+  decryptedText += decipher.final('utf-8');
+  return decryptedText;
+}
+
+models.cipher = {
+  encryptData: (text, password) => {
+    try {
+      const { encryptedText, iv } = encryptText(text, password);
+      return { encryptedText, iv }; 
+    } catch (error) {
+      throw new Error("Error encrypting data: " + error.message);
+    }
+  },
+  decryptData: (encryptedText, password, iv) => {
+    try {
+      const decryptedText = decryptText(encryptedText, password, iv);
+      return decryptedText;
+    } catch (error) {
+      throw new Error("Error decrypting data: " + error.message);
+    }
+  }
+};
+
+//return models
+return models;
 };
