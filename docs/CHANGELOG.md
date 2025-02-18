@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.3.5 - 2025-02-15
+
+### Changed
+
+- Refactoring tasks + Skin selector + Language selector
+
 ## v0.3.0 - 2024-12-15
 
 ### Changed

@@ -6,5 +6,5 @@ module.exports = {
   pub: 'getPublicKey',
   log: 'createLogStream',
   logt: 'messagesByType',
-  conf: 'config'
-}
+  conf: 'config',
+};

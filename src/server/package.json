@@ -1,7 +1,7 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.3.3",
-  "description": "SNH-Oasis Project Networking GUI",
+  "version": "0.3.4",
+  "description": "SNH-Oasis Project Networking GUI Utopia",
   "repository": {
     "type": "git",
     "url": "git+ssh://git@code.03c8.net/krakenlabs/oasis.git"
@@ -22,7 +22,8 @@
     "start-client": "node src/index.js",
     "test": "tap --timeout 240 && common-good test",
     "preversion": "npm test",
-    "version": "mv docs/CHANGELOG.md ./ && changelog-version && mv CHANGELOG.md docs/ && git add docs/CHANGELOG.md"
+    "version": "mv docs/CHANGELOG.md ./ && mv CHANGELOG.md docs/ && git add docs/CHANGELOG.md",
+    "postinstall": "node ../../scripts/patch-node-modules.js"
   },
   "dependencies": {
     "@koa/router": "^13.1.0",
@@ -80,6 +81,7 @@
     "remark-html": "^16.0.1",
     "require-style": "^1.1.0",
     "secret-stack": "^6.3.1",
+    "sqlite3": "^5.1.7",
     "ssb-about": "^2.0.1",
     "ssb-backlinks": "^2.1.1",
     "ssb-blobs": "^2.0.1",
@@ -124,7 +126,7 @@
     "ssb-room": "^0.0.10",
     "ssb-search": "^1.3.0",
     "ssb-search2": "^2.1.3",
-    "ssb-server": "file:./packages/ssb-server",
+    "ssb-server": "file:packages/ssb-server",
     "ssb-tangle": "^1.0.1",
     "ssb-thread-schema": "^1.1.1",
     "ssb-threads": "^10.0.4",

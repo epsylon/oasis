@@ -1,0 +1,72 @@
+{
+  "replicationScheduler": {
+    "autostart": true,
+    "partialReplication": null
+  },
+  "pub": true,
+  "local": true,
+  "friends": {
+    "dunbar": 300,
+    "hops": 2
+  },
+  "gossip": {
+    "connections": 20,
+    "local": true,
+    "friends": true,
+    "seed": true,
+    "global": true
+  },
+  "connections": {
+    "incoming": {
+      "net": [
+        {
+          "scope": "public",
+          "transform": "shs",
+          "port": 8008
+        },
+        {
+          "scope": "device",
+          "transform": "shs",
+          "port": 8008
+        }
+      ],
+      "tunnel": [
+        {
+          "scope": "public",
+          "portal": "@1wOEiCjJJ0nEs1OABUIV20valZ1LHUsfHJY/ivBoM8Y=.ed25519",
+          "transform": "shs"
+        }
+      ],
+      "onion": [
+        {
+          "scope": "public",
+          "transform": "shs"
+        }
+      ],
+      "ws": [
+        {
+          "scope": "public",
+          "transform": "shs"
+        }
+      ]
+    },
+    "outgoing": {
+      "net": [
+        {
+          "transform": "shs"
+        }
+      ],
+      "ws": [
+        {
+          "transform": "shs"
+        }
+      ],
+      "tunnel": [
+        {
+          "transform": "shs"
+        }
+      ]
+    }
+  }
+}
+

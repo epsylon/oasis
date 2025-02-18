@@ -1,15 +1,15 @@
 "use strict";
 
 const path = require("path");
-const envPaths = require("env-paths");
+const envPaths = require("../server/node_modules/env-paths");
 const fs = require("fs");
 const homedir = require('os').homedir();
 const gossipPath = path.join(homedir, ".ssb/gossip.json");
-const debug = require("debug")("oasis");
-const highlightJs = require("highlight.js");
-const prettyMs = require("pretty-ms");
+const debug = require("../server/node_modules/debug")("oasis");
+const highlightJs = require("../server/node_modules/highlight.js");
+const prettyMs = require("../server/node_modules/pretty-ms");
 
-const updater = require("../updater.js");
+const updater = require("../backend/updater.js");
 async function checkForUpdate() {
   try {
     await updater.getRemoteVersion();
@@ -73,12 +73,12 @@ const {
   title,
   tr,
   ul,
-} = require("hyperaxe");
+} = require("../server/node_modules/hyperaxe");
 
-const lodash = require("lodash");
+const lodash = require("../server/node_modules/lodash");
 const markdown = require("./markdown");
 
-const i18nBase = require("./i18n");
+const i18nBase = require("../client/assets/translations/i18n");
 
 let selectedLanguage = "en";
 let i18n = i18nBase[selectedLanguage];
@@ -94,17 +94,17 @@ const snhUrl = "https://solarnethub.com/";
 const doctypeString = "<!DOCTYPE html>";
 
 const THREAD_PREVIEW_LENGTH = 3;
-
 const toAttributes = (obj) =>
   Object.entries(obj)
     .map(([key, val]) => `${key}=${val}`)
     .join(", ");
-
-// non-breaking space
+    
 const nbsp = "\xa0";
 
-const { saveConfig, getConfig } = require('../config');
+const { saveConfig, getConfig } = require('../configs/config-manager.js');
 const configMods = getConfig().modules;
+
+// menu INIT
 const navLink = ({ href, emoji, text, current }) =>
   li(
     a(
@@ -135,24 +135,28 @@ const renderPopularLink = () => {
     ? navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular, class: "popular-link enabled" }) 
     : ''; 
 };
+
 const renderTopicsLink = () => {
   const topicsMod = getConfig().modules.topicsMod === 'on';
   return topicsMod 
     ? navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics, class: "topics-link enabled" }) 
     : ''; 
 };
+
 const renderSummariesLink = () => {
   const summariesMod = getConfig().modules.summariesMod === 'on';
   return summariesMod 
     ? navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries, class: "summaries-link enabled" }) 
     : ''; 
 };
+
 const renderLatestLink = () => {
   const latestMod = getConfig().modules.latestMod === 'on';
   return latestMod 
     ? navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest, class: "latest-link enabled" }) 
     : ''; 
 };
+
 const renderThreadsLink = () => {
   const threadsMod = getConfig().modules.threadsMod === 'on';
   return threadsMod 
@@ -166,12 +170,14 @@ const renderInboxLink = () => {
     ? navLink({ href: "/inbox", emoji: "☂", text: i18n.inbox, class: "inbox-link enabled" }) 
     : ''; 
 };
+
 const renderInvitesLink = () => {
   const invitesMod = getConfig().modules.invitesMod === 'on';
   return invitesMod 
     ? navLink({ href: "/invites", emoji: "ꔹ", text: i18n.invites, class: "invites-link enabled" }) 
     : ''; 
 };
+
 const renderMultiverseLink = () => {
   const multiverseMod = getConfig().modules.multiverseMod === 'on';
   return multiverseMod 
@@ -181,6 +187,7 @@ const renderMultiverseLink = () => {
       ]
     : '';
 };
+
 const renderWalletLink = () => {
   const walletMod = getConfig().modules.walletMod === 'on';
   if (walletMod) {
@@ -190,15 +197,17 @@ const renderWalletLink = () => {
   }
   return ''; 
 };
+
 const renderLegacyLink = () => {
   const legacyMod = getConfig().modules.legacyMod === 'on';
   if (legacyMod) {
     return [
-      navLink({ href: "/legacy", emoji: "ꖸ", text: i18n.legacy, class: "legacy-link enabled" }),
+      navLink({ href: "/legacy", emoji: "ꖤ", text: i18n.legacy, class: "legacy-link enabled" }),
     ];
   }
   return ''; 
 };
+
 const renderCipherLink = () => {
   const cipherMod = getConfig().modules.cipherMod === 'on';
   if (cipherMod) {
@@ -210,38 +219,67 @@ const renderCipherLink = () => {
 };
 
 const template = (titlePrefix, ...elements) => {
+  const currentConfig = getConfig();
+    const theme = currentConfig.themes.current || "Dark-SNH";
+    const themeLink = link({
+    rel: "stylesheet",
+    href: `/assets/themes/${theme}.css`
+  });
   const nodes = html(
     { lang: "en" },
     head(
       title(titlePrefix, " | Oasis"),
-      link({ rel: "stylesheet", href: "/assets/style.css" }),
-      link({ rel: "icon", href: "/assets/favicon.svg" }),
+      link({ rel: "stylesheet", href: "/assets/styles/style.css" }),
+      themeLink,
+      link({ rel: "icon", href: "/assets/images/favicon.svg" }),
       meta({ charset: "utf-8" }),
       meta({ name: "description", content: i18n.oasisDescription }),
       meta({ name: "viewport", content: toAttributes({ width: "device-width", "initial-scale": 1 }) })
     ),
     body(
       div(
-        { class: "header" },      
-          a(
-            {
-             class: "logo-icon",
-             href: "https://solarnethub.com",
-            },
-             img({ class: "logo-icon", src: "/assets/snh-oasis.jpg" })
-           ),
-        nav(
-          ul(
-            navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
-            renderInboxLink(),
-            renderCipherLink(),
-            navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
-            renderInvitesLink(),
-            navLink({ href: "/modules", emoji: "ꗣ", text: i18n.modules }),
-            renderLegacyLink(),
-            navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
-            renderWalletLink()
+        { class: "header" },
+        div(
+          { class: "left-bar" },            
+          a({ class: "logo-icon", href: "https://solarnethub.com" },
+            img({ class: "logo-icon", src: "/assets/images/snh-oasis.jpg" })
+          ),
+          nav(
+            ul(
+              navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
+              renderInboxLink(),
+              renderWalletLink(),
+              hr,
+              renderCipherLink(),
+              renderLegacyLink(),
+              hr,
+              navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
+              renderInvitesLink(),
+              hr,
+              navLink({ href: "/modules", emoji: "ꗣ", text: i18n.modules }),
+              navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
+            )
           )
+        ),
+        div(
+          { class: "right-bar" },
+          nav(
+            ul(
+             navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
+             navLink({ href: "/search", emoji: "ꔅ", text: i18n.search }),
+             form(
+            { action: "/search", method: "get" },
+            input({
+              name: "query",
+              required: false,
+              type: "search",
+              placeholder: i18n.searchPlaceholder,
+              class: "search-input",
+              minlength: 3
+            })
+          )
+         )
+        ),
         )
       ),
       div(
@@ -261,21 +299,13 @@ const template = (titlePrefix, ...elements) => {
             )
           )
         ),
-        main({ id: "content", class: "main-column" }, elements),
-        div(
-          { class: "sidebar-right" },
-          nav(
-            ul(
-              navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
-              navLink({ href: "/search", emoji: "ꔅ", text: i18n.search }),
-            )
-          )
-        )
+        main({ id: "content", class: "main-column" }, elements)
       )
     )
   );
   return doctypeString + nodes.outerHTML;
 };
+// menu END
 
 const thread = (messages) => {
   let lookingForTarget = true;
@@ -371,14 +401,6 @@ const postSnippet = (text) => {
   return text;
 };
 
-/**
- * Render a section containing a link that takes users to the context for a
- * thread preview.
- *
- * @param {Array} thread with SSB message objects
- * @param {Boolean} isComment true if this is shown in the context of a comment
- *  instead of a post
- */
 const continueThreadComponent = (thread, isComment) => {
   const encoded = {
     next: encodeURIComponent(thread[THREAD_PREVIEW_LENGTH + 1].key),
@@ -398,16 +420,6 @@ const continueThreadComponent = (thread, isComment) => {
   }
 };
 
-/**
- * Render an aside with a preview of comments on a message
- *
- * For posts, up to three comments are shown, for comments, up to 3 messages
- * directly following this one in the thread are displayed. If there are more
- * messages in the thread, a link is rendered that links to the rest of the
- * context.
- *
- * @param {Object} post for which to display the aside
- */
 const postAside = ({ key, value }) => {
   const thread = value.meta.thread;
   if (thread == null) return null;
@@ -652,9 +664,6 @@ exports.editProfileView = ({ name, description }) =>
     )
   );
 
-/**
- * @param {{avatarUrl: string, description: string, feedId: string, messages: any[], name: string, relationship: object, firstPost: object, lastPost: object}} input
- */
 exports.authorView = ({
   avatarUrl,
   description,
@@ -944,7 +953,11 @@ exports.threadView = ({ messages }) => {
   const rootSnippet = postSnippet(
     lodash.get(rootMessage, "value.content.text", i18n.mysteryDescription)
   );
-  return template([`@${rootAuthorName}: `, rootSnippet], thread(messages));
+  return template([`@${rootAuthorName}: `, rootSnippet], 
+    div(
+    thread(messages)
+    )
+  );
 };
 
 exports.publishView = (preview, text, contentWarning) => {
@@ -1383,20 +1396,35 @@ exports.modulesView = () => {
   );
 };
 
-exports.settingsView = ({ theme, version }) => {
+const themeFilePath = path.join(__dirname, '../configs/oasis-config.json');
+const getThemeConfig = () => {
+  try {
+    const configData = fs.readFileSync(themeFilePath);
+    return JSON.parse(configData);
+  } catch (error) {
+    console.error('Error reading config file:', error);
+    return {};
+  }
+};
+
+exports.settingsView = ({ version }) => {
+  const currentThemeConfig = getThemeConfig();
+  const theme = currentThemeConfig.themes?.current || "Dark-SNH";
     const currentConfig = getConfig();
     const walletUrl = currentConfig.wallet.url
     const walletUser = currentConfig.wallet.user
-    const walletFee = currentConfig.wallet.fee
-
+    const walletFee = currentConfig.wallet.feee;
   const themeElements = [
-    option({ value: "SNH-Oasis", selected: true }, "SNH-Oasis"),
-  ];
-
-  const languageOption = (longName, shortName, selectedLanguage) =>
-    shortName === selectedLanguage
+    option({ value: "Dark-SNH", selected: theme === "Dark-SNH" ? true : undefined }, "Dark-SNH"),
+    option({ value: "Clear-SNH", selected: theme === "Clear-SNH" ? true : undefined }, "Clear-SNH"),
+    option({ value: "Purple-SNH", selected: theme === "Purple-SNH" ? true : undefined }, "Purple-SNH"),
+    option({ value: "Matrix-SNH", selected: theme === "Matrix-SNH" ? true : undefined }, "Matrix-SNH"),
+   ];
+  const languageOption = (longName, shortName) => {
+    return shortName === selectedLanguage
       ? option({ value: shortName, selected: true }, longName)
       : option({ value: shortName }, longName);
+  };
 
   const rebuildButton = form(
     { action: "/settings/rebuild", method: "post" },
@@ -1413,7 +1441,7 @@ exports.settingsView = ({ theme, version }) => {
       h2(i18n.theme),
       p(i18n.themeIntro),
       form(
-        { action: "/theme.css", method: "post" },
+        { action: "/settings/theme", method: "post" },
         select({ name: "theme" }, ...themeElements),
         br,
         br,
@@ -1425,9 +1453,9 @@ exports.settingsView = ({ theme, version }) => {
       form(
         { action: "/language", method: "post" },
         select({ name: "language" }, [
-          languageOption("English", "en", selectedLanguage),
-          languageOption("Español", "es", selectedLanguage),
-          languageOption("Français", "fr", selectedLanguage),
+          languageOption("English", "en"),
+          languageOption("Español", "es"),
+          languageOption("Français", "fr"),
         ]),
         br,
         br,
@@ -1459,7 +1487,6 @@ exports.settingsView = ({ theme, version }) => {
   );
 };
 
-/** @param {{ viewTitle: string, viewDescription: string }} input */
 const viewInfoBox = ({ viewTitle = null, viewDescription = null }) => {
   if (!viewTitle && !viewDescription) {
     return null;
@@ -1492,7 +1519,6 @@ const messageListView = ({
   viewTitle = null,
   viewDescription = null,
   viewElements = null,
-  // If `aside = true`, it will show a few comments in the thread.
   aside = null,
 }) => {
   return template(
@@ -1676,8 +1702,6 @@ exports.searchView = ({ messages, query }) => {
 
 const imageResult = ({ id, infos }) => {
   const encodedBlobId = encodeURIComponent(id);
-  // only rendering the first message result so far
-  // todo: render links to the others as well
   const info = infos[0];
   const encodedMsgId = encodeURIComponent(info.msg);
 
@@ -1747,9 +1771,7 @@ exports.hashtagView = ({ messages, hashtag }) => {
   );
 };
 
-/** @param {{percent: number}} input */
 exports.indexingView = ({ percent }) => {
-  // TODO: i18n
   const message = `Oasis has only processed ${percent}% of the messages and needs to catch up. This page will refresh every 10 seconds. Thanks for your patience! ❤`;
 
   const nodes = html(
@@ -1864,7 +1886,7 @@ exports.walletHistoryView = async (balance, transactions) => {
 }
 
 exports.walletReceiveView = async (balance, address) => {
-  const QRCode = require('qrcode');
+  const QRCode = require('../server/node_modules/qrcode');
   const qrImage = await QRCode.toString(address, { type: 'svg' });
   const qrContainer = address + qrImage
 

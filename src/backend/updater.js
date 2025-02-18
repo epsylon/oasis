@@ -1,8 +1,8 @@
-const fetch = require('node-fetch');
+const fetch = require('../server/node_modules/node-fetch');
 const { existsSync, readFileSync } = require('fs');
 const { join } = require('path');
 
-const localpackage = join(__dirname, '../package.json');
+const localpackage = join(__dirname, '../server/package.json');
 const remoteUrl = 'https://code.03c8.net/KrakensLab/oasis/raw/master/package.json'; // Official SNH-Oasis
 const remoteUrl2 = 'https://raw.githubusercontent.com/epsylon/oasis/main/package.json'; // Mirror SNH-Oasis
 
@@ -67,7 +67,7 @@ async function checkMirror(callback) {
 }
 
 exports.getRemoteVersion = async () => {
-  if (existsSync('.git')) { 
+  if (existsSync('../../.git')) { 
     try {
       const response = await fetch(remoteUrl, {
         method: 'GET',
@@ -85,7 +85,6 @@ exports.getRemoteVersion = async () => {
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`);
       }
-
       const data = await response.text();
       diffVersion(data, (status) => {
         if (status === "required") {

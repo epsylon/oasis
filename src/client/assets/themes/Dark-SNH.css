@@ -1,0 +1,149 @@
+body {
+  background-color: #121212;
+  color: #FFD700;
+}
+
+header, footer {
+  background-color: #1F1F1F;
+}
+
+.sidebar-left, .sidebar-right {
+  background-color: #1A1A1A;
+  border: 1px solid #333;
+}
+
+.main-column {
+  background-color: #1C1C1C;
+}
+
+button, input[type="submit"], input[type="button"] {
+  background-color: #444;
+  color: #FFD700;
+  border: 1px solid #444;
+}
+
+button:hover, input[type="submit"]:hover, input[type="button"]:hover {
+  background-color: #333;
+  border-color: #666;
+}
+
+input, textarea, select {
+  background-color: #333;
+  color: #FFD700;
+  border: 1px solid #555;
+}
+
+a {
+  color: #FFD700;
+}
+
+a:hover {
+  color: #FFDD44;
+}
+
+table {
+  background-color: #222;
+  color: #FFD700;
+}
+
+table th {
+  background-color: #333;
+}
+
+table tr:nth-child(even) {
+  background-color: #2A2A2A;
+}
+
+nav ul {
+  background-color: #1F1F1F;
+}
+
+nav ul li a:hover {
+  color: #FFDD44;
+  text-decoration: underline;
+}
+
+.profile {
+  background-color: #222;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.profile .name {
+  color: #FFD700;
+}
+
+.avatar {
+  border: 3px solid #FFD700;
+}
+
+article, section {
+  background-color: #1C1C1C;
+  color: #FFD700;
+}
+
+.article img {
+  border: 3px solid #FFD700;
+}
+
+.post-preview img {
+  border: 3px solid #FFD700;
+}
+
+.post-preview .image-container {
+  max-width: 100%;
+  overflow: hidden;
+  display: block;
+  margin: 0 auto;
+}
+
+div {
+  background-color: #1A1A1A;
+  border: 1px solid #333;
+}
+
+div .header-content {
+  width: 100%;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #444;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: #222;
+}
+
+.action-container {
+  background-color: #1A1A1A;
+  border: 1px solid #333;
+  padding: 10px;
+  border-radius: 8px;
+  color: #FFD700;
+}
+
+footer {
+  background-color: #1F1F1F;
+  border-top: 1px solid #333;
+  padding: 10px 0;
+}
+
+footer a {
+  background-color: #444;
+  color: #FFD700;
+  text-align: center;
+  padding: 8px 16px;
+  border-radius: 5px;
+  text-decoration: none;
+}
+
+footer a:hover {
+  background-color: #333;
+  color: #FFDD44;
+}
+

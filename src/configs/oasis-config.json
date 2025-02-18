@@ -1,4 +1,7 @@
 {
+  "themes": {
+    "current": "Dark-SNH"
+  },
   "modules": {
     "popularMod": "on",
     "topicsMod": "on",

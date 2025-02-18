@@ -1,19 +1,20 @@
 "use strict";
 
-const debug = require("debug")("oasis");
-const { isRoot, isReply: isComment } = require("ssb-thread-schema");
-const lodash = require("lodash");
-const prettyMs = require("pretty-ms");
-const pullAbortable = require("pull-abortable");
-const pullParallelMap = require("pull-paramap");
-const pull = require("pull-stream");
-const pullSort = require("pull-sort");
-const ssbRef = require("ssb-ref");
+const debug = require("../server/node_modules/debug")("oasis");
+const { isRoot, isReply: isComment } = require("../server/node_modules/ssb-thread-schema");
+const lodash = require("../server/node_modules/lodash");
+const prettyMs = require("../server/node_modules/pretty-ms");
+const pullAbortable = require("../server/node_modules/pull-abortable");
+const pullParallelMap = require("../server/node_modules/pull-paramap");
+const pull = require("../server/node_modules/pull-stream");
+const pullSort = require("../server/node_modules/pull-sort");
+
+const ssbRef = require("../server/node_modules/ssb-ref");
 
 const {
   RequestManager,
   HTTPTransport,
-  Client } = require("@open-rpc/client-js");
+  Client } = require("../server/node_modules/@open-rpc/client-js");
 
 const isEncrypted = (message) => typeof message.value.content === "string";
 const isNotEncrypted = (message) => isEncrypted(message) === false;
@@ -45,8 +46,7 @@ const isBlogPost = (message) =>
 
 const isTextLike = (message) => isPost(message) || isBlogPost(message);
 
-// HACK: https://github.com/ssbc/ssb-thread-schema/issues/4
-const isSubtopic = require("ssb-thread-schema/post/nested-reply/validator");
+const isSubtopic = require("../server/node_modules/ssb-thread-schema/post/nested-reply/validator");
 
 const nullImage = `&${"0".repeat(43)}=.sha256`;
 
@@ -58,7 +58,6 @@ const defaultOptions = {
 
 const publicOnlyFilter = pull.filter(isNotPrivate);
 
-/** @param {object[]} customOptions */
 const configure = (...customOptions) =>
   Object.assign({}, defaultOptions, ...customOptions);
 
@@ -100,27 +99,20 @@ module.exports = ({ cooler, isPublic }) => {
       )
     );
   };
-  // TODO: an alternative would be using ssb.names if available and just loading this as a fallback
   const feeds_to_name = {};
   let all_the_names = {};
-
-  let dirty = false; // just stop mindless work (nothing changed) could be smarter thou
-  let running = false; // don't run twice
-
-  // transposeLookupTable flips the lookup around (form feed->name to name->feed)
-  // and also enhances the entries with image and relationship info
+  let dirty = false;
+  let running = false;
   const transposeLookupTable = () => {
     if (!dirty) return;
     if (running) return;
     running = true;
 
-    // invalidate old cache
-    // regenerate a new thing because we don't know which entries will be gone
     all_the_names = {};
 
     const allFeeds = Object.keys(feeds_to_name);
-    console.log(`updating ${allFeeds.length} feeds`);
-    console.time("transpose-name-index");
+    console.log(`Synced-feeds: [ ${allFeeds.length} ]`);
+    console.time("Sync-time");
 
     const lookups = [];
     for (const feed of allFeeds) {
@@ -128,21 +120,17 @@ module.exports = ({ cooler, isPublic }) => {
       let pair = { feed, name: e.name };
       lookups.push(enhanceFeedInfo(pair));
     }
-
-    // wait for all image and follow lookups
     Promise.all(lookups)
       .then(() => {
-        dirty = false; // all updated
+        dirty = false; 
         running = false;
-        console.timeEnd("transpose-name-index");
+        console.timeEnd("Sync-time");
       })
       .catch((err) => {
         running = false;
-        console.warn("lookup transposition failed:", err);
+        console.warn("lookup sync failed:", err);
       });
   };
-
-  // this function adds the avatar image and relationship to the all_the_names lookup table
   const enhanceFeedInfo = ({ feed, name }) => {
     return new Promise((resolve, reject) => {
       getAbout({ feedId: feed, key: "image" })
@@ -155,19 +143,16 @@ module.exports = ({ cooler, isPublic }) => {
           ) {
             img = img.link;
           } else if (img === null) {
-            img = nullImage; // default empty image if we don't have one
+            img = nullImage; 
           }
 
           models.friend
             .getRelationship(feed)
             .then((rel) => {
-              // append and update lookup table
               let feeds_named = all_the_names[name] || [];
               feeds_named.push({ feed, name, rel, img });
               all_the_names[name.toLowerCase()] = feeds_named;
               resolve();
-
-              // TODO: append if these fail!?
             })
             .catch(reject);
         })
@@ -175,135 +160,126 @@ module.exports = ({ cooler, isPublic }) => {
     });
   };
 
-  models.about = {
-    publicWebHosting: async (feedId) => {
-      const result = await getAbout({
-        key: "publicWebHosting",
+models.about = {
+  publicWebHosting: async (feedId) => {
+    const result = await getAbout({
+      key: "publicWebHosting",
+      feedId,
+    });
+    return result === true;
+  },
+  name: async (feedId) => {
+    if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
+      return "Redacted";
+    }
+    return (
+      (await getAbout({
+        key: "name",
         feedId,
-      });
-      return result === true;
-    },
-    name: async (feedId) => {
-      if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
-        return "Redacted";
-      }
+      })) || feedId.slice(1, 1 + 8)
+    );
+  },
+  named: (name) => {
+    let found = [];
+    let matched = Object.keys(all_the_names).filter((n) => {
+      return n.startsWith(name.toLowerCase());
+    });
+    for (const m of matched) {
+      found = found.concat(all_the_names[m]);
+    }
+    return found;
+  },
+  image: async (feedId) => {
+    if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
+      return nullImage;
+    }
 
-      // TODO: could possibly use all_the_names
-      return (
-        (await getAbout({
-          key: "name",
-          feedId,
-        })) || feedId.slice(1, 1 + 8)
-      ); // First 8 chars of public key
-    },
-    named: (name) => {
-      let found = [];
-      let matched = Object.keys(all_the_names).filter((n) => {
-        return n.startsWith(name.toLowerCase());
-      });
-      for (const m of matched) {
-        found = found.concat(all_the_names[m]);
-      }
-      return found;
-    },
-    image: async (feedId) => {
-      if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
-        return nullImage;
-      }
+    const raw = await getAbout({
+      key: "image",
+      feedId,
+    });
 
-      const raw = await getAbout({
-        key: "image",
+    if (raw == null || raw.link == null) {
+      return nullImage;
+    }
+
+    if (typeof raw.link === "string") {
+      return raw.link;
+    }
+    return raw;
+  },
+  description: async (feedId) => {
+    if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
+      return "Redacted";
+    }
+
+    const raw =
+      (await getAbout({
+        key: "description",
         feedId,
-      });
-
-      if (raw == null || raw.link == null) {
-        return nullImage;
-      }
-
-      if (typeof raw.link === "string") {
-        return raw.link;
-      }
-      return raw;
-    },
-    description: async (feedId) => {
-      if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
-        return "Redacted";
-      }
-
-      const raw =
-        (await getAbout({
-          key: "description",
-          feedId,
-        })) || "";
-      return raw;
-    },
-    // This needs to run in the background but also needs to be aborted
-    // in index.js when the server closes. There's also an interval that
-    // needs to be cleared. TODO: Ensure that there's never more than
-    // one interval running at a time.
-    _startNameWarmup() {
-      const abortable = pullAbortable();
-      let intervals = [];
-      cooler.open().then((ssb) => {
-        console.time("about-name-warmup"); // benchmark the time it takes to stream all existing about messages
-        pull(
-          ssb.query.read({
-            live: true, // keep streaming new messages as they arrive
-            query: [
-              {
-                $filter: {
-                  // all messages of type:about that have a name field that is typeof string
-                  value: {
-                    content: {
-                      type: "about",
-                      name: { $is: "string" },
-                    },
+      })) || "";
+    return raw;
+  },
+  _startNameWarmup() {
+    const abortable = pullAbortable();
+    let intervals = [];
+    cooler.open().then((ssb) => {
+      console.time("Warmup-time");
+      pull(
+        ssb.query.read({
+          live: true,
+          query: [
+            {
+              $filter: {
+                value: {
+                  content: {
+                    type: "about",
+                    name: { $is: "string" },
                   },
                 },
               },
-            ],
-          }),
-          abortable,
-          pull.filter((msg) => {
-            // backlog of data is done, only new values from now on
-            if (msg.sync && msg.sync === true) {
-              console.timeEnd("about-name-warmup");
-              transposeLookupTable(); // fire once now
-              intervals.push(setInterval(transposeLookupTable, 1000 * 60)); // and then every 60 seconds
-              return false;
-            }
-            // only pick messages about self
-            return msg.value.author == msg.value.content.about;
-          }),
-          pull.drain((msg) => {
-            const name = msg.value.content.name;
-            const ts = msg.value.timestamp;
-            const feed = msg.value.author;
+            },
+          ],
+        }),
+        abortable,
+        pull.filter((msg) => {
+          if (msg.sync && msg.sync === true) {
+            console.timeEnd("Warmup-time");
+            transposeLookupTable();
+            intervals.push(setInterval(transposeLookupTable, 1000 * 60)); 
+            return false;
+          }
+          return msg.value.author == msg.value.content.about;
+        }),
+        pull.drain((msg) => {
+          const name = msg.value.content.name;
+          const ts = msg.value.timestamp;
+          const feed = msg.value.author;
 
-            const newEntry = { name, ts };
-            const currentEntry = feeds_to_name[feed];
-            if (typeof currentEntry == "undefined") {
-              dirty = true;
-              feeds_to_name[feed] = newEntry;
-            } else if (currentEntry.ts < ts) {
-              // overwrite entry if it's newer
-              dirty = true;
-              feeds_to_name[feed] = newEntry;
-            }
-          }, (err) => {
-            console.error(err);
-          })
-        );
-      });
+          const newEntry = { name, ts };
+          const currentEntry = feeds_to_name[feed];
+          if (typeof currentEntry == "undefined") {
+            dirty = true;
+            feeds_to_name[feed] = newEntry;
+          } else if (currentEntry.ts < ts) {
+            dirty = true;
+            feeds_to_name[feed] = newEntry;
+          }
+        }, (err) => {
+          console.error(err);
+        })
+      );
+    });
 
-      return {
-        close: () => {
-          abortable.abort();
-          intervals.forEach((i) => clearInterval(i));
-        },
-      };
-    },
-  };
+    return {
+      close: () => {
+        abortable.abort();
+        intervals.forEach((i) => clearInterval(i));
+      },
+    };
+  },
+};
+
 
   models.blob = {
     get: async ({ blobId }) => {
@@ -334,7 +310,6 @@ module.exports = ({ cooler, isPublic }) => {
       cooler
         .open()
         .then((ssb) => {
-          // This does not wait for the blob.
           ssb.blobs.want(blobId);
         })
         .catch((err) => {
@@ -356,7 +331,6 @@ module.exports = ({ cooler, isPublic }) => {
   };
 
   models.friend = {
-    /** @param {{ feedId: string, following: boolean, blocking: boolean }} input */
     setRelationship: async ({ feedId, following, blocking }) => {
       if (following && blocking) {
         throw new Error("Cannot follow and block at the same time");
@@ -367,7 +341,6 @@ module.exports = ({ cooler, isPublic }) => {
         current.following === following && current.blocking === blocking;
 
       if (alreadySet) {
-        // The following state is already set, don't re-set it.
         return;
       }
 
@@ -379,7 +352,7 @@ module.exports = ({ cooler, isPublic }) => {
         following,
         blocking,
       };
-      transposeLookupTable(); // invalidate @mentions table
+      transposeLookupTable(); 
       return ssb.publish(content);
     },
     follow: (feedId) =>
@@ -406,10 +379,6 @@ module.exports = ({ cooler, isPublic }) => {
         blocking: false,
         following: false,
       }),
-    /**
-     * @param feedId {string}
-     * @returns {Promise<{me: boolean, following: boolean, blocking: boolean, followsMe: boolean }>}
-     */
     getRelationship: async (feedId) => {
       const ssb = await cooler.open();
       const { id } = ssb;
@@ -472,7 +441,6 @@ module.exports = ({ cooler, isPublic }) => {
       return new Promise((resolve, reject) => {
         pull(
           peersSource,
-          // https://github.com/staltz/ssb-conn/issues/9
           pull.take(1),
           pull.collect((err, val) => {
             if (err) return reject(err);
@@ -499,7 +467,6 @@ module.exports = ({ cooler, isPublic }) => {
         const expectedName = "TypeError";
         const expectedMessage = "Cannot read property 'close' of null";
         if (e.name === expectedName && e.message === expectedMessage) {
-          // https://github.com/staltz/ssb-lan/issues/5
           debug("ssbConn is already stopped -- caught error");
         } else {
           throw new Error(e);
@@ -522,7 +489,6 @@ module.exports = ({ cooler, isPublic }) => {
       const progress = await ssb.progress();
       let previousTarget = progress.indexes.target;
 
-      // Automatically timeout after 5 minutes.
       let keepGoing = true;
       const timeoutInterval = setTimeout(() => {
         keepGoing = false;
@@ -530,7 +496,6 @@ module.exports = ({ cooler, isPublic }) => {
 
       await ssb.conn.start();
 
-      // Promise that resolves the number of new messages after 5 seconds.
       const diff = async () =>
         new Promise((resolve) => {
           setTimeout(async () => {
@@ -545,14 +510,12 @@ module.exports = ({ cooler, isPublic }) => {
 
       debug("Starting sync, waiting for new messages...");
 
-      // Wait until we **start** receiving messages.
       while (keepGoing && (await diff()) === 0) {
         debug("Received no new messages.");
       }
 
       debug("Finished waiting for first new message.");
 
-      // Wait until we **stop** receiving messages.
       while (keepGoing && (await diff()) > 0) {
         debug(`Still receiving new messages...`);
       }
@@ -567,7 +530,6 @@ module.exports = ({ cooler, isPublic }) => {
       const ssb = await cooler.open();
       return await ssb.invite.accept(invite);
     },
-    // Returns promise, does not wait for rebuild to finish.
     rebuild: async () => {
       const ssb = await cooler.open();
       return ssb.rebuild();
@@ -630,15 +592,6 @@ module.exports = ({ cooler, isPublic }) => {
       );
     });
   };
-
-  /**
-   * Returns a function that filters messages based on who published the message.
-   *
-   * `null` means we don't care, `true` means it must be true, and `false` means
-   * that the value must be false. For example, if you set `me = true` then it
-   * will only allow messages that are from you. If you set `blocking = true`
-   * then you only see message from people you block.
-   */
   const socialFilter = async ({
     following = null,
     blocking = false,
@@ -705,8 +658,9 @@ module.exports = ({ cooler, isPublic }) => {
   }
 
   const transform = (ssb, messages, myFeedId) =>
-    Promise.all(
-      messages.map(async (msg) => {
+   Promise.all(
+    messages.map(async (msg) => {
+      try {
         debug("transforming %s", msg.key);
 
         if (msg == null) {
@@ -721,11 +675,10 @@ module.exports = ({ cooler, isPublic }) => {
 
         const referenceStream = ssb.backlinks.read({
           query: [filterQuery],
-          index: "DTA", // use asserted timestamps
+          index: "DTA",
           private: true,
           meta: true,
         });
-
         if (lodash.get(msg, "value.content.type") === "blog") {
           const blogTitle = msg.value.content.title;
           const blogSummary = lodash.get(msg, "value.content.summary", null);
@@ -737,7 +690,6 @@ module.exports = ({ cooler, isPublic }) => {
           }
           lodash.set(msg, "value.content.text", textElements.join("\n\n"));
         }
-
         const rawVotes = await new Promise((resolve, reject) => {
           pull(
             referenceStream,
@@ -759,28 +711,20 @@ module.exports = ({ cooler, isPublic }) => {
             })
           );
         });
-
-        // { @key: 1, @key2: 0, @key3: 1 }
-        //
-        // only one vote per person!
         const reducedVotes = rawVotes.reduce((acc, vote) => {
           acc[vote.value.author] = vote.value.content.vote.value;
           return acc;
         }, {});
 
-        // gets *only* the people who voted 1
-        // [ @key, @key, @key ]
         const voters = Object.entries(reducedVotes)
           .filter(([, value]) => value === 1)
           .map(([key]) => key);
 
-        // get an array of voter names, for display on hovers
         const pendingVoterNames = voters.map(async (author) => ({
           name: await models.about.name(author),
           key: author,
         }));
         const voterNames = await Promise.all(pendingVoterNames);
-
         const { name, avatarId, avatarUrl } = await getUserInfo(
           msg.value.author
         );
@@ -801,22 +745,12 @@ module.exports = ({ cooler, isPublic }) => {
             }
           }
         }
-
-        const channel = lodash.get(msg, "value.content.channel");
-        const hasChannel = typeof channel === "string" && channel.length > 2;
-
-        if (hasChannel && hasNoRoot(msg)) {
-          msg.value.content.text += `\n\n#${channel}`;
-        }
-
         const ts = new Date(msg.value.timestamp);
         let isoTs;
 
         try {
           isoTs = ts.toISOString();
         } catch (e) {
-          // Just in case it's an invalid date. :(
-          debug(e);
           const receivedTs = new Date(msg.timestamp);
           isoTs = receivedTs.toISOString();
         }
@@ -831,7 +765,6 @@ module.exports = ({ cooler, isPublic }) => {
           id: avatarId,
           url: avatarUrl,
         });
-
         if (isTextLike(msg) && hasNoRoot(msg) && hasNoFork(msg)) {
           lodash.set(msg, "value.meta.postType", "post");
         } else if (isTextLike(msg) && hasRoot(msg) && hasNoFork(msg)) {
@@ -859,8 +792,12 @@ module.exports = ({ cooler, isPublic }) => {
         lodash.set(msg, "value.meta.blocking", blocking);
 
         return msg;
-      })
-    );
+
+      } catch (err) {
+        return null; 
+      }
+    })
+  );
 
   const getLimitPost = async (feedId, reverse) => {
     const ssb = await cooler.open();
@@ -900,10 +837,6 @@ module.exports = ({ cooler, isPublic }) => {
       defaultOptions.reverse = !(gt >= 0 && lt < 0);
       const options = configure(defaultOptions, customOptions);
       const { blocking } = await models.friend.getRelationship(feedId);
-
-      // Avoid streaming any messages from this feed. If we used the social
-      // filter here it would continue streaming all messages from this author
-      // until it consumed the entire feed.
       if (blocking) {
         return [];
       }
@@ -928,53 +861,50 @@ module.exports = ({ cooler, isPublic }) => {
       if (!defaultOptions.reverse) return messages.reverse();
       else return messages;
     },
-    mentionsMe: async (customOptions = {}) => {
-      const ssb = await cooler.open();
+  mentionsMe: async (customOptions = {}) => {
+    const ssb = await cooler.open();
 
-      const myFeedId = ssb.id;
+    const myFeedId = ssb.id;
 
-      const query = [
-        {
-          $filter: {
-            dest: myFeedId,
-          },
-        },
-      ];
-
-      const messages = await getMessages({
-        myFeedId,
-        customOptions,
-        ssb,
-        query,
-        filter: (msg) =>
-          msg.value.author !== myFeedId &&
-          lodash.get(msg, "value.meta.private") !== true,
-      });
-
-      return messages;
+    const query = [
+    {
+      $filter: {
+        dest: myFeedId,
+      },
     },
-    fromHashtag: async (hashtag, customOptions = {}) => {
-      const ssb = await cooler.open();
+    ];
 
-      const myFeedId = ssb.id;
+  const messages = await getMessages({
+    myFeedId,
+    customOptions,
+    ssb,
+    query,
+    filter: (msg) =>
+      lodash.get(msg, "value.meta.private") !== true,
+  });
+  return messages;
+  },
 
-      const query = [
-        {
-          $filter: {
-            dest: `#${hashtag}`,
-          },
-        },
-      ];
-
-      const messages = await getMessages({
-        myFeedId,
-        customOptions,
-        ssb,
-        query,
-      });
-
-      return messages;
+  fromHashtag: async (hashtag, customOptions = {}) => {
+   const ssb = await cooler.open();
+   const myFeedId = ssb.id;
+   const query = [
+    {
+      $filter: {
+        dest: `#${hashtag}`,
+      },
     },
+  ];
+  const messages = await getMessages({
+    myFeedId,
+    customOptions,
+    ssb,
+    query,
+   });
+
+   return messages;
+  },
+
     topicComments: async (rootId, customOptions = {}) => {
       const ssb = await cooler.open();
 
@@ -1372,8 +1302,6 @@ module.exports = ({ cooler, isPublic }) => {
               if (acc[author] == null) {
                 acc[author] = {};
               }
-
-              // Only accept values between -1 and 1
               acc[author][target] = Math.max(-1, Math.min(1, value));
 
               return acc;
@@ -1383,20 +1311,11 @@ module.exports = ({ cooler, isPublic }) => {
               if (err) {
                 return reject(err);
               }
-
-              // HACK: Can we do this without a reduce()? I think this makes the
-              // stream much slower than it needs to be. Also, we should probably
-              // be indexing these rather than building the stream on refresh.
-
               const adjustedObj = Object.entries(obj).reduce(
                 (acc, [author, values]) => {
                   if (author === myFeedId) {
                     return acc;
                   }
-
-                  // The value of a users vote is 1 / (1 + total votes), the
-                  // more a user votes, the less weight is given to each vote.
-
                   const entries = Object.entries(values);
                   const total = 1 + Math.log(entries.length);
 
@@ -1427,7 +1346,6 @@ module.exports = ({ cooler, isPublic }) => {
                     cb(null, null);
                   }
                 }),
-                // avoid private messages (!) and non-posts
                 pull.filter(
                   (message) =>
                     message &&
@@ -1474,13 +1392,10 @@ module.exports = ({ cooler, isPublic }) => {
                 debug("getting root ancestor of %s", msg.key);
 
                 if (isEncrypted(msg)) {
-                  // Private message we can't decrypt, stop looking for parents.
                   debug("private message");
                   if (parents.length > 0) {
-                    // If we already have some parents, return those.
                     resolve(parents);
                   } else {
-                    // If we don't know of any parents, resolve this message.
                     resolve(msg);
                   }
                 } else if (msg.value.content.type !== "post") {
@@ -1492,7 +1407,6 @@ module.exports = ({ cooler, isPublic }) => {
                 ) {
                   debug("subtopic, get the parent");
                   try {
-                    // It's a subtopic, get the parent!
                     ssb
                       .get({
                         id: msg.value.content.fork,
@@ -1513,7 +1427,6 @@ module.exports = ({ cooler, isPublic }) => {
                 ) {
                   debug("comment: %s", msg.value.content.root);
                   try {
-                    // It's a thread subtopic, get the parent!
                     ssb
                       .get({
                         id: msg.value.content.root,
@@ -1532,8 +1445,6 @@ module.exports = ({ cooler, isPublic }) => {
                   debug("got root ancestor");
                   resolve(msg);
                 } else {
-                  // type !== "post", probably
-                  // this should show up as JSON
                   debug(
                     "got mysterious root ancestor that fails all known schemas"
                   );
@@ -1553,7 +1464,7 @@ module.exports = ({ cooler, isPublic }) => {
 
               const referenceStream = ssb.backlinks.read({
                 query: [filterQuery],
-                index: "DTA", // use asserted timestamps
+                index: "DTA",
               });
               pull(
                 referenceStream,
@@ -1566,13 +1477,10 @@ module.exports = ({ cooler, isPublic }) => {
                   const fork = lodash.get(msg, "value.content.fork");
 
                   if (root !== key && fork !== key) {
-                    // mention
                     return false;
                   }
 
                   if (fork === key) {
-                    // not a subtopic of this post
-                    // it's a subtopic **of a subtopic** of this post
                     return false;
                   }
 
@@ -1587,8 +1495,6 @@ module.exports = ({ cooler, isPublic }) => {
                 })
               );
             });
-
-          // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flat
           const flattenDeep = (arr1) =>
             arr1.reduce(
               (acc, val) =>
@@ -1675,7 +1581,7 @@ module.exports = ({ cooler, isPublic }) => {
     publishProfileEdit: async ({ name, description, image }) => {
       const ssb = await cooler.open();
       if (image.length > 0) {
-        // 25 MiB check
+        // 25 MiB check (here we set max file size allowed!)
         const megabyte = Math.pow(2, 20);
         const maxSize = 25 * megabyte;
         if (image.length > maxSize) {
@@ -1731,15 +1637,10 @@ module.exports = ({ cooler, isPublic }) => {
 
       if (isRoot(message) !== true) {
         const messageString = JSON.stringify(message, null, 2);
-        throw new Error(`message should be valid root post: ${messageString}`);
       }
-
       return post.publish(message);
     },
     comment: async ({ parent, message }) => {
-      // Set `root` to `parent`'s root.
-      // If `parent` doesn't have a root, use the parent's key.
-      // If `parent` has a fork, you must use the parent's key.
       const parentKey = parent.key;
       const parentFork = lodash.get(parent, "value.content.fork");
       const parentRoot = lodash.get(parent, "value.content.root", parentKey);
@@ -1753,9 +1654,6 @@ module.exports = ({ cooler, isPublic }) => {
               typeof recipient.link === "string" &&
               recipient.link.length
             ) {
-              // Some interfaces, like Patchbay, put `{ name, link }` objects in
-              // `recps`. The comment schema says this is invalid, so we want to
-              // fix the `recps` before publishing.
               return recipient.link;
             } else {
               return recipient;
@@ -1771,7 +1669,7 @@ module.exports = ({ cooler, isPublic }) => {
 
       message.root = parentHasFork ? parentKey : parentRoot;
       message.branch = await post.branch({ root: parent.key });
-      message.type = "post"; // redundant but used for validation
+      message.type = "post"; 
 
       if (isComment(message) !== true) {
         const messageString = JSON.stringify(message, null, 2);
@@ -1846,7 +1744,6 @@ module.exports = ({ cooler, isPublic }) => {
       const messages = await new Promise((resolve, reject) => {
         pull(
           source,
-          // Make sure we're only getting private messages that are posts.
           pull.filter(
             (message) =>
               isDecrypted(message) &&

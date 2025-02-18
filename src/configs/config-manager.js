@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const configFilePath = path.join(__dirname, 'config.json');
+const configFilePath = path.join(__dirname, 'oasis-config.json');
 
 if (!fs.existsSync(configFilePath)) {
   const defaultConfig = {

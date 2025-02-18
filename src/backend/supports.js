@@ -10,11 +10,11 @@ const {
   a,
   br,
   li,
-} = require("hyperaxe");
+} = require("../server/node_modules/hyperaxe");
 
-const envPaths = require("env-paths");
-const {cli} = require("./cli");
-const ssb = require("./ssb");
+const envPaths = require("../server/node_modules/env-paths");
+const {cli} = require("../client/oasis_client");
+const ssb = require("../client/gui");
 
 const defaultConfig = {};
 const defaultConfigFile = join(
@@ -28,7 +28,7 @@ if (config.debug) {
 }
 const cooler = ssb({ offline: config.offline });
 
-const models = require("./models.js");
+const models = require("../models/main_models");
 
 const { about } = models({
   cooler,

@@ -2,10 +2,9 @@
 
 "use strict";
 
-// Minimum required to get config
 const path = require("path");
-const envPaths = require("env-paths");
-const {cli} = require("./cli");
+const envPaths = require("../server/node_modules/env-paths");
+const {cli} = require("../client/oasis_client");
 const fs = require("fs");
 const os = require('os');
 const promisesFs = require("fs").promises;
@@ -62,7 +61,7 @@ try {
 
 const { get } = require("node:http");
 
-const debug = require("debug")("oasis");
+const debug = require("../server/node_modules/debug")("oasis");
 
 const log = (formatter, ...args) => {
   const isDebugEnabled = debug.enabled;
@@ -82,12 +81,11 @@ debug("Current configuration: %O", config);
 debug(`You can save the above to ${defaultConfigFile} to make \
 these settings the default. See the readme for details.`);
 
-const { saveConfig, getConfig } = require('./config');
+const { saveConfig, getConfig } = require('../configs/config-manager');
 
 const oasisCheckPath = "/.well-known/oasis";
 
 process.on("uncaughtException", function (err) {
-  // This isn't `err.code` because TypeScript doesn't like that.
   if (err["code"] === "EADDRINUSE") {
     get(url + oasisCheckPath, (res) => {
       let rawData = "";
@@ -124,31 +122,47 @@ Alternatively, you can set the default port in ${defaultConfigFile} with:
       });
     });
   } else {
-    throw err;
+    console.log("");
+    console.log("Oasis traceback (share below content with devs to report!):");
+    console.log("===========================================================");
+    console.log(err);
+    console.log("");
   }
 });
 
 process.argv = [];
 
-const http = require("./http");
+const http = require("../client/middleware");
 
-const {koaBody} = require("koa-body");
-const { nav, ul, li, a } = require("hyperaxe");
-const open = require("open");
-const pull = require("pull-stream");
-const koaRouter = require("@koa/router");
-const ssbMentions = require("ssb-mentions");
-const isSvg = require('is-svg');
-const { isFeed, isMsg, isBlob } = require("ssb-ref");
+const {koaBody} = require("../server/node_modules/koa-body");
+const { nav, ul, li, a } = require("../server/node_modules/hyperaxe");
+const open = require("../server/node_modules/open");
+const pull = require("../server/node_modules/pull-stream");
+const koaRouter = require("../server/node_modules/@koa/router");
+const ssbMentions = require("../server/node_modules/ssb-mentions");
+const isSvg = require('../server/node_modules/is-svg');
+const { isFeed, isMsg, isBlob } = require("../server/node_modules/ssb-ref");
 
-const ssb = require("./ssb");
+const ssb = require("../client/gui");
 
 const router = new koaRouter();
+
+const extractMentions = async (text) => {
+  const mentions = ssbMentions(text) || [];
+  const resolvedMentions = await Promise.all(mentions.map(async (mention) => {
+    const name = mention.name || await about.name(mention.link); 
+    return {
+      link: mention.link,
+      name: name || 'Anonymous', 
+    };
+  }));
+  return resolvedMentions;
+};
+
+const models = require("../models/main_models");
 const cooler = ssb({ offline: config.offline });
 
-const models = require("./models");
-
-const { about, blob, friend, meta, post, vote, wallet, legacy, cipher } = models({
+const { about, blob, friend, meta, post, vote, wallet, legacy, cipher} = models({
   cooler,
   isPublic: config.public,
 });
@@ -157,7 +171,6 @@ const nameWarmup = about._startNameWarmup();
 const preparePreview = async function (ctx) {
   let text = String(ctx.request.body.text);
   const mentions = {};
-  // TODO: sort by relationship
   const rex = /(^|\s)(?!\[)@([a-zA-Z0-9-]+)([\s.,!?)~]{1}|$)/g;
   let m;
   while ((m = rex.exec(text)) !== null) {
@@ -169,11 +182,8 @@ const preparePreview = async function (ctx) {
       mentions[name] = found;
     }
   }
-  // filter the matches depending on the follow relation
   Object.keys(mentions).forEach((name) => {
     let matches = mentions[name];
-    // if we find mention matches for a name, and we follow them / they follow us,
-    // then use those matches as suggestions
     const meaningfulMatches = matches.filter((m) => {
       return (m.rel.followsMe || m.rel.following) && m.rel.blocking === false;
     });
@@ -182,24 +192,16 @@ const preparePreview = async function (ctx) {
     }
     mentions[name] = matches;
   });
-
-  // replace the text with a markdown link if we have unambiguous match
   const replacer = (match, name, sign) => {
     let matches = mentions[name];
     if (matches && matches.length === 1) {
-      // we found an exact match, don't send it to frontend as a suggestion
-      delete mentions[name];
-      // format markdown link and put the correct sign back at the end
-      return `[@${matches[0].name}](${matches[0].feed})${sign ? sign : ""}`;
+      return `[@${matches[0].name}](${matches[0].feed})${sign || ""}`;
     }
     return match;
   };
   text = text.replace(rex, replacer);
-
-  // add blob new blob to the end of the document.
   text += await handleBlobUpload(ctx);
 
-  // author metadata for the preview-post
   const ssb = await cooler.open();
   const authorMeta = {
     id: ssb.id,
@@ -210,10 +212,6 @@ const preparePreview = async function (ctx) {
   return { authorMeta, text, mentions };
 };
 
-// handleBlobUpload ingests an uploaded form file.
-// it takes care of maximum blob size (5meg), exif stripping and mime detection.
-// finally it returns the correct markdown link for the blob depending on the mime-type.
-// it supports plain, image and also audio: and video: as understood by ssbMarkdown.
 const handleBlobUpload = async function (ctx) {
   if (!ctx.request.files) return "";
 
@@ -250,14 +248,9 @@ const handleBlobUpload = async function (ctx) {
         return clean;
       }
     };
-
     const dataString = data.toString("binary");
-    // implementation borrowed from ssb-blob-files
-    // (which operates on a slightly different data structure, sadly)
-    // https://github.com/ssbc/ssb-blob-files/blob/master/async/image-process.js
     data = Buffer.from(removeExif(dataString), "binary");
   } catch (e) {
-    // blob was likely not a jpeg -- no exif data to remove. proceeding with blob upload
   }
 
   const addBlob = new Promise((resolve, reject) => {
@@ -274,8 +267,7 @@ const handleBlobUpload = async function (ctx) {
     name: blobUpload.name,
   };
 
-  // determine encoding to add the correct markdown link
-  const FileType = require("file-type");
+  const FileType = require("../server/node_modules/file-type");
   try {
     let fileType = await FileType.fromBuffer(data);
     blob.mime = fileType.mime;
@@ -284,7 +276,6 @@ const handleBlobUpload = async function (ctx) {
     blob.mime = "application/octet-stream";
   }
 
-  // append uploaded blob as markdown to the end of the input text
   if (blob.mime.startsWith("image/")) {
     return `\n![${blob.name}](${blob.id})`;
   } else if (blob.mime.startsWith("audio/")) {
@@ -364,11 +355,11 @@ const {
   walletSendConfirmView,
   walletSendResultView,
   legacyView,
-  cipherView,
-} = require("./views/index.js");
+  cipherView
+} = require("../views/main_views");
 
-const ssbRef = require("ssb-ref");
-const markdownView = require("./views/markdown.js");
+const ssbRef = require("../server/node_modules/ssb-ref");
+const markdownView = require("../views/markdown");
 
 let sharp;
 
@@ -378,8 +369,8 @@ try {
   // Optional dependency
 }
 
-const readmePath = path.join(__dirname, "..", "README.md");
-const packagePath = path.join(__dirname, "..", "package.json");
+const readmePath = path.join(__dirname, "..", ".." ,"README.md");
+const packagePath = path.join(__dirname, "..", "server", "package.json");
 
 const readme = fs.readFileSync(readmePath, "utf8");
 const version = JSON.parse(fs.readFileSync(packagePath, "utf8")).version;
@@ -419,35 +410,33 @@ router
     ctx.body = "oasis";
   })
   .get("/public/popular/:period", async (ctx) => {
-    const { period } = ctx.params; 
-    const popularMod = ctx.cookies.get("popularMod") || 'on';
-    if (popularMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
-    }
-    const publicPopular = async ({ period }) => {
-      const messages = await post.popular({ period });
-      const selectedLanguage = ctx.cookies.get("language") || "en";
-      const i18nBase = require("./views/i18n");
-      let i18n = i18nBase[selectedLanguage];
-      exports.setLanguage = (language) => {
-        selectedLanguage = language;
-        i18n = Object.assign({}, i18nBase.en, i18nBase[language]);
-      };
-      const prefix = nav(
-        ul(
-          a({ href: "./day" }, i18n.day),
-          a({ href: "./week" }, i18n.week),
-          a({ href: "./month" }, i18n.month),
-          a({ href: "./year" }, i18n.year)
-        )
-      );
-      return popularView({
-        messages,
-        prefix,
-      });
-    };
-    ctx.body = await publicPopular({ period });
+  const { period } = ctx.params;
+  const popularMod = ctx.cookies.get("popularMod") || 'on';
+
+  if (popularMod !== 'on') {
+    ctx.redirect('/modules');
+    return;
+  }
+  const i18n = require("../client/assets/translations/i18n");
+  const lang = ctx.cookies.get('lang') || 'en'; 
+  const translations = i18n[lang] || i18n['en']; 
+
+  const publicPopular = async ({ period }) => {
+    const messages = await post.popular({ period });
+    const prefix = nav(
+      ul(
+        a({ href: "./day" }, translations.day),
+        a({ href: "./week" }, translations.week),
+        a({ href: "./month" }, translations.month),
+        a({ href: "./year" }, translations.year)
+      )
+    );
+    return popularView({
+      messages,
+      prefix,
+    });
+  }
+  ctx.body = await publicPopular({ period });
   })
   .get("/public/latest", async (ctx) => {
     const latestMod = ctx.cookies.get("latestMod") || 'on';
@@ -661,10 +650,6 @@ router
     // This prevents an auto-download when visiting the URL.
     ctx.attachment(blobId, { type: "inline" });
 
-    // If we don't do this explicitly the browser downloads the SVG and thinks
-    // that it's plain XML, so it doesn't render SVG files correctly. Note that
-    // this library is **not a full SVG parser**, and may cause false positives
-    // in the case of malformed XML like `<svg><div></svg>`.
     if (isSvg(buffer)) {
       ctx.type = "image/svg+xml";
     }
@@ -756,7 +741,7 @@ router
     ctx.body = modulesView({ popularMod, topicsMod, summariesMod, latestMod, threadsMod, multiverseMod, inboxMod, invitesMod, walletMod, legacyMod, cipherMod });
   })
   .get("/settings", async (ctx) => {
-    const theme = ctx.cookies.get("theme") || config.theme;
+    const theme = ctx.cookies.get("theme") || "Dark-SNH";
     const getMeta = async ({ theme }) => {
       return settingsView({
         theme,
@@ -809,16 +794,10 @@ router
     };
     ctx.body = await likes({ feed });
   })
-  .get("/settings/readme", async (ctx) => {
-    const status = async (text) => {
-      return markdownView({ text });
-    };
-    ctx.body = await status(readme);
-  })
   .get("/mentions", async (ctx) => {
     const mentions = async () => {
       const messages = await post.mentionsMe();
-      return mentionsView({ messages });
+      return mentionsView({ messages }); 
     };
     ctx.body = await mentions();
   })
@@ -850,7 +829,6 @@ router
     const { message } = ctx.params;
     const thread = async (message) => {
       const messages = await post.fromThread(message);
-      debug("got %i messages", messages.length);
       return threadView({ messages });
     };
     ctx.body = await thread(message);
@@ -947,8 +925,7 @@ router
 
     const publishSubtopic = async ({ message, text }) => {
       // TODO: rename `message` to `parent` or `ancestor` or similar
-      const mentions = ssbMentions(text) || undefined;
-
+      const mentions = extractMentions(text);
       const parent = await post.get(message);
       return post.subtopic({
         parent,
@@ -984,8 +961,7 @@ router
       rawContentWarning.length > 0 ? rawContentWarning : undefined;
 
     const publishComment = async ({ message, text }) => {
-      // TODO: rename `message` to `parent` or `ancestor` or similar
-      const mentions = ssbMentions(text) || undefined;
+      const mentions = extractMentions(text);
       const parent = await meta.get(message);
 
       return post.comment({
@@ -1008,11 +984,10 @@ router
     const text = String(ctx.request.body.text);
     const rawContentWarning = String(ctx.request.body.contentWarning);
     const contentWarning =
-      rawContentWarning.length > 0 ? rawContentWarning : undefined;
+    rawContentWarning.length > 0 ? rawContentWarning : undefined;
 
     const publish = async ({ text, contentWarning }) => {
-      const mentions = ssbMentions(text) || undefined;
-
+      const mentions = await extractMentions(text); 
       return post.root({
         text,
         mentions,
@@ -1194,12 +1169,22 @@ router
     const referer = new URL(ctx.request.header.referer);
     ctx.redirect(referer.href);
   })
-  .post("/theme.css", koaBody(), async (ctx) => {
-    const theme = "SNH-Oasis"; 
-    ctx.cookies.set("theme", theme);  
-    const referer = new URL(ctx.request.header.referer);
-    ctx.redirect(referer.href);  
-  })
+  .post("/settings/theme", koaBody(), async (ctx) => {
+    const theme = String(ctx.request.body.theme);
+    const currentConfig = getConfig();
+    if (theme) {
+        currentConfig.themes.current = theme;
+        const configPath = path.join(__dirname, '../configs', 'oasis-config.json');
+        fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2));
+        ctx.cookies.set("theme", theme);
+        ctx.redirect("/settings");
+    } else {
+        currentConfig.themes.current = "Dark-SNH";
+        fs.writeFileSync(path.join(__dirname, 'configs', 'oasis-config.json'), JSON.stringify(currentConfig, null, 2));
+        ctx.cookies.set("theme", "Dark-SNH");
+        ctx.redirect("/settings");
+     }
+   })
   .post("/language", koaBody(), async (ctx) => {
     const language = String(ctx.request.body.language);
     ctx.cookies.set("language", language);
@@ -1227,8 +1212,6 @@ router
       const invite = String(ctx.request.body.invite);
       await meta.acceptInvite(invite);
     } catch (e) {
-      // Just in case it's an invalid invite code. :(
-      debug(e);
     }
     ctx.redirect("/invites");
   })
@@ -1361,16 +1344,20 @@ const middleware = [
       0
     );
     const totalTarget = status.sync.since * values.length;
-
     const left = totalTarget - totalCurrent;
-
     const percent = Math.floor((totalCurrent / totalTarget) * 1000) / 10;
-    const mebibyte = 1024 * 1024;
-
-    if (left > mebibyte) {
+    const megabyte = 1024 * 1024;
+    if (left > megabyte) {
       ctx.response.body = indexingView({ percent });
     } else {
-      await next();
+       try {
+    await next();
+  } catch (err) {
+    ctx.status = err.status || 500;
+    ctx.body = { message: err.message || 'Internal Server Error' };
+    // Optionally log the error for debugging
+    console.error(err);
+  }
     }
   },
   routes,

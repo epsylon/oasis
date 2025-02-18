@@ -1,16 +1,13 @@
 "use strict";
 
-const yargs = require("yargs");
-const { hideBin } = require("yargs/helpers"); // Helper to parse arguments
-const _ = require("lodash");
+const path = require('path');
+const yargs = require(path.join(__dirname, '../server/node_modules/yargs'));
+const { hideBin } = require(path.join(__dirname, '../server/node_modules/yargs/helpers'));
+const _ = require(path.join(__dirname, '../server/node_modules/lodash'));
 
-const moduleAlias = require('module-alias');
+const moduleAlias = require(path.join(__dirname, '../server/node_modules/module-alias'));
 moduleAlias.addAlias('punycode', 'punycode/');
 
-/**
- * @param {object} presets
- * @param {string} defaultConfigFile
- */
 const cli = (presets, defaultConfigFile) =>
   yargs(hideBin(process.argv))
     .scriptName("oasis")
@@ -85,3 +82,4 @@ const cli = (presets, defaultConfigFile) =>
     .epilog(`The defaults can be configured in ${defaultConfigFile}.`).argv;
 
 module.exports = { cli };
+

@@ -1,32 +1,23 @@
-const Koa = require("koa");
-const koaStatic = require("koa-static");
+const path = require("path");
+const Koa = require(path.join(__dirname, "../server/node_modules/koa"));
+const koaStatic = require(path.join(__dirname, "../server/node_modules/koa-static"));
 const { join } = require("path");
-const mount = require("koa-mount");
+const mount = require(path.join(__dirname, "../server/node_modules/koa-mount"));
 
-/**
- * @type function
- * @param {{ host: string, port: number, middleware: any[], allowHost: string | null }} input
- * @return function
- */
 module.exports = ({ host, port, middleware, allowHost }) => {
-  const assets = new Koa();
-  assets.use(koaStatic(join(__dirname, "..", "assets")));
-
+  const assets = new Koa()
+  assets.use(koaStatic(join(__dirname, "..", "client", "assets")));
+  
   const app = new Koa();
-
   const validHosts = [];
 
-  // All non-GET requests must have a path that doesn't start with `/blob/`.
   const isValidRequest = (request) => {
-    // All requests must use our hostname to prevent DNS rebind attacks.
     if (validHosts.includes(request.hostname) !== true) {
       console.log(`Invalid HTTP hostname: ${request.hostname}`);
       return false;
     }
 
-    // All non-GET requests must ...
     if (request.method !== "GET") {
-      // ...have a referer...
       if (request.header.referer == null) {
         console.log("No referer");
         return false;
@@ -34,13 +25,11 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
       try {
         const refererUrl = new URL(request.header.referer);
-        // ...with a valid hostname...
         if (validHosts.includes(refererUrl.hostname) !== true) {
           console.log(`Invalid referer hostname: ${refererUrl.hostname}`);
           return false;
         }
 
-        // ...and must not originate from a blob path.
         if (refererUrl.pathname.startsWith("/blob/")) {
           console.log(`Invalid referer path: ${refererUrl.pathname}`);
           return false;
@@ -51,15 +40,12 @@ module.exports = ({ host, port, middleware, allowHost }) => {
       }
     }
 
-    // If all of the above checks pass, this is a valid request.
     return true;
   };
 
   app.on("error", (err, ctx) => {
-    // Output full error objects
     console.error(err);
 
-    // Avoid printing errors for invalid requests.
     if (isValidRequest(ctx.request)) {
       err.message = err.stack;
       err.expose = true;
@@ -70,8 +56,10 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
   app.use(mount("/assets", assets));
 
-  // headers
   app.use(async (ctx, next) => {
+  
+    //console.log("Requesting:", ctx.path); // uncomment to check for HTTP requests
+    
     const csp = [
       "default-src 'none'",
       "img-src 'self'",
@@ -80,25 +68,16 @@ module.exports = ({ host, port, middleware, allowHost }) => {
       "style-src 'self'",
     ].join("; ");
 
-    // Disallow scripts.
     ctx.set("Content-Security-Policy", csp);
-
-    // Disallow <iframe> embeds from other domains.
     ctx.set("X-Frame-Options", "SAMEORIGIN");
 
     const isBlobPath = ctx.path.startsWith("/blob/");
 
     if (isBlobPath === false) {
-      // Disallow browsers overwriting declared media types.
-      //
-      // This should only happen on non-blob URLs.
       ctx.set("X-Content-Type-Options", "nosniff");
     }
 
-    // Disallow sharing referrer with other domains.
     ctx.set("Referrer-Policy", "same-origin");
-
-    // Disallow extra browser features except audio output.
     ctx.set("Feature-Policy", "speaker 'self'");
 
     const validHostsString = validHosts.join(" or ");
@@ -120,7 +99,6 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     const address = server.address();
 
     if (typeof address === "string") {
-      // This shouldn't happen, but TypeScript was complaining about it.
       throw new Error("HTTP server should never bind to Unix socket");
     }
 
@@ -137,3 +115,4 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
   return server;
 };
+
