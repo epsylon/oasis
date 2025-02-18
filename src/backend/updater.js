@@ -3,8 +3,8 @@ const { existsSync, readFileSync } = require('fs');
 const { join } = require('path');
 
 const localpackage = join(__dirname, '../server/package.json');
-const remoteUrl = 'https://code.03c8.net/KrakensLab/oasis/raw/master/package.json'; // Official SNH-Oasis
-const remoteUrl2 = 'https://raw.githubusercontent.com/epsylon/oasis/main/package.json'; // Mirror SNH-Oasis
+const remoteUrl = 'https://code.03c8.net/KrakensLab/oasis/raw/master/src/server/package.json'; // Official SNH-Oasis
+const remoteUrl2 = 'https://raw.githubusercontent.com/epsylon/oasis/refs/heads/main/src/server/package.json'; // Mirror SNH-Oasis
 
 async function extractVersionFromText(text) {
   try {
