@@ -1,9 +1,7 @@
 body {
-  background-color: #000000;
-  color: #00FF00;
+  background-color: #000000 !important;
+  color: #00FF00 !important;
   font-family: 'Courier New', monospace;
-  line-height: 1.5;
-  font-size: 16px;
 }
 
 header, footer {
@@ -11,7 +9,6 @@ header, footer {
   color: #00FF00;
   padding: 20px;
   text-align: center;
-  border-bottom: 2px solid #00FF00;
   font-size: 18px;
 }
 
@@ -92,7 +89,6 @@ nav ul {
   background-color: #000000;
   padding: 0;
   margin: 0;
-  border-bottom: 2px solid #00FF00;
 }
 
 nav ul li {
@@ -190,3 +186,58 @@ footer a {
   text-decoration: none;
 }
 
+.top-bar-left,
+.top-bar-mid,
+.top-bar-right {
+  background-color: #000000 !important;
+  border: 2px solid #00FF00 !important;
+  padding: 12px 16px;
+  box-shadow: 0 0 12px #00FF00;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+}
+
+.sidebar-left,
+.sidebar-right {
+  background-color: #000000 !important;
+  border: 2px solid #00FF00 !important;
+  box-shadow: 0 0 15px #00FF00;
+  padding: 16px;
+}
+
+.sidebar-left nav ul,
+.sidebar-right nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-left nav ul li,
+.sidebar-right nav ul li {
+  width: 100%;
+}
+
+.sidebar-left nav ul li a,
+.sidebar-right nav ul li a,
+.header nav ul li a {
+  background-color: #000000 !important;
+  color: #00FF00 !important;
+  border: 1px solid #00FF00 !important;
+  font-weight: bold;
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: flex-start;
+  box-shadow: 0 0 6px #00FF00;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.sidebar-left nav ul li a:hover,
+.sidebar-right nav ul li a:hover,
+.header nav ul li a:hover {
+  background-color: #00FF00 !important;
+  color: #000000 !important;
+}

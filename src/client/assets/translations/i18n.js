@@ -1,6 +1,6 @@
 const path = require('path');
 let i18n = {};
-const languages = ['en', 'es', 'fr']; // Add more language codes if needed
+const languages = ['en', 'es', 'eu']; // Add more language codes
 
 languages.forEach(language => {
   try {

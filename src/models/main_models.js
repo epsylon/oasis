@@ -9,12 +9,11 @@ const pullParallelMap = require("../server/node_modules/pull-paramap");
 const pull = require("../server/node_modules/pull-stream");
 const pullSort = require("../server/node_modules/pull-sort");
 
-const ssbRef = require("../server/node_modules/ssb-ref");
+const path = require('path');
+const fs = require('fs/promises');
+const os = require('os');
 
-const {
-  RequestManager,
-  HTTPTransport,
-  Client } = require("../server/node_modules/@open-rpc/client-js");
+const ssbRef = require("../server/node_modules/ssb-ref");
 
 const isEncrypted = (message) => typeof message.value.content === "string";
 const isNotEncrypted = (message) => isEncrypted(message) === false;
@@ -159,7 +158,8 @@ module.exports = ({ cooler, isPublic }) => {
         .catch(reject);
     });
   };
-
+  
+  //ABOUT MODEL
 models.about = {
   publicWebHosting: async (feedId) => {
     const result = await getAbout({
@@ -191,28 +191,33 @@ models.about = {
   },
   image: async (feedId) => {
     if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
-      return nullImage;
+      return nullImage; 
     }
+    const timeoutPromise = (timeout) => new Promise((_, reject) => setTimeout(() => reject('Timeout'), timeout));
 
-    const raw = await getAbout({
-      key: "image",
-      feedId,
-    });
-
-    if (raw == null || raw.link == null) {
-      return nullImage;
+    try {
+      const raw = await Promise.race([
+        getAbout({
+          key: "image",
+          feedId,
+        }),
+        timeoutPromise(5000),
+      ]);
+      if (raw == null || raw.link == null) {
+        return nullImage;
+      }
+      if (typeof raw.link === "string") {
+        return raw.link;
+      }
+      return raw;
+    } catch (error) {
+      return '/assets/images/default-avatar.png';
     }
-
-    if (typeof raw.link === "string") {
-      return raw.link;
-    }
-    return raw;
   },
   description: async (feedId) => {
     if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
       return "Redacted";
     }
-
     const raw =
       (await getAbout({
         key: "description",
@@ -270,7 +275,6 @@ models.about = {
         })
       );
     });
-
     return {
       close: () => {
         abortable.abort();
@@ -280,81 +284,95 @@ models.about = {
   },
 };
 
+// BLOBS MODEL
+function blobIdToHexPath(blobId) {
+  const homeDir = os.homedir();
+  const m = /^&([A-Za-z0-9+/=]+)\.sha256$/.exec(blobId);
+  if (!m) throw new Error('Invalid blobId: ' + blobId);
+  const b64 = m[1];
+  const buf = Buffer.from(b64, 'base64');
+  const hex = buf.toString('hex');
+  const prefix = hex.slice(0, 2);
+  return path.join(homeDir, '.ssb', 'blobs', 'sha256', prefix, hex);
+}
 
-  models.blob = {
-    get: async ({ blobId }) => {
-      debug("get blob: %s", blobId);
-      const ssb = await cooler.open();
-      return ssb.blobs.get(blobId);
-    },
-    getResolved: async ({ blobId }) => {
-      const bufferSource = await models.blob.get({ blobId });
-      debug("got buffer source");
-      return new Promise((resolve) => {
-        pull(
-          bufferSource,
-          pull.collect(async (err, bufferArray) => {
-            if (err) {
-              await models.blob.want({ blobId });
-              resolve(Buffer.alloc(0));
-            } else {
-              const buffer = Buffer.concat(bufferArray);
-              resolve(buffer);
-            }
-          })
-        );
+async function checkLocalBlob(blobId) {
+  const filePath = blobIdToHexPath(blobId);
+  try {
+    const buf = await fs.readFile(filePath);
+    if (buf && buf.length) return buf;
+  } catch (_) { /* not found */ }
+  return null;
+}
+
+models.blob = {
+  getResolved: async ({ blobId, timeout = 30000 }) => {
+    let buf = await checkLocalBlob(blobId);
+    if (buf) return buf;
+    const ssb = await cooler.open();
+    await new Promise((resolve, reject) => {
+      ssb.blobs.want(blobId, (err) => {
+        if (err) reject(err);
+        else resolve();
       });
-    },
-    want: async ({ blobId }) => {
-      debug("want blob: %s", blobId);
-      cooler
-        .open()
-        .then((ssb) => {
-          ssb.blobs.want(blobId);
+    });
+    return new Promise((resolve, reject) => {
+      let timer = setTimeout(() => resolve(null), timeout);
+      pull(
+        ssb.blobs.get(blobId),
+        pull.collect(async (err, bufs) => {
+          clearTimeout(timer);
+          if (err || !bufs || !bufs.length) return resolve(null);
+          const buffer = Buffer.concat(bufs);
+          try {
+            const filePath = blobIdToHexPath(blobId);
+            await fs.mkdir(path.dirname(filePath), { recursive: true });
+            await fs.writeFile(filePath, buffer);
+          } catch (e) { /* ignore */ }
+          resolve(buffer);
         })
-        .catch((err) => {
-          console.warn(`failed to want blob:${blobId}: ${err}`);
-        });
-    },
-    search: async ({ query }) => {
-      debug("blob search: %s", query);
-      const ssb = await cooler.open();
-
-      return new Promise((resolve, reject) => {
-        ssb.meme.search(query, (err, blobs) => {
-          if (err) return reject(err);
-
-          return resolve(blobs);
-        });
+      );
+    });
+  },
+  want: async ({ blobId }) => {
+    const ssb = await cooler.open();
+    return new Promise((resolve, reject) => {
+      ssb.blobs.want(blobId, (err) => {
+        if (err) reject(new Error(`Failed to request blob: ${blobId}`));
+        else resolve();
       });
-    },
-  };
+    });
+  }
+};
 
+  //FRIENDS MODEL
   models.friend = {
-    setRelationship: async ({ feedId, following, blocking }) => {
-      if (following && blocking) {
-        throw new Error("Cannot follow and block at the same time");
-      }
+  setRelationship: async ({ feedId, following, blocking }) => {
+    if (following && blocking) {
+      throw new Error("Cannot follow and block at the same time");
+    }
+    const current = await models.friend.getRelationship(feedId);
+    const alreadySet =
+     current.following === following && current.blocking === blocking;
 
-      const current = await models.friend.getRelationship(feedId);
-      const alreadySet =
-        current.following === following && current.blocking === blocking;
-
-      if (alreadySet) {
-        return;
-      }
-
-      const ssb = await cooler.open();
-
-      const content = {
-        type: "contact",
-        contact: feedId,
-        following,
-        blocking,
-      };
-      transposeLookupTable(); 
-      return ssb.publish(content);
-    },
+    if (alreadySet) {
+      return;
+    }
+    const ssb = await cooler.open();
+    const content = {
+      type: "contact",
+      contact: feedId,
+      following,
+      blocking,
+    };
+    transposeLookupTable();
+    return new Promise((resolve, reject) => {
+      ssb.publish(content, (err, msg) => {
+        if (err) reject(err);
+        else resolve(msg);
+      });
+    });
+  },
     follow: (feedId) =>
       models.friend.setRelationship({
         feedId,
@@ -379,43 +397,45 @@ models.about = {
         blocking: false,
         following: false,
       }),
-    getRelationship: async (feedId) => {
-      const ssb = await cooler.open();
-      const { id } = ssb;
-
-      if (feedId === id) {
-        return {
-          me: true,
-          following: false,
-          blocking: false,
-          followsMe: false,
-        };
-      }
-
-      const isFollowing = await ssb.friends.isFollowing({
-        source: id,
-        dest: feedId,
+  getRelationship: async (feedId) => {
+    const ssb = await cooler.open();
+    const { id } = ssb;
+    if (feedId === id) {
+    return {
+      me: true,
+      following: false,
+      blocking: false,
+      followsMe: false,
+      };
+    }
+    const isFollowing = await new Promise((resolve, reject) => {
+      ssb.friends.isFollowing({ source: id, dest: feedId }, (err, val) => {
+        if (err) reject(err);
+        else resolve(val);
       });
-
-      const isBlocking = await ssb.friends.isBlocking({
-        source: id,
-        dest: feedId,
+    });
+    const isBlocking = await new Promise((resolve, reject) => {
+      ssb.friends.isBlocking({ source: id, dest: feedId }, (err, val) => {
+        if (err) reject(err);
+        else resolve(val);
       });
-
-      const followsMe = await ssb.friends.isFollowing({
-        source: feedId,
-        dest: id,
-      });
-
-      return {
-        me: false,
-        following: isFollowing,
-        blocking: isBlocking,
-        followsMe: followsMe,
+    });
+    const followsMe = await new Promise((resolve, reject) => {
+      ssb.friends.isFollowing({ source: feedId, dest: id }, (err, val) => {
+        if (err) reject(err);
+        else resolve(val);
+     });
+    });
+    return {
+      me: false,
+      following: isFollowing,
+      blocking: isBlocking,
+      followsMe,
       };
     },
   };
-
+  
+  //META MODEL
   models.meta = {
     myFeedId: async () => {
       const ssb = await cooler.open();
@@ -424,11 +444,19 @@ models.about = {
     },
     get: async (msgId) => {
       const ssb = await cooler.open();
-      return ssb.get({
-        id: msgId,
-        meta: true,
-        private: true,
-      });
+      return new Promise((resolve, reject) => {
+        ssb.get(
+          {
+            id: msgId,
+            meta: true,
+            private: true,
+          },
+          (err, msg) => {
+            if (err) reject(err);
+            else resolve(msg);
+          }
+        );
+       });
     },
     status: async () => {
       const ssb = await cooler.open();
@@ -509,21 +537,15 @@ models.about = {
         });
 
       debug("Starting sync, waiting for new messages...");
-
       while (keepGoing && (await diff()) === 0) {
         debug("Received no new messages.");
       }
-
       debug("Finished waiting for first new message.");
-
       while (keepGoing && (await diff()) > 0) {
         debug(`Still receiving new messages...`);
       }
-
       debug("Finished waiting for last new message.");
-
       clearInterval(timeoutInterval);
-
       await ssb.conn.stop();
     },
     acceptInvite: async (invite) => {
@@ -567,31 +589,25 @@ models.about = {
     query,
     filter = null,
   }) => {
-    const options = configure({ query, index: "DTA" }, customOptions);
-    const source = ssb.backlinks.read(options);
-    const basicSocialFilter = await socialFilter();
+    const source = ssb.createLogStream({ reverse: true, limit: 100 });
 
     return new Promise((resolve, reject) => {
       pull(
         source,
-        basicSocialFilter,
-        pull.filter(
-          (msg) =>
-            isNotEncrypted(msg) &&
-            isPost(msg) &&
-            (filter == null || filter(msg) === true)
-        ),
-        pull.take(maxMessages),
+        pull.filter((msg) => {
+          return msg.value.content.type === "post";
+        }),
         pull.collect((err, collectedMessages) => {
           if (err) {
-            reject(err);
+           reject(err);
           } else {
-            resolve(transform(ssb, collectedMessages, myFeedId));
+           resolve(collectedMessages);
           }
         })
       );
     });
   };
+
   const socialFilter = async ({
     following = null,
     blocking = false,
@@ -631,21 +647,17 @@ models.about = {
       }
     });
   };
-
   const getUserInfo = async (feedId) => {
     const pendingName = models.about.name(feedId);
     const pendingAvatarMsg = models.about.image(feedId);
-
     const pending = [pendingName, pendingAvatarMsg];
     const [name, avatarMsg] = await Promise.all(pending);
-
     const avatarId =
       avatarMsg != null && typeof avatarMsg.link === "string"
         ? avatarMsg.link || nullImage
         : avatarMsg || nullImage;
 
     const avatarUrl = `/image/64/${encodeURIComponent(avatarId)}`;
-
     return { name, feedId, avatarId, avatarUrl };
   };
 
@@ -737,7 +749,7 @@ models.about = {
             lodash.set(
               msg,
               "value.content.text",
-              "This is a public message that has been redacted because Oasis is running in public mode. This redaction is only meant to make Oasis consistent with other public SSB viewers. Please do not mistake this for privacy. All public messages are public. Any peer on the SSB network can see this message."
+              "This is a public message that has been redacted because Oasis is running in public mode. This redaction is only meant to make Oasis consistent with other public SSB viewers. Please do not mistake this for privacy. All public messages are public. Any peer on the Oasis network can see this message."
             );
 
             if (msg.value.content.contentWarning != null) {
@@ -819,6 +831,7 @@ models.about = {
     return messages.length ? messages[0] : undefined;
   };
 
+  // POST MODEL
   const post = {
     firstBy: async (feedId) => {
       return getLimitPost(feedId, false);
@@ -861,28 +874,36 @@ models.about = {
       if (!defaultOptions.reverse) return messages.reverse();
       else return messages;
     },
+
   mentionsMe: async (customOptions = {}) => {
     const ssb = await cooler.open();
-
     const myFeedId = ssb.id;
+    const { name: myUsername } = await getUserInfo(myFeedId);
 
     const query = [
-    {
-      $filter: {
-        dest: myFeedId,
+      {
+        $filter: {
+          "value.content.type": "post",
+        },
       },
-    },
     ];
 
-  const messages = await getMessages({
-    myFeedId,
-    customOptions,
-    ssb,
-    query,
-    filter: (msg) =>
-      lodash.get(msg, "value.meta.private") !== true,
-  });
-  return messages;
+    const messages = await getMessages({
+      myFeedId,
+      customOptions,
+      ssb,
+      query,
+      filter: (msg) => {
+        const mentionsText = lodash.get(msg, "value.content.text", "");
+        const mentionRegex = /<a class="mention" href="\/author\/([^"]+)">(@[^<]+)<\/a>/g;
+        let match;
+        while ((match = mentionRegex.exec(mentionsText))) {
+          if (match[1] === myFeedId || match[2] === myUsername) return true;
+        }
+        return false;
+      },
+    });
+    return { messages, myFeedId };
   },
 
   fromHashtag: async (hashtag, customOptions = {}) => {
@@ -903,34 +924,41 @@ models.about = {
    });
 
    return messages;
-  },
-
-    topicComments: async (rootId, customOptions = {}) => {
-      const ssb = await cooler.open();
-
-      const myFeedId = ssb.id;
-
-      const query = [
-        {
-          $filter: {
-            dest: rootId,
-          },
-        },
-      ];
-
-      const messages = await getMessages({
-        myFeedId,
-        customOptions,
-        ssb,
-        query,
-        filter: (msg) => msg.value.content.root === rootId && hasNoFork(msg),
-      });
-
-      return messages;
+  },  
+  topicComments: async (rootId, customOptions = {}) => {
+    const ssb = await cooler.open();
+    const myFeedId = ssb.id;
+    const query = [
+    {
+      $filter: {
+        dest: rootId,
+      },
     },
-    likes: async ({ feed }, customOptions = {}) => {
+  ];
+  const messages = await getMessages({
+    myFeedId,
+    customOptions,
+    ssb,
+    query,
+    filter: (msg) => msg.value.content.root === rootId && hasNoFork(msg),
+  });
+  const fullMessages = await Promise.all(
+    messages.map(async (msg) => {
+      if (typeof msg === 'string') {
+        return new Promise((resolve, reject) => {
+          ssb.get({ id: msg, meta: true, private: true }, (err, fullMsg) => {
+            if (err) reject(err);
+            else resolve(fullMsg);
+          });
+        });
+      }
+      return msg;
+    })
+  );
+  return fullMessages;
+  },
+  likes: async ({ feed }, customOptions = {}) => {
       const ssb = await cooler.open();
-
       const query = [
         {
           $filter: {
@@ -938,23 +966,14 @@ models.about = {
               author: feed,
               timestamp: { $lte: Date.now() },
               content: {
-                type: "vote",
+                type: 'vote',
               },
             },
           },
         },
       ];
-
-      const options = configure(
-        {
-          query,
-          reverse: true,
-        },
-        customOptions
-      );
-
+      const options = { ...defaultOptions, query, reverse: true, ...customOptions };
       const source = await ssb.query.read(options);
-
       const messages = await new Promise((resolve, reject) => {
         pull(
           source,
@@ -962,8 +981,8 @@ models.about = {
             return (
               isNotEncrypted(msg) &&
               msg.value.author === feed &&
-              typeof msg.value.content.vote === "object" &&
-              typeof msg.value.content.vote.link === "string"
+              typeof msg.value.content.vote === 'object' &&
+              typeof msg.value.content.vote.link === 'string'
             );
           }),
           pull.take(maxMessages),
@@ -984,7 +1003,6 @@ models.about = {
           })
         );
       });
-
       return messages;
     },
     search: async ({ query }) => {
@@ -1171,7 +1189,6 @@ models.about = {
           extendedFilter,
           pull.take(maxMessages),
           pullParallelMap(async (message, cb) => {
-            // Retrieve a preview of this post's comments / thread
             const thread = await post.fromThread(message.key);
             lodash.set(
               message,
@@ -1222,7 +1239,6 @@ models.about = {
           pull.filter((message) => isNotPrivate(message) && hasNoRoot(message)),
           pull.take(maxMessages),
           pullParallelMap(async (message, cb) => {
-            // Retrieve a preview of this post's comments / thread
             const thread = await post.fromThread(message.key);
             lodash.set(
               message,
@@ -1369,225 +1385,154 @@ models.about = {
 
       return messages;
     },
-    fromThread: async (msgId, customOptions) => {
-      debug("thread: %s", msgId);
-      const ssb = await cooler.open();
+  fromThread: async (msgId, customOptions) => {
+    const ssb = await cooler.open();
+    const myFeedId = ssb.id;
+    const options = configure({ id: msgId }, customOptions);
 
-      const myFeedId = ssb.id;
-
-      const options = configure({ id: msgId }, customOptions);
-      return ssb
-        .get(options)
-        .then(async (rawMsg) => {
-          debug("got raw message");
-
-          const parents = [];
-
-          const getRootAncestor = (msg) =>
-            new Promise((resolve, reject) => {
-              if (msg.key == null) {
-                debug("something is very wrong, we used `{ meta: true }`");
-                resolve(parents);
-              } else {
-                debug("getting root ancestor of %s", msg.key);
-
-                if (isEncrypted(msg)) {
-                  debug("private message");
-                  if (parents.length > 0) {
-                    resolve(parents);
-                  } else {
-                    resolve(msg);
-                  }
-                } else if (msg.value.content.type !== "post") {
-                  debug("not a post");
-                  resolve(msg);
-                } else if (
-                  isLooseSubtopic(msg) &&
-                  ssbRef.isMsg(msg.value.content.fork)
-                ) {
-                  debug("subtopic, get the parent");
-                  try {
-                    ssb
-                      .get({
-                        id: msg.value.content.fork,
-                        meta: true,
-                        private: true,
-                      })
-                      .then((fork) => {
-                        resolve(getRootAncestor(fork));
-                      })
-                      .catch(reject);
-                  } catch (e) {
-                    debug(e);
-                    resolve(msg);
-                  }
-                } else if (
-                  isLooseComment(msg) &&
-                  ssbRef.isMsg(msg.value.content.root)
-                ) {
-                  debug("comment: %s", msg.value.content.root);
-                  try {
-                    ssb
-                      .get({
-                        id: msg.value.content.root,
-                        meta: true,
-                        private: true,
-                      })
-                      .then((root) => {
-                        resolve(getRootAncestor(root));
-                      })
-                      .catch(reject);
-                  } catch (e) {
-                    debug(e);
-                    resolve(msg);
-                  }
-                } else if (isLooseRoot(msg)) {
-                  debug("got root ancestor");
-                  resolve(msg);
-                } else {
-                  debug(
-                    "got mysterious root ancestor that fails all known schemas"
-                  );
-                  debug("%O", msg);
-                  resolve(msg);
-                }
-              }
-            });
-
-          const getDirectDescendants = (key) =>
-            new Promise((resolve, reject) => {
-              const filterQuery = {
-                $filter: {
-                  dest: key,
-                },
-              };
-
-              const referenceStream = ssb.backlinks.read({
-                query: [filterQuery],
-                index: "DTA",
-              });
-              pull(
-                referenceStream,
-                pull.filter((msg) => {
-                  if (isTextLike(msg) === false) {
-                    return false;
-                  }
-
-                  const root = lodash.get(msg, "value.content.root");
-                  const fork = lodash.get(msg, "value.content.fork");
-
-                  if (root !== key && fork !== key) {
-                    return false;
-                  }
-
-                  if (fork === key) {
-                    return false;
-                  }
-
-                  return true;
-                }),
-                pull.collect((err, messages) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(messages || undefined);
-                  }
-                })
-              );
-            });
-          const flattenDeep = (arr1) =>
-            arr1.reduce(
-              (acc, val) =>
-                Array.isArray(val)
-                  ? acc.concat(flattenDeep(val))
-                  : acc.concat(val),
-              []
-            );
-
-          const getDeepDescendants = (key) =>
-            new Promise((resolve, reject) => {
-              const oneDeeper = async (descendantKey, depth) => {
-                const descendants = await getDirectDescendants(descendantKey);
-
-                if (descendants.length === 0) {
-                  return descendants;
-                }
-
-                return Promise.all(
-                  descendants.map(async (descendant) => {
-                    const deeperDescendants = await oneDeeper(
-                      descendant.key,
-                      depth + 1
-                    );
-                    lodash.set(descendant, "value.meta.thread.depth", depth);
-                    lodash.set(descendant, "value.meta.thread.subtopic", true);
-                    return [descendant, deeperDescendants];
-                  })
-                );
-              };
-              oneDeeper(key, 0)
-                .then((nested) => {
-                  const nestedDescendants = [...nested];
-                  const deepDescendants = flattenDeep(nestedDescendants);
-                  resolve(deepDescendants);
-                })
-                .catch(reject);
-            });
-
-          const rootAncestor = await getRootAncestor(rawMsg);
-          const deepDescendants = await getDeepDescendants(rootAncestor.key);
-
-          const allMessages = [rootAncestor, ...deepDescendants].map(
-            (message) => {
-              const isThreadTarget = message.key === msgId;
-              lodash.set(message, "value.meta.thread.target", isThreadTarget);
-              return message;
-            }
-          );
-
-          return await transform(ssb, allMessages, myFeedId);
-        })
-        .catch((err) => {
-          if (err.name === "NotFoundError") {
-            throw new Error(
-              "Message not found in the database. You've done nothing wrong. Maybe try again later?"
-            );
-          } else {
-            throw err;
+    const rawMsg = await new Promise((resolve, reject) => {
+      ssb.get(options, (err, msg) => {
+        if (err) reject(err);
+        else resolve(msg);
+      });
+    });
+    const parents = [];
+    const getRootAncestor = (msg) =>
+      new Promise((resolve, reject) => {
+      if (msg.key == null) {
+        resolve(parents);
+      } else if (isEncrypted(msg)) {
+        if (parents.length > 0) {
+          resolve(parents);
+        } else {
+          resolve(msg);
+        }
+      } else if (msg.value.content.type !== "post") {
+        resolve(msg);
+      } else if (isLooseSubtopic(msg) && ssbRef.isMsg(msg.value.content.fork)) {
+        ssb.get(
+          { id: msg.value.content.fork, meta: true, private: true },
+          (err, fork) => {
+            if (err) reject(err);
+            else getRootAncestor(fork).then(resolve).catch(reject);
           }
-        });
-    },
-    get: async (msgId, customOptions) => {
-      debug("get: %s", msgId);
-      const ssb = await cooler.open();
+        );
+      } else if (isLooseComment(msg) && ssbRef.isMsg(msg.value.content.root)) {
+        ssb.get(
+          { id: msg.value.content.root, meta: true, private: true },
+          (err, root) => {
+            if (err) reject(err);
+            else getRootAncestor(root).then(resolve).catch(reject);
+          }
+        );
+      } else if (isLooseRoot(msg)) {
+        resolve(msg);
+      } else {
+        resolve(msg);
+      }
+    });
 
-      const myFeedId = ssb.id;
+    const getDirectDescendants = (key) =>
+      new Promise((resolve, reject) => {
+      const filterQuery = {
+        $filter: {
+          dest: key,
+        },
+      };
 
-      const options = configure({ id: msgId }, customOptions);
-      const rawMsg = await ssb.get(options);
-      debug("got raw message");
+      const referenceStream = ssb.backlinks.read({
+        query: [filterQuery],
+        index: "DTA",
+      });
 
-      const transformed = await transform(ssb, [rawMsg], myFeedId);
-      debug("transformed: %O", transformed);
-      return transformed[0];
-    },
-    publish: async (options) => {
+      pull(
+        referenceStream,
+        pull.filter((msg) => {
+          if (!isTextLike(msg)) return false;
+          const root = lodash.get(msg, "value.content.root");
+          const fork = lodash.get(msg, "value.content.fork");
+          if (root !== key && fork !== key) return false;
+          if (fork === key) return false;
+          return true;
+        }),
+        pull.collect((err, messages) => {
+          if (err) reject(err);
+          else resolve(messages || undefined);
+        })
+      );
+    });
+
+    const flattenDeep = (arr1) =>
+      arr1.reduce(
+        (acc, val) =>
+          Array.isArray(val)
+            ? acc.concat(flattenDeep(val))
+            : acc.concat(val),
+        []
+      );
+
+    const getDeepDescendants = (key) =>
+      new Promise((resolve, reject) => {
+        const oneDeeper = async (descendantKey, depth) => {
+        const descendants = await getDirectDescendants(descendantKey);
+        if (descendants.length === 0) return descendants;
+        return Promise.all(
+          descendants.map(async (descendant) => {
+            const deeperDescendants = await oneDeeper(descendant.key, depth + 1);
+            lodash.set(descendant, "value.meta.thread.depth", depth);
+            lodash.set(descendant, "value.meta.thread.subtopic", true);
+            return [descendant, deeperDescendants];
+          })
+        );
+      };
+      oneDeeper(key, 0)
+        .then((nested) => {
+          const nestedDescendants = [...nested];
+          const deepDescendants = flattenDeep(nestedDescendants);
+          resolve(deepDescendants);
+        })
+        .catch(reject);
+      });
+    const rootAncestor = await getRootAncestor(rawMsg);
+    const deepDescendants = await getDeepDescendants(rootAncestor.key);
+    const allMessages = [rootAncestor, ...deepDescendants].map((message) => {
+      const isThreadTarget = message.key === msgId;
+      lodash.set(message, "value.meta.thread.target", isThreadTarget);
+      return message;
+    });
+    return await transform(ssb, allMessages, myFeedId);
+  },
+  get: async (msgId, customOptions) => {
+    const ssb = await cooler.open();
+    const myFeedId = ssb.id;
+    const options = configure({ id: msgId }, customOptions);
+    const rawMsg = await new Promise((resolve, reject) => {
+      ssb.get(options, (err, msg) => {
+        if (err) reject(err);
+        else resolve(msg);
+      });
+    });
+    const transformed = await transform(ssb, [rawMsg], myFeedId);
+    return transformed[0];
+  },
+   publish: async (options) => {
       const ssb = await cooler.open();
       const body = { type: "post", ...options };
-
-      debug("Published: %O", body);
-      return ssb.publish(body);
+      return new Promise((resolve, reject) => {
+        ssb.publish(body, (err, msg) => {
+          if (err) reject(err);
+          else resolve(msg);
+        });
+      });
     },
     publishProfileEdit: async ({ name, description, image }) => {
       const ssb = await cooler.open();
       if (image.length > 0) {
-        // 25 MiB check (here we set max file size allowed!)
         const megabyte = Math.pow(2, 20);
         const maxSize = 25 * megabyte;
         if (image.length > maxSize) {
           throw new Error("File is too big, maximum size is 25 megabytes");
         }
-
         return new Promise((resolve, reject) => {
           pull(
             pull.values([image]),
@@ -1602,88 +1547,104 @@ models.about = {
                   description,
                   image: blobId,
                 };
-                debug("Published: %O", content);
-                resolve(ssb.publish(content));
+                ssb.publish(content, (err, msg) => {
+                  if (err) reject(err);
+                  else resolve(msg);
+                });
               }
             })
           );
         });
       } else {
         const body = { type: "about", about: ssb.id, name, description };
-        debug("Published: %O", body);
-        return ssb.publish(body);
+        return new Promise((resolve, reject) => {
+          ssb.publish(body, (err, msg) => {
+            if (err) reject(err);
+            else resolve(msg);
+          });
+        });
       }
     },
     publishCustom: async (options) => {
       const ssb = await cooler.open();
-      debug("Published: %O", options);
-      return ssb.publish(options);
+      return new Promise((resolve, reject) => {
+        ssb.publish(options, (err, msg) => {
+          if (err) reject(err);
+          else resolve(msg);
+        });
+      });
     },
     subtopic: async ({ parent, message }) => {
+      message = { ...message };
       message.root = parent.key;
       message.fork = lodash.get(parent, "value.content.root");
       message.branch = await post.branch({ root: parent.key });
-      message.type = "post"; // redundant but used for validation
-
+      message.type = "post";
+      if (!Array.isArray(message.mentions)) message.mentions = [];
       if (isSubtopic(message) !== true) {
         const messageString = JSON.stringify(message, null, 2);
         throw new Error(`message should be valid subtopic: ${messageString}`);
       }
-
       return post.publish(message);
     },
     root: async (options) => {
       const message = { type: "post", ...options };
-
       if (isRoot(message) !== true) {
         const messageString = JSON.stringify(message, null, 2);
       }
       return post.publish(message);
     },
-    comment: async ({ parent, message }) => {
-      const parentKey = parent.key;
-      const parentFork = lodash.get(parent, "value.content.fork");
-      const parentRoot = lodash.get(parent, "value.content.root", parentKey);
+  comment: async ({ parent, message }) => {
+    if (!parent || !parent.value) {
+      throw new Error("Invalid parent message: Missing 'value'");
+    }
 
-      if (isDecrypted(parent)) {
-        message.recps = lodash
-          .get(parent, "value.content.recps", [])
-          .map((recipient) => {
-            if (
-              typeof recipient === "object" &&
-              typeof recipient.link === "string" &&
-              recipient.link.length
-            ) {
-              return recipient.link;
-            } else {
-              return recipient;
-            }
-          });
+    const parentKey = parent.key;
+    const parentFork = lodash.get(parent, "value.content.fork");
+    const parentRoot = lodash.get(parent, "value.content.root", parentKey);
 
-        if (message.recps.length === 0) {
-          throw new Error("Refusing to publish message with no recipients");
+    if (isDecrypted(parent)) {
+      message.recps = lodash
+      .get(parent, "value.content.recps", [])
+      .map((recipient) => {
+        if (
+          typeof recipient === "object" &&
+          typeof recipient.link === "string" &&
+          recipient.link.length
+        ) {
+          return recipient.link;
+        } else {
+          return recipient;
         }
+      });
+
+     if (message.recps.length === 0) {
+        throw new Error("Refusing to publish message with no recipients");
       }
+    }
 
-      const parentHasFork = parentFork != null;
+    const parentHasFork = parentFork != null;
+    message.root = parentHasFork ? parentKey : parentRoot;
+    message.branch = await post.branch({ root: parent.key });
+    message.type = "post";
 
-      message.root = parentHasFork ? parentKey : parentRoot;
-      message.branch = await post.branch({ root: parent.key });
-      message.type = "post"; 
-
-      if (isComment(message) !== true) {
-        const messageString = JSON.stringify(message, null, 2);
-        throw new Error(`message should be valid comment: ${messageString}`);
+    if (isComment(message) !== true) {
+      const messageString = JSON.stringify(message, null, 2);
+      throw new Error(`Message should be a valid comment: ${messageString}`);
+    }
+    return post.publish(message);
+  },
+  branch: async ({ root }) => {
+    const ssb = await cooler.open();
+    return new Promise((resolve, reject) => {
+    ssb.tangle.branch(root, (err, keys) => {
+      if (err) {
+        return reject(err);
       }
-
-      return post.publish(message);
-    },
-    branch: async ({ root }) => {
-      const ssb = await cooler.open();
-      const keys = await ssb.tangle.branch(root);
-
-      return keys;
-    },
+      resolve(keys);
+    });
+  });
+  },
     channels: async () => {
       const ssb = await cooler.open();
 
@@ -1726,60 +1687,56 @@ models.about = {
       });
 
       return subbedChannels;
-    },
-    inbox: async (customOptions = {}) => {
+    },    
+    inbox: async () => {
       const ssb = await cooler.open();
-
       const myFeedId = ssb.id;
+  const rawMessages = await new Promise((resolve, reject) => {
+    pull(
+      ssb.createLogStream({ reverse: true, limit: 1000 }),
+      pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
+    );
+  });
+  const decryptedMessages = rawMessages.map(msg => {
+    try {
+      return ssb.private.unbox(msg);
+    } catch {
+      return null;
+    }
+  }).filter(Boolean);
+  const tombstoneTargets = new Set(
+    decryptedMessages
+      .filter(msg => msg.value?.content?.type === 'tombstone')
+      .map(msg => msg.value.content.target)
+  );
+  return decryptedMessages.filter(msg => {
+    if (tombstoneTargets.has(msg.key)) return false;
+    const content = msg.value?.content;
+    const author = msg.value?.author;
+    return content?.type === 'post' && content?.private === true && (author === myFeedId || content.to?.includes(myFeedId));
+  });
+}
 
-      const options = configure(
-        {
-          query: [{ $filter: { dest: ssb.id } }],
-        },
-        customOptions
-      );
 
-      const source = ssb.backlinks.read(options);
-
-      const messages = await new Promise((resolve, reject) => {
-        pull(
-          source,
-          pull.filter(
-            (message) =>
-              isDecrypted(message) &&
-              (lodash.get(message, "value.content.type") === "post" ||
-                lodash.get(message, "value.content.type") === "blog")
-          ),
-          pull.unique((message) => {
-            const { root } = message.value.content;
-            if (root == null) {
-              return message.key;
-            } else {
-              return root;
-            }
-          }),
-          pull.take(maxMessages),
-          pull.collect((err, collectedMessages) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(transform(ssb, collectedMessages, myFeedId));
-            }
-          })
-        );
-      });
-
-      return messages;
-    },
   };
   models.post = post;
 
-models.vote = {
-    publish: async ({ messageKey, value, recps }) => {
-      const ssb = await cooler.open();
-      const branch = await ssb.tangle.branch(messageKey);
 
-      await ssb.publish({
+// SPREAD MODEL
+models.vote = {
+  publish: async ({ messageKey, value, recps }) => {
+      const ssb = await cooler.open();
+      const branch = await new Promise((resolve, reject) => {
+        ssb.tangle.branch(messageKey, (err, result) => {
+          if (err) {
+            console.error("Error fetching branch:", err);
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+      });
+      const content = {
         type: "vote",
         vote: {
           link: messageKey,
@@ -1787,187 +1744,18 @@ models.vote = {
         },
         branch,
         recps,
+      };
+      return new Promise((resolve, reject) => {
+        ssb.publish(content, (err, msg) => {
+          if (err) {
+            console.error("Publish error:", err);
+            reject(err);
+          } else {
+            resolve(msg);
+          }
+        });
       });
-    },
-  };
-
-models.wallet = {
-    client: async (url, user, pass) => {
-      const transport = new HTTPTransport(url, {
-        headers: {
-          'Authorization': 'Basic ' + btoa(`${user}:${pass}`)
-        }
-      });
-      return new Client(new RequestManager([transport]));
-    },
-    execute: async (url, user, pass, method, params = []) => {
-      try {
-        const client = await models.wallet.client(url, user, pass);
-        return await client.request({ method, params });
-      } catch (error) {
-        throw new Error(
-          "ECOin wallet disconnected. " +
-          "Check your wallet settings or connection status."
-        );
-      }
-    },
-    getBalance: async (url, user, pass) => {
-      return await models.wallet.execute(url, user, pass, "getbalance");
-    },
-    getAddress: async (url, user, pass) => {
-      const addresses = await models.wallet.execute(url, user, pass, "getaddressesbyaccount", ['']);
-      return addresses[0]  // TODO: Handle multiple addresses
-    },
-    listTransactions: async (url, user, pass) => {
-      return await models.wallet.execute(url, user, pass, "listtransactions", ["", 1000000, 0]);
-    },
-    sendToAddress: async (url, user, pass, address, amount) => {
-      return await models.wallet.execute(url, user, pass, "sendtoaddress", [address, amount]);
-    },
-    validateSend: async (url, user, pass, address, amount, fee) => {
-      let isValid = false
-      const errors = [];
-      const addressValid = await models.wallet.execute(url, user, pass, "validateaddress", [address]);
-      const amountValid = amount > 0;
-      const feeValid = fee > 0;
-      if (!addressValid.isvalid) { errors.push("invalid_dest") }
-      if (!amountValid) { errors.push("invalid_amount") }
-      if (!feeValid) { errors.push("invalid_fee") }
-      if (errors.length == 0) { isValid = true }
-      return { isValid, errors }
-    }
-  }
-
-//legacy: export/import .ssb secret (private key)
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const os = require('os');
-
-function encryptFile(filePath, password) {
-  if (typeof password === 'object' && password.password) {
-    password = password.password;
-  }
-  const key = Buffer.from(password, 'utf-8');
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-  const homeDir = os.homedir();
-  const encryptedFilePath = path.join(homeDir, 'oasis.enc');
-  const output = fs.createWriteStream(encryptedFilePath);
-  const input = fs.createReadStream(filePath);
-  input.pipe(cipher).pipe(output);
-  return new Promise((resolve, reject) => {
-    output.on('finish', () => {
-      resolve(encryptedFilePath);
-    });
-    output.on('error', (err) => {
-      reject(err);
-    });
-  });
-}
-
-function decryptFile(filePath, password) {
-  if (typeof password === 'object' && password.password) {
-    password = password.password;
-  } 
-  const key = Buffer.from(password, 'utf-8');
-  const iv = crypto.randomBytes(16);
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv); 
-  const homeDir = os.homedir();
-  const decryptedFilePath = path.join(homeDir, 'secret');
-  const output = fs.createWriteStream(decryptedFilePath);
-  const input = fs.createReadStream(filePath);
-  input.pipe(decipher).pipe(output);
-  return new Promise((resolve, reject) => {
-    output.on('finish', () => {
-      resolve(decryptedFilePath);
-    });
-    output.on('error', (err) => {
-      console.error('Error deciphering data:', err);
-      reject(err);
-    });
-  });
-}
-
-models.legacy = {
-  exportData: async (password) => {
-    try {
-      const homeDir = os.homedir();
-      const secretFilePath = path.join(homeDir, '.ssb', 'secret');
-      
-      if (!fs.existsSync(secretFilePath)) {
-        throw new Error(".ssb/secret file doesn't exist");
-      }
-      const encryptedFilePath = await encryptFile(secretFilePath, password);   
-      fs.unlinkSync(secretFilePath);
-      return encryptedFilePath;
-    } catch (error) {
-      throw new Error("Error exporting data: " + error.message);
-    }
   },
-  importData: async ({ filePath, password }) => {
-    try {
-      if (!fs.existsSync(filePath)) {
-        throw new Error('Encrypted file not found.');
-      }
-      const decryptedFilePath = await decryptFile(filePath, password);
-
-      if (!fs.existsSync(decryptedFilePath)) {
-        throw new Error("Decryption failed.");
-      }
-
-      fs.unlinkSync(filePath);
-      return decryptedFilePath;
-
-    } catch (error) {
-      throw new Error("Error importing data: " + error.message);
-    }
-  }
-};
-
-//cipher: encrypt/decrypt text at client side
-function encryptText(text, password) {
-  if (typeof password === 'object' && password.password) {
-    password = password.password;
-  }
-  const key = Buffer.from(password, 'utf-8');
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-  let encryptedText = cipher.update(text, 'utf-8', 'hex');
-  encryptedText += cipher.final('hex');
-  const ivHex = iv.toString('hex');
-  return { encryptedText, iv: ivHex }; 
-}
-
-function decryptText(encryptedText, password, ivHex) {
-  if (typeof password === 'object' && password.password) {
-    password = password.password;
-  }
-  const key = Buffer.from(password, 'utf-8');
-  const iv = Buffer.from(ivHex, 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-  let decryptedText = decipher.update(encryptedText, 'hex', 'utf-8');
-  decryptedText += decipher.final('utf-8');
-  return decryptedText;
-}
-
-models.cipher = {
-  encryptData: (text, password) => {
-    try {
-      const { encryptedText, iv } = encryptText(text, password);
-      return { encryptedText, iv }; 
-    } catch (error) {
-      throw new Error("Error encrypting data: " + error.message);
-    }
-  },
-  decryptData: (encryptedText, password, iv) => {
-    try {
-      const decryptedText = decryptText(encryptedText, password, iv);
-      return decryptedText;
-    } catch (error) {
-      throw new Error("Error decrypting data: " + error.message);
-    }
-  }
 };
 
 //return models

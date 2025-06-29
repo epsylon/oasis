@@ -54,10 +54,6 @@ table tr:nth-child(even) {
   background-color: #2A2A2A;
 }
 
-nav ul {
-  background-color: #1F1F1F;
-}
-
 nav ul li a:hover {
   color: #FFDD44;
   text-decoration: underline;
@@ -129,7 +125,6 @@ div .header-content {
 
 footer {
   background-color: #1F1F1F;
-  border-top: 1px solid #333;
   padding: 10px 0;
 }
 

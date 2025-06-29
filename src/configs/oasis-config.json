@@ -9,16 +9,33 @@
     "latestMod": "on",
     "threadsMod": "on",
     "multiverseMod": "on",
-    "inboxMod": "on",
     "invitesMod": "on",
     "walletMod": "on",
     "legacyMod": "on",
-    "cipherMod": "on"
+    "cipherMod": "on",
+    "bookmarksMod": "on",
+    "videosMod": "on",
+    "docsMod": "on",
+    "audiosMod": "on",
+    "tagsMod": "on",
+    "imagesMod": "on",
+    "trendingMod": "on",
+    "eventsMod": "on",
+    "tasksMod": "on",
+    "marketMod": "on",
+    "governanceMod": "on",
+    "tribesMod": "on",
+    "reportsMod": "on",
+    "opinionsMod": "on",
+    "transfersMod": "on",
+    "feedMod": "on",
+    "pixeliaMod": "on",
+    "agendaMod": "on"
   },
   "wallet": {
     "url": "http://localhost:7474",
     "user": "ecoinrpc",
-    "pass": "ecoinrpc",
-    "fee": "0.01"
+    "pass": "",
+    "fee": "1"
   }
 }

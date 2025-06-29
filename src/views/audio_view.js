@@ -1,0 +1,198 @@
+const { form, button, div, h2, p, section, input, label, br, a, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
+const { template, i18n } = require('./main_views');
+const moment = require("../server/node_modules/moment");
+const { config } = require('../server/SSB_server.js');
+
+const userId = config.keys.id
+
+const getFilteredAudios = (filter, audios, userId) => {
+  const now = Date.now();
+  let filtered =
+    filter === 'mine' ? audios.filter(a => a.author === userId) :
+    filter === 'recent' ? audios.filter(a => new Date(a.createdAt).getTime() >= now - 86400000) :
+    filter === 'top' ? [...audios].sort((a, b) => {
+      const sumA = Object.values(a.opinions || {}).reduce((s, n) => s + (n || 0), 0);
+      const sumB = Object.values(b.opinions || {}).reduce((s, n) => s + (n || 0), 0);
+      return sumB - sumA;
+    }) :
+    audios;
+
+  return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+};
+
+const renderAudioActions = (filter, audio) => {
+  return filter === 'mine' ? div({ class: "audio-actions" },
+    form({ method: "GET", action: `/audios/edit/${encodeURIComponent(audio.key)}` },
+      button({ class: "update-btn", type: "submit" }, i18n.audioUpdateButton)
+    ),
+    form({ method: "POST", action: `/audios/delete/${encodeURIComponent(audio.key)}` },
+      button({ class: "delete-btn", type: "submit" }, i18n.audioDeleteButton)
+    )
+  ) : null;
+};
+
+const renderAudioList = (filteredAudios, filter) => {
+  return filteredAudios.length > 0
+    ? filteredAudios.map(audio =>
+        div({ class: "audio-item" },
+          renderAudioActions(filter, audio),
+          form({ method: "GET", action: `/audios/${encodeURIComponent(audio.key)}` },
+            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
+          br,
+          audio.url
+            ? div({ class: "audio-container" },
+                audioHyperaxe({
+                  controls: true,
+                  src: `/blob/${encodeURIComponent(audio.url)}`,
+                  type: audio.mimeType,
+                  preload: 'metadata',
+                  width: '640',
+                  height: '360'
+                })
+              )
+            : p(i18n.audioNoFile),
+          p(`${i18n.audioCreatedAt}: ${moment(audio.createdAt).format('YYYY/MM/DD HH:mm:ss')}`),
+          p(`${i18n.audioAuthor}: `, a({ href: `/author/${encodeURIComponent(audio.author)}` }, audio.author)),
+          audio.title?.trim() ? h2(audio.title) : null,
+          audio.description?.trim() ? p(audio.description) : null,
+          audio.tags?.length
+            ? div(audio.tags.map(tag =>
+                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
+              ))
+            : null,
+          div({ class: "voting-buttons" },
+            ['interesting','necessary','funny','disgusting','sensible',
+             'propaganda','adultOnly','boring','confusing','inspiring','spam']
+              .map(category =>
+                form({ method: "POST", action: `/audios/opinions/${encodeURIComponent(audio.key)}/${category}` },
+                  button({ class: "vote-btn" },
+                    `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${audio.opinions?.[category] || 0}]`
+                  )
+                )
+              )
+          )
+        )
+      )
+    : div(i18n.noAudios);
+};
+
+const renderAudioForm = (filter, audioId, audioToEdit) => {
+  return div({ class: "div-center audio-form" },
+    form({
+      action: filter === 'edit' ? `/audios/update/${encodeURIComponent(audioId)}` : "/audios/create",
+      method: "POST", enctype: "multipart/form-data"
+    },
+      label(i18n.audioFileLabel), br(),
+      input({ type: "file", name: "audio", required: filter !== "edit" }), br(), br(),
+      label(i18n.audioTagsLabel), br(),
+      input({ type: "text", name: "tags", placeholder: i18n.audioTagsPlaceholder, value: audioToEdit?.tags?.join(', ') || '' }), br(), br(),
+      label(i18n.audioTitleLabel), br(),
+      input({ type: "text", name: "title", placeholder: i18n.audioTitlePlaceholder, value: audioToEdit?.title || '' }), br(), br(),
+      label(i18n.audioDescriptionLabel), br(),
+      input({ type: "text", name: "description", placeholder: i18n.audioDescriptionPlaceholder, value: audioToEdit?.description || '' }), br(), br(),
+      button({ type: "submit" }, filter === 'edit' ? i18n.audioUpdateButton : i18n.audioCreateButton)
+    )
+  );
+};
+
+exports.audioView = async (audios, filter, audioId) => {
+  const title = filter === 'mine' ? i18n.audioMineSectionTitle :
+                filter === 'create' ? i18n.audioCreateSectionTitle :
+                filter === 'edit' ? i18n.audioUpdateSectionTitle :
+                filter === 'recent' ? i18n.audioRecentSectionTitle :
+                filter === 'top' ? i18n.audioTopSectionTitle :
+                i18n.audioAllSectionTitle;
+
+  const filteredAudios = getFilteredAudios(filter, audios, userId);
+
+  const audioToEdit = audios.find(a => a.key === audioId);
+
+  return template(
+    title,
+    section(
+      div({ class: "tags-header" },
+        h2(title),
+        p(i18n.audioDescription)
+      ),
+      div({ class: "filters" },
+        form({ method: "GET", action: "/audios" },
+          ["all", "mine", "recent", "top"].map(f =>
+            button({
+              type: "submit", name: "filter", value: f,
+              class: filter === f ? "filter-btn active" : "filter-btn"
+            },
+              i18n[`audioFilter${f.charAt(0).toUpperCase() + f.slice(1)}`]
+            )
+          ),
+          button({ type: "submit", name: "filter", value: "create", class: "create-button" },
+            i18n.audioCreateButton)
+        )
+      )
+    ),
+    section(
+      (filter === 'create' || filter === 'edit')
+        ? renderAudioForm(filter, audioId, audioToEdit)
+        : renderAudioList(filteredAudios, filter)
+    )
+  );
+};
+
+exports.singleAudioView = async (audio, filter) => {
+  const isAuthor = audio.author === userId; 
+  const hasOpinions = Object.keys(audio.opinions || {}).length > 0; 
+
+  return template(
+    i18n.audioTitle,
+    section(
+      div({ class: "filters" },
+        form({ method: "GET", action: "/audios" },
+          button({ type: "submit", name: "filter", value: "all", class: filter === 'all' ? 'filter-btn active' : 'filter-btn' }, i18n.audioFilterAll),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === 'mine' ? 'filter-btn active' : 'filter-btn' }, i18n.audioFilterMine),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === 'recent' ? 'filter-btn active' : 'filter-btn' }, i18n.audioFilterRecent),
+          button({ type: "submit", name: "filter", value: "top", class: filter === 'top' ? 'filter-btn active' : 'filter-btn' }, i18n.audioFilterTop),
+          button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.audioCreateButton)
+        )
+      ),
+      div({ class: "tags-header" },
+        h2(audio.title),
+        p(audio.description),
+        audio.url
+          ? div({ class: "audio-container" },
+              audioHyperaxe({
+                controls: true,
+                src: `/blob/${encodeURIComponent(audio.url)}`,
+                type: audio.mimeType,
+                preload: 'metadata',
+                width: '640',
+                height: '360'
+              })
+            )
+          : p(i18n.audioNoFile),
+        p(`${i18n.audioCreatedAt}: ${moment(audio.createdAt).format('YYYY/MM/DD HH:mm:ss')}`),
+        p(`${i18n.audioAuthor}: `, a({ href: `/author/${encodeURIComponent(audio.author)}` }, audio.author)),
+        audio.tags?.length
+          ? div(audio.tags.map(tag =>
+              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
+            ))
+          : null
+      ),
+      isAuthor ? div({ class: "audio-actions" },
+        !hasOpinions
+          ? form({ method: "GET", action: `/audios/edit/${encodeURIComponent(audio.key)}` },
+              button({ class: "update-btn", type: "submit" }, i18n.audioUpdateButton)
+            )
+          : null,
+        form({ method: "POST", action: `/audios/delete/${encodeURIComponent(audio.key)}` },
+          button({ class: "delete-btn", type: "submit" }, i18n.audioDeleteButton)
+        )
+      ) : null,
+      div({ class: "voting-buttons" },
+        ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
+          form({ method: "POST", action: `/audios/opinions/${encodeURIComponent(audio.key)}/${category}` },
+            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${audio.opinions?.[category] || 0}]`)
+          )
+        )
+      )
+    )
+  );
+};

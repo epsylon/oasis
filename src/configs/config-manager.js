@@ -5,15 +5,44 @@ const configFilePath = path.join(__dirname, 'oasis-config.json');
 
 if (!fs.existsSync(configFilePath)) {
   const defaultConfig = {
-    modules: {
-      invitesMod: 'on',
-      walletMod: 'on',
+    "themes": {
+      "current": "Dark-SNH"
     },
-    wallet: {
-      url: 'http://localhost:7474',
-      user: 'ecoinrpc',
-      pass: 'ecoinrpc',
-      fee: 0.01,
+    "modules": {
+      "popularMod": "on",
+      "topicsMod": "on",
+      "summariesMod": "on",
+      "latestMod": "on",
+      "threadsMod": "on",
+      "multiverseMod": "on",
+      "invitesMod": "on",
+      "walletMod": "on",
+      "legacyMod": "on",
+      "cipherMod": "on",
+      "bookmarksMod": "on",
+      "videosMod": "on",
+      "docsMod": "on",
+      "audiosMod": "on",
+      "tagsMod": "on",
+      "imagesMod": "on",
+      "trendingMod": "on",
+      "eventsMod": "on",
+      "tasksMod": "on",
+      "marketMod": "on",
+      "tribesMod": "on",
+      "governanceMod": "on",
+      "reportsMod": "on",
+      "opinionsMod": "on",
+      "transfersMod": "on",
+      "feedMod": "on",
+      "pixeliaMod": "on",
+      "agendaMod": "on"
+    },
+    "wallet": {
+      "url": "http://localhost:7474",
+      "user": "ecoinrpc",
+      "pass": "",
+      "fee": "1"
     }
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
@@ -32,4 +61,3 @@ module.exports = {
   getConfig,
   saveConfig,
 };
-

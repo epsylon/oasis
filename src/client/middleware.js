@@ -13,29 +13,23 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
   const isValidRequest = (request) => {
     if (validHosts.includes(request.hostname) !== true) {
-      console.log(`Invalid HTTP hostname: ${request.hostname}`);
       return false;
     }
-
     if (request.method !== "GET") {
       if (request.header.referer == null) {
-        console.log("No referer");
         return false;
       }
 
       try {
         const refererUrl = new URL(request.header.referer);
         if (validHosts.includes(refererUrl.hostname) !== true) {
-          console.log(`Invalid referer hostname: ${refererUrl.hostname}`);
           return false;
         }
 
         if (refererUrl.pathname.startsWith("/blob/")) {
-          console.log(`Invalid referer path: ${refererUrl.pathname}`);
           return false;
         }
       } catch (e) {
-        console.log(`Invalid referer URL: ${request.header.referer}`);
         return false;
       }
     }
@@ -55,17 +49,22 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   });
 
   app.use(mount("/assets", assets));
+  
+  // pdf viewer
+  app.use(mount("/js", koaStatic(path.join(__dirname, 'public/js'))));
+  app.use(koaStatic(path.join(__dirname, 'public')));
 
   app.use(async (ctx, next) => {
   
     //console.log("Requesting:", ctx.path); // uncomment to check for HTTP requests
     
     const csp = [
-      "default-src 'none'",
+      "default-src 'self' blob:", 
       "img-src 'self'",
       "form-action 'self'",
       "media-src 'self'",
       "style-src 'self'",
+      "script-src 'self' http://localhost:3000/js",  // pdfviewer
     ].join("; ");
 
     ctx.set("Content-Security-Policy", csp);
@@ -90,6 +89,10 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
     await next();
   });
+  
+  // pdf viewer
+  const pdfjsPath = path.join(__dirname, '../server/node_modules/pdfjs-dist/build/pdf.min.js');
+  app.use(koaStatic(pdfjsPath));
 
   middleware.forEach((m) => app.use(m));
 

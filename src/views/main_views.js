@@ -1,95 +1,64 @@
 "use strict";
 
 const path = require("path");
-const envPaths = require("../server/node_modules/env-paths");
 const fs = require("fs");
-const homedir = require('os').homedir();
-const gossipPath = path.join(homedir, ".ssb/gossip.json");
+
+const envPaths = require("../server/node_modules/env-paths");
 const debug = require("../server/node_modules/debug")("oasis");
 const highlightJs = require("../server/node_modules/highlight.js");
 const prettyMs = require("../server/node_modules/pretty-ms");
+const moment = require('../server/node_modules/moment');
 
-const updater = require("../backend/updater.js");
-async function checkForUpdate() {
-  try {
-    await updater.getRemoteVersion();
-    if (global.ck === "required") {
-      global.updaterequired = form(
-        { action: "/update", method: "post" },
-        button({ type: "submit" }, i18n.updateit)
-      );
-    }
-  } catch (error) {
-    console.error("\noasis@version: error fetching package.json:", error.message, "\n");
-  }
-}
-checkForUpdate();
+const ssbClientGUI = require("../client/gui");
+const config = require("../server/ssb_config");
+const cooler = ssbClientGUI({ offline: config.offline });
 
-const crypto = require('crypto');
+let ssb, userId;
 
-function generateRandomPassword(length = 32) {
-  return crypto.randomBytes(length).toString('hex').slice(0, length); 
-}
+const getUserId = async () => {
+  if (!ssb) ssb = await cooler.open();
+  if (!userId) userId = ssb.id;
+  return userId;
+};
 
-const {
-  a,
-  article,
-  br,
-  body,
-  button,
-  details,
-  div,
-  em,
-  footer,
-  form,
-  h1,
-  h2,
-  head,
-  header,
-  hr,
-  html,
-  img,
-  input,
-  label,
-  li,
-  link,
-  main,
-  meta,
-  nav,
-  option,
-  p,
-  pre,
-  progress,
-  section,
-  select,
-  span,
-  summary,
-  table,
-  tbody,
-  td,
-  textarea,
-  th,
-  thead,
-  title,
-  tr,
-  ul,
-} = require("../server/node_modules/hyperaxe");
+const { a, article, br, body, button, details, div, em, footer, form, h1, h2, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, textarea, title, tr, ul } = require("../server/node_modules/hyperaxe");
 
 const lodash = require("../server/node_modules/lodash");
 const markdown = require("./markdown");
 
+// set language
 const i18nBase = require("../client/assets/translations/i18n");
-
 let selectedLanguage = "en";
-let i18n = i18nBase[selectedLanguage];
-
+let i18n = {};
+Object.assign(i18n, i18nBase[selectedLanguage]);
 exports.setLanguage = (language) => {
   selectedLanguage = language;
-  i18n = Object.assign({}, i18nBase.en, i18nBase[language]);
+  const newLang = i18nBase[selectedLanguage] || i18nBase['en'];
+  Object.keys(i18n).forEach(k => delete i18n[k]);
+  Object.assign(i18n, newLang);
 };
+exports.i18n = i18n;
+exports.selectedLanguage = selectedLanguage;
 
+//markdown
 const markdownUrl = "https://commonmark.org/help/";
-const snhUrl = "https://solarnethub.com/";
+function renderBlobMarkdown(text, mentions = {}) {
+  text = text
+    .replace(/!\[image:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
+      `<img src="/blob/${encodeURIComponent(id)}" alt="image" class="post-image" />`)
+    .replace(/\[audio:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
+      `<audio controls class="post-audio" src="/blob/${encodeURIComponent(id)}"></audio>`)
+    .replace(/\[video:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
+      `<video controls class="post-video" src="/blob/${encodeURIComponent(id)}"></video>`)
+    .replace(/\[pdf:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
+      `<a class="post-pdf" href="/blob/${encodeURIComponent(id)}" target="_blank">PDF</a>`)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, id) =>
+      `<a class="post-link" href="/blob/${encodeURIComponent(id)}">${label}</a>`)
+    .replace(/\[@([^\]]+)\]\(([^)]+)\)/g, (_, name, id) =>
+      `<a class="mention" href="/author/${encodeURIComponent(id)}">@${name}</a>`);
+
+  return text;
+}
 
 const doctypeString = "<!DOCTYPE html>";
 
@@ -101,8 +70,7 @@ const toAttributes = (obj) =>
     
 const nbsp = "\xa0";
 
-const { saveConfig, getConfig } = require('../configs/config-manager.js');
-const configMods = getConfig().modules;
+const { getConfig } = require('../configs/config-manager.js');
 
 // menu INIT
 const navLink = ({ href, emoji, text, current }) =>
@@ -131,9 +99,13 @@ const customCSS = (filename) => {
 
 const renderPopularLink = () => {
   const popularMod = getConfig().modules.popularMod === 'on';
-  return popularMod 
-    ? navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular, class: "popular-link enabled" }) 
-    : ''; 
+  if (popularMod) {
+    return [
+      navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular, class: "popular-link enabled" }),
+      hr,
+    ];
+  }
+  return ''; 
 };
 
 const renderTopicsLink = () => {
@@ -145,9 +117,12 @@ const renderTopicsLink = () => {
 
 const renderSummariesLink = () => {
   const summariesMod = getConfig().modules.summariesMod === 'on';
-  return summariesMod 
-    ? navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries, class: "summaries-link enabled" }) 
-    : ''; 
+  if (summariesMod) {
+    return [
+     navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries, class: "summaries-link enabled" }),
+    ];
+  }
+  return ''; 
 };
 
 const renderLatestLink = () => {
@@ -159,16 +134,12 @@ const renderLatestLink = () => {
 
 const renderThreadsLink = () => {
   const threadsMod = getConfig().modules.threadsMod === 'on';
-  return threadsMod 
-    ? navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads, class: "threads-link enabled" }) 
-    : ''; 
-};
-
-const renderInboxLink = () => {
-  const inboxMod = getConfig().modules.inboxMod === 'on';
-  return inboxMod 
-    ? navLink({ href: "/inbox", emoji: "☂", text: i18n.inbox, class: "inbox-link enabled" }) 
-    : ''; 
+  if (threadsMod) {
+    return [
+      navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads, class: "threads-link enabled" }),
+    ];
+  }
+  return ''; 
 };
 
 const renderInvitesLink = () => {
@@ -176,16 +147,6 @@ const renderInvitesLink = () => {
   return invitesMod 
     ? navLink({ href: "/invites", emoji: "ꔹ", text: i18n.invites, class: "invites-link enabled" }) 
     : ''; 
-};
-
-const renderMultiverseLink = () => {
-  const multiverseMod = getConfig().modules.multiverseMod === 'on';
-  return multiverseMod 
-    ? [
-        hr(),
-        navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.multiverse, class: "multiverse-link enabled" }) 
-      ]
-    : '';
 };
 
 const renderWalletLink = () => {
@@ -218,10 +179,197 @@ const renderCipherLink = () => {
   return ''; 
 };
 
+const renderBookmarksLink = () => {
+  const bookmarksMod = getConfig().modules.bookmarksMod === 'on';
+  if (bookmarksMod) {
+    return [
+      hr(),
+      navLink({ href: "/bookmarks", emoji: "ꔪ", text: i18n.bookmarksLabel, class: "bookmark-link enabled" }),
+    ];
+  }
+  return ''; 
+};
+
+const renderImagesLink = () => {
+  const imagesMod = getConfig().modules.imagesMod === 'on';
+  if (imagesMod) {
+    return [
+      navLink({ href: "/images", emoji: "ꕥ", text: i18n.imagesLabel, class: "images-link enabled" }),
+    ];
+  }
+  return ''; 
+};
+
+const renderVideosLink = () => {
+  const videosMod = getConfig().modules.videosMod === 'on';
+  if (videosMod) {
+    return [
+      navLink({ href: "/videos", emoji: "ꗟ", text: i18n.videosLabel, class: "videos-link enabled" }),
+    ];
+  }
+  return ''; 
+};
+
+const renderAudiosLink = () => {
+  const audiosMod = getConfig().modules.audiosMod === 'on';
+  if (audiosMod) {
+    return [
+      navLink({ href: "/audios", emoji: "ꔿ", text: i18n.audiosLabel, class: "audios-link enabled" }),
+    ];
+  }
+  return ''; 
+};
+
+const renderDocsLink = () => {
+  const docsMod = getConfig().modules.docsMod === 'on';
+  if (docsMod) {
+    return [
+      navLink({ href: "/documents", emoji: "ꕨ", text: i18n.docsLabel, class: "docs-link enabled" }),
+    ];
+  }
+  return ''; 
+};
+
+const renderTagsLink = () => {
+  const tagsMod = getConfig().modules.tagsMod === 'on';
+  return tagsMod 
+    ? [
+        navLink({ href: "/tags", emoji: "ꖶ", text: i18n.tagsLabel, class: "tags-link enabled" }) 
+      ]
+    : '';
+};
+
+const renderMultiverseLink = () => {
+  const multiverseMod = getConfig().modules.multiverseMod === 'on';
+  return multiverseMod 
+    ? [
+        hr,
+        navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.multiverse, class: "multiverse-link enabled" }) 
+      ]
+    : '';
+};
+
+const renderMarketLink = () => {
+  const marketMod = getConfig().modules.marketMod === 'on';
+  return marketMod 
+    ? [
+        div(
+          { class: "top-bar-mid" },
+          nav(
+            ul(
+              navLink({ href: "/market", emoji: "ꕻ", text: i18n.marketTitle })
+            )
+          )
+        )
+      ]
+    : '';
+};
+
+const renderTribesLink = () => {
+  const tribesMod = getConfig().modules.tribesMod === 'on';
+  return tribesMod 
+    ? [
+        navLink({ href: "/tribes", emoji: "ꖥ", text: i18n.tribesTitle, class: "tribes-link enabled" }),
+        hr(),
+      ]
+    : '';
+};
+
+const renderGovernanceLink = () => {
+  const governanceMod = getConfig().modules.governanceMod === 'on';
+  return governanceMod 
+    ? [
+       navLink({ href: "/votes", emoji: "ꔰ", text: i18n.governanceTitle, class: "votes-link enabled" }),
+      ]
+    : '';
+};
+
+const renderTrendingLink = () => {
+  const trendingMod = getConfig().modules.trendingMod === 'on';
+  return trendingMod 
+    ? [
+        navLink({ href: "/trending", emoji: "ꗝ", text: i18n.trendingLabel, class: "trending-link enabled" }),
+      ]
+    : '';
+};
+
+const renderReportsLink = () => {
+  const reportsMod = getConfig().modules.reportsMod === 'on';
+  return reportsMod 
+    ? [
+       navLink({ href: "/reports", emoji: "ꕥ", text: i18n.reportsTitle, class: "reports-link enabled" }),
+      ]
+    : '';
+};
+
+const renderOpinionsLink = () => {
+  const opinionsMod = getConfig().modules.opinionsMod === 'on';
+  return opinionsMod 
+    ? [
+      navLink({ href: "/opinions", emoji: "ꔍ", text: i18n.opinionsTitle, class: "opinions-link enabled" }),
+      ]
+    : '';
+};
+
+const renderTransfersLink = () => {
+  const transfersMod = getConfig().modules.transfersMod === 'on';
+  return transfersMod 
+    ? [
+      navLink({ href: "/transfers", emoji: "ꘉ", text: i18n.transfersTitle, class: "transfers-link enabled" }),
+      hr(),
+      ]
+    : '';
+};
+
+const renderFeedLink = () => {
+  const feedMod = getConfig().modules.feedMod === 'on';
+  return feedMod 
+    ? [
+      navLink({ href: "/feed", emoji: "ꕿ", text: i18n.feedTitle, class: "feed-link enabled" }),
+      ]
+    : '';
+};
+
+const renderPixeliaLink = () => {
+  const pixeliaMod = getConfig().modules.pixeliaMod === 'on';
+  return pixeliaMod 
+    ? [
+     navLink({ href: "/pixelia", emoji: "ꔘ", text: i18n.pixeliaTitle, class: "pixelia-link enabled" }),
+      ]
+    : '';
+};
+
+const renderAgendaLink = () => {
+  const agendaMod = getConfig().modules.agendaMod === 'on';
+  return agendaMod 
+    ? [
+      navLink({ href: "/agenda", emoji: "ꗤ", text: i18n.agendaTitle, class: "agenda-link enabled" }),
+      ]
+    : '';
+};
+
+const renderEventsLink = () => {
+  const eventsMod = getConfig().modules.eventsMod === 'on';
+  return eventsMod 
+    ? [
+        navLink({ href: "/events", emoji: "ꕆ", text: i18n.eventsLabel, class: "events-link enabled" }),
+      ]
+    : '';
+};
+
+const renderTasksLink = () => {
+  const tasksMod = getConfig().modules.tasksMod === 'on';
+  return tasksMod 
+    ? [
+        navLink({ href: "/tasks", emoji: "ꖧ", text: i18n.tasksTitle, class: "tasks-link enabled" }),     
+      ]
+    : '';
+};
+
 const template = (titlePrefix, ...elements) => {
   const currentConfig = getConfig();
-    const theme = currentConfig.themes.current || "Dark-SNH";
-    const themeLink = link({
+  const theme = currentConfig.themes.current || "Dark-SNH";
+  const themeLink = link({
     rel: "stylesheet",
     href: `/assets/themes/${theme}.css`
   });
@@ -240,46 +388,36 @@ const template = (titlePrefix, ...elements) => {
       div(
         { class: "header" },
         div(
-          { class: "left-bar" },            
+          { class: "top-bar-left" },
           a({ class: "logo-icon", href: "https://solarnethub.com" },
-            img({ class: "logo-icon", src: "/assets/images/snh-oasis.jpg" })
+            img({ class: "logo-icon", src: "/assets/images/snh-oasis.jpg", alt: "Oasis Logo" })
           ),
           nav(
             ul(
               navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
-              renderInboxLink(),
+              navLink({ href: "/cv", emoji: "ꕛ", text: i18n.cvTitle }),
+              renderLegacyLink(),            
               renderWalletLink(),
-              hr,
-              renderCipherLink(),
-              renderLegacyLink(),
-              hr,
               navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
               renderInvitesLink(),
-              hr,
               navLink({ href: "/modules", emoji: "ꗣ", text: i18n.modules }),
               navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
             )
           )
         ),
+        renderMarketLink(),
         div(
-          { class: "right-bar" },
+          { class: "top-bar-right" },
           nav(
             ul(
+             renderCipherLink(),
+             navLink({ href: "/pm", emoji: "ꕕ", text: i18n.privateMessage }),
              navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
-             navLink({ href: "/search", emoji: "ꔅ", text: i18n.search }),
-             form(
-            { action: "/search", method: "get" },
-            input({
-              name: "query",
-              required: false,
-              type: "search",
-              placeholder: i18n.searchPlaceholder,
-              class: "search-input",
-              minlength: 3
-            })
-          )
-         )
-        ),
+             //navLink({ href: "/ai", emoji: "ꘜ", text: i18n.ai }),
+             renderTagsLink(),
+             navLink({ href: "/search", emoji: "ꔅ", text: i18n.search })
+             )
+          ),
         )
       ),
       div(
@@ -289,23 +427,52 @@ const template = (titlePrefix, ...elements) => {
           nav(
             ul(
               navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
+              navLink({ href: "/inbox", emoji: "☂", text: i18n.inbox }),
+              renderAgendaLink(),
+              navLink({ href: "/stats", emoji: "ꕷ", text: i18n.statistics }),
               hr,
-              renderPopularLink(),
-              renderTopicsLink(),
-              renderSummariesLink(),
               renderLatestLink(),
               renderThreadsLink(),
+              renderTopicsLink(),
+              renderSummariesLink(),
+              renderPopularLink(),
+              navLink({ href: "/inhabitants", emoji: "ꖘ", text: i18n.inhabitantsLabel }),
+              renderTribesLink(),
+              renderGovernanceLink(),
+              renderEventsLink(),
+              renderTasksLink(),
+              renderReportsLink(),
               renderMultiverseLink()
             )
           )
         ),
-        main({ id: "content", class: "main-column" }, elements)
+        main({ id: "content", class: "main-column" }, elements),
+        div(
+          { class: "sidebar-right" },
+          nav(
+            ul(
+              navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
+              renderTrendingLink(),
+              renderOpinionsLink(),
+              renderTransfersLink(),
+              renderFeedLink(),
+              renderPixeliaLink(),
+              renderBookmarksLink(),
+              renderImagesLink(),
+              renderVideosLink(),
+              renderAudiosLink(),
+              renderDocsLink(),
+            )
+          )
+        ),
       )
     )
   );
   return doctypeString + nodes.outerHTML;
 };
 // menu END
+
+exports.template = template;
 
 const thread = (messages) => {
   let lookingForTarget = true;
@@ -319,7 +486,6 @@ const thread = (messages) => {
       const isThreadTarget = Boolean(
         lodash.get(msg, "value.meta.thread.target", false)
       );
-
       if (isThreadTarget) {
         lookingForTarget = false;
       }
@@ -334,7 +500,6 @@ const thread = (messages) => {
   const msgList = [];
   for (let i = 0; i < messages.length; i++) {
     const j = i + 1;
-
     const currentMsg = messages[i];
     const nextMsg = messages[j];
 
@@ -343,15 +508,13 @@ const thread = (messages) => {
       return lodash.get(msg, "value.meta.thread.depth", 0);
     };
 
-    msgList.push(post({ msg: currentMsg }).outerHTML);
+    msgList.push(post({ msg: currentMsg }));
 
     if (depth(currentMsg) < depth(nextMsg)) {
       const isAncestor = Boolean(
         lodash.get(currentMsg, "value.meta.thread.ancestorOfTarget", false)
       );
       const isBlocked = Boolean(nextMsg.value.meta.blocking);
-      msgList.push(`<details ${isAncestor ? "open" : ""}>`);
-
       const nextAuthor = lodash.get(nextMsg, "value.meta.author.name");
       const nextSnippet = postSnippet(
         lodash.has(nextMsg, "value.content.contentWarning")
@@ -359,31 +522,21 @@ const thread = (messages) => {
           : lodash.get(nextMsg, "value.content.text")
       );
       msgList.push(
-        summary(
-          isBlocked
-            ? i18n.relationshipBlockingPost
-            : `${nextAuthor}: ${nextSnippet}`
-        ).outerHTML
+        details(
+          isAncestor ? { open: true } : {},
+          summary(
+            isBlocked
+              ? i18n.relationshipBlockingPost
+              : `${nextAuthor}: ${nextSnippet}`
+          )
+        )
       );
     } else if (depth(currentMsg) > depth(nextMsg)) {
-      // getting more shallow
       const diffDepth = depth(currentMsg) - depth(nextMsg);
-
-      const shallowList = [];
-      for (let d = 0; d < diffDepth; d++) {
-        // on the way up it might go several depths at once
-        shallowList.push("</details></div>");
-      }
-
-      msgList.push(shallowList);
     }
   }
 
-  const htmlStrings = lodash.flatten(msgList);
-  return div(
-    {},
-    { class: "thread-container", innerHTML: htmlStrings.join("") }
-  );
+  return div({ class: "thread-container" }, ...msgList);
 };
 
 const postSnippet = (text) => {
@@ -449,11 +602,11 @@ const postAside = ({ key, value }) => {
   return fragments;
 };
 
-const post = ({ msg, aside = false }) => {
+const post = ({ msg, aside = false, preview = false }) => {
   const encoded = {
     key: encodeURIComponent(msg.key),
-    author: encodeURIComponent(msg.value.author),
-    parent: encodeURIComponent(msg.value.content.root),
+    author: encodeURIComponent(msg.value?.author),
+    parent: encodeURIComponent(msg.value?.content?.root),
   };
 
   const url = {
@@ -461,42 +614,64 @@ const post = ({ msg, aside = false }) => {
     likeForm: `/like/${encoded.key}`,
     link: `/thread/${encoded.key}#${encoded.key}`,
     parent: `/thread/${encoded.parent}#${encoded.parent}`,
-    avatar: msg.value.meta.author.avatar.url,
+    avatar: msg.value?.meta?.author?.avatar?.url || '/assets/images/default-avatar.png',
     json: `/json/${encoded.key}`,
     subtopic: `/subtopic/${encoded.key}`,
     comment: `/comment/${encoded.key}`,
   };
 
-  const isPrivate = Boolean(msg.value.meta.private);
-  const isBlocked = Boolean(msg.value.meta.blocking);
-  const isRoot = msg.value.content.root == null;
-  const isFork = msg.value.meta.postType === "subtopic";
-  const hasContentWarning =
-    typeof msg.value.content.contentWarning === "string";
-  const isThreadTarget = Boolean(
-    lodash.get(msg, "value.meta.thread.target", false)
-  );
+  const isPrivate = Boolean(msg.value?.meta?.private); 
+  const isBlocked = Boolean(msg.value?.meta?.blocking);
+  const isRoot = msg.value?.content?.root == null;
+  const isFork = msg.value?.meta?.postType === "subtopic";
+  const hasContentWarning = typeof msg.value?.content?.contentWarning === "string";
+  const isThreadTarget = Boolean(lodash.get(msg, "value.meta.thread.target", false));
 
-  const { name } = msg.value.meta.author;
+  const { name } = msg.value?.meta?.author || { name: "Anonymous" };
 
-  const ts_received = msg.value.meta.timestamp.received;
-  const timeAgo = ts_received.since.replace("~");
-  const timeAbsolute = ts_received.iso8601.split(".")[0].replace("T");
+  const markdownContent = msg.value?.content?.text;
+  const emptyContent = "<p>undefined</p>\n";
+  const articleElement =
+    markdownContent === emptyContent
+      ? article(
+          { class: "content" },
+          pre({
+            innerHTML: highlightJs.highlight(
+              JSON.stringify(msg, null, 2),
+              { language: "json", ignoreIllegals: true }
+            ).value,
+          })
+        )
+      : article({ class: "content", innerHTML: markdownContent });
 
-  const markdownContent = markdown(
-    msg.value.content.text,
-    msg.value.content.mentions
-  );
+  if (preview) {
+    return section(
+      { id: msg.key, class: "post-preview" },
+      hasContentWarning
+        ? details(summary(msg.value?.content?.contentWarning), articleElement)
+        : articleElement
+    );
+  }
 
-  const likeButton = msg.value.meta.voted
+  const ts_received = msg.value?.meta?.timestamp?.received;
+
+  if (!ts_received || !ts_received.iso8601 || !moment(ts_received.iso8601, moment.ISO_8601, true).isValid()) {
+    return null;
+  }
+
+  const validTimestamp = moment(ts_received.iso8601, moment.ISO_8601);
+  const timeAgo = validTimestamp.fromNow();
+  const timeAbsolute = validTimestamp.toISOString().split(".")[0].replace("T", " ");
+
+  const likeButton = msg.value?.meta?.voted
     ? { value: 0, class: "liked" }
     : { value: 1, class: null };
 
-  const likeCount = msg.value.meta.votes.length;
+  const likeCount = msg.value?.meta?.votes?.length || 0;
   const maxLikedNameLength = 16;
   const maxLikedNames = 16;
 
-  const likedByNames = msg.value.meta.votes
+  const likedByNames = msg.value?.meta?.votes
     .slice(0, maxLikedNames)
     .map((person) => person.name)
     .map((name) => name.slice(0, maxLikedNameLength))
@@ -513,7 +688,7 @@ const post = ({ msg, aside = false }) => {
   const recps = [];
 
   const addRecps = (recpsInfo) => {
-    recpsInfo.forEach(function (recp) {
+    recpsInfo.forEach((recp) => {
       recps.push(
         a(
           { href: `/author/${encodeURIComponent(recp.feedId)}` },
@@ -525,33 +700,12 @@ const post = ({ msg, aside = false }) => {
 
   if (isPrivate) {
     messageClasses.push("private");
-    addRecps(msg.value.meta.recpsInfo);
+    addRecps(msg.value?.meta?.recpsInfo || []);
   }
 
   if (isThreadTarget) {
     messageClasses.push("thread-target");
   }
-
-  const postOptions = {
-    post: null,
-    comment: i18n.commentDescription({ parentUrl: url.parent }),
-    subtopic: i18n.subtopicDescription({ parentUrl: url.parent }),
-    mystery: i18n.mysteryDescription,
-  };
-
-  const emptyContent = "<p>undefined</p>\n";
-  const articleElement =
-    markdownContent === emptyContent
-      ? article(
-          { class: "content" },
-          pre({
-            innerHTML: highlightJs.highlight(
-              JSON.stringify(msg, null, 2),
-              {language: "json", ignoreIllegals: true}
-            ).value,
-          })
-        )
-      : article({ class: "content", innerHTML: markdownContent });
 
   if (isBlocked) {
     messageClasses.push("blocked");
@@ -564,9 +718,18 @@ const post = ({ msg, aside = false }) => {
     );
   }
 
-  const articleContent = hasContentWarning
-    ? details(summary(msg.value.content.contentWarning), articleElement)
-    : articleElement;
+  const postOptions = {
+    post: null,
+    comment: i18n.commentDescription({ parentUrl: url.parent }),
+    subtopic: i18n.subtopicDescription({ parentUrl: url.parent }),
+    mystery: i18n.mysteryDescription,
+  };
+
+  const articleContent = article(
+    { class: "content" },
+    hasContentWarning ? div({ class: "post-subject" }, msg.value?.content?.contentWarning) : null,
+    articleElement
+  );
 
   const fragment = section(
     {
@@ -576,24 +739,16 @@ const post = ({ msg, aside = false }) => {
     header(
       div(
         { class: "header-content" },
-        span(
-          { class: "author" },
-          a({ href: url.author },
-            img({ class: "avatar-profile", src: url.avatar, alt: "" }),
-            name
-          ),
-        span({ class: "author-action" }, postOptions[msg.value.meta.postType]),
-        label(i18n.sendTime),
-          { class: "time", title: timeAbsolute },
-          isPrivate ? "🔒" : null,
-          isPrivate ? recps : null,
-          a({ href: url.link }, timeAgo)
+        a(
+          { href: url.author },
+          img({ class: "avatar-profile", src: url.avatar, alt: "" })
         ),
-        label(i18n.timeAgo)
+        span({ class: "created-at" }, `${i18n.createdBy} `, a({ href: url.author }, "@", name), ` | ${timeAbsolute} | ${i18n.sendTime} `, a({ href: url.link }, timeAgo), ` ${i18n.timeAgo}`),
+        isPrivate ? "🔒" : null,
+        isPrivate ? recps : null
       )
     ),
     articleContent,
-    br,
     footer(
       div(
         form(
@@ -612,7 +767,7 @@ const post = ({ msg, aside = false }) => {
         a({ href: url.comment }, i18n.comment),
         isPrivate || isRoot || isFork
           ? null
-          : a({ href: url.subtopic }, nbsp, i18n.subtopic),
+          : a({ href: url.subtopic }, nbsp, i18n.subtopic)
       ),
       br()
     )
@@ -641,11 +796,17 @@ exports.editProfileView = ({ name, description }) =>
         },
         label(
           i18n.profileImage,
+          br,
           input({ type: "file", name: "image", accept: "image/*" })
         ),
-        label(i18n.profileName, input({ name: "name", value: name })),
+        br,br,
+        label(i18n.profileName, 
+        br,
+        input({ name: "name", value: name })),
+        br,br,
         label(
           i18n.profileDescription,
+          br,
           textarea(
             {
               autofocus: true,
@@ -654,6 +815,7 @@ exports.editProfileView = ({ name, description }) =>
             description
           )
         ),
+        br,
         button(
           {
             type: "submit",
@@ -675,7 +837,7 @@ exports.authorView = ({
   relationship,
 }) => {
   const mention = `[@${name}](${feedId})`;
-  const markdownMention = highlightJs.highlight(mention, {language: "markdown", ignoreIllegals: true}).value;
+  const markdownMention = highlightJs.highlight(mention, { language: "markdown", ignoreIllegals: true }).value;
 
   const contactForms = [];
 
@@ -707,59 +869,40 @@ exports.authorView = ({
   }
 
   const relationshipText = (() => {
-    if (relationship.me === true) {
-      return i18n.relationshipYou;
-    } else if (
-      relationship.following === true &&
-      relationship.blocking === false
-    ) {
-      return i18n.relationshipFollowing;
-    } else if (
-      relationship.following === false &&
-      relationship.blocking === true
-    ) {
-      return i18n.relationshipBlocking;
-    } else if (
-      relationship.following === false &&
-      relationship.blocking === false
-    ) {
-      return i18n.relationshipNone;
-    } else if (
-      relationship.following === true &&
-      relationship.blocking === true
-    ) {
-      return i18n.relationshipConflict;
-    } else {
-      throw new Error(`Unknown relationship ${JSON.stringify(relationship)}`);
-    }
+    if (relationship.me === true) return i18n.relationshipYou;
+    if (relationship.following === true && relationship.blocking === false) return i18n.relationshipFollowing;
+    if (relationship.following === false && relationship.blocking === true) return i18n.relationshipBlocking;
+    if (relationship.following === false && relationship.blocking === false) return i18n.relationshipNone;
+    if (relationship.following === true && relationship.blocking === true) return i18n.relationshipConflict;
+    throw new Error(`Unknown relationship ${JSON.stringify(relationship)}`);
   })();
 
-const prefix = section(
-  { class: "message" },
-  div(
-    { class: "profile" },
-    div({ class: "avatar-container" },
-      img({ class: "avatar", src: avatarUrl }),
-      h1({ class: "name" }, name)
-    ),
-    pre({
-      class: "md-mention",
-      innerHTML: markdownMention,
-    })
-  ),
-  description !== "" ? article({ innerHTML: markdown(description) }) : null,
-  footer(
-  div(
+  const prefix = section(
+    { class: "message" },
+    div(
       { class: "profile" },
-    ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
-    span(nbsp, relationshipText),
-    relationship.me
-      ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
-      : span(i18n.relationshipNotFollowing),
-  a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes)
-  )
-  )
-);
+      div({ class: "avatar-container" },
+        img({ class: "avatar", src: avatarUrl }),
+        h1({ class: "name" }, name)
+      ),
+      pre({
+        class: "md-mention",
+        innerHTML: markdownMention,
+      })
+    ),
+    description !== "" ? article({ innerHTML: markdown(description) }) : null,
+    footer(
+      div(
+        { class: "profile" },
+        ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
+        span(nbsp, relationshipText),
+        relationship.me
+          ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
+          : span(i18n.relationshipNotFollowing),
+        a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes)
+      )
+    )
+  );
 
   const linkUrl = relationship.me
     ? "/profile/"
@@ -779,31 +922,49 @@ const prefix = section(
         )
       );
     }
-  } //else {
-    //const highestSeqNum = messages[0].value.sequence;
-    //const lowestSeqNum = messages[messages.length - 1].value.sequence;
-    //let newerPostsLink;
-    //if (lastPost !== undefined && highestSeqNum < lastPost.value.sequence)
-    //  newerPostsLink = a(
-    //    { href: `${linkUrl}?gt=${highestSeqNum}` },
-    //    i18n.newerPosts
-    //  );
-    //else newerPostsLink = span(i18n.newerPosts, { title: i18n.noNewerPosts });
-   // let olderPostsLink;
-   // if (lowestSeqNum > firstPost.value.sequence)
-   //   olderPostsLink = a(
-   //     { href: `${linkUrl}?lt=${lowestSeqNum}` },
-   //     i18n.olderPosts
-    //  );
-   // else
-  //    olderPostsLink = span(i18n.olderPosts, { title: i18n.beginningOfFeed });
-  //  const pagination = section(
-  //    { class: "message" },
-  //    footer(div(newerPostsLink, olderPostsLink), br())
-  //  );
-  //  items.unshift(pagination);
-  //  items.push(pagination);
-  //}
+  } else {
+    const highestSeqNum = messages[0].value.sequence;
+    const lowestSeqNum = messages[messages.length - 1].value.sequence;
+
+    const newerPostsLink = a(
+      {
+        href:
+          lastPost !== undefined && highestSeqNum < lastPost.value.sequence
+            ? `${linkUrl}?gt=${highestSeqNum}`
+            : "#",
+        class:
+          lastPost !== undefined && highestSeqNum < lastPost.value.sequence
+            ? "btn"
+            : "btn disabled",
+        "aria-disabled":
+          lastPost === undefined || highestSeqNum >= lastPost.value.sequence
+      },
+      i18n.newerPosts
+    );
+
+    const olderPostsLink = a(
+      {
+        href:
+          lowestSeqNum > firstPost.value.sequence
+            ? `${linkUrl}?lt=${lowestSeqNum}`
+            : "#",
+        class:
+          lowestSeqNum > firstPost.value.sequence
+            ? "btn"
+            : "btn disabled",
+        "aria-disabled": !(lowestSeqNum > firstPost.value.sequence)
+      },
+      i18n.olderPosts
+    );
+
+    const pagination = section(
+      { class: "message" },
+      footer(div(newerPostsLink, olderPostsLink), br())
+    );
+
+    items.unshift(pagination);
+    items.push(pagination);
+  }
 
   return template(i18n.profile, prefix, items);
 };
@@ -815,8 +976,11 @@ exports.previewCommentView = async ({
   parentMessage,
   contentWarning,
 }) => {
-  const publishAction = `/comment/${encodeURIComponent(messages[0].key)}`;
+  if (!parentMessage || !parentMessage.value) {
+    throw new Error("Missing parentMessage or value");
+  }
 
+  const publishAction = `/comment/${encodeURIComponent(messages[0].key)}`;
   const preview = generatePreview({
     previewData,
     contentWarning,
@@ -824,7 +988,7 @@ exports.previewCommentView = async ({
   });
   return exports.commentView(
     { messages, myFeedId, parentMessage },
-    preview,
+    preview, 
     previewData.text,
     contentWarning
   );
@@ -837,41 +1001,44 @@ exports.commentView = async (
   contentWarning
 ) => {
   let markdownMention;
-
+  const authorName = parentMessage?.value?.meta?.author?.name || "Anonymous";
+  
   const messageElements = await Promise.all(
-    messages.reverse().map((message) => {
-      debug("%O", message);
-      const authorName = message.value.meta.author.name;
-      const authorFeedId = message.value.author;
+    messages.reverse().map(async (message) => {  
+      const isRootMessage = message.key === parentMessage.key;
+      const messageAuthorName = message.value?.meta?.author?.name || "Anonymous";
+      const authorFeedId = myFeedId;
+      
       if (authorFeedId !== myFeedId) {
         if (message.key === parentMessage.key) {
-          const x = `[@${authorName}](${authorFeedId})\n\n`;
+          const x = `[@${messageAuthorName}](${authorFeedId})\n\n`;
           markdownMention = x;
         }
       }
-      return post({ msg: message });
+      const timestamp = message?.value?.meta?.timestamp?.received;
+      const validTimestamp = moment(timestamp, moment.ISO_8601, true); 
+      const timeAgo = validTimestamp.isValid() 
+        ? validTimestamp.fromNow() 
+        : "Invalid time"; 
+      const messageId = message.key.endsWith('.sha256') ? message.key.slice(0, -7) : message.key;
+      const result = await post({ msg: { ...message, key: messageId } });
+      return result; 
     })
   );
 
   const action = `/comment/preview/${encodeURIComponent(messages[0].key)}`;
   const method = "post";
-
-  const isPrivate = parentMessage.value.meta.private;
-  const authorName = parentMessage.value.meta.author.name;
-
+  const isPrivate = parentMessage?.value?.meta?.private;
   const publicOrPrivate = isPrivate ? i18n.commentPrivate : i18n.commentPublic;
   const maybeSubtopicText = isPrivate ? [null] : i18n.commentWarning;
 
   return template(
     i18n.commentTitle({ authorName }),
     div({ class: "thread-container" }, messageElements),
-    preview !== undefined ? preview : "",
-    p(
-      ...i18n.commentLabel({ publicOrPrivate, markdownUrl }),
-      ...maybeSubtopicText
-    ),
     form(
       { action, method, enctype: "multipart/form-data" },
+      i18n.blogSubject,
+      br,
       label(
         i18n.contentWarningLabel,
         input({
@@ -882,35 +1049,178 @@ exports.commentView = async (
           placeholder: i18n.contentWarningPlaceholder,
         })
       ),
+      br,
+      label({ for: "text" }, i18n.blogMessage),
+      br,
       textarea(
         {
           autofocus: true,
           required: true,
           name: "text",
+          rows: "6",
+          cols: "50",
+          placeholder: i18n.publishWarningPlaceholder,
         },
         text ? text : isPrivate ? null : markdownMention
       ),
-      button({ type: "submit" }, i18n.preview),
-      label({ class: "file-button", for: "blob" }, i18n.attachFiles),
-      input({ type: "file", id: "blob", name: "blob" })
+      br,
+      label(
+        { for: "blob" },
+        i18n.blogImage || "Upload Image (jpeg, jpg, png, gif) (max-size: 500px x 400px)"
+      ),
+      input({ type: "file", id: "blob", name: "blob" }),
+      br,
+      br,
+      button({ type: "submit" }, i18n.blogPublish)
+    ),
+    preview ? div({ class: "comment-preview" }, preview) : ""
+  );
+};
+
+const renderMessage = (msg) => {
+  const content = lodash.get(msg, "value.content", {});
+  const author = msg.value.author || "Anonymous";
+  const createdAt = new Date(msg.value.timestamp).toLocaleString();
+  const mentionsText = content.text || '';
+
+  return div({ class: "mention-item" }, [
+    div({ class: "mention-content", innerHTML: mentionsText || '[No content]' }),
+    p(`By: `, a({ href: `/author/${encodeURIComponent(author)}` }, author)),
+    p(`${i18n.createdAtLabel || i18n.mentionsCreatedAt}: ${createdAt}`)
+  ]);
+};
+
+exports.mentionsView = ({ messages, myFeedId }) => {
+  const title = i18n.mentions;
+  const description = i18n.mentionsDescription;
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return template(
+      title,
+      section(
+        div({ class: "tags-header" },
+          h2(title),
+          p(description)
+        )
+      ),
+      section(
+        div({ class: "mentions-list" },
+          p({ class: "empty" }, i18n.noMentions)
+        )
+      )
+    );
+  }
+  const filteredMessages = messages.filter(msg => {
+    const mentions = lodash.get(msg, "value.content.mentions", {});
+    return Object.keys(mentions).length > 0;
+  });
+  if (filteredMessages.length === 0) {
+    return template(
+      title,
+      section(
+        div({ class: "tags-header" },
+          h2(title),
+          p(description)
+        )
+      ),
+      section(
+        div({ class: "mentions-list" },
+          p({ class: "empty" }, i18n.noMentions)
+        )
+      )
+    );
+  }
+  return template(
+    title,
+    section(
+      div({ class: "tags-header" },
+        h2(title),
+        p(description)
+      )
+    ),
+    section(
+      div({ class: "mentions-list" },
+        filteredMessages.map(renderMessage) 
+      )
     )
   );
 };
 
-exports.mentionsView = ({ messages }) => {
-  return messageListView({
-    messages,
-    viewTitle: i18n.mentions,
-    viewDescription: i18n.mentionsDescription,
-  });
-};
+exports.privateView = async (input, filter) => {
+  const messages = Array.isArray(input) ? input : input.messages;
+  const userId = await getUserId();
+  const counts = {
+    inbox: messages.filter(m => m.value.content.to?.includes(userId)).length,
+    sent: messages.filter(m => m.value.content.from === userId).length
+  };
 
-exports.privateView = ({ messages }) => {
-  return messageListView({
-    messages,
-    viewTitle: i18n.private,
-    viewDescription: i18n.privateDescription,
-  });
+  const filtered =
+    filter === 'sent' ? messages.filter(m => m.value.content.from === userId) :
+    filter === 'inbox' ? messages.filter(m => m.value.content.to?.includes(userId)) :
+    messages;
+
+  return template(
+    i18n.private,
+    section(
+      div({ class: 'tags-header' },
+        h2(i18n.private),
+        p(i18n.privateDescription)
+      ),
+	div({ class: 'filters' },
+	  form({ method: 'GET', action: '/inbox' }, [
+	    button({
+	      type: 'submit',
+	      name: 'filter',
+	      value: 'inbox',
+	      class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
+	    }, i18n.privateInbox),
+	    button({
+	      type: 'submit',
+	      name: 'filter',
+	      value: 'sent',
+	      class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
+	    }, i18n.privateSent),
+	    button({
+	      type: 'submit',
+	      name: 'filter',
+	      value: 'create',
+	      class: 'create-button',
+	      formaction: '/pm',
+	      formmethod: 'GET'
+	    }, i18n.pmCreateButton)
+	  ])
+	),
+      div({ class: 'message-list' },
+        filtered.length
+          ? filtered.map(msg => {
+              const content = msg?.value?.content;
+              const author = msg?.value?.author;
+              if (!content || !author) {
+                return div({ class: 'malformed-message' }, 'Invalid message');
+              }
+
+              const subject = content.subject || '(no subject)';
+              const text = content.text || '';
+              const sentAt = new Date(content.sentAt || msg.timestamp).toLocaleString();
+              const from = content.from;
+              const toLinks = (content.to || []).map(addr =>
+                a({ href: `/author/${encodeURIComponent(addr)}` }, addr)
+              );
+
+              return div({ class: 'message-item' },
+                h2(subject),
+                p(`${i18n.privateFrom}: `, a({ href: `/author/${encodeURIComponent(from)}` }, from)),
+                p(`${i18n.privateTo}: [ `, ...toLinks.flatMap((link, i, arr) => i < arr.length - 1 ? [link, ', '] : [link]), ' ]'),
+                p(`${i18n.privateDate}: ${sentAt}`),
+                div({ class: 'message-text' }, text),
+                form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(msg.key)}`, class: 'delete-message-form' },
+                  button({ type: 'submit', class: 'delete-btn' }, i18n.privateDelete)
+                )
+              );
+            })
+          : p({ class: 'empty' }, i18n.noPrivateMessages)
+      )
+    )
+  );
 };
 
 exports.publishCustomView = async () => {
@@ -920,8 +1230,10 @@ exports.publishCustomView = async () => {
   return template(
     i18n.publishCustom,
     section(
-      h1(i18n.publishCustom),
-      p(i18n.publishCustomDescription),
+      div({ class: "tags-header" },
+        h2(i18n.publishCustom),
+        p(i18n.publishCustomDescription)
+      ),
       form(
         { action, method },
         textarea(
@@ -929,21 +1241,24 @@ exports.publishCustomView = async () => {
             autofocus: true,
             required: true,
             name: "text",
+            rows: 10,
+            style: "width: 100%;"
           },
           "{\n",
-          '  "type": "test",\n',
+          '  "type": "feed",\n',
           '  "hello": "world"\n',
           "}"
         ),
-        button(
-          {
-            type: "submit",
-          },
-          i18n.submit
-        )
+        br,
+        br,
+        button({ type: "submit" }, i18n.submit)
       )
     ),
-    p(i18n.publishBasicInfo({ href: "/publish" }))
+    section(
+      div({ class: "tags-header" },
+        p(i18n.publishBasicInfo({ href: "/publish" }))
+      )
+    )
   );
 };
 
@@ -964,146 +1279,156 @@ exports.publishView = (preview, text, contentWarning) => {
   return template(
     i18n.publish,
     section(
-      h1(i18n.publish),
-      form(
-        {
-          action: "/publish/preview",
-          method: "post",
-          enctype: "multipart/form-data",
-        },
-        p(
-          i18n.publishLabel({ markdownUrl, linkTarget: "_blank" }),
-        label(
-          i18n.contentWarningLabel,
-          input({
-            name: "contentWarning",
-            type: "text",
-            class: "contentWarning",
-            value: contentWarning ? contentWarning : "",
-            placeholder: i18n.contentWarningPlaceholder,
-          })
-        ),
-          textarea({ required: true, name: "text", placeholder: i18n.publishWarningPlaceholder }, text ? text : "")
-        ),
-        input({ type: "file", id: "blob", name: "blob" }),
-        br,
-        br,
-        button({ type: "submit" }, i18n.preview),
+      div({ class: "tags-header" },
+        h2(i18n.publishBlog),
+        p(i18n.publishLabel({ markdownUrl, linkTarget: "_blank" }))
       )
     ),
-    preview ? preview : "",
-    p(i18n.publishCustomInfo({ href: "/publish/custom" }))
+    section(
+      div({ class: "publish-form" },
+        form(
+          {
+            action: "/publish/preview",
+            method: "post",
+            enctype: "multipart/form-data",
+          },
+          [
+            label({ for: "contentWarning" }, i18n.blogSubject),
+            br(),
+            input({
+              name: "contentWarning",
+              id: "contentWarning",
+              type: "text",
+              class: "contentWarning",
+              value: contentWarning || "",
+              placeholder: i18n.contentWarningPlaceholder
+            }),
+            br(),
+            label({ for: "text" }, i18n.blogMessage),
+            br(),
+            textarea(
+              {
+                required: true,
+                name: "text",
+                id: "text",
+                rows: "6",
+                cols: "50",
+                placeholder: i18n.publishWarningPlaceholder,
+                class: "publish-textarea"
+              },
+              text || ""
+            ),
+            br(),
+            label({ for: "blob" }, i18n.blogImage || "Upload Image (jpeg, jpg, png, gif) (max-size: 500px x 400px)"),
+            br(),
+            input({ type: "file", id: "blob", name: "blob" }),
+            br(), br(),
+            button({ type: "submit" }, i18n.blogPublish)
+          ]
+        )
+      )
+    ),
+    preview || "",
+    section(
+      div({ class: "tags-header" },
+        p(i18n.publishCustomInfo({ href: "/publish/custom" }))
+      )
+    )
   );
 };
 
 const generatePreview = ({ previewData, contentWarning, action }) => {
-  const { authorMeta, text, mentions } = previewData;
+  const { authorMeta, formattedText, mentions } = previewData;
+  const renderedText = formattedText;
   const msg = {
     key: "%non-existent.preview",
     value: {
       author: authorMeta.id,
-      // sequence: -1,
       content: {
         type: "post",
-        text: text,
+        text: renderedText,
+        mentions: mentions,
       },
       timestamp: Date.now(),
       meta: {
-        isPrivate: true,
+        isPrivate: false,
         votes: [],
         author: {
           name: authorMeta.name,
           avatar: {
-            url: `/image/64/${encodeURIComponent(authorMeta.image)}`,
+            url: `http://localhost:3000/blob/${encodeURIComponent(authorMeta.image)}`,
           },
         },
       },
     },
   };
-  if (contentWarning) msg.value.content.contentWarning = contentWarning;
+  if (contentWarning) {
+    msg.value.content.contentWarning = contentWarning;
+  }
+  if (msg.value.meta.author.avatar.url === 'http://localhost:3000/blob/%260000000000000000000000000000000000000000000%3D.sha256') {
+    msg.value.meta.author.avatar.url = '/assets/images/default-avatar.png';
+  }
   const ts = new Date(msg.value.timestamp);
   lodash.set(msg, "value.meta.timestamp.received.iso8601", ts.toISOString());
   const ago = Date.now() - Number(ts);
   const prettyAgo = prettyMs(ago, { compact: true });
   lodash.set(msg, "value.meta.timestamp.received.since", prettyAgo);
-  return div(
-    Object.keys(mentions).length === 0
-      ? ""
-      : section(
-          { class: "mention-suggestions" },
-          h2(i18n.mentionsMatching),
-          Object.keys(mentions).map((name) => {
-            let matches = mentions[name];
 
-            return div(
-              matches.map((m) => {
-                let relationship = { emoji: "", desc: "" };
-                if (m.rel.followsMe && m.rel.following) {
-                  relationship.emoji = "☍";
-                  relationship.desc = i18n.relationshipMutuals;
-                } else if (m.rel.following) {
-                  relationship.emoji = "☌";
-                  relationship.desc = i18n.relationshipFollowing;
-                } else if (m.rel.followsMe) {
-                  relationship.emoji = "⚼";
-                  relationship.desc = i18n.relationshipTheyFollow;
-                } else {
-                  if (m.rel.me = true){
-                    relationship.emoji = "#";
-                    relationship.desc = i18n.relationshipYou;
-                  } else {
-                    relationship.emoji = "❓";
-                    relationship.desc = i18n.relationshipNotFollowing;
-                  }
-                }
-                return div(
-                  { class: "mentions-container" },
-                  a(
-                    {
-                      class: "mentions-image",
-                      href: `/author/${encodeURIComponent(m.feed)}`,
-                    },
-                    img({ src: `/image/64/${encodeURIComponent(m.img)}` })
-                  ),
-                  a(
-                    {
-                      class: "mentions-name",
-                      href: `/author/${encodeURIComponent(m.feed)}`,
-                    },
-                    m.name
-                  ),
-                  div(
-                    { class: "emo-rel" },
-                    span(
-                      { class: "emoji", title: relationship.desc },
-                      relationship.emoji
-                    ),
-                    span(
-                      { class: "mentions-listing" },
-                      `[@${m.name}](${m.feed})`
-                    )
-                  )
-                );
-              })
-            );
-          })
-        ),
+  return div(
     section(
       { class: "post-preview" },
-      post({ msg }),
+      div(
+        { class: "preview-content" },
+        h2(i18n.messagePreview),
+        post({ msg, preview: true })
+      ),
+    ),
+    section(
+      { class: "mention-suggestions" },
+      Object.keys(mentions).map((name) => {
+        const matches = mentions[name];
+        return div(
+          h2(i18n.mentionsMatching),
+          { class: "mention-card" },
+          a(
+            {
+              href: `/author/@${encodeURIComponent(matches[0].feed)}`,
+            },
+            img({ src: msg.value.meta.author.avatar.url, class: "avatar-profile" })
+          ),
+          br,
+          div(
+            { class: "mention-name" },
+            span({ class: "label" }, `${i18n.mentionsName}: `),
+            a(
+              {
+                href: `/author/@${encodeURIComponent(matches[0].feed)}`,
+              },
+              `@${matches[0].name}`
+            )
+          ),
+          div(
+            { class: "mention-relationship" },
+            span({ class: "label" }, `${i18n.mentionsRelationship}:`),
+            span({ class: "relationship" }, matches[0].rel.followsMe ? i18n.relationshipMutuals : i18n.relationshipNotMutuals),
+            { class: "mention-relationship-details" },
+            span({ class: "emoji" }, matches[0].rel.followsMe ? "☍" : "⚼"),
+            span({ class: "mentions-listing" },
+              a({ href: `/author/@${encodeURIComponent(matches[0].feed)}` }, `@${matches[0].feed}`)
+            )
+          )
+        );
+      })
+    ),
+    section(
       form(
         { action, method: "post" },
-        input({
-          name: "contentWarning",
-          type: "hidden",
-          value: contentWarning,
-        }),
-        input({
-          name: "text",
-          type: "hidden",
-          value: text,
-        }),
-        button({ type: "submit" }, i18n.publish)
+        [
+          input({ type: "hidden", name: "text", value: renderedText }), // Pass the formatted text
+          input({ type: "hidden", name: "contentWarning", value: contentWarning || "" }),
+          input({ type: "hidden", name: "mentions", value: JSON.stringify(mentions) }),
+          button({ type: "submit" }, i18n.publish)
+        ]
       )
     )
   );
@@ -1111,380 +1436,12 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
 
 exports.previewView = ({ previewData, contentWarning }) => {
   const publishAction = "/publish";
-
   const preview = generatePreview({
     previewData,
     contentWarning,
     action: publishAction,
   });
-  return exports.publishView(preview, previewData.text, contentWarning);
-};
-
-exports.peersView = async ({ peers, supports, blocks, recommends }) => {
-
-  const startButton = form(
-    { action: "/settings/conn/start", method: "post" },
-    button({ type: "submit" }, i18n.startNetworking)
-  );
-
-  const restartButton = form(
-    { action: "/settings/conn/restart", method: "post" },
-    button({ type: "submit" }, i18n.restartNetworking)
-  );
-
-  const stopButton = form(
-    { action: "/settings/conn/stop", method: "post" },
-    button({ type: "submit" }, i18n.stopNetworking)
-  );
-
-  const syncButton = form(
-    { action: "/settings/conn/sync", method: "post" },
-    button({ type: "submit" }, i18n.sync)
-  );
-
-  const connButtons = div({ class: "form-button-group" }, [
-    startButton,
-    restartButton,
-    stopButton,
-    syncButton,
-  ]);
-
-  const peerList = (peers || [])
-    .filter(([, data]) => data.state === "connected")
-    .map(([, data]) => {
-      return li(
-        data.name, br,
-        a(
-          { href: `/author/${encodeURIComponent(data.key)}` },
-          data.key, br, br
-        )
-      );
-    });
-
-  return template(
-    i18n.peers,
-    section(
-      { class: "viewInfo" },
-      h1(i18n.peerConnections),
-      p(i18n.peerConnectionsIntro),
-      div({ class: "conn-buttons" }, connButtons),
-      h1(i18n.online, " (", peerList.length, ")"),
-      p(peerList.length > 0 ? ul(peerList) : i18n.noConnections),
-      p(i18n.connectionActionIntro),
-      h1(i18n.supported, " (", supports.length / 2, ")"),
-      p(supports.length > 0 ? ul(supports) : i18n.noSupportedConnections),
-      p(i18n.connectionActionIntro),
-      h1(i18n.recommended, " (", recommends.length / 2, ")"),
-      p(recommends.length > 0 ? ul(recommends) : i18n.noRecommendedConnections),
-      p(i18n.connectionActionIntro),
-      h1(i18n.blocked, " (", blocks.length / 2, ")"),
-      p(blocks.length > 0 ? ul(blocks) : i18n.noBlockedConnections),
-      p(i18n.connectionActionIntro)
-    )
-  );
-}; 
-
-exports.invitesView = ({ invitesEnabled }) => {
-  let pubs = [];
-  let pubsValue = "false";
-
-  try {
-    pubs = fs.readFileSync(gossipPath, "utf8");
-  } catch (error) {
-    pubs = undefined;
-  }
-
-  if (pubs) {
-    try {
-      pubs = JSON.parse(pubs);
-      if (pubs && pubs.length > 0) {
-        pubsValue = "true";
-      } else {
-        pubsValue = "false";
-      }
-    } catch (error) {
-      pubsValue = "false";
-    }
-  }
-
-  let pub = [];
-  if (pubsValue === "true") {
-    const arr2 = pubs.map(pubItem => {
-      return li(
-        p(`PUB: ${pubItem.host}`),
-        p(`${i18n.inhabitants}: ${pubItem.announcers}`),
-        a(
-          { href: `/author/${encodeURIComponent(pubItem.key)}` },
-          pubItem.key
-        ),
-        br,
-        br
-      );
-    });
-    pub = arr2;
-  }
-
-  return template(
-    i18n.invites,
-    section(
-      { class: "viewInfo" },
-      h1(i18n.invites),
-      p(i18n.invitesDescription),
-      form(
-        { action: "/settings/invite/accept", method: "post" },
-        input({ name: "invite", type: "text", autofocus: true, required: true }),
-        button({ type: "submit" }, i18n.acceptInvite),
-        hr,
-        h1(i18n.acceptedInvites, " (", pub.length, ")"),
-        pub.length > 0 ? ul(pub) : i18n.noInvites
-      )
-    )
-  );
-};
- 
-exports.modulesView = () => {
-  const config = getConfig().modules;
-  const popularMod = config.popularMod === 'on' ? 'on' : 'off';
-  const topicsMod = config.topicsMod === 'on' ? 'on' : 'off';
-  const summariesMod = config.summariesMod === 'on' ? 'on' : 'off';
-  const latestMod = config.latestMod === 'on' ? 'on' : 'off';
-  const threadsMod = config.threadsMod === 'on' ? 'on' : 'off';
-  const multiverseMod = config.multiverseMod === 'on' ? 'on' : 'off';
-  const inboxMod = config.inboxMod === 'on' ? 'on' : 'off';
-  const invitesMod = config.invitesMod === 'on' ? 'on' : 'off';
-  const walletMod = config.walletMod === 'on' ? 'on' : 'off';
-  const legacyMod = config.legacyMod === 'on' ? 'on' : 'off';
-  const cipherMod = config.cipherMod === 'on' ? 'on' : 'off';
-  
-  return template(
-    i18n.modules,
-    section(
-      { class: "modules-view" },
-      h1(i18n.modulesViewTitle),
-      p(i18n.modulesViewDescription)
-    ),
-    section(
-      form(
-        { action: "/save-modules", method: "post" },
-        table(
-          { class: "module-table" },
-          tr(
-            td(i18n.popularLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "popularMod",
-                name: "popularForm",
-                class: "input-checkbox",
-                checked: popularMod === 'on' ? true : undefined
-              })
-            ),
-            td(i18n.latestLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "latestMod",
-                name: "latestForm",
-                class: "input-checkbox",
-                checked: latestMod === 'on' ? true : undefined
-              })
-            ),
-            td(i18n.walletLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "walletMod",
-                name: "walletForm",
-                class: "input-checkbox",
-                checked: walletMod === 'on' ? true : undefined
-              })
-            )
-          ),
-          tr(
-            td(i18n.topicsLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "topicsMod",
-                name: "topicsForm",
-                class: "input-checkbox",
-                checked: topicsMod === 'on' ? true : undefined
-              })
-            ),
-            td(i18n.threadsLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "threadsMod",
-                name: "threadsForm",
-                class: "input-checkbox",
-                checked: threadsMod === 'on' ? true : undefined
-              })
-            ),
-            td(i18n.inboxLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "inboxMod",
-                name: "inboxForm",
-                class: "input-checkbox",
-                checked: inboxMod === 'on' ? true : undefined
-              })
-            )
-          ),
-          tr(
-            td(i18n.summariesLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "summariesMod",
-                name: "summariesForm",
-                class: "input-checkbox",
-                checked: summariesMod === 'on' ? true : undefined
-              })
-            ),
-            td(i18n.multiverseLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "multiverseMod",
-                name: "multiverseForm",
-                class: "input-checkbox",
-                checked: multiverseMod === 'on' ? true : undefined
-              })
-            ),
-            td(i18n.invitesLabel),
-            td(
-              input({
-                type: "checkbox",
-                id: "invitesMod",
-                name: "invitesForm",
-                class: "input-checkbox",
-                checked: invitesMod === 'on' ? true : undefined
-              })
-            )
-          ),
-         tr(
-          td(i18n.legacyLabel),
-          td(
-           input({
-            type: "checkbox",
-            id: "legacyMod",
-            name: "legacyForm",
-            class: "input-checkbox",
-            checked: legacyMod === 'on' ? true : undefined
-           })
-          ),
-          td(i18n.cipherLabel),
-          td(
-           input({
-            type: "checkbox",
-            id: "cipherMod",
-            name: "cipherForm",
-            class: "input-checkbox",
-            checked: cipherMod === 'on' ? true : undefined
-           })
-          )
-         )       
-        ),
-        div(
-          { class: "save-button-container" },
-          button({ type: "submit", class: "submit-button" }, i18n.saveSettings)
-        )
-      )
-    )
-  );
-};
-
-const themeFilePath = path.join(__dirname, '../configs/oasis-config.json');
-const getThemeConfig = () => {
-  try {
-    const configData = fs.readFileSync(themeFilePath);
-    return JSON.parse(configData);
-  } catch (error) {
-    console.error('Error reading config file:', error);
-    return {};
-  }
-};
-
-exports.settingsView = ({ version }) => {
-  const currentThemeConfig = getThemeConfig();
-  const theme = currentThemeConfig.themes?.current || "Dark-SNH";
-    const currentConfig = getConfig();
-    const walletUrl = currentConfig.wallet.url
-    const walletUser = currentConfig.wallet.user
-    const walletFee = currentConfig.wallet.feee;
-  const themeElements = [
-    option({ value: "Dark-SNH", selected: theme === "Dark-SNH" ? true : undefined }, "Dark-SNH"),
-    option({ value: "Clear-SNH", selected: theme === "Clear-SNH" ? true : undefined }, "Clear-SNH"),
-    option({ value: "Purple-SNH", selected: theme === "Purple-SNH" ? true : undefined }, "Purple-SNH"),
-    option({ value: "Matrix-SNH", selected: theme === "Matrix-SNH" ? true : undefined }, "Matrix-SNH"),
-   ];
-  const languageOption = (longName, shortName) => {
-    return shortName === selectedLanguage
-      ? option({ value: shortName, selected: true }, longName)
-      : option({ value: shortName }, longName);
-  };
-
-  const rebuildButton = form(
-    { action: "/settings/rebuild", method: "post" },
-    button({ type: "submit" }, i18n.rebuildName)
-  );
-
-  return template(
-    i18n.settings,
-    section(
-      { class: "viewInfo" },
-      h1(i18n.settings),
-      p(a({ href: snhUrl, target: "_blank" }, i18n.settingsIntro({ version }))),
-      hr,
-      h2(i18n.theme),
-      p(i18n.themeIntro),
-      form(
-        { action: "/settings/theme", method: "post" },
-        select({ name: "theme" }, ...themeElements),
-        br,
-        br,
-        button({ type: "submit" }, i18n.setTheme)
-      ),
-      hr,
-      h2(i18n.language),
-      p(i18n.languageDescription),
-      form(
-        { action: "/language", method: "post" },
-        select({ name: "language" }, [
-          languageOption("English", "en"),
-          languageOption("Español", "es"),
-          languageOption("Français", "fr"),
-        ]),
-        br,
-        br,
-        button({ type: "submit" }, i18n.setLanguage)
-      ),
-      hr,
-      h2(i18n.wallet),
-      p(i18n.walletSettingsDescription),
-      form(
-        { action: "/settings/wallet", method: "POST" },
-        label({ for: "wallet_url" }, i18n.walletAddress),
-        input({ type: "text", id: "wallet_url", name: "wallet_url", placeholder: walletUrl, value: walletUrl }),
-        label({ for: "wallet_user" }, i18n.walletUser),
-        input({ type: "text", id: "wallet_user", name: "wallet_user", placeholder: walletUser, value: walletUser }),
-
-        label({ for: "wallet_pass" }, i18n.walletPass),
-        input({ type: "password", id: "wallet_pass", name: "wallet_pass" }),
-
-        label({ for: "wallet_fee" }, i18n.walletFee),
-        input({ type: "text", id: "wallet_fee", name: "wallet_fee", placeholder: walletFee, value: walletFee }),
-
-        button({ type: "submit" }, i18n.walletConfiguration)
-      ),
-      hr,
-      h2(i18n.indexes),
-      p(i18n.indexesDescription),
-      rebuildButton
-    )
-  );
+  return exports.publishView(preview, previewData.formattedText, contentWarning);
 };
 
 const viewInfoBox = ({ viewTitle = null, viewDescription = null }) => {
@@ -1505,9 +1462,9 @@ exports.likesView = async ({ messages, feed, name }) => {
   );
 
   return template(
-    ["@", name, i18n.likedBy],
+    ["@", name],
     viewInfoBox({
-      viewTitle: span(authorLink, i18n.likedBy),
+      viewTitle: span(authorLink),
       viewDescription: span(i18n.spreadedDescription)
     }),
     messages.map((msg) => post({ msg }))
@@ -1521,70 +1478,103 @@ const messageListView = ({
   viewElements = null,
   aside = null,
 }) => {
+  const hasHeader = !!viewElements;
+  const titleBlock = hasHeader
+    ? viewElements
+    : div({ class: "tags-header" },
+        h2(viewTitle),
+        p(viewDescription)
+      );
   return template(
     viewTitle,
-    section(h1(viewTitle), p(viewDescription), viewElements),
+    section(titleBlock),
     messages.map((msg) => post({ msg, aside }))
   );
 };
 
 exports.popularView = ({ messages, prefix }) => {
+  const header = div({ class: "tags-header" },
+    h2(i18n.popular),
+    p(i18n.popularDescription)
+  );
   return messageListView({
     messages,
-    viewElements: prefix,
     viewTitle: i18n.popular,
-    viewDescription: i18n.popularDescription,
+    viewElements: [header, prefix]
   });
 };
 
 exports.extendedView = ({ messages }) => {
+  const header = div({ class: "tags-header" },
+    h2(i18n.extended),
+    p(i18n.extendedDescription)
+  );
   return messageListView({
     messages,
     viewTitle: i18n.extended,
-    viewDescription: i18n.extendedDescription,
+    viewElements: header
   });
 };
 
 exports.latestView = ({ messages }) => {
+  const header = div({ class: "tags-header" },
+    h2(i18n.latest),
+    p(i18n.latestDescription)
+  );
   return messageListView({
     messages,
     viewTitle: i18n.latest,
-    viewDescription: i18n.latestDescription,
+    viewElements: header
   });
 };
 
 exports.topicsView = ({ messages, prefix }) => {
+  const header = div({ class: "tags-header" },
+    h2(i18n.topics),
+    p(i18n.topicsDescription)
+  );
   return messageListView({
     messages,
     viewTitle: i18n.topics,
-    viewDescription: i18n.topicsDescription,
-    viewElements: prefix,
+    viewElements: [header, prefix]
   });
 };
 
 exports.summaryView = ({ messages }) => {
+  const header = div({ class: "tags-header" },
+    h2(i18n.summaries),
+    p(i18n.summariesDescription)
+  );
   return messageListView({
     messages,
     viewTitle: i18n.summaries,
-    viewDescription: i18n.summariesDescription,
-    aside: true,
+    viewElements: header,
+    aside: true
   });
 };
 
 exports.spreadedView = ({ messages }) => {
+  const header = div({ class: "tags-header" },
+    h2(i18n.spreaded),
+    p(i18n.spreadedDescription)
+  );
   return spreadedListView({
     messages,
     viewTitle: i18n.spreaded,
-    viewDescription: i18n.spreadedDescription,
+    viewElements: header
   });
 };
 
 exports.threadsView = ({ messages }) => {
+  const header = div({ class: "tags-header" },
+    h2(i18n.threads),
+    p(i18n.threadsDescription)
+  );
   return messageListView({
     messages,
     viewTitle: i18n.threads,
-    viewDescription: i18n.threadsDescription,
-    aside: true,
+    viewElements: header,
+    aside: true
   });
 };
 
@@ -1595,7 +1585,6 @@ exports.previewSubtopicView = async ({
   contentWarning,
 }) => {
   const publishAction = `/subtopic/${encodeURIComponent(messages[0].key)}`;
-
   const preview = generatePreview({
     previewData,
     contentWarning,
@@ -1603,7 +1592,7 @@ exports.previewSubtopicView = async ({
   });
   return exports.subtopicView(
     { messages, myFeedId },
-    preview,
+    preview, 
     previewData.text,
     contentWarning
   );
@@ -1641,18 +1630,10 @@ exports.subtopicView = async (
   return template(
     i18n.subtopicTitle({ authorName }),
     div({ class: "thread-container" }, messageElements),
-    preview !== undefined ? preview : "",
-    p(i18n.subtopicLabel({ markdownUrl })),
     form(
       { action: subtopicForm, method: "post", enctype: "multipart/form-data" },
-      textarea(
-        {
-          autofocus: true,
-          required: true,
-          name: "text",
-        },
-        text ? text : markdownMention
-      ),
+      i18n.blogSubject,
+      br, 
       label(
         i18n.contentWarningLabel,
         input({
@@ -1663,466 +1644,30 @@ exports.subtopicView = async (
           placeholder: i18n.contentWarningPlaceholder,
         })
       ),
-      button({ type: "submit" }, i18n.preview),
-      label({ class: "file-button", for: "blob" }, i18n.attachFiles),
-      input({ type: "file", id: "blob", name: "blob" })
-    )
-  );
-};
-
-exports.searchView = ({ messages, query }) => {
-  const searchInput = input({
-    name: "query",
-    required: false,
-    type: "search",
-    value: query,
-  });
-  searchInput.setAttribute("minlength", 3);
-
-  return template(
-    i18n.search,
-    section(
-      h1(i18n.search),
-      form(
-        { action: "/search", method: "get" },
-        p(i18n.searchLabel, searchInput),
-        br,
-        br,
-        button(
-          {
-            type: "submit",
-          },
-          i18n.submit
-        )
-      )
-    ),
-    messages.map((msg) => post({ msg }))
-  );
-};
-
-const imageResult = ({ id, infos }) => {
-  const encodedBlobId = encodeURIComponent(id);
-  const info = infos[0];
-  const encodedMsgId = encodeURIComponent(info.msg);
-
-  return div(
-    {
-      class: "image-result",
-    },
-    [
-      a(
+      br,
+      label({ for: "text" }, i18n.blogMessage),
+      br,
+      textarea(
         {
-          href: `/blob/${encodedBlobId}`,
+          autofocus: true,
+          required: true,
+          name: "text",
+          rows: "6",
+          cols: "50",
+          placeholder: i18n.publishWarningPlaceholder,
         },
-        img({ src: `/image/256/${encodedBlobId}` })
+        text ? text : markdownMention
       ),
-      a(
-        {
-          href: `/thread/${encodedMsgId}#${encodedMsgId}`,
-          class: "result-text",
-        },
-        info.name
+      br,
+      label(
+        { for: "blob" },
+        i18n.blogImage || "Upload Image (jpeg, jpg, png, gif) (max-size: 500px x 400px)"
       ),
-    ]
+      input({ type: "file", id: "blob", name: "blob" }),
+      br,
+      br,
+      button({ type: "submit" }, i18n.blogPublish)
+    ),
+    preview ? div({ class: "comment-preview" }, preview) : ""
   );
-};
-
-exports.imageSearchView = ({ blobs, query }) => {
-  const searchInput = input({
-    name: "query",
-    required: false,
-    type: "search",
-    value: query,
-  });
-  searchInput.setAttribute("minlength", 3);
-
-  return template(
-    i18n.imageSearch,
-    section(
-      h1(i18n.imageSearch),
-      form(
-        { action: "/imageSearch", method: "get" },
-        label(i18n.imageSearchLabel, searchInput),
-        button(
-          {
-            type: "submit",
-          },
-          i18n.submit
-        )
-      )
-    ),
-    div(
-      {
-        class: "image-search-grid",
-      },
-      Object.keys(blobs)
-        // todo: add pagination
-        .slice(0, 30)
-        .map((blobId) => imageResult({ id: blobId, infos: blobs[blobId] }))
-    )
-  );
-};
-
-exports.hashtagView = ({ messages, hashtag }) => {
-  return template(
-    `#${hashtag}`,
-    section(h1(`#${hashtag}`), p(i18n.hashtagDescription)),
-    messages.map((msg) => post({ msg }))
-  );
-};
-
-exports.indexingView = ({ percent }) => {
-  const message = `Oasis has only processed ${percent}% of the messages and needs to catch up. This page will refresh every 10 seconds. Thanks for your patience! ❤`;
-
-  const nodes = html(
-    { lang: "en" },
-    head(
-      title("Oasis"),
-      link({ rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg" }),
-      meta({ charset: "utf-8" }),
-      meta({
-        name: "description",
-        content: i18n.oasisDescription,
-      }),
-      meta({
-        name: "viewport",
-        content: toAttributes({ width: "device-width", "initial-scale": 1 }),
-      }),
-      meta({ "http-equiv": "refresh", content: 10 })
-    ),
-    body(
-      main(
-        { id: "content" },
-        p(message),
-        progress({ value: percent, max: 100 })
-      )
-    )
-  );
-
-  const result = doctypeString + nodes.outerHTML;
-
-  return result;
-};
-
-const walletViewRender = (balance, ...elements) => {
-  return template(
-    i18n.walletTitle,
-    section(
-      h1(i18n.walletTitle),
-      p(i18n.walletDescription),
-    ),
-    section(
-    h1(i18n.walletBalanceTitle),
-      div(
-        {class: "div-center"},
-        span(
-          {class: "wallet-balance"},
-          i18n.walletBalanceLine({ balance })
-        ),
-        ),
-        div(
-        {class: "div-center"},
-        span(
-          { class: "wallet-form-button-group-center" },
-           form({ action: "/wallet/send", method: "get" },
-            button({ type: 'submit' }, i18n.walletSend)
-           ),
-           form({ action: "/wallet/receive", method: "get" },
-            button({ type: 'submit' }, i18n.walletReceive)
-            ),
-           form({ action: "/wallet/history", method: "get" },
-            button({ type: 'submit' }, i18n.walletHistory)
-           )
-        )
-      ),
-    ),
-    elements.length > 0 ? section(...elements) : null
-  )
-};
-
-exports.walletView = async (balance) => {
-  return walletViewRender(balance)
-}
-
-exports.walletHistoryView = async (balance, transactions) => {
-  return walletViewRender(
-    balance,
-    h1(i18n.walletHistoryTitle),
-    table(
-      { class: "wallet-history" },
-      thead(
-        tr(
-          { class: "full-center" },
-          th({ class: "col-10" }, i18n.walletCnfrs),
-          th(i18n.walletDate),
-          th(i18n.walletType),
-          th(i18n.walletAmount),
-          th({ class: "col-30" }, i18n.walletTxId)
-        )
-      ),
-      tbody(
-        ...transactions.map((tx) => {
-          const date = new Date(tx.time * 1000);
-          const amount = Number(tx.amount);
-          const fee = Number(tx.fee) || 0;
-          const totalAmount = Number(amount + fee);
-
-          return tr(
-            td({ class: "full-center" }, tx.confirmations),
-            td(date.toLocaleDateString(), br(), date.toLocaleTimeString()),
-            td(tx.category),
-            td(totalAmount.toFixed(2)),
-            td({ width: "30%", class: "tcell-ellipsis" },
-              a({
-                href: `https://ecoin.03c8.net/blockexplorer/search?q=${tx.txid}`,
-                target: "_blank",
-              }, tx.txid)
-            )
-          )
-        })
-      )
-    )
-  )
-}
-
-exports.walletReceiveView = async (balance, address) => {
-  const QRCode = require('../server/node_modules/qrcode');
-  const qrImage = await QRCode.toString(address, { type: 'svg' });
-  const qrContainer = address + qrImage
-
-  return walletViewRender(
-    balance,
-    h1(i18n.walletReceiveTitle),
-    div(
-      {class: 'div-center qr-code', innerHTML: qrContainer},
-    ),
-  )
-}
-
-exports.walletSendFormView = async (balance, destination, amount, fee, statusMessages) => {
-  const { type, title, messages } = statusMessages || {};
-  const statusBlock = div({ class: `wallet-status-${type}` },);
-
-  if (messages?.length > 0) {
-    statusBlock.appendChild(
-      span(
-        i18n.walletStatusMessages[title]
-      )
-    )
-    statusBlock.appendChild(
-      ul(
-        ...messages.map(error => li(i18n.walletStatusMessages[error]))
-      )
-    )
-  }
-
-  return walletViewRender(
-    balance,
-    h1(i18n.walletWalletSendTitle),
-    div(
-      {class: "div-center"},
-      messages?.length > 0 ? statusBlock : null,
-      form(
-        { action: '/wallet/send', method: 'POST' },
-        label({ for: 'destination' }, i18n.walletAddress),
-        input({ type: 'text', id: 'destination', name: 'destination', placeholder: 'ETQ17sBv8QFoiCPGKDQzNcDJeXmB2317HX', value: destination }),
-        label({ for: 'amount' }, i18n.walletAmount),
-        input({ type: 'text', id: 'amount', name: 'amount', placeholder: '0.25', value: amount }),
-        label({ for: 'fee' }, i18n.walletFee),
-        input({ type: 'text', id: 'fee', name: 'fee', placeholder: '0.01', value: fee }),
-        input({ type: 'hidden', name: 'action', value: 'confirm' }),
-        div({ class: 'form-button-group-center' },
-          button({ type: 'submit' }, i18n.walletSend),
-          button({ type: 'reset' }, i18n.walletReset)
-        )
-      )
-    )
-  )
-}
-
-exports.walletSendConfirmView = async (balance, destination, amount, fee) => {
-  const totalCost = amount + fee;
-
-  return walletViewRender(
-    balance,
-    p(
-      i18n.walletAddressLine({ address: destination }), br(),
-      i18n.walletAmountLine({ amount }), br(),
-      i18n.walletFeeLine({ fee }), br(),
-      i18n.walletTotalCostLine({ totalCost }),
-    ),
-    form(
-      { action: '/wallet/send', method: 'POST' },
-      input({ type: 'hidden', name: 'action', value: 'send' }),
-      input({ type: 'hidden', name: 'destination', value: destination }),
-      input({ type: 'hidden', name: 'amount', value: amount }),
-      input({ type: 'hidden', name: 'fee', value: fee }),
-      div({ class: 'form-button-group-center' },
-        button({ type: 'submit' }, i18n.walletConfirm),
-        a ({ href: `/wallet/send`, class: "button-like-link" }, i18n.walletBack),
-      )
-    ),
-  )
-}
-
-exports.walletErrorView = async (error) => {
-  return template(
-    i18n.walletTitle,
-    section(
-      h1(i18n.walletTitle),
-      p(i18n.walletDescription),
-    ),
-    section(
-      h2(i18n.walletStatus),
-      p(i18n.walletDisconnected),
-    )
-  )
-}
-
-exports.walletSendResultView = async (balance, destination, amount, txId) => {
-  return walletViewRender(
-    balance,
-    p(
-      i18n.walletSentToLine({ destination, amount }), br(),
-      `${i18n.walletTransactionId}: `,
-      a(
-        {
-          href: `https://ecoin.03c8.net/blockexplorer/search?q=${txId}`,
-          target: "_blank",
-        },
-        txId
-      ),
-    ),
-  )
-}
-
-exports.legacyView = async () => {
-  const randomPassword = generateRandomPassword();
-  
-  return template(
-    `${i18n.legacyTitle}`,
-    section(
-      h1(i18n.legacyTitle),
-      p(i18n.legacyDescription)
-    ),
-    p({ class: "generated-password", id: "randomPassword" }, `${i18n.randomPassword}: ${randomPassword}`),
-    section(
-      div(
-        { class: "div-center" },
-        label(i18n.exportTitle),
-        p(i18n.exportDescription),
-        form(
-          { 
-            action: "/legacy/export", 
-            method: "POST", 
-            id: "exportForm" 
-          },
-          label(i18n.exportPasswordLabel),
-          input({ 
-            type: "password", 
-            name: "password", 
-            id: "password", 
-            required: true, 
-            placeholder: i18n.exportPasswordPlaceholder, 
-            minlength: 32
-          }),
-          p({ class: "file-info" }, i18n.fileInfo),
-          button({ type: "submit" }, i18n.legacyExportButton)
-        ),
-        br,
-        label(i18n.importTitle),
-        p(i18n.importDescription),
-        form(
-          { action: "/legacy/import", method: "POST", enctype: "multipart/form-data" },
-          input({ type: "file", name: "uploadedFile", required: true }),
-          br,
-          p(i18n.passwordImport),
-          input({ 
-            type: "password", 
-            name: "importPassword", 
-            required: true, 
-            placeholder: i18n.importPasswordPlaceholder,
-            minlength: 32
-          }),
-          button({ type: "submit" }, i18n.legacyImportButton)
-        )
-      )
-    )
-  );
-};
-
-exports.cipherView = async (encryptedText = "", decryptedText = "", iv = "", password = "") => {
-  const randomPassword = generateRandomPassword();
-
-  const view = template(
-    `${i18n.cipherTitle}`,
-    section(
-      h1(i18n.cipherTitle),
-      p(i18n.cipherDescription)
-    ),
-    p({ class: "generated-password", id: "randomPassword" }, `${i18n.randomPassword}: ${randomPassword}`),
-    section(
-      div(
-        { class: "div-center" },
-        label(i18n.cipherEncryptTitle),
-        p(i18n.cipherEncryptDescription),
-        form(
-          { 
-            action: "/cipher/encrypt", 
-            method: "POST", 
-            id: "encryptForm" 
-          },
-          label(i18n.cipherTextLabel),
-          textarea({
-            name: "text",
-            id: "text",
-            required: true,
-            placeholder: i18n.cipherTextPlaceholder,
-            rows: 4
-          }),
-          label(i18n.cipherPasswordLabel),
-          input({
-            type: "password",
-            name: "password",
-            id: "password",
-            required: true,
-            placeholder: i18n.cipherPasswordPlaceholder,
-            minlength: 32
-          }),
-          button({ type: "submit" }, i18n.cipherEncryptButton)
-        ),
-        encryptedText ? div({ class: "cipher-result visible encrypted-result" }, `${encryptedText}`) : div({ class: "cipher-result" }),
-        encryptedText ? div({ class: "cipher-result visible encrypted-result" }, `${password}`) : div({ class: "cipher-result" }),
-        encryptedText ? input({ type: "hidden", name: "iv", value: iv }) : "",
-        label(i18n.cipherDecryptTitle),
-        p(i18n.cipherDecryptDescription),
-        form(
-          { action: "/cipher/decrypt", method: "POST", id: "decryptForm" },
-          label(i18n.cipherEncryptedTextLabel),
-          textarea({
-            name: "encryptedText",
-            id: "encryptedText",
-            required: true,
-            placeholder: i18n.cipherEncryptedTextPlaceholder,
-            rows: 4,
-            value: encryptedText
-          }),
-          label(i18n.cipherPasswordLabel),
-          input({
-            type: "password",
-            name: "password",
-            id: "password",
-            required: true,
-            placeholder: i18n.cipherPasswordPlaceholder,
-            minlength: 32
-          }),
-          input({ type: "hidden", name: "iv", value: iv }),
-          button({ type: "submit" }, i18n.cipherDecryptButton)
-        ),
-        decryptedText ? div({ class: "cipher-result visible decrypted-result" }, `${decryptedText}`) : div({ class: "cipher-result" }),
-        decryptedText ? div({ class: "cipher-result visible decrypted-result" }, `${password}`) : div({ class: "cipher-result" }),
-      )
-    )
-  );
-  return view;
 };

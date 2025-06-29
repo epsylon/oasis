@@ -4,14 +4,6 @@ body {
   font-family: 'Arial', sans-serif;
 }
 
-header, footer {
-  background-color: #7A1F9C;
-  color: #E5E5E5;
-  padding: 20px;
-  text-align: center;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-}
-
 footer {
   border-top: 2px solid #9B1C96;
 }
@@ -188,3 +180,99 @@ footer a:hover {
   background-color: #6A0066;
 }
 
+
+.sidebar-left nav ul li a,
+.sidebar-right nav ul li a,
+.header nav ul li a {
+  background-color: #682B94 !important;
+  color: #FFE082 !important;
+  border: 1px solid #B86ADE !important;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.sidebar-left nav ul li a:hover,
+.sidebar-right nav ul li a:hover,
+.header nav ul li a:hover {
+  background-color: #682B94 !important;
+  border-color: #FFD54F !important;
+  color: #FFFFFF !important;
+}
+
+body {
+  background-color: #2D0B47 !important;
+}
+
+.main-column,
+article,
+section,
+.action-container,
+.profile,
+.post-preview {
+  background-color: #3C1360 !important;
+  border-color: #B86ADE !important;
+  color: #FFEEDB !important;
+}
+
+input,
+textarea,
+select {
+  background-color: #4B1A72 !important;
+  color: #FFFFFF !important;
+  border-color: #BB5EFF !important;
+}
+
+button,
+input[type="submit"],
+input[type="button"] {
+  background-color: #A34AD8 !important;
+  color: #FFFFFF !important;
+  border-color: #751E9F !important;
+}
+
+header {
+  background-color: #5A1A85 !important;
+  border-bottom: 1px solid #B86ADE !important;
+  box-shadow: none !important;
+}
+
+.header {
+  background-color: #5A1A85 !important;
+}
+
+.top-bar-left,
+.top-bar-mid,
+.top-bar-right {
+  background-color: #39006D !important;
+  border: 1px solid #9B1C96 !important;
+  padding: 15px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  gap: 12px;
+  border-radius: 10px;
+}
+
+.sidebar-left,
+.sidebar-right {
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.sidebar-left nav ul,
+.sidebar-right nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-left nav ul li,
+.sidebar-right nav ul li {
+  width: 100%;
+}

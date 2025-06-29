@@ -28,4 +28,4 @@ Only the latest release is supported.
 
 ## Reporting a Vulnerability
 
-Send an email to solarnethub@riseup.net to report any security problems. Please do not use the public issue tracker.
+Send an email to epsylon@riseup.net to report any security problems. Please do not use the public issue tracker.
