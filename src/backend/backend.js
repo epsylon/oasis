@@ -10,6 +10,7 @@ const os = require('os');
 const promisesFs = require("fs").promises;
 const SSBconfig = require('../server/SSB_server.js');
 const moment = require('../server/node_modules/moment');
+const FileType = require('../server/node_modules/file-type');
 
 const defaultConfig = {};
 const defaultConfigFile = path.join(
@@ -898,70 +899,47 @@ router
   })
   .get("/image/:imageSize/:blobId", async (ctx) => {
     const { blobId, imageSize } = ctx.params;
-    const fakePixel = Buffer.from(
+    const size = Number(imageSize);
+    const fallbackPixel = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
       "base64"
     );
-    const fakeImage = (imageSize) =>
-    sharp
-      ? sharp({
-          create: {
-            width: imageSize,
-            height: imageSize,
-            channels: 4,
-            background: {
-              r: 0,
-              g: 0,
-              b: 0,
-              alpha: 0.5,
-            },
-          },
-        })
-          .png()
-          .toBuffer()
-    : new Promise((resolve) => resolve(fakePixel));
-    const image = async ({ blobId, imageSize }) => {
-    try {
-      if (blobId.startsWith('local://')) {
-        const localImagePath = blobId.slice(7);
-        const resolvedPath = path.resolve(localImagePath);
-        if (fs.existsSync(resolvedPath)) {
-          const buffer = fs.readFileSync(resolvedPath);
-          return buffer; 
-        } else {
-          return fakeImage(imageSize); 
-        }
+    const fakeImage = () => {
+      if (typeof sharp !== "function") {
+        return Promise.resolve(fallbackPixel);
       }
-      const bufferSource = await blob.get({ blobId });
-      if (!bufferSource) {
-        return fakeImage(imageSize);
-      }
-      return new Promise((resolve, reject) => {
-        pull(
-          bufferSource,
-          pull.collect((err, bufferArray) => {
-            if (err) {
-              reject(fakeImage(imageSize));
-            } else {
-              const buffer = Buffer.concat(bufferArray);
-              if (sharp) {
-                sharp(buffer)
-                  .resize(imageSize, imageSize)
-                  .png()
-                  .toBuffer()
-                  .then((data) => resolve(data)); 
-                } else {
-                  resolve(buffer);
-                  }
-              }
-            })
-          );
-        });
-      } catch (error) {
-        return fakeImage(imageSize);
-      }
+      return sharp({
+        create: {
+          width: size,
+          height: size,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 0.5 },
+        },
+      }).png().toBuffer();
     };
-    ctx.body = await image({ blobId, imageSize: Number(imageSize) });
+    try {
+      const buffer = await blob.getResolved({ blobId });
+      if (!buffer) {
+        ctx.set("Content-Type", "image/png");
+        ctx.body = await fakeImage();
+        return;
+      }
+      const fileType = await FileType.fromBuffer(buffer);
+      const mimeType = fileType?.mime || "application/octet-stream";
+      ctx.set("Content-Type", mimeType);
+      if (typeof sharp === "function") {
+        ctx.body = await sharp(buffer)
+          .resize(size, size)
+          .png()
+          .toBuffer();
+      } else {
+        ctx.body = buffer;
+      }
+    } catch (err) {
+      console.error("Image fetch error:", err);
+      ctx.set("Content-Type", "image/png");
+      ctx.body = await fakeImage();
+    }
   })
   .get("/settings", async (ctx) => {
     const theme = ctx.cookies.get("theme") || "Dark-SNH";

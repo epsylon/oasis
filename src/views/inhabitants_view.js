@@ -1,6 +1,16 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, br } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 
+function resolvePhoto(photoField, size = 256) {
+  if (typeof photoField === 'string' && photoField.startsWith('/image/')) {
+    return photoField;
+  }
+  if (/^&[A-Za-z0-9+/=]+\.sha256$/.test(photoField)) {
+    return `/image/${size}/${encodeURIComponent(photoField)}`;
+  }
+  return '/assets/images/default-avatar.png';
+}
+
 const generateFilterButtons = (filters, currentFilter) => {
   return filters.map(mode => 
     form({ method: 'GET', action: '/inhabitants' },
@@ -15,10 +25,10 @@ const generateFilterButtons = (filters, currentFilter) => {
 
 const renderInhabitantCard = (user, filter) => {
   return div({ class: 'inhabitant-card' },
-    img({
-      class: 'inhabitant-photo',
-      src: user.photo
-    }),
+  img({
+    class: 'inhabitant-photo',
+    src: resolvePhoto(user.photo),
+  }),
     div({ class: 'inhabitant-details' },
       h2(user.name),
       user.description ? p(user.description) : null,
@@ -40,7 +50,7 @@ const renderGalleryInhabitants = (inhabitants) => {
   return div({ class: "gallery", style: 'display:grid; grid-template-columns: repeat(3, 1fr); gap:16px;' },
     inhabitants.length
       ? inhabitants.map(u => {
-          const photo = u.photo || '/assets/images/default-avatar.png'; 
+          const photo = resolvePhoto(u.photo);
           return a({ href: `#inhabitant-${encodeURIComponent(u.id)}`, class: "gallery-item" },
             img({
               src: photo,
@@ -55,7 +65,7 @@ const renderGalleryInhabitants = (inhabitants) => {
 
 const renderLightbox = (inhabitants) => {
   return inhabitants.map(u => {
-    const photoUrl = u.photo;
+  const photoUrl = resolvePhoto(u.photo);
     return div(
       { id: `inhabitant-${encodeURIComponent(u.id)}`, class: "lightbox" },
       a({ href: "#", class: "lightbox-close" }, "×"),
@@ -143,7 +153,7 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }) => {
   const id = cv?.author || about?.about || 'unknown';
   const name = cv?.name || about?.name || 'Unnamed';
   const description = cv?.description || about?.description || '';
-  const image = cv?.photo ? `/image/256/${encodeURIComponent(cv.photo)}` : '/assets/images/snh-oasis.jpg';
+  const image = resolvePhoto(cv?.photo) || '/assets/images/default-oasis.jpg';
   const location = cv?.location || '';
   const languages = typeof cv?.languages === 'string'
     ? cv.languages.split(',').map(x => x.trim()).filter(Boolean)
