@@ -197,27 +197,49 @@ const activityModel = require('../models/activity_model')({ cooler, isPublic: co
 const pixeliaModel = require('../models/pixelia_model')({ cooler, isPublic: config.public });
 const marketModel = require('../models/market_model')({ cooler, isPublic: config.public });
 
-function normalizeBlobId(id) {
-  if (!id.startsWith('&')) id = '&' + id;
-  if (!id.endsWith('.sha256')) id = id + '.sha256';
-  return id;
-}
+// starting warmup
+about._startNameWarmup();
 
-function renderBlobMarkdown(text, mentions = {}) {
-  return text
+async function renderBlobMarkdown(text, mentions = {}, myFeedId, myUsername) {
+  if (!text) return '';
+  const mentionByFeed = {};
+  Object.values(mentions).forEach(arr => {
+    arr.forEach(m => {
+      mentionByFeed[m.feed] = m;
+    });
+  });
+  text = text.replace(/\[@([^\]]+)\]\(([^)]+)\)/g, (_, name, id) => {
+    return `<a class="mention" href="/author/${encodeURIComponent(id)}">@${myUsername}</a>`;
+  });
+  const mentionRegex = /@([A-Za-z0-9_\-\.+=\/]+\.ed25519)/g;
+  const words = text.split(' ');
+
+  text = (await Promise.all(
+    words.map(async (word) => {
+      const match = mentionRegex.exec(word);
+      if (match && match[1]) {
+        const feedId = match[1];
+        if (feedId === myFeedId) {
+          return `<a class="mention" href="/author/${encodeURIComponent(feedId)}">@${myUsername}</a>`;
+        } 
+      }
+      return word;
+    })
+  )).join(' ');
+  text = text
     .replace(/!\[image:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
-    `<img src="/blob/${encodeURIComponent(normalizeBlobId(id))}" alt="image" class="post-image" />`)
+      `<img src="/blob/${encodeURIComponent(id)}" alt="image" class="post-image" />`)
     .replace(/\[audio:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
-    `<audio controls class="post-audio" src="/blob/${encodeURIComponent(normalizeBlobId(id))}"></audio>`)
+      `<audio controls class="post-audio" src="/blob/${encodeURIComponent(id)}"></audio>`)
     .replace(/\[video:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
-    `<video controls class="post-video" src="/blob/${encodeURIComponent(normalizeBlobId(id))}"></video>`)
+      `<video controls class="post-video" src="/blob/${encodeURIComponent(id)}"></video>`)
     .replace(/\[pdf:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
-    `<a class="post-pdf" href="/blob/${encodeURIComponent(normalizeBlobId(id))}" target="_blank">PDF</a>`)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, id) =>
-    `<a class="post-link" href="/blob/${encodeURIComponent(normalizeBlobId(id))}">${label}</a>`);
+      `<a class="post-pdf" href="/blob/${encodeURIComponent(id)}" target="_blank">PDF</a>`);
+
+  return text;
 }
 
-let formattedTextCache = null;
+let formattedTextCache = null; 
 
 const preparePreview = async function (ctx) {
   let text = String(ctx.request.body.text || "");
@@ -228,7 +250,6 @@ const preparePreview = async function (ctx) {
     const token = m[2];
     const key = token;
     let found = mentions[key] || [];
-
     if (/\.ed25519$/.test(token)) {
       const name = await about.name(token);
       const img = await about.image(token);
@@ -271,7 +292,7 @@ const preparePreview = async function (ctx) {
     name: await about.name(ssbClient.id),
     image: await about.image(ssbClient.id),
   };
-  const renderedText = renderBlobMarkdown(text, mentions);
+  const renderedText = await renderBlobMarkdown(text, mentions, authorMeta.id, authorMeta.name);
   const hasBrTags = /<br\s*\/?>/.test(renderedText);
   const formattedText = formattedTextCache || (!hasBrTags ? renderedText.replace(/\n/g, '<br>') : renderedText);
   if (!formattedTextCache && !hasBrTags) {
@@ -282,7 +303,6 @@ const preparePreview = async function (ctx) {
   if (contentWarning && !finalContent.startsWith(contentWarning)) {
     finalContent = `<br>${finalContent}`;
   }
-
   return { authorMeta, text: renderedText, formattedText: finalContent, mentions };
 };
 
@@ -539,13 +559,13 @@ router
     ctx.body = await topicsView({ messages, prefix });
   })
   .get("/public/latest/summaries", async (ctx) => {
-  const summariesMod = ctx.cookies.get("summariesMod") || 'on';
-  if (summariesMod !== 'on') {
-    ctx.redirect('/modules');
-    return;
-  }
-  const messages = await post.latestSummaries();
-  ctx.body = await summaryView({ messages });
+    const summariesMod = ctx.cookies.get("summariesMod") || 'on';
+    if (summariesMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    const messages = await post.latestSummaries();
+    ctx.body = await summaryView({ messages });
   })
   .get("/public/latest/threads", async (ctx) => {
     const threadsMod = ctx.cookies.get("threadsMod") || 'on';
@@ -741,8 +761,8 @@ router
   })
   .get('/agenda', async (ctx) => {
     const filter = ctx.query.filter || 'all';
-    const allItems = await agendaModel.listAgenda();
-    ctx.body = await agendaView(allItems, filter);
+    const data = await agendaModel.listAgenda(filter);
+    ctx.body = await agendaView(data, filter);
   })
   .get("/hashtag/:hashtag", async (ctx) => {
     const { hashtag } = ctx.params;
@@ -797,6 +817,9 @@ router
     const tribe = await tribesModel.getTribeById(tribeId);
     const userId = SSBconfig.config.keys.id;
     const query = ctx.query; 
+    if (!query.feedFilter) {
+      query.feedFilter = 'TOP';
+    }
     if (tribe.isAnonymous === false && !tribe.members.includes(userId)) {
       ctx.status = 403;
       ctx.body = { message: 'You cannot access to this tribe!' };
@@ -936,7 +959,6 @@ router
         ctx.body = buffer;
       }
     } catch (err) {
-      console.error("Image fetch error:", err);
       ctx.set("Content-Type", "image/png");
       ctx.body = await fakeImage();
     }
@@ -953,19 +975,34 @@ router
   })
   .get("/peers", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
-    const getMeta = async ({ theme }) => {
-      const peers = await meta.connectedPeers();
-      const peersWithNames = await Promise.all(
-        peers.map(async ([key, value]) => {
-          value.name = await about.name(value.key);
-          return [key, value];
-        })
-      );
+    const getMeta = async () => {
+      const allPeers = await meta.peers();
+      const connected = allPeers.filter(([, data]) => data.state === "connected");
+      const offline = allPeers.filter(([, data]) => data.state !== "connected");
+      const enrich = async (peers) => {
+        return await Promise.all(
+          peers.map(async ([address, data]) => {
+            const feedId = data.key || data.id;
+            const name = await about.name(feedId);
+            return [
+              address,
+              {
+                ...data,
+                key: feedId,
+                name: name || feedId,
+              },
+            ];
+          })
+        );
+      };
+      const connectedPeers = await enrich(connected);
+      const offlinePeers = await enrich(offline);
       return peersView({
-        peers: peersWithNames,
+        connectedPeers,
+        peers: offlinePeers,
       });
     };
-    ctx.body = await getMeta({ theme });
+    ctx.body = await getMeta();
   })
   .get("/invites", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
@@ -1498,6 +1535,16 @@ router
     }
     await opinionsModel.createVote(contentId, category);
     ctx.redirect('/opinions');
+  })
+  .post('/agenda/discard/:itemId', async (ctx) => {
+    const { itemId } = ctx.params;
+    await agendaModel.discardItem(itemId);
+    ctx.redirect('/agenda');
+  })
+  .post('/agenda/restore/:itemId', async (ctx) => {
+    const { itemId } = ctx.params;
+    await agendaModel.restoreItem(itemId);
+    ctx.redirect('/agenda?filter=discarded');
   })
   .post('/feed/create', koaBody(), async ctx => {
     const { text } = ctx.request.body || {};

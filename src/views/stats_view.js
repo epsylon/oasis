@@ -108,11 +108,7 @@ exports.statsView = (stats, filter) => {
             ])
             : div({ class: 'stats-container' }, [
               div({ style: blockStyle },
-                h2(`${i18n.TOMBSTONEButton}: ${stats.userTombstoneCount}`),
-                ul(
-                  li(`${i18n.statsNetwork}: ${stats.networkTombstoneCount}`),
-                  li(`${i18n.statsYou}: ${stats.userTombstoneCount}`)
-                )
+                h2(`${i18n.TOMBSTONEButton}: ${stats.userTombstoneCount}`)
               )
             ])
       )

@@ -42,23 +42,6 @@ exports.selectedLanguage = selectedLanguage;
 
 //markdown
 const markdownUrl = "https://commonmark.org/help/";
-function renderBlobMarkdown(text, mentions = {}) {
-  text = text
-    .replace(/!\[image:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
-      `<img src="/blob/${encodeURIComponent(id)}" alt="image" class="post-image" />`)
-    .replace(/\[audio:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
-      `<audio controls class="post-audio" src="/blob/${encodeURIComponent(id)}"></audio>`)
-    .replace(/\[video:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
-      `<video controls class="post-video" src="/blob/${encodeURIComponent(id)}"></video>`)
-    .replace(/\[pdf:[^\]]+\]\(([^)]+)\)/g, (_, id) =>
-      `<a class="post-pdf" href="/blob/${encodeURIComponent(id)}" target="_blank">PDF</a>`)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, id) =>
-      `<a class="post-link" href="/blob/${encodeURIComponent(id)}">${label}</a>`)
-    .replace(/\[@([^\]]+)\]\(([^)]+)\)/g, (_, name, id) =>
-      `<a class="mention" href="/author/${encodeURIComponent(id)}">@${name}</a>`);
-
-  return text;
-}
 
 const doctypeString = "<!DOCTYPE html>";
 
@@ -389,7 +372,7 @@ const template = (titlePrefix, ...elements) => {
         { class: "header" },
         div(
           { class: "top-bar-left" },
-          a({ class: "logo-icon", href: "https://solarnethub.com" },
+          a({ class: "logo-icon", href: "/" },
             img({ class: "logo-icon", src: "/assets/images/snh-oasis.jpg", alt: "Oasis Logo" })
           ),
           nav(
@@ -868,40 +851,83 @@ exports.authorView = ({
     }
   }
 
-  const relationshipText = (() => {
-    if (relationship.me === true) return i18n.relationshipYou;
-    if (relationship.following === true && relationship.blocking === false) return i18n.relationshipFollowing;
-    if (relationship.following === false && relationship.blocking === true) return i18n.relationshipBlocking;
-    if (relationship.following === false && relationship.blocking === false) return i18n.relationshipNone;
-    if (relationship.following === true && relationship.blocking === true) return i18n.relationshipConflict;
-    throw new Error(`Unknown relationship ${JSON.stringify(relationship)}`);
-  })();
+const relationshipMessage = (() => {
+  if (relationship.me) return i18n.relationshipYou; 
+  const following = relationship.following === true;
+  const followsMe = relationship.followsMe === true;
+  if (following && followsMe) {
+    return i18n.relationshipMutuals;
+  }
+  const messages = [];
+  messages.push(
+    following
+      ? i18n.relationshipFollowing
+      : i18n.relationshipNone
+  );
+  messages.push(
+    followsMe
+      ? i18n.relationshipTheyFollow
+      : i18n.relationshipNotFollowing
+  );
+  return messages.join(". ") + ".";
+})();
 
-  const prefix = section(
-    { class: "message" },
-    div(
-      { class: "profile" },
-      div({ class: "avatar-container" },
-        img({ class: "avatar", src: avatarUrl }),
-        h1({ class: "name" }, name)
-      ),
-      pre({
-        class: "md-mention",
-        innerHTML: markdownMention,
-      })
+const prefix = section(
+  { class: "message" },
+  div(
+    { class: "profile" },
+    div({ class: "avatar-container" },
+      img({ class: "avatar", src: avatarUrl }),
+      h1({ class: "name" }, name),
     ),
-    description !== "" ? article({ innerHTML: markdown(description) }) : null,
-    footer(
-      div(
-        { class: "profile" },
-        ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
-        span(nbsp, relationshipText),
-        relationship.me
-          ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
-          : span(i18n.relationshipNotFollowing),
-        a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes)
-      )
+    pre({
+      class: "md-mention",
+      innerHTML: markdownMention,
+    })
+  ),
+  description !== "" ? article({ innerHTML: markdown(description) }) : null,
+  footer(
+  div(
+    { class: "profile" },
+    ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
+    relationship.me ? (
+      span({ class: "status you" }, i18n.relationshipYou)
+    ) : (
+      div({ class: "relationship-status" },
+        relationship.blocking && relationship.blockedBy
+          ? span({ class: "status blocked" }, i18n.relationshipMutualBlock)
+        : [
+            relationship.blocking
+              ? span({ class: "status blocked" }, i18n.relationshipBlocking)
+              : null,
+            relationship.blockedBy
+              ? span({ class: "status blocked-by" }, i18n.relationshipBlockedBy)
+              : null,
+            relationship.following && relationship.followsMe
+              ? span({ class: "status mutual" }, i18n.relationshipMutuals)
+              : [
+                  span(
+                    { class: "status supporting" },
+                    relationship.following
+                      ? i18n.relationshipFollowing
+                      : i18n.relationshipNone
+                  ),
+                  span(
+                    { class: "status supported-by" },
+                    relationship.followsMe
+                      ? i18n.relationshipTheyFollow
+                      : i18n.relationshipNotFollowing
+                  )
+               ]
+            ]
+        )
+    ),
+    relationship.me
+      ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
+      : null,
+    a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes)
     )
+   )
   );
 
   const linkUrl = relationship.me
@@ -1404,7 +1430,7 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
               {
                 href: `/author/@${encodeURIComponent(matches[0].feed)}`,
               },
-              `@${matches[0].name}`
+              `@${authorMeta.name}`
             )
           ),
           div(

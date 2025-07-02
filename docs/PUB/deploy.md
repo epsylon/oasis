@@ -30,7 +30,7 @@ Paste this:
     "level": "notice"
   },
   "caps": {
-    "shs": "+u5/ShHkb5g8jIWmybt/8ulGbZ2jFfzp8ggMwmKcRF0="
+    "shs": "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
   },
   "pub": true,
   "local": false,

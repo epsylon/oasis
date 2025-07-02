@@ -1522,3 +1522,57 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   color: #ff6600;
 }
 
+/*avatar relationships*/
+.relationship-status {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 0.8rem 0 0.5rem 0;
+}
+
+.status {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background-color: #2a2a2a;
+  font-size: 0.9rem;
+  color: #e0e0e0;
+}
+
+.status.mutual {
+  border-color: #557d3b;
+  color: #8bc34a;
+}
+
+.status.supporting {
+  border-color: #997f2e;
+  color: #f0c674;
+}
+
+.status.supported-by {
+  border-color: #3a6f9c;
+  color: #6ab0f3;
+}
+
+.status.blocked {
+  color: #ff5555;
+  border-color: #802020;
+}
+
+.status.blocked-by {
+  color: #ff8888;
+  border-color: #a04040;
+}
+
+.status.you {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background-color: #2a2a2a;
+  font-size: 0.9rem;
+  color: #FFDD44;
+  border-color: #FF6A00;
+  font-weight: bold;
+}
+

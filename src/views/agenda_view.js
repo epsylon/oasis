@@ -5,31 +5,8 @@ const { config } = require('../server/SSB_server.js');
 
 userId = config.keys.id;
 
-exports.agendaView = async (items, filter) => {
-  const now = Date.now();
-  const counts = {
-    all: items.length,
-    open: items.filter(i => i.status === 'OPEN').length,
-    closed: items.filter(i => i.status === 'CLOSED').length,
-    tasks: items.filter(i => i.type === 'task').length,
-    events: items.filter(i => i.type === 'event').length,
-    transfers: items.filter(i => i.type === 'transfer').length,
-    tribes: items.filter(i => i.type === 'tribe').length,
-    market: items.filter(i => i.type === 'market').length,
-    reports: items.filter(i => i.type === 'report').length
-  };
-
-  const filtered =
-    filter === 'open' ? items.filter(i => i.status === 'OPEN') :
-    filter === 'closed' ? items.filter(i => i.status === 'CLOSED') :
-    filter === 'tasks' ? items.filter(i => i.type === 'task') :
-    filter === 'events' ? items.filter(i => i.type === 'event') :
-    filter === 'transfers' ? items.filter(i => i.type === 'transfer') :
-    filter === 'tribes' ? items.filter(i => i.type === 'tribe') :
-    filter === 'market' ? items.filter(i => i.type === 'market') :
-    filter === 'reports' ? items.filter(i => i.type === 'report') :
-    items;
-
+exports.agendaView = async (data, filter) => {
+  const { items, counts } = data;
   const fmt = d => moment(d).format('YYYY/MM/DD HH:mm:ss');
 
   return template(
@@ -56,14 +33,16 @@ exports.agendaView = async (items, filter) => {
           button({ type: 'submit', name: 'filter', value: 'tribes', class: filter === 'tribes' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterTribes} (${counts.tribes})`),
           button({ type: 'submit', name: 'filter', value: 'market', class: filter === 'market' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterMarket} (${counts.market})`), 
+            `${i18n.agendaFilterMarket} (${counts.market})`),
           button({ type: 'submit', name: 'filter', value: 'transfers', class: filter === 'transfers' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterTransfers} (${counts.transfers})`)
+            `${i18n.agendaFilterTransfers} (${counts.transfers})`),
+          button({ type: 'submit', name: 'filter', value: 'discarded', class: filter === 'discarded' ? 'filter-btn active' : 'filter-btn' },
+            `DISCARDED (${counts.discarded})`)
         )
       ),
       div({ class: 'agenda-list' },
-        filtered.length
-          ? filtered.map(item => {
+        items.length
+          ? items.map(item => {
               const author = item.seller || item.organizer || item.from || item.author;
               const commonFields = [
                 p(`${i18n.agendaAuthor}: `, a({ href: `/author/${encodeURIComponent(author)}` }, author)),
@@ -71,64 +50,69 @@ exports.agendaView = async (items, filter) => {
               ];
               let details = [];
               let actionButton = null;
-		if (item.type === 'market') {
-		  commonFields.push(p(`${i18n.marketItemType}: ${item.item_type}`));
-		  commonFields.push(p(`${i18n.marketItemTitle}: ${item.title}`));
-		  commonFields.push(p(`${i18n.marketItemDescription}: ${item.description}`));
-		  commonFields.push(p(`${i18n.marketItemPrice}: ${item.price} ECO`));
-		  commonFields.push(p(`${i18n.marketItemIncludesShipping}: ${item.includesShipping ? i18n.agendaYes : i18n.agendaNo}`));
-		  commonFields.push(p(`${i18n.marketItemSeller}: `, a({ href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)));
-		  commonFields.push(p(`${i18n.marketItemAvailable}: ${moment(item.createdAt).format('YYYY-MM-DD HH:mm')}`));
-		  commonFields.push(
-		    item.image
-		      ? img({ src: `/blob/${encodeURIComponent(item.image)}`, class: 'market-image' })
-		      : p(i18n.marketNoImage)
-		  );
-		  commonFields.push(
-		    item.tags && item.tags.length
-		      ? div(
-			  item.tags.map(tag =>
-			    a(
-			      {
-				href: `/search?query=%23${encodeURIComponent(tag)}`,
-				class: 'tag-link',
-				style: 'margin-right:0.8em;',
-			      },
-			      `#${tag}`
-			    )
-			  )
-			)
-		      : null
-		  );
+              if (filter === 'discarded') {
+		actionButton = form({ method: 'POST', action: `/agenda/restore/${encodeURIComponent(item.id)}` },
+		  button({ type: 'submit', class: 'restore-btn' }, i18n.agendaRestoreButton)
+		);
+              } else {
+		actionButton = form({ method: 'POST', action: `/agenda/discard/${encodeURIComponent(item.id)}` },
+		  button({ type: 'submit', class: 'discard-btn' }, i18n.agendaDiscardButton)
+		);
+              }
 
-		  if (item.item_type === 'auction') {
-		    details.push(p(`${i18n.marketItemAvailable}: ${moment(item.deadline).format('YYYY-MM-DD HH:mm')}`));
-		    const bids = item.auctions_poll.map(bid => parseFloat(bid.split(':')[1]));
-		    const maxBid = bids.length ? Math.max(...bids) : 0;
-		    details.push(p(`${i18n.marketItemHighestBid}: ${maxBid} ECO`));
-		  }
-
-		  details.push(p(`${i18n.marketItemStatus}: ${item.status}`));
-		}
+              if (item.type === 'market') {
+                commonFields.push(p(`${i18n.marketItemType}: ${item.item_type}`));
+                commonFields.push(p(`${i18n.marketItemTitle}: ${item.title}`));
+                commonFields.push(p(`${i18n.marketItemDescription}: ${item.description}`));
+                commonFields.push(p(`${i18n.marketItemPrice}: ${item.price} ECO`));
+                commonFields.push(p(`${i18n.marketItemIncludesShipping}: ${item.includesShipping ? i18n.agendaYes : i18n.agendaNo}`));
+                commonFields.push(p(`${i18n.marketItemSeller}: `, a({ href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)));
+                commonFields.push(p(`${i18n.marketItemAvailable}: ${moment(item.createdAt).format('YYYY-MM-DD HH:mm')}`));
+                commonFields.push(
+                  item.image
+                    ? img({ src: `/blob/${encodeURIComponent(item.image)}`, class: 'market-image' })
+                    : p(i18n.marketNoImage)
+                );
+                commonFields.push(
+                  item.tags && item.tags.length
+                    ? div(
+                        item.tags.map(tag =>
+                          a(
+                            {
+                              href: `/search?query=%23${encodeURIComponent(tag)}`,
+                              class: 'tag-link',
+                              style: 'margin-right:0.8em;',
+                            },
+                            `#${tag}`
+                          )
+                        )
+                      )
+                    : null
+                );
+                if (item.item_type === 'auction') {
+                  details.push(p(`${i18n.marketItemAvailable}: ${moment(item.deadline).format('YYYY-MM-DD HH:mm')}`));
+                  const bids = item.auctions_poll.map(bid => parseFloat(bid.split(':')[1]));
+                  const maxBid = bids.length ? Math.max(...bids) : 0;
+                  details.push(p(`${i18n.marketItemHighestBid}: ${maxBid} ECO`));
+                }
+                details.push(p(`${i18n.marketItemStatus}: ${item.status}`));
+              }
               if (item.type === 'tribe') {
                 commonFields.push(p(`${i18n.agendaDescriptionLabel}: ${item.description || i18n.noDescription}`));
                 details = [
                   p(`${i18n.agendaMembersCount}: ${item.members.length || 0}`),
                   p(`${i18n.agendaLocationLabel}: ${item.location || i18n.noLocation}`),
-                  p(`${i18n.agendaLARPLabel}: ${item.isLARP ? i18n.agendaYes : i18n.agendaNo}`), 
-                  p(`${i18n.agendaAnonymousLabel}: ${item.isAnonymous ? i18n.agendaYes : i18n.agendaNo}`), 
+                  p(`${i18n.agendaLARPLabel}: ${item.isLARP ? i18n.agendaYes : i18n.agendaNo}`),
+                  p(`${i18n.agendaAnonymousLabel}: ${item.isAnonymous ? i18n.agendaYes : i18n.agendaNo}`),
                   p(`${i18n.agendaInviteModeLabel}: ${item.inviteMode || i18n.noInviteMode}`)
                 ];
-
-                const membersList = item.members.map(member => 
+                const membersList = item.members.map(member =>
                   p(a({ href: `/author/${encodeURIComponent(member)}` }, member))
                 );
-
                 details.push(
                   div({ class: 'members-list' }, `${i18n.agendaMembersLabel}:`, membersList)
                 );
               }
-
               if (item.type === 'report') {
                 details = [
                   p(`${i18n.agendareportCategory}: ${item.category || i18n.noCategory}`),
@@ -137,7 +121,6 @@ exports.agendaView = async (items, filter) => {
                   p(`${i18n.agendareportDescription}: ${item.description || i18n.noDescription}`)
                 ];
               }
-
               if (item.type === 'event') {
                 details = [
                   p(`${i18n.eventDescriptionLabel}: ${item.description}`),
@@ -146,12 +129,9 @@ exports.agendaView = async (items, filter) => {
                   p(`${i18n.eventPriceLabel}: ${item.price} ECO`),
                   p(`${i18n.eventUrlLabel}: ${item.url || i18n.noUrl}`)
                 ];
-                actionButton = form({ method: 'POST', action: `/events/attend/${encodeURIComponent(item.id)}` },
-                              button({ type: 'submit', class: 'assign-btn' },
-                                     `${i18n.eventAttendButton}`)
-                );
+                actionButton = actionButton || form({ method: 'POST', action: `/events/attend/${encodeURIComponent(item.id)}` },
+                  button({ type: 'submit', class: 'assign-btn' }, `${i18n.eventAttendButton}`));
               }
-
               if (item.type === 'task') {
                 details = [
                   p(`${i18n.taskDescriptionLabel}: ${item.description}`),
@@ -159,11 +139,10 @@ exports.agendaView = async (items, filter) => {
                   p(`${i18n.taskLocationLabel}: ${item.location}`)
                 ];
                 const assigned = Array.isArray(item.assignees) && item.assignees.includes(userId);
-                actionButton = form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(item.id)}` },
-                              button({ type: 'submit', class: 'assign-btn' },
-                                     assigned ? i18n.taskUnassignButton : i18n.taskAssignButton));
+                actionButton = actionButton || form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(item.id)}` },
+                  button({ type: 'submit', class: 'assign-btn' },
+                    assigned ? i18n.taskUnassignButton : i18n.taskAssignButton));
               }
-
               if (item.type === 'transfer') {
                 details = [
                   p(`${i18n.agendaTransferConcept}: ${item.concept}`),

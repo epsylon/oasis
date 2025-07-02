@@ -28,7 +28,7 @@ const renderPaginationTribesView = (page, totalPages, filter) => {
 
 const renderFeedTribesView = (tribe, page, query, filter) => {
   const feed = Array.isArray(tribe.feed) ? tribe.feed : [];
-  const feedFilter = (query.feedFilter || 'RECENT').toUpperCase();
+  const feedFilter = (query.feedFilter || 'TOP').toUpperCase();
   let filteredFeed = feed;
 
   if (feedFilter === 'MINE') filteredFeed = feed.filter(m => m.author === userId);
@@ -53,7 +53,7 @@ const renderFeedTribesView = (tribe, page, query, filter) => {
 
   return div({ class: 'tribe-feed' },
     div({ class: 'feed-actions', style: 'margin-bottom:8px;' },
-      ['RECENT', 'MINE', 'ALL', 'TOP'].map(f =>
+      ['TOP', 'MINE', 'ALL', 'RECENT'].map(f =>
         form({ method: 'GET', action: '/tribes' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'hidden', name: 'feedFilter', value: f }),
@@ -335,7 +335,7 @@ const renderFeedTribeView = async (tribe, query = {}, filter) => {
   }
   return div({ class: 'tribe-feed-full' },
     div({ class: 'feed-actions', style: 'margin-bottom:8px;' },
-      ['RECENT', 'MINE', 'ALL', 'TOP'].map(f =>
+      ['TOP', 'MINE', 'ALL', 'RECENT'].map(f =>
 	form({ method: 'GET', action: `/tribe/${encodeURIComponent(tribe.id)}` },
 	  input({ type: 'hidden', name: 'filter', value: filter }),
 	  input({ type: 'hidden', name: 'feedFilter', value: f }), 
@@ -368,7 +368,7 @@ exports.tribeView = async (tribe, userId, query) => {
   if (!tribe) {
     return div({ class: 'error' }, 'Tribe not found!');
   }
-  const feedFilter = (query.feedFilter || 'RECENT').toUpperCase();
+  const feedFilter = (query.feedFilter || 'TOP').toUpperCase();
   const imageSrc = tribe.image
     ? `/blob/${encodeURIComponent(tribe.image)}`
     : '/assets/images/default-tribe.png';

@@ -47,17 +47,19 @@ async function printMetadata(mode, modeColor = colors.cyan) {
   const publicKey = config.keys?.public || '';
 
   console.log("=========================");
-  console.log(`Mode: ${modeColor}${mode}${colors.reset}`);
+  console.log(`Running mode: ${modeColor}${mode}${colors.reset}`);
   console.log("=========================");
-  console.log(`Package: ${colors.blue}${name} ${colors.yellow}[Version: ${version}]${colors.reset}`);
-  console.log("Logging Level:", logLevel);
-  console.log(`Oasis ID: [ ${colors.orange}@${publicKey}${colors.reset} ]`);
+  console.log(`- Package: ${colors.blue}${name} ${colors.yellow}[Version: ${version}]${colors.reset}`);
+  console.log("- Logging Level:", logLevel);
+  console.log(`- Oasis ID: [ ${colors.orange}@${publicKey}${colors.reset} ]`);
+  console.log("");
   console.log("=========================");
   console.log("Modules loaded: [", modules.length, "]");
   console.log("=========================");
 
   // Check for updates
   await checkForUpdate();
+  console.log("=========================");
 }
 
 module.exports = {

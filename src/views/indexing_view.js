@@ -1,5 +1,11 @@
-const { html,  title, link, meta,  body, main, p, progress } = require("../server/node_modules/hyperaxe");
+const { html, head, title, link, meta, body, main, p, progress } = require("../server/node_modules/hyperaxe");
 const { i18n } = require('./main_views');
+
+const doctypeString = '<!DOCTYPE html>';
+
+function toAttributes(attrs) {
+  return Object.entries(attrs).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(', ');
+}
 
 exports.indexingView = ({ percent }) => {
   const message = `Oasis has only processed ${percent}% of the messages and needs to catch up. This page will refresh every 10 seconds. Thanks for your patience! ❤`;
@@ -15,7 +21,7 @@ exports.indexingView = ({ percent }) => {
       }),
       meta({
         name: "viewport",
-        content: toAttributes({ width: "device-width", "initial-scale": 1 }),
+        content: "width=device-width, initial-scale=1",
       }),
       meta({ "http-equiv": "refresh", content: 10 })
     ),
@@ -27,6 +33,6 @@ exports.indexingView = ({ percent }) => {
       )
     )
   );
-  const result = doctypeString + nodes.outerHTML;
-  return result;
+  return doctypeString + nodes.outerHTML;
 };
+

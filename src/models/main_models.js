@@ -110,8 +110,8 @@ module.exports = ({ cooler, isPublic }) => {
     all_the_names = {};
 
     const allFeeds = Object.keys(feeds_to_name);
-    console.log(`Synced-feeds: [ ${allFeeds.length} ]`);
-    console.time("Sync-time");
+    console.log(` - Synced-feeds: [ ${allFeeds.length} ]`);
+    console.time(" - Sync-time");
 
     const lookups = [];
     for (const feed of allFeeds) {
@@ -123,7 +123,7 @@ module.exports = ({ cooler, isPublic }) => {
       .then(() => {
         dirty = false; 
         running = false;
-        console.timeEnd("Sync-time");
+        console.timeEnd(" - Sync-time");
       })
       .catch((err) => {
         running = false;
@@ -159,7 +159,7 @@ module.exports = ({ cooler, isPublic }) => {
     });
   };
   
-  //ABOUT MODEL
+//ABOUT MODEL
 models.about = {
   publicWebHosting: async (feedId) => {
     const result = await getAbout({
@@ -345,8 +345,8 @@ models.blob = {
   }
 };
 
-  //FRIENDS MODEL
-  models.friend = {
+//FRIENDS MODEL
+models.friend = {
   setRelationship: async ({ feedId, following, blocking }) => {
     if (following && blocking) {
       throw new Error("Cannot follow and block at the same time");
@@ -435,8 +435,8 @@ models.blob = {
     },
   };
   
-  //META MODEL
-  models.meta = {
+//META MODEL
+models.meta = {
     myFeedId: async () => {
       const ssb = await cooler.open();
       const { id } = ssb;
@@ -464,26 +464,20 @@ models.blob = {
     },
     peers: async () => {
       const ssb = await cooler.open();
-      const peersSource = await ssb.conn.peers();
-
       return new Promise((resolve, reject) => {
         pull(
-          peersSource,
+          ssb.conn.peers(),
           pull.take(1),
-          pull.collect((err, val) => {
+          pull.collect((err, [entries]) => {
             if (err) return reject(err);
-            resolve(val[0]);
+            resolve(entries);
           })
         );
       });
     },
     connectedPeers: async () => {
       const peers = await models.meta.peers();
-      return peers.filter(([address, data]) => {
-        if (data.state === "connected") {
-          return [address, data];
-        }
-      });
+      return peers.filter(([_, data]) => data.state === "connected");
     },
     connStop: async () => {
       const ssb = await cooler.open();
@@ -580,7 +574,7 @@ models.blob = {
     return conditions.every((x) => x === true);
   };
 
-  const maxMessages = 64;
+  const maxMessages = 30; // change it to control post overloading
 
   const getMessages = async ({
     myFeedId,
@@ -831,8 +825,8 @@ models.blob = {
     return messages.length ? messages[0] : undefined;
   };
 
-  // POST MODEL
-  const post = {
+// POST MODEL
+const post = {
     firstBy: async (feedId) => {
       return getLimitPost(feedId, false);
     },
@@ -879,28 +873,46 @@ models.blob = {
     const ssb = await cooler.open();
     const myFeedId = ssb.id;
     const { name: myUsername } = await getUserInfo(myFeedId);
-
     const query = [
-      {
+        {
         $filter: {
           "value.content.type": "post",
         },
       },
     ];
-
     const messages = await getMessages({
       myFeedId,
       customOptions,
       ssb,
       query,
       filter: (msg) => {
-        const mentionsText = lodash.get(msg, "value.content.text", "");
+      const content = msg.value.content;
+      if (content.mentions) {
+        if (Array.isArray(content.mentions)) {
+          if (content.mentions.some(m => {
+            return m.link === myFeedId || m.name === myUsername || m.name === '@' + myUsername;
+          })) {
+            return true; 
+          }
+        }
+        if (typeof content.mentions === 'object' && !Array.isArray(content.mentions)) {
+          const values = Object.values(content.mentions);
+          if (values.some(v => {
+            return v.link === myFeedId || v.name === myUsername || v.name === '@' + myUsername;
+          })) {
+            return true;
+            }
+          }
+        }
+        const mentionsText = lodash.get(content, "text", "");
         const mentionRegex = /<a class="mention" href="\/author\/([^"]+)">(@[^<]+)<\/a>/g;
         let match;
         while ((match = mentionRegex.exec(mentionsText))) {
-          if (match[1] === myFeedId || match[2] === myUsername) return true;
+          if (match[1] === myFeedId || match[2] === myUsername || match[2] === '@' + myUsername) {
+            return true; 
+          }
         }
-        return false;
+        return false; 
       },
     });
     return { messages, myFeedId };
@@ -1529,9 +1541,9 @@ models.blob = {
       const ssb = await cooler.open();
       if (image.length > 0) {
         const megabyte = Math.pow(2, 20);
-        const maxSize = 25 * megabyte;
+        const maxSize = 50 * megabyte;
         if (image.length > maxSize) {
-          throw new Error("File is too big, maximum size is 25 megabytes");
+          throw new Error("File is too big, maximum size is 50 megabytes");
         }
         return new Promise((resolve, reject) => {
           pull(
