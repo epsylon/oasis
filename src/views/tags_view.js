@@ -4,13 +4,11 @@ const moment = require("../server/node_modules/moment");
 
 const getFilteredTags = (filter, tags) => {
   let filteredTags = tags.filter(t => !t.tombstone);
-
   if (filter === 'top') {
-    filteredTags = [...filteredTags].sort((a, b) => b.count - a.count);
+    filteredTags = filteredTags.sort((a, b) => b.count - a.count); 
   } else {
     filteredTags = filteredTags.sort((a, b) => a.name.localeCompare(b.name));
   }
-
   return filteredTags;
 };
 

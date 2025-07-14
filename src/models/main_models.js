@@ -110,8 +110,8 @@ module.exports = ({ cooler, isPublic }) => {
     all_the_names = {};
 
     const allFeeds = Object.keys(feeds_to_name);
-    console.log(` - Synced-feeds: [ ${allFeeds.length} ]`);
-    console.time(" - Sync-time");
+    console.log(`- Synced-peers: [ ${allFeeds.length} ]`);
+    console.time("- Sync-time");
 
     const lookups = [];
     for (const feed of allFeeds) {
@@ -123,11 +123,11 @@ module.exports = ({ cooler, isPublic }) => {
       .then(() => {
         dirty = false; 
         running = false;
-        console.timeEnd(" - Sync-time");
+        console.timeEnd("- Sync-time");
       })
       .catch((err) => {
         running = false;
-        console.warn("lookup sync failed:", err);
+        console.warn("- Lookup Sync failed: ", err);
       });
   };
   const enhanceFeedInfo = ({ feed, name }) => {
@@ -1703,32 +1703,31 @@ const post = {
     inbox: async () => {
       const ssb = await cooler.open();
       const myFeedId = ssb.id;
-  const rawMessages = await new Promise((resolve, reject) => {
-    pull(
-      ssb.createLogStream({ reverse: true, limit: 1000 }),
-      pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-    );
-  });
-  const decryptedMessages = rawMessages.map(msg => {
-    try {
-      return ssb.private.unbox(msg);
-    } catch {
-      return null;
+      const rawMessages = await new Promise((resolve, reject) => {
+        pull(
+          ssb.createLogStream({ reverse: true, limit: 1000 }),
+          pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
+        );
+      });
+     const decryptedMessages = rawMessages.map(msg => {
+        try {
+          return ssb.private.unbox(msg);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean);
+      const tombstoneTargets = new Set(
+        decryptedMessages
+          .filter(msg => msg.value?.content?.type === 'tombstone')
+          .map(msg => msg.value.content.target)
+      );
+      return decryptedMessages.filter(msg => {
+        if (tombstoneTargets.has(msg.key)) return false;
+          const content = msg.value?.content;
+          const author = msg.value?.author;
+          return content?.type === 'post' && content?.private === true && (author === myFeedId || content.to?.includes(myFeedId));
+      });
     }
-  }).filter(Boolean);
-  const tombstoneTargets = new Set(
-    decryptedMessages
-      .filter(msg => msg.value?.content?.type === 'tombstone')
-      .map(msg => msg.value.content.target)
-  );
-  return decryptedMessages.filter(msg => {
-    if (tombstoneTargets.has(msg.key)) return false;
-    const content = msg.value?.content;
-    const author = msg.value?.author;
-    return content?.type === 'post' && content?.private === true && (author === myFeedId || content.to?.includes(myFeedId));
-  });
-}
-
 
   };
   models.post = post;

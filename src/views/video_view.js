@@ -1,9 +1,9 @@
-const { form, button, div, h2, p, section, input, label, br, a, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, label, br, a, video: videoHyperaxe, span } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 
-const userId = config.keys.id
+const userId = config.keys.id;
 
 const getFilteredVideos = (filter, videos, userId) => {
   const now = Date.now();
@@ -34,11 +34,11 @@ const renderVideoActions = (filter, video) => {
 const renderVideoList = (filteredVideos, filter) => {
   return filteredVideos.length > 0
     ? filteredVideos.map(video =>
-        div({ class: "video-item" },
+        div({ class: "tags-header" },
           renderVideoActions(filter, video),
           form({ method: "GET", action: `/videos/${encodeURIComponent(video.key)}` },
-	  button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
-	  br,
+            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
+          video.title?.trim() ? h2(video.title) : null,
           video.url
             ? div({ class: "video-container" },
                 videoHyperaxe({
@@ -50,16 +50,20 @@ const renderVideoList = (filteredVideos, filter) => {
                   height: '360'
                 })
               )
-            : p(i18n.videoNoFile),
-          p(`${i18n.videoCreatedAt}: ${moment(video.createdAt).format('YYYY/MM/DD HH:mm:ss')}`),
-          p(`${i18n.videoAuthor}: `, a({ href: `/author/${encodeURIComponent(video.author)}` }, video.author)),
-          video.title?.trim() ? h2(video.title) : null,
+            : p(i18n.videoNoFile),        
           video.description?.trim() ? p(video.description) : null,
           video.tags?.length
-            ? div(video.tags.map(tag =>
-                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
-              ))
+            ? div({ class: "card-tags" },
+                video.tags.map(tag =>
+                  a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
+                )
+              )
             : null,
+          br,
+          p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${moment(video.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+          a({ href: `/author/${encodeURIComponent(video.author)}`, class: 'user-link' }, `${video.author}`)
+          ),
           div({ class: "voting-buttons" },
             ['interesting','necessary','funny','disgusting','sensible',
              'propaganda','adultOnly','boring','confusing','inspiring','spam']
@@ -154,8 +158,17 @@ exports.singleVideoView = async (video, filter) => {
         )
       ),
       div({ class: "tags-header" },
+        isAuthor ? div({ class: "video-actions" },
+        !hasOpinions
+          ? form({ method: "GET", action: `/videos/edit/${encodeURIComponent(video.key)}` },
+              button({ class: "update-btn", type: "submit" }, i18n.videoUpdateButton)
+            )
+          : null,
+        form({ method: "POST", action: `/videos/delete/${encodeURIComponent(video.key)}` },
+          button({ class: "delete-btn", type: "submit" }, i18n.videoDeleteButton)
+        )
+      ) : null,
         h2(video.title),
-        p(video.description),
         video.url
           ? div({ class: "video-container" },
               videoHyperaxe({
@@ -168,24 +181,20 @@ exports.singleVideoView = async (video, filter) => {
               })
             )
           : p(i18n.videoNoFile),
-        p(`${i18n.videoCreatedAt}: ${moment(video.createdAt).format('YYYY/MM/DD HH:mm:ss')}`),
-        p(`${i18n.videoAuthor}: `, a({ href: `/author/${encodeURIComponent(video.author)}` }, video.author)),
+        p(video.description),
         video.tags?.length
-          ? div(video.tags.map(tag =>
-              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
-            ))
-          : null
+            ? div({ class: "card-tags" },
+                video.tags.map(tag =>
+                  a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
+                )
+              )
+            : null,
+          br,
+          p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${moment(video.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+          a({ href: `/author/${encodeURIComponent(video.author)}`, class: 'user-link' }, `${video.author}`)
+          ),
       ),
-      isAuthor ? div({ class: "video-actions" },
-        !hasOpinions
-          ? form({ method: "GET", action: `/videos/edit/${encodeURIComponent(video.key)}` },
-              button({ class: "update-btn", type: "submit" }, i18n.videoUpdateButton)
-            )
-          : null,
-        form({ method: "POST", action: `/videos/delete/${encodeURIComponent(video.key)}` },
-          button({ class: "delete-btn", type: "submit" }, i18n.videoDeleteButton)
-        )
-      ) : null,
       div({ class: "voting-buttons" },
         ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
           form({ method: "POST", action: `/videos/opinions/${encodeURIComponent(video.key)}/${category}` },
@@ -196,3 +205,4 @@ exports.singleVideoView = async (video, filter) => {
     )
   );
 };
+

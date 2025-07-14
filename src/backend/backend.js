@@ -1122,10 +1122,6 @@ router
     }
     const eventId = ctx.params.id;
     const event = await eventsModel.getEventById(eventId);
-    if (event.opinions_inhabitants && event.opinions_inhabitants.length > 0) {
-        ctx.flash = { message: "This event has received votes and cannot be updated." };
-        ctx.redirect(`/events?filter=mine`);
-    }
     ctx.body = await eventView([event], 'edit', eventId);
    })
   .get('/events/:eventId', async ctx => {
@@ -1695,14 +1691,14 @@ router
   })
   .post('/documents/create', koaBody({ multipart: true }), async (ctx) => {
     const docBlob = await handleBlobUpload(ctx, 'document');
-    const { tags } = ctx.request.body;
-    await documentsModel.createDocument(docBlob, tags);
+    const { tags, title, description } = ctx.request.body;
+    await documentsModel.createDocument(docBlob, tags, title, description);
     ctx.redirect('/documents');
   })
   .post('/documents/update/:id', koaBody({ multipart: true }), async (ctx) => {
-    const { tags } = ctx.request.body;
+    const { tags, title, description } = ctx.request.body;
     const blob = ctx.request.files?.document ? await handleBlobUpload(ctx, 'document') : null;
-    await documentsModel.updateDocumentById(ctx.params.id, blob, tags);
+    await documentsModel.updateDocumentById(ctx.params.id, blob, tags, title, description);
     ctx.redirect('/documents?filter=mine');
   })
   .post('/documents/delete/:id', koaBody(), async (ctx) => {
@@ -1882,11 +1878,6 @@ router
     const { title, description, startTime, endTime, priority, location, tags, isPublic } = ctx.request.body;
     const taskId = ctx.params.id;
     const task = await tasksModel.getTaskById(taskId);
-    if (task.opinions_inhabitants && task.opinions_inhabitants.length > 0) {
-      ctx.flash = { message: "This task has received votes and cannot be updated." };
-      ctx.redirect(`/tasks?filter=mine`);
-      return;
-    }
     await tasksModel.updateTaskById(taskId, {
       title,
       description,
@@ -1900,46 +1891,34 @@ router
       author: task.author
     });
     ctx.redirect('/tasks?filter=mine');
-  })
+   })
   .post('/tasks/assign/:id', koaBody(), async (ctx) => {
     const taskId = ctx.params.id;
     await tasksModel.toggleAssignee(taskId);
     ctx.redirect('/tasks');
-  })
+   })
   .post('/tasks/delete/:id', koaBody(), async (ctx) => {
     const taskId = ctx.params.id;
     await tasksModel.deleteTaskById(taskId);
     ctx.redirect('/tasks?filter=mine');
-  })
+   })
   .post('/tasks/status/:id', koaBody(), async (ctx) => {
     const taskId = ctx.params.id;
     const { status } = ctx.request.body;
     await tasksModel.updateTaskStatus(taskId, status);
     ctx.redirect('/tasks?filter=mine');
-  })
-  .post('/tasks/opinions/:taskId/:category', async (ctx) => {
-    const { taskId, category } = ctx.params;
-    const voterId = config?.keys?.id;
-    const task = await tasksModel.getTaskById(taskId);
-    if (task.opinions_inhabitants && task.opinions_inhabitants.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/tasks');
-      return;
-    }
-    await opinionsModel.createVote(taskId, category, 'task');
-    ctx.redirect('/tasks');
    })
-   .post('/reports/create', koaBody({ multipart: true }), async ctx => {
-      const { title, description, category, tags, severity, isAnonymous } = ctx.request.body;
+  .post('/reports/create', koaBody({ multipart: true }), async ctx => {
+      const { title, description, category, tags, severity } = ctx.request.body;
       const image = await handleBlobUpload(ctx, 'image');
-      await reportsModel.createReport(title, description, category, image, tags, severity, !!isAnonymous);
+      await reportsModel.createReport(title, description, category, image, tags, severity);
       ctx.redirect('/reports');
-    })
-   .post('/reports/update/:id', koaBody({ multipart: true }), async ctx => {
-      const { title, description, category, tags, severity, isAnonymous } = ctx.request.body;
+   })
+  .post('/reports/update/:id', koaBody({ multipart: true }), async ctx => {
+      const { title, description, category, tags, severity } = ctx.request.body;
       const image = await handleBlobUpload(ctx, 'image');
       await reportsModel.updateReportById(ctx.params.id, {
-        title, description, category, image, tags, severity, isAnonymous: !!isAnonymous
+        title, description, category, image, tags, severity
       });
       ctx.redirect('/reports?filter=mine');
    })
@@ -1947,18 +1926,6 @@ router
       await reportsModel.deleteReportById(ctx.params.id);
       ctx.redirect('/reports?filter=mine');
    })   
-  .post('/reports/opinions/:reportId/:category', async (ctx) => {
-    const { reportId, category } = ctx.params;
-    const voterId = SSBconfig?.keys?.id;
-    const report = await reportsModel.getReportById(reportId);
-    if (report.opinions_inhabitants && report.opinions_inhabitants.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/reports');
-      return;
-    }
-    await opinionsModel.createVote(reportId, category, 'report');
-    ctx.redirect('/reports');
-   })
   .post('/reports/confirm/:id', async ctx => {
       await reportsModel.confirmReportById(ctx.params.id);
       ctx.redirect('/reports');
@@ -1978,10 +1945,6 @@ router
     const { title, description, date, location, price, url, attendees, tags, isPublic } = ctx.request.body;
     const eventId = ctx.params.id;
     const event = await eventsModel.getEventById(eventId);
-    if (event.opinions_inhabitants && event.opinions_inhabitants.length > 0) {
-        ctx.flash = { message: "This event has received votes and cannot be updated." };
-        ctx.redirect(`/events?filter=mine`);
-    }
     await eventsModel.updateEventById(eventId, {
       title,
       description,
@@ -2006,18 +1969,6 @@ router
     const eventId = ctx.params.id;
     await eventsModel.deleteEventById(eventId);
     ctx.redirect('/events?filter=mine');
-  })
-  .post('/events/opinions/:eventId/:category', async (ctx) => {
-    const { eventId, category } = ctx.params;
-    const voterId = SSBconfig?.keys?.id;
-    const event = await eventsModel.getEventById(eventId);
-    if (event.opinions_inhabitants && event.opinions_inhabitants.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/events');
-      return;
-    }
-    await opinionsModel.createVote(eventId, category, 'event');
-    ctx.redirect('/events');
   })
   .post('/votes/create', koaBody(), async ctx => {
     const { question, deadline, options = 'YES,NO,ABSTENTION', tags = '' } = ctx.request.body;
@@ -2058,15 +2009,21 @@ router
     ctx.redirect('/votes');
   })
   .post('/market/create', koaBody({ multipart: true }), async ctx => {
-    const { item_type, title, description, price, tags, item_status, deadline, includesShipping } = ctx.request.body;
+    const { item_type, title, description, price, tags, item_status, deadline, includesShipping, stock } = ctx.request.body;
     const image = await handleBlobUpload(ctx, 'image');
-    await marketModel.createItem(item_type, title, description, image, price, tags, item_status, deadline, includesShipping);
-    ctx.redirect('/market');
+    if (!stock || stock <= 0) {
+      ctx.throw(400, 'Stock must be a positive number.');
+    }
+    await marketModel.createItem(item_type, title, description, image, price, tags, item_status, deadline, includesShipping, stock);
+   ctx.redirect('/market');
   })
   .post('/market/update/:id', koaBody({ multipart: true }), async ctx => {
     const id = ctx.params.id;
-    const { item_type, title, description, price, tags = '', item_status, deadline, includesShipping } = ctx.request.body;
+    const { item_type, title, description, price, tags = '', item_status, deadline, includesShipping, stock } = ctx.request.body;
     const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+    if (stock < 0) {
+      ctx.throw(400, 'Stock cannot be negative.');
+    }
     const updatedData = {
       item_type, 
       title, 
@@ -2075,7 +2032,8 @@ router
       item_status, 
       deadline, 
       includesShipping, 
-      tags: parsedTags  
+      tags: parsedTags, 
+      stock
     };
     const image = await handleBlobUpload(ctx, 'image');
     updatedData.image = image;
@@ -2090,8 +2048,12 @@ router
   .post('/market/sold/:id', koaBody(), async ctx => {
     const id = ctx.params.id;
     const marketItem = await marketModel.getItemById(id);
+    if (marketItem.stock <= 0) {
+      ctx.throw(400, 'No stock left to mark as sold.');
+    }
     if (marketItem.status !== 'SOLD') {
       await marketModel.setItemAsSold(id);
+      await marketModel.decrementStock(id);
     }
     ctx.redirect('/market?filter=mine');
   })
@@ -2100,21 +2062,25 @@ router
     const marketItem = await marketModel.getItemById(id);
     if (marketItem.item_type === 'exchange') {
       if (marketItem.status !== 'SOLD') {
-      const buyerId = ctx.request.body.buyerId;
-      const { price, title, seller } = marketItem;
-      const subject = `Your item "${title}" has been sold`;
-      const text = `The item with title: "${title}" has been sold. The buyer with OASIS ID: ${buyerId} purchased it for: $${price}.`;
-      await pmModel.sendMessage([seller], subject, text);
-      await marketModel.setItemAsSold(id);
+        const buyerId = ctx.request.body.buyerId;
+        const { price, title, seller } = marketItem;
+        const subject = `Your item "${title}" has been sold`;
+        const text = `The item with title: "${title}" has been sold. The buyer with OASIS ID: ${buyerId} purchased it for: $${price}.`;
+        await pmModel.sendMessage([seller], subject, text);
+        await marketModel.setItemAsSold(id);
       }
     }
+    await marketModel.decrementStock(id);
     ctx.redirect('/inbox?filter=sent');
   })
- .post('/market/bid/:id', koaBody(), async ctx => {
+  .post('/market/bid/:id', koaBody(), async ctx => {
     const id = ctx.params.id;
     const { bidAmount } = ctx.request.body;
     const marketItem = await marketModel.getItemById(id);
     await marketModel.addBidToAuction(id, userId, bidAmount);
+    if (marketItem.stock > 0 && marketItem.status === 'SOLD') {
+      await marketModel.decrementStock(id);
+    }
     ctx.redirect('/market?filter=auctions');
   })
 

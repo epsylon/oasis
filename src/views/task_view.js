@@ -1,18 +1,15 @@
-const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span } = require("../server/node_modules/hyperaxe");
 const moment = require('../server/node_modules/moment');
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 
 const userId = config.keys.id;
 
-const generateFilterButtons = (filters, currentFilter, action) => {
-  return filters.map(mode =>
-    form({ method: 'GET', action },
-      input({ type: 'hidden', name: 'filter', value: mode }),
-      button({ type: 'submit', class: currentFilter === mode.toLowerCase() ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
-    )
+const renderStyledField = (labelText, valueElement) =>
+  div({ class: 'card-field' },
+    span({ class: 'card-label' }, labelText),
+    span({ class: 'card-value' }, valueElement)
   );
-};
 
 const renderTaskItem = (task, filter, userId) => {
   const actions = [];
@@ -29,38 +26,45 @@ const renderTaskItem = (task, filter, userId) => {
   }
   if (task.status !== 'CLOSED') {
     actions.push(
-      form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(task.id)}` }, button({ type: 'submit' }, task.assignees.includes(userId) ? i18n.taskUnassignButton : i18n.taskAssignButton))
+      form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(task.id)}` },
+        button({ type: 'submit' }, task.assignees.includes(userId) ? i18n.taskUnassignButton : i18n.taskAssignButton)
+      )
     );
   }
-  return div({ class: 'task-item' },
+  return div({ class: 'card card-section task' },
     actions.length > 0 ? div({ class: 'task-actions' }, ...actions) : null,
-    h2(task.title),
-    p(`${i18n.taskDescriptionLabel}: ${task.description}`),
-    p(`${i18n.taskStartTimeLabel}: ${moment(task.startTime).format(i18n.dateFormat)}`),
-    p(`${i18n.taskEndTimeLabel}: ${moment(task.endTime).format(i18n.dateFormat)}`),
-    p(`${i18n.taskPriorityLabel}: ${task.priority}`),
-    task.location?.trim() ? p(`${i18n.taskLocationLabel}: ${task.location}`) : null,
-    p(`${i18n.taskCreatedAt}: ${moment(task.createdAt).format(i18n.dateFormat)}`),
-    p(`${i18n.taskBy}: `, a({ href: `/author/${encodeURIComponent(task.author)}` }, task.author)),
-    p(`${i18n.taskStatus}: ${task.status}`),
-    p(`${i18n.taskVisibilityLabel}: ${task.isPublic}`),
-    p(`${i18n.taskAssignedTo}: `,
-      Array.isArray(task.assignees) && task.assignees.length
-        ? task.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
-        : i18n.noAssignees
+    form({ method: 'GET', action: `/tasks/${encodeURIComponent(task.id)}` }, button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)),
+    br,
+    renderStyledField(i18n.taskTitleLabel + ':', task.title),
+    renderStyledField(i18n.taskDescriptionLabel + ':', task.description),
+    task.location?.trim() ? renderStyledField(i18n.taskLocationLabel + ':', task.location) : null,
+    renderStyledField(i18n.taskStatus + ':', task.status),
+    renderStyledField(i18n.taskPriorityLabel + ':', task.priority),
+    renderStyledField(i18n.taskVisibilityLabel + ':', task.isPublic),
+    renderStyledField(i18n.taskStartTimeLabel + ':', moment(task.startTime).format('YYYY/MM/DD HH:mm:ss')),
+    renderStyledField(i18n.taskEndTimeLabel + ':', moment(task.endTime).format('YYYY/MM/DD HH:mm:ss')),  
+    br,
+    div({ class: 'card-field' },
+      span({ class: 'card-label' }, i18n.taskAssignedTo + ':'),
+      span({ class: 'card-value' },
+        Array.isArray(task.assignees) && task.assignees.length
+          ? task.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ class: "user-link", href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
+          : i18n.noAssignees
+      )
     ),
-    task.tags && task.tags.filter(Boolean).length
-      ? div(
-        task.tags.filter(Boolean).map(tag =>
-          a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link', style: 'margin-right:0.8em;margin-bottom:0.5em;' }, `#${tag}`)
+    br,
+    task.tags && task.tags.length
+      ? div({ class: 'card-tags' },
+          task.tags.map(tag =>
+            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+          )
         )
-      )
-      : null,
-    div({ class: 'voting-buttons' },
-      ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(cat =>
-        form({ method: 'POST', action: `/tasks/opinions/${encodeURIComponent(task.id)}/${cat}` }, button({ class: 'vote-btn' }, `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)]} [${task.opinions?.[cat] || 0}]`))
-      )
-    )
+      : null, 
+    br,
+    p({ class: 'card-footer' },
+      span({ class: 'date-link' }, `${moment(task.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+      a({ href: `/author/${encodeURIComponent(task.author)}`, class: 'user-link' }, `${task.author}`)
+    )   
   );
 };
 
@@ -153,56 +157,7 @@ exports.taskView = async (tasks, filter, taskId) => {
           )
         : div({ class: 'task-list' },
             filtered.length > 0
-              ? filtered.map(t => {
-                  const actions = [];
-                  if (filter === 'mine' && t.author === userId) {
-                    actions.push(
-                      form({ method: 'GET', action: `/tasks/edit/${encodeURIComponent(t.id)}` }, button({ type: 'submit', class: 'update-btn' }, i18n.taskUpdateButton)),
-                      form({ method: 'POST', action: `/tasks/delete/${encodeURIComponent(t.id)}` }, button({ type: 'submit', class: 'delete-btn' }, i18n.taskDeleteButton)),
-                      form({ method: 'POST', action: `/tasks/status/${encodeURIComponent(t.id)}` },
-                        button({ type: 'submit', name: 'status', value: 'OPEN' }, i18n.taskStatusOpen), br(),
-                        button({ type: 'submit', name: 'status', value: 'IN-PROGRESS' }, i18n.taskStatusInProgress), br(),
-                        button({ type: 'submit', name: 'status', value: 'CLOSED' }, i18n.taskStatusClosed)
-                      )
-                    );
-                  }
-                  if (t.status !== 'CLOSED') {
-                    actions.push(
-                      form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(t.id)}` }, button({ type: 'submit' }, t.assignees.includes(userId) ? i18n.taskUnassignButton : i18n.taskAssignButton))
-                    );
-                  }
-                  return div({ class: 'task-item' },
-                    actions.length > 0 ? div({ class: 'task-actions' }, ...actions) : null,
-                    form({ method: 'GET', action: `/tasks/${encodeURIComponent(t.id)}` }, button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)),
-                    h2(t.title),
-                    p(`${i18n.taskDescriptionLabel}: ${t.description}`),
-                    p(`${i18n.taskStartTimeLabel}: ${moment(t.startTime).format(i18n.dateFormat)}`),
-                    p(`${i18n.taskEndTimeLabel}: ${moment(t.endTime).format(i18n.dateFormat)}`),
-                    p(`${i18n.taskPriorityLabel}: ${t.priority}`),
-                    t.location?.trim() ? p(`${i18n.taskLocationLabel}: ${t.location}`) : null,
-                    p(`${i18n.taskCreatedAt}: ${moment(t.createdAt).format(i18n.dateFormat)}`),
-                    p(`${i18n.taskBy}: `, a({ href: `/author/${encodeURIComponent(t.author)}` }, t.author)),
-                    p(`${i18n.taskStatus}: ${t.status}`),
-                    p(`${i18n.taskVisibilityLabel}: ${t.isPublic}`),
-                    p(`${i18n.taskAssignedTo}: `,
-                      Array.isArray(t.assignees) && t.assignees.length
-                        ? t.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
-                        : i18n.noAssignees
-                    ),
-                    t.tags && t.tags.filter(Boolean).length
-                      ? div(
-                          t.tags.filter(Boolean).map(tag =>
-                            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link', style: 'margin-right:0.8em;margin-bottom:0.5em;' }, `#${tag}`)
-                          )
-                        )
-                      : null,
-                    div({ class: 'voting-buttons' },
-                      ['interesting','necessary','funny','disgusting','sensible','propaganda','adultOnly','boring','confusing','inspiring','spam'].map(cat =>
-                        form({ method: 'POST', action: `/tasks/opinions/${encodeURIComponent(t.id)}/${cat}` }, button({ class: 'vote-btn' }, `${i18n['vote'+cat.charAt(0).toUpperCase()+cat.slice(1)]} [${t.opinions?.[cat]||0}]`))
-                      )
-                    ),
-                  );
-                })
+              ? filtered.map(t => renderTaskItem(t, filter, userId))
               : p(i18n.notasks)
           )
     )
@@ -228,25 +183,30 @@ exports.singleTaskView = async (task, filter) => {
           button({ type: 'submit', name: 'filter', value: 'create', class: "create-button" }, i18n.taskCreateButton)
         )
       ),
-      div({ class: "tags-header" },
-        h2(task.title),
-        p(task.description),
-        p(`${i18n.taskStartTimeLabel}: ${moment(task.startTime).format(i18n.dateFormat)}`),
-        p(`${i18n.taskEndTimeLabel}: ${moment(task.endTime).format(i18n.dateFormat)}`),
-        p(`${i18n.taskPriorityLabel}: ${task.priority}`),
-        task.location?.trim() ? p(`${i18n.taskLocationLabel}: ${task.location}`) : null,
-        p(`${i18n.taskCreatedAt}: ${moment(task.createdAt).format(i18n.dateFormat)}`),
-        p(`${i18n.taskBy}: `, a({ href: `/author/${encodeURIComponent(task.author)}` }, task.author)),
-        p(`${i18n.taskStatus}: ${task.status}`),
-        p(`${i18n.taskVisibilityLabel}: ${task.isPublic}`),
-        p(`${i18n.taskAssignedTo}: `,
-          Array.isArray(task.assignees) && task.assignees.length
-            ? task.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
-            : i18n.noAssignees
+      div({ class: 'card card-section task' },
+        renderStyledField(i18n.taskTitleLabel + ':', task.title),
+        renderStyledField(i18n.taskDescriptionLabel + ':', task.description),
+        renderStyledField(i18n.taskStartTimeLabel + ':', moment(task.startTime).format('YYYY/MM/DD HH:mm:ss')),
+        renderStyledField(i18n.taskEndTimeLabel + ':', moment(task.endTime).format('YYYY/MM/DD HH:mm:ss')),
+        renderStyledField(i18n.taskPriorityLabel + ':', task.priority),
+        task.location?.trim() ? renderStyledField(i18n.taskLocationLabel + ':', task.location) : null,
+        renderStyledField(i18n.taskCreatedAt + ':', moment(task.createdAt).format(i18n.dateFormat)),
+        renderStyledField(i18n.taskBy + ':', a({ href: `/author/${encodeURIComponent(task.author)}` }, task.author)),
+        renderStyledField(i18n.taskStatus + ':', task.status),
+        renderStyledField(i18n.taskVisibilityLabel + ':', task.isPublic),
+        div({ class: 'card-field' },
+          span({ class: 'card-label' }, i18n.taskAssignedTo + ':'),
+          span({ class: 'card-value' },
+            Array.isArray(task.assignees) && task.assignees.length
+              ? task.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
+              : i18n.noAssignees
+          )
         ),
         task.tags && task.tags.length
-          ? div(
-              task.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
+          ? div({ class: 'card-tags' },
+              task.tags.map(tag =>
+                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+              )
             )
           : null
       ),

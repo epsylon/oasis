@@ -5,6 +5,12 @@ const { config } = require('../server/SSB_server.js');
 
 const userId = config.keys.id;
 
+const renderCardField = (labelText, value) =>
+  div({ class: 'card-field' },
+    span({ class: 'card-label' }, labelText),
+    span({ class: 'card-value' }, value)
+  );
+
 exports.marketView = async (items, filter, itemToEdit = null) => {
   const list = Array.isArray(items) ? items : [];
   let title = i18n.marketAllSectionTitle;
@@ -118,6 +124,17 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
               option({ value: "NEW", selected: itemToEdit?.item_status === 'NEW' ? true : false }, "NEW")
             ), br(), br(),
             
+            label(i18n.marketItemStock), br(),
+	    input({ 
+	      type: "number", 
+	      name: "stock", 
+	      id: "stock", 
+	      value: itemToEdit?.stock || 1, 
+	      required: true, 
+	      min: "1", 
+	      step: "1" 
+	    }), br(), br(),
+            
             label(i18n.marketItemPrice), br(),
             input({ type: "number", name: "price", id: "price", value: itemToEdit?.price || '', required: true, step: "0.000001", min: "0.000001" }), br(), br(),
             
@@ -141,95 +158,99 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
           )
         )
       ) : (
-        div({ class: "market-grid" },
-          filtered.length > 0
-            ? filtered.map((item, index) =>     
-              div({ class: "market-item" }, 
-                div({ class: "market-card left-col" },
-                  form({ method: "GET", action: `/market/${encodeURIComponent(item.id)}` },
-                      button({ class: "filter-btn", type: "submit" }, i18n.viewDetails)
-                  ),
-                  h2({ class: "market-card type" }, `${i18n.marketItemType}: ${item.item_type}`),
-                  p(item.title),
-
-                  p(item.description),
-                  div({ class: "market-card image" },
-                    item.image
-                      ? img({ src: `/blob/${encodeURIComponent(item.image)}` })
-                      : img({ src: '/assets/images/default-market.png', alt: item.title })
-                  ),
-                  item.tags && item.tags.filter(Boolean).length
-                    ? item.tags.filter(Boolean).map(tag =>
-                        a({ class: "tag-link", href: `/search?query=%23${encodeURIComponent(tag)}` },
-                          `#${tag}`)
-                      )
-                    : null
-                ),
-                div({ class: "market-card right-col" },
-                  div({ class: "market-card price" },
-                    h2(`${i18n.marketItemPrice}: ${item.price} ECO`)
-                  ),
-                  p(`${i18n.marketItemCondition}: ${item.item_status}`),
-                  p(`${i18n.marketItemIncludesShipping}: ${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
-                  p(`${i18n.marketItemStatus}: ${item.status}`),
-                  item.deadline ? p(`${i18n.marketItemAvailable}: ${moment(item.deadline).format('YYYY/MM/DD HH:mm:ss')}`) : null,
+	div({ class: "market-grid" },
+	  filtered.length > 0
+	    ? filtered.map((item, index) =>     
+	      div({ class: "market-item" }, 
+		div({ class: "market-card left-col" },
+		  form({ method: "GET", action: `/market/${encodeURIComponent(item.id)}` },
+		      button({ class: "filter-btn", type: "submit" }, i18n.viewDetails)
+		  ),
+		  h2({ class: "market-card type" }, `${i18n.marketItemType}: ${item.item_type.toUpperCase()}`),
+		  h2(item.title),
+		  renderCardField(`${i18n.marketItemStatus}:`, item.status),
+		  item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, moment(item.deadline).format('YYYY/MM/DD HH:mm:ss')) : null,
+		  br,br,
+		  div({ class: "market-card image" },
+		    item.image
+		      ? img({ src: `/blob/${encodeURIComponent(item.image)}` })
+		      : img({ src: '/assets/images/default-market.png', alt: item.title })
+		  ),
+		  p(item.description),
+		  item.tags && item.tags.filter(Boolean).length
+		    ? div({ class: 'card-tags' }, item.tags.filter(Boolean).map(tag =>
+		        a({ class: "tag-link", href: `/search?query=%23${encodeURIComponent(tag)}` },
+		          `#${tag}`)
+		      ))
+		    : null,
+		),
+		div({ class: "market-card right-col" },
+		  renderCardField(`${i18n.marketItemStock}:`, item.stock > 0 ? item.stock : i18n.marketOutOfStock),
+		  div({ class: "market-card price" },
+		    renderCardField(`${i18n.marketItemPrice}:`, `${item.price} ECO`),
+		  ),
+		  renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
+		  renderCardField(`${i18n.marketItemIncludesShipping}:`, item.includesShipping ? i18n.YESLabel : i18n.NOLabel),
+		  renderCardField(`${i18n.marketItemSeller}:`),
+		  div({ class: 'card-field' },
+		    a({ class: 'user-link', href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)
+		  ),
 		  item.item_type === 'auction' && item.auctions_poll.length > 0
 		  ? div({ class: "auction-info" },
 		      p({ class: "auction-bid-text" }, i18n.marketAuctionBids),
 		      table({ class: 'auction-bid-table' },
-			tr(
-			  th(i18n.marketAuctionBidTime),
-			  th(i18n.marketAuctionUser),
-			  th(i18n.marketAuctionBidAmount)
-			),
-			item.auctions_poll.map(bid => {
-			  const [userId, bidAmount, bidTime] = bid.split(':');
-			  return tr(
-			    td(moment(bidTime).format('YYYY-MM-DD HH:mm:ss')),
-			    td(a({ href: `/author/${encodeURIComponent(userId)}` }, userId)),
-			    td(`${parseFloat(bidAmount).toFixed(6)} ECO`)
-			  );
-			})
+		        tr(
+		          th(i18n.marketAuctionBidTime),
+		          th(i18n.marketAuctionUser),
+		          th(i18n.marketAuctionBidAmount)
+		        ),
+		        item.auctions_poll.map(bid => {
+		          const [userId, bidAmount, bidTime] = bid.split(':');
+		          return tr(
+		            td(moment(bidTime).format('YYYY-MM-DD HH:mm:ss')),
+		            td(a({ href: `/author/${encodeURIComponent(userId)}` }, userId)),
+		            td(`${parseFloat(bidAmount).toFixed(6)} ECO`)
+		          );
+		        })
 		      )
 		    )
 		  : null,
-                  p(`${i18n.marketItemSeller}: `, a({ href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)),
-                  div({ class: "market-card buttons" },
-                    (filter === 'mine') ? [
-                      form({ method: "POST", action: `/market/delete/${encodeURIComponent(item.id)}` },
-                        button({ class: "delete-btn", type: "submit" }, i18n.marketActionsDelete)
-                      ),
-                      (item.status !== 'SOLD' && item.status !== 'DISCARDED' && item.auctions_poll.length === 0) 
-                        ? form({ method: "GET", action: `/market/edit/${encodeURIComponent(item.id)}` },
-                        button({ class: "update-btn", type: "submit" }, i18n.marketActionsUpdate)
-                      )
-                        : null,
-                      (item.status === 'FOR SALE') 
-                        ? form({ method: "POST", action: `/market/sold/${encodeURIComponent(item.id)}` },
-                        button({ class: "sold-btn", type: "submit" }, i18n.marketActionsSold)
-                      )
-                        : null
-                    ] : [
-                      (item.status !== 'SOLD' && item.status !== 'DISCARDED')
-                        ? (item.item_type === 'auction'
-                          ? form({ method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
-                              input({ type: "number", name: "bidAmount", step:"0.000001", min:"0.000001", placeholder: i18n.marketYourBid, required: true }),
-                              br,
-                              button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
-                            )
-                          : form({ method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
-                              input({ type: "hidden", name: "buyerId", value: userId }),
-                              button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
-                            )
-                        )
-                        : null
-                    ]
-                  )
-                )
-              )
-            )
-          : p(i18n.marketNoItems)
-        )
+		  div({ class: "market-card buttons" },
+		    (filter === 'mine') ? [
+		      form({ method: "POST", action: `/market/delete/${encodeURIComponent(item.id)}` },
+		        button({ class: "delete-btn", type: "submit" }, i18n.marketActionsDelete)
+		      ),
+		      (item.status !== 'SOLD' && item.status !== 'DISCARDED' && item.auctions_poll.length === 0) 
+		        ? form({ method: "GET", action: `/market/edit/${encodeURIComponent(item.id)}` },
+		        button({ class: "update-btn", type: "submit" }, i18n.marketActionsUpdate)
+		      )
+		        : null,
+		      (item.status === 'FOR SALE') 
+		        ? form({ method: "POST", action: `/market/sold/${encodeURIComponent(item.id)}` },
+		        button({ class: "sold-btn", type: "submit" }, i18n.marketActionsSold)
+		      )
+		        : null
+		    ] : [
+		      (item.status !== 'SOLD' && item.status !== 'DISCARDED')
+		        ? (item.item_type === 'auction'
+		          ? form({ method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
+		              input({ type: "number", name: "bidAmount", step:"0.000001", min:"0.000001", placeholder: i18n.marketYourBid, required: true }),
+		              br,
+		              button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
+		            )
+		          : form({ method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
+		              input({ type: "hidden", name: "buyerId", value: userId }),
+		              button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
+		            )
+		        )
+		        : null
+		    ]
+		  )
+		)
+	      )
+	    )
+	  : p(i18n.marketNoItems)
+	)
       )
     )
   );
@@ -257,26 +278,33 @@ exports.singleMarketView = async (item, filter) => {
       ),
       div({ class: "tags-header" },
         h2(item.title),
-        p(item.description),
-        p(`${i18n.marketItemType}: ${item.item_type}`),
-        p(`${i18n.marketItemCondition}: ${item.item_status}`),
-        p(`${i18n.marketItemPrice}: ${item.price} ECO`),
-        p(`${i18n.marketItemIncludesShipping}: ${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
-        p(`${i18n.marketItemStatus}: ${item.status}`),
-        item.deadline ? p(`${i18n.marketItemAvailable}: ${moment(item.deadline).format('YYYY/MM/DD HH:mm:ss')}`) : null,
-        p(`${i18n.marketItemSeller}: `, a({ href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)),
+        renderCardField(`${i18n.marketItemType}:`, `${item.item_type.toUpperCase()}`),
+        renderCardField(`${i18n.marketItemStatus}:`, item.status),
+        renderCardField(`${i18n.marketItemStock}:`, item.stock > 0 ? item.stock : i18n.marketOutOfStock),
+        renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
+        renderCardField(`${i18n.marketItemPrice}:`, `${item.price} ECO`),
+        renderCardField(`${i18n.marketItemIncludesShipping}:`, `${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
+        item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, `${moment(item.deadline).format('YYYY/MM/DD HH:mm:ss')}`) : null,
+        br,
         div({ class: "market-item image" },
           item.image
             ? img({ src: `/blob/${encodeURIComponent(item.image)}` })
             : img({ src: '/assets/images/default-market.png', alt: item.title })
         ),
+        renderCardField(`${i18n.marketItemDescription}:`, item.description),
+        br,
         item.tags && item.tags.length
-          ? div(
+          ? div({ class: 'card-tags' },
               item.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
               )
             )
-          : null
+          : null,
+          br,
+	div({ class: 'card-field' },
+	  span({ class: 'card-label' }, `${i18n.marketItemSeller}:`),
+	  a({ class: 'user-link', href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)
+	)
       ),
       item.item_type === 'auction' 
         ? div({ class: "auction-info" },

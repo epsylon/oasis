@@ -5,6 +5,78 @@ const { config } = require('../server/SSB_server.js');
 
 const userId = config.keys.id
 
+const renderStyledField = (labelText, valueElement) =>
+  div({ class: 'card-field' },
+    span({ class: 'card-label' }, labelText),
+    span({ class: 'card-value' }, valueElement)
+  );
+
+const renderEventItem = (e, filter, userId) => {
+  const actions = [];
+  if (filter === 'mine' && e.status === 'OPEN') {
+    actions.push(
+      form({ method:"GET", action:`/events/edit/${encodeURIComponent(e.id)}` },
+        button({ type:"submit", class:"update-btn" }, i18n.eventUpdateButton)
+      ),
+      form({ method:"POST", action:`/events/delete/${encodeURIComponent(e.id)}` },
+        button({ type:"submit", class:"delete-btn" }, i18n.eventDeleteButton)
+      )
+    );
+  }
+  if (e.status === 'OPEN') {
+    actions.push(
+      form({ method:"POST", action:`/events/attend/${encodeURIComponent(e.id)}` },
+        button({ type:"submit" },
+          e.attendees.includes(userId)
+            ? i18n.eventUnattendButton
+            : i18n.eventAttendButton
+        )
+      )
+    );
+  }
+  return div({ class:"card card-section event" },
+    actions.length ? div({ class:"event-actions" }, ...actions) : null,
+    form({ method:"GET", action:`/events/${encodeURIComponent(e.id)}` },
+      button({ type:"submit", class:"filter-btn" }, i18n.viewDetails)
+    ),
+    br,
+    renderStyledField(i18n.eventTitleLabel + ':', e.title),
+    renderStyledField(i18n.eventDescriptionLabel + ':', e.description),
+    renderStyledField(i18n.eventDateLabel + ':', moment(e.date).format('YYYY/MM/DD HH:mm:ss')),
+    e.location?.trim() ? renderStyledField(i18n.eventLocationLabel + ':', e.location) : null,
+    renderStyledField(i18n.eventPrivacyLabel + ':', e.isPublic.toUpperCase()),
+    renderStyledField(i18n.eventStatus + ':', e.status),
+    e.url?.trim() ? renderStyledField(i18n.eventUrlLabel + ':', a({ href: e.url }, e.url)) : null,
+    renderStyledField(i18n.eventPriceLabel + ':', parseFloat(e.price || 0).toFixed(6) + ' ECO'),
+    br,
+    div({ class: 'card-field' },
+      span({ class: 'card-label' }, i18n.eventAttendees + ':'),
+      span({ class: 'card-value' },
+        Array.isArray(e.attendees) && e.attendees.length
+          ? e.attendees.filter(Boolean).map((id, i) => [i > 0 ? ', ' : '', a({ class: "user-link", href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
+          : i18n.noAttendees
+      )
+    ),
+    br,
+    e.tags && e.tags.filter(Boolean).length
+      ? div({ class: 'card-tags' },
+          e.tags.filter(Boolean).map(tag =>
+            a({
+              href:`/search?query=%23${encodeURIComponent(tag)}`,
+              class:"tag-link"
+            }, `#${tag}`)
+          )
+        )
+      : null,
+    br,
+    p({ class: 'card-footer' },
+      span({ class: 'date-link' }, `${e.createdAt} ${i18n.performed} `),
+      a({ href: `/author/${encodeURIComponent(e.organizer)}`, class: 'user-link' }, `${e.organizer}`)
+    )
+    
+  )
+};
+
 exports.eventView = async (events, filter, eventId) => {
   const list = Array.isArray(events) ? events : [events]
   const title =
@@ -116,73 +188,7 @@ exports.eventView = async (events, filter, eventId) => {
       ) : (
         div({ class:"event-list" },
           filtered.length > 0
-            ? filtered.map(e => {
-                const actions = []
-                if (filter==='mine' && e.status==='OPEN') {
-                  actions.push(
-                    form({ method:"GET", action:`/events/edit/${encodeURIComponent(e.id)}` },
-                      button({ type:"submit", class:"update-btn" }, i18n.eventUpdateButton)
-                    )
-                  )
-                  actions.push(
-                    form({ method:"POST", action:`/events/delete/${encodeURIComponent(e.id)}` },
-                      button({ type:"submit", class:"delete-btn" }, i18n.eventDeleteButton)
-                    )
-                  )
-                }
-                if (e.status === 'OPEN') {
-                  actions.push(
-                    form({ method:"POST", action:`/events/attend/${encodeURIComponent(e.id)}` },
-                      button({ type:"submit" },
-                        e.attendees.includes(userId)
-                          ? i18n.eventUnattendButton
-                          : i18n.eventAttendButton
-                      )
-                    )
-                  )
-                }
-                return div({ class:"event-item" },
-                  actions.length ? div({ class:"event-actions" }, ...actions) : null,
-                  form({ method:"GET", action:`/events/${encodeURIComponent(e.id)}` },
-                    button({ type:"submit", class:"filter-btn" }, i18n.viewDetails)
-                  ),
-                  h2(e.title),
-                  p(`${i18n.eventDescription}: ${e.description}`),
-                  p(`${i18n.eventDate}: ${moment(e.date).format('YYYY/MM/DD HH:mm:ss')}`),
-                  p(`${i18n.eventPrivacyLabel}: ${e.isPublic}`),
-                  e.location?.trim() ? p(`${i18n.eventLocation}: ${e.location}`) : null,
-                  e.url?.trim() ? p(`${i18n.eventUrlLabel}: `, a({ href: e.url }, e.url)) : null,
-                  p(`${i18n.eventPriceLabel}: ${parseFloat(e.price || 0).toFixed(6)} ECO`),
-                  p(`${i18n.eventAttendees}: `,
-                    Array.isArray(e.attendees) && e.attendees.length
-                      ? e.attendees.filter(Boolean).map((id, i) => [i > 0 ? ', ' : '', a({ href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
-                      : i18n.noAttendees
-                  ),
-                  p(`${i18n.eventCreatedAt}: ${moment(e.createdAt).format('YYYY/MM/DD HH:mm:ss')}`),
-                  p(`${i18n.eventBy}: `, a({ href: `/author/${encodeURIComponent(e.organizer)}` }, e.organizer)),
-                  p(`${i18n.eventStatus}: ${e.status}`),
-                  e.tags && e.tags.filter(Boolean).length
-                    ? div(
-                        e.tags.filter(Boolean).map(tag =>
-                          a({
-                            href:`/search?query=%23${encodeURIComponent(tag)}`,
-                            class:"tag-link",
-                            style:"margin-right:0.8em;margin-bottom:0.5em;"
-                          }, `#${tag}`)
-                        )
-                      )
-                    : null,
-                  div({ class: "voting-buttons" },
-                    ['interesting','necessary','funny','disgusting','sensible','propaganda','adultOnly','boring','confusing','inspiring','spam'].map(category =>
-                      form({ method:"POST", action:`/events/opinions/${encodeURIComponent(e.id)}/${category}` },
-                        button({ class:"vote-btn" },
-                          `${i18n[`vote${category.charAt(0).toUpperCase()+category.slice(1)}`]} [${e.opinions?.[category]||0}]`
-                        )
-                      )
-                    )
-                  )
-                )
-              })
+            ? filtered.map(e => renderEventItem(e, filter, userId))
             : p(i18n.noevents)
         )
       )
@@ -206,27 +212,6 @@ exports.singleEventView = async (event, filter) => {
           button({ type: 'submit', name: 'filter', value: 'create', class: "create-button" }, i18n.eventCreateButton)
         )
       ),
-      div({ class: "tags-header" },
-        h2(event.title),
-        p(event.description),
-        p(`${i18n.eventDate}: ${moment(event.date).format('YYYY/MM/DD HH:mm:ss')}`),
-        p(`${i18n.eventLocation}: ${event.location}`),
-        p(`${i18n.eventUrlLabel}: `, a({ href: event.url }, event.url)),
-        p(`${i18n.eventPriceLabel}: ${parseFloat(event.price || 0).toFixed(6)} ECO`),
-        p(`${i18n.eventAttendees}: `,
-          Array.isArray(event.attendees) && event.attendees.length
-            ? event.attendees.map((id, i) => [i > 0 ? ', ' : '', a({ href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
-            : i18n.noAttendees
-        ),
-        p(`${i18n.eventCreatedAt}: ${moment(event.createdAt).format('YYYY/MM/DD HH:mm:ss')}`),
-        p(`${i18n.eventBy}: `, a({ href: `/author/${encodeURIComponent(event.organizer)}` }, event.organizer)),
-        p(`${i18n.eventStatus}: ${event.status}`),
-        event.tags && event.tags.length
-          ? div(
-              event.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
-            )
-          : null
-      ),
       div({ class: "event-actions" },
         form({ method: "POST", action: `/events/attend/${encodeURIComponent(event.id)}` },
           button({ type: "submit" },
@@ -235,7 +220,44 @@ exports.singleEventView = async (event, filter) => {
               : i18n.eventAttendButton
           )
         )
+      ),
+      div({ class: "card card-section event" },
+        form({ method:"GET", action:`/events/${encodeURIComponent(event.id)}` },
+         button({ type:"submit", class:"filter-btn" }, i18n.viewDetails)
+        ),
+        br,
+        renderStyledField(i18n.eventTitleLabel + ':', event.title),
+        renderStyledField(i18n.eventDescriptionLabel + ':', event.description),
+        renderStyledField(i18n.eventDateLabel + ':', moment(event.date).format('YYYY/MM/DD HH:mm:ss')),
+        event.location?.trim() ? renderStyledField(i18n.eventLocationLabel + ':', event.location) : null,
+        renderStyledField(i18n.eventPrivacyLabel + ':', event.isPublic.toUpperCase()),
+        renderStyledField(i18n.eventStatus + ':', event.status),
+        event.url?.trim() ? renderStyledField(i18n.eventUrlLabel + ':', a({ href: event.url }, event.url)) : null,
+        renderStyledField(i18n.eventPriceLabel + ':', parseFloat(event.price || 0).toFixed(6) + ' ECO'),
+        br,
+        div({ class: 'card-field' },
+          span({ class: 'card-label' }, i18n.eventAttendees + ':'),
+          span({ class: 'card-value' },
+            Array.isArray(event.attendees) && event.attendees.length
+              ? event.attendees.filter(Boolean).map((id, i) => [i > 0 ? ', ' : '', a({ class: "user-link", href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
+              : i18n.noAttendees
+          )
+        ),
+        br,
+        event.tags && event.tags.length
+          ? div({ class: 'card-tags' },
+              event.tags.filter(Boolean).map(tag =>
+                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+              )
+            )
+          : null,
+              br,
+        p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${moment(event.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+          a({ href: `/author/${encodeURIComponent(event.organizer)}`, class: 'user-link' }, `${event.organizer}`)
+        )
       )
     )
   );
 };
+

@@ -20,32 +20,64 @@ const generateTransferActions = (transfer, userId) => {
 
 const generateTransferCard = (transfer, userId) => {
   return div({ class: "transfer-item" },
-    generateTransferActions(transfer, userId),
-    form({ method: "GET", action: `/transfers/${encodeURIComponent(transfer.id)}` },
-      button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-    ),
-    h2(`${i18n.transfersConcept}: ${transfer.concept}`),
-    p(`${i18n.transfersFrom}: `, a({ href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from)),
-    p(`${i18n.transfersTo}: `, a({ href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to)),
-    p(`${i18n.transfersAmount}: ${transfer.amount} ECO`),
-    p(`${i18n.transfersDeadline}: ${moment(transfer.deadline).format("YYYY-MM-DD HH:mm")}`),
-    p(`${i18n.transfersCreatedAt}: ${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")}`),
-    p(`${i18n.transfersStatus}: ${i18n[`transfersStatus${transfer.status.charAt(0) + transfer.status.slice(1).toLowerCase()}`]}`),
-    p(`${i18n.transfersConfirmations}: ${transfer.confirmedBy.length}/2`),
-    (transfer.status === 'UNCONFIRMED' && transfer.to === userId)
-      ? form({ method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
-          button({ type: "submit" }, i18n.transfersConfirmButton), br(), br()
-        )
-      : null,
-    transfer.tags && transfer.tags.length
-      ? div(
-          transfer.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right:0.8em;margin-bottom:0.5em;" }, `#${tag}`))
-        )
-      : null,
-    div({ class: "voting-buttons" },
-      ["interesting", "necessary", "funny", "disgusting", "sensible", "propaganda", "adultOnly", "boring", "confusing", "inspiring", "spam"].map(category =>
-        form({ method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
-          button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${transfer.opinions?.[category] || 0}]`)
+    div({ class: 'card-section transfer' },
+      generateTransferActions(transfer, userId),
+      form({ method: "GET", action: `/transfers/${encodeURIComponent(transfer.id)}` },
+        button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+      ),
+      br,
+      div({ class: 'card-field' },
+        span({ class: 'card-label' }, `${i18n.transfersConcept}:`),
+        span({ class: 'card-value' }, transfer.concept)
+      ),
+      div({ class: 'card-field' },
+        span({ class: 'card-label' }, `${i18n.transfersDeadline}:`),
+        span({ class: 'card-value' }, moment(transfer.deadline).format("YYYY-MM-DD HH:mm"))
+      ),
+      div({ class: 'card-field' },
+        span({ class: 'card-label' }, `${i18n.transfersStatus}:`),
+        span({ class: 'card-value' }, i18n[`transfersStatus${transfer.status.charAt(0) + transfer.status.slice(1).toLowerCase()}`])
+      ),
+      div({ class: 'card-field' },
+        span({ class: 'card-label' }, `${i18n.transfersAmount}:`),
+        span({ class: 'card-value' }, `${transfer.amount} ECO`)
+      ),
+      br,
+      div({ class: 'card-field' },
+        span({ class: 'card-label' }, `${i18n.transfersFrom}:`),
+        span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from))
+      ),
+      div({ class: 'card-field' },
+        span({ class: 'card-label' }, `${i18n.transfersTo}:`),
+        span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to))
+      ),
+      br,
+      h2({ class: 'card-field' },
+        span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
+        span({ class: 'card-value' }, `${transfer.confirmedBy.length}/2`)
+      ),
+      (transfer.status === 'UNCONFIRMED' && transfer.to === userId)
+        ? form({ method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
+            button({ type: "submit" }, i18n.transfersConfirmButton), br(), br()
+          )
+        : null,
+      transfer.tags && transfer.tags.length
+        ? div({ class: 'card-tags' },
+            transfer.tags.map(tag =>
+              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right:0.8em;margin-bottom:0.5em;" }, `#${tag}`)
+            )
+          )
+        : null, 
+      br,
+      p({ class: 'card-footer' },
+        span({ class: 'date-link' }, `${transfer.createdAt} ${i18n.performed} `),
+        a({ href: `/author/${encodeURIComponent(transfer.from)}`, class: 'user-link' }, `${transfer.from}`)
+      ), 
+      div({ class: "voting-buttons" },
+        ["interesting", "necessary", "funny", "disgusting", "sensible", "propaganda", "adultOnly", "boring", "confusing", "inspiring", "spam"].map(category =>
+          form({ method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
+            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${transfer.opinions?.[category] || 0}]`)
+          )
         )
       )
     )
@@ -136,26 +168,55 @@ exports.singleTransferView = async (transfer, filter) => {
           button({ type: 'submit', name: 'filter', value: 'create', class: "create-button" }, i18n.transfersCreateButton)
         )
       ),
-      div({ class: "tags-header" },
-        h2(transfer.concept),
-        p(`${i18n.transfersFrom}: `, a({ href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from)),
-        p(`${i18n.transfersTo}: `, a({ href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to)),
-        p(`${i18n.transfersAmount}: ${transfer.amount} ECO`),
-        p(`${i18n.transfersDeadline}: ${moment(transfer.deadline).format("YYYY-MM-DD HH:mm")}`),
-        p(`${i18n.transfersCreatedAt}: ${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")}`),
-        p(`${i18n.transfersStatus}: ${i18n[`transfersStatus${transfer.status.charAt(0) + transfer.status.slice(1).toLowerCase()}`]}`),
-        p(`${i18n.transfersConfirmations}: ${transfer.confirmedBy.length}/2`)
-      ),
+	div({ class: "tags-header" },
+	  div({ class: 'card-section transfer' },
+            div({ class: 'card-field' },
+             span({ class: 'card-label' }, `${i18n.transfersConcept}:`),
+             span({ class: 'card-value' }, transfer.concept)
+            ),
+            div({ class: 'card-field' },
+	      span({ class: 'card-label' }, `${i18n.transfersDeadline}:`),
+	      span({ class: 'card-value' }, moment(transfer.deadline).format("YYYY-MM-DD HH:mm"))
+	    ),
+	    div({ class: 'card-field' },
+	      span({ class: 'card-label' }, `${i18n.transfersStatus}:`),
+	      span({ class: 'card-value' }, i18n[`transfersStatus${transfer.status.charAt(0) + transfer.status.slice(1).toLowerCase()}`])
+	    ),
+	    div({ class: 'card-field' },
+	      span({ class: 'card-label' }, `${i18n.transfersAmount}:`),
+	      span({ class: 'card-value' }, `${transfer.amount} ECO`)
+	    ),
+	    br,
+	    div({ class: 'card-field' },
+	      span({ class: 'card-label' }, `${i18n.transfersFrom}:`),
+	      span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from))
+	    ),
+	    div({ class: 'card-field' },
+	      span({ class: 'card-label' }, `${i18n.transfersTo}:`),
+	      span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to))
+	    ),
+            br,
+	    h2({ class: 'card-field' },
+	      span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
+	      span({ class: 'card-value' }, `${transfer.confirmedBy.length}/2`)
+	    )
+	  )
+	),
       transfer.status === 'UNCONFIRMED' && transfer.to === userId
         ? form({ method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
             button({ type: "submit" }, i18n.transfersConfirmButton), br(), br()
           )
         : null,
       transfer.tags && transfer.tags.length
-        ? div(
+          ? div({ class: 'card-tags' },
             transfer.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right:0.8em;margin-bottom:0.5em;" }, `#${tag}`))
           )
         : null,
+       br,
+       p({ class: 'card-footer' },
+        span({ class: 'date-link' }, `${transfer.createdAt} ${i18n.performed} `),
+        a({ href: `/author/${encodeURIComponent(transfer.from)}`, class: 'user-link' }, `${transfer.from}`)
+      ),
       div({ class: "voting-buttons" },
         ["interesting", "necessary", "funny", "disgusting", "sensible", "propaganda", "adultOnly", "boring", "confusing", "inspiring", "spam"].map(category =>
           form({ method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },

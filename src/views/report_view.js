@@ -5,61 +5,65 @@ const moment = require('../server/node_modules/moment');
 
 const userId = config.keys.id;
 
-const generateReportActions = (report, userId) => {
-  return report.author === userId
-    ? div({ class: "report-actions" },
-        form({ method: "GET", action: `/reports/edit/${encodeURIComponent(report.id)}` },
-          button({ type: "submit", class: "update-btn" }, i18n.reportsUpdateButton)
-        ),
-        form({ method: "POST", action: `/reports/delete/${encodeURIComponent(report.id)}` },
-          button({ type: "submit", class: "delete-btn" }, i18n.reportsDeleteButton)
-        ),
-        form({ method: "POST", action: `/reports/status/${encodeURIComponent(report.id)}` },
-          button({ type: "submit", name: "status", value: "OPEN" }, i18n.reportsStatusOpen), br(),
-          button({ type: "submit", name: "status", value: "UNDER_REVIEW" }, i18n.reportsStatusUnderReview), br(),
-          button({ type: "submit", name: "status", value: "RESOLVED" }, i18n.reportsStatusResolved), br(),
-          button({ type: "submit", name: "status", value: "INVALID" }, i18n.reportsStatusInvalid)
-        )
-      )
-    : null;
-};
+const renderCardField = (labelText, value) =>
+  div({ class: 'card-field' },
+    span({ class: 'card-label' }, labelText),
+    span({ class: 'card-value' }, value)
+  );
 
-const generateReportCard = (report, userId) => {
-  return div({ class: "report-item" },
-    generateReportActions(report, userId),
-    h2(report.title),
+const renderReportCard = (report, userId) => {
+  const actions = report.author === userId ? [
+    form({ method: "GET", action: `/reports/edit/${encodeURIComponent(report.id)}` },
+      button({ type: "submit", class: "update-btn" }, i18n.reportsUpdateButton)
+    ),
+    form({ method: "POST", action: `/reports/delete/${encodeURIComponent(report.id)}` },
+      button({ type: "submit", class: "delete-btn" }, i18n.reportsDeleteButton)
+    ),
+    form({ method: "POST", action: `/reports/status/${encodeURIComponent(report.id)}` },
+      button({ type: "submit", name: "status", value: "OPEN" }, i18n.reportsStatusOpen), br(),
+      button({ type: "submit", name: "status", value: "UNDER_REVIEW" }, i18n.reportsStatusUnderReview), br(),
+      button({ type: "submit", name: "status", value: "RESOLVED" }, i18n.reportsStatusResolved), br(),
+      button({ type: "submit", name: "status", value: "INVALID" }, i18n.reportsStatusInvalid)
+    )
+  ] : [];
+
+  return div({ class: "card card-section report" },
+    actions.length ? div({ class: "report-actions" }, ...actions) : null,
     form({ method: 'GET', action: `/reports/${encodeURIComponent(report.id)}` },
       button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
     ),
-    p(`${i18n.reportsCategory}: ${report.category}`),
-    p(`${i18n.reportsSeverity}: ${report.severity}`),
-    p(`${i18n.reportsStatus}: ${report.status}`),
-    p(`${i18n.reportsDescriptionLabel}: ${report.description}`),
-    report.image ? img({ src: `/blob/${encodeURIComponent(report.image)}`, class: "report-image" }) : p(i18n.reportsNoFile),
-    p(`${i18n.reportsCreatedAt}: ${moment(report.createdAt).format('YYYY-MM-DD HH:mm')}`),
-    p(`${i18n.reportsCreatedBy}: `,
-      report.isAnonymous
-        ? span({ class: "anonymous-label" }, i18n.reportsAnonymousAuthor)
-        : a({ href: `/author/${encodeURIComponent(report.author)}` }, report.author)
+    br,
+    renderCardField(i18n.reportsTitleLabel + ":", report.title),
+    renderCardField(i18n.reportsStatus + ":", report.status),
+    renderCardField(i18n.reportsSeverity + ":", report.severity.toUpperCase()),
+    renderCardField(i18n.reportsCategory + ":", report.category),
+    renderCardField(i18n.reportsConfirmations + ":", report.confirmations.length),
+    renderCardField(i18n.reportsDescriptionLabel + ":", report.description),
+    br,
+    div({ class: 'card-field' },
+      report.image ? div({ class: 'card-field' },
+        img({ src: `/blob/${encodeURIComponent(report.image)}`, class: "report-image" }),
+      ) : null
     ),
-    p(`${i18n.reportsConfirmations}: ${report.confirmations.length}`),
+    br,
     form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
       button({ type: "submit" }, i18n.reportsConfirmButton)
     ),
-
-    a({ href: "/tasks?filter=create", target: "_blank" }, button({ type: "button" }, i18n.reportsCreateTaskButton)), br(), br(),
+    a({ href: "/tasks?filter=create", target: "_blank" },
+      button({ type: "button" }, i18n.reportsCreateTaskButton)
+    ),
+    br(), br(),
     report.tags && report.tags.length
-      ? div(
+      ? div({ class: "card-tags" },
           report.tags.map(tag =>
-            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right:0.8em;" }, `#${tag}`)
+            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
           )
-        ) : null,
-    div({ class: "voting-buttons" },
-      ["interesting", "necessary", "funny", "disgusting", "sensible", "propaganda", "adultOnly", "boring", "confusing", "inspiring", "spam"].map(category =>
-        form({ method: "POST", action: `/reports/opinions/${encodeURIComponent(report.id)}/${category}` },
-          button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${report.opinions?.[category] || 0}]`)
         )
-      )
+      : null,
+    br,
+    p({ class: 'card-footer' },
+      span({ class: 'date-link' }, `${moment(report.createdAt).format('YYYY-MM-DD HH:mm')} ${i18n.performed} `),
+        a({ class: "user-link", href: `/author/${encodeURIComponent(report.author)}`, class: 'user-link' }, report.author)
     )
   );
 };
@@ -128,10 +132,10 @@ exports.reportView = async (reports, filter, reportId) => {
 
               label(i18n.reportsSeverity), br(),
               select({ name: "severity" },
-                option({ value: "low", selected: reportToEdit?.severity === 'low' }, i18n.reportsSeverityLow),
-                option({ value: "medium", selected: reportToEdit?.severity === 'medium' }, i18n.reportsSeverityMedium),
+                option({ value: "critical", selected: reportToEdit?.severity === 'critical' }, i18n.reportsSeverityCritical),
                 option({ value: "high", selected: reportToEdit?.severity === 'high' }, i18n.reportsSeverityHigh),
-                option({ value: "critical", selected: reportToEdit?.severity === 'critical' }, i18n.reportsSeverityCritical)
+                option({ value: "medium", selected: reportToEdit?.severity === 'medium' }, i18n.reportsSeverityMedium),
+                option({ value: "low", selected: reportToEdit?.severity === 'low' }, i18n.reportsSeverityLow)
               ), br(), br(),
 
               label(i18n.reportsUploadFile), br(),
@@ -140,14 +144,11 @@ exports.reportView = async (reports, filter, reportId) => {
               label("Tags"), br(),
               input({ type: "text", name: "tags", value: reportToEdit?.tags?.join(', ') || '' }), br(), br(),
 
-              label(i18n.reportsAnonymityOption),
-              input({ type: "checkbox", name: "isAnonymous", checked: reportToEdit?.isAnonymous || false }), br(), br(),
-
               button({ type: "submit" }, filter === 'edit' ? i18n.reportsUpdateButton : i18n.reportsCreateButton)
             )
           )
         : div({ class: "report-list" },
-            filtered.length > 0 ? filtered.map(r => generateReportCard(r, userId)) : p(i18n.reportsNoItems)
+            filtered.length > 0 ? filtered.map(r => renderReportCard(r, userId)) : p(i18n.reportsNoItems)
        )
      )
   );
@@ -173,33 +174,43 @@ exports.singleReportView = async (report, filter) => {
           button({ type: 'submit', name: 'filter', value: 'create', class: "create-button" }, i18n.reportsCreateButton)
         )
       ),
-      div({ class: "tags-header" },
-        h2(report.title),
-        p(report.description),
-        p(`${i18n.reportsCategory}: ${report.category}`),
-        p(`${i18n.reportsSeverity}: ${report.severity}`),
-        p(`${i18n.reportsStatus}: ${report.status}`),
-        report.image ? img({ src: `/blob/${encodeURIComponent(report.image)}`, class: "report-image" }) : p(i18n.reportsNoFile),
-        p(`${i18n.reportsCreatedAt}: ${moment(report.createdAt).format('YYYY-MM-DD HH:mm')}`),
-        p(`${i18n.reportsCreatedBy}: `,
-          report.isAnonymous
-            ? span({ class: "anonymous-label" }, i18n.reportsAnonymousAuthor)
-            : a({ href: `/author/${encodeURIComponent(report.author)}` }, report.author)
+      div({ class: "card card-section report" },
+        form({ method: 'GET', action: `/reports/${encodeURIComponent(report.id)}` },
+          button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
         ),
-        p(`${i18n.reportsConfirmations}: ${report.confirmations.length}`),
-        report.tags && report.tags.length
-          ? div(
-              report.tags.map(tag =>
-                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right:0.8em;" }, `#${tag}`)
-              )
-            )
-          : null
-      ),
-      div({ class: "report-actions" },
+        br,
+        renderCardField(i18n.reportsTitleLabel + ":", report.title),
+        renderCardField(i18n.reportsStatus + ":", report.status),
+        renderCardField(i18n.reportsSeverity + ":", report.severity.toUpperCase()),
+        renderCardField(i18n.reportsCategory + ":", report.category),
+        renderCardField(i18n.reportsConfirmations + ":", report.confirmations.length),
+        renderCardField(i18n.reportsDescriptionLabel + ":", report.description),
+        br,
+        div({ class: 'card-field' },
+          report.image ? div({ class: 'card-field' },
+            img({ src: `/blob/${encodeURIComponent(report.image)}`, class: "report-image" }),
+          ) : null
+        ),
+        br,
         form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
           button({ type: "submit" }, i18n.reportsConfirmButton)
         ),
-        a({ href: "/tasks?filter=create", target: "_blank" }, button({ type: "button" }, i18n.reportsCreateTaskButton))
+        a({ href: "/tasks?filter=create", target: "_blank" },
+          button({ type: "button" }, i18n.reportsCreateTaskButton)
+        ),
+        br(), br(),
+        report.tags && report.tags.length
+          ? div({ class: "card-tags" },
+              report.tags.map(tag =>
+                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
+              )
+            )
+          : null,
+        br,
+        p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${moment(report.createdAt).format('YYYY-MM-DD HH:mm')} ${i18n.performed} `),
+            a({ class: "user-link", href: `/author/${encodeURIComponent(report.author)}`, class: 'user-link' }, report.author)
+        )
       )
     )
   );

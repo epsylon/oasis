@@ -38,7 +38,7 @@ const renderInhabitantCard = (user, filter) => {
         ? p(`${i18n.mutualFollowers}: ${user.mutualCount}`) : null,
       filter === 'blocked' && user.isBlocked
         ? p(i18n.blockedLabel) : null,
-      p(`${i18n.oasisId}: `, a({ href: `/author/${encodeURIComponent(user.id)}` }, user.id)),
+      p(a({ class: 'user-link', href: `/author/${encodeURIComponent(user.id)}` }, user.id)),
       ['CVs', 'MATCHSKILLS', 'SUGGESTED'].includes(filter)
         ? a({ href: `/inhabitant/${encodeURIComponent(user.id)}`, class: 'view-profile-btn' }, i18n.inhabitantviewDetails)
         : null
@@ -185,7 +185,7 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }) => {
         img({ class: 'inhabitant-photo', src: image, alt: name }),
         div({ class: 'inhabitant-details' },
           h2(name),
-          p(a({ href: `/author/${encodeURIComponent(id)}` }, id)),
+          p(a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)),
           description ? p(description) : null,
           location ? p(`${i18n.locationLabel}: ${location}`) : null,
           languages.length ? p(`${i18n.languagesLabel}: ${languages.join(', ')}`) : null,
@@ -197,7 +197,7 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }) => {
       ),
       feed && feed.length
         ? section({ class: 'profile-feed' },
-            h2(i18n.latestMessages || 'Latest Messages'),
+            h2(i18n.latestInteractions),
             feed.map(m => div({ class: 'post' }, p(m.value.content.text || '')))
           )
         : null

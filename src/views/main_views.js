@@ -236,14 +236,8 @@ const renderMarketLink = () => {
   const marketMod = getConfig().modules.marketMod === 'on';
   return marketMod 
     ? [
-        div(
-          { class: "top-bar-mid" },
-          nav(
-            ul(
-              navLink({ href: "/market", emoji: "ꕻ", text: i18n.marketTitle })
-            )
-          )
-        )
+      hr(),
+      navLink({ href: "/market", emoji: "ꕻ", text: i18n.marketTitle }),
       ]
     : '';
 };
@@ -299,7 +293,6 @@ const renderTransfersLink = () => {
   return transfersMod 
     ? [
       navLink({ href: "/transfers", emoji: "ꘉ", text: i18n.transfersTitle, class: "transfers-link enabled" }),
-      hr(),
       ]
     : '';
 };
@@ -308,6 +301,7 @@ const renderFeedLink = () => {
   const feedMod = getConfig().modules.feedMod === 'on';
   return feedMod 
     ? [
+      hr(),
       navLink({ href: "/feed", emoji: "ꕿ", text: i18n.feedTitle, class: "feed-link enabled" }),
       ]
     : '';
@@ -388,7 +382,6 @@ const template = (titlePrefix, ...elements) => {
             )
           )
         ),
-        renderMarketLink(),
         div(
           { class: "top-bar-right" },
           nav(
@@ -437,9 +430,10 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
               renderTrendingLink(),
               renderOpinionsLink(),
-              renderTransfersLink(),
               renderFeedLink(),
               renderPixeliaLink(),
+              renderMarketLink(),
+              renderTransfersLink(),
               renderBookmarksLink(),
               renderImagesLink(),
               renderVideosLink(),
@@ -1111,7 +1105,7 @@ const renderMessage = (msg) => {
 
   return div({ class: "mention-item" }, [
     div({ class: "mention-content", innerHTML: mentionsText || '[No content]' }),
-    p(`By: `, a({ href: `/author/${encodeURIComponent(author)}` }, author)),
+    p(a({ class: 'user-link', href: `/author/${encodeURIComponent(author)}` }, author)),
     p(`${i18n.createdAtLabel || i18n.mentionsCreatedAt}: ${createdAt}`)
   ]);
 };
@@ -1229,15 +1223,16 @@ exports.privateView = async (input, filter) => {
               const sentAt = new Date(content.sentAt || msg.timestamp).toLocaleString();
               const from = content.from;
               const toLinks = (content.to || []).map(addr =>
-                a({ href: `/author/${encodeURIComponent(addr)}` }, addr)
+                a({ class: 'user-link', href: `/author/${encodeURIComponent(addr)}` }, addr)
               );
 
               return div({ class: 'message-item' },
-                h2(subject),
-                p(`${i18n.privateFrom}: `, a({ href: `/author/${encodeURIComponent(from)}` }, from)),
-                p(`${i18n.privateTo}: [ `, ...toLinks.flatMap((link, i, arr) => i < arr.length - 1 ? [link, ', '] : [link]), ' ]'),
-                p(`${i18n.privateDate}: ${sentAt}`),
+                p(subject),
                 div({ class: 'message-text' }, text),
+                p({ class: 'card-footer' },
+                span({ class: 'date-link' }, `${sentAt} ${i18n.performed} `),
+                 a({ href: `/author/${encodeURIComponent(from)}`, class: 'user-link' }, `${from}`)
+                ),
                 form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(msg.key)}`, class: 'delete-message-form' },
                   button({ type: 'submit', class: 'delete-btn' }, i18n.privateDelete)
                 )
@@ -1294,7 +1289,7 @@ exports.threadView = ({ messages }) => {
   const rootSnippet = postSnippet(
     lodash.get(rootMessage, "value.content.text", i18n.mysteryDescription)
   );
-  return template([`@${rootAuthorName}: `, rootSnippet], 
+  return template([`@${rootAuthorName}`], 
     div(
     thread(messages)
     )
@@ -1440,7 +1435,7 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
             { class: "mention-relationship-details" },
             span({ class: "emoji" }, matches[0].rel.followsMe ? "☍" : "⚼"),
             span({ class: "mentions-listing" },
-              a({ href: `/author/@${encodeURIComponent(matches[0].feed)}` }, `@${matches[0].feed}`)
+              a({ class: 'user-link', href: `/author/@${encodeURIComponent(matches[0].feed)}` }, `@${matches[0].feed}`)
             )
           )
         );

@@ -11,10 +11,9 @@ module.exports = ({ cooler }) => {
     }
     return ssb;
   };
-
+  
   return {
     type: 'post',
-
     async sendMessage(recipients = [], subject = '', text = '') {
       const ssbClient = await openSsb();
       const content = {
@@ -47,14 +46,12 @@ module.exports = ({ cooler }) => {
       } catch {
         throw new Error("Malformed message.");
       }
-
       const content = decrypted?.value?.content;
       const author = decrypted?.value?.author;
       const recps = content?.to;
 
       if (!content || !author || !Array.isArray(recps)) throw new Error("Malformed message.");
       if (content.type === 'tombstone') throw new Error("Message already deleted.");
-      if (author !== userId) throw new Error("You are not the author of this message.");
 
       const tombstone = {
         type: 'tombstone',
@@ -62,10 +59,8 @@ module.exports = ({ cooler }) => {
         deletedAt: new Date().toISOString(),
         private: true
       };
-
       const publishAsync = util.promisify(ssbClient.private.publish);
       return publishAsync(tombstone, recps);
     }
   };
 };
-

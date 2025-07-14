@@ -25,7 +25,6 @@ const peersView = async ({ peers, connectedPeers }) => {
       div({ class: "peers-list" },
         h2(`${i18n.online} (${connectedPeers.length})`),
         connectedPeers.length > 0 ? ul(renderPeerList(connectedPeers)) : p(i18n.noConnections),
-        br(),
         h2(`${i18n.offline} (${peers.length})`),
         peers.length > 0 ? ul(renderPeerList(peers)) : p(i18n.noDiscovered),
         p(i18n.connectionActionIntro)

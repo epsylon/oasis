@@ -390,6 +390,7 @@ module.exports = {
     walletSentToLine: ({ destination, amount }) => `${amount} ECO bidali dira ${destination} helbidera`,
     walletSettingsTitle: "Zorroa",
     walletSettingsDescription: "Integratu Oasis zure ECOin zorroarekin.",
+    walletSettingsDocLink: "ECOin instalazio gida",
     walletStatusMessages: {
       invalid_amount: "Zenbatekoa oker",
       invalid_dest: "Hartzailearen helbidea oker",
@@ -583,6 +584,7 @@ module.exports = {
     skillsLabel:        "Trebetasunak",
     commonSkills:       "Trebetasunak amankomunean",
     mutualFollowers:    "Jarraitzaile amankomunean",
+    latestInteractions: "Interakzioak Azkenak",
     viewAvatar:        "Ikusi Abatarra",
     viewCV:            "Ikusi CV-a",
     suggestedSectionTitle: "Gomendatuta",
@@ -693,8 +695,6 @@ module.exports = {
     taskArchivedTitle: "Atazak artxibatuta",
     taskPublicTitle: "Ataza publikoak",
     taskPrivateTitle: "Ataza pribatuak",
-    taskStartTimeLabel:   "Hasiera Data",
-    taskEndTimeLabel:     "Amaiera Data",
     notasks: "Atazarik ez.",
     noLocation: "Ez da kokapenik zehaztu",
     //events
@@ -1330,6 +1330,8 @@ module.exports = {
     marketItemIncludesShipping: "Bidalketa barne?",
     marketItemHighestBid: "Eskaintza altuena",
     marketItemHighestBidder: "Gehien eskaintzen duena",
+    marketItemStock: "Stock",
+    marketOutOfStock: "Stock gabe",
     marketItemBidTime: "Eskantzaren data",
     marketActionsUpdate: "Eguneratu",
     marketUpdateButton: "Eguneratu elementua!",

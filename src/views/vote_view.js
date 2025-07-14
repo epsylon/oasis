@@ -1,21 +1,18 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
 const userId = config.keys.id;
 
-const generateFilterButtons = (filters, currentFilter, action) => {
-  return filters.map(mode =>
-    form({ method: 'GET', action },
-      input({ type: 'hidden', name: 'filter', value: mode }),
-      button({ type: 'submit', class: currentFilter === mode.toLowerCase() ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
-    )
-  );
-};
-
 const voteLabel = opt =>
   i18n['vote' + opt.split('_').map(w => w.charAt(0) + w.slice(1).toLowerCase()).join('')] || opt;
+
+const renderStyledField = (labelText, valueElement) =>
+  div({ class: 'card-field' },
+    span({ class: 'card-label' }, labelText),
+    span({ class: 'card-value' }, valueElement)
+  );
 
 const renderVoteCard = (v, voteOptions, firstRow, secondRow, userId, filter) => {
   const baseCounts = voteOptions.reduce((acc, opt) => { acc[opt] = v.votes?.[opt] || 0; return acc }, {});
@@ -30,7 +27,7 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, userId, filter) => 
   const showUpdateButton = filter === 'mine' && !Object.values(v.opinions || {}).length;
   const showDeleteButton = filter === 'mine';
 
-  return div({ class: 'vote-item' },
+  return div({ class: 'card card-section vote' },
     filter === 'mine' ? div({ class: 'vote-actions' },
       showUpdateButton
         ? form({ method: 'GET', action: `/votes/edit/${encodeURIComponent(v.id)}` },
@@ -46,10 +43,11 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, userId, filter) => 
     form({ method: 'GET', action: `/votes/${encodeURIComponent(v.id)}` },
       button({ class: 'filter-btn', type: 'submit' }, i18n.viewDetails)
     ),
-    h2(v.question),
-    p(`${i18n.voteDeadline}: ${moment(v.deadline).format('YYYY/MM/DD HH:mm:ss')}`),
-    p(`${i18n.voteStatus}: ${v.status}`),
-
+    br,
+    renderStyledField(i18n.voteQuestionLabel + ':', v.question),
+    renderStyledField(i18n.voteDeadline + ':', moment(v.deadline).format('YYYY/MM/DD HH:mm:ss')),
+    renderStyledField(i18n.voteStatus + ':', v.status),
+    br,
     v.status === 'OPEN'
       ? div({ class: 'vote-buttons-block' },
           div({ class: 'vote-buttons-row' },
@@ -64,21 +62,35 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, userId, filter) => 
           )
         )
       : null,
-
-    h2(`${i18n.voteTotalVotes}: ${v.totalVotes}`),
-    table(
-      tr(...voteOptions.map(opt => th(voteLabel(opt)))),
-      tr(...voteOptions.map(opt => td(baseCounts[opt])))
+    renderStyledField(i18n.voteTotalVotes + ':', v.totalVotes),
+    br,
+    div({ class: 'vote-table' },
+      table(
+        tr(...voteOptions.map(opt => th(voteLabel(opt)))),
+        tr(...voteOptions.map(opt => td(baseCounts[opt])))
+      )
     ),
-    p(`${i18n.voteBreakdown}: ${voteLabel(result)} = ${baseCounts[result]} + ${voteLabel('FOLLOW_MAJORITY')}: ${baseCounts.FOLLOW_MAJORITY}`),
+    renderStyledField(
+      i18n.voteBreakdown + ':',
+      span({}, [
+        voteLabel(result), ' = ', baseCounts[result],
+        ' + ', voteLabel('FOLLOW_MAJORITY'), ': ', baseCounts.FOLLOW_MAJORITY
+      ])
+    ),
+    br,
     div({ class: 'vote-buttons-row' }, h2(voteLabel(result))),
-
     v.tags && v.tags.filter(Boolean).length
-      ? div(
-          v.tags.filter(Boolean).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link', style: 'margin-right:0.8em;margin-bottom:0.5em;' }, `#${tag}`))
+      ? div({ class: 'card-tags' },
+          v.tags.filter(Boolean).map(tag =>
+            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+          )
         )
-      : null,
-
+      : null,    
+    br,
+    p({ class: 'card-footer' },
+      span({ class: 'date-link' }, `${moment(v.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+      a({ href: `/author/${encodeURIComponent(v.createdBy)}`, class: 'user-link' }, `${v.createdBy}`)
+    ),
     div({ class: 'voting-buttons' },
       ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
         form({ method: 'POST', action: `/votes/opinions/${encodeURIComponent(v.id)}/${category}` },
@@ -136,7 +148,7 @@ exports.voteView = async (votes, filter, voteId) => {
       (filter === 'edit' || filter === 'create')
         ? div({ class: 'vote-form' },
             form({ action: filter === 'edit' ? `/votes/update/${encodeURIComponent(voteId)}` : '/votes/create', method: 'POST' },
-              label(i18n.voteQuestionLabel), br(),
+              h2(i18n.voteQuestionLabel),
               input({ type: 'text', name: 'question', id: 'question', required: true, value: voteToEdit.question || '' }), br(), br(),
               label(i18n.voteDeadlineLabel), br(),
               input({ type: 'datetime-local', name: 'deadline', id: 'deadline', required: true,

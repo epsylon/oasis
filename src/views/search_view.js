@@ -1,4 +1,4 @@
-const { form, button, div, h2, p, section, input, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, a } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
@@ -45,141 +45,184 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     option({ value: "10", selected: resultCount === "10" }, "10"),
     option({ value: "all", selected: resultCount === "all" }, i18n.allTypesLabel)
   );
-  
+
+const getViewDetailsActionForSearch = (type, contentId) => {
+  switch (type) {
+    case 'votes': return `/votes/${encodeURIComponent(contentId)}`;
+    case 'transfer': return `/transfers/${encodeURIComponent(contentId)}`;
+    case 'tribe': return `/tribe/${encodeURIComponent(contentId)}`;
+    case 'curriculum': return `/inhabitant/${encodeURIComponent(contentId)}`;
+    case 'image': return `/images/${encodeURIComponent(contentId)}`;
+    case 'audio': return `/audios/${encodeURIComponent(contentId)}`;
+    case 'video': return `/videos/${encodeURIComponent(contentId)}`;
+    case 'document': return `/documents/${encodeURIComponent(contentId)}`;
+    case 'bookmark': return `/bookmarks/${encodeURIComponent(contentId)}`;
+    case 'event': return `/events/${encodeURIComponent(contentId)}`;
+    case 'task': return `/tasks/${encodeURIComponent(contentId)}`;
+    case 'post': return `/thread/${encodeURIComponent(contentId)}#${encodeURIComponent(contentId)}`;
+    case 'market': return `/market/${encodeURIComponent(contentId)}`;
+    case 'report': return `/reports/${encodeURIComponent(contentId)}`;
+    default: return '#';
+  }
+};
+
 let hasDocument = false; 
 
 const renderContentHtml = (content) => {
   switch (content.type) {
     case 'post':
       return div({ class: 'search-post' },
-        content.contentWarning ? p(i18n.contentWarning + `: ${content.contentWarning}`) : null,
-        content.text ? p({ innerHTML: content.text }) : null,
-        content.tags && content.tags.length
-           ? div(content.tags.map(tag =>
-           a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
-         ))
-       : null
-    );
+        content.contentWarning ? h2({ class: 'card-field' }, span({ class: 'card-value' }, content.contentWarning)) : null,
+        content.text ? div({ class: 'card-field' }, span({ class: 'card-value', innerHTML: content.text })) : null
+      );
     case 'about':
       return div({ class: 'search-about' },
-        content.name ? h2('@', content.name) : null,
-        content.description ? p(content.description) : null,
+        content.name ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.name + ':'), span({ class: 'card-value' }, content.name)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.description + ':'), span({ class: 'card-value' }, content.description)) : null,
         content.image ? img({ src: `/image/64/${encodeURIComponent(content.image)}` }) : null
-    );
+      );
     case 'feed':
       return div({ class: 'search-feed' },
-        content.text ? h2(content.text) : null,
-        div(
-          h2(`${i18n.tribeFeedRefeeds}: ${content.refeeds}`)
-        )
-    );
+        content.text ? h2({ class: 'card-field' }, span({ class: 'card-value' }, content.text)) : null,
+        h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ':'), span({ class: 'card-value' }, content.refeeds))
+      );
     case 'event':
       return div({ class: 'search-event' },
-        content.title ? h2(content.title) : null,
-        content.description ? p(i18n.searchDescription + `: ${content.description}`) : null,
-        content.date ? p(`${i18n.eventDate}: ${new Date(content.date).toLocaleString()}`) : null,
-        content.location ? p(`${i18n.eventLocation}: ${content.location}`) : null,
-        content.price ? p(`${i18n.eventPrice}: ${content.price} ECO`) : null,
-        content.eventUrl ? p(`${i18n.eventUrlLabel}: `, a({ href: content.eventUrl, target: '_blank' }, content.eventUrl)) : null,
-        content.organizer ? p(`${i18n.eventOrganizer}: `, a({ href: `/author/${encodeURIComponent(content.organizer)}` }, content.organizer)) : null,
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.description)) : null,
+        content.date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventDate + ':'), span({ class: 'card-value' }, new Date(content.date).toLocaleString())) : null,
+        content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventLocation + ':'), span({ class: 'card-value' }, content.location)) : null,
+        content.isPublic ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventPrivacyLabel + ':'), span({ class: 'card-value' }, content.isPublic)) : null, 
+        content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventStatus + ':'), span({ class: 'card-value' }, content.status)) : null,    
+        content.eventUrl ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventUrlLabel + ':'), span({ class: 'card-value' }, a({ href: content.eventUrl, target: '_blank' }, content.eventUrl))) : null,
+        content.price ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventPrice + ':'), span({ class: 'card-value' }, content.price)) : null,
         content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
       );
     case 'votes':
+      const { question, deadline, status, votes, totalVotes } = content;
+      const votesList = votes && typeof votes === 'object'
+        ? Object.entries(votes).map(([option, count]) => ({ option, count }))
+        : [];
       return div({ class: 'search-vote' },
-        content.question ? h2(content.question) : null,
-        content.status ? p(`${i18n.voteStatus}: ${content.status}`) : null,
-        content.totalVotes ? p(`${i18n.voteTotalVotes}: ${content.totalVotes}`) : null,
-        content.votes && content.votes.YES ? p(`${i18n.voteYes}: ${content.votes.YES}`) : null,
-        content.votes && content.votes.NO ? p(`${i18n.voteNo}: ${content.votes.NO}`) : null,
-        content.votes && content.votes.ABSTENTION ? p(`${i18n.voteAbstention}: ${content.votes.ABSTENTION}`) : null,
-        content.votes && content.votes.FOLLOW_MAJORITY ? p(`${i18n.voteFollowMajority}: ${content.votes.FOLLOW_MAJORITY}`) : null,
-        content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
-            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
-          ))
-        : null
+        br,
+        content.question ? div({ class: 'card-field' }, 
+          span({ class: 'card-label' }, i18n.voteQuestionLabel + ':'), 
+          span({ class: 'card-value' }, content.question)
+        ) : null,
+        content.status ? div({ class: 'card-field' }, 
+          span({ class: 'card-label' }, i18n.voteStatus + ':'), 
+          span({ class: 'card-value' }, content.status)
+        ) : null,
+        content.deadline ? div({ class: 'card-field' }, 
+          span({ class: 'card-label' }, i18n.voteDeadline + ':'), 
+          span({ class: 'card-value' }, content.deadline ? new Date(content.deadline).toLocaleString() : '')
+        ) : null,
+        div({ class: 'card-field' }, 
+          span({ class: 'card-label' }, i18n.voteTotalVotes + ':'), 
+          span({ class: 'card-value' }, totalVotes !== undefined ? totalVotes : '0')
+        ),
+        br,
+        votesList.length > 0 ? div({ class: 'card-votes' }, 
+          table(
+            tr(...votesList.map(({ option }) => th(i18n[option] || option))),
+            tr(...votesList.map(({ count }) => td(count)))
+          )
+        ) : null
       );
     case 'tribe':
       return div({ class: 'search-tribe' },
-        h2(content.title),
-        content.description ? p(i18n.tribeDescriptionLabel + ': ' + content.description) : null,
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.isAnonymous !== undefined ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel + ':'), span({ class: 'card-value' }, content.isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : null,
+        content.inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeModeLabel + ':'), span({ class: 'card-value' }, content.inviteMode.toUpperCase())) : null,  
+        content.isLARP !== undefined ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel + ':'), span({ class: 'card-value' }, content.isLARP ? i18n.tribeYes : i18n.tribeNo)) : null,
+        br,
         content.image ? img({ src: `/blob/${encodeURIComponent(content.image)}`, class: 'feed-image' }) : img({ src: '/assets/images/default-tribe.png', class: 'feed-image' }),
-        p(`${i18n.location || 'Location'}: ${content.location || ''}`),
-        typeof content.isLARP === 'boolean' ? p(`${i18n.isLARPLabel || 'LARP'}: ${content.isLARP ? 'Yes' : 'No'}`) : null,
-        typeof content.isAnonymous === 'boolean' ? p(`${i18n.isAnonymousLabel || 'Anonymous'}: ${content.isAnonymous ? 'Yes' : 'No'}`) : null,
-        Array.isArray(content.members) ? p(`${i18n.tribeMembersCount || 'Members'}: ${content.members.length}`) : null,
+        br,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
+        content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.location + ':'), span({ class: 'card-value' }, content.location)) : null,
+        Array.isArray(content.members) ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeMembersCount + ':'), span({ class: 'card-value' }, content.members.length)) : null,
         content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
       );
     case 'audio':
       return content.url ? div({ class: 'search-audio' },
-        content.title ? h2(content.title) : null,
-        content.description ? p(i18n.searchDescription + `: ${content.description}`) : null,
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.audioTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.audioDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
+        br,
         audioHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(content.url)}`, type: content.mimeType, preload: 'metadata' }),
+        br,
         content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
       ) : null;
     case 'image':
       return content.url ? div({ class: 'search-image' },
-        content.title ? h2(content.title) : null,
-        content.description ? p(i18n.searchDescription + `: ${content.description}`) : null,
-        content.meme ? h2(`${i18n.trendingCategory}: ${i18n.meme}`) : null,
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
+        content.meme ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.trendingCategory + ':'), span({ class: 'card-value' }, i18n.meme)) : null,
+        br,
         img({ src: `/blob/${encodeURIComponent(content.url)}` }),
-        br(),
+        br,
         content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
       ) : null;
     case 'video':
       return content.url ? div({ class: 'search-video' },
-        content.title ? h2(content.title) : null,
-        content.description ? p(i18n.searchDescription + `: ${content.description}`) : null,
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.videoTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.videoDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
+        br,
         videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(content.url)}`, type: content.mimeType || 'video/mp4', width: '640', height: '360' }),
+        br,
         content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
       ) : null;
     case 'document':
       return div({ class: 'search-document' },
-        content.title ? h2(content.title) : null,
-        content.description ? p(i18n.searchDescription + `: ${content.description}`) : null,
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.documentTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.description)) : null,
+        br,
         div({
           id: `pdf-container-${content.key || content.url}`,
-          class: 'pdf-viewer-container',
-         'data-pdf-url': `/blob/${encodeURIComponent(content.url)}`
+          class: 'card-field pdf-viewer-container',
+          'data-pdf-url': `/blob/${encodeURIComponent(content.url)}`
         }),
-       content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
-              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
-            ))
-          : null
-     );
+        br,
+        content.tags && content.tags.length
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
+            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+          ))
+        : null
+      );
     case 'market':
       return div({ class: 'search-market' },
-        content.item_type ? h2(`${i18n.marketItemType}: ${content.item_type}`) : null,
-        content.title ? h2(content.title) : null,
-        content.description ? p(`${i18n.searchDescription}: ${content.description}`) : null,
-        content.price ? p(`${i18n.searchPriceLabel}: ${content.price || 'N/A'}`) : null,
-        content.status ? p(`${i18n.marketItemCondition}: ${content.status}`) : null,
-        content.item_status ? p(`${i18n.marketItemCondition}: ${content.item_status}`) : null,
-        content.deadline ? p(`${i18n.marketItemDeadline}: ${new Date(content.deadline).toLocaleString()}`) : null,
-        typeof content.includesShipping === 'boolean' ? p(`${i18n.marketItemIncludesShipping}: ${content.includesShipping ? i18n.YESLabel : i18n.NOLabel}`) : null,
-        content.seller ? p(`${i18n.marketItemSeller}: `, a({ href: `/author/${encodeURIComponent(content.seller)}` }, content.seller)) : null,
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.description)) : null,
+        content.item_type ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, content.item_type.toUpperCase())) : null,
+        content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemCondition + ':'), span({ class: 'card-value' }, content.status)) : null,
+        content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemDeadline + ':'), span({ class: 'card-value' }, new Date(content.deadline).toLocaleString())) : null,
+        br,
         content.image ? img({ src: `/blob/${encodeURIComponent(content.image)}`, class: 'market-image' }) : null,
+        br,
+        content.seller ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemSeller + ':'), span({ class: 'card-value' }, a({ class: "user-link", href: `/author/${encodeURIComponent(content.seller)}` }, content.seller))) : null,
+        content.stock ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, content.stock || 'N/A')) : null, 
+        content.price ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchPriceLabel + ':'), span({ class: 'card-value' }, `${content.price} ECO`)) : null,    
+        content.condition ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.condition)) : null,
+        content.includesShipping ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemIncludesShipping + ':'), span({ class: 'card-value' }, `${content.includesShipping ? i18n.YESLabel : i18n.NOLabel}`)) : null,
         content.auctions_poll && content.auctions_poll.length > 0
           ? div({ class: 'auction-info' },
               p(i18n.marketAuctionBids),
@@ -201,105 +244,106 @@ const renderContentHtml = (content) => {
           )
           : null,
         content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
       );
     case 'bookmark':
       return div({ class: 'search-bookmark' },
-        content.description ? p(content.description) : null,
-        h2(content.url ? a({ href: content.url, target: '_blank' }, content.url) : null),
-        content.category ? p(`${i18n.bookmarkCategory}: ${content.category}`) : null,
-        content.lastVisit ? p(`${i18n.bookmarkLastVisit}: ${new Date(content.lastVisit).toLocaleString()}`) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
+        content.url ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkUrlLabel + ':'), span({ class: 'card-value' }, a({ href: content.url, target: '_blank' }, content.url))) : null,
+        content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkCategory + ':'), span({ class: 'card-value' }, content.category)) : null,
+        content.lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, new Date(content.lastVisit).toLocaleString())) : null,
         content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
       );
     case 'task':
       return div({ class: 'search-task' },
-       content.title ? h2(content.title) : null,
-       content.description ? p(i18n.searchDescription + `: ${content.description}`) : null,
-       content.startTime ? p(`${i18n.taskStartTimeLabel}: ${new Date(content.startTime).toLocaleString()}`) : null,
-       content.endTime ? p(`${i18n.taskEndTimeLabel}: ${new Date(content.endTime).toLocaleString()}`) : null,
-       content.priority ? p(`${i18n.searchPriorityLabel}: ${content.priority}`) : null,
-       content.location ? p(`${i18n.searchLocationLabel}: ${content.location}`) : null,
-       typeof content.isPublic === 'boolean' ? p(`${i18n.searchIsPublicLabel}: ${content.isPublic ? i18n.YESLabel : i18n.NOLabel}`) : null,
-       Array.isArray(content.assignees)
-          ? p(`${i18n.taskAssignees}: ${content.assignees.length}`)
-          : null,
-       content.status ? p(`${i18n.searchStatusLabel}: ${content.status}`) : null,
-       content.author ? p(`${i18n.author}: `, a({ href: `/author/${encodeURIComponent(content.author)}` }, content.author)) : null,
-       content.tags && content.tags.length
-         ? div(content.tags.map(tag =>
-            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
-           ))
-         : null
-     );
-   case 'report':
-      return div({ class: 'search-report' },
-      content.title ? h2(content.title) : null,
-      content.description ? p(i18n.searchDescription + `: ${content.description}`) : null,
-      content.category ? p(`${i18n.searchCategoryLabel}: ${content.category}`) : null,
-      content.severity ? p(`${i18n.reportsSeverity}: ${content.severity}`) : null,
-      content.status ? p(`${i18n.searchStatusLabel}: ${content.status}`) : null,
-      content.image ? img({ src: `/blob/${encodeURIComponent(content.image)}` }) : null,
-      typeof content.confirmations === 'number' ? p(`${i18n.reportsConfirmations}: ${content.confirmations}`) : null,
-      br,
-      content.tags && content.tags.length
-        ? div(content.tags.map(tag =>
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.description)) : null,
+        content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchLocationLabel + ':'), span({ class: 'card-value' }, content.location)) : null,
+        content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchStatusLabel + ':'), span({ class: 'card-value' }, content.status)) : null,
+        content.priority ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchPriorityLabel + ':'), span({ class: 'card-value' }, content.priority)) : null,
+        typeof content.isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchIsPublicLabel + ':'), span({ class: 'card-value' }, content.isPublic ? i18n.YESLabel : i18n.NOLabel)) : null,
+        content.startTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskStartTimeLabel + ':'), span({ class: 'card-value' }, new Date(content.startTime).toLocaleString())) : null,
+        content.endTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskEndTimeLabel + ':'), span({ class: 'card-value' }, new Date(content.endTime).toLocaleString())) : null,
+        Array.isArray(content.assignees) ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskAssignees + ':'), span({ class: 'card-value' }, content.assignees.length)) : null,
+        content.tags && content.tags.length
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
-    );
+      );
+    case 'report':
+      return div({ class: 'search-report' },
+        content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.reportsTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
+        content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchStatusLabel + ':'), span({ class: 'card-value' }, content.status)) : null,
+        content.severity ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.reportsSeverity + ':'), span({ class: 'card-value' }, content.severity)) : null,
+        content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchCategoryLabel + ':'), span({ class: 'card-value' }, content.category)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.description)) : null,
+        br,
+        content.image ? img({ src: `/blob/${encodeURIComponent(content.image)}` }) : null,
+        br,
+        typeof content.confirmations === 'number' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.reportsConfirmations + ':'), span({ class: 'card-value' }, content.confirmations)) : null,
+        content.tags && content.tags.length
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
+            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+          ))
+        : null
+      );
     case 'transfer':
       return div({ class: 'search-transfer' },
-        p(`${i18n.transfersFrom}: `, a({ href: `/author/${encodeURIComponent(content.from)}` }, content.from)),
-        p(`${i18n.transfersTo}: `, a({ href: `/author/${encodeURIComponent(content.to)}` }, content.to)),
-        p(`${i18n.transfersAmount}: ${content.amount}`),
-        h2(`${i18n.transfersConcept}: ${content.concept}`),
-        p(`${i18n.transfersStatus}: ${content.status}`),
+        content.concept ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.transfersConcept + ':'), span({ class: 'card-value' }, content.concept)) : null,
+        content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.transfersDeadline + ':'), span({ class: 'card-value' }, content.deadline)) : null,      
+        content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.transfersStatus + ':'), span({ class: 'card-value' }, content.status)) : null,
+        content.amount ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.transfersAmount + ':'), span({ class: 'card-value' }, content.amount)) : null, 
+        br,
+        content.from ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.transfersFrom + ':'), span({ class: 'card-value' }, a({ class: "user-link", href: `/author/${encodeURIComponent(content.from)}` }, content.from))) : null,
+        content.to ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.transfersTo + ':'), span({ class: 'card-value' }, a({ class: "user-link", href: `/author/${encodeURIComponent(content.to)}` }, content.to))) : null,
+        br,
         content.confirmedBy && content.confirmedBy.length
-          ? p(`${i18n.transfersConfirmations}: ${content.confirmedBy.length}`)
+          ? h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.transfersConfirmations + ':'), span({ class: 'card-value' }, content.confirmedBy.length))
           : null,
         content.tags && content.tags.length
-          ? div(content.tags.map(tag =>
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           ))
         : null
       );
     case 'curriculum':
       return div({ class: 'search-curriculum' },
-        content.name ? h2(content.name) : null,
-        content.description ? p(content.description) : null,
+        content.name ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.cvNameLabel + ':'), span({ class: 'card-value' }, content.name)) : null,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.cvDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
         content.photo ? img({ src: `/blob/${encodeURIComponent(content.photo)}`, class: 'curriculum-photo' }) : null,
-        content.location ? p(`${i18n.cvLocationLabel}: ${content.location}`) : null,
-        content.status ? p(`${i18n.cvStatusLabel}: ${content.status}`) : null,
-        content.preferences ? p(`${i18n.cvPreferencesLabel}: ${content.preferences}`) : null,
+        content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.cvLocationLabel + ':'), span({ class: 'card-value' }, content.location)) : null,
+        content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.cvStatusLabel + ':'), span({ class: 'card-value' }, content.status)) : null,
+        content.preferences ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.cvPreferencesLabel + ':'), span({ class: 'card-value' }, content.preferences)) : null,
         Array.isArray(content.personalSkills) && content.personalSkills.length
-          ? div(content.personalSkills.map(skill =>
+          ? div({ class: 'card-field' }, content.personalSkills.map(skill =>
               a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: 'tag-link' }, `#${skill}`)
             )) : null,
         Array.isArray(content.personalExperiences) && content.personalExperiences.length
-          ? div(content.personalExperiences.map(exp => p(exp))) : null,
+          ? div({ class: 'card-field' }, content.personalExperiences.map(exp => p(exp))) : null,
         Array.isArray(content.oasisExperiences) && content.oasisExperiences.length
-          ? div(content.oasisExperiences.map(exp => p(exp))) : null,
+          ? div({ class: 'card-field' }, content.oasisExperiences.map(exp => p(exp))) : null,
         Array.isArray(content.oasisSkills) && content.oasisSkills.length
-          ? div(content.oasisSkills.map(skill => p(skill))) : null,
+          ? div({ class: 'card-field' }, content.oasisSkills.map(skill => p(skill))) : null,
         Array.isArray(content.educationExperiences) && content.educationExperiences.length
-          ? div(content.educationExperiences.map(exp => p(exp))) : null,
+          ? div({ class: 'card-field' }, content.educationExperiences.map(exp => p(exp))) : null,
         Array.isArray(content.educationalSkills) && content.educationalSkills.length
-          ? div(content.educationalSkills.map(skill =>
+          ? div({ class: 'card-field' }, content.educationalSkills.map(skill =>
               a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: 'tag-link' }, `#${skill}`)
             )) : null,
         Array.isArray(content.languages) && content.languages.length
-          ? div(content.languages.map(lang => p(lang))) : null,
+          ? div({ class: 'card-field' }, content.languages.map(lang => p(lang))) : null,
         Array.isArray(content.professionalExperiences) && content.professionalExperiences.length
-          ? div(content.professionalExperiences.map(exp => p(exp))) : null,
+          ? div({ class: 'card-field' }, content.professionalExperiences.map(exp => p(exp))) : null,
        Array.isArray(content.professionalSkills) && content.professionalSkills.length
-          ? div(content.professionalSkills.map(skill => p(skill))) : null
+          ? div({ class: 'card-field' }, content.professionalSkills.map(skill => p(skill))) : null
       );
     default:
       return div({ class: 'styled-text', innerHTML: renderTextWithStyles(content.text || content.description || content.title || '[no content]') });
@@ -318,7 +362,6 @@ const resultSection = Object.entries(results).length > 0
         const contentHtml = renderContentHtml(content);
         let author;
         let authorUrl = '#';
-
         if (content.type === 'market') {
           author = content.seller || i18n.anonymous || "Anonymous";
           authorUrl = `/author/${encodeURIComponent(content.seller)}`;
@@ -329,20 +372,34 @@ const resultSection = Object.entries(results).length > 0
           author = content.from || i18n.anonymous || "Anonymous";
           authorUrl = `/author/${encodeURIComponent(content.from)}`;
         } else if (content.type === 'post' || content.type === 'about') {
-          author = null;
-        } else if (content.type === 'report' && content.isAnonymous) {
-          author = null;
-        } else {
+          author = msg.value.author || i18n.anonymous || "Anonymous";
+          authorUrl = `/author/${encodeURIComponent(msg.value.author)}`;
+        } else if (content.type === 'report') {
           author = content.author || i18n.anonymous || "Anonymous";
           authorUrl = `/author/${encodeURIComponent(content.author || 'anonymous')}`;
+        } else if (content.type === 'votes') {
+          author = content.createdBy || i18n.anonymous || "Anonymous";
+          authorUrl = `/author/${encodeURIComponent(content.createdBy || 'anonymous')}`;   
+        } else {
+          author = content.author
+          authorUrl = `/author/${encodeURIComponent(content.author || 'anonymous')}`;
         }
+        
+        const contentId = msg.key;
+        const detailsButton = form({ method: "GET", action: getViewDetailsActionForSearch(content.type, contentId) },
+          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+        );
 
         return div({ class: 'result-item' }, [
+          detailsButton,
+          br,
           contentHtml,
           author
-            ? p(`${i18n.author}: `, a({ href: authorUrl }, author))
-            : null,
-          p(`${i18n.createdAtLabel || i18n.searchCreatedAt}: ${created}`)
+            ? p({ class: 'card-footer' },
+             span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+             a({ href: authorUrl, class: 'user-link' }, `${author}`)
+          ): null, 
+          
         ]);
       })
     )

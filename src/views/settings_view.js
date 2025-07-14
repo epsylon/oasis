@@ -95,7 +95,10 @@ const settingsView = ({ version }) => {
     section(
       div({ class: "tags-header" },
         h2(i18n.wallet),
-        p(i18n.walletSettingsDescription),
+	p(
+	  i18n.walletSettingsDescription, " ",
+	  a({ href: "docs/ecoin.md", target: "_blank", rel: "noopener" }, `[${i18n.walletSettingsDocLink}]`)
+	),
         form(
           { action: "/settings/wallet", method: "POST" },
           label({ for: "wallet_url" }, i18n.walletAddress), br(),

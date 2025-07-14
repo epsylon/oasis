@@ -84,7 +84,7 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
           h2(i18n.contributorsTitle),
           ul(
             ...contributors.map(author =>
-              li(a({ href: `/author/${encodeURIComponent(author)}` }, author))
+              li(a({ class: 'user-link', href: `/author/${encodeURIComponent(author)}` }, author))
             )
           )
         ) : null 

@@ -276,3 +276,152 @@ header {
 .sidebar-right nav ul li {
   width: 100%;
 }
+
+.card {
+  border-radius: 16px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
+  color: #E5E5E5;
+  font-family: inherit;
+  box-shadow: 0 4px 30px 0 rgba(0, 0, 0, 0.2);
+  background-color: #3C1360;
+  border: 1px solid #B86ADE;
+}
+
+.card-section {
+  border: none;
+  padding: 16px 0 0 16px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  margin-top: 16px;
+  padding-top: 0px;
+  border: none;
+}
+
+.card-label {
+  color: #9B1C96;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+
+.card-footer {
+  margin-top: 12px;
+  font-weight: 500;
+  color: #B86ADE;
+  font-size: 1.1em;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: none;
+  padding-top: 0;
+  margin-bottom: 12px;
+}
+
+.card-body {
+  margin-top: 12px;
+  margin-bottom: 16px;
+  padding: 0;
+}
+
+.card-field {
+  display: flex;
+  align-items: baseline;
+  padding: 0;
+  margin-bottom: 8px;
+  border: none;
+  background: none;
+}
+
+.card-tags {
+  margin: 5px 0 3px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.card-tags a.tag-link {
+  text-decoration: none;
+  color: #FFFFFF;
+  background: #D94F4F;
+  padding: 5px 13px 4px 13px;
+  border-radius: 7px;
+  font-size: .98em;
+  border: none;
+  font-weight: bold;
+}
+
+.card-tags a.tag-link:hover {
+  background: #B86ADE;
+  color: #E5E5E5;
+  cursor: pointer;
+}
+
+a.user-link {
+  background-color: #FFD600;
+  color: #3C1360;
+  padding: 12px 24px;
+  border-radius: 5px;
+  text-align: center;
+  font-weight: bold;
+  text-decoration: none;
+  display: inline-block;
+  border: 2px solid #FFD600;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+  font-size: 1em;
+}
+
+a.user-link:hover {
+  background-color: #FFB600;
+  border-color: #FFB600;
+  color: #3C1360;
+  cursor: pointer;
+}
+
+a.user-link:focus {
+  background-color: #9A2F2F;
+  border-color: #9A2F2F;
+  color: #E5E5E5;
+}
+
+.date-link {
+  background-color: #2F3C32;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  margin-left: 12px;
+}
+
+.date-link:hover {
+  background-color: #3E4A3D;
+  color: #fff;
+}
+
+.activitySpreadInhabitant2 {
+  background-color: #3E4A3D;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: bold;
+  text-decoration: none;
+  display: inline-block;
+  border: 2px solid transparent;
+}
+
+.activityVotePost {
+  background-color: #3B5C42;
+  color: #fff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: bold;
+  text-decoration: none;
+  display: inline-block;
+  border: 2px solid transparent;
+}

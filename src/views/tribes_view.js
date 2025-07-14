@@ -73,7 +73,7 @@ const renderFeedTribesView = (tribe, page, query, filter) => {
                   : p(i18n.alreadyRefeeded)
               ),
               div({ class: 'feed-main' },
-                p(`${new Date(m.date).toLocaleString()} — `, a({ href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
+                p(`${new Date(m.date).toLocaleString()} — `, a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
                 p(m.message)
               )
             )
@@ -263,18 +263,18 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
         ),
         h2(t.title)
       ),
-      img({ src: imageSrc }),
-      p(t.description),
-      p(`${i18n.tribeLocationLabel}: ${t.location}`),
       p(`${i18n.tribeIsAnonymousLabel}: ${t.isAnonymous ? i18n.tribePrivate : i18n.tribePublic}`),
       p(`${i18n.tribeModeLabel}: ${t.inviteMode.toUpperCase()}`),
       p(`${i18n.tribeLARPLabel}: ${t.isLARP ? i18n.tribeYes : i18n.tribeNo}`),
-      p(`${i18n.tribeMembersCount}: ${t.members.length}`),
+      img({ src: imageSrc }),
+      p(t.description),
+      p(`${i18n.tribeLocationLabel}: ${t.location}`),
+      h2(`${i18n.tribeMembersCount}: ${t.members.length}`),
       t.tags && t.tags.filter(Boolean).length ? div(t.tags.filter(Boolean).map(tag =>
         a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link', style: 'margin-right:0.8em;margin-bottom:0.5em;' }, `#${tag}`)
-      )) : null,
+      )) : null,    
       p(`${i18n.tribeCreatedAt}: ${new Date(t.createdAt).toLocaleString()}`),
-      p(`${i18n.tribeAuthor}: `, a({ href: `/author/${encodeURIComponent(t.author)}` }, t.author)),
+      p(a({ class: 'user-link', href: `/author/${encodeURIComponent(t.author)}` }, t.author)),
       t.members.includes(userId) ? div(
       form({ method: 'POST', action: '/tribes/generate-invite' }, 
         input({ type: 'hidden', name: 'tribeId', value: t.id }),
@@ -355,7 +355,7 @@ const renderFeedTribeView = async (tribe, query = {}, filter) => {
                   : p(i18n.alreadyRefeeded)
               ),
               div({ class: 'feed-main' },
-                p(`${new Date(m.date).toLocaleString()} — `, a({ href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
+                p(`${new Date(m.date).toLocaleString()} — `, a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
                 p(m.message)
               )
             )
@@ -375,15 +375,18 @@ exports.tribeView = async (tribe, userId, query) => {
   const pageTitle = tribe.title;
   const tribeDetails = div({ class: 'tribe-details' },
     h2(tribe.title),
-    img({ src: imageSrc, alt: tribe.title }),
-    p(tribe.description),
-    p(`${i18n.tribeLocationLabel}: ${tribe.location}`),
     p(`${i18n.tribeIsAnonymousLabel}: ${tribe.isAnonymous ? i18n.tribePrivate : i18n.tribePublic}`),
     p(`${i18n.tribeModeLabel}: ${tribe.inviteMode.toUpperCase()}`),
     p(`${i18n.tribeLARPLabel}: ${tribe.isLARP ? i18n.tribeYes : i18n.tribeNo}`),
-    p(`${i18n.tribeMembersCount}: ${tribe.members.length}`),
+    img({ src: imageSrc, alt: tribe.title }),
+    p(tribe.description),
+    p(`${i18n.tribeLocationLabel}: ${tribe.location}`),
+    h2(`${i18n.tribeMembersCount}: ${tribe.members.length}`),
+    tribe.tags && tribe.tags.filter(Boolean).length ? div(tribe.tags.filter(Boolean).map(tag =>
+      a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link', style: 'margin-right:0.8em;margin-bottom:0.5em;' }, `#${tag}`)
+    )) : null,  
     p(`${i18n.tribeCreatedAt}: ${new Date(tribe.createdAt).toLocaleString()}`),
-    p(`${i18n.tribeAuthor}: `, a({ href: `/author/${encodeURIComponent(tribe.author)}` }, tribe.author)),
+    p(a({ class: 'user-link', href: `/author/${encodeURIComponent(tribe.author)}` }, tribe.author)),
     div({ class: 'tribe-feed-form' }, tribe.members.includes(config.keys.id)
       ? form({ method: 'POST', action: `/tribe/${encodeURIComponent(tribe.id)}/message` },
           textarea({ name: 'message', rows: 3, cols: 50, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),

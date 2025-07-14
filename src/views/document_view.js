@@ -1,9 +1,9 @@
-const { form, button, div, h2, p, section, input, label, br, a } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, label, br, a, span } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 
-const userId = config.keys.id
+const userId = config.keys.id;
 
 const getFilteredDocuments = (filter, documents, userId) => {
   const now = Date.now();
@@ -34,25 +34,27 @@ const renderDocumentActions = (filter, doc) => {
 const renderDocumentList = (filteredDocs, filter) => {
   return filteredDocs.length > 0
     ? filteredDocs.map(doc =>
-        div({ class: "document-item" },
+        div({ class: "tags-header" },
           renderDocumentActions(filter, doc),
           form({ method: "GET", action: `/documents/${encodeURIComponent(doc.key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
-          br,
+          doc.title?.trim() ? h2(doc.title) : null,
           div({
             id: `pdf-container-${doc.key}`,
             class: 'pdf-viewer-container',
             'data-pdf-url': `/blob/${encodeURIComponent(doc.url)}`
           }),
-          p(`${i18n.documentCreatedAt}: ${moment(doc.createdAt).format('YYYY/MM/DD HH:mm:ss')}`),
-          p(`${i18n.documentAuthor}: `, a({ href: `/author/${encodeURIComponent(doc.author)}` }, doc.author)),
-          doc.title?.trim() ? h2(doc.title) : null,
           doc.description?.trim() ? p(doc.description) : null,
           doc.tags.length
-            ? div(doc.tags.map(tag =>
+            ? div({ class: "card-tags" }, doc.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
               ))
             : null,
+          br,
+          p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${moment(doc.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+          a({ href: `/author/${encodeURIComponent(doc.author)}`, class: 'user-link' }, `${doc.author}`)
+          ),
           div({ class: "voting-buttons" },
             ['interesting','necessary','funny','disgusting','sensible',
              'propaganda','adultOnly','boring','confusing','inspiring','spam']
@@ -149,22 +151,7 @@ exports.singleDocumentView = async (doc, filter) => {
         )
       ),
       div({ class: "tags-header" },
-        h2(doc.title),
-        p(doc.description),
-        div({
-          id: `pdf-container-${doc.key}`,
-          class: 'pdf-viewer-container',
-          'data-pdf-url': `/blob/${encodeURIComponent(doc.url)}`
-        }),
-        p(`${i18n.documentCreatedAt}: ${moment(doc.createdAt).format('YYYY/MM/DD HH:mm:ss')}`),
-        p(`${i18n.documentAuthor}: `, a({ href: `/author/${encodeURIComponent(doc.author)}` }, doc.author)),
-        doc.tags?.length
-          ? div(doc.tags.map(tag =>
-              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
-            ))
-          : null
-      ),
-      isAuthor ? div({ class: "document-actions" },
+       isAuthor ? div({ class: "document-actions" },
         !hasOpinions
           ? form({ method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
               button({ class: "update-btn", type: "submit" }, i18n.documentUpdateButton)
@@ -174,6 +161,24 @@ exports.singleDocumentView = async (doc, filter) => {
           button({ class: "delete-btn", type: "submit" }, i18n.documentDeleteButton)
         )
       ) : null,
+        h2(doc.title),
+        div({
+          id: `pdf-container-${doc.key}`,
+          class: 'pdf-viewer-container',
+          'data-pdf-url': `/blob/${encodeURIComponent(doc.url)}`
+        }),
+        p(doc.description),
+          doc.tags.length
+            ? div({ class: "card-tags" }, doc.tags.map(tag =>
+                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
+              ))
+            : null,
+            br,
+          p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${moment(doc.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+          a({ href: `/author/${encodeURIComponent(doc.author)}`, class: 'user-link' }, `${doc.author}`)
+          ),
+      ),
       div({ class: "voting-buttons" },
         ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
           form({ method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },

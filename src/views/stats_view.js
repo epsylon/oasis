@@ -30,8 +30,8 @@ exports.statsView = (stats, filter) => {
       ),
       section(
 	div({ style: 'background-color:#f8f9fa; padding:24px; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 2px 8px rgba(0,0,0,0.1);' },
-	    h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' }, `${i18n.statsOasisID}: `, a({ href: `/author/${encodeURIComponent(stats.id)}`, style: 'color:#007bff; text-decoration:none;' }, stats.id)),
-	    h3({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsCreatedAt}: `, span({ style: 'color:#888;' }, stats.createdAt)),
+	 h3({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsCreatedAt}: `, span({ style: 'color:#888;' }, stats.createdAt)),
+	  h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' }, a({ class: "user-link", href: `/author/${encodeURIComponent(stats.id)}`, style: 'color:#007bff; text-decoration:none;' }, stats.id)),
 	  div({ style: 'margin-bottom:16px;' },
 	  ul({ style: 'list-style-type:none; padding:0; margin:0;' },
 	    li({ style: 'font-size:18px; color:#555; margin:8px 0;' },

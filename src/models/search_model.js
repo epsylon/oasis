@@ -10,7 +10,7 @@ module.exports = ({ cooler }) => {
 
   const searchableTypes = [
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
-    'vote', 'report', 'task', 'event', 'bookmark', 'document',
+    'votes', 'report', 'task', 'event', 'bookmark', 'document',
     'image', 'audio', 'video', 'market'
   ];
 
@@ -24,8 +24,8 @@ module.exports = ({ cooler }) => {
         return [content?.text, content?.author, content?.createdAt, ...(content?.tags || []), content?.refeeds];
       case 'event':
         return [content?.title, content?.description, content?.date, content?.location, content?.price, content?.eventUrl, ...(content?.tags || []), content?.attendees, content?.organizer, content?.status, content?.isPublic];
-      case 'vote':
-        return [content?.question, content?.deadline, content?.status, ...(content?.votes || []), content?.totalVotes];
+      case 'votes':
+        return [content?.question, content?.deadline, content?.status, ...(Object.values(content?.votes || {})), content?.totalVotes];
       case 'tribe':
         return [content?.title, content?.description, content?.image, content?.location, ...(content?.tags || []), content?.isLARP, content?.isAnonymous, content?.members?.length, content?.createdAt, content?.author];
       case 'audio':
@@ -86,6 +86,9 @@ module.exports = ({ cooler }) => {
       const c = msg?.value?.content;
       const t = c?.type;
       if (!t || (types.length > 0 && !types.includes(t))) return false;
+      if (t === 'market') {
+        if (c.stock === 0 && c.status !== 'SOLD') return false;
+      }
       if (query.startsWith('@') && query.length > 1) return (t === 'about' && c?.about === query);
       const fields = getRelevantFields(t, c);
       if (query.startsWith('#') && query.length > 1) {

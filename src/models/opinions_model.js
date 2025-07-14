@@ -13,14 +13,12 @@ module.exports = ({ cooler }) => {
   ];
 
   const validTypes = [
-    'event', 'bookmark', 'task', 'votes', 'report', 'transfer',
+    'bookmark', 'votes', 'transfer',
     'feed', 'image', 'audio', 'video', 'document'
   ];
 
   const getPreview = (c) => {
     if (c.type === 'bookmark' && c.bookmark) return `🔖 ${c.bookmark}`;
-    if (c.type === 'event' && c.text) return c.text.slice(0, 200);
-    if (c.type === 'task' && c.description) return c.description;
     return c.text || c.description || c.title || '';
   };
 
@@ -34,8 +32,10 @@ module.exports = ({ cooler }) => {
     );
 
     if (!msg || !msg.content) throw new Error("Opinion not found.");
-    const type = msg.content.type;
-    if (!validTypes.includes(type)) throw new Error("Invalid content type for voting.");
+	const type = msg.content.type;
+	if (!validTypes.includes(type) || ['task', 'event', 'report'].includes(type)) {
+	  throw new Error("Voting not allowed on this content type.");
+	}
     if (msg.content.opinions_inhabitants?.includes(userId)) throw new Error("Already voted.");
 
     const tombstone = {
@@ -87,7 +87,11 @@ module.exports = ({ cooler }) => {
         tombstoned.add(c.target);
         continue;
       }
-      if (c.opinions && !tombstoned.has(key)) {
+       if (
+	  c.opinions &&
+	  !tombstoned.has(key) &&
+	  !['task', 'event', 'report'].includes(c.type)
+	) {
         if (c.replaces) replaces.set(c.replaces, key);
         byId.set(key, {
           key,

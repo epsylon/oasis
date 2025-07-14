@@ -390,6 +390,7 @@ module.exports = {
     walletSentToLine: ({ destination, amount }) => `Sent ECO ${amount} to ${destination}`,
     walletSettingsTitle: "Wallet",
     walletSettingsDescription: "Integrate Oasis with your ECOin wallet.",
+    walletSettingsDocLink: "ECOin installation guide",
     walletStatusMessages: {
       invalid_amount: "Invalid amount",
       invalid_dest: "Invalid destination address",
@@ -583,6 +584,7 @@ module.exports = {
     skillsLabel:        "Skills",
     commonSkills:       "Common Skills",
     mutualFollowers:    "Mutual Followers",
+    latestInteractions: "Latest Interactions",
     viewAvatar:        "View Avatar",
     viewCV:            "View CV",
     suggestedSectionTitle: "Suggested",
@@ -693,8 +695,6 @@ module.exports = {
     taskArchivedTitle: "Archived Tasks",
     taskPublicTitle: "Public Tasks",
     taskPrivateTitle: "Private Tasks",
-    taskStartTimeLabel:   "Start Time",
-    taskEndTimeLabel:     "End Time",
     notasks: "No tasks available.",
     noLocation: "No location specified",
     //events
@@ -1330,6 +1330,8 @@ module.exports = {
     marketItemIncludesShipping: "Includes Shipping?",
     marketItemHighestBid: "Highest Bid",
     marketItemHighestBidder: "Highest Bidder",
+    marketItemStock: "Stock",
+    marketOutOfStock: "Out of stock",
     marketItemBidTime: "Bid Time",
     marketActionsUpdate: "Update",
     marketUpdateButton: "Update Item!",

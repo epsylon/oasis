@@ -154,9 +154,9 @@ exports.cvView = async (cv) => {
                   class: "cv-photo"
                 })
               : null,
-            cv.contact ? p("User ID: ", a({ href: `/author/${encodeURIComponent(cv.contact)}` }, cv.contact)) : null,
-            cv.name ? p(`${i18n.cvNameLabel}: ${cv.name}`) : null,
-            cv.description ? p(`${i18n.cvDescriptionLabel}: ${cv.description}`) : null,
+            cv.name ? h2(`${cv.name}`) : null,
+            cv.contact ? p(a({ class: "user-link", href: `/author/${encodeURIComponent(cv.contact)}` }, cv.contact)) : null,
+            cv.description ? p(`${cv.description}`) : null,
             cv.languages ? p(`${i18n.cvLanguagesLabel}: ${cv.languages}`) : null,
             (cv.personalSkills && cv.personalSkills.length)
               ? div(

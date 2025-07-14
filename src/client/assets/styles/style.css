@@ -793,7 +793,7 @@ button.create-button:hover {
 
 .inhabitant-photo {
   width: 64px;
-  height: 64px;
+  height: 64px !important;;
   object-fit: cover;
   border-radius: 50%;
   margin-right: 1rem;
@@ -1474,52 +1474,73 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 
 /* Market */
-.market-item {
-  display: flex;
-  margin-bottom: 20px;
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  justify-content: center;
 }
 
 .market-card {
+  background-color: #2c2c2c;
+  border-radius: 16px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
   display: flex;
-  flex-direction: row;
-}
-
-.market-card.left-col {
-  flex: 35%;
-  border: 0;
   flex-direction: column;
+  justify-content: space-between;
+  text-align: center;
 }
 
-.market-card.right-col {
-  flex: 65%; 
-  border: 0;
-  flex-direction: column;
-}
-
-.market-card.image {
-  max-width: 600px;
-  max-height: 500px;
-  border:0px;
-}
-
-.market-card.right-col .market-card.buttons {
-  display: flex;
-  gap:10px;
-  border:0;
-}
-
-.market-card.right-col .market-card.buttons form {
+.market-card-image {
   width: 100%;
+  max-height: 150px; 
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.market-card-title {
+  font-size: 1.3em;
+  font-weight: bold;
+  color: #ffd600;
+  margin-bottom: 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis; 
+}
+
+.market-card-description {
+  font-size: 0.9em;
+  color: #ccc;
+  margin-bottom: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap; 
+}
+
+.market-card-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 1.1em;
+  color: #ffd600;
+}
+
+.market-card-footer .condition,
+.market-card-footer .stock {
+  font-size: 1em;
+  color: #ff9900;
+}
+
+.market-card-footer .stock {
+  font-weight: bold;
+  color: #ff0000;
 }
 
 .market-card.price {
+  font-size: 1.3em;
   font-weight: bold;
-  color: #ff6600;
-}
-
-.auction-bid-text {
-  font-weight: bold;
-  color: #ff6600;
 }
 
 /*avatar relationships*/
@@ -1575,4 +1596,3 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   border-color: #FF6A00;
   font-weight: bold;
 }
-

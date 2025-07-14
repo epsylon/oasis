@@ -31,9 +31,11 @@ const renderFeedCard = (feed, alreadyRefeeded, alreadyVoted) => {
       ),
       div({ class: 'feed-main' },
         div({ class: 'feed-text', innerHTML: renderTextWithStyles(content.text) }),
-        p(`${i18n.author}: `, a({ href: `/author/${encodeURIComponent(feed.value.author)}` }, feed.value.author)),
-        p(`${i18n.createdAtLabel}: ${createdAt}`),
-        h2(`${i18n.totalOpinions}: ${totalCount}`)
+        h2(`${i18n.totalOpinions}: ${totalCount}`),
+        p({ class: 'card-footer' },
+        span({ class: 'date-link' }, `${createdAt} ${i18n.performed} `),
+          a({ href: `/author/${encodeURIComponent(feed.value.author)}`, class: 'user-link' }, `${feed.value.author}`)
+        )
       )
     ),
     div({ class: 'votes-wrapper' },

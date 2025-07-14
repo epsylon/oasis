@@ -8,7 +8,7 @@ module.exports = ({ cooler }) => {
   };
 
   const types = [
-    'bookmark', 'event', 'task', 'votes', 'report', 'feed',
+    'bookmark', 'votes', 'feed',
     'image', 'audio', 'video', 'document', 'transfer'
   ];
 
@@ -40,11 +40,14 @@ module.exports = ({ cooler }) => {
         tombstoned.add(c.target);
         continue;
       }
-      if (c.opinions) {
-        if (tombstoned.has(k)) continue;
-        if (c.replaces) replaces.set(c.replaces, k);
-        itemsById.set(k, m);
-      }
+	if (
+	  c.opinions &&
+	  !tombstoned.has(k) &&
+	  !['task', 'event', 'report'].includes(c.type)
+	) {
+	  if (c.replaces) replaces.set(c.replaces, k);
+	  itemsById.set(k, m);
+	}
     }
 
     for (const replacedId of replaces.keys()) {
@@ -105,8 +108,13 @@ module.exports = ({ cooler }) => {
     const msg = await getMessageById(contentId);
     if (!msg || !msg.content) throw new Error('Content not found');
 
-    const type = msg.content.type;
-    if (!types.includes(type)) throw new Error('Invalid content type for voting');
+	const type = msg.content.type;
+	if (
+	  !types.includes(type) ||
+	  ['task', 'event', 'report'].includes(type)
+	) {
+	  throw new Error('Voting not allowed on this content type');
+	}
 
     if (msg.content.opinions_inhabitants?.includes(userId)) throw new Error('Already voted');
 

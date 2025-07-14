@@ -142,3 +142,149 @@ footer a:hover {
   color: #FFDD44;
 }
 
+.card {
+  border-radius: 16px;
+  padding: 0px 24px 10px 24px; 
+  margin-bottom: 16px;
+  color: #FFD600;
+  font-family: inherit;
+  box-shadow: 0 2px 20px 0 #FFD60024;
+}
+
+.card-section {
+  border:none;
+  padding: 10px 0 0 16px; 
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0px; 
+  margin-top: 8px;
+  padding-top: 0px;   
+  border: none;
+}
+
+.card-label {
+  color: #ffa300;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  line-height: 1.2;
+  margin-bottom: 0;
+}
+
+.card-footer {
+  margin-top: 6px;  
+  font-weight: 500;
+  color: #ff9900;
+  font-size: 1.07em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding-top: 0;
+  margin-bottom: 6;
+}
+
+.card-body {
+  margin-top: 0; 
+  margin-bottom: 4;
+  padding: 0; 
+}
+
+.card-field {
+  display: flex;
+  align-items: baseline;
+  padding: 0;
+  margin-bottom: 0;
+  border: none;
+  background: none;
+}
+
+.card-tags {
+  margin: 5px 0 3px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.card-tags a.tag-link {
+  text-decoration: none;
+  color: #181818;
+  background: #FFD600;
+  padding: 5px 13px 4px 13px;
+  border-radius: 7px;
+  font-size: .98em;
+  border: none;
+  font-weight: bold;
+}
+
+.card-tags a.tag-link:hover {
+  background: #ffe86a;
+  color: #111;
+  cursor: pointer;
+}
+
+a.user-link {
+  background-color: #FFA500; 
+  color: #000;
+  padding: 8px 16px;
+  border-radius: 5px; 
+  text-align: center;
+  font-weight: bold;
+  text-decoration: none; 
+  display: inline-block;
+  border: 2px solid transparent;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s; 
+  font-size: 0.8em; 
+}
+
+a.user-link:hover {
+  background-color: #FFD700; 
+  border-color: #FFD700; 
+  color: #000; 
+  cursor: pointer; 
+}
+
+a.user-link:focus {
+  background-color: #007B9F; 
+  border-color: #007B9F; 
+  color: #fff;
+}
+
+.date-link {
+  background-color: #444;
+  color: #FFD600;
+  padding: 8px 16px;
+  border-radius: 5px;
+  margin-left: 8px;
+}
+
+.date-link:hover {
+  background-color: #555;
+  color: #FFD700;
+}
+
+.activitySpreadInhabitant2 {
+  background-color: #007B9F; 
+  color: #fff;  
+  padding: 8px 16px;
+  border-radius: 5px;
+  font-weight: bold;
+  text-decoration: none;
+  display: inline-block;
+  border: 2px solid transparent;
+}
+
+.activityVotePost {
+  background-color: #557d3b; 
+  color: #fff;  
+  padding: 8px 16px;
+  border-radius: 5px;
+  font-weight: bold;
+  text-decoration: none;
+  display: inline-block;
+  border: 2px solid transparent;
+}
