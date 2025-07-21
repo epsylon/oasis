@@ -325,6 +325,15 @@ const renderAgendaLink = () => {
     : '';
 };
 
+const renderAILink = () => {
+  const aiMod = getConfig().modules.aiMod === 'on';
+  return aiMod 
+    ? [
+      navLink({ href: "/ai", emoji: "ꘜ", text: i18n.ai, class: "ai-link enabled" }),
+      ]
+    : '';
+};
+
 const renderEventsLink = () => {
   const eventsMod = getConfig().modules.eventsMod === 'on';
   return eventsMod 
@@ -389,8 +398,8 @@ const template = (titlePrefix, ...elements) => {
              renderCipherLink(),
              navLink({ href: "/pm", emoji: "ꕕ", text: i18n.privateMessage }),
              navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
-             //navLink({ href: "/ai", emoji: "ꘜ", text: i18n.ai }),
              renderTagsLink(),
+             renderAILink(),
              navLink({ href: "/search", emoji: "ꔅ", text: i18n.search })
              )
           ),

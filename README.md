@@ -39,7 +39,6 @@ But it has others features that are also really interesting, for example:
     
  +  Support for multiple themes.
  
- 
    ![SNH](https://solarnethub.com/git/snh-clear-theme.png "SolarNET.HuB")
    ![SNH](https://solarnethub.com/git/snh-purple-theme.png "SolarNET.HuB")
    ![SNH](https://solarnethub.com/git/snh-matrix-theme.png "SolarNET.HuB")
@@ -53,6 +52,7 @@ And much more, that we invite you to discover by yourself ;-)
 Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
 
  + Agenda: Module to manage all your assigned items.
+ + AI: Module to talk with a LLM called '42'.
  + Audios: Module to discover and manage audios.
  + Bookmarks: Module to discover and manage bookmarks.	
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
@@ -82,6 +82,20 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Topics: Module to receive discussion categories based on shared interests.
 
 Both the codebase and the inhabitants can generate new modules.
+
+----------
+
+## C-AI (collective artificial intelligence)
+
+Oasis contains its own AI model called "42". 
+
+The main idea behind this implementation is to enable distributed learning generated through the collective action of many individuals, with the goal of redistributing the necessary processing load, as well as the ecological footprint and corporate bias.
+
+  ![SNH](https://solarnethub.com/git/oasis-ai-example.png "SolarNET.HuB")
+
+Our AI is trained with content from the OASIS network and its purpose is to take action and obtain answers to individual, but also global, problems.
+
+ + https://wiki.solarnethub.com/socialnet/ai
 
 ----------
 

@@ -1296,6 +1296,14 @@ module.exports = {
     statsSize: "Total (size)",
     statsBlockchainSize: "Blockchain (size)",
     statsBlobsSize: "Blobs (size)",
+    //AI
+    ai: "AI",
+    aiTitle: "AI",
+    aiDescription: "A Collective Artificial Intelligence (CAI) called '42' that learns from your network.",
+    aiInputPlaceholder: "What's up?",
+    aiUserQuestion: "Your Question",
+    aiResponseTitle: "AI Reply",
+    aiSubmitButton: "Send!",
     //market
     marketMineSectionTitle: "Your Items",
     marketCreateSectionTitle: "Create a New Item",
@@ -1406,7 +1414,9 @@ module.exports = {
     modulesPixeliaLabel: "Pixelia",
     modulesPixeliaDescription: "Module to draw on a collaborative grid.",
     modulesAgendaLabel: "Agenda",
-    modulesAgendaDescription: "Module to manage all your assigned items."
+    modulesAgendaDescription: "Module to manage all your assigned items.",
+    modulesAILabel: "AI",
+    modulesAIDescription: "Module to talk with a LLM called '42'."   
      
      //END
     }

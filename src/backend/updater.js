@@ -95,7 +95,7 @@ exports.getRemoteVersion = async () => {
       diffVersion(data, (status) => {
         if (status === "required" && !printed) {
           printed = true; 
-          console.log("\noasis@version: new code updates are available:\n\n1) Run Oasis and go to 'Settings' tab\n2) Click at 'Get updates' button to download latest code\n3) Restart Oasis when finished\n");
+          console.log("\noasis@version: new code updates are available!\n\n1) Run Oasis and go to 'Settings' tab\n2) Click at 'Get updates' button to download latest code\n3) Restart Oasis when finished\n");
         } else if (status === "") {
           console.log("\noasis@version: no updates requested.\n");
         }
@@ -108,7 +108,7 @@ exports.getRemoteVersion = async () => {
           diffVersion(data, (status) => {
             if (status === "required" && !printed) {
               printed = true; 
-              console.log("\noasis@version: new code updates are available:\n\n1) Run Oasis and go to 'Settings' tab\n2) Click at 'Get updates' button to download latest code\n3) Restart Oasis when finished\n");
+              console.log("\noasis@version: new code updates are available!\n\n1) Run Oasis and go to 'Settings' tab\n2) Click at 'Get updates' button to download latest code\n3) Restart Oasis when finished\n");
             } else {
               console.log("oasis@version: no updates requested.\n");
             }

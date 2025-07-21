@@ -11,6 +11,7 @@ const promisesFs = require("fs").promises;
 const SSBconfig = require('../server/SSB_server.js');
 const moment = require('../server/node_modules/moment');
 const FileType = require('../server/node_modules/file-type');
+const ssbRef = require("../server/node_modules/ssb-ref");
 
 const defaultConfig = {};
 const defaultConfigFile = path.join(
@@ -38,6 +39,17 @@ try {
 const config = cli(defaultConfig, defaultConfigFile);
 if (config.debug) {
   process.env.DEBUG = "oasis,oasis:*";
+}
+
+//AI
+const { spawn } = require('child_process');
+function startAI() {
+  const aiPath = path.resolve(__dirname, '../AI/ai_service.mjs');
+  const aiProcess = spawn('node', [aiPath], {
+    detached: false,
+    stdio: 'ignore', //inherit for debug
+  });
+  aiProcess.unref();
 }
 
 const customStyleFile = path.join(
@@ -394,8 +406,7 @@ const { imageView, singleImageView } = require("../views/image_view");
 const { settingsView } = require("../views/settings_view");
 const { trendingView } = require("../views/trending_view");
 const { marketView, singleMarketView } = require("../views/market_view");
-
-const ssbRef = require("../server/node_modules/ssb-ref");
+const { aiView } = require("../views/AI_view");
 
 let sharp;
 
@@ -506,25 +517,40 @@ router
     ctx.body = await publicPopular({ period });
    }) 
    
-   // pixelArt
-  .get('/pixelia', async (ctx) => {
-    const pixelArt = await pixeliaModel.listPixels();
-    ctx.body = pixeliaView(pixelArt);
-  })
-  // modules
+   // modules
   .get("/modules", async (ctx) => {
     const configMods = getConfig().modules;
     const modules = [
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 
     'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers', 
-    'feed', 'pixelia', 'agenda'
+    'feed', 'pixelia', 'agenda', 'ai'
     ];
     const moduleStates = modules.reduce((acc, mod) => {
       acc[`${mod}Mod`] = configMods[`${mod}Mod`];
       return acc;
     }, {});
     ctx.body = modulesView(moduleStates);
+  })
+   // AI
+  .get('/ai', async (ctx) => {
+    const aiMod = ctx.cookies.get("aiMod") || 'on';
+    if (aiMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    startAI();
+    ctx.body = aiView();
+  })
+   // pixelArt
+  .get('/pixelia', async (ctx) => {
+    const pixeliaMod = ctx.cookies.get("pixeliaMod") || 'on';
+    if (pixeliaMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    const pixelArt = await pixeliaModel.listPixels();
+    ctx.body = pixeliaView(pixelArt);
   })
   .get("/public/latest", async (ctx) => {
     const latestMod = ctx.cookies.get("latestMod") || 'on';
@@ -1260,6 +1286,16 @@ router
   })
 
   //POST backend routes   
+  .post('/ai', koaBody(), async (ctx) => {
+    const axios = require('../server/node_modules/axios').default;
+    const { input } = ctx.request.body;
+    if (!input) {
+      return ctx.status = 400, ctx.body = { error: 'No input provided' };
+    }
+    const response = await axios.post('http://localhost:4001/ai', { input });
+    const aiResponse = response.data.answer;
+    ctx.body = aiView(aiResponse, input);
+  })
   .post('/pixelia/paint', koaBody(), async (ctx) => {
     const { x, y, color } = ctx.request.body;
     if (x < 1 || x > 50 || y < 1 || y > 200) {
@@ -2085,7 +2121,7 @@ router
   })
 
   // UPDATE OASIS
- .post("/update", koaBody(), async (ctx) => {
+  .post("/update", koaBody(), async (ctx) => {
     const util = require("node:util");
     const exec = util.promisify(require("node:child_process").exec);
     async function updateTool() {
@@ -2093,11 +2129,15 @@ router
       console.log("oasis@version: updating Oasis...");
       console.log(stdout);
       console.log(stderr);
+      const { stdout: shOut, stderr: shErr } = await exec("sh install.sh");
+      console.log("oasis@version: running install.sh...");
+      console.log(shOut);
+      console.error(shErr);
     }
     await updateTool();
     const referer = new URL(ctx.request.header.referer);
     ctx.redirect(referer.href);
-  })
+  }) 
   .post("/settings/theme", koaBody(), async (ctx) => {
     const theme = String(ctx.request.body.theme);
     const currentConfig = getConfig();
@@ -2153,7 +2193,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet',
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending',
     'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers',
-    'feed', 'pixelia', 'agenda'
+    'feed', 'pixelia', 'agenda', 'ai'
     ];
     const currentConfig = getConfig();
     modules.forEach(mod => {

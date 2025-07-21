@@ -68,9 +68,8 @@ const renderAgendaItem = (item, userId, filter) => {
 
   if (item.type === 'tribe') {
     details = [
-      renderCardField(i18n.agendaDescriptionLabel + ":",item.description || i18n.noDescription),
       renderCardField(i18n.agendaAnonymousLabel + ":", item.isAnonymous ? i18n.agendaYes : i18n.agendaNo),
-      renderCardField(i18n.agendaInviteModeLabel + ":", item.inviteMode || i18n.noInviteMode),
+      renderCardField(i18n.agendaInviteModeLabel + ":", item.inviteMode.toUpperCase() || i18n.noInviteMode),
       renderCardField(i18n.agendaLARPLabel + ":", item.isLARP ? i18n.agendaYes : i18n.agendaNo),
       renderCardField(i18n.agendaLocationLabel + ":", item.location || i18n.noLocation),
       renderCardField(i18n.agendaMembersCount + ":", item.members.length || 0),

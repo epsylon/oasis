@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.3.8 - 2025-07-21
+
+### Added
+
+- AI model called "42".
+
 ## v0.3.5 - 2025-06-21 (summer solstic)
 
 ### Changed

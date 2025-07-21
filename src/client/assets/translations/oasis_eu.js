@@ -1296,6 +1296,14 @@ module.exports = {
     statsSize: "Guztira (taimaina)",
     statsBlockchainSize: "Blockchain (tamaina)",
     statsBlobsSize: "Blob-ak (tamaina)",
+    //IA
+    ai: "IA",
+    aiTitle: "IA",
+    aiDescription: "Zure saretik ikasten duen '42' izeneko Adimen Artifizial Kolektibo (AIA) bat.",
+    aiInputPlaceholder: "Zer jakin nahi duzu?",
+    aiUserQuestion: "Zure galdera",
+    aiResponseTitle: "Erantzuna",
+    aiSubmitButton: "Bidali!",
     //market
     marketMineSectionTitle: "Zure Elementuak",
     marketCreateSectionTitle: "Sortu Elementu Berria",
@@ -1343,6 +1351,7 @@ module.exports = {
     marketItemSeller: "Saltzailea",
     marketNoItems: "Elementurik ez, oraindik.",
     marketYourBid: "Zeure eskaintza",
+    marketCreateFormImageLabel: "Igo Irudia (jpeg, jpg, png, gif) (gehienez: 500px x 400px)",
     //modules
     modulesModuleName: "Izena",
     modulesModuleDescription: "Deskribapena",
@@ -1406,7 +1415,8 @@ module.exports = {
     modulesPixeliaDescription: "Lauki kolaboratibo batean marrazteko modulua.",
     modulesAgendaLabel: "Agenda",
     modulesAgendaDescription: "Esleitu zaizkizun elementu guztiak kudeatzeko modulua.",
-    marketCreateFormImageLabel: "Igo Irudia (jpeg, jpg, png, gif) (gehienez: 500px x 400px)",
+    modulesAILabel: "AI",
+    modulesAIDescription: "'42' izeneko LLM batekin hitz egiteko modulua."
 
      //END
   }

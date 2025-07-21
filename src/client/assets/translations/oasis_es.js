@@ -1295,6 +1295,14 @@ module.exports = {
     statsSize: "Total (tamaño)",
     statsBlockchainSize: "Blockchain (tamaño)",
     statsBlobsSize: "Blobs (tamaño)",
+    //AI
+    ai: "IA",
+    aiTitle: "IA",
+    aiDescription: "Una Inteligencia Artificial Colectiva (IAC) llamada '42' que aprende de tu red.",
+    aiInputPlaceholder: "Qué quieres saber?",
+    aiUserQuestion: "Tu pregunta",
+    aiResponseTitle: "Respuesta",
+    aiSubmitButton: "Enviar!",
     //market
     marketMineSectionTitle: "Tus Artículos",
     marketCreateSectionTitle: "Crear un Nuevo Artículo",
@@ -1405,7 +1413,9 @@ module.exports = {
     modulesPixeliaLabel: "Pixelia",
     modulesPixeliaDescription: "Módulo para dibujar en una cuadrícula colaborativa.",
     modulesAgendaLabel: "Agenda",
-    modulesAgendaDescription: "Módulo para gestionar todos tus elementos asignados."
+    modulesAgendaDescription: "Módulo para gestionar todos tus elementos asignados.",
+    modulesAILabel: "AI",
+    modulesAIDescription: "Módulo para hablar con un LLM llamado '42'."   
      
      //END
     }

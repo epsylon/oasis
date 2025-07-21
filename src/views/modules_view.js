@@ -6,6 +6,7 @@ const modulesView = () => {
   const config = getConfig().modules;
   const modules = [
     { name: 'agenda', label: i18n.modulesAgendaLabel, description: i18n.modulesAgendaDescription },
+    { name: 'ai', label: i18n.modulesAILabel, description: i18n.modulesAIDescription },
     { name: 'audios', label: i18n.modulesAudiosLabel, description: i18n.modulesAudiosDescription },
     { name: 'bookmarks', label: i18n.modulesBookmarksLabel, description: i18n.modulesBookmarksDescription },
     { name: 'cipher', label: i18n.modulesCipherLabel, description: i18n.modulesCipherDescription },
