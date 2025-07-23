@@ -2168,7 +2168,7 @@ router
     const util = require("node:util");
     const exec = util.promisify(require("node:child_process").exec);
     async function updateTool() {
-      const { stdout, stderr } = await exec("git reset --hard && git pull && npm install .");
+      const { stdout, stderr } = await exec("git reset --hard && git pull && cd src/server && npm install");
       console.log("oasis@version: updating Oasis...");
       console.log(stdout);
       console.log(stderr);
