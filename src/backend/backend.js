@@ -540,7 +540,17 @@ router
       return;
     }
     startAI();
-    ctx.body = aiView();
+    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    let chatHistory = [];
+    try {
+      const fileData = fs.readFileSync(historyPath, 'utf-8');
+      chatHistory = JSON.parse(fileData);
+    } catch (e) {
+      chatHistory = [];
+    }
+    const config = getConfig();
+    const userPrompt = config.ai?.prompt?.trim() || '';
+    ctx.body = aiView(chatHistory, userPrompt);
   })
    // pixelArt
   .get('/pixelia', async (ctx) => {
@@ -991,13 +1001,16 @@ router
   })
   .get("/settings", async (ctx) => {
     const theme = ctx.cookies.get("theme") || "Dark-SNH";
-    const getMeta = async ({ theme }) => {
+    const config = getConfig();
+    const aiPrompt = config.ai?.prompt || "";
+    const getMeta = async ({ theme, aiPrompt }) => {
       return settingsView({
         theme,
         version: version.toString(),
+        aiPrompt
       });
     };
-    ctx.body = await getMeta({ theme });
+    ctx.body = await getMeta({ theme, aiPrompt });
   })
   .get("/peers", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
@@ -1290,11 +1303,41 @@ router
     const axios = require('../server/node_modules/axios').default;
     const { input } = ctx.request.body;
     if (!input) {
-      return ctx.status = 400, ctx.body = { error: 'No input provided' };
+      ctx.status = 400;
+      ctx.body = { error: 'No input provided' };
+      return;
     }
+    const config = getConfig();
+    const userPrompt = config.ai?.prompt?.trim() || "Provide an informative and precise response.";
     const response = await axios.post('http://localhost:4001/ai', { input });
     const aiResponse = response.data.answer;
-    ctx.body = aiView(aiResponse, input);
+    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    let chatHistory = [];
+    try {
+      const fileData = fs.readFileSync(historyPath, 'utf-8');
+      chatHistory = JSON.parse(fileData);
+    } catch (e) {
+      chatHistory = [];
+    }
+    chatHistory.unshift({
+      prompt: userPrompt,
+      question: input,
+      answer: aiResponse,
+      timestamp: Date.now()
+    });
+    chatHistory = chatHistory.slice(0, 20);
+    fs.writeFileSync(historyPath, JSON.stringify(chatHistory, null, 2), 'utf-8');
+    ctx.body = aiView(chatHistory, userPrompt);
+  })
+  .post('/ai/clear', async (ctx) => {
+    const fs = require('fs');
+    const path = require('path');
+    const { getConfig } = require('../configs/config-manager.js');
+    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    fs.writeFileSync(historyPath, '[]', 'utf-8');
+    const config = getConfig();
+    const userPrompt = config.ai?.prompt?.trim() || '';
+    ctx.body = aiView([], userPrompt);
   })
   .post('/pixelia/paint', koaBody(), async (ctx) => {
     const { x, y, color } = ctx.request.body;
@@ -2204,6 +2247,20 @@ router
     });
     saveConfig(currentConfig);
     ctx.redirect(`/modules`);
+  })
+  .post("/settings/ai", koaBody(), async (ctx) => {
+    const aiPrompt = String(ctx.request.body.ai_prompt || "").trim();
+    if (aiPrompt.length > 128) {
+      ctx.status = 400;
+      ctx.body = "Prompt too long. Must be 128 characters or fewer.";
+      return;
+    }
+    const currentConfig = getConfig();
+    currentConfig.ai = currentConfig.ai || {};
+    currentConfig.ai.prompt = aiPrompt;
+    saveConfig(currentConfig);
+    const referer = new URL(ctx.request.header.referer);
+    ctx.redirect("/settings");
   })
   .post('/transfers/create',
     koaBody(),

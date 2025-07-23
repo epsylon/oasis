@@ -38,5 +38,8 @@
     "user": "ecoinrpc",
     "pass": "",
     "fee": "1"
+  },
+  "ai": {
+    "prompt": "Provide an informative and precise response."
   }
 }

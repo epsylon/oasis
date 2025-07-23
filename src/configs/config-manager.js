@@ -44,6 +44,9 @@ if (!fs.existsSync(configFilePath)) {
       "user": "ecoinrpc",
       "pass": "",
       "fee": "1"
+    },
+    "ai": {
+      "prompt": "Provide an informative and precise response."
     }
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));

@@ -1,8 +1,19 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import express from '../server/node_modules/express/index.js'; 
-import cors from '../server/node_modules/cors/lib/index.js';   
+import express from '../server/node_modules/express/index.js';
+import cors from '../server/node_modules/cors/lib/index.js';
 import { getLlama, LlamaChatSession } from '../server/node_modules/node-llama-cpp/dist/index.js';
+
+let getConfig, buildAIContext;
+
+try {
+  getConfig = (await import('../configs/config-manager.js')).getConfig;
+} catch {}
+
+try {
+  const mod = await import('./buildAIContext.js');
+  buildAIContext = mod.default || mod.buildContext;
+} catch {}
 
 const app = express();
 app.use(cors());
@@ -25,24 +36,31 @@ async function initModel() {
 }
 
 app.post('/ai', async (req, res) => {
+  try {
     const userInput = req.body.input;
-
-    await initModel();  
-    const prompt = `
-      Context: You are an AI assistant in Oasis, a distributed, encrypted and federated social network created by old-school hackers.
-
-      Query: "${userInput}"
-
-      Provide an informative and precise response.
-    `;
-
-    const response = await session.prompt(prompt);
-    if (!response) {
-      res.status(500).json({ error: 'Failed to get response from model' });
-      return;
+    await initModel();
+    let userContext = '';
+    try {
+      userContext = await buildAIContext();
+    } catch {
+      userContext = '';
     }
+    const config = getConfig?.() || {};
+    const userPrompt = config.ai?.prompt?.trim() || "Provide an informative and precise response.";
+    const promptParts = [
+      "Context: You are an AI assistant called \"42\" in Oasis, a distributed, encrypted and federated social network.",
+    ];
+    if (userContext?.trim()) {
+      promptParts.push(`User Data:\n${userContext}`);
+    }
+    promptParts.push(`Query: "${userInput}"`);
+    promptParts.push(userPrompt);
+    const finalPrompt = promptParts.join('\n\n');
+    const response = await session.prompt(finalPrompt);
     res.json({ answer: response.trim() });
+  } catch (err) {
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
+  }
 });
 
-app.listen(4001, () => {
-});
+app.listen(4001);

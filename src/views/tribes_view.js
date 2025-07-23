@@ -1,6 +1,7 @@
 const { div, h2, p, section, button, form, a, input, img, label, select, option, br, textarea, h1 } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id;
 
@@ -267,7 +268,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
       p(`${i18n.tribeModeLabel}: ${t.inviteMode.toUpperCase()}`),
       p(`${i18n.tribeLARPLabel}: ${t.isLARP ? i18n.tribeYes : i18n.tribeNo}`),
       img({ src: imageSrc }),
-      p(t.description),
+      t.description ? p(...renderUrl(t.description)) : null,
       p(`${i18n.tribeLocationLabel}: ${t.location}`),
       h2(`${i18n.tribeMembersCount}: ${t.members.length}`),
       t.tags && t.tags.filter(Boolean).length ? div(t.tags.filter(Boolean).map(tag =>
@@ -379,7 +380,7 @@ exports.tribeView = async (tribe, userId, query) => {
     p(`${i18n.tribeModeLabel}: ${tribe.inviteMode.toUpperCase()}`),
     p(`${i18n.tribeLARPLabel}: ${tribe.isLARP ? i18n.tribeYes : i18n.tribeNo}`),
     img({ src: imageSrc, alt: tribe.title }),
-    p(tribe.description),
+    tribe.description ? p(...renderUrl(tribe.description)) : null,
     p(`${i18n.tribeLocationLabel}: ${tribe.location}`),
     h2(`${i18n.tribeMembersCount}: ${tribe.members.length}`),
     tribe.tags && tribe.tags.filter(Boolean).length ? div(tribe.tags.filter(Boolean).map(tag =>

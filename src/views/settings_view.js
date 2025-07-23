@@ -18,7 +18,7 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version }) => {
+const settingsView = ({ version, aiPrompt }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -110,6 +110,25 @@ const settingsView = ({ version }) => {
           label({ for: "wallet_fee" }, i18n.walletFee), br(),
           input({ type: "text", id: "wallet_fee", name: "wallet_fee", placeholder: walletFee, value: walletFee }), br(),
           button({ type: "submit" }, i18n.walletConfiguration)
+        )
+      )
+    ),
+    section(
+      div({ class: "tags-header" },
+        h2(i18n.aiTitle),
+        p(i18n.aiSettingsDescription),
+        form(
+          { action: "/settings/ai", method: "POST" },
+          input({
+            type: "text",
+            id: "ai_prompt",
+            name: "ai_prompt",
+            placeholder: aiPrompt,
+            value: aiPrompt,
+            maxlength: "128",
+            required: true
+          }), br(),
+          button({ type: "submit" }, i18n.aiConfiguration)
         )
       )
     ),

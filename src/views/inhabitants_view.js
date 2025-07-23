@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, br } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
+const { renderUrl } = require('../backend/renderUrl');
 
 function resolvePhoto(photoField, size = 256) {
   if (typeof photoField === 'string' && photoField.startsWith('/image/')) {
@@ -31,7 +32,7 @@ const renderInhabitantCard = (user, filter) => {
   }),
     div({ class: 'inhabitant-details' },
       h2(user.name),
-      user.description ? p(user.description) : null,
+        user.description ? p(...renderUrl(user.description)) : null,
       filter === 'MATCHSKILLS' && user.commonSkills?.length
         ? p(`${i18n.commonSkills}: ${user.commonSkills.join(', ')}`) : null,
       filter === 'SUGGESTED' && user.mutualCount
@@ -186,7 +187,7 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }) => {
         div({ class: 'inhabitant-details' },
           h2(name),
           p(a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)),
-          description ? p(description) : null,
+          description ? p(...renderUrl(description)) : null,
           location ? p(`${i18n.locationLabel}: ${location}`) : null,
           languages.length ? p(`${i18n.languagesLabel}: ${languages.join(', ')}`) : null,
           skills.length ? p(`${i18n.skillsLabel}: ${skills.join(', ')}`) : null,
