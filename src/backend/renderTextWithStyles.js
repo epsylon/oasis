@@ -13,7 +13,9 @@ function renderTextWithStyles(text) {
     .replace(/(https?:\/\/[^\s]+)/g, url =>
       `<a href="${url}" target="_blank" class="styled-link">${url}</a>`
     )
+    .replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, email =>
+      `<a href="mailto:${email}" class="styled-link">${email}</a>`
+    )
 }
 
 module.exports = { renderTextWithStyles }
-

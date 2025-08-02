@@ -905,6 +905,30 @@ module.exports = {
     blogImage: "Igo Irudia (jpeg, jpg, png, gif) (gehienez: 500px x 400px)",
     blogPublish: "Aurrebista",
     noPopularMessages: "Pil-pileko mezurike ez, oraindik",
+    // forum
+    forumTitle: "Foroak",
+    forumCategoryLabel: "Kategoria",
+    forumTitleLabel: "Izenburua",
+    forumTitlePlaceholder: "Foroaren izenburua...",
+    forumCreateButton: "Sortu foroa",
+    forumCreateSectionTitle: "Sortu foroa",
+    forumDescription: "Hitz egin sareko beste erabiltzaileekin libreki.",
+    forumFilterAll: "GUZTIAK",
+    forumFilterMine: "NIREAK",
+    forumFilterRecent: "BERRIENAK",
+    forumFilterTop: "GORENAK",
+    forumMineSectionTitle: "Zure Foroak",
+    forumRecentSectionTitle: "Azken Foroak",
+    forumAllSectionTitle: "Foroak",
+    forumDeleteButton: "Ezabatu",
+    forumParticipants: "parte-hartzaileak",
+    forumMessages: "mezuak",
+    forumLastMessage: "Azken mezua",
+    forumMessageLabel: "Mezua",
+    forumMessagePlaceholder: "Idatzi zure mezua...",
+    forumSendButton: "Bidali",
+    forumVisitForum: "Bisitatu Foroaren",
+    noForums: "Ez da fororik aurkitu.",
     // images
     imageTitle: "Irudiak",
     imagePluginTitle: "Izenburua",
@@ -1012,6 +1036,7 @@ module.exports = {
     typeTransfer:    "TRANSFERENTZIAK",
     typeTask:        "ATAZAK",
     typePixelia:     "PIXELIA",
+    typeForum: 	     "FOROAK",
     typeReport:      "TXOSTENAK",
     typeFeed:        "JARIOAK",
     typeContact:     "KONTAKTUA",
@@ -1421,7 +1446,9 @@ module.exports = {
     modulesAgendaLabel: "Agenda",
     modulesAgendaDescription: "Esleitu zaizkizun elementu guztiak kudeatzeko modulua.",
     modulesAILabel: "AI",
-    modulesAIDescription: "'42' izeneko LLM batekin hitz egiteko modulua."
+    modulesAIDescription: "'42' izeneko LLM batekin hitz egiteko modulua.",
+    modulesForumLabel: "Foroak",
+    modulesForumDescription: "Foroak deskubritu eta kudeatzeko modulua."
 
      //END
   }

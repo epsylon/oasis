@@ -2,13 +2,14 @@ const { div, h2, p, section, button, form, a, span, textarea, br, input, label, 
 const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id
 
 const renderStyledField = (labelText, valueElement) =>
   div({ class: 'card-field' },
     span({ class: 'card-label' }, labelText),
-    span({ class: 'card-value' }, valueElement)
+    span({ class: 'card-value' }, ...renderUrl(valueElement))
   );
 
 const renderEventItem = (e, filter, userId) => {
@@ -41,7 +42,8 @@ const renderEventItem = (e, filter, userId) => {
     ),
     br,
     renderStyledField(i18n.eventTitleLabel + ':', e.title),
-    renderStyledField(i18n.eventDescriptionLabel + ':', e.description),
+    renderStyledField(i18n.eventDescriptionLabel + ':'),
+    p(...renderUrl(e.description)),
     renderStyledField(i18n.eventDateLabel + ':', moment(e.date).format('YYYY/MM/DD HH:mm:ss')),
     e.location?.trim() ? renderStyledField(i18n.eventLocationLabel + ':', e.location) : null,
     renderStyledField(i18n.eventPrivacyLabel + ':', e.isPublic.toUpperCase()),
@@ -145,7 +147,7 @@ exports.eventView = async (events, filter, eventId) => {
               ...(filter==='edit'?{value:eventToEdit.title}:{})
             }), br(), br(),
             label(i18n.eventDescriptionLabel), br(),
-            textarea({ name:"description", id:"description", placeholder:i18n.eventDescriptionPlaceholder}, filter === 'edit' ? eventToEdit.description : ''), br(), br(),
+            textarea({ name:"description", id:"description", placeholder:i18n.eventDescriptionPlaceholder, rows:"4"}, filter === 'edit' ? eventToEdit.description : ''), br(), br(),
             label(i18n.eventDateLabel), br(),
             input({
               type: "datetime-local",
@@ -227,7 +229,8 @@ exports.singleEventView = async (event, filter) => {
         ),
         br,
         renderStyledField(i18n.eventTitleLabel + ':', event.title),
-        renderStyledField(i18n.eventDescriptionLabel + ':', event.description),
+        renderStyledField(i18n.eventDescriptionLabel + ':'),
+        p(...renderUrl(event.description)),
         renderStyledField(i18n.eventDateLabel + ':', moment(event.date).format('YYYY/MM/DD HH:mm:ss')),
         event.location?.trim() ? renderStyledField(i18n.eventLocationLabel + ':', event.location) : null,
         renderStyledField(i18n.eventPrivacyLabel + ':', event.isPublic.toUpperCase()),

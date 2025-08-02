@@ -2,6 +2,7 @@ const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th
 const { template, i18n } = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id
 
@@ -30,9 +31,13 @@ const renderTrendingCard = (item, votes, categories) => {
         button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
       ),
       br,
-      description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ':'), span({ class: 'card-value' }, description)) : "",
       h2(url ? p(a({ href: url, target: '_blank', class: "bookmark-url" }, url)) : ""),
-      lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, new Date(lastVisit).toLocaleString())) : ""
+      lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, new Date(lastVisit).toLocaleString())) : "",
+      description
+	? [
+	  span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ":"),
+	  p(...renderUrl(description))
+        ]: null,
     )
   );
   } else if (c.type === 'image') {
@@ -44,9 +49,12 @@ const renderTrendingCard = (item, votes, categories) => {
       ),
       br,
       title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
-      description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageDescriptionLabel + ':'), span({ class: 'card-value' }, description)) : "",
+      description
+	? [
+	  span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"),
+	  p(...renderUrl(description))
+        ]: null,
       meme ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.trendingCategory + ':'), span({ class: 'card-value' }, i18n.meme)) : "",
-      br,
       div({ class: 'card-field' }, img({ src: `/blob/${encodeURIComponent(url)}`, class: 'feed-image' }))
     )
   );
@@ -59,8 +67,11 @@ const renderTrendingCard = (item, votes, categories) => {
       ),
       br,
       title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.audioTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
-      description?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.audioDescriptionLabel + ':'), span({ class: 'card-value' }, description)) : "",
-      br,
+      description
+	? [
+	  span({ class: 'card-label' }, i18n.audioDescriptionLabel + ":"),
+	  p(...renderUrl(description))
+        ]: null,
       url
         ? div({ class: 'card-field audio-container' },
             audioHyperaxe({
@@ -81,7 +92,11 @@ const renderTrendingCard = (item, votes, categories) => {
       ),
       br,
       title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.videoTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
-      description?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.videoDescriptionLabel + ':'), span({ class: 'card-value' }, description)) : "",
+      description
+	? [
+	  span({ class: 'card-label' }, i18n.videoDescriptionLabel + ":"),
+	  p(...renderUrl(description))
+        ]: null,
       br,
       url
         ? div({ class: 'card-field video-container' },
@@ -106,8 +121,11 @@ const renderTrendingCard = (item, votes, categories) => {
       ),
       br,
       title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.documentTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
-      description?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.documentDescriptionLabel + ':'), span({ class: 'card-value' }, description)) : "",
-      br,
+      description
+	? [
+	  span({ class: 'card-label' }, i18n.documentDescriptionLabel + ":"),
+	  p(...renderUrl(description))
+        ]: null,
       div({
         id: `pdf-container-${key || url}`,
         class: 'card-field pdf-viewer-container',
@@ -119,7 +137,7 @@ const renderTrendingCard = (item, votes, categories) => {
     const { text, refeeds } = c;
     contentHtml = div({ class: 'trending-feed' },
     div({ class: 'card-section feed' },
-      h2(text),
+      div({ class: 'feed-text', innerHTML: renderTextWithStyles(text) }),
       h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-label' }, refeeds))
     )
   );
@@ -154,11 +172,12 @@ const renderTrendingCard = (item, votes, categories) => {
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)),
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
-      br,
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.from + ':'), span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(from)}`, target: "_blank" }, from))),
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.to + ':'), span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(to)}`, target: "_blank" }, to))),
-      br,
-      div({ class: 'card-field' }, h2({ class: 'card-label' }, i18n.transfersConfirmations + ': ' + `${confirmedBy.length}/2`))
+      h2({ class: 'card-field' },
+	 span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
+	 span({ class: 'card-value' }, `${confirmedBy.length}/2`)
+      )
     )
   );
   } else {

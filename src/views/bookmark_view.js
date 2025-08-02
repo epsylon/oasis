@@ -2,6 +2,7 @@ const { form, button, div, h2, p, section, input, label, textarea, br, a, span }
 const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id
 
@@ -33,8 +34,9 @@ const renderBookmarkList = (filteredBookmarks, filter) => {
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
           ),
           h2(bookmark.title),
-          renderCardField(i18n.bookmarkDescriptionLabel + ":", bookmark.description),
-          renderCardField(i18n.bookmarkUrlLabel + ":", bookmark.url
+          renderCardField(i18n.bookmarkUrlLabel + ":"), 
+          br,
+          div(bookmark.url
             ? a({ href: bookmark.url, target: "_blank", class: "bookmark-url" }, bookmark.url)
             : i18n.noUrl
           ),
@@ -44,8 +46,13 @@ const renderBookmarkList = (filteredBookmarks, filter) => {
           ),
           bookmark.category?.trim()
             ? renderCardField(i18n.bookmarkCategory + ":", bookmark.category)
-            : null,
-          br,
+            : null,  
+	  bookmark.description
+	    ? [
+	      renderCardField(i18n.bookmarkDescriptionLabel + ":"),
+	      p(...renderUrl(bookmark.description))
+	    ]
+	  : null,
           bookmark.tags?.length
             ? div({ class: "card-tags" }, bookmark.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
@@ -69,7 +76,7 @@ const renderBookmarkList = (filteredBookmarks, filter) => {
 };
 
 const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags) => {
-  return div({ class: "div-center bookmark-form" },   // <-- No "card" here
+  return div({ class: "div-center bookmark-form" },
     form(
       {
         action: filter === 'edit'
@@ -80,7 +87,7 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags) => {
       label(i18n.bookmarkUrlLabel), br,
       input({ type: "url", name: "url", id: "url", required: true, placeholder: i18n.bookmarkUrlPlaceholder, value: filter === 'edit' ? bookmarkToEdit.url : '' }), br, br,
       label(i18n.bookmarkDescriptionLabel), br,
-      textarea({ name: "description", id: "description", placeholder: i18n.bookmarkDescriptionPlaceholder }, filter === 'edit' ? bookmarkToEdit.description : ''), br, br,
+      textarea({ name: "description", id: "description", placeholder: i18n.bookmarkDescriptionPlaceholder, rows:"4" }, filter === 'edit' ? bookmarkToEdit.description : ''), br, br,
       label(i18n.bookmarkTagsLabel), br,
       input({ type: "text", name: "tags", id: "tags", placeholder: i18n.bookmarkTagsPlaceholder, value: filter === 'edit' ? tags.join(', ') : '' }), br, br,
       label(i18n.bookmarkCategoryLabel), br,
@@ -186,8 +193,9 @@ exports.singleBookmarkView = async (bookmark, filter) => {
           )
         ) : null,
         h2(bookmark.title),
-        renderCardField(i18n.bookmarkDescriptionLabel + ":", bookmark.description),
-        renderCardField(i18n.bookmarkUrlLabel + ":", bookmark.url
+        renderCardField(i18n.bookmarkUrlLabel + ":"), 
+        br,
+        div(bookmark.url
           ? a({ href: bookmark.url, target: "_blank", class: "bookmark-url" }, bookmark.url)
           : i18n.noUrl
         ),
@@ -196,7 +204,8 @@ exports.singleBookmarkView = async (bookmark, filter) => {
           : i18n.noLastVisit
         ),
         renderCardField(i18n.bookmarkCategory + ":", bookmark.category || i18n.noCategory),
-        br,
+        renderCardField(i18n.bookmarkDescriptionLabel + ":"), 
+        p(...renderUrl(bookmark.description)),
         bookmark.tags && bookmark.tags.length
           ? div({ class: "card-tags" },
               bookmark.tags.map(tag =>

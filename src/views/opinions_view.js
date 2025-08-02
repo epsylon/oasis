@@ -1,6 +1,8 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
+const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
+const { renderUrl } = require('../backend/renderUrl');
 
 const generateFilterButtons = (filters, currentFilter) => {
   return filters.map(mode =>
@@ -20,17 +22,18 @@ const renderContentHtml = (content, key) => {
         button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
       ),
       br,
-      content.description ? div({ class: 'card-field' },
-        span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ':'),
-        span({ class: 'card-value' }, content.description)
-      ) : "",
       h2(content.url ? div({ class: 'card-field' },
         span({ class: 'card-label' }, p(a({ href: content.url, target: '_blank', class: "bookmark-url" }, content.url)))
       ) : ""),
       content.lastVisit ? div({ class: 'card-field' },
         span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'),
         span({ class: 'card-value' }, new Date(content.lastVisit).toLocaleString())
-      ) : ""
+      ) : "",
+      content.description 
+	? [
+	  span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ":"),
+	  p(...renderUrl(content.description))
+        ]: null,
     )
   );
   case 'image':
@@ -41,7 +44,11 @@ const renderContentHtml = (content, key) => {
       ),
       br,
       content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : "",
-      content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : "",
+      content.description 
+	? [
+	  span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"),
+	  p(...renderUrl(content.description))
+        ]: null,
       content.meme ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.trendingCategory + ':'), span({ class: 'card-value' }, i18n.meme)) : "",
       br,
       div({ class: 'card-field' }, img({ src: `/blob/${encodeURIComponent(content.url)}`, class: 'feed-image' }))
@@ -58,11 +65,11 @@ const renderContentHtml = (content, key) => {
         span({ class: 'card-label' }, i18n.videoTitleLabel + ':'),
         span({ class: 'card-value' }, content.title)
       ) : "",
-      content.description ? div({ class: 'card-field' },
-        span({ class: 'card-label' }, i18n.videoDescriptionLabel + ':'),
-        span({ class: 'card-value' }, content.description)
-      ) : "",
-      br,
+      content.description 
+	? [
+	  span({ class: 'card-label' }, i18n.videoDescriptionLabel + ":"),
+	  p(...renderUrl(content.description))
+        ]: null,
       div({ class: 'card-field' },
         videoHyperaxe({
           controls: true,
@@ -85,11 +92,11 @@ const renderContentHtml = (content, key) => {
         span({ class: 'card-label' }, i18n.audioTitleLabel + ':'),
         span({ class: 'card-value' }, content.title)
       ) : "",
-      content.description ? div({ class: 'card-field' },
-        span({ class: 'card-label' }, i18n.audioDescriptionLabel + ':'),
-        span({ class: 'card-value' }, content.description)
-      ) : "",
-      br,
+      content.description 
+	? [
+	  span({ class: 'card-label' }, i18n.audioDescriptionLabel + ":"),
+	  p(...renderUrl(content.description))
+        ]: null,
       div({ class: 'card-field' },
         audioHyperaxe({
           controls: true,
@@ -111,11 +118,11 @@ const renderContentHtml = (content, key) => {
         span({ class: 'card-label' }, i18n.documentTitleLabel + ':'),
         span({ class: 'card-value' }, content.title)
       ) : "",
-      content.description ? div({ class: 'card-field' },
-        span({ class: 'card-label' }, i18n.documentDescriptionLabel + ':'),
-        span({ class: 'card-value' }, content.description)
-      ) : "",
-      br,
+      content.description 
+	? [
+	  span({ class: 'card-label' }, i18n.documentDescriptionLabel + ":"),
+	  p(...renderUrl(content.description))
+        ]: null,
       div({ class: 'card-field' },
         div({ class: 'pdf-viewer-container', 'data-pdf-url': `/blob/${encodeURIComponent(content.url)}` })
       )
@@ -124,7 +131,7 @@ const renderContentHtml = (content, key) => {
   case 'feed':
   return div({ class: 'opinion-feed' },
     div({ class: 'card-section feed' },
-      h2(content.text),
+      div({ class: 'feed-text', innerHTML: renderTextWithStyles(content.text) }),
       h2({ class: 'card-field' },
         span({ class: 'card-label' }, `${i18n.tribeFeedRefeeds}: `),
         span({ class: 'card-value' }, content.refeeds)
@@ -181,7 +188,6 @@ const renderContentHtml = (content, key) => {
         span({ class: 'card-label' }, i18n.amount + ':'),
         span({ class: 'card-value' }, content.amount)
       ),
-      br,
       div({ class: 'card-field' },
         span({ class: 'card-label' }, i18n.from + ':'),
         span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(content.from)}`, target: "_blank" }, content.from))
@@ -190,9 +196,9 @@ const renderContentHtml = (content, key) => {
         span({ class: 'card-label' }, i18n.to + ':'),
         span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(content.to)}`, target: "_blank" }, content.to))
       ),
-      br,
-      div({ class: 'card-field' },
-        h2({ class: 'card-label' }, i18n.transfersConfirmations + ': ' + `${content.confirmedBy.length}/2`)
+      h2({ class: 'card-field' },
+	 span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
+	 span({ class: 'card-value' }, `${content.confirmedBy.length}/2`)
       )
     )
   );

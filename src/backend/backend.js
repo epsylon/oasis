@@ -208,6 +208,7 @@ const searchModel = require('../models/search_model')({ cooler, isPublic: config
 const activityModel = require('../models/activity_model')({ cooler, isPublic: config.public });
 const pixeliaModel = require('../models/pixelia_model')({ cooler, isPublic: config.public });
 const marketModel = require('../models/market_model')({ cooler, isPublic: config.public });
+const forumModel = require('../models/forum_model')({ cooler, isPublic: config.public });
 
 // starting warmup
 about._startNameWarmup();
@@ -407,6 +408,7 @@ const { settingsView } = require("../views/settings_view");
 const { trendingView } = require("../views/trending_view");
 const { marketView, singleMarketView } = require("../views/market_view");
 const { aiView } = require("../views/AI_view");
+const { forumView, singleForumView } = require("../views/forum_view");
 
 let sharp;
 
@@ -524,7 +526,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 
     'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers', 
-    'feed', 'pixelia', 'agenda', 'ai'
+    'feed', 'pixelia', 'agenda', 'ai', 'forum'
     ];
     const moduleStates = modules.reduce((acc, mod) => {
       acc[`${mod}Mod`] = configMods[`${mod}Mod`];
@@ -1085,6 +1087,31 @@ router
   .get('/feed/create', async ctx => {
     ctx.body = feedCreateView();
   })
+  .get('/forum', async ctx => {
+    const forumMod = ctx.cookies.get("forumMod") || 'on';
+    if (forumMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    const filter = ctx.query.filter || 'hot';
+    const forums = await forumModel.listAll(filter);
+    ctx.body = await forumView(forums, filter);
+  })
+  .get('/forum/:forumId', async ctx => {
+    const rawId = ctx.params.forumId
+    const msg = await forumModel.getMessageById(rawId)
+    const isReply = Boolean(msg.root)
+    const forumId = isReply ? msg.root : rawId
+    const highlightCommentId = isReply ? rawId   : null
+    const forum = await forumModel.getForumById(forumId)
+    const messagesData = await forumModel.getMessagesByForumId(forumId)
+    ctx.body = await singleForumView(
+      forum,
+      messagesData,
+      ctx.query.filter,
+      highlightCommentId
+    )
+  })
   .get('/legacy', async (ctx) => {
     const legacyMod = ctx.cookies.get("legacyMod") || 'on';
     if (legacyMod !== 'on') {
@@ -1539,6 +1566,30 @@ router
     };
     ctx.body = await like({ messageKey, voteValue });
     ctx.redirect(referer.href);
+  }) 
+  .post('/forum/create', koaBody(), async ctx => {
+    const { category, title, text } = ctx.request.body;
+    await forumModel.createForum(category, title, text);
+    ctx.redirect('/forum');
+  })
+  .post('/forum/:id/message', koaBody(), async ctx => {
+    const forumId = ctx.params.id;
+    const { message, parentId } = ctx.request.body;
+    const userId = SSBconfig.config.keys.id;
+    const newMessage = { text: message, author: userId, timestamp: new Date().toISOString() };
+    await forumModel.addMessageToForum(forumId, newMessage, parentId);
+    ctx.redirect(`/forum/${encodeURIComponent(forumId)}`);
+  })
+  .post('/forum/:forumId/vote', koaBody(), async ctx => {
+    const { forumId } = ctx.params;
+    const { target, value } = ctx.request.body;
+    await forumModel.voteContent(target, parseInt(value, 10));
+    const back = ctx.get('referer') || `/forum/${encodeURIComponent(forumId)}`;
+    ctx.redirect(back);
+  })
+  .post('/forum/delete/:id', koaBody(), async ctx => {
+    await forumModel.deleteForumById(ctx.params.id);
+    ctx.redirect('/forum');
   })
   .post('/legacy/export', koaBody(), async (ctx) => {
     const password = ctx.request.body.password;
@@ -2236,7 +2287,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet',
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending',
     'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers',
-    'feed', 'pixelia', 'agenda', 'ai'
+    'feed', 'pixelia', 'agenda', 'ai', 'forum'
     ];
     const currentConfig = getConfig();
     modules.forEach(mod => {

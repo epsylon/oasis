@@ -45,12 +45,11 @@ const renderAgendaItem = (item, userId, filter) => {
   }
   if (item.type === 'market') {
   details = [
-    renderCardField(i18n.marketItemDescription + ":", item.description), 
-    renderCardField(i18n.marketItemType + ":", item.item_type),
+    renderCardField(i18n.marketItemType + ":", item.item_type.toUpperCase()),
     renderCardField(i18n.marketItemStatus + ":", item.status),
+    renderCardField(i18n.marketItemStock + ":", item.stock), 
     renderCardField(i18n.marketItemPrice + ":", `${item.price} ECO`),
     renderCardField(i18n.marketItemIncludesShipping + ":", item.includesShipping ? i18n.agendaYes : i18n.agendaNo),
-    renderCardField(i18n.marketItemStock + ":", item.stock), 
     renderCardField(i18n.deadline + ":", new Date(item.deadline).toLocaleString()),
    ];
     if (item.item_type === 'auction') {
@@ -85,20 +84,23 @@ const renderAgendaItem = (item, userId, filter) => {
 
   if (item.type === 'report') {
     details = [
-      renderCardField(i18n.agendareportDescription + ":", item.description || i18n.noDescription),
       renderCardField(i18n.agendareportStatus + ":", item.status || i18n.noStatus),
       renderCardField(i18n.agendareportCategory + ":", item.category || i18n.noCategory),
-      renderCardField(i18n.agendareportSeverity + ":", item.severity || i18n.noSeverity),
+      renderCardField(i18n.agendareportSeverity + ":", item.severity.toUpperCase() || i18n.noSeverity),
     ];
   }
 
   if (item.type === 'event') {
     details = [
-      renderCardField(i18n.eventDescriptionLabel + ":", item.description),
       renderCardField(i18n.eventDateLabel + ":", fmt(item.date)),
       renderCardField(i18n.eventLocationLabel + ":", item.location),
       renderCardField(i18n.eventPriceLabel + ":", `${item.price} ECO`),
-      renderCardField(i18n.eventUrlLabel + ":", item.url || i18n.noUrl)
+      renderCardField(
+  	i18n.eventUrlLabel + ":",
+ 	 item.url
+   	 ? p(a({href: item.url, target: "_blank" }, item.url))
+         : p(i8n.noUrl)
+         ),
     ];
 
     actionButton = actionButton || form({ method: 'POST', action: `/events/attend/${encodeURIComponent(item.id)}` },
@@ -108,13 +110,11 @@ const renderAgendaItem = (item, userId, filter) => {
 
   if (item.type === 'task') {
     details = [
-      renderCardField(i18n.taskDescriptionLabel + ":", item.description),
       renderCardField(i18n.taskStatus + ":", item.status),
       renderCardField(i18n.taskPriorityLabel + ":", item.priority),
       renderCardField(i18n.taskStartTimeLabel + ":",  new Date(item.startTime).toLocaleString()),
       renderCardField(i18n.taskEndTimeLabel + ":", new Date(item.endTime).toLocaleString()),
       renderCardField(i18n.taskLocationLabel + ":", item.location),
-
     ];
 
     const assigned = Array.isArray(item.assignees) && item.assignees.includes(userId);

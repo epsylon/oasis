@@ -1,7 +1,8 @@
-const { form, button, div, h2, p, section, input, label, br, a, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, label, br, a, span, textarea } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id;
 
@@ -44,7 +45,7 @@ const renderDocumentList = (filteredDocs, filter) => {
             class: 'pdf-viewer-container',
             'data-pdf-url': `/blob/${encodeURIComponent(doc.url)}`
           }),
-          doc.description?.trim() ? p(doc.description) : null,
+          doc.description?.trim() ? p(...renderUrl(doc.description)) : null,
           doc.tags.length
             ? div({ class: "card-tags" }, doc.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
@@ -84,7 +85,7 @@ const renderDocumentForm = (filter, documentId, docToEdit) => {
       label(i18n.documentTitleLabel), br(),
       input({ type: "text", name: "title", placeholder: i18n.documentTitlePlaceholder, value: docToEdit?.title || '' }), br(), br(),
       label(i18n.documentDescriptionLabel), br(),
-      input({ type: "text", name: "description", placeholder: i18n.documentDescriptionPlaceholder, value: docToEdit?.description || '' }), br(), br(),
+      textarea({name: "description", placeholder: i18n.documentDescriptionPlaceholder, rows:"4", value: docToEdit?.description || '' }), br(), br(),
       button({ type: "submit" }, filter === 'edit' ? i18n.documentUpdateButton : i18n.documentCreateButton)
     )
   );
@@ -167,7 +168,7 @@ exports.singleDocumentView = async (doc, filter) => {
           class: 'pdf-viewer-container',
           'data-pdf-url': `/blob/${encodeURIComponent(doc.url)}`
         }),
-        p(doc.description),
+        p(...renderUrl(doc.description)),
           doc.tags.length
             ? div({ class: "card-tags" }, doc.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)

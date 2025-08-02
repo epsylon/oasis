@@ -1,7 +1,8 @@
-const { form, button, div, h2, p, section, input, label, br, a, audio: audioHyperaxe, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, label, br, a, audio: audioHyperaxe, span, textarea } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id
 
@@ -56,8 +57,7 @@ const renderAudioList = (filteredAudios, filter) => {
                 })
               )
             : p(i18n.audioNoFile),
-          audio.description?.trim() ? renderCardField(`${i18n.audioDescriptionLabel}: `, audio.description) : null,
-          br,
+          p(...renderUrl(audio.description)),
           audio.tags?.length
             ? div({ class: "card-tags" }, 
                 audio.tags.map(tag =>
@@ -99,7 +99,7 @@ const renderAudioForm = (filter, audioId, audioToEdit) => {
       label(i18n.audioTitleLabel), br(),
       input({ type: "text", name: "title", placeholder: i18n.audioTitlePlaceholder, value: audioToEdit?.title || '' }), br(), br(),
       label(i18n.audioDescriptionLabel), br(),
-      input({ type: "text", name: "description", placeholder: i18n.audioDescriptionPlaceholder, value: audioToEdit?.description || '' }), br(), br(),
+      textarea({name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows:"4", value: audioToEdit?.description || '' }), br(), br(),
       button({ type: "submit" }, filter === 'edit' ? i18n.audioUpdateButton : i18n.audioCreateButton)
     )
   );
@@ -187,8 +187,7 @@ exports.singleAudioView = async (audio, filter) => {
               })
             )
           : p(i18n.audioNoFile),
-        audio.description?.trim() ? renderCardField(`${i18n.audioDescriptionLabel}: `, audio.description) : null,
-        br,
+        p(...renderUrl(audio.description)),
         audio.tags?.length
           ? div({ class: "card-tags" },
               audio.tags.map(tag =>

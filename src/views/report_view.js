@@ -2,13 +2,14 @@ const { div, h2, p, section, button, form, a, textarea, br, input, img, span, la
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const moment = require('../server/node_modules/moment');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id;
 
 const renderCardField = (labelText, value) =>
   div({ class: 'card-field' },
     span({ class: 'card-label' }, labelText),
-    span({ class: 'card-value' }, value)
+    span({ class: 'card-value' }, ...renderUrl(value))
   );
 
 const renderReportCard = (report, userId) => {
@@ -37,14 +38,15 @@ const renderReportCard = (report, userId) => {
     renderCardField(i18n.reportsStatus + ":", report.status),
     renderCardField(i18n.reportsSeverity + ":", report.severity.toUpperCase()),
     renderCardField(i18n.reportsCategory + ":", report.category),
-    renderCardField(i18n.reportsConfirmations + ":", report.confirmations.length),
-    renderCardField(i18n.reportsDescriptionLabel + ":", report.description),
-    br,
+    renderCardField(i18n.reportsDescriptionLabel + ':'),
+    p(...renderUrl(report.description)), 
     div({ class: 'card-field' },
       report.image ? div({ class: 'card-field' },
         img({ src: `/blob/${encodeURIComponent(report.image)}`, class: "report-image" }),
       ) : null
     ),
+    br,
+    renderCardField(i18n.reportsConfirmations + ":", report.confirmations.length),
     br,
     form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
       button({ type: "submit" }, i18n.reportsConfirmButton)
@@ -120,7 +122,7 @@ exports.reportView = async (reports, filter, reportId) => {
               input({ type: "text", name: "title", required: true, value: reportToEdit?.title || '' }), br(), br(),
 
               label(i18n.reportsDescriptionLabel), br(),
-              textarea({ name: "description", required: true }, reportToEdit?.description || ''), br(), br(),
+              textarea({ name: "description", required: true, rows:"4" }, reportToEdit?.description || ''), br(), br(),
 
               label(i18n.reportsCategory), br(),
               select({ name: "category", required: true },
@@ -183,14 +185,15 @@ exports.singleReportView = async (report, filter) => {
         renderCardField(i18n.reportsStatus + ":", report.status),
         renderCardField(i18n.reportsSeverity + ":", report.severity.toUpperCase()),
         renderCardField(i18n.reportsCategory + ":", report.category),
-        renderCardField(i18n.reportsConfirmations + ":", report.confirmations.length),
-        renderCardField(i18n.reportsDescriptionLabel + ":", report.description),
-        br,
+        renderCardField(i18n.reportsDescriptionLabel + ':'),
+        p(...renderUrl(report.description)), 
         div({ class: 'card-field' },
           report.image ? div({ class: 'card-field' },
             img({ src: `/blob/${encodeURIComponent(report.image)}`, class: "report-image" }),
           ) : null
         ),
+        br,
+        renderCardField(i18n.reportsConfirmations + ":", report.confirmations.length),
         br,
         form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
           button({ type: "submit" }, i18n.reportsConfirmButton)

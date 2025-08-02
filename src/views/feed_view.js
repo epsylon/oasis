@@ -103,7 +103,7 @@ exports.feedView = (feeds, filter) => {
                 name: 'text',
                 placeholder: i18n.feedPlaceholder,
                 maxlength: 280,
-                rows: 5,
+                rows: 4,
                 cols: 50
               }),
               br(),

@@ -189,7 +189,7 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }) => {
           p(a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)),
           description ? p(...renderUrl(description)) : null,
           location ? p(`${i18n.locationLabel}: ${location}`) : null,
-          languages.length ? p(`${i18n.languagesLabel}: ${languages.join(', ')}`) : null,
+          languages.length ? p(`${i18n.languagesLabel}: ${languages.join(', ').toUpperCase()}`) : null,
           skills.length ? p(`${i18n.skillsLabel}: ${skills.join(', ')}`) : null,
           status ? p(`${i18n.statusLabel || 'Status'}: ${status}`) : null,
           preferences ? p(`${i18n.preferencesLabel || 'Preferences'}: ${preferences}`) : null,
@@ -199,10 +199,9 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }) => {
       feed && feed.length
         ? section({ class: 'profile-feed' },
             h2(i18n.latestInteractions),
-            feed.map(m => div({ class: 'post' }, p(m.value.content.text || '')))
+            feed.map(m => div({ class: 'post' }, p(...renderUrl(m.value.content.text || ''))))
           )
         : null
     )
   );
 };
-

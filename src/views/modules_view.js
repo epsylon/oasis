@@ -13,6 +13,7 @@ const modulesView = () => {
     { name: 'docs', label: i18n.modulesDocsLabel, description: i18n.modulesDocsDescription },
     { name: 'events', label: i18n.modulesEventsLabel, description: i18n.modulesEventsDescription },
     { name: 'feed', label: i18n.modulesFeedLabel, description: i18n.modulesFeedDescription },
+    { name: 'forum', label: i18n.modulesForumLabel, description: i18n.modulesForumDescription },
     { name: 'governance', label: i18n.modulesGovernanceLabel, description: i18n.modulesGovernanceDescription },
     { name: 'images', label: i18n.modulesImagesLabel, description: i18n.modulesImagesDescription },
     { name: 'invites', label: i18n.modulesInvitesLabel, description: i18n.modulesInvitesDescription },

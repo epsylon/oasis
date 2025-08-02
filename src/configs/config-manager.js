@@ -37,7 +37,8 @@ if (!fs.existsSync(configFilePath)) {
       "feedMod": "on",
       "pixeliaMod": "on",
       "agendaMod": "on",
-      "aiMod": "on"
+      "aiMod": "on",
+      "forumMod": "on",
     },
     "wallet": {
       "url": "http://localhost:7474",

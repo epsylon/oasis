@@ -75,14 +75,15 @@ const renderFeedTribesView = (tribe, page, query, filter) => {
               ),
               div({ class: 'feed-main' },
                 p(`${new Date(m.date).toLocaleString()} — `, a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
-                p(m.message)
+                br,
+                p(...renderUrl(m.message))
               )
             )
           ))
         ),
     tribe.members.includes(userId)
       ? form({ method: 'POST', action: `/tribes/${encodeURIComponent(tribe.id)}/message` },
-          textarea({ name: 'message', rows: 3, cols: 50, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),
+          textarea({ name: 'message', rows: 4, cols: 50, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),
           button({ type: 'submit' }, i18n.tribeFeedSend)
         )
       : null,
@@ -267,9 +268,9 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
       p(`${i18n.tribeIsAnonymousLabel}: ${t.isAnonymous ? i18n.tribePrivate : i18n.tribePublic}`),
       p(`${i18n.tribeModeLabel}: ${t.inviteMode.toUpperCase()}`),
       p(`${i18n.tribeLARPLabel}: ${t.isLARP ? i18n.tribeYes : i18n.tribeNo}`),
+      p(`${i18n.tribeLocationLabel}: ${t.location}`),
       img({ src: imageSrc }),
       t.description ? p(...renderUrl(t.description)) : null,
-      p(`${i18n.tribeLocationLabel}: ${t.location}`),
       h2(`${i18n.tribeMembersCount}: ${t.members.length}`),
       t.tags && t.tags.filter(Boolean).length ? div(t.tags.filter(Boolean).map(tag =>
         a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link', style: 'margin-right:0.8em;margin-bottom:0.5em;' }, `#${tag}`)
@@ -357,7 +358,8 @@ const renderFeedTribeView = async (tribe, query = {}, filter) => {
               ),
               div({ class: 'feed-main' },
                 p(`${new Date(m.date).toLocaleString()} — `, a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
-                p(m.message)
+                br,
+                p(...renderUrl(m.message))
               )
             )
           ))
@@ -379,9 +381,9 @@ exports.tribeView = async (tribe, userId, query) => {
     p(`${i18n.tribeIsAnonymousLabel}: ${tribe.isAnonymous ? i18n.tribePrivate : i18n.tribePublic}`),
     p(`${i18n.tribeModeLabel}: ${tribe.inviteMode.toUpperCase()}`),
     p(`${i18n.tribeLARPLabel}: ${tribe.isLARP ? i18n.tribeYes : i18n.tribeNo}`),
+    p(`${i18n.tribeLocationLabel}: ${tribe.location}`),
     img({ src: imageSrc, alt: tribe.title }),
     tribe.description ? p(...renderUrl(tribe.description)) : null,
-    p(`${i18n.tribeLocationLabel}: ${tribe.location}`),
     h2(`${i18n.tribeMembersCount}: ${tribe.members.length}`),
     tribe.tags && tribe.tags.filter(Boolean).length ? div(tribe.tags.filter(Boolean).map(tag =>
       a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link', style: 'margin-right:0.8em;margin-bottom:0.5em;' }, `#${tag}`)
@@ -390,7 +392,7 @@ exports.tribeView = async (tribe, userId, query) => {
     p(a({ class: 'user-link', href: `/author/${encodeURIComponent(tribe.author)}` }, tribe.author)),
     div({ class: 'tribe-feed-form' }, tribe.members.includes(config.keys.id)
       ? form({ method: 'POST', action: `/tribe/${encodeURIComponent(tribe.id)}/message` },
-          textarea({ name: 'message', rows: 3, cols: 50, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),
+          textarea({ name: 'message', rows: 4, cols: 50, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),
           br,
           button({ type: 'submit' }, i18n.tribeFeedSend)
         )

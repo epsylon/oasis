@@ -1,7 +1,8 @@
-const { form, button, div, h2, p, section, input, label, br, a, img, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, label, br, a, img, span, textarea } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id;
 
@@ -42,7 +43,7 @@ const renderImageList = (filteredImages, filter) => {
           
           imgObj.title ? h2(imgObj.title) : null,
           a({ href: `#img-${encodeURIComponent(imgObj.key)}` }, img({ src: `/blob/${encodeURIComponent(imgObj.url)}` })),
-          imgObj.description ? p(imgObj.description) : null,
+          imgObj.description ? p(...renderUrl(imgObj.description)) : null,
           imgObj.tags?.length
             ? div({ class: "card-tags" }, 
                 imgObj.tags.map(tag =>
@@ -87,7 +88,7 @@ const renderImageForm = (filter, imageId, imageToEdit) => {
       label(i18n.imageTitleLabel), br(),
       input({ type: "text", name: "title", placeholder: i18n.imageTitlePlaceholder, value: imageToEdit?.title || '' }), br(), br(),
       label(i18n.imageDescriptionLabel), br(),
-      input({ type: "text", name: "description", placeholder: i18n.imageDescriptionPlaceholder, value: imageToEdit?.description || '' }), br(), br(),
+      textarea({ name: "description", placeholder: i18n.imageDescriptionPlaceholder, rows:"4", value: imageToEdit?.description || '' }), br(), br(),
       label(i18n.imageMemeLabel),
       input({ type: "checkbox", name: "meme", ...(imageToEdit?.meme ? { checked: true } : {}) }), br(), br(),
       button({ type: "submit" }, filter === 'edit' ? i18n.imageUpdateButton : i18n.imageCreateButton)
@@ -135,7 +136,7 @@ exports.imageView = async (images, filter, imageId) => {
     title,
     section(
       div({ class: "tags-header" },
-        h2(title),
+        h2(i18n.imageCreateSectionTitle),
         p(i18n.imageDescription)
       ),
       div({ class: "filters" },
@@ -194,7 +195,7 @@ exports.singleImageView = async (image, filter) => {
       ) : null,
         h2(image.title),
         image.url ? img({ src: `/blob/${encodeURIComponent(image.url)}` }) : null,
-        p(image.description),
+        p(...renderUrl(image.description)),
         image.tags?.length
             ? div({ class: "card-tags" }, 
               image.tags.map(tag =>

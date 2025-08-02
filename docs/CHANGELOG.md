@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.4.0 - 2025-07-29
+
+### Added
+
+  + Forums: Module to discover and manage forums.
+
 ## v0.3.8 - 2025-07-21
 
 ### Added

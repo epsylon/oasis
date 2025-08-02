@@ -2,13 +2,14 @@ const { div, h2, p, section, button, form, a, span, textarea, br, input, label, 
 const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id;
 
 const renderCardField = (labelText, value) =>
   div({ class: 'card-field' },
     span({ class: 'card-label' }, labelText),
-    span({ class: 'card-value' }, value)
+    span({ class: 'card-value' }, ...renderUrl(value))
   );
 
 exports.marketView = async (items, filter, itemToEdit = null) => {
@@ -112,7 +113,7 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
             input({ type: "text", name: "title", id: "title", value: itemToEdit?.title || '', required: true }), br(), br(),
             
             label(i18n.marketItemDescription), br(),
-            textarea({ name: "description", id: "description", placeholder: i18n.marketItemDescriptionPlaceholder, innerHTML: itemToEdit?.description || '', required: true }), br(), br(),
+            textarea({ name: "description", id: "description", placeholder: i18n.marketItemDescriptionPlaceholder, rows:"6", innerHTML: itemToEdit?.description || '', required: true }), br(), br(),
             
             label(i18n.marketCreateFormImageLabel), br(),
             input({ type: "file", name: "image", id: "image", accept: "image/*" }), br(), br(),
@@ -176,7 +177,7 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
 		      ? img({ src: `/blob/${encodeURIComponent(item.image)}` })
 		      : img({ src: '/assets/images/default-market.png', alt: item.title })
 		  ),
-		  p(item.description),
+		  p(...renderUrl(item.description)),
 		  item.tags && item.tags.filter(Boolean).length
 		    ? div({ class: 'card-tags' }, item.tags.filter(Boolean).map(tag =>
 		        a({ class: "tag-link", href: `/search?query=%23${encodeURIComponent(tag)}` },
@@ -192,9 +193,10 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
 		  renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
 		  renderCardField(`${i18n.marketItemIncludesShipping}:`, item.includesShipping ? i18n.YESLabel : i18n.NOLabel),
 		  renderCardField(`${i18n.marketItemSeller}:`),
+		  div({ class: "market-card image" }, 
 		  div({ class: 'card-field' },
 		    a({ class: 'user-link', href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)
-		  ),
+		  )),
 		  item.item_type === 'auction' && item.auctions_poll.length > 0
 		  ? div({ class: "auction-info" },
 		      p({ class: "auction-bid-text" }, i18n.marketAuctionBids),
@@ -280,19 +282,15 @@ exports.singleMarketView = async (item, filter) => {
         h2(item.title),
         renderCardField(`${i18n.marketItemType}:`, `${item.item_type.toUpperCase()}`),
         renderCardField(`${i18n.marketItemStatus}:`, item.status),
-        renderCardField(`${i18n.marketItemStock}:`, item.stock > 0 ? item.stock : i18n.marketOutOfStock),
         renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
-        renderCardField(`${i18n.marketItemPrice}:`, `${item.price} ECO`),
-        renderCardField(`${i18n.marketItemIncludesShipping}:`, `${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
-        item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, `${moment(item.deadline).format('YYYY/MM/DD HH:mm:ss')}`) : null,
         br,
         div({ class: "market-item image" },
           item.image
             ? img({ src: `/blob/${encodeURIComponent(item.image)}` })
             : img({ src: '/assets/images/default-market.png', alt: item.title })
         ),
-        renderCardField(`${i18n.marketItemDescription}:`, item.description),
-        br,
+        renderCardField(`${i18n.marketItemDescription}:`),
+        p(...renderUrl(item.description)),   
         item.tags && item.tags.length
           ? div({ class: 'card-tags' },
               item.tags.map(tag =>
@@ -301,8 +299,18 @@ exports.singleMarketView = async (item, filter) => {
             )
           : null,
           br,
+        renderCardField(`${i18n.marketItemPrice}:`),
+        br,
+        div({ class: 'card-label' },
+          h2(`${item.price} ECO`),
+          ),
+        br,
+        renderCardField(`${i18n.marketItemStock}:`, item.stock > 0 ? item.stock : i18n.marketOutOfStock),
+        renderCardField(`${i18n.marketItemIncludesShipping}:`, `${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
+        item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, `${moment(item.deadline).format('YYYY/MM/DD HH:mm:ss')}`) : null,
+        renderCardField(`${i18n.marketItemSeller}:`),
+        br,
 	div({ class: 'card-field' },
-	  span({ class: 'card-label' }, `${i18n.marketItemSeller}:`),
 	  a({ class: 'user-link', href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)
 	)
       ),

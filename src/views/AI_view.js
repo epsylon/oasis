@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, textarea, br, span } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
+const { renderUrl } = require('../backend/renderUrl');
 
 exports.aiView = (history = [], userPrompt = '') => {
   return template(
@@ -61,7 +62,7 @@ exports.aiView = (history = [], userPrompt = '') => {
             br(),br(),
             div({ class: 'user-question', style: 'margin-bottom: 0.75em;' },
               h2(`${i18n.aiUserQuestion}:`),
-              p(entry.question)
+              p( ...renderUrl(entry.question))
             ),
             div({
               class: 'ai-response',
@@ -83,7 +84,7 @@ exports.aiView = (history = [], userPrompt = '') => {
                   paragraph
                     .split('\n')
                     .map(line =>
-                      p({ style: "margin-bottom: 1.2em;" }, line.trim())
+                      p({ style: "margin-bottom: 1.2em;" }, ...renderUrl(line.trim()))
                 )
               )
             )

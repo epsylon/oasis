@@ -2,13 +2,14 @@ const { div, h2, p, section, button, form, input, select, option, a, br, textare
 const moment = require('../server/node_modules/moment');
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id;
 
 const renderStyledField = (labelText, valueElement) =>
   div({ class: 'card-field' },
     span({ class: 'card-label' }, labelText),
-    span({ class: 'card-value' }, valueElement)
+    span({ class: 'card-value' }, ...renderUrl(valueElement))
   );
 
 const renderTaskItem = (task, filter, userId) => {
@@ -36,7 +37,8 @@ const renderTaskItem = (task, filter, userId) => {
     form({ method: 'GET', action: `/tasks/${encodeURIComponent(task.id)}` }, button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)),
     br,
     renderStyledField(i18n.taskTitleLabel + ':', task.title),
-    renderStyledField(i18n.taskDescriptionLabel + ':', task.description),
+    renderStyledField(i18n.taskDescriptionLabel + ':'),
+    p(...renderUrl(task.description)),
     task.location?.trim() ? renderStyledField(i18n.taskLocationLabel + ':', task.location) : null,
     renderStyledField(i18n.taskStatus + ':', task.status),
     renderStyledField(i18n.taskPriorityLabel + ':', task.priority),
@@ -131,7 +133,7 @@ exports.taskView = async (tasks, filter, taskId) => {
               label(i18n.taskTitleLabel), br(),
               input({ type: 'text', name: 'title', required: true, value: filter === 'edit' ? editTask.title : '' }), br(), br(),
               label(i18n.taskDescriptionLabel), br(),
-              textarea({ name: 'description', required: true, placeholder: i18n.taskDescriptionPlaceholder }, filter === 'edit' ? editTask.description : ''), br(), br(),
+              textarea({ name: 'description', required: true, placeholder: i18n.taskDescriptionPlaceholder, rows:"4"}, filter === 'edit' ? editTask.description : ''), br(), br(),
               label(i18n.taskStartTimeLabel), br(),
               input({ type: 'datetime-local', name: 'startTime', required: true, min: moment().format('YYYY-MM-DDTHH:mm'), value: filter === 'edit' ? moment(editTask.startTime).format('YYYY-MM-DDTHH:mm') : '' }), br(), br(),
               label(i18n.taskEndTimeLabel), br(),
@@ -185,7 +187,8 @@ exports.singleTaskView = async (task, filter) => {
       ),
       div({ class: 'card card-section task' },
         renderStyledField(i18n.taskTitleLabel + ':', task.title),
-        renderStyledField(i18n.taskDescriptionLabel + ':', task.description),
+        renderStyledField(i18n.taskDescriptionLabel + ':'),
+        p(...renderUrl(task.description)),
         renderStyledField(i18n.taskStartTimeLabel + ':', moment(task.startTime).format('YYYY/MM/DD HH:mm:ss')),
         renderStyledField(i18n.taskEndTimeLabel + ':', moment(task.endTime).format('YYYY/MM/DD HH:mm:ss')),
         renderStyledField(i18n.taskPriorityLabel + ':', task.priority),

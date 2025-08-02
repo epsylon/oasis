@@ -1,6 +1,7 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
+const { renderUrl } = require('../backend/renderUrl');
 
 function capitalize(str) {
   return typeof str === 'string' && str.length ? str[0].toUpperCase() + str.slice(1) : '';
@@ -62,27 +63,23 @@ function renderActionCards(actions) {
       cardBody.push(
         div({ class: 'card-section transfer' }, 
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.concept + ':'), span({ class: 'card-value' }, concept)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
-          br,
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.from + ': '), a({ class: 'user-link', href: `/author/${encodeURIComponent(from)}`, target: "_blank" }, from)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.to + ': '), a({ class: 'user-link', href: `/author/${encodeURIComponent(to)}`, target: "_blank" }, to)),
-          div({ class: 'card-field' }, h2({ class: 'card-label' }, i18n.transfersConfirmations + ': ' + `${confirmedBy.length}/2`)),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status))
         )
       );
     }
 
-	if (type === 'pixelia') {
-	  const { author } = content;
-	  cardBody.push(
-	    div({ class: 'card-section pixelia' },
-	      div({ class: 'card-field' },
-		a({ href: `/author/${encodeURIComponent(author)}`, class: 'activityVotePost' }, author)
-	      )
-	    )
-	  );
-	}
+    if (type === 'pixelia') {
+       const { author } = content;
+       cardBody.push(
+	 div({ class: 'card-section pixelia' },
+	   div({ class: 'card-field' },
+	      a({ href: `/author/${encodeURIComponent(author)}`, class: 'activityVotePost' }, author)
+	   )
+	 )
+       );
+    }
 
     if (type === 'tribe') {
       const { title, image, description, tags, isLARP, inviteMode, isAnonymous, members } = content;
@@ -92,15 +89,15 @@ function renderActionCards(actions) {
 	h2({ class: 'tribe-title' }, 
 	  a({ href: `/tribe/${encodeURIComponent(action.id)}`, class: "user-link" }, title)
 	),
-        p({ class: 'tribe-description' }, description || ''),
-          image
-            ? img({ src: `/blob/${encodeURIComponent(image)}`, class: 'feed-image tribe-image' })
-            : img({ src: '/assets/images/default-tribe.png', class: 'feed-image tribe-image' }),
-          br(),
           typeof isAnonymous === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel+ ':'), span({ class: 'card-value' }, isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : "",      
           inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeModeLabel) + ':'), span({ class: 'card-value' }, inviteMode.toUpperCase())) : "",
           typeof isLARP === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel+ ':'), span({ class: 'card-value' }, isLARP ? i18n.tribeYes : i18n.tribeNo)) : "",
           Array.isArray(members) ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeMembersCount) + ':'), span({ class: 'card-value' }, members.length)) : "",
+          br(),
+          image
+            ? img({ src: `/blob/${encodeURIComponent(image)}`, class: 'feed-image tribe-image' })
+            : img({ src: '/assets/images/default-tribe.png', class: 'feed-image tribe-image' }),
+          p({ class: 'tribe-description' }, ...renderUrl(description || '')),
           validTags.length
             ? div({ class: 'card-tags' }, validTags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
@@ -110,18 +107,38 @@ function renderActionCards(actions) {
     }
 
     if (type === 'curriculum') {
-      const { author, name, description, photo, personalSkills, oasisSkills, educationalSkills, languages, professionalSkills, status, preferences} = content;
+      const { author, name, description, photo, personalSkills, oasisSkills, educationalSkills, languages, professionalSkills, status, preferences, createdAt, updatedAt} = content;
       cardBody.push(
         div({ class: 'card-section curriculum' },
           h2(a({ href: `/author/${encodeURIComponent(author)}`, class: "user-link" }, `@`, name)),
+          div(
+          { class: 'card-fields-container' },
+	  createdAt ? 
+	   div(
+	    { class: 'card-field' },
+	    span({ class: 'card-label' }, i18n.cvCreatedAt + ':'),
+	    span({ class: 'card-value' }, moment(createdAt).format('YYYY-MM-DD HH:mm:ss'))
+	  ) 
+	  : "",
+	  updatedAt ? 
+	  div(
+	    { class: 'card-field' },
+	    span({ class: 'card-label' }, i18n.cvUpdatedAt + ':'),
+	    span({ class: 'card-value' }, moment(updatedAt).format('YYYY-MM-DD HH:mm:ss'))
+	  ) 
+     	  : ""
+     	  ),
           status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.cvStatusLabel + ':'), span({ class: 'card-value' }, status)) : "",
           preferences ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.cvPreferencesLabel || 'Preferences') + ':'), span({ class: 'card-value' }, preferences)) : "",
-          languages ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.cvLanguagesLabel || 'Languages') + ':'), span({ class: 'card-value' }, languages)) : "",
-          br(),
-          photo ? img({ class: "cv-photo", src: `/blob/${encodeURIComponent(photo)}` }) : "",
-          br(),
-          description ? div({ class: 'card-field' }, span({ class: 'card-value' }, description)) : "",
-          br(),
+          languages ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.cvLanguagesLabel || 'Languages') + ':'), span({ class: 'card-value' }, languages.toUpperCase())) : "",
+	  photo ? 
+	  [
+	    br(),
+	    img({ class: "cv-photo", src: `/blob/${encodeURIComponent(photo)}` }),
+	    br()
+	  ]
+	: "",
+	  p(...renderUrl(description || "")),
 	  personalSkills && personalSkills.length
 	  ? div({ class: 'card-tags' }, personalSkills.map(skill =>
 	      a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
@@ -205,30 +222,25 @@ function renderActionCards(actions) {
     }
 
     if (type === 'bookmark') {
-      const { url, description, lastVisit } = content;
+      const { url } = content;
       cardBody.push(
         div({ class: 'card-section bookmark' },       
-          description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ':'), span({ class: 'card-value' }, description)) : "",
-          h2(url ? p(a({ href: url, target: '_blank', class: "bookmark-url" }, url)) : ""),
-          lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, new Date(lastVisit).toLocaleString())) : ""
+          h2(url ? p(a({ href: url, target: '_blank', class: "bookmark-url" }, url)) : "")
         )
       );
     }
 
     if (type === 'event') {
-      const { title, description, date, location, price, url: eventUrl, attendees, organizer, status, isPublic } = content;
+      const { title, description, date, location, price, attendees, organizer, isPublic } = content;
       cardBody.push(
         div({ class: 'card-section event' },    
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
-          description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.description + ':'), span({ class: 'card-value' }, description)) : "",
-          date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.date + ':'), span({ class: 'card-value' }, new Date(date).toLocaleString())) : "",
-          location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.location || 'Location') + ':'), span({ class: 'card-value' }, location)) : "",
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : "",
-          typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
-          price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
-          eventUrl ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.trendingUrl + ':'), a({ href: eventUrl, target: '_blank' }, eventUrl)) : "",
-          br,
-          organizer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.organizer || 'Organizer') + ': '), a({ class: "user-link", href: `/author/${encodeURIComponent(organizer)}` }, organizer)) : "",
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
+        date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.date + ':'), span({ class: 'card-value' }, new Date(date).toLocaleString())) : "",
+        location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.location || 'Location') + ':'), span({ class: 'card-value' }, location)) : "",
+        typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
+        price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
+        br,
+        organizer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.organizer || 'Organizer') + ': '), a({ class: "user-link", href: `/author/${encodeURIComponent(organizer)}` }, organizer)) : "",
           Array.isArray(attendees) ? h2({ class: 'card-label' }, (i18n.attendees || 'Attendees') + ': ' + attendees.length) : "",   
         )
       );
@@ -239,19 +251,20 @@ function renderActionCards(actions) {
       cardBody.push(
         div({ class: 'card-section task' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : "",
           priority ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.priority || 'Priority') + ':'), span({ class: 'card-value' }, priority)) : "",
           startTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskStartTimeLabel || 'Start') + ':'), span({ class: 'card-value' }, new Date(startTime).toLocaleString())) : "",
           endTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskEndTimeLabel || 'End') + ':'), span({ class: 'card-value' }, new Date(endTime).toLocaleString())) : "",
+          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : "",
         )
       );
     }
 
     if (type === 'feed') {
+      const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
       const { text, refeeds } = content;
       cardBody.push(
         div({ class: 'card-section feed' }, 
-          h2({ class: 'feed-title' }, text),
+          div({ class: 'feed-text', innerHTML: renderTextWithStyles(text) }),
           h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-label' }, refeeds))
         )
       );
@@ -266,6 +279,36 @@ function renderActionCards(actions) {
         )
       );
     }
+    
+    if (type === 'forum') {
+        const { root, category, title, text, key } = content;
+        if (!root) {
+            cardBody.push(
+                div({ class: 'card-section forum' },
+                    div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
+                        span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
+                        a({ href: `/forum/${encodeURIComponent(key || action.id)}`, style: "font-weight:800;color:#4fc3f7;" }, title)
+                    ),
+                )
+            )
+        } else {
+            let parentForum = actions.find(a => a.type === 'forum' && !a.content.root && (a.id === root || a.content.key === root));
+            let parentCategory = parentForum?.content?.category || '';
+            let parentTitle = parentForum?.content?.title || '';
+            cardBody.push(
+                div({ class: 'card-section forum' },
+                    div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
+                        span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
+                        a({ href: `/forum/${encodeURIComponent(root)}`, style: "font-weight:800;color:#4fc3f7;" }, parentTitle)
+                    ),
+                    br(),
+                    div({ class: 'card-field', style: 'margin-bottom:12px;' },
+                        p({ style: "margin:0 0 8px 0; word-break:break-all;" }, ...renderUrl(text))
+                    )
+                )
+            )
+        }
+    }
 
     if (type === 'vote') {
       const { vote } = content;
@@ -279,7 +322,7 @@ function renderActionCards(actions) {
 	}
 
     if (type === 'about') {
-      const { about, name, description, image } = content;
+      const { about, name, image } = content;
       cardBody.push(
         div({ class: 'card-section about' },
         h2(a({ href: `/author/${encodeURIComponent(about)}`, class: "user-link" }, `@`, name)),
@@ -290,28 +333,28 @@ function renderActionCards(actions) {
       );
     }
 
-	if (type === 'contact') {
-	  const { contact } = content;
-	  cardBody.push(
-	    div({ class: 'card-section contact' },
-	      p({ class: 'card-field' }, 
-		a({ href: `/author/${encodeURIComponent(contact)}`, class: 'activitySpreadInhabitant2' }, contact)
-	      )
-	    )
-	  );
-	}
+    if (type === 'contact') {
+      const { contact } = content;
+      cardBody.push(
+	div({ class: 'card-section contact' },
+	   p({ class: 'card-field' }, 
+            a({ href: `/author/${encodeURIComponent(contact)}`, class: 'activitySpreadInhabitant2' }, contact)
+	   )
+	 )
+      );
+     }
 
-	if (type === 'pub') {
-	  const { address } = content;
-	  const { host, key } = address;
-	  cardBody.push(
-	    div({ class: 'card-section pub' },
-	      p({ class: 'card-field' },
-		a({ href: `/author/${encodeURIComponent(key)}`, class: 'activitySpreadInhabitant2' }, key)
-	      )
-	    )
-	  );
-	}
+    if (type === 'pub') {
+      const { address } = content;
+      const { host, key } = address;
+      cardBody.push(
+        div({ class: 'card-section pub' },
+	   p({ class: 'card-field' },
+            a({ href: `/author/${encodeURIComponent(key)}`, class: 'activitySpreadInhabitant2' }, key)
+	   )
+        )
+      );
+    }
 
     if (type === 'market') {
       const { item_type, title, price, status, deadline, stock, image, auctions_poll } = content;
@@ -320,12 +363,12 @@ function renderActionCards(actions) {
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemTitle + ':'), span({ class: 'card-value' }, title)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, item_type.toUpperCase())),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStatus + ": " ), span({ class: 'card-value' }, status.toUpperCase())),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : "")),
           br,
           image
             ? img({ src: `/blob/${encodeURIComponent(image)}` })
             : img({ src: '/assets/images/default-market.png', alt: title }),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
           br,
           div({ class: "market-card price" },
             p(`${i18n.marketItemPrice}: ${price} ECO`)
@@ -405,6 +448,8 @@ function getViewDetailsAction(type, action) {
     case 'image': return `/images/${encodeURIComponent(action.id)}`;
     case 'audio': return `/audios/${encodeURIComponent(action.id)}`;
     case 'video': return `/videos/${encodeURIComponent(action.id)}`;
+    case 'forum': 
+      return `/forum/${encodeURIComponent(action.content?.key || action.id)}`;
     case 'document': return `/documents/${encodeURIComponent(action.id)}`;
     case 'bookmark': return `/bookmarks/${encodeURIComponent(action.id)}`;
     case 'event': return `/events/${encodeURIComponent(action.id)}`;
@@ -439,6 +484,7 @@ exports.activityView = (actions, filter, userId) => {
     { type: 'feed', label: i18n.typeFeed },
     { type: 'post', label: i18n.typePost },
     { type: 'pixelia', label: i18n.typePixelia },
+    { type: 'forum', label: i18n.typeForum },
     { type: 'bookmark', label: i18n.typeBookmark },
     { type: 'image', label: i18n.typeImage },
     { type: 'video', label: i18n.typeVideo },

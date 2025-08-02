@@ -18,85 +18,100 @@ const getRelevantFields = (type, content) => {
     case 'feed':
       return [content?.text, content?.author, content?.createdAt, ...(content?.tags || []), content?.refeeds];
     case 'event':
-      return [content?.title, content?.description, content?.date, content?.location, content?.price, content?.eventUrl, ...(content?.tags || []), content?.attendees, content?.organizer, content?.status, content?.isPublic];
+      return [content?.title, content?.description, content?.date, content?.location, content?.price, ...(content?.tags || [])];
     case 'votes':
-      return [content?.question, content?.deadline, content?.status, ...(Object.values(content?.votes || {})), content?.totalVotes];
+      return [content?.question, content?.deadline, content?.status, content?.totalVotes];
     case 'tribe':
-      return [content?.title, content?.description, content?.image, content?.location, ...(content?.tags || []), content?.isLARP, content?.isAnonymous, content?.members?.length, content?.createdAt, content?.author];
+      return [content?.title, content?.description, content?.location, content?.members?.length, ...(content?.tags || [])];
     case 'audio':
-      return [content?.url, content?.mimeType, content?.title, content?.description, ...(content?.tags || [])];
+      return [content?.title, content?.description, ...(content?.tags || [])];
     case 'image':
-      return [content?.url, content?.title, content?.description, ...(content?.tags || []), content?.meme];
+      return [content?.title, content?.description, ...(content?.tags || [])];
     case 'video':
-      return [content?.url, content?.mimeType, content?.title, content?.description, ...(content?.tags || [])];
+      return [content?.title, content?.description, ...(content?.tags || [])];
     case 'document':
-      return [content?.url, content?.title, content?.description, ...(content?.tags || []), content?.key];
+      return [content?.title, content?.description, ...(content?.tags || [])];
     case 'market':
-      return [content?.item_type, content?.title, content?.description, content?.price, ...(content?.tags || []), content?.status, content?.item_status, content?.deadline, content?.includesShipping, content?.seller, content?.image, content?.auctions_poll];
+      return [content?.title, content?.description, content?.price, content?.status, ...(content?.tags || [])];
     case 'bookmark':
-      return [content?.author, content?.url, ...(content?.tags || []), content?.description, content?.category, content?.lastVisit];
+      return [content?.url, content?.description, ...(content?.tags || [])];
     case 'task':
-      return [content?.title, content?.description, content?.startTime, content?.endTime, content?.priority, content?.location, ...(content?.tags || []), content?.isPublic, content?.assignees?.length, content?.status, content?.author];
+      return [content?.title, content?.description, content?.status, ...(content?.tags || [])];
     case 'report':
-      return [content?.title, content?.description, content?.category, content?.createdAt, content?.author, content?.image, ...(content?.tags || []), content?.confirmations, content?.severity, content?.status, content?.isAnonymous];
+      return [content?.title, content?.description, content?.severity, content?.status, ...(content?.tags || [])];
     case 'transfer':
-      return [content?.from, content?.to, content?.concept, content?.amount, content?.deadline, content?.status, ...(content?.tags || []), content?.confirmedBy?.length];
+      return [content?.from, content?.to, content?.amount, content?.status, ...(content?.tags || [])];
     case 'curriculum':
-      return [content?.author, content?.name, content?.description, content?.photo, ...(content?.personalSkills || []), ...(content?.personalExperiences || []), ...(content?.oasisExperiences || []), ...(content?.oasisSkills || []), ...(content?.educationExperiences || []), ...(content?.educationalSkills || []), ...(content?.languages || []), ...(content?.professionalExperiences || []), ...(content?.professionalSkills || []), content?.location, content?.status, content?.preferences, content?.createdAt];
+      return [content?.name, content?.description, content?.location, content?.status, ...(content?.personalSkills || []), ...(content?.languages || [])];
     default:
       return [];
   }
 };
 
-async function buildContext(maxItems = 10, filterTypes = []) {
+async function buildContext(maxItems = 100) {
   const ssb = await cooler.open();
   return new Promise((resolve, reject) => {
     pull(
       ssb.createLogStream(),
       pull.collect((err, msgs) => {
         if (err) return reject(err);
-        const contextLines = [];
-        const latest = new Map();
+
         const tombstoned = new Set();
+        const latest = new Map();
+        const users = new Set();
+        const events = [];
 
-        for (const msg of msgs) {
-          const { content } = msg.value;
-          if (content.type === 'tombstone') {
-            tombstoned.add(content.target);
-          }
-        }
+        msgs.forEach(({ key, value }) => {
+          if (value.content.type === 'tombstone') tombstoned.add(value.content.target);
+        });
 
-        for (const msg of msgs) {
-          const key = msg.key;
-          const { content } = msg.value;
+        msgs.forEach(({ key, value }) => {
+          const { author, content, timestamp } = value;
           const type = content?.type;
-          if (!type || !searchableTypes.includes(type)) continue;
-          if (filterTypes.length && !filterTypes.includes(type)) continue;
-          if (tombstoned.has(key)) continue;
-          latest.set(key, msg);
-        }
+          if (!searchableTypes.includes(type) || tombstoned.has(key)) return;
 
-        const sorted = Array.from(latest.values())
-          .sort((a, b) => b.value.timestamp - a.value.timestamp)
-          .slice(0, maxItems);
+          users.add(author);
+          if (type === 'event' && new Date(content.date) >= new Date()) events.push({ content, timestamp });
+
+          const uniqueKey = type === 'about' ? content.about : key;
+          if (!latest.has(uniqueKey) || latest.get(uniqueKey).value.timestamp < timestamp) {
+            latest.set(uniqueKey, { key, value });
+          }
+        });
+
+        events.sort((a, b) => new Date(a.content.date) - new Date(b.content.date));
 
         const grouped = {};
+        Array.from(latest.values())
+          .sort((a, b) => b.value.timestamp - a.value.timestamp)
+          .slice(0, maxItems)
+          .forEach(({ value }) => {
+            const { content, timestamp } = value;
+            const fields = getRelevantFields(content.type, content).filter(Boolean).join(' | ');
+            if (!fields) return;
 
-        for (const msg of sorted) {
-          const type = msg.value.content.type;
-          const fields = getRelevantFields(type, msg.value.content);
-          const compact = fields.filter(Boolean).join(' | ');
-          if (!compact) continue;
+            const date = new Date(timestamp).toISOString().slice(0, 10);
+            grouped[content.type] = grouped[content.type] || [];
+            grouped[content.type].push(`[${date}] (${content.type}) ${fields}`);
+          });
 
-          const date = new Date(msg.value.timestamp).toISOString().slice(0, 10);
-          const line = `[${date}] (${type}) ${compact}`;
-          if (!grouped[type]) grouped[type] = [];
-          grouped[type].push(line);
+        const summary = [`## SUMMARY`, `Total Users: ${users.size}`];
+        if (events.length) {
+          const nextEvent = events[0].content;
+          summary.push(`Next Event: "${nextEvent.title}" on ${nextEvent.date} at ${nextEvent.location}`);
         }
 
-        const finalContext = Object.entries(grouped)
-          .map(([type, lines]) => `## ${type.toUpperCase()}\n\n` + lines.join('\n\n'))
+        const upcomingEvents = events.map(({ content }) => `[${content.date}] ${content.title} | ${content.location}`).join('\n');
+
+        const contextSections = Object.entries(grouped)
+          .map(([type, lines]) => `## ${type.toUpperCase()}\n\n${lines.join('\n')}`)
           .join('\n\n');
+
+        const finalContext = [
+          summary.join('\n'),
+          events.length ? `## UPCOMING EVENTS\n\n${upcomingEvents}` : '',
+          contextSections
+        ].filter(Boolean).join('\n\n');
 
         resolve(finalContext);
       })

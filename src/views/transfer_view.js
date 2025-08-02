@@ -42,7 +42,6 @@ const generateTransferCard = (transfer, userId) => {
         span({ class: 'card-label' }, `${i18n.transfersAmount}:`),
         span({ class: 'card-value' }, `${transfer.amount} ECO`)
       ),
-      br,
       div({ class: 'card-field' },
         span({ class: 'card-label' }, `${i18n.transfersFrom}:`),
         span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from))
@@ -51,7 +50,6 @@ const generateTransferCard = (transfer, userId) => {
         span({ class: 'card-label' }, `${i18n.transfersTo}:`),
         span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to))
       ),
-      br,
       h2({ class: 'card-field' },
         span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
         span({ class: 'card-value' }, `${transfer.confirmedBy.length}/2`)
@@ -168,7 +166,7 @@ exports.singleTransferView = async (transfer, filter) => {
           button({ type: 'submit', name: 'filter', value: 'create', class: "create-button" }, i18n.transfersCreateButton)
         )
       ),
-	div({ class: "tags-header" },
+	div({ class: "transfer-item" },
 	  div({ class: 'card-section transfer' },
             div({ class: 'card-field' },
              span({ class: 'card-label' }, `${i18n.transfersConcept}:`),
@@ -186,16 +184,14 @@ exports.singleTransferView = async (transfer, filter) => {
 	      span({ class: 'card-label' }, `${i18n.transfersAmount}:`),
 	      span({ class: 'card-value' }, `${transfer.amount} ECO`)
 	    ),
-	    br,
-	    div({ class: 'card-field' },
-	      span({ class: 'card-label' }, `${i18n.transfersFrom}:`),
-	      span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from))
-	    ),
-	    div({ class: 'card-field' },
-	      span({ class: 'card-label' }, `${i18n.transfersTo}:`),
-	      span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to))
-	    ),
-            br,
+            div({ class: 'card-field' },
+              span({ class: 'card-label' }, `${i18n.transfersFrom}:`),
+              span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from))
+            ),
+            div({ class: 'card-field' },
+              span({ class: 'card-label' }, `${i18n.transfersTo}:`),
+              span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to))
+            ),
 	    h2({ class: 'card-field' },
 	      span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
 	      span({ class: 'card-value' }, `${transfer.confirmedBy.length}/2`)

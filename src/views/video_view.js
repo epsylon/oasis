@@ -1,7 +1,8 @@
-const { form, button, div, h2, p, section, input, label, br, a, video: videoHyperaxe, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, label, br, a, video: videoHyperaxe, span, textarea } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
+const { renderUrl } = require('../backend/renderUrl');
 
 const userId = config.keys.id;
 
@@ -51,7 +52,7 @@ const renderVideoList = (filteredVideos, filter) => {
                 })
               )
             : p(i18n.videoNoFile),        
-          video.description?.trim() ? p(video.description) : null,
+          video.description?.trim() ? p(...renderUrl(video.description)) : null,
           video.tags?.length
             ? div({ class: "card-tags" },
                 video.tags.map(tag =>
@@ -93,7 +94,7 @@ const renderVideoForm = (filter, videoId, videoToEdit) => {
       label(i18n.videoTitleLabel), br(),
       input({ type: "text", name: "title", placeholder: i18n.videoTitlePlaceholder, value: videoToEdit?.title || '' }), br(), br(),
       label(i18n.videoDescriptionLabel), br(),
-      input({ type: "text", name: "description", placeholder: i18n.videoDescriptionPlaceholder, value: videoToEdit?.description || '' }), br(), br(),
+      textarea({name: "description", placeholder: i18n.videoDescriptionPlaceholder, rows:"4", value: videoToEdit?.description || '' }), br(), br(),
       button({ type: "submit" }, filter === 'edit' ? i18n.videoUpdateButton : i18n.videoCreateButton)
     )
   );
@@ -181,7 +182,7 @@ exports.singleVideoView = async (video, filter) => {
               })
             )
           : p(i18n.videoNoFile),
-        p(video.description),
+        p(...renderUrl(video.description)),
         video.tags?.length
             ? div({ class: "card-tags" },
                 video.tags.map(tag =>

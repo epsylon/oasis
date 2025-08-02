@@ -1,6 +1,6 @@
 # Oasis
 
-Oasis is a **free, open-source, encrypted, peer-to-peer, distributed (not decentralized!) & federated**... project networking application 
+Oasis is a **libre, open-source, encrypted, peer-to-peer, distributed (not decentralized!) & federated**... project networking application 
 that helps you follow interesting content and discover new ones.
 
   ![SNH](https://solarnethub.com/git/snh-oasis-logo3.jpg "SolarNET.HuB")
@@ -42,6 +42,12 @@ But it has others features that are also really interesting, for example:
    ![SNH](https://solarnethub.com/git/snh-clear-theme.png "SolarNET.HuB")
    ![SNH](https://solarnethub.com/git/snh-purple-theme.png "SolarNET.HuB")
    ![SNH](https://solarnethub.com/git/snh-matrix-theme.png "SolarNET.HuB")
+   
+ +  Even a complex Reddit-styled forum system.
+ 
+   ![SNH](https://solarnethub.com/git/snh-forum.png "SolarNET.HuB")
+   ![SNH](https://solarnethub.com/git/snh-forum-reply.png "SolarNET.HuB")
+   ![SNH](https://solarnethub.com/git/snh-activity-forum.png "SolarNET.HuB")
  
 And much more, that we invite you to discover by yourself ;-)
 
@@ -58,7 +64,8 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
  + Documents: Module to discover and manage documents.	
  + Events: Module to discover and manage events.	
- + Feed: Module to discover and share short-texts (feeds).	
+ + Feed: Module to discover and share short-texts (feeds).
+ + Forums: Module to discover and manage forums.	
  + Governance: Module to discover and manage votes.	
  + Images: Module to discover and manage images.	
  + Invites: Module to manage and apply invite codes.	
@@ -246,13 +253,16 @@ Check ['Call 4 Hackers'](https://wiki.solarnethub.com/community/hackers) for con
  + SNH Website: https://solarnethub.com
  + Kräkens.Lab: https://krakenslab.com
  + Documentation: https://wiki.solarnethub.com
- + Forum: https://forum.solarnethub.com
  + Research: https://wiki.solarnethub.com/docs/research
  + Code of Conduct: https://wiki.solarnethub.com/docs/code_of_conduct
  + The KIT: https://wiki.solarnethub.com/kit/overview
  + Ecosystem: https://wiki.solarnethub.com/socialnet/ecosystem
  + Project Network: https://wiki.solarnethub.com/socialnet/snh#the_project_network
+ + Oasis: https://wiki.solarnethub.com/socialnet/overview
  + ECOin: https://wiki.solarnethub.com/ecoin/overview
  + Role-playing (L.A.R.P): https://wiki.solarnethub.com/socialnet/roleplaying
  + Warehouse: https://wiki.solarnethub.com/stock/submit_request
  + THS: https://thehackerstyle.com
+ + PeerTube: https://video.hardlimit.com/c/thehackerstyle/videos
+ + Youtube: https://www.youtube.com/@thehackerstyle
+ + Twitch: https://twitch.tv/thehackerstyle

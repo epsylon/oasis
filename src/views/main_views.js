@@ -8,7 +8,7 @@ const debug = require("../server/node_modules/debug")("oasis");
 const highlightJs = require("../server/node_modules/highlight.js");
 const prettyMs = require("../server/node_modules/pretty-ms");
 const moment = require('../server/node_modules/moment');
-
+const { renderUrl } = require('../backend/renderUrl');
 const ssbClientGUI = require("../client/gui");
 const config = require("../server/ssb_config");
 const cooler = ssbClientGUI({ offline: config.offline });
@@ -316,6 +316,15 @@ const renderPixeliaLink = () => {
     : '';
 };
 
+const renderForumLink = () => {
+  const forumMod = getConfig().modules.forumMod === 'on';
+  return forumMod 
+    ? [
+     navLink({ href: "/forum", emoji: "ꕒ", text: i18n.forumTitle, class: "forum-link enabled" }),
+      ]
+    : '';
+};
+
 const renderAgendaLink = () => {
   const agendaMod = getConfig().modules.agendaMod === 'on';
   return agendaMod 
@@ -439,6 +448,7 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
               renderTrendingLink(),
               renderOpinionsLink(),
+              renderForumLink(),
               renderFeedLink(),
               renderPixeliaLink(),
               renderMarketLink(),
@@ -797,6 +807,7 @@ exports.editProfileView = ({ name, description }) =>
             {
               autofocus: true,
               name: "description",
+              rows: "6",
             },
             description
           )
@@ -1226,7 +1237,6 @@ exports.privateView = async (input, filter) => {
               if (!content || !author) {
                 return div({ class: 'malformed-message' }, 'Invalid message');
               }
-
               const subject = content.subject || '(no subject)';
               const text = content.text || '';
               const sentAt = new Date(content.sentAt || msg.timestamp).toLocaleString();
@@ -1234,14 +1244,13 @@ exports.privateView = async (input, filter) => {
               const toLinks = (content.to || []).map(addr =>
                 a({ class: 'user-link', href: `/author/${encodeURIComponent(addr)}` }, addr)
               );
-
               return div({ class: 'message-item' },
-                p(subject),
-                div({ class: 'message-text' }, text),
                 p({ class: 'card-footer' },
                 span({ class: 'date-link' }, `${sentAt} ${i18n.performed} `),
                  a({ href: `/author/${encodeURIComponent(from)}`, class: 'user-link' }, `${from}`)
                 ),
+                h2(subject),
+                p({ class: 'message-text' }, ...renderUrl(text)),
                 form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(msg.key)}`, class: 'delete-message-form' },
                   button({ type: 'submit', class: 'delete-btn' }, i18n.privateDelete)
                 )

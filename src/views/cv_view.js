@@ -1,5 +1,6 @@
 const { form, button, div, h2, p, section, textarea, label, input, br, img, a, select, option } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
+const { renderUrl } = require('../backend/renderUrl');
 
 const generateCVBox = (label, content, className) => {
   return div({ class: `cv-box ${className}` }, 
@@ -43,7 +44,7 @@ exports.createCVView = async (cv = {}, editMode = false) => {
             label(i18n.cvNameLabel), br(),
             input({ type: "text", name: "name", required: true, value: cv.name || "" }), br(),
             label(i18n.cvDescriptionLabel), br(),
-            textarea({ name: "description", required: true }, cv.description || ""), br(),
+            textarea({ name: "description", required: true, rows: 4  }, cv.description || ""), br(),
             label(i18n.cvLanguagesLabel), br(),
             input({ type: "text", name: "languages", value: cv.languages || "" }), br(),
             label(i18n.cvPhotoLabel), br(),
@@ -156,8 +157,7 @@ exports.cvView = async (cv) => {
               : null,
             cv.name ? h2(`${cv.name}`) : null,
             cv.contact ? p(a({ class: "user-link", href: `/author/${encodeURIComponent(cv.contact)}` }, cv.contact)) : null,
-            cv.description ? p(`${cv.description}`) : null,
-            cv.languages ? p(`${i18n.cvLanguagesLabel}: ${cv.languages}`) : null,
+            cv.description ? p(...renderUrl(`${cv.description}`)) : null,
             (cv.personalSkills && cv.personalSkills.length)
               ? div(
                   cv.personalSkills.map(tag =>
@@ -170,24 +170,13 @@ exports.cvView = async (cv) => {
                 )
               : null
           ]) : null,
-          hasOasis ? div({ class: "cv-box oasis" }, ...[
-            h2(i18n.cvOasisContributorView),
-            p(`${cv.oasisExperiences}`),
-            (cv.oasisSkills && cv.oasisSkills.length)
-              ? div(
-                  cv.oasisSkills.map(tag =>
-                    a({
-                      href: `/search?query=%23${encodeURIComponent(tag)}`,
-                      class: "tag-link",
-                      style: "margin-right:0.8em;margin-bottom:0.5em;"
-                    }, `#${tag}`)
-                  )
-                )
-              : null
+          hasPersonal ? div({ class: "cv-box personal" }, ...[  
+           h2(i18n.cvLanguagesLabel),
+           cv.languages ? p(`${cv.languages.toUpperCase()}`) : null
           ]) : null,
           hasEducational ? div({ class: "cv-box education" }, ...[
             h2(i18n.cvEducationalView),
-            cv.educationExperiences ? p(`${cv.educationExperiences}`) : null,
+            cv.educationExperiences ? p(...renderUrl(`${cv.educationExperiences}`)) : null,
             (cv.educationalSkills && cv.educationalSkills.length)
               ? div(
                   cv.educationalSkills.map(tag =>
@@ -202,10 +191,25 @@ exports.cvView = async (cv) => {
           ]) : null,
           hasProfessional ? div({ class: "cv-box professional" }, ...[
             h2(i18n.cvProfessionalView),
-            cv.professionalExperiences ? p(`${cv.professionalExperiences}`) : null,
+            cv.professionalExperiences ? p(...renderUrl(`${cv.professionalExperiences}`)) : null,
             (cv.professionalSkills && cv.professionalSkills.length)
               ? div(
                   cv.professionalSkills.map(tag =>
+                    a({
+                      href: `/search?query=%23${encodeURIComponent(tag)}`,
+                      class: "tag-link",
+                      style: "margin-right:0.8em;margin-bottom:0.5em;"
+                    }, `#${tag}`)
+                  )
+                )
+              : null
+          ]) : null,
+          hasOasis ? div({ class: "cv-box oasis" }, ...[
+            h2(i18n.cvOasisContributorView),
+            p(...renderUrl(`${cv.oasisExperiences}`)),
+            (cv.oasisSkills && cv.oasisSkills.length)
+              ? div(
+                  cv.oasisSkills.map(tag =>
                     a({
                       href: `/search?query=%23${encodeURIComponent(tag)}`,
                       class: "tag-link",
