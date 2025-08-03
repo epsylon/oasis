@@ -87,13 +87,11 @@ module.exports = ({ cooler }) => {
           pull.collect((err, msgs) => err ? rej(err) : res(msgs))
         )
       })
-
       const tombstoned = new Set(
         messages
           .filter(m => m.value.content?.type === 'tombstone')
           .map(m => m.value.content.target)
       )
-
       const replaces = new Map()
       const latest = new Map()
 
@@ -120,14 +118,26 @@ module.exports = ({ cooler }) => {
       for (const oldId of replaces.keys()) {
         latest.delete(oldId)
       }
-
       let documents = Array.from(latest.values())
-
       if (filter === 'mine') {
         documents = documents.filter(d => d.author === userId)
       } else {
         documents = documents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       }
+      const hasBlob = (blobId) => {
+        return new Promise((resolve) => {
+          ssbClient.blobs.has(blobId, (err, has) => {
+            resolve(!err && has);
+          });
+        });
+      };
+     documents = await Promise.all(
+        documents.map(async (doc) => {
+          const ok = await hasBlob(doc.url);
+          return ok ? doc : null;
+        })
+      );
+      documents = documents.filter(Boolean);
 
       return documents
     },

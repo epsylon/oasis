@@ -17,8 +17,10 @@ const getFilteredDocuments = (filter, documents, userId) => {
       return sumB - sumA;
     }) :
     documents;
-
-  return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (filter !== 'top') {
+    filtered = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+  return filtered;
 };
 
 const renderDocumentActions = (filter, doc) => {
@@ -33,12 +35,21 @@ const renderDocumentActions = (filter, doc) => {
 };
 
 const renderDocumentList = (filteredDocs, filter) => {
-  return filteredDocs.length > 0
-    ? filteredDocs.map(doc =>
+  const seen = new Set();
+  const unique = [];
+  for (const doc of filteredDocs) {
+    if (seen.has(doc.title)) continue;
+    seen.add(doc.title);
+    unique.push(doc);
+  }
+
+  return unique.length > 0
+    ? unique.map(doc =>
         div({ class: "tags-header" },
           renderDocumentActions(filter, doc),
           form({ method: "GET", action: `/documents/${encodeURIComponent(doc.key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
+            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+          ),
           doc.title?.trim() ? h2(doc.title) : null,
           div({
             id: `pdf-container-${doc.key}`,
@@ -51,14 +62,13 @@ const renderDocumentList = (filteredDocs, filter) => {
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
               ))
             : null,
-          br,
+          br(),
           p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${moment(doc.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(doc.author)}`, class: 'user-link' }, `${doc.author}`)
+            span({ class: 'date-link' }, `${moment(doc.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+            a({ href: `/author/${encodeURIComponent(doc.author)}`, class: 'user-link' }, doc.author)
           ),
           div({ class: "voting-buttons" },
-            ['interesting','necessary','funny','disgusting','sensible',
-             'propaganda','adultOnly','boring','confusing','inspiring','spam']
+            ['interesting','necessary','funny','disgusting','sensible','propaganda','adultOnly','boring','confusing','inspiring','spam']
               .map(category =>
                 form({ method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },
                   button({ class: "vote-btn" },

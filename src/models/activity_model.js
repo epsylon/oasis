@@ -8,6 +8,14 @@ module.exports = ({ cooler }) => {
     return ssb;
   };
 
+  const hasBlob = async (ssbClient, url) => {
+    return new Promise((resolve) => {
+      ssbClient.blobs.has(url, (err, has) => {
+        resolve(!err && has);
+      });
+    });
+  };
+
   return {
     async listFeed(filter = 'all') {
       const ssbClient = await openSsb();
@@ -40,20 +48,31 @@ module.exports = ({ cooler }) => {
       for (const oldId of replaces.keys()) latest.delete(oldId);
       for (const t of tombstoned) latest.delete(t);
 
-      const actions = Array.from(latest.values()).filter(a =>
-        a.type !== 'tombstone' &&
-        !tombstoned.has(a.id) &&
-        !(a.content?.root && tombstoned.has(a.content.root)) &&
-        !(a.type === 'vote' && tombstoned.has(a.content.vote.link))
+      const actions = await Promise.all(
+        Array.from(latest.values()).map(async (a) => {
+          if (a.type === 'document') {
+            const url = a.content.url;
+            const validBlob = await hasBlob(ssbClient, url);
+            if (!validBlob) return null;
+          }
+          if (
+            a.type !== 'tombstone' &&
+            !tombstoned.has(a.id) &&
+            !(a.content?.root && tombstoned.has(a.content.root)) &&
+            !(a.type === 'vote' && tombstoned.has(a.content.vote.link))
+          ) {
+            return a;
+          }
+          return null;
+        })
       );
-
+      const validActions = actions.filter(Boolean);
       if (filter === 'mine')
-        return actions
+        return validActions
           .filter(a => a.author === userId)
           .sort((a, b) => b.ts - a.ts);
 
-      return actions.sort((a, b) => b.ts - a.ts);
+      return validActions.sort((a, b) => b.ts - a.ts);
     }
   };
 };
-

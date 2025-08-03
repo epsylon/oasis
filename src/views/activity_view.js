@@ -29,6 +29,8 @@ function renderActionCards(actions) {
   if (!validActions.length) {
     return div({ class: "no-actions" }, p(i18n.noActions)); 
   }
+  
+  const seenDocumentTitles = new Set();
 
   return validActions.map(action => {
     const date = action.ts ? new Date(action.ts).toLocaleString() : "";
@@ -186,7 +188,7 @@ function renderActionCards(actions) {
       );
     }
 
-    if (content.type === 'video') {
+    if (type === 'video') {
       const { url, mimeType, title } = content;
       cardBody.push(
         div({ class: 'card-section video' },     
@@ -207,8 +209,12 @@ function renderActionCards(actions) {
       );
     }
 
-    if (content.type === 'document') {
+    if (type === 'document') {
       const { url, title, key } = content;
+      if (title && seenDocumentTitles.has(title.trim())) {
+        return null;
+     }
+      if (title) seenDocumentTitles.add(title.trim());
       cardBody.push(
         div({ class: 'card-section document' },      
           title?.trim() ? h2({ class: 'document-title' }, title) : "",
@@ -555,7 +561,7 @@ exports.activityView = (actions, filter, userId) => {
             div({
               style: 'display: flex; flex-direction: column; gap: 8px;'
             },
-              activityTypes.slice(15, 20).map(({ type, label }) =>
+              activityTypes.slice(15, 21).map(({ type, label }) =>
                 form({ method: 'GET', action: '/activity' },
                   input({ type: 'hidden', name: 'filter', value: type }),
                   button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
