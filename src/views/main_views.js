@@ -407,8 +407,8 @@ const template = (titlePrefix, ...elements) => {
              renderCipherLink(),
              navLink({ href: "/pm", emoji: "ꕕ", text: i18n.privateMessage }),
              navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
-             renderTagsLink(),
              renderAILink(),
+             renderTagsLink(),
              navLink({ href: "/search", emoji: "ꔅ", text: i18n.search })
              )
           ),
@@ -424,6 +424,7 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/inbox", emoji: "☂", text: i18n.inbox }),
               renderAgendaLink(),
               navLink({ href: "/stats", emoji: "ꕷ", text: i18n.statistics }),
+              navLink({ href: "/blockexplorer", emoji: "ꖸ", text: i18n.blockchain }),
               hr,
               renderLatestLink(),
               renderThreadsLink(),

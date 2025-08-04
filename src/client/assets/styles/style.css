@@ -1865,3 +1865,219 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .forum-comment.level-2 { margin-left: 40px; }
 .forum-comment.level-3 { margin-left: 60px; }
 .forum-comment.level-4 { margin-left: 80px; }
+
+/*blockexplorer*/
+.blockchain-view {
+  font-family: 'Inter', 'Roboto', 'Segoe UI', Arial, sans-serif;
+  background-color: #191b20;
+  padding: 32px 16px;
+  border-radius: 16px;
+  box-shadow: 0 8px 36px rgba(0,0,0,0.16);
+  color: #e7e7e7;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.block {
+  background: #23242a;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(32,35,42,0.11);
+  padding: 22px 24px;
+  margin-bottom: 26px;
+  transition: box-shadow 0.22s;
+  position: relative;
+}
+
+.block-buttons {
+  display: flex;
+  justify-content: right;
+  align-items: center; 
+  gap: 12px;
+}
+
+.button-container {
+  display: flex; 
+  gap: 12px; 
+  justify-content: right;
+  align-items: center;
+}
+
+.block:hover {
+  box-shadow: 0 8px 32px rgba(35,40,50,0.18);
+}
+
+.block-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.blockchain-card-label {
+  color: #ffa300;
+  font-weight: bold;
+  letter-spacing: 1.5px;
+  line-height: 1.2;
+  margin-bottom: 0;
+}
+
+.block-row--content {
+  margin: 10px 0 0 0;
+}
+
+.block-info-table td {
+  padding: 12px 15px;
+  font-size: 14px;
+  border: 1px solid #444;
+}
+
+.block-author {
+  font-weight: 600;
+  font-size: 14px;
+  color: #ffb36a;
+  background: rgba(255,179,106,0.08);
+  padding: 3px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: color 0.12s;
+}
+
+.block-author:hover {
+  color: #ffe0ba;
+}
+
+.block-timestamp {
+  color: #f5c242;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.block-content-preview,
+.block-content {
+  background: #222326;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #f5c242; 
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  overflow-x: auto;
+}
+
+.block-content-preview pre {
+  margin: 0;
+}
+
+.block-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 15px 0;
+}
+
+.block-info-table td {
+  padding: 10px;
+  border: 1px solid #444;
+  font-size: 14px;
+}
+
+.json-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #f5c242; 
+}
+
+.block-row--details {
+  margin-top: 14px;
+  position: relative;
+}
+
+.block-url {
+  color: #ffb36a;
+  font-size: 14px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.13s, border-color 0.13s;
+}
+
+.block-row--details .block-url {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: #1f2023;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  transition: background 0.12s, color 0.12s;
+}
+
+.block-row--details .block-url:hover {
+  background: #292b36;
+  color: #ffb36a;
+}
+
+.btn-singleview {
+  background: #1e1f23;
+  border: none;
+  border-radius: 50%;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 1.14em;
+  color: #c6c6c6;
+  box-shadow: none;
+  transition: background 0.14s, color 0.14s;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-singleview:hover {
+  background: #2d2e34;
+  color: #f8b92c;
+}
+
+.block-row--back {
+  margin-top: 15px;
+}
+
+.block-content-label {
+  color: #f5c242;
+  font-size: 1.02em;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.btn-back {
+  background: #21232b;
+  color: #d7d7d7;
+  padding: 7px 22px;
+  border-radius: 8px;
+  text-decoration: none;
+  border: none;
+  font-size: 1.01rem;
+  font-weight: 500;
+  margin-top: 12px;
+  transition: background 0.12s, color 0.13s;
+  display: inline-block;
+}
+
+.btn-back:hover {
+  background: #292b36;
+  color: #ffb36a;
+}
+
+@media (max-width: 700px) {
+  .blockchain-view {
+    padding: 9vw 2vw;
+  }
+
+  .block, .block-single, .block--single {
+    padding: 15px 5vw;
+  }
+
+  .mode-buttons-row {
+    flex-direction: column;
+    gap: 18px;
+  }
+}

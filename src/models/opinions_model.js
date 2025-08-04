@@ -6,6 +6,14 @@ module.exports = ({ cooler }) => {
     if (!ssb) ssb = await cooler.open();
     return ssb;
   };
+  
+  const hasBlob = async (ssbClient, url) => {
+    return new Promise(resolve => {
+      ssbClient.blobs.has(url, (err, has) => {
+        resolve(!err && has);
+      });
+    });
+  };
 
   const categories = [
     "interesting", "necessary", "funny", "disgusting", "sensible",
@@ -17,7 +25,7 @@ module.exports = ({ cooler }) => {
     'feed', 'image', 'audio', 'video', 'document'
   ];
 
-  const getPreview = (c) => {
+  const getPreview = c => {
     if (c.type === 'bookmark' && c.bookmark) return `🔖 ${c.bookmark}`;
     return c.text || c.description || c.title || '';
   };
@@ -26,24 +34,20 @@ module.exports = ({ cooler }) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
     if (!categories.includes(category)) throw new Error("Invalid voting category.");
-
     const msg = await new Promise((resolve, reject) =>
       ssbClient.get(contentId, (err, value) => err ? reject(err) : resolve(value))
     );
-
     if (!msg || !msg.content) throw new Error("Opinion not found.");
-	const type = msg.content.type;
-	if (!validTypes.includes(type) || ['task', 'event', 'report'].includes(type)) {
-	  throw new Error("Voting not allowed on this content type.");
-	}
+    const type = msg.content.type;
+    if (!validTypes.includes(type) || ['task', 'event', 'report'].includes(type)) {
+      throw new Error("Voting not allowed on this content type.");
+    }
     if (msg.content.opinions_inhabitants?.includes(userId)) throw new Error("Already voted.");
-
     const tombstone = {
       type: 'tombstone',
       target: contentId,
       deletedAt: new Date().toISOString()
     };
-
     const updated = {
       ...msg.content,
       opinions: {
@@ -54,11 +58,9 @@ module.exports = ({ cooler }) => {
       updatedAt: new Date().toISOString(),
       replaces: contentId
     };
-
     await new Promise((resolve, reject) =>
-      ssbClient.publish(tombstone, (err) => err ? reject(err) : resolve())
+      ssbClient.publish(tombstone, err => err ? reject(err) : resolve())
     );
-
     return new Promise((resolve, reject) =>
       ssbClient.publish(updated, (err, result) => err ? reject(err) : resolve(result))
     );
@@ -67,14 +69,12 @@ module.exports = ({ cooler }) => {
   const listOpinions = async (filter = 'ALL', category = '') => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
-
     const messages = await new Promise((res, rej) => {
       pull(
         ssbClient.createLogStream(),
         pull.collect((err, msgs) => err ? rej(err) : res(msgs))
       );
     });
-
     const tombstoned = new Set();
     const replaces = new Map();
     const byId = new Map();
@@ -87,16 +87,13 @@ module.exports = ({ cooler }) => {
         tombstoned.add(c.target);
         continue;
       }
-       if (
-	  c.opinions &&
-	  !tombstoned.has(key) &&
-	  !['task', 'event', 'report'].includes(c.type)
-	) {
+      if (c.opinions && !tombstoned.has(key) && !['task', 'event', 'report'].includes(c.type)) {
         if (c.replaces) replaces.set(c.replaces, key);
         byId.set(key, {
           key,
           value: {
             ...msg.value,
+            content: c,
             preview: getPreview(c)
           }
         });
@@ -108,6 +105,23 @@ module.exports = ({ cooler }) => {
     }
 
     let filtered = Array.from(byId.values());
+    const blobTypes = ['document', 'image', 'audio', 'video'];
+    const blobCheckCache = new Map();
+
+    filtered = await Promise.all(
+      filtered.map(async m => {
+        const c = m.value.content;
+        if (blobTypes.includes(c.type) && c.url) {
+          if (!blobCheckCache.has(c.url)) {
+            const valid = await hasBlob(ssbClient, c.url);
+            blobCheckCache.set(c.url, valid);
+          }
+          if (!blobCheckCache.get(c.url)) return null;
+        }
+        return m;
+      })
+    );
+    filtered = filtered.filter(Boolean);
 
     if (filter === 'MINE') {
       filtered = filtered.filter(m => m.value.author === userId);
@@ -130,10 +144,14 @@ module.exports = ({ cooler }) => {
     return filtered;
   };
 
-  const getMessageById = async (id) => {
+  const getMessageById = async id => {
     const ssbClient = await openSsb();
     return new Promise((resolve, reject) =>
-      ssbClient.get(id, (err, msg) => err ? reject(new Error("Error fetching opinion: " + err)) : (!msg?.content ? reject(new Error("Opinion not found")) : resolve(msg)))
+      ssbClient.get(id, (err, msg) =>
+        err ? reject(new Error("Error fetching opinion: " + err)) :
+        !msg?.content ? reject(new Error("Opinion not found")) :
+        resolve(msg)
+      )
     );
   };
 

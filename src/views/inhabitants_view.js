@@ -196,12 +196,18 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }) => {
           createdAt ? p(`${i18n.createdAtLabel || 'Created at'}: ${createdAt}`) : null
         )
       ),
-      feed && feed.length
-        ? section({ class: 'profile-feed' },
-            h2(i18n.latestInteractions),
-            feed.map(m => div({ class: 'post' }, p(...renderUrl(m.value.content.text || ''))))
-          )
-        : null
-    )
-  );
+	feed && feed.length
+	  ? section({ class: 'profile-feed' },
+	      h2(i18n.latestInteractions),
+	      feed.map(m => {
+		const contentText = m.value.content.text || '';
+		const cleanText = contentText.replace(/<br\s*\/?>/g, '');	
+		return div({ class: 'post' },
+		  p(...renderUrl(cleanText)) 
+		);
+	      })
+	    )
+          : null
+      )
+    );
 };

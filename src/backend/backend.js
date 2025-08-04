@@ -209,6 +209,7 @@ const activityModel = require('../models/activity_model')({ cooler, isPublic: co
 const pixeliaModel = require('../models/pixelia_model')({ cooler, isPublic: config.public });
 const marketModel = require('../models/market_model')({ cooler, isPublic: config.public });
 const forumModel = require('../models/forum_model')({ cooler, isPublic: config.public });
+const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic: config.public });
 
 // starting warmup
 about._startNameWarmup();
@@ -409,6 +410,7 @@ const { trendingView } = require("../views/trending_view");
 const { marketView, singleMarketView } = require("../views/market_view");
 const { aiView } = require("../views/AI_view");
 const { forumView, singleForumView } = require("../views/forum_view");
+const { renderBlockchainView, renderSingleBlockView } = require("../views/blockchain_view");
 
 let sharp;
 
@@ -563,6 +565,19 @@ router
     }
     const pixelArt = await pixeliaModel.listPixels();
     ctx.body = pixeliaView(pixelArt);
+  })
+   // blockexplorer
+  .get('/blockexplorer', async (ctx) => {
+    const userId = SSBconfig.config.keys.id; 
+    const query = ctx.query;
+    const filter = query.filter || 'recent';
+    const blockchainData = await blockchainModel.listBlockchain(filter, userId);
+    ctx.body = renderBlockchainView(blockchainData, filter, userId);
+  })
+  .get('/blockexplorer/block/:id', async (ctx) => {
+    const blockId = ctx.params.id;
+    const block = await blockchainModel.getBlockById(blockId);
+    ctx.body = renderSingleBlockView(block);
   })
   .get("/public/latest", async (ctx) => {
     const latestMod = ctx.cookies.get("latestMod") || 'on';
