@@ -106,6 +106,15 @@ module.exports = ({ cooler }) => {
     }
 
     let feeds = Array.from(byId.values());
+    const seenTexts = new Map();
+	for (const feed of feeds) {
+	  const text = feed.value.content.text;
+	  const existing = seenTexts.get(text);
+	  if (!existing || feed.value.timestamp > existing.value.timestamp) {
+	    seenTexts.set(text, feed);
+	  }
+	}
+    feeds = Array.from(seenTexts.values());
 
     if (filter === 'MINE') {
       feeds = feeds.filter(m => m.value.content.author === userId);
