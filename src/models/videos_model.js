@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -87,7 +89,7 @@ module.exports = ({ cooler }) => {
       const userId = ssbClient.id;
       const messages = await new Promise((res, rej) => {
         pull(
-          ssbClient.createLogStream(),
+          ssbClient.createLogStream({ limit: logLimit }),
           pull.collect((err, msgs) => err ? rej(err) : res(msgs))
         );
       });
@@ -103,13 +105,12 @@ module.exports = ({ cooler }) => {
           continue;
         }
         if (c.type !== 'video') continue;
-        if (tombstoned.has(k)) continue;
         if (c.replaces) replaces.set(c.replaces, k);
         videos.set(k, {
           key: k,
           url: c.url,
           createdAt: c.createdAt,
-          updatedAt: c.updatedAt || null,
+         updatedAt: c.updatedAt || null,
           tags: c.tags || [],
           author: c.author,
           title: c.title || '',
@@ -118,9 +119,8 @@ module.exports = ({ cooler }) => {
           opinions_inhabitants: c.opinions_inhabitants || []
         });
       }
-      for (const replaced of replaces.keys()) {
-        videos.delete(replaced);
-      }
+      for (const oldId of replaces.keys()) videos.delete(oldId);
+      for (const delId of tombstoned.values()) videos.delete(delId);
       let out = Array.from(videos.values());
       if (filter === 'mine') {
         out = out.filter(v => v.author === userId);
@@ -129,9 +129,8 @@ module.exports = ({ cooler }) => {
         out = out.filter(v => new Date(v.createdAt).getTime() >= now - 86400000);
       } else if (filter === 'top') {
         out = out.sort((a, b) => {
-          const sumA = Object.values(a.opinions).reduce((s, v) => s + v, 0);
-          const sumB = Object.values(b.opinions).reduce((s, v) => s + v, 0);
-          return sumB - sumA;
+          const sum = o => Object.values(o || {}).reduce((s, n) => s + (n || 0), 0);
+          return sum(b.opinions) - sum(a.opinions);
         });
       } else {
         out = out.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));

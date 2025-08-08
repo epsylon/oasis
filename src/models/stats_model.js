@@ -1,17 +1,16 @@
 const pull = require('../server/node_modules/pull-stream');
 const os = require('os');
 const fs = require('fs');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
-  const openSsb = async () => {
-    if (!ssb) ssb = await cooler.open();
-    return ssb;
-  };
+  const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
   const types = [
-    'bookmark', 'event', 'task', 'votes', 'report', 'feed',
-    'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe', 'market'
+    'bookmark','event','task','votes','report','feed',
+    'image','audio','video','document','transfer','post','tribe','market','forum','job'
   ];
 
   const getFolderSize = (folderPath) => {
@@ -40,50 +39,75 @@ module.exports = ({ cooler }) => {
 
     const messages = await new Promise((res, rej) => {
       pull(
-        ssbClient.createLogStream(),
+        ssbClient.createLogStream({ limit: logLimit }),
         pull.collect((err, msgs) => err ? rej(err) : res(msgs))
       );
     });
 
     const allMsgs = messages.filter(m => m.value?.content);
-    const tombstoned = new Set(allMsgs.filter(m => m.value.content.type === 'tombstone' && m.value.content.target).map(m => m.value.content.target));
-    const replacesMap = new Map();
-    const userMsgs = filter === 'MINE' ? allMsgs.filter(m => m.value.author === userId) : allMsgs;
+    const tombTargets = new Set(
+      allMsgs
+        .filter(m => m.value.content.type === 'tombstone' && m.value.content.target)
+        .map(m => m.value.content.target)
+    );
 
-    const latestByType = {};
-    const opinions = {};
-    const content = {};
+    const scopedMsgs = filter === 'MINE' ? allMsgs.filter(m => m.value.author === userId) : allMsgs;
 
+    const byType = {};
+    const parentOf = {};
     for (const t of types) {
-      latestByType[t] = new Map();
-      opinions[t] = 0;
-      content[t] = 0;
+      byType[t] = new Map();
+      parentOf[t] = new Map();
     }
 
-    for (const m of userMsgs) {
+    for (const m of scopedMsgs) {
       const k = m.key;
       const c = m.value.content;
       const t = c.type;
       if (!types.includes(t)) continue;
-      if (tombstoned.has(k)) continue;
-      if (c.replaces) replacesMap.set(c.replaces, k);
-      latestByType[t].set(k, { msg: m, content: c });
+      byType[t].set(k, { key: k, ts: m.value.timestamp, content: c });
+      if (c.replaces) parentOf[t].set(k, c.replaces);
     }
 
-    for (const replacedId of replacesMap.keys()) {
-      for (const t of types) {
-        latestByType[t].delete(replacedId);
+    const findRoot = (t, id) => {
+      let cur = id;
+      const pMap = parentOf[t];
+      while (pMap.has(cur)) cur = pMap.get(cur);
+      return cur;
+    };
+
+    const tipOf = {};
+    for (const t of types) {
+      tipOf[t] = new Map();
+      const pMap = parentOf[t];
+      const fwd = new Map();
+      for (const [child, parent] of pMap.entries()) {
+        fwd.set(parent, child);
+      }
+      const allMap = byType[t];
+      const roots = new Set(Array.from(allMap.keys()).map(id => findRoot(t, id)));
+      for (const root of roots) {
+        let tip = root;
+        while (fwd.has(tip)) tip = fwd.get(tip);
+        if (tombTargets.has(tip)) continue;
+        const node = allMap.get(tip) || allMap.get(root);
+        if (node) tipOf[t].set(root, node);
       }
     }
 
+    const content = {};
+    const opinions = {};
     for (const t of types) {
-      const values = Array.from(latestByType[t].values());
-      content[t] = values.length;
-      opinions[t] = values.filter(e => (e.content.opinions_inhabitants || []).length > 0).length;
+      let vals = Array.from(tipOf[t].values()).map(v => v.content);
+      if (t === 'forum') {
+        vals = vals.filter(c => !(c.root && tombTargets.has(c.root)));
+      }
+      content[t] = vals.length;
+      opinions[t] = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length;
     }
 
-    const tribeContents = Array.from(latestByType['tribe'].values()).map(e => e.content);
-    const memberTribes = tribeContents
+    const tribeVals = Array.from(tipOf['tribe'].values()).map(v => v.content);
+    const memberTribes = tribeVals
       .filter(c => Array.isArray(c.members) && c.members.includes(userId))
       .map(c => c.name || c.title || c.id);
 
@@ -103,7 +127,7 @@ module.exports = ({ cooler }) => {
       content,
       opinions,
       memberTribes,
-      userTombstoneCount: userMsgs.filter(m => m.value.content.type === 'tombstone').length,
+      userTombstoneCount: scopedMsgs.filter(m => m.value.content.type === 'tombstone').length,
       networkTombstoneCount: allMsgs.filter(m => m.value.content.type === 'tombstone').length,
       folderSize: formatSize(folderSize),
       statsBlockchainSize: formatSize(flumeSize),

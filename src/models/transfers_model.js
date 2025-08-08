@@ -1,5 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -116,7 +118,7 @@ module.exports = ({ cooler }) => {
 	  const ssb = await openSsb();
 	  return new Promise((resolve, reject) => {
 	    pull(
-	      ssb.createLogStream(),
+	      ssb.createLogStream({ limit: logLimit }),
 	      pull.collect(async (err, results) => {
 		if (err) return reject(err);
 		const tombstoned = new Set();

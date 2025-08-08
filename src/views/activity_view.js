@@ -7,7 +7,7 @@ function capitalize(str) {
   return typeof str === 'string' && str.length ? str[0].toUpperCase() + str.slice(1) : '';
 }
 
-function renderActionCards(actions) {
+function renderActionCards(actions, userId) {
   const validActions = actions
     .filter(action => {
       const content = action.value?.content || action.content;
@@ -363,23 +363,24 @@ function renderActionCards(actions) {
     }
 
     if (type === 'market') {
-      const { item_type, title, price, status, deadline, stock, image, auctions_poll } = content;
+      const { item_type, title, price, status, deadline, stock, image, auctions_poll, seller } = content;
+      const isSeller = seller && userId && seller === userId;
       cardBody.push(
         div({ class: 'card-section market' }, 
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemTitle + ':'), span({ class: 'card-value' }, title)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, item_type.toUpperCase())),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStatus + ": " ), span({ class: 'card-value' }, status.toUpperCase())),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : "")),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
           br,
           image
             ? img({ src: `/blob/${encodeURIComponent(image)}` })
             : img({ src: '/assets/images/default-market.png', alt: title }),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
           br,
           div({ class: "market-card price" },
             p(`${i18n.marketItemPrice}: ${price} ECO`)
           ),
-          item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED'
+            item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? div({ class: "auction-info" },
                 auctions_poll && auctions_poll.length > 0
                   ? [
@@ -390,8 +391,8 @@ function renderActionCards(actions) {
                           th(i18n.marketAuctionUser),
                           th(i18n.marketAuctionBidAmount)
                         ),
-                        ...auctions_poll.map(bid => {
-                          const [userId, bidAmount, bidTime] = bid.split(':');
+                            ...auctions_poll.map(bid => {
+                            const [bidderId, bidAmount, bidTime] = bid.split(':');
                           return tr(
                             td(moment(bidTime).format('YYYY-MM-DD HH:mm:ss')),
                             td(a({ href: `/author/${encodeURIComponent(userId)}` }, userId)),
@@ -407,7 +408,7 @@ function renderActionCards(actions) {
                   button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
                 )
               ) : "",
-          item_type === 'exchange' && status !== 'SOLD' && status !== 'DISCARDED'
+            item_type === 'exchange' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? form({ method: "POST", action: `/market/buy/${encodeURIComponent(action.id)}` },
                 button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
               ) : ""
@@ -426,13 +427,55 @@ function renderActionCards(actions) {
         )
       );
     }
+    
+    if (type === 'job') {
+      const { title, job_type, tasks, location, vacants, salary, status, subscribers } = content;
+      cardBody.push(
+        div({ class: 'card-section report' },
+            div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.title + ':'),
+                span({ class: 'card-value' }, title)
+            ),
+            salary && div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.jobSalary + ':'),
+                span({ class: 'card-value' }, salary + ' ECO')
+            ),
+            status && div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.jobStatus + ':'),
+                span({ class: 'card-value' }, status.toUpperCase())
+            ),
+            job_type && div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.jobType + ':'),
+                span({ class: 'card-value' }, job_type.toUpperCase())
+            ),
+            location && div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.jobLocation + ':'),
+                span({ class: 'card-value' }, location.toUpperCase())
+            ),
+            vacants && div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.jobVacants + ':'),
+                span({ class: 'card-value' }, vacants)
+            ),
+            div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.jobSubscribers + ':'),
+                span({ class: 'card-value' },
+                    Array.isArray(subscribers) && subscribers.length > 0
+                        ? `${subscribers.length}`
+                        : i18n.noSubscribers.toUpperCase()
+                )
+            ),
+        )
+      );
+    }
 
 return div({ class: 'card card-rpg' },
   div({ class: 'card-header' },
     h2({ class: 'card-label' }, `[${typeLabel}]`),
-    type !== 'feed' ? form({ method: "GET", action: getViewDetailsAction(type, action) },
-      button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-    ) : ''
+	type !== 'feed' && (!action.tipId || action.tipId === action.id)
+	  ? form({ method: "GET", action: getViewDetailsAction(type, action) },
+	      button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+	    )
+	  : ''
   ),
   div({ class: 'card-body' }, ...cardBody),
   p({ class: 'card-footer' },
@@ -445,30 +488,32 @@ return div({ class: 'card card-rpg' },
 }
 
 function getViewDetailsAction(type, action) {
+  const id = encodeURIComponent(action.tipId || action.id);
   switch (type) {
-    case 'votes': return `/votes/${encodeURIComponent(action.id)}`;
-    case 'transfer': return `/transfers/${encodeURIComponent(action.id)}`;
+    case 'votes': return `/votes/${id}`;
+    case 'transfer': return `/transfers/${id}`;
     case 'pixelia': return `/pixelia`;
-    case 'tribe': return `/tribe/${encodeURIComponent(action.id)}`;
+    case 'tribe': return `/tribe/${id}`;
     case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
-    case 'image': return `/images/${encodeURIComponent(action.id)}`;
-    case 'audio': return `/audios/${encodeURIComponent(action.id)}`;
-    case 'video': return `/videos/${encodeURIComponent(action.id)}`;
-    case 'forum': 
-      return `/forum/${encodeURIComponent(action.content?.key || action.id)}`;
-    case 'document': return `/documents/${encodeURIComponent(action.id)}`;
-    case 'bookmark': return `/bookmarks/${encodeURIComponent(action.id)}`;
-    case 'event': return `/events/${encodeURIComponent(action.id)}`;
-    case 'task': return `/tasks/${encodeURIComponent(action.id)}`;    
+    case 'image': return `/images/${id}`;
+    case 'audio': return `/audios/${id}`;
+    case 'video': return `/videos/${id}`;
+    case 'forum':
+      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
+    case 'document': return `/documents/${id}`;
+    case 'bookmark': return `/bookmarks/${id}`;
+    case 'event': return `/events/${id}`;
+    case 'task': return `/tasks/${id}`;
     case 'about': return `/author/${encodeURIComponent(action.author)}`;
-    case 'post': return `/thread/${encodeURIComponent(action.id)}#${encodeURIComponent(action.id)}`;
+    case 'post': return `/thread/${id}#${id}`;
     case 'vote': return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
     case 'contact': return `/inhabitants`;
     case 'pub': return `/invites`;
-    case 'market': return `/market/${encodeURIComponent(action.id)}`;
-    case 'report': return `/reports/${encodeURIComponent(action.id)}`;
-    }
-   }
+    case 'market': return `/market/${id}`;
+    case 'job': return `/jobs/${id}`;
+    case 'report': return `/reports/${id}`;
+  }
+}
 
 exports.activityView = (actions, filter, userId) => {
   const title = filter === 'mine' ? i18n.yourActivity : i18n.globalActivity;
@@ -486,6 +531,7 @@ exports.activityView = (actions, filter, userId) => {
     { type: 'about', label: i18n.typeAbout },
     { type: 'curriculum', label: i18n.typeCurriculum },
     { type: 'market', label: i18n.typeMarket },
+    { type: 'job', label: i18n.typeJob },
     { type: 'transfer', label: i18n.typeTransfer },
     { type: 'feed', label: i18n.typeFeed },
     { type: 'post', label: i18n.typePost },
@@ -551,7 +597,7 @@ exports.activityView = (actions, filter, userId) => {
             div({
               style: 'display: flex; flex-direction: column; gap: 8px;'
             },
-              activityTypes.slice(11, 15).map(({ type, label }) =>
+              activityTypes.slice(11, 16).map(({ type, label }) =>
                 form({ method: 'GET', action: '/activity' },
                   input({ type: 'hidden', name: 'filter', value: type }),
                   button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
@@ -561,7 +607,7 @@ exports.activityView = (actions, filter, userId) => {
             div({
               style: 'display: flex; flex-direction: column; gap: 8px;'
             },
-              activityTypes.slice(15, 21).map(({ type, label }) =>
+              activityTypes.slice(16, 22).map(({ type, label }) =>
                 form({ method: 'GET', action: '/activity' },
                   input({ type: 'hidden', name: 'filter', value: type }),
                   button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
@@ -570,7 +616,7 @@ exports.activityView = (actions, filter, userId) => {
             )
           )
         ),
-      section({ class: 'feed-container' }, renderActionCards(filteredActions))
+       section({ class: 'feed-container' }, renderActionCards(filteredActions, userId))
     )
   );
   const hasDocument = actions.some(a => a && a.type === 'document');

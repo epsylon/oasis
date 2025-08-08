@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -30,7 +32,7 @@ module.exports = ({ cooler }) => {
     const userId = ssbClient.id;
     const messages = await new Promise((res, rej) => {
       pull(
-        ssbClient.createLogStream(),
+        ssbClient.createLogStream({ limit: logLimit }),
         pull.collect((err, xs) => err ? rej(err) : res(xs))
       );
     });
@@ -71,6 +73,35 @@ module.exports = ({ cooler }) => {
       })
     );
     items = items.filter(Boolean);
+    const signatureOf = (m) => {
+    const c = m.value?.content || {};
+    switch (c.type) {
+      case 'document':
+      case 'image':
+      case 'audio':
+      case 'video':
+        return `${c.type}::${(c.url || '').trim()}`;
+      case 'bookmark':
+        return `bookmark::${(c.url || '').trim().toLowerCase()}`;
+      case 'feed':
+        return `feed::${(c.text || '').replace(/\s+/g, ' ').trim()}`;
+      case 'votes':
+       return `votes::${(c.question || '').replace(/\s+/g, ' ').trim()}`;
+      case 'transfer':
+        return `transfer::${(c.concept || '')}|${c.amount || ''}|${c.from || ''}|${c.to || ''}|${c.deadline || ''}`;
+      default:
+        return `key::${m.key}`;
+    }
+    };
+    const bySig = new Map();
+    for (const m of items) {
+      const sig = signatureOf(m);
+      const prev = bySig.get(sig);
+      if (!prev || (m.value?.timestamp || 0) > (prev.value?.timestamp || 0)) {
+        bySig.set(sig, m);
+      }
+    }
+    items = Array.from(bySig.values());
 
     if (filter === 'MINE') {
       items = items.filter(m => m.value.author === userId);

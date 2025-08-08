@@ -4,6 +4,8 @@ const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 
 const agendaConfigPath = path.join(__dirname, '../configs/agenda-config.json');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 function readAgendaConfig() {
   if (!fs.existsSync(agendaConfigPath)) {
@@ -20,32 +22,112 @@ module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const fetchItems = (targetType, filterFn) =>
+  const STATUS_ORDER = ['FOR SALE', 'OPEN', 'RESERVED', 'CLOSED', 'SOLD'];
+  const sIdx = s => STATUS_ORDER.indexOf(String(s || '').toUpperCase());
+
+  const fetchItems = (targetType) =>
     new Promise((resolve, reject) => {
       openSsb().then((ssbClient) => {
-        const userId = ssbClient.id;
         pull(
-          ssbClient.createLogStream(),
+          ssbClient.createLogStream({ limit: logLimit }),
           pull.collect((err, msgs) => {
             if (err) return reject(err);
-            const tombstoned = new Set();
-            const replacesMap = new Map();
-            const latestMap = new Map();
-            for (const msg of msgs) {
-              const c = msg.value?.content;
-              const k = msg.key;
+
+            const tomb = new Set();
+            const nodes = new Map();
+            const parent = new Map();
+            const child = new Map();
+
+            for (const m of msgs) {
+              const k = m.key;
+              const v = m.value;
+              const c = v?.content;
               if (!c) continue;
-              if (c.type === 'tombstone' && c.target) tombstoned.add(c.target);
-              else if (c.type === targetType) {
-                if (c.replaces) replacesMap.set(c.replaces, k);
-                latestMap.set(k, { key: k, value: msg.value });
-              }
+              if (c.type === 'tombstone' && c.target) { tomb.add(c.target); continue; }
+              if (c.type !== targetType) continue;
+              nodes.set(k, { key: k, ts: v.timestamp || 0, content: c });
+              if (c.replaces) { parent.set(k, c.replaces); child.set(c.replaces, k); }
             }
-            for (const [oldId, newId] of replacesMap.entries()) latestMap.delete(oldId);
-            const results = Array.from(latestMap.values()).filter(
-              (msg) => !tombstoned.has(msg.key) && filterFn(msg.value.content, userId)
-            );
-            resolve(results.map(item => ({ ...item.value.content, id: item.key })));
+
+            const rootOf = (id) => { let cur = id; while (parent.has(cur)) cur = parent.get(cur); return cur; };
+
+            const groups = new Map();
+            for (const id of nodes.keys()) {
+              const r = rootOf(id);
+              if (!groups.has(r)) groups.set(r, new Set());
+              groups.get(r).add(id);
+            }
+
+            const statusOrder = ['FOR SALE', 'OPEN', 'RESERVED', 'CLOSED', 'SOLD'];
+            const sIdx = s => statusOrder.indexOf(String(s || '').toUpperCase());
+
+            const out = [];
+
+            for (const [root, ids] of groups.entries()) {
+              const items = Array.from(ids).map(id => nodes.get(id)).filter(n => n && !tomb.has(n.key));
+              if (!items.length) continue;
+
+              let tipId = Array.from(ids).find(id => !child.has(id));
+              let tip = tipId ? nodes.get(tipId) : items.reduce((a, b) => a.ts > b.ts ? a : b);
+
+              if (targetType === 'market') {
+                let chosen = items[0];
+                for (const n of items) {
+                  const a = sIdx(n.content.status);
+                  const b = sIdx(chosen.content.status);
+                  if (a > b || (a === b && n.ts > chosen.ts)) chosen = n;
+                }
+                const c = chosen.content;
+                let status = c.status;
+                if (c.deadline) {
+                  const dl = moment(c.deadline);
+                  if (dl.isValid() && dl.isBefore(moment()) && String(status).toUpperCase() !== 'SOLD') status = 'DISCARDED';
+                }
+                if (status === 'FOR SALE' && (c.stock || 0) === 0) continue;
+
+                out.push({
+                  ...c,
+                  status,
+                  id: chosen.key,
+                  tipId: chosen.key,
+                  createdAt: c.createdAt || chosen.ts
+                });
+                continue;
+              }
+
+              if (targetType === 'job') {
+                const latest = items.sort((a, b) => b.ts - a.ts)[0];
+                const withSubsNode = items
+                  .filter(n => Array.isArray(n.content.subscribers))
+                  .sort((a, b) => b.ts - a.ts)[0];
+                const subscribers = withSubsNode ? withSubsNode.content.subscribers : [];
+                const latestWithStatus = items
+                  .filter(n => typeof n.content.status !== 'undefined')
+                  .sort((a, b) => b.ts - a.ts)[0];
+                const resolvedStatus = latestWithStatus
+                  ? latestWithStatus.content.status
+                  : latest.content.status;
+
+                const c = { ...latest.content, status: resolvedStatus, subscribers };
+
+                out.push({
+                  ...c,
+                  id: latest.key,
+                  tipId: latest.key,
+                  createdAt: c.createdAt || latest.ts
+                });
+                continue;
+              }
+
+              out.push({
+                ...tip.content,
+                id: tip.key,
+                tipId: tip.key,
+                createdAt: tip.content.createdAt || tip.ts
+              });
+            }
+
+            resolve(out);
           })
         );
       }).catch(reject);
@@ -58,54 +140,55 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
-      const [tasks, events, transfers, tribes, marketItems, reports] = await Promise.all([
-        fetchItems('task', (c, id) => Array.isArray(c.assignees) && c.assignees.includes(id)),
-        fetchItems('event', (c, id) => Array.isArray(c.attendees) && c.attendees.includes(id)),
-        fetchItems('transfer', (c, id) => c.from === id || c.to === id),
-        fetchItems('tribe', (c, id) => Array.isArray(c.members) && c.members.includes(id)),
-        fetchItems('market', (c, id) => c.seller === id || (Array.isArray(c.auctions_poll) && c.auctions_poll.some(b => b.split(':')[0] === id))),
-        fetchItems('report', (c, id) => c.author === id || (Array.isArray(c.confirmations) && c.confirmations.includes(id)))
+      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll] = await Promise.all([
+        fetchItems('task'),
+        fetchItems('event'),
+        fetchItems('transfer'),
+        fetchItems('tribe'),
+        fetchItems('market'),
+        fetchItems('report'),
+        fetchItems('job')
       ]);
+
+      const tasks = tasksAll.filter(c => Array.isArray(c.assignees) && c.assignees.includes(userId)).map(t => ({ ...t, type: 'task' }));
+      const events = eventsAll.filter(c => Array.isArray(c.attendees) && c.attendees.includes(userId)).map(e => ({ ...e, type: 'event' }));
+      const transfers = transfersAll.filter(c => c.from === userId || c.to === userId).map(tr => ({ ...tr, type: 'transfer' }));
+      const tribes = tribesAll.filter(c => Array.isArray(c.members) && c.members.includes(userId)).map(t => ({ ...t, type: 'tribe', title: t.title }));
+      const marketItems = marketAll.filter(c =>
+        c.seller === userId || (Array.isArray(c.auctions_poll) && c.auctions_poll.some(b => String(b).split(':')[0] === userId))
+      ).map(m => ({ ...m, type: 'market' }));
+      const reports = reportsAll.filter(c => c.author === userId || (Array.isArray(c.confirmations) && c.confirmations.includes(userId))).map(r => ({ ...r, type: 'report' }));
+      const jobs = jobsAll.filter(c => c.author === userId || (Array.isArray(c.subscribers) && c.subscribers.includes(userId))).map(j => ({ ...j, type: 'job', title: j.title }));
 
       let combined = [
         ...tasks,
         ...events,
         ...transfers,
-        ...tribes.map(t => ({ ...t, type: 'tribe', title: t.title })),
-        ...marketItems.map(m => ({ ...m, type: 'market' })),
-        ...reports.map(r => ({ ...r, type: 'report' }))
+        ...tribes,
+        ...marketItems,
+        ...reports,
+        ...jobs
       ];
-      const dedup = {};
-      for (const item of combined) {
-        const dA = item.startTime || item.date || item.deadline || item.createdAt;
-        if (!dedup[item.id]) dedup[item.id] = item;
-        else {
-          const existing = dedup[item.id];
-          const dB = existing.startTime || existing.date || existing.deadline || existing.createdAt;
-          if (new Date(dA) > new Date(dB)) dedup[item.id] = item;
-        }
-      }
-      combined = Object.values(dedup);
 
       let filtered;
       if (filter === 'discarded') {
         filtered = combined.filter(i => discardedItems.includes(i.id));
       } else {
         filtered = combined.filter(i => !discardedItems.includes(i.id));
-
         if (filter === 'tasks') filtered = filtered.filter(i => i.type === 'task');
         else if (filter === 'events') filtered = filtered.filter(i => i.type === 'event');
         else if (filter === 'transfers') filtered = filtered.filter(i => i.type === 'transfer');
         else if (filter === 'tribes') filtered = filtered.filter(i => i.type === 'tribe');
         else if (filter === 'market') filtered = filtered.filter(i => i.type === 'market');
         else if (filter === 'reports') filtered = filtered.filter(i => i.type === 'report');
-        else if (filter === 'open') filtered = filtered.filter(i => i.status === 'OPEN');
-        else if (filter === 'closed') filtered = filtered.filter(i => i.status === 'CLOSED');
+        else if (filter === 'open') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'OPEN');
+        else if (filter === 'closed') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'CLOSED');
+        else if (filter === 'jobs') filtered = filtered.filter(i => i.type === 'job');
       }
 
       filtered.sort((a, b) => {
-        const dateA = a.startTime || a.date || a.deadline || a.createdAt;
-        const dateB = b.startTime || b.date || b.deadline || b.createdAt;
+        const dateA = a.startTime || a.date || a.deadline || a.createdAt || 0;
+        const dateB = b.startTime || b.date || b.deadline || b.createdAt || 0;
         return new Date(dateA) - new Date(dateB);
       });
 
@@ -116,14 +199,15 @@ module.exports = ({ cooler }) => {
         items: filtered,
         counts: {
           all: mainItems.length,
-          open: mainItems.filter(i => i.status === 'OPEN').length,
-          closed: mainItems.filter(i => i.status === 'CLOSED').length,
+          open: mainItems.filter(i => String(i.status).toUpperCase() === 'OPEN').length,
+          closed: mainItems.filter(i => String(i.status).toUpperCase() === 'CLOSED').length,
           tasks: mainItems.filter(i => i.type === 'task').length,
           events: mainItems.filter(i => i.type === 'event').length,
           transfers: mainItems.filter(i => i.type === 'transfer').length,
           tribes: mainItems.filter(i => i.type === 'tribe').length,
           market: mainItems.filter(i => i.type === 'market').length,
           reports: mainItems.filter(i => i.type === 'report').length,
+          jobs: mainItems.filter(i => i.type === 'job').length,
           discarded: discarded.length
         }
       };

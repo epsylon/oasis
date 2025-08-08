@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb, userId;
@@ -15,7 +17,7 @@ module.exports = ({ cooler }) => {
     return new Promise((resolve, reject) => {
       const tomb = new Set();
       pull(
-        ssbClient.createLogStream(),
+        ssbClient.createLogStream({ limit: logLimit }),
         pull.filter(m => m.value.content?.type === 'tombstone' && m.value.content.target),
         pull.drain(m => tomb.add(m.value.content.target), err => err ? reject(err) : resolve(tomb))
       );
@@ -68,7 +70,8 @@ module.exports = ({ cooler }) => {
   async function getMessageById(id) {
     const ssbClient = await openSsb();
     const msgs = await new Promise((res, rej) =>
-      pull(ssbClient.createLogStream(), pull.collect((err, data) => err ? rej(err) : res(data)))
+      pull(ssbClient.createLogStream({ limit: logLimit }), 
+      pull.collect((err, data) => err ? rej(err) : res(data)))
     );
     const msg = msgs.find(m => m.key === id && m.value.content?.type === 'forum');
     if (!msg) throw new Error('Message not found');
@@ -154,7 +157,8 @@ module.exports = ({ cooler }) => {
     listAll: async filter => {
       const ssbClient = await openSsb();
       const msgs = await new Promise((res, rej) =>
-        pull(ssbClient.createLogStream(), pull.collect((err, data) => err ? rej(err) : res(data)))
+        pull(ssbClient.createLogStream({ limit: logLimit }), 
+        pull.collect((err, data) => err ? rej(err) : res(data)))
       );
       const deleted = new Set(
         msgs.filter(m => m.value.content?.type === 'tombstone').map(m => m.value.content.target)
@@ -220,7 +224,8 @@ module.exports = ({ cooler }) => {
     getForumById: async id => {
       const ssbClient = await openSsb();
       const msgs = await new Promise((res, rej) =>
-        pull(ssbClient.createLogStream(), pull.collect((err, data) => err ? rej(err) : res(data)))
+        pull(ssbClient.createLogStream({ limit: logLimit }), 
+        pull.collect((err, data) => err ? rej(err) : res(data)))
       );
       const deleted = new Set(
         msgs.filter(m => m.value.content?.type === 'tombstone').map(m => m.value.content.target)
@@ -241,7 +246,8 @@ module.exports = ({ cooler }) => {
     getMessagesByForumId: async forumId => {
       const ssbClient = await openSsb();
       const msgs = await new Promise((res, rej) =>
-        pull(ssbClient.createLogStream(), pull.collect((err, data) => err ? rej(err) : res(data)))
+        pull(ssbClient.createLogStream({ limit: logLimit }), 
+        pull.collect((err, data) => err ? rej(err) : res(data)))
       );
       const deleted = new Set(
         msgs.filter(m => m.value.content?.type === 'tombstone').map(m => m.value.content.target)

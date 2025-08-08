@@ -1,5 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -38,6 +40,54 @@ module.exports = ({ cooler }) => {
       const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
       return new Promise((res, rej) => ssb.publish(tombstone, (err, result) => err ? rej(err) : res(result)));
     },
+    
+    async updateVoteById(id, { question, deadline, options, tags }) {
+      const ssb = await openSsb();
+      const userId = ssb.id;
+      const oldMsg = await new Promise((res, rej) =>
+        ssb.get(id, (err, msg) => err || !msg ? rej(new Error('Vote not found')) : res(msg))
+      );
+      const c = oldMsg.content;
+      if (c.type !== 'votes') throw new Error('Invalid type');
+      if (c.createdBy !== userId) throw new Error('Not the author');
+      let newDeadline = c.deadline;
+      if (deadline != null && deadline !== '') {
+        const parsed = moment(deadline, moment.ISO_8601, true);
+        if (!parsed.isValid() || parsed.isBefore(moment())) throw new Error('Invalid deadline');
+        newDeadline = parsed.toISOString();
+      }
+      let newOptions = c.options;
+      let newVotesMap = c.votes;
+      let newTotalVotes = c.totalVotes;
+      const optionsCambiaron = Array.isArray(options) && (
+        options.length !== c.options.length ||
+        options.some((o, i) => o !== c.options[i])
+      );
+      if (optionsCambiaron) {
+        if (c.totalVotes > 0) {
+          throw new Error('Cannot change options after voting has started');
+        }
+        newOptions = options;
+        newVotesMap = newOptions.reduce((acc, opt) => (acc[opt] = 0, acc), {});
+        newTotalVotes = 0;
+      }
+      const newTags =
+        Array.isArray(tags) ? tags.filter(Boolean)
+        : typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean)
+        : c.tags || [];
+      const updated = {
+        ...c,
+        replaces: id,
+        question: question ?? c.question,
+        deadline: newDeadline,
+        options: newOptions,
+        votes: newVotesMap,
+        totalVotes: newTotalVotes,
+        tags: newTags,
+        updatedAt: new Date().toISOString()
+      };
+      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+    },
 
     async voteOnVote(id, choice) {
       const ssb = await openSsb();
@@ -68,7 +118,8 @@ module.exports = ({ cooler }) => {
       const userId = ssb.id;
       const now = moment();
       return new Promise((resolve, reject) => {
-        pull(ssb.createLogStream(), pull.collect((err, results) => {
+        pull(ssb.createLogStream({ limit: logLimit }), 
+        pull.collect((err, results) => {
           if (err) return reject(err);
           const tombstoned = new Set();
           const replaced = new Map();

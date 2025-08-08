@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -233,7 +235,7 @@ module.exports = ({ cooler }) => {
     async getTribeById(tribeId) {
       const ssb = await openSsb();
       return new Promise((res, rej) => pull(
-        ssb.createLogStream(),
+        ssb.createLogStream({ limit: logLimit }),
         pull.collect((err, msgs) => {
           if (err) return rej(err);
           const tombstoned = new Set();
@@ -278,7 +280,7 @@ module.exports = ({ cooler }) => {
     async listAll() {
       const ssb = await openSsb();
       return new Promise((res, rej) => pull(
-        ssb.createLogStream(),
+        ssb.createLogStream({ limit: logLimit }),
         pull.collect((err, msgs) => {
           if (err) return rej(err);
           const tombstoned = new Set();

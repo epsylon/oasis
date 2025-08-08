@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream')
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb
@@ -44,16 +46,16 @@ module.exports = ({ cooler }) => {
           const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : oldMsg.content.tags
           const match = blobMarkdown?.match(/\(([^)]+)\)/)
           const blobId = match ? match[1] : blobMarkdown
-          const updated = {
-            ...oldMsg.content,
-            replaces: id,
-            url: blobId || oldMsg.content.url,
-            tags,
-            title: title || '',
-            description: description || '',
-            meme: !!meme,
-            updatedAt: new Date().toISOString()
-          }
+	  const updated = {
+	    ...oldMsg.content,
+	    replaces: id,
+	    url: blobId || oldMsg.content.url,
+	    tags,
+	    title: title ?? oldMsg.content.title,
+	    description: description ?? oldMsg.content.description,
+	    meme: meme != null ? !!meme : !!oldMsg.content.meme,
+	    updatedAt: new Date().toISOString()
+	  }
           ssbClient.publish(updated, (err2, result) => err2 ? reject(err2) : resolve(result))
         })
       })
@@ -61,19 +63,28 @@ module.exports = ({ cooler }) => {
 
     async deleteImageById(id) {
       const ssbClient = await openSsb()
-      return new Promise((resolve, reject) => {
-        ssbClient.get(id, (err, msg) => {
-          if (err || !msg || msg.content?.type !== 'image') return reject(new Error('Image not found'))
-          if (msg.content.author !== userId) return reject(new Error('Not the author'))
-          const tombstone = {
-            type: 'tombstone',
-            target: id,
-            deletedAt: new Date().toISOString(),
-            author: userId
-          }
-          ssbClient.publish(tombstone, (err2, res) => err2 ? reject(err2) : resolve(res))
-        })
+      const author = ssbClient.id
+      const getMsg = (mid) => new Promise((resolve, reject) => {
+        ssbClient.get(mid, (err, msg) => err || !msg ? reject(new Error('Image not found')) : resolve(msg))
       })
+      const publishTomb = (target) => new Promise((resolve, reject) => {
+        ssbClient.publish({
+          type: 'tombstone',
+          target,
+          deletedAt: new Date().toISOString(),
+          author
+        }, (err, res) => err ? reject(err) : resolve(res))
+      })
+      const tip = await getMsg(id)
+      if (tip.content?.type !== 'image') throw new Error('Image not found')
+      if (tip.content.author !== author) throw new Error('Not the author')
+      let currentId = id
+      while (currentId) {
+        const msg = await getMsg(currentId)
+        await publishTomb(currentId)
+        currentId = msg.content?.replaces || null
+      }
+      return { ok: true }
     },
 
     async listAll(filter = 'all') {
@@ -81,26 +92,23 @@ module.exports = ({ cooler }) => {
       const userId = ssbClient.id
       const messages = await new Promise((res, rej) => {
         pull(
-          ssbClient.createLogStream(),
+          ssbClient.createLogStream({ limit: logLimit }),
           pull.collect((err, msgs) => err ? rej(err) : res(msgs))
         )
       })
-
       const tombstoned = new Set(
         messages
           .filter(m => m.value.content?.type === 'tombstone')
           .map(m => m.value.content.target)
       )
-
       const replaces = new Map()
       const latest = new Map()
-
       for (const m of messages) {
         const k = m.key
         const c = m.value?.content
         if (!c || c.type !== 'image') continue
-        if (tombstoned.has(k)) continue
         if (c.replaces) replaces.set(c.replaces, k)
+        if (tombstoned.has(k)) continue
         latest.set(k, {
           key: k,
           url: c.url,
@@ -115,13 +123,13 @@ module.exports = ({ cooler }) => {
           opinions_inhabitants: c.opinions_inhabitants || []
         })
       }
-
       for (const oldId of replaces.keys()) {
         latest.delete(oldId)
       }
-
+      for (const delId of tombstoned) {
+        latest.delete(delId)
+      }
       let images = Array.from(latest.values())
-
       if (filter === 'mine') {
         images = images.filter(img => img.author === userId)
       } else if (filter === 'recent') {
@@ -138,7 +146,6 @@ module.exports = ({ cooler }) => {
       } else {
         images = images.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       }
-
       return images
     },
 

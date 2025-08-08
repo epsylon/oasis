@@ -13,6 +13,15 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.4.3 - 2025-08-08
+
+### Added
+
+- Limiter to blockchain logstream retrieval.
+
+  + Jobs: Module to discover and manage jobs.
+  + BlockExplorer: Module to navigate the blockchain.
+
 ## v0.4.0 - 2025-07-29
 
 ### Added

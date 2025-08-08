@@ -55,7 +55,7 @@ const renderTaskItem = (task, filter, userId) => {
       )
     ),
     br,
-    task.tags && task.tags.length
+      Array.isArray(task.tags) && task.tags.length
       ? div({ class: 'card-tags' },
           task.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
@@ -205,7 +205,7 @@ exports.singleTaskView = async (task, filter) => {
               : i18n.noAssignees
           )
         ),
-        task.tags && task.tags.length
+          Array.isArray(task.tags) && task.tags.length
           ? div({ class: 'card-tags' },
               task.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
@@ -214,7 +214,7 @@ exports.singleTaskView = async (task, filter) => {
           : null
       ),
       div({ class: "task-actions" },
-        form({ method: "POST", action: `/tasks/attend/${encodeURIComponent(task.id)}` },
+        form({ method: "POST", action: `/tasks/assign/${encodeURIComponent(task.id)}` },
           button({ type: "submit" },
             task.assignees.includes(userId)
               ? i18n.taskUnassignButton

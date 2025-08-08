@@ -32,7 +32,8 @@
     "pixeliaMod": "on",
     "agendaMod": "on",
     "aiMod": "on",
-    "forumMod": "on"
+    "forumMod": "on",
+    "jobsMod": "on"
   },
   "wallet": {
     "url": "http://localhost:7474",
@@ -42,5 +43,8 @@
   },
   "ai": {
     "prompt": "Provide an informative and precise response."
+  },
+  "ssbLogStream": {
+    "limit": 1000
   }
 }

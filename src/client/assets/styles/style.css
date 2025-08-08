@@ -1236,7 +1236,19 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
     margin-top: 10px;
 }
 
+.job-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
 .tribe-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.pm-actions{
     display: flex;
     gap: 10px;
     margin-top: 10px;
@@ -2080,4 +2092,27 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
     flex-direction: column;
     gap: 18px;
   }
+}
+
+/*inbox/pm*/
+.pm-card {
+  border-radius: 10px;
+  margin-bottom: 24px;
+  background: #262626;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.16);
+  padding: 22px 28px;
+}
+
+.pm-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 12px;
+  font-size: 1em;
+  color: #ffd54f;
+}
+
+.pm-title {
+  font-weight: bold;
+  margin-bottom: 8px;
 }

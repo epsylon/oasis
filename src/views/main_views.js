@@ -242,6 +242,15 @@ const renderMarketLink = () => {
     : '';
 };
 
+const renderJobsLink = () => {
+  const jobsMod = getConfig().modules.jobsMod === 'on';
+  return jobsMod 
+    ? [
+      navLink({ href: "/jobs", emoji: "ꗒ", text: i18n.jobsTitle }),
+      ]
+    : '';
+};
+
 const renderTribesLink = () => {
   const tribesMod = getConfig().modules.tribesMod === 'on';
   return tribesMod 
@@ -453,6 +462,7 @@ const template = (titlePrefix, ...elements) => {
               renderFeedLink(),
               renderPixeliaLink(),
               renderMarketLink(),
+              renderJobsLink(),
               renderTransfersLink(),
               renderBookmarksLink(),
               renderImagesLink(),
@@ -940,8 +950,17 @@ const prefix = section(
     relationship.me
       ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
       : null,
-    a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes)
-    )
+    a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes),
+     !relationship.me
+        ? a(
+            { 
+              href: `/pm?recipients=${encodeURIComponent(feedId)}`, 
+              class: "btn" 
+            },
+            i18n.pmCreateButton
+          )
+        : null
+      )
    )
   );
 
@@ -1186,18 +1205,57 @@ exports.mentionsView = ({ messages, myFeedId }) => {
   );
 };
 
-exports.privateView = async (input, filter) => {
-  const messages = Array.isArray(input) ? input : input.messages;
+exports.privateView = async (messagesInput, filter) => {
+  const messages = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages;
   const userId = await getUserId();
-  const counts = {
-    inbox: messages.filter(m => m.value.content.to?.includes(userId)).length,
-    sent: messages.filter(m => m.value.content.from === userId).length
-  };
-
   const filtered =
     filter === 'sent' ? messages.filter(m => m.value.content.from === userId) :
     filter === 'inbox' ? messages.filter(m => m.value.content.to?.includes(userId)) :
     messages;
+
+  function header({ sentAt, from, toLinks, botIcon = '', botLabel = '' }) {
+    return div({ class: 'pm-header' },
+      span({ class: 'date-link' }, `${moment(sentAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
+      botIcon || botLabel ? span({ class: 'pm-from' }, `${botIcon} ${botLabel}`) : null,
+      !botIcon && !botLabel
+        ? [
+            span({ class: 'pm-from' },
+              'From: ', a({ href: `/author/${encodeURIComponent(from)}`, class: 'user-link' }, from)
+            ),
+            span({ class: 'pm-to' },
+              'To: ', toLinks
+            )
+          ] : null
+    );
+  }
+
+  function actions({ key, replyId }) {
+    return div({ class: 'pm-actions' },
+      form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'delete-message-form', style: 'display:inline-block;margin-right:8px;' },
+        button({ type: 'submit', class: 'delete-btn' }, i18n.privateDelete)
+      ),
+      form({ method: 'GET', action: '/pm', style: 'display:inline-block;' },
+        input({ type: 'hidden', name: 'recipients', value: replyId }),
+        button({ type: 'submit', class: 'reply-btn' }, i18n.pmCreateButton || 'Write a PM')
+      )
+    );
+  }
+  
+  function clickableLinks(str) {
+    return str
+      .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g,
+        (match, userId) =>
+          `<a class="user-link" href="/author/${encodeURIComponent(userId)}">${match}</a>`
+      )
+      .replace(/\/jobs\/([%a-zA-Z0-9/+._=-]+\.sha256)/g,
+        (match, jobId) =>
+          `<a class="job-link" href="/jobs/${jobId}">${match}</a>`
+      )
+      .replace(/\/market\/([%a-zA-Z0-9/+._=-]+\.sha256)/g,
+        (match, itemId) =>
+          `<a class="market-link" href="/market/${itemId}">${match}</a>`
+      );
+  }
 
   return template(
     i18n.private,
@@ -1206,55 +1264,88 @@ exports.privateView = async (input, filter) => {
         h2(i18n.private),
         p(i18n.privateDescription)
       ),
-	div({ class: 'filters' },
-	  form({ method: 'GET', action: '/inbox' }, [
-	    button({
-	      type: 'submit',
-	      name: 'filter',
-	      value: 'inbox',
-	      class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
-	    }, i18n.privateInbox),
-	    button({
-	      type: 'submit',
-	      name: 'filter',
-	      value: 'sent',
-	      class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
-	    }, i18n.privateSent),
-	    button({
-	      type: 'submit',
-	      name: 'filter',
-	      value: 'create',
-	      class: 'create-button',
-	      formaction: '/pm',
-	      formmethod: 'GET'
-	    }, i18n.pmCreateButton)
-	  ])
-	),
+      div({ class: 'filters' },
+        form({ method: 'GET', action: '/inbox' }, [
+          button({
+            type: 'submit',
+            name: 'filter',
+            value: 'inbox',
+            class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
+          }, i18n.privateInbox),
+          button({
+            type: 'submit',
+            name: 'filter',
+            value: 'sent',
+            class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
+          }, i18n.privateSent),
+          button({
+            type: 'submit',
+            name: 'filter',
+            value: 'create',
+            class: 'create-button',
+            formaction: '/pm',
+            formmethod: 'GET'
+          }, i18n.pmCreateButton)
+        ])
+      ),
       div({ class: 'message-list' },
         filtered.length
           ? filtered.map(msg => {
               const content = msg?.value?.content;
               const author = msg?.value?.author;
-              if (!content || !author) {
+              if (!content || !author)
                 return div({ class: 'malformed-message' }, 'Invalid message');
-              }
               const subject = content.subject || '(no subject)';
               const text = content.text || '';
-              const sentAt = new Date(content.sentAt || msg.timestamp).toLocaleString();
+              const sentAt = new Date(content.sentAt || msg.timestamp);
               const from = content.from;
               const toLinks = (content.to || []).map(addr =>
                 a({ class: 'user-link', href: `/author/${encodeURIComponent(addr)}` }, addr)
               );
-              return div({ class: 'message-item' },
-                p({ class: 'card-footer' },
-                span({ class: 'date-link' }, `${sentAt} ${i18n.performed} `),
-                 a({ href: `/author/${encodeURIComponent(from)}`, class: 'user-link' }, `${from}`)
-                ),
+              let jobMatch = text.match(/has subscribed to your job offer "([^"]+)"/);
+              let jobLinkMatch = text.match(/\/jobs\/([%a-zA-Z0-9/+._-]+\.sha256)/);
+              if (jobMatch && jobLinkMatch) {
+                const jobTitle = jobMatch[1];
+                const jobId = jobLinkMatch[1];
+                return div({ class: 'pm-card job-sub-notification' },
+                  header({ sentAt, from, toLinks, botIcon: '🟡', botLabel: '42-JobsBOT' }),
+                  h2({ class: 'pm-title', style: 'color:#ffe082;' }, 'New subscription to your job offer'),
+                  p(
+                    'Inhabitant with OASIS ID: ',
+                    a({ class: 'user-link', href: `/author/${encodeURIComponent(from)}` }, from),
+                    ' has subscribed to your job offer ',
+                    a({ class: "job-link", href: `/jobs/${encodeURIComponent(decodeURIComponent(jobId))}` }, `"${jobTitle}"`)
+                  ),
+                  actions({ key: msg.key, replyId: from })
+                );
+              }
+              let saleMatch = subject.match(/item "([^"]+)" has been sold/);
+              let buyerMatch = text.match(/OASIS ID: ([\w=/+.-]+)/);
+              let priceMatch = text.match(/for: \$([\d.]+)/);
+              let marketIdMatch = text.match(/\/market\/([%a-zA-Z0-9/+._-]+\.sha256)/);
+              if (saleMatch && buyerMatch && priceMatch && marketIdMatch) {
+                const itemTitle = saleMatch[1];
+                const buyerId = buyerMatch[1];
+                const price = priceMatch[1];
+                const marketId = marketIdMatch[1];
+                return div({ class: 'pm-card market-sold-notification' },
+                  header({ sentAt, from, toLinks, botIcon: '💰', botLabel: '42-MarketBOT' }),
+                  h2({ class: 'pm-title', style: 'color:#80cbc4;' }, 'Item Sold'),
+                  p(
+                    'Your item ',
+                    a({ class: 'market-link', href: `/market/${encodeURIComponent(decodeURIComponent(marketId))}` }, `"${itemTitle}"`),
+                    ' has been sold to ',
+                    a({ class: 'user-link', href: `/author/${encodeURIComponent(buyerId)}` }, buyerId),
+                    ` for $${price}.`
+                  ),
+                  actions({ key: msg.key, replyId: buyerId })
+                );
+              }
+              return div({ class: 'pm-card normal-pm' },
+                header({ sentAt, from, toLinks }),
                 h2(subject),
                 p({ class: 'message-text' }, ...renderUrl(text)),
-                form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(msg.key)}`, class: 'delete-message-form' },
-                  button({ type: 'submit', class: 'delete-btn' }, i18n.privateDelete)
-                )
+                actions({ key: msg.key, replyId: from })
               );
             })
           : p({ class: 'empty' }, i18n.noPrivateMessages)
@@ -1464,7 +1555,7 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
       form(
         { action, method: "post" },
         [
-          input({ type: "hidden", name: "text", value: renderedText }), // Pass the formatted text
+          input({ type: "hidden", name: "text", value: renderedText }),
           input({ type: "hidden", name: "contentWarning", value: contentWarning || "" }),
           input({ type: "hidden", name: "mentions", value: JSON.stringify(mentions) }),
           button({ type: "submit" }, i18n.publish)

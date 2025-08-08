@@ -6,6 +6,8 @@ const { about, friend } = models({
   cooler: coolerInstance,
   isPublic: require('../server/ssb_config').public,
 });
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -23,11 +25,10 @@ module.exports = ({ cooler }) => {
           timeoutPromise(5000) 
         ]).catch(() => '/assets/images/default-avatar.png'); 
       };
-
       if (filter === 'GALLERY') {
         const feedIds = await new Promise((res, rej) => {
           pull(
-            ssbClient.createLogStream(),
+            ssbClient.createLogStream({ limit: logLimit }),
             pull.filter(msg => {
               const c = msg.value?.content;
               const a = msg.value?.author;
@@ -43,7 +44,6 @@ module.exports = ({ cooler }) => {
         });
 
         const uniqueFeedIds = Array.from(new Set(feedIds.map(r => r.value.author).filter(Boolean)));
-
         const users = await Promise.all(
           uniqueFeedIds.map(async (feedId) => {
             const name = await about.name(feedId);
@@ -56,14 +56,12 @@ module.exports = ({ cooler }) => {
             return { id: feedId, name, description, photo };
           })
         );
-
         return users;
       }
-
       if (filter === 'all') {
         const feedIds = await new Promise((res, rej) => {
           pull(
-            ssbClient.createLogStream(),
+            ssbClient.createLogStream({ limit: logLimit }),
             pull.filter(msg => {
               const c = msg.value?.content;
               const a = msg.value?.author;
@@ -79,7 +77,6 @@ module.exports = ({ cooler }) => {
         });
 
         const uniqueFeedIds = Array.from(new Set(feedIds.map(r => r.value.author).filter(Boolean)));
-
         const users = await Promise.all(
           uniqueFeedIds.map(async (feedId) => {
             const name = await about.name(feedId);
@@ -93,10 +90,8 @@ module.exports = ({ cooler }) => {
             return { id: feedId, name, description, photo };
           })
         );
-
         const deduplicated = Array.from(new Map(users.filter(u => u && u.id).map(u => [u.id, u])).values());
         let filtered = deduplicated;
-
         if (search) {
           const q = search.toLowerCase();
           filtered = filtered.filter(u =>
@@ -105,10 +100,8 @@ module.exports = ({ cooler }) => {
             u.id?.toLowerCase().includes(q)
           );
         }
-
         return filtered;
       }
-
       if (filter === 'contacts') {
         const all = await this.listInhabitants({ filter: 'all' });
         const result = [];
@@ -118,7 +111,6 @@ module.exports = ({ cooler }) => {
         }
         return Array.from(new Map(result.map(u => [u.id, u])).values());
       }
-
       if (filter === 'blocked') {
         const all = await this.listInhabitants({ filter: 'all' });
         const result = [];
@@ -128,7 +120,6 @@ module.exports = ({ cooler }) => {
         }
         return Array.from(new Map(result.map(u => [u.id, u])).values());
       }
-
       if (filter === 'SUGGESTED') {
         const all = await this.listInhabitants({ filter: 'all' });
         const result = [];
@@ -143,11 +134,10 @@ module.exports = ({ cooler }) => {
         return Array.from(new Map(result.map(u => [u.id, u])).values())
           .sort((a, b) => (b.mutualCount || 0) - (a.mutualCount || 0));
       }
-
       if (filter === 'CVs' || filter === 'MATCHSKILLS') {
         const records = await new Promise((res, rej) => {
           pull(
-            ssbClient.createLogStream(),
+            ssbClient.createLogStream({ limit: logLimit }),
             pull.filter(msg =>
               msg.value.content?.type === 'curriculum' &&
               msg.value.content?.type !== 'tombstone'
@@ -180,7 +170,6 @@ module.exports = ({ cooler }) => {
           }
           return cvs;
         }
-
         if (filter === 'MATCHSKILLS') {
           const cv = await this.getCVByUserId();
           const userSkills = cv
@@ -196,12 +185,12 @@ module.exports = ({ cooler }) => {
             if (c.id === userId) return null;
             const common = c.skills.map(s => s.toLowerCase()).filter(s => userSkills.includes(s));
             if (!common.length) return null;
-            return { ...c, commonSkills: common };
+            const matchScore = common.length / userSkills.length;
+            return { ...c, commonSkills: common, matchScore };
           }).filter(Boolean);
-          return matches.sort((a, b) => b.commonSkills.length - a.commonSkills.length);
+          return matches.sort((a, b) => b.matchScore - a.matchScore);
         }
       }
-
       return [];
     },
 
@@ -229,6 +218,44 @@ module.exports = ({ cooler }) => {
         createdAt: c.createdAt
       };
     },
+    
+      async getLatestAboutById(id) {
+        const ssbClient = await openSsb();
+        const records = await new Promise((res, rej) => {
+        pull(
+          ssbClient.createUserStream({ id }),
+          pull.filter(msg =>
+            msg.value.content?.type === 'about' &&
+            msg.value.content?.type !== 'tombstone'
+          ),
+          pull.collect((err, msgs) => err ? rej(err) : res(msgs))
+        );
+      });
+      if (!records.length) return null;
+      const latest = records.sort((a, b) => b.value.timestamp - a.value.timestamp)[0];
+      return latest.value.content;
+    },
+    
+    async getFeedByUserId(id) {
+      const ssbClient = await openSsb();
+      const targetId = id || ssbClient.id;
+      const records = await new Promise((res, rej) => {
+      pull(
+      ssbClient.createUserStream({ id: targetId }),
+      pull.filter(msg =>
+        msg.value &&
+        msg.value.content &&
+        typeof msg.value.content.text === 'string' &&
+        msg.value.content?.type !== 'tombstone'
+      ),
+      pull.collect((err, msgs) => err ? rej(err) : res(msgs))
+      );
+    });
+    return records
+    .filter(m => typeof m.value.content.text === 'string')
+    .sort((a, b) => b.value.timestamp - a.value.timestamp)
+    .slice(0, 10);
+    },
 
     async getCVByUserId(id) {
       const ssbClient = await openSsb();
@@ -244,44 +271,6 @@ module.exports = ({ cooler }) => {
         );
       });
       return records.length ? records[records.length - 1].value.content : null;
-    },
-
-    async _getLatestAboutById(id) {
-      const ssbClient = await openSsb();
-      const records = await new Promise((res, rej) => {
-        pull(
-          ssbClient.createUserStream({ id }),
-          pull.filter(msg =>
-            msg.value.content?.type === 'about' &&
-            msg.value.content?.type !== 'tombstone'
-          ),
-          pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-        );
-      });
-      if (!records.length) return null;
-      const latest = records.sort((a, b) => b.value.timestamp - a.value.timestamp)[0];
-      return latest.value.content;
-    },
-
-    async getFeedByUserId(id) {
-      const ssbClient = await openSsb();
-      const targetId = id || ssbClient.id;
-      const records = await new Promise((res, rej) => {
-        pull(
-          ssbClient.createUserStream({ id: targetId }),
-          pull.filter(msg =>
-            msg.value &&
-            msg.value.content &&
-            typeof msg.value.content.text === 'string' &&
-            msg.value.content?.type !== 'tombstone'
-          ),
-          pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-        );
-      });
-      return records
-        .filter(m => typeof m.value.content.text === 'string')
-        .sort((a, b) => b.value.timestamp - a.value.timestamp)
-        .slice(0, 10);
     }
   };
 };

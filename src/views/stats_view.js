@@ -7,7 +7,7 @@ exports.statsView = (stats, filter) => {
   const modes = ['ALL', 'MINE', 'TOMBSTONE'];
   const types = [
     'bookmark', 'event', 'task', 'votes', 'report', 'feed',
-    'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe', 'market'
+    'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe', 'market', 'forum', 'job'
   ];
   const totalContent = types.reduce((sum, t) => sum + (stats.content[t] || 0), 0);
   const totalOpinions = types.reduce((sum, t) => sum + (stats.opinions[t] || 0), 0);
@@ -64,6 +64,15 @@ exports.statsView = (stats, filter) => {
               h2(`${i18n.statsDiscoveredMarket}: ${stats.content.market}`)
             ),
             div({ style: blockStyle },
+              h2(`${i18n.statsDiscoveredJob}: ${stats.content.job}`)
+            ),
+            div({ style: blockStyle },
+              h2(`${i18n.statsDiscoveredTransfer}: ${stats.content.transfer}`)
+            ),
+            div({ style: blockStyle },
+              h2(`${i18n.statsDiscoveredForum}: ${stats.content.forum}`)
+            ),
+            div({ style: blockStyle },
               h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
               ul(types.map(t =>
                 stats.opinions[t] > 0
@@ -88,6 +97,15 @@ exports.statsView = (stats, filter) => {
               ),
               div({ style: blockStyle },
                 h2(`${i18n.statsYourMarket}: ${stats.content.market}`)
+              ),
+              div({ style: blockStyle },
+                h2(`${i18n.statsYourJob}: ${stats.content.job}`)
+              ),
+              div({ style: blockStyle },
+                h2(`${i18n.statsYourTransfer}: ${stats.content.transfer}`)
+              ),
+              div({ style: blockStyle },
+                h2(`${i18n.statsYourForum}: ${stats.content.forum}`)
               ),
               div({ style: blockStyle },
                 h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),

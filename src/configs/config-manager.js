@@ -39,6 +39,7 @@ if (!fs.existsSync(configFilePath)) {
       "agendaMod": "on",
       "aiMod": "on",
       "forumMod": "on",
+      "jobsMod": "on"
     },
     "wallet": {
       "url": "http://localhost:7474",
@@ -48,6 +49,9 @@ if (!fs.existsSync(configFilePath)) {
     },
     "ai": {
       "prompt": "Provide an informative and precise response."
+    },
+    "ssbLogStream": {
+      "limit": 1000
     }
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));

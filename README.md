@@ -60,6 +60,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Agenda: Module to manage all your assigned items.
  + AI: Module to talk with a LLM called '42'.
  + Audios: Module to discover and manage audios.
+ + BlockExplorer: Module to navigate the blockchain.
  + Bookmarks: Module to discover and manage bookmarks.	
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
  + Documents: Module to discover and manage documents.	
@@ -69,6 +70,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Governance: Module to discover and manage votes.	
  + Images: Module to discover and manage images.	
  + Invites: Module to manage and apply invite codes.	
+ + Jobs: Module to discover and manage jobs.	
  + Legacy: Module to manage your secret (private key) quickly and securely.	
  + Latest: Module to receive the most recent posts and discussions.
  + Market: Module to exchange goods or services.

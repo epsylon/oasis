@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -71,7 +73,7 @@ module.exports = ({ cooler }) => {
     const userId = ssbClient.id;
     const messages = await new Promise((res, rej) => {
       pull(
-        ssbClient.createLogStream(),
+        ssbClient.createLogStream({ limit: logLimit }),
         pull.collect((err, msgs) => err ? rej(err) : res(msgs))
       );
     });
@@ -122,6 +124,48 @@ module.exports = ({ cooler }) => {
       })
     );
     filtered = filtered.filter(Boolean);
+    const signatureOf = (m) => {
+    const c = m.value?.content || {};
+    switch (c.type) {
+      case 'document':
+      case 'image':
+      case 'audio':
+      case 'video':
+        return `${c.type}::${(c.url || '').trim()}`;
+      case 'bookmark': {
+        const u = (c.url || c.bookmark || '').trim().toLowerCase();
+        return `bookmark::${u}`;
+      }
+      case 'feed': {
+        const t = (c.text || '').replace(/\s+/g, ' ').trim();
+        return `feed::${t}`;
+      }
+      case 'votes': {
+        const q = (c.question || '').replace(/\s+/g, ' ').trim();
+        return `votes::${q}`;
+      }
+      case 'transfer': {
+        const concept = (c.concept || '').trim();
+        const amount = c.amount || '';
+        const from = c.from || '';
+        const to = c.to || '';
+        const deadline = c.deadline || '';
+        return `transfer::${concept}|${amount}|${from}|${to}|${deadline}`;
+      }
+      default:
+        return `key::${m.key}`;
+    }
+  };
+
+    const bySig = new Map();
+    for (const m of filtered) {
+      const sig = signatureOf(m);
+      const prev = bySig.get(sig);
+      if (!prev || (m.value?.timestamp || 0) > (prev.value?.timestamp || 0)) {
+        bySig.set(sig, m);
+      }
+    }
+    filtered = Array.from(bySig.values());
 
     if (filter === 'MINE') {
       filtered = filtered.filter(m => m.value.author === userId);

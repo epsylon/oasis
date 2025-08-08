@@ -134,6 +134,24 @@ const settingsView = ({ version, aiPrompt }) => {
     ),
     section(
       div({ class: "tags-header" },
+      h2(i18n.ssbLogStream),
+      p(i18n.ssbLogStreamDescription),
+      form(
+        { action: "/settings/ssb-logstream", method: "POST" },
+        input({
+          type: "number",
+          id: "ssb_log_limit",
+          name: "ssb_log_limit",
+          min: 1,
+          max: 100000,
+          value: currentConfig.ssbLogStream?.limit || 1000
+        }), br(),br(),
+        button({ type: "submit" }, i18n.saveSettings)
+      )
+     )
+    ),
+    section(
+      div({ class: "tags-header" },
         h2(i18n.indexes),
         p(i18n.indexesDescription),
         rebuildButton

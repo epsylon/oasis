@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, input, textarea, br, label } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 
-exports.pmView = async () => {
+exports.pmView = async (initialRecipients = '') => {
   const title = i18n.pmSendTitle;
   const description = i18n.pmDescription;
 
@@ -17,7 +17,13 @@ exports.pmView = async () => {
           form({ method: "POST", action: "/pm" },
             label({ for: "recipients" }, i18n.pmRecipients),
             br(),
-            input({ type: "text", name: "recipients", placeholder: i18n.pmRecipientsHint, required: true }),
+            input({
+              type: "text",
+              name: "recipients",
+              placeholder: i18n.pmRecipientsHint,
+              required: true,
+              value: initialRecipients
+            }),
             br(),
             label({ for: "subject" }, i18n.pmSubject),
             br(),

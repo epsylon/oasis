@@ -1,5 +1,7 @@
 import pull from 'pull-stream';
 import gui from '../client/gui.js';
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const cooler = gui({ offline: false });
 
@@ -52,7 +54,7 @@ async function buildContext(maxItems = 100) {
   const ssb = await cooler.open();
   return new Promise((resolve, reject) => {
     pull(
-      ssb.createLogStream(),
+      ssb.createLogStream({ limit: logLimit }),
       pull.collect((err, msgs) => {
         if (err) return reject(err);
 

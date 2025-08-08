@@ -15,6 +15,9 @@ const os = require('os');
 
 const ssbRef = require("../server/node_modules/ssb-ref");
 
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
+
 const isEncrypted = (message) => typeof message.value.content === "string";
 const isNotEncrypted = (message) => isEncrypted(message) === false;
 
@@ -583,7 +586,7 @@ models.meta = {
     query,
     filter = null,
   }) => {
-    const source = ssb.createLogStream({ reverse: true, limit: 100 });
+    const source = ssb.createLogStream({ reverse: true,  limit: logLimit });
 
     return new Promise((resolve, reject) => {
       pull(
@@ -1705,7 +1708,7 @@ const post = {
       const myFeedId = ssb.id;
       const rawMessages = await new Promise((resolve, reject) => {
         pull(
-          ssb.createLogStream({ reverse: true, limit: 1000 }),
+          ssb.createLogStream({ reverse: true, limit: logLimit }),
           pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
         );
       });

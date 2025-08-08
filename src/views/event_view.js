@@ -94,7 +94,7 @@ exports.eventView = async (events, filter, eventId) => {
 
   let filtered
   if (filter === 'all') {
-    filtered = list.filter(e => e.isPublic === "public")
+    filtered = list.filter(e => String(e.isPublic).toLowerCase() === 'public')
   } else if (filter === 'mine') {
     filtered = list.filter(e => e.organizer === userId)
   } else if (filter === 'today') {

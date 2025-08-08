@@ -17,6 +17,7 @@ const modulesView = () => {
     { name: 'governance', label: i18n.modulesGovernanceLabel, description: i18n.modulesGovernanceDescription },
     { name: 'images', label: i18n.modulesImagesLabel, description: i18n.modulesImagesDescription },
     { name: 'invites', label: i18n.modulesInvitesLabel, description: i18n.modulesInvitesDescription },
+    { name: 'jobs', label: i18n.modulesJobsLabel, description: i18n.modulesJobsDescription },
     { name: 'legacy', label: i18n.modulesLegacyLabel, description: i18n.modulesLegacyDescription },
     { name: 'latest', label: i18n.modulesLatestLabel, description: i18n.modulesLatestDescription },
     { name: 'market', label: i18n.modulesMarketLabel, description: i18n.modulesMarketDescription },

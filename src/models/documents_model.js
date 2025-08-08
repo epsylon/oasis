@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream')
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const extractBlobId = str => {
   if (!str || typeof str !== 'string') return null
@@ -83,7 +85,7 @@ module.exports = ({ cooler }) => {
       const userId = ssbClient.id
       const messages = await new Promise((res, rej) => {
         pull(
-          ssbClient.createLogStream(),
+          ssbClient.createLogStream({ limit: logLimit }),
           pull.collect((err, msgs) => err ? rej(err) : res(msgs))
         )
       })

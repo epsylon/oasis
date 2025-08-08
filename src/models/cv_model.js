@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const extractBlobId = str => {
   if (!str || typeof str !== 'string') return null;
@@ -6,11 +8,17 @@ const extractBlobId = str => {
   return match ? match[1] : str.trim();
 };
 
-const parseCSV = str => str ? str.split(',').map(s => s.trim()).filter(Boolean) : [];
+const parseCSV = str => str
+  ? str.split(',').map(s => s.trim()).filter(Boolean)
+  : [];
 
 module.exports = ({ cooler }) => {
   let ssb;
-  const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
+
+  const openSsb = async () => {
+    if (!ssb) ssb = await cooler.open();
+    return ssb;
+  };
 
   return {
     type: 'curriculum',
@@ -47,16 +55,22 @@ module.exports = ({ cooler }) => {
     async updateCV(id, data, photoBlobId) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
+
       const old = await new Promise((res, rej) =>
         ssbClient.get(id, (err, msg) =>
-          err || !msg?.content ? rej(err || new Error('CV not found')) : res(msg)
+          err || !msg?.content
+            ? rej(err || new Error('CV not found'))
+            : res(msg)
         )
       );
-      if (old.content.author !== userId) throw new Error('Not the author');
+
+      if (old.content.author !== userId) {
+        throw new Error('Not the author');
+      }
 
       const tombstone = {
         type: 'tombstone',
-        id,
+        target: id,
         deletedAt: new Date().toISOString()
       };
 
@@ -95,17 +109,25 @@ module.exports = ({ cooler }) => {
     async deleteCVById(id) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
+
       const msg = await new Promise((res, rej) =>
         ssbClient.get(id, (err, msg) =>
-          err || !msg?.content ? rej(new Error('CV not found')) : res(msg)
+          err || !msg?.content
+            ? rej(new Error('CV not found'))
+            : res(msg)
         )
       );
-      if (msg.content.author !== userId) throw new Error('Not the author');
+
+      if (msg.content.author !== userId) {
+        throw new Error('Not the author');
+      }
+
       const tombstone = {
         type: 'tombstone',
-        id,
+        target: id,
         deletedAt: new Date().toISOString()
       };
+
       return new Promise((resolve, reject) => {
         ssbClient.publish(tombstone, (err, result) => err ? reject(err) : resolve(result));
       });
@@ -115,27 +137,30 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const authorId = targetUserId || userId;
+
       return new Promise((resolve, reject) => {
         pull(
-          ssbClient.createLogStream(),
+          ssbClient.createLogStream({ limit: logLimit }),
           pull.collect((err, msgs) => {
             if (err) return reject(err);
 
             const tombstoned = new Set(
               msgs
-                .filter(m => m.value?.content?.type === 'tombstone' && m.value?.content?.id)
-                .map(m => m.value.content.id)
+                .filter(m => m.value?.content?.type === 'tombstone' && m.value.content.target)
+                .map(m => m.value.content.target)
             );
 
             const cvMsgs = msgs
               .filter(m =>
                 m.value?.content?.type === 'curriculum' &&
-                m.value?.content?.author === authorId &&
+                m.value.content.author === authorId &&
                 !tombstoned.has(m.key)
               )
               .sort((a, b) => b.value.timestamp - a.value.timestamp);
 
-            if (!cvMsgs.length) return resolve(null);
+            if (!cvMsgs.length) {
+              return resolve(null);
+            }
 
             const latest = cvMsgs[0];
             resolve({ id: latest.key, ...latest.value.content });

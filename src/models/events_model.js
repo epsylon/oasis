@@ -1,6 +1,8 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const userId = config.keys.id;
 
@@ -162,31 +164,35 @@ module.exports = ({ cooler }) => {
       });
     },
 
-async listAll(author = null, filter = 'all') {
-  const ssbClient = await openSsb();
-  return new Promise((resolve, reject) => {
-    pull(
-      ssbClient.createLogStream(),
+    async listAll(author = null, filter = 'all') {
+      const ssbClient = await openSsb();
+      return new Promise((resolve, reject) => {
+      pull(
+      ssbClient.createLogStream({ limit: logLimit }),
       pull.collect((err, results) => {
         if (err) return reject(new Error("Error listing events: " + err.message));
         const tombstoned = new Set();
         const replaces = new Map();
         const byId = new Map();
+
         for (const r of results) {
           const k = r.key;
           const c = r.value.content;
           if (!c) continue;
+
           if (c.type === 'tombstone' && c.target) {
             tombstoned.add(c.target);
             continue;
           }
+
           if (c.type === 'event') {
-            if (tombstoned.has(k)) continue;
             if (c.replaces) replaces.set(c.replaces, k);
             if (author && c.organizer !== author) continue;
+
             let status = c.status || 'OPEN';
             const dateM = moment(c.date);
             if (dateM.isValid() && dateM.isBefore(moment())) status = 'CLOSED';
+
             byId.set(k, {
               id: k,
               title: c.title,
@@ -204,19 +210,19 @@ async listAll(author = null, filter = 'all') {
             });
           }
         }
-        for (const replaced of replaces.keys()) {
-          byId.delete(replaced);
-        }
+        replaces.forEach((_, oldId) => byId.delete(oldId));
+        tombstoned.forEach((id) => byId.delete(id));
+
         let out = Array.from(byId.values());
         if (filter === 'mine') out = out.filter(e => e.organizer === userId);
         if (filter === 'open') out = out.filter(e => e.status === 'OPEN');
         if (filter === 'closed') out = out.filter(e => e.status === 'CLOSED');
         resolve(out);
-      })
-    );
-  });
-}
-    
+        })
+       );
+     });
+    }
+
   };
 };
 

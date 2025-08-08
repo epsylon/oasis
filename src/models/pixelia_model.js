@@ -1,4 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -12,7 +14,7 @@ module.exports = ({ cooler }) => {
     const ssbClient = await openSsb();
     const messages = await new Promise((res, rej) => {
       pull(
-        ssbClient.createLogStream(),
+        ssbClient.createLogStream({ limit: logLimit }),
         pull.collect((err, msgs) => err ? rej(err) : res(msgs))
       );
     });
@@ -89,7 +91,7 @@ module.exports = ({ cooler }) => {
     const ssbClient = await openSsb();
     const messages = await new Promise((res, rej) => {
       pull(
-        ssbClient.createLogStream(),
+        ssbClient.createLogStream({ limit: logLimit }),
         pull.collect((err, msgs) => err ? rej(err) : res(msgs))
       );
     });

@@ -1,4 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
+const { config } = require('../server/SSB_server.js');
+const { getConfig } = require('../configs/config-manager.js');
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -8,28 +11,22 @@ module.exports = ({ cooler }) => {
     return ssb;
   };
 
-  const hasBlob = async (ssbClient, url) => {
-    return new Promise((resolve) => {
-      ssbClient.blobs.has(url, (err, has) => {
-        resolve(!err && has);
-      });
-    });
-  };
+  const hasBlob = async (ssbClient, url) =>
+    new Promise(resolve => ssbClient.blobs.has(url, (err, has) => resolve(!err && has)));
 
   return {
     async listBlockchain(filter = 'all') {
       const ssbClient = await openSsb();
-
-      const results = await new Promise((resolve, reject) => {
+      const results = await new Promise((resolve, reject) =>
         pull(
-          ssbClient.createLogStream({ reverse: true, limit: 1000 }),
+          ssbClient.createLogStream({ reverse: true, limit: logLimit }),
           pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-        );
-      });
+        )
+      );
 
       const tombstoned = new Set();
-      const replaces = new Map();
-      const blocks = new Map();
+      const idToBlock = new Map();
+      const referencedAsReplaces = new Set();
 
       for (const msg of results) {
         const k = msg.key;
@@ -38,64 +35,153 @@ module.exports = ({ cooler }) => {
         if (!c?.type) continue;
         if (c.type === 'tombstone' && c.target) {
           tombstoned.add(c.target);
+          idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
           continue;
         }
-        if (c.replaces) replaces.set(c.replaces, k);
-        blocks.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
+        if (c.replaces) referencedAsReplaces.add(c.replaces);
+        idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
       }
 
-      for (const oldId of replaces.keys()) blocks.delete(oldId);
-      for (const t of tombstoned) blocks.delete(t);
+      const tipBlocks = [];
+      for (const [id, block] of idToBlock.entries()) {
+        if (!referencedAsReplaces.has(id) && block.content.replaces) tipBlocks.push(block);
+      }
+      for (const [id, block] of idToBlock.entries()) {
+        if (!block.content.replaces && !referencedAsReplaces.has(id)) tipBlocks.push(block);
+      }
 
-      const blockData = await Promise.all(
-        Array.from(blocks.values()).map(async (block) => {
-          if (block.type === 'document') {
-            const url = block.content.url;
-            const validBlob = await hasBlob(ssbClient, url);
-            if (!validBlob) return null;
+      const groups = {};
+      for (const block of tipBlocks) {
+        const ancestor = block.content.replaces || block.id;
+        if (!groups[ancestor]) groups[ancestor] = [];
+        groups[ancestor].push(block);
+      }
+
+      const liveTipIds = new Set();
+      for (const groupBlocks of Object.values(groups)) {
+        let best = groupBlocks[0];
+        for (const block of groupBlocks) {
+          if (block.type === 'market') {
+            const isClosedSold = s => s === 'SOLD' || s === 'CLOSED';
+            if (isClosedSold(block.content.status) && !isClosedSold(best.content.status)) {
+              best = block;
+            } else if ((block.content.status === best.content.status) && block.ts > best.ts) {
+              best = block;
+            }
+          } else if (block.type === 'job' || block.type === 'forum') {
+            if (block.ts > best.ts) best = block;
+          } else {
+            if (block.ts > best.ts) best = block;
           }
-          return block;
-        })
-      );
+        }
+        liveTipIds.add(best.id);
+      }
 
+      const blockData = Array.from(idToBlock.values()).map(block => {
+        const c = block.content;
+        const rootDeleted = c?.type === 'forum' && c.root && tombstoned.has(c.root);
+        return {
+          ...block,
+          isTombstoned: tombstoned.has(block.id),
+          isReplaced: c.replaces
+            ? (!liveTipIds.has(block.id) || tombstoned.has(block.id))
+            : referencedAsReplaces.has(block.id) || tombstoned.has(block.id) || rootDeleted
+        };
+      });
+
+      let filtered = blockData;
       if (filter === 'RECENT') {
         const now = Date.now();
-        return blockData.filter(block => now - block.ts <= 24 * 60 * 60 * 1000);
+        filtered = blockData.filter(b => b && now - b.ts <= 24 * 60 * 60 * 1000);
       }
-
       if (filter === 'MINE') {
-        const userId = SSBconfig.config.keys.id;
-        return blockData.filter(block => block.author === userId);
+        filtered = blockData.filter(b => b && b.author === config.keys.id);
       }
 
-      return blockData.filter(Boolean);
+      return filtered.filter(Boolean);
     },
 
     async getBlockById(id) {
       const ssbClient = await openSsb();
-      return await new Promise((resolve, reject) => {
+      const results = await new Promise((resolve, reject) =>
         pull(
-          ssbClient.createLogStream({ reverse: true, limit: 1000 }),
-          pull.find((msg) => msg.key === id, async (err, msg) => {
-            if (err || !msg) return resolve(null);
-            const c = msg.value?.content;
-            if (!c?.type) return resolve(null);
-            if (c.type === 'document') {
-              const url = c.url;
-              const validBlob = await hasBlob(ssbClient, url);
-              if (!validBlob) return resolve(null);
-            }
+          ssbClient.createLogStream({ reverse: true, limit: logLimit }),
+          pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
+        )
+      );
 
-            resolve({
-              id: msg.key,
-              author: msg.value?.author,
-              ts: msg.value?.timestamp,
-              type: c.type,
-              content: c
-            });
-          })
-        );
-      });
+      const tombstoned = new Set();
+      const idToBlock = new Map();
+      const referencedAsReplaces = new Set();
+
+      for (const msg of results) {
+        const k = msg.key;
+        const c = msg.value?.content;
+        const author = msg.value?.author;
+        if (!c?.type) continue;
+        if (c.type === 'tombstone' && c.target) {
+          tombstoned.add(c.target);
+          idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
+          continue;
+        }
+        if (c.replaces) referencedAsReplaces.add(c.replaces);
+        idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
+      }
+
+      const tipBlocks = [];
+      for (const [bid, block] of idToBlock.entries()) {
+        if (!referencedAsReplaces.has(bid) && block.content.replaces) tipBlocks.push(block);
+      }
+      for (const [bid, block] of idToBlock.entries()) {
+        if (!block.content.replaces && !referencedAsReplaces.has(bid)) tipBlocks.push(block);
+      }
+
+      const groups = {};
+      for (const block of tipBlocks) {
+        const ancestor = block.content.replaces || block.id;
+        if (!groups[ancestor]) groups[ancestor] = [];
+        groups[ancestor].push(block);
+      }
+
+      const liveTipIds = new Set();
+      for (const groupBlocks of Object.values(groups)) {
+        let best = groupBlocks[0];
+        for (const block of groupBlocks) {
+          if (block.type === 'market') {
+            const isClosedSold = s => s === 'SOLD' || s === 'CLOSED';
+            if (isClosedSold(block.content.status) && !isClosedSold(best.content.status)) {
+              best = block;
+            } else if ((block.content.status === best.content.status) && block.ts > best.ts) {
+              best = block;
+            }
+          } else if (block.type === 'job' || block.type === 'forum') {
+            if (block.ts > best.ts) best = block;
+          } else {
+            if (block.ts > best.ts) best = block;
+          }
+        }
+        liveTipIds.add(best.id);
+      }
+
+      const block = idToBlock.get(id);
+      if (!block) return null;
+      if (block.type === 'document') {
+        const valid = await hasBlob(ssbClient, block.content.url);
+        if (!valid) return null;
+      }
+
+      const c = block.content;
+      const rootDeleted = c?.type === 'forum' && c.root && tombstoned.has(c.root);
+      const isTombstoned = tombstoned.has(block.id);
+      const isReplaced = c.replaces
+        ? (!liveTipIds.has(block.id) || tombstoned.has(block.id))
+        : referencedAsReplaces.has(block.id) || tombstoned.has(block.id) || rootDeleted;
+
+      return {
+        ...block,
+        isTombstoned,
+        isReplaced
+      };
     }
   };
 };

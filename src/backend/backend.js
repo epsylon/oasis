@@ -89,6 +89,7 @@ debug("Current configuration: %O", config);
 debug(`You can save the above to ${defaultConfigFile} to make \
 these settings the default. See the readme for details.`);
 const { saveConfig, getConfig } = require('../configs/config-manager');
+const configPath = path.join(__dirname, '../configs/oasis-config.json');
 
 const oasisCheckPath = "/.well-known/oasis";
 
@@ -210,6 +211,7 @@ const pixeliaModel = require('../models/pixelia_model')({ cooler, isPublic: conf
 const marketModel = require('../models/market_model')({ cooler, isPublic: config.public });
 const forumModel = require('../models/forum_model')({ cooler, isPublic: config.public });
 const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic: config.public });
+const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public });
 
 // starting warmup
 about._startNameWarmup();
@@ -411,6 +413,7 @@ const { marketView, singleMarketView } = require("../views/market_view");
 const { aiView } = require("../views/AI_view");
 const { forumView, singleForumView } = require("../views/forum_view");
 const { renderBlockchainView, renderSingleBlockView } = require("../views/blockchain_view");
+const { jobsView, singleJobsView, renderJobForm } = require("../views/jobs_view");
 
 let sharp;
 
@@ -528,7 +531,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 
     'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers', 
-    'feed', 'pixelia', 'agenda', 'ai', 'forum'
+    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs'
     ];
     const moduleStates = modules.reduce((acc, mod) => {
       acc[`${mod}Mod`] = configMods[`${mod}Mod`];
@@ -677,7 +680,7 @@ router
       return acc;
     }, {});
     ctx.body = await searchView({ results: groupedResults, query, types: [] });
-  })
+   })
   .get('/images', async (ctx) => {
     const imagesMod = ctx.cookies.get("imagesMod") || 'on';
     if (imagesMod !== 'on') {
@@ -688,16 +691,11 @@ router
     const images = await imagesModel.listAll(filter);
     ctx.body = await imageView(images, filter, null);
    })
-  .get('/images/edit/:id', async (ctx) => {
-    const imagesMod = ctx.cookies.get("imagesMod") || 'on';
-    if (imagesMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
-    }
-    const filter = 'edit';
-    const img = await imagesModel.getImageById(ctx.params.id, false);
-    ctx.body = await imageView([img], filter, ctx.params.id);
-  })
+  .get('/images/edit/:id', async ctx => {
+    const imageId = ctx.params.id;
+    const images = await imagesModel.listAll('all');
+    ctx.body = await imageView(images, 'edit', imageId);
+   })
   .get('/images/:imageId', async ctx => {
     const imageId = ctx.params.imageId;
     const filter = ctx.query.filter || 'all'; 
@@ -771,7 +769,8 @@ router
     ctx.body = await createCVView(cv, true)
   })
   .get('/pm', async ctx => {
-    ctx.body = await pmView();
+    const { recipients = '' } = ctx.query;
+    ctx.body = await pmView(recipients);
   })
   .get("/inbox", async (ctx) => {
     const inboxMod = ctx.cookies.get("inboxMod") || 'on';
@@ -832,19 +831,20 @@ router
       query.language = ctx.query.language || '';
       query.skills = ctx.query.skills || '';
     }
+    const userId = SSBconfig.config.keys.id;
     const inhabitants = await inhabitantsModel.listInhabitants({
       filter,
       ...query
     });
-
-    ctx.body = await inhabitantsView(inhabitants, filter, query);
+    ctx.body = await inhabitantsView(inhabitants, filter, query, userId);
   })
   .get('/inhabitant/:id', async (ctx) => {
     const id = ctx.params.id;
-    const about = await inhabitantsModel._getLatestAboutById(id);
+    const about = await inhabitantsModel.getLatestAboutById(id);
     const cv = await inhabitantsModel.getCVByUserId(id);
     const feed = await inhabitantsModel.getFeedByUserId(id);
-    ctx.body = await inhabitantsProfileView({ about, cv, feed });
+    const currentUserId = SSBconfig.config.keys.id;
+    ctx.body = await inhabitantsProfileView({ about, cv, feed }, currentUserId);
   })
   .get('/tribes', async ctx => {
     const filter = ctx.query.filter || 'all';
@@ -888,7 +888,8 @@ router
   .get('/activity', async ctx => {
     const filter = ctx.query.filter || 'recent';
     const actions = await activityModel.listFeed(filter);
-    ctx.body = activityView(actions, filter);
+    const userId = SSBconfig.config.keys.id;
+    ctx.body = activityView(actions, filter, userId);
   })
   .get("/profile", async (ctx) => {
     const myFeedId = await meta.myFeedId();
@@ -1212,35 +1213,75 @@ router
     ctx.body = await singleEventView(event, filter);
   })
   .get('/votes', async ctx => {
-      const filter = ctx.query.filter || 'all';
-      const voteList = await votesModel.listAll(filter);
-      ctx.body = await voteView(voteList, filter, null);
-   })
-   .get('/votes/:voteId', async ctx => {
-     const voteId = ctx.params.voteId;
-     const vote = await votesModel.getVoteById(voteId);
-     ctx.body = await voteView(vote);
+    const filter = ctx.query.filter || 'all';
+    const voteList = await votesModel.listAll(filter);
+    ctx.body = await voteView(voteList, filter, null);
    })
   .get('/votes/edit/:id', async ctx => {
-      const id = ctx.params.id;
-      const vote = await votesModel.getVoteById(id);
-      ctx.body = await voteView([vote], 'edit', id);
+    const id = ctx.params.id;
+    const vote = await votesModel.getVoteById(id);
+    ctx.body = await voteView([vote], 'edit', id);
+   })
+  .get('/votes/:voteId', async ctx => {
+    const voteId = ctx.params.voteId;
+    const vote = await votesModel.getVoteById(voteId);
+    ctx.body = await voteView(vote);
    })
   .get('/market', async ctx => {
+    const marketMod = ctx.cookies.get("marketMod") || 'on';
+    if (marketMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
     const filter = ctx.query.filter || 'all';
     const marketItems = await marketModel.listAllItems(filter);
     ctx.body = await marketView(marketItems, filter, null);
-  })
+   })
   .get('/market/edit/:id', async ctx => {
     const id = ctx.params.id;
     const marketItem = await marketModel.getItemById(id);
     ctx.body = await marketView([marketItem], 'edit', marketItem);
-  })
+   })
   .get('/market/:itemId', async ctx => {
     const itemId = ctx.params.itemId;
     const filter = ctx.query.filter || 'all'; 
     const item = await marketModel.getItemById(itemId); 
     ctx.body = await singleMarketView(item, filter);
+   })
+  .get('/jobs', async (ctx) => {
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on';
+    if (jobsMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    const filter = ctx.query.filter || 'ALL';
+    const query = {
+      search: ctx.query.search || '',
+    };
+    if (filter === 'CV') {
+      query.location = ctx.query.location || '';
+      query.language = ctx.query.language || '';
+      query.skills = ctx.query.skills || '';
+      const inhabitants = await inhabitantsModel.listInhabitants({ 
+        filter: 'CVs', 
+        ...query 
+      });
+      ctx.body = await jobsView(inhabitants, filter, query);
+      return;
+    }
+    const jobs = await jobsModel.listJobs(filter, ctx.state.user?.id, query);
+    ctx.body = await jobsView(jobs, filter, query);
+  })
+  .get('/jobs/edit/:id', async (ctx) => {
+    const id = ctx.params.id;
+    const job = await jobsModel.getJobById(id);
+    ctx.body = await jobsView([job], 'EDIT');
+  })
+  .get('/jobs/:jobId', async (ctx) => {
+    const jobId = ctx.params.jobId;
+    const filter = ctx.query.filter || 'ALL';
+    const job = await jobsModel.getJobById(jobId);
+    ctx.body = await singleJobsView(job, filter);
   })
   .get('/cipher', async (ctx) => {
     const cipherMod = ctx.cookies.get("cipherMod") || 'on';
@@ -2022,7 +2063,9 @@ router
   .post('/tasks/update/:id', koaBody(), async (ctx) => {
     const { title, description, startTime, endTime, priority, location, tags, isPublic } = ctx.request.body;
     const taskId = ctx.params.id;
-    const task = await tasksModel.getTaskById(taskId);
+    const parsedTags = Array.isArray(tags)
+      ? tags.filter(Boolean)
+      : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
     await tasksModel.updateTaskById(taskId, {
       title,
       description,
@@ -2030,13 +2073,11 @@ router
       endTime,
       priority,
       location,
-      tags,
-      isPublic,
-      createdAt: task.createdAt,
-      author: task.author
+      tags: parsedTags,
+      isPublic
     });
     ctx.redirect('/tasks?filter=mine');
-   })
+  })
   .post('/tasks/assign/:id', koaBody(), async (ctx) => {
     const taskId = ctx.params.id;
     await tasksModel.toggleAssignee(taskId);
@@ -2116,16 +2157,21 @@ router
     ctx.redirect('/events?filter=mine');
   })
   .post('/votes/create', koaBody(), async ctx => {
-    const { question, deadline, options = 'YES,NO,ABSTENTION', tags = '' } = ctx.request.body;
-    const parsedOptions = options.split(',').map(o => o.trim()).filter(Boolean);
+    const { question, deadline, options, tags = '' } = ctx.request.body;
+    const defaultOptions = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'];
+    const parsedOptions = options
+      ? options.split(',').map(o => o.trim()).filter(Boolean)
+      : defaultOptions;
     const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
     await votesModel.createVote(question, deadline, parsedOptions, parsedTags);
     ctx.redirect('/votes');
-    })
+  })
   .post('/votes/update/:id', koaBody(), async ctx => {
     const id = ctx.params.id;
-    const { question, deadline, options = 'YES,NO,ABSTENTION', tags = '' } = ctx.request.body;
-    const parsedOptions = options.split(',').map(o => o.trim()).filter(Boolean);
+    const { question, deadline, options, tags = '' } = ctx.request.body;
+    const parsedOptions = options
+      ? options.split(',').map(o => o.trim()).filter(Boolean)
+      : undefined;
     const parsedTags = tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [];
     await votesModel.updateVoteById(id, { question, deadline, options: parsedOptions, tags: parsedTags });
     ctx.redirect('/votes?filter=mine');
@@ -2150,7 +2196,7 @@ router
       ctx.redirect('/votes');
       return;
     }
-    await opinionsModel.createVote(voteId, category, 'votes');
+    await votesModel.createOpinion(voteId, category);
     ctx.redirect('/votes');
   })
   .post('/market/create', koaBody({ multipart: true }), async ctx => {
@@ -2220,6 +2266,7 @@ router
   })
   .post('/market/bid/:id', koaBody(), async ctx => {
     const id = ctx.params.id;
+    const userId = SSBconfig.config.keys.id;
     const { bidAmount } = ctx.request.body;
     const marketItem = await marketModel.getItemById(id);
     await marketModel.addBidToAuction(id, userId, bidAmount);
@@ -2228,7 +2275,91 @@ router
     }
     ctx.redirect('/market?filter=auctions');
   })
-
+  .post('/jobs/create', koaBody({ multipart: true }), async (ctx) => {
+   const {
+      job_type,
+      title,
+      description,
+      requirements,
+      languages,
+      job_time,
+      tasks,
+      location,
+      vacants,
+      salary
+    } = ctx.request.body;
+    const imageBlob = ctx.request.files?.image
+      ? await handleBlobUpload(ctx, 'image')
+      : null;
+    await jobsModel.createJob({
+      job_type,
+      title,
+      description,
+      requirements,
+      languages,
+      job_time,
+      tasks,
+      location,
+      vacants: vacants ? parseInt(vacants, 10) : 1,
+      salary: salary != null ? parseFloat(salary) : 0,
+      image: imageBlob
+    });
+    ctx.redirect('/jobs?filter=MINE');
+  })
+  .post('/jobs/update/:id', koaBody({ multipart: true }), async (ctx) => {
+    const id = ctx.params.id;
+    const {
+      job_type,
+      title,
+      description,
+      requirements,
+      languages,
+      job_time,
+      tasks,
+      location,
+      vacants,
+      salary
+    } = ctx.request.body;
+    const imageBlob = ctx.request.files?.image
+      ? await handleBlobUpload(ctx, 'image')
+      : undefined;
+    await jobsModel.updateJob(id, {
+      job_type,
+      title,
+      description,
+      requirements,
+      languages,
+      job_time,
+      tasks,
+      location,
+      vacants: vacants ? parseInt(vacants, 10) : undefined,
+      salary: salary != null && salary !== '' ? parseFloat(salary) : undefined,
+      image: imageBlob
+    });
+    ctx.redirect('/jobs?filter=MINE');
+  })
+  .post('/jobs/delete/:id', koaBody(), async (ctx) => {
+    const id = ctx.params.id;
+    await jobsModel.deleteJob(id);
+    ctx.redirect('/jobs?filter=MINE');
+  })
+  .post('/jobs/status/:id', koaBody(), async (ctx) => {
+    const id = ctx.params.id;
+    const { status } = ctx.request.body;
+    await jobsModel.updateJobStatus(id, String(status).toUpperCase());
+    ctx.redirect('/jobs?filter=MINE');
+  })
+  .post('/jobs/subscribe/:id', koaBody(), async (ctx) => {
+    const id = ctx.params.id;
+    await jobsModel.subscribeToJob(id, config.keys.id);
+    ctx.redirect('/jobs');
+  })
+  .post('/jobs/unsubscribe/:id', koaBody(), async (ctx) => {
+    const id = ctx.params.id;
+    await jobsModel.unsubscribeFromJob(id, config.keys.id);
+    ctx.redirect('/jobs');
+  })
+  
   // UPDATE OASIS
   .post("/update", koaBody(), async (ctx) => {
     const util = require("node:util");
@@ -2246,23 +2377,15 @@ router
     await updateTool();
     const referer = new URL(ctx.request.header.referer);
     ctx.redirect(referer.href);
-  }) 
+  })  
   .post("/settings/theme", koaBody(), async (ctx) => {
-    const theme = String(ctx.request.body.theme);
+    const theme = String(ctx.request.body.theme || "").trim();
     const currentConfig = getConfig();
-    if (theme) {
-        currentConfig.themes.current = theme;
-        const configPath = path.join(__dirname, '../configs', 'oasis-config.json');
-        fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2));
-        ctx.cookies.set("theme", theme);
-        ctx.redirect("/settings");
-    } else {
-        currentConfig.themes.current = "Dark-SNH";
-        fs.writeFileSync(path.join(__dirname, 'configs', 'oasis-config.json'), JSON.stringify(currentConfig, null, 2));
-        ctx.cookies.set("theme", "Dark-SNH");
-        ctx.redirect("/settings");
-     }
-   })
+    currentConfig.themes.current = theme || "Dark-SNH";
+    fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2));
+    ctx.cookies.set("theme", currentConfig.themes.current);
+    ctx.redirect("/settings");
+  })
   .post("/language", koaBody(), async (ctx) => {
     const language = String(ctx.request.body.language);
     ctx.cookies.set("language", language);
@@ -2293,6 +2416,17 @@ router
     }
     ctx.redirect("/invites");
   })
+  .post("/settings/ssb-logstream", koaBody(), async (ctx) => {
+    const logLimit = parseInt(ctx.request.body.ssb_log_limit, 10);
+    if (!isNaN(logLimit) && logLimit > 0 && logLimit <= 100000) {
+      const configData = fs.readFileSync(configPath, 'utf8');
+      const config = JSON.parse(configData);
+      if (!config.ssbLogStream) config.ssbLogStream = {};
+      config.ssbLogStream.limit = logLimit;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    }
+    ctx.redirect("/settings");
+  })
   .post("/settings/rebuild", async (ctx) => {
     meta.rebuild();
     ctx.redirect("/settings");
@@ -2302,7 +2436,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet',
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending',
     'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers',
-    'feed', 'pixelia', 'agenda', 'ai', 'forum'
+    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs'
     ];
     const currentConfig = getConfig();
     modules.forEach(mod => {
