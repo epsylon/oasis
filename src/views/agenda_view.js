@@ -23,6 +23,7 @@ function getViewDetailsAction(item) {
     case 'market': return `/market/${encodeURIComponent(item.id)}`;
     case 'report': return `/reports/${encodeURIComponent(item.id)}`;
     case 'job': return `/jobs/${encodeURIComponent(item.id)}`;
+    case 'project': return `/projects/${encodeURIComponent(item.id)}`;
     default: return `/messages/${encodeURIComponent(item.id)}`;
   }
 }
@@ -129,6 +130,16 @@ const renderAgendaItem = (item, userId, filter) => {
     const membersList = item.to ? p(a({ class: "user-link", href: `/author/${encodeURIComponent(item.to)}` }, item.to)) : '';
     details.push(div({ class: 'members-list' }, i18n.to + ': ', membersList));
   }
+  
+  if (item.type === 'project') {
+    details = [
+      renderCardField(i18n.projectStatus + ":", item.status || i18n.noStatus),
+      renderCardField(i18n.projectProgress + ":", `${item.progress || 0}%`),
+      renderCardField(i18n.projectGoal + ":", `${item.goal} ECO`),
+      renderCardField(i18n.projectPledged + ":", `${item.pledged || 0} ECO`),
+      renderCardField(i18n.projectDeadline + ":", item.deadline ? new Date(item.deadline).toLocaleString() : i18n.noDeadline)
+    ];
+  }
 
   if (item.type === 'job') {
     const subs = Array.isArray(item.subscribers)
@@ -204,12 +215,14 @@ exports.agendaView = async (data, filter) => {
             `${i18n.agendaFilterReports} (${counts.reports})`),
           button({ type: 'submit', name: 'filter', value: 'tribes', class: filter === 'tribes' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterTribes} (${counts.tribes})`),
-          button({ type: 'submit', name: 'filter', value: 'market', class: filter === 'market' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterMarket} (${counts.market})`),
-          button({ type: 'submit', name: 'filter', value: 'transfers', class: filter === 'transfers' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterTransfers} (${counts.transfers})`),
           button({ type: 'submit', name: 'filter', value: 'jobs', class: filter === 'jobs' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterJobs} (${counts.jobs})`),
+          button({ type: 'submit', name: 'filter', value: 'market', class: filter === 'market' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterMarket} (${counts.market})`),
+          button({ type: 'submit', name: 'filter', value: 'projects', class: filter === 'projects' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterProjects} (${counts.projects})`),
+          button({ type: 'submit', name: 'filter', value: 'transfers', class: filter === 'transfers' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterTransfers} (${counts.transfers})`),
           button({ type: 'submit', name: 'filter', value: 'discarded', class: filter === 'discarded' ? 'filter-btn active' : 'filter-btn' },
             `DISCARDED (${counts.discarded})`)
         )

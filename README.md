@@ -60,6 +60,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Agenda: Module to manage all your assigned items.
  + AI: Module to talk with a LLM called '42'.
  + Audios: Module to discover and manage audios.
+ + Banking: Module to distribute a fair Universal Basic Income (UBI) using commons-treasury.
  + BlockExplorer: Module to navigate the blockchain.
  + Bookmarks: Module to discover and manage bookmarks.	
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
@@ -77,6 +78,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Multiverse: Module to receive content from other federated peers.	
  + Opinions: Module to discover and vote on opinions.	
  + Pixelia: Module to draw on a collaborative grid.	
+ + Projects: Module to explore, crowd-funding and manage projects.
  + Popular: Module to receive posts that are trending, most viewed, or most commented on.	
  + Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.	
  + Summaries: Module to receive summaries of long discussions or posts.	
@@ -100,7 +102,7 @@ Oasis contains its own AI model called "42".
 
 The main idea behind this implementation is to enable distributed learning generated through the collective action of many individuals, with the goal of redistributing the necessary processing load, as well as the ecological footprint and corporate bias.
 
-  ![SNH](https://solarnethub.com/git/oasis-ai-example.png "SolarNET.HuB")
+  ![SNH](https://solarnethub.com/git/oasis-ai-example2.png "SolarNET.HuB")
 
 Our AI is trained with content from the OASIS network and its purpose is to take action and obtain answers to individual, but also global, problems.
 
@@ -117,6 +119,12 @@ Oasis contains its own cryptocurrency. With it, you can exchange items and servi
 You can also receive a -Universal Basic Income- if you contribute to the Tribes and their coordinated actions.
 
  + https://ecoin.03c8.net
+ 
+## Banking (crypto-economy)
+
+Oasis contains its own UBI (Universal Basic Income), distributed weekly using ECOin, and calculated by our AI through positive and efficient participation and trust.
+
+  ![SNH](https://solarnethub.com/git/oasis-banking.png "SolarNET.HuB")
 
 ----------
 

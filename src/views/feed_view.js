@@ -87,7 +87,7 @@ exports.feedView = (feeds, filter) => {
     title,
     section(
       header,
-      div({ class: 'mode-buttons', style: 'display:flex; gap:8px; margin-bottom:24px;' },
+      div({ class: 'mode-buttons-row' },
         generateFilterButtons(['ALL', 'MINE', 'TODAY', 'TOP'], filter, '/feed'),
         form({ method: 'GET', action: '/feed/create' },
           button({

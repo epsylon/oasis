@@ -13,6 +13,21 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.4.4 - 2025-08-17
+
+### Added
+
+ + Projects: Module to explore, crowd-funding and manage projects.
+ + Banking: Module to distribute a fair Universal Basic Income (UBI) using commons-treasury.
+ 
+### Changed
+
+- AI.
+- Activity.
+- BlockExplorer.
+- Statistics.
+- Avatar.
+
 ## v0.4.3 - 2025-08-08
 
 ### Added

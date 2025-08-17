@@ -7,6 +7,12 @@ const ORDER_MARKET = ['FOR_SALE','OPEN','RESERVED','CLOSED','SOLD'];
 const SCORE_MARKET = s => {
   const i = ORDER_MARKET.indexOf(N(s));
   return i < 0 ? -1 : i;
+}
+
+const ORDER_PROJECT = ['CANCELLED','PAUSED','ACTIVE','COMPLETED'];
+const SCORE_PROJECT = s => {
+  const i = ORDER_PROJECT.indexOf(N(s));
+  return i < 0 ? -1 : i;
 };
 
 module.exports = ({ cooler }) => {
@@ -86,8 +92,16 @@ module.exports = ({ cooler }) => {
           for (const a of arr) {
             const s = SCORE_MARKET(a.content.status);
             if (s > bestScore || (s === bestScore && a.ts > tip.ts)) {
-              tip = a;
-              bestScore = s;
+              tip = a; bestScore = s;
+            }
+          }
+        } else if (type === 'project') {
+          tip = arr[0];
+          let bestScore = SCORE_PROJECT(tip.content.status);
+          for (const a of arr) {
+            const s = SCORE_PROJECT(a.content.status);
+            if (s > bestScore || (s === bestScore && a.ts > tip.ts)) {
+              tip = a; bestScore = s;
             }
           }
         } else {
@@ -120,22 +134,22 @@ module.exports = ({ cooler }) => {
       }
       latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
     }
-
-      let out;
-      if (filter === 'mine') {
-        out = latest.filter(a => a.author === userId);
-      } else if (filter === 'recent') {
-        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-        out = latest.filter(a => (a.ts || 0) >= cutoff);
-      } else if (filter === 'all') {
-        out = latest;
-      } else {
-        out = latest.filter(a => a.type === filter);
-      }
-
-      out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-
-      return out;
+    
+    let out;
+    if (filter === 'mine') {
+      out = latest.filter(a => a.author === userId);
+    } else if (filter === 'recent') {
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      out = latest.filter(a => (a.ts || 0) >= cutoff);
+    } else if (filter === 'all') {
+      out = latest;
+    } else if (filter === 'banking') {
+      out = latest.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
+    } else {
+      out = latest.filter(a => a.type === filter);
+    }
+    out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    return out;
     }
   };
 };

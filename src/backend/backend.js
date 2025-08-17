@@ -42,16 +42,42 @@ if (config.debug) {
 }
 
 //AI
+const axiosMod = require('../server/node_modules/axios');
+const axios = axiosMod.default || axiosMod;
 const { spawn } = require('child_process');
+
+const { fieldsForSnippet, buildContext, clip, publishExchange } = require('../AI/buildAIContext.js');
+
+let aiStarted = false;
 function startAI() {
-  const aiPath = path.resolve(__dirname, '../AI/ai_service.mjs');
-  const aiProcess = spawn('node', [aiPath], {
-    detached: false,
-    stdio: 'ignore', //inherit for debug
-  });
-  aiProcess.unref();
+    if (aiStarted) return;
+    aiStarted = true;
+    const aiPath = path.resolve(__dirname, '../AI/ai_service.mjs');
+    const aiProcess = spawn('node', [aiPath], {
+        detached: true,
+        stdio: 'ignore' // set 'inherit' for debug
+    });
+    aiProcess.unref();
 }
 
+//banking
+function readWalletMap() {
+  const candidates = [
+    path.join(__dirname, '..', 'configs', 'wallet-addresses.json'),
+    path.join(process.cwd(), 'configs', 'wallet-addresses.json')
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        const obj = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (obj && typeof obj === 'object') return obj;
+      }
+    } catch {}
+  }
+  return {};
+}
+
+//custom styles
 const customStyleFile = path.join(
   envPaths("oasis", { suffix: "" }).config,
   "/custom-style.css"
@@ -212,6 +238,8 @@ const marketModel = require('../models/market_model')({ cooler, isPublic: config
 const forumModel = require('../models/forum_model')({ cooler, isPublic: config.public });
 const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic: config.public });
 const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public });
+const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
+const bankingModel = require("../models/banking_model")({ cooler, isPublic: config.public });
 
 // starting warmup
 about._startNameWarmup();
@@ -256,6 +284,14 @@ async function renderBlobMarkdown(text, mentions = {}, myFeedId, myUsername) {
 }
 
 let formattedTextCache = null; 
+const ADDR_PATH = path.join(__dirname, "..", "configs", "wallet-addresses.json");
+function readAddrMap() {
+  try { return JSON.parse(fs.readFileSync(ADDR_PATH, "utf8")); } catch { return {}; }
+}
+function writeAddrMap(map) {
+  fs.mkdirSync(path.dirname(ADDR_PATH), { recursive: true });
+  fs.writeFileSync(ADDR_PATH, JSON.stringify(map, null, 2));
+}
 
 const preparePreview = async function (ctx) {
   let text = String(ctx.request.body.text || "");
@@ -414,6 +450,8 @@ const { aiView } = require("../views/AI_view");
 const { forumView, singleForumView } = require("../views/forum_view");
 const { renderBlockchainView, renderSingleBlockView } = require("../views/blockchain_view");
 const { jobsView, singleJobsView, renderJobForm } = require("../views/jobs_view");
+const { projectsView, singleProjectView } = require("../views/projects_view")
+const { renderBankingView, renderSingleAllocationView, renderEpochView } = require("../views/banking_views")
 
 let sharp;
 
@@ -473,9 +511,16 @@ router
   .get(oasisCheckPath, (ctx) => {
     ctx.body = "oasis";
   })
-  .get('/stats', async ctx => {
+  .get('/stats', async (ctx) => {
     const filter = ctx.query.filter || 'ALL';
     const stats = await statsModel.getStats(filter);
+    const myId = SSBconfig.config.keys.id;
+    const myAddress = await bankingModel.getUserAddress(myId);
+    const addrRows = await bankingModel.listAddressesMerged();
+    stats.banking = {
+      myAddress: myAddress || null,
+      totalAddresses: Array.isArray(addrRows) ? addrRows.length : 0
+    };
     ctx.body = statsView(stats, filter);
   })
   .get("/public/popular/:period", async (ctx) => {
@@ -531,7 +576,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 
     'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers', 
-    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs'
+    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking'
     ];
     const moduleStates = modules.reduce((acc, mod) => {
       acc[`${mod}Mod`] = configMods[`${mod}Mod`];
@@ -541,20 +586,23 @@ router
   })
    // AI
   .get('/ai', async (ctx) => {
-    const aiMod = ctx.cookies.get("aiMod") || 'on';
+    const aiMod = ctx.cookies.get('aiMod') || 'on';
     if (aiMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
+        ctx.redirect('/modules');
+        return;
     }
     startAI();
+    const i18nAll = require('../client/assets/translations/i18n');
+    const lang = ctx.cookies.get('lang') || 'en';
+    const translations = i18nAll[lang] || i18nAll['en'];
+    const { setLanguage } = require('../views/main_views');
+    setLanguage(lang);
     const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
     let chatHistory = [];
     try {
-      const fileData = fs.readFileSync(historyPath, 'utf-8');
-      chatHistory = JSON.parse(fileData);
-    } catch (e) {
-      chatHistory = [];
-    }
+        const fileData = fs.readFileSync(historyPath, 'utf-8');
+        chatHistory = JSON.parse(fileData);
+    } catch {}
     const config = getConfig();
     const userPrompt = config.ai?.prompt?.trim() || '';
     ctx.body = aiView(chatHistory, userPrompt);
@@ -632,33 +680,31 @@ router
     const messages = await post.latestThreads();
     ctx.body = await threadsView({ messages });
   })
-  .get("/author/:feed", async (ctx) => {
-    const { feed } = ctx.params;
-    const gt = Number(ctx.request.query["gt"] || -1);
-    const lt = Number(ctx.request.query["lt"] || -1);
-    if (lt > 0 && gt > 0 && gt >= lt)
-      throw new Error("Given search range is empty");
-    const author = async (feedId) => {
-      const description = await about.description(feedId);
-      const name = await about.name(feedId);
-      const image = await about.image(feedId);
-      const messages = await post.fromPublicFeed(feedId, gt, lt);
-      const firstPost = await post.firstBy(feedId);
-      const lastPost = await post.latestBy(feedId);
-      const relationship = await friend.getRelationship(feedId);
-      const avatarUrl = getAvatarUrl(image);
-      return authorView({
-        feedId,
-        messages,
-        firstPost,
-        lastPost,
-        name,
-        description,
-        avatarUrl,
-        relationship,
-      });
-    };
-    ctx.body = await author(feed);
+  .get('/author/:feed', async (ctx) => {
+    const feedId = decodeURIComponent(ctx.params.feed || '');
+    const gt = Number(ctx.request.query.gt || -1);
+    const lt = Number(ctx.request.query.lt || -1);
+    if (lt > 0 && gt > 0 && gt >= lt) throw new Error('Given search range is empty');
+    const description = await about.description(feedId);
+    const name = await about.name(feedId);
+    const image = await about.image(feedId);
+    const messages = await post.fromPublicFeed(feedId, gt, lt);
+    const firstPost = await post.firstBy(feedId);
+    const lastPost = await post.latestBy(feedId);
+    const relationship = await friend.getRelationship(feedId);
+    const avatarUrl = getAvatarUrl(image);
+    const ecoAddress = await bankingModel.getUserAddress(feedId);
+    ctx.body = authorView({
+      feedId,
+      messages,
+      firstPost,
+      lastPost,
+      name,
+      description,
+      avatarUrl,
+      relationship,
+      ecoAddress
+    });
   })
   .get("/search", async (ctx) => {
     const query = ctx.query.query || '';
@@ -892,18 +938,18 @@ router
     ctx.body = activityView(actions, filter, userId);
   })
   .get("/profile", async (ctx) => {
-    const myFeedId = await meta.myFeedId();
-    const gt = Number(ctx.request.query["gt"] || -1);
-    const lt = Number(ctx.request.query["lt"] || -1);
-    if (lt > 0 && gt > 0 && gt >= lt)
-      throw new Error("Given search range is empty");
-    const description = await about.description(myFeedId);
-    const name = await about.name(myFeedId);
-    const image = await about.image(myFeedId);
-    const messages = await post.fromPublicFeed(myFeedId, gt, lt);
-    const firstPost = await post.firstBy(myFeedId);
-    const lastPost = await post.latestBy(myFeedId);
-    const avatarUrl = getAvatarUrl(image);
+    const myFeedId = await meta.myFeedId()
+    const gt = Number(ctx.request.query["gt"] || -1)
+    const lt = Number(ctx.request.query["lt"] || -1)
+    if (lt > 0 && gt > 0 && gt >= lt) throw new Error("Given search range is empty")
+    const description = await about.description(myFeedId)
+    const name = await about.name(myFeedId)
+    const image = await about.image(myFeedId)
+    const messages = await post.fromPublicFeed(myFeedId, gt, lt)
+    const firstPost = await post.firstBy(myFeedId)
+    const lastPost = await post.latestBy(myFeedId)
+    const avatarUrl = getAvatarUrl(image)
+    const ecoAddress = await bankingModel.getUserAddress(myFeedId)
     ctx.body = await authorView({
       feedId: myFeedId,
       messages,
@@ -913,7 +959,8 @@ router
       description,
       avatarUrl,
       relationship: { me: true },
-    });
+      ecoAddress
+    })
   })
   .get("/profile/edit", async (ctx) => {
     const myFeedId = await meta.myFeedId();
@@ -1021,14 +1068,26 @@ router
     const theme = ctx.cookies.get("theme") || "Dark-SNH";
     const config = getConfig();
     const aiPrompt = config.ai?.prompt || "";
-    const getMeta = async ({ theme, aiPrompt }) => {
+    const pubWalletUrl = config.walletPub?.url || '';
+    const pubWalletUser = config.walletPub?.user || '';
+    const pubWalletPass = config.walletPub?.pass || '';
+    const getMeta = async ({ theme, aiPrompt, pubWalletUrl, pubWalletUser, pubWalletPass }) => {
       return settingsView({
         theme,
         version: version.toString(),
-        aiPrompt
+        aiPrompt,
+        pubWalletUrl, 
+        pubWalletUser,
+        pubWalletPass
       });
     };
-    ctx.body = await getMeta({ theme, aiPrompt });
+    ctx.body = await getMeta({ 
+      theme, 
+      aiPrompt, 
+      pubWalletUrl, 
+      pubWalletUser, 
+      pubWalletPass 
+    });
   })
   .get("/peers", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
@@ -1283,6 +1342,61 @@ router
     const job = await jobsModel.getJobById(jobId);
     ctx.body = await singleJobsView(job, filter);
   })
+  .get('/projects', async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || 'on'
+    if (projectsMod !== 'on') { ctx.redirect('/modules'); return }
+    const filter = ctx.query.filter || 'ALL'
+    if (filter === 'CREATE') {
+      ctx.body = await projectsView([], 'CREATE'); return
+    }
+    const modelFilter = (filter === 'BACKERS') ? 'ALL' : filter
+    const projects = await projectsModel.listProjects(modelFilter)
+    ctx.body = await projectsView(projects, filter)
+  })
+  .get('/projects/edit/:id', async (ctx) => {
+    const id = ctx.params.id
+    const pr = await projectsModel.getProjectById(id)
+    ctx.body = await projectsView([pr], 'EDIT')
+  })
+  .get('/projects/:projectId', async (ctx) => {
+    const projectId = ctx.params.projectId
+    const filter = ctx.query.filter || 'ALL'
+    const project = await projectsModel.getProjectById(projectId)
+    ctx.body = await singleProjectView(project, filter)
+  })
+  .get('/banking', async (ctx) => {
+    const bankingMod = ctx.cookies.get("bankingMod") || 'on';
+    if (bankingMod !== 'on') { 
+      ctx.redirect('/modules'); 
+      return; 
+    }
+    const userId = SSBconfig.config.keys.id;
+    const query = ctx.query;
+    const filter = (query.filter || 'overview').toLowerCase();
+    const q = (query.q || '').trim();
+    const msg = (query.msg || '').trim();
+    await bankingModel.ensureSelfAddressPublished();
+    const data = await bankingModel.listBanking(filter, userId);
+    if (filter === 'addresses' && q) {
+      data.addresses = (data.addresses || []).filter(x =>
+        String(x.id).toLowerCase().includes(q.toLowerCase()) ||
+        String(x.address).toLowerCase().includes(q.toLowerCase())
+      );
+      data.search = q;
+    }
+    data.flash = msg || '';
+    ctx.body = renderBankingView(data, filter, userId);
+  })
+  .get("/banking/allocation/:id", async (ctx) => {
+    const userId = SSBconfig.config.keys.id;
+    const allocation = await bankingModel.getAllocationById(ctx.params.id);
+    ctx.body = renderSingleAllocationView(allocation, userId);
+  })
+  .get("/banking/epoch/:id", async (ctx) => {
+    const epoch = await bankingModel.getEpochById(ctx.params.id);
+    const allocations = await bankingModel.listEpochAllocations(ctx.params.id);
+    ctx.body = renderEpochView(epoch, allocations);
+  })
   .get('/cipher', async (ctx) => {
     const cipherMod = ctx.cookies.get("cipherMod") || 'on';
     if (cipherMod !== 'on') {
@@ -1322,13 +1436,20 @@ router
   .get("/wallet", async (ctx) => {
     const { url, user, pass } = getConfig().wallet;
     const walletMod = ctx.cookies.get("walletMod") || 'on';
-    if (walletMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
-    }
+    if (walletMod !== 'on') { ctx.redirect('/modules'); return; }
     try {
       const balance = await walletModel.getBalance(url, user, pass);
       const address = await walletModel.getAddress(url, user, pass);
+      const userId = SSBconfig.config.keys.id;
+      if (address && typeof address === "string") {
+        const map = readAddrMap();
+        const was = map[userId];
+        if (was !== address) {
+          map[userId] = address;
+          writeAddrMap(map);
+          try { await publishActivity({ type: 'bankWallet', address }); } catch (e) {}
+        }
+      }
       ctx.body = await walletView(balance, address);
     } catch (error) {
       ctx.body = await walletErrorView(error);
@@ -1340,6 +1461,16 @@ router
       const balance = await walletModel.getBalance(url, user, pass);
       const transactions = await walletModel.listTransactions(url, user, pass);
       const address = await walletModel.getAddress(url, user, pass);
+      const userId = SSBconfig.config.keys.id;
+      if (address && typeof address === "string") {
+        const map = readAddrMap();
+        const was = map[userId];
+        if (was !== address) {
+          map[userId] = address;
+          writeAddrMap(map);
+          try { await publishActivity({ type: 'bankWallet', address }); } catch (e) {}
+        }
+      }
       ctx.body = await walletHistoryView(balance, transactions, address);
     } catch (error) {
       ctx.body = await walletErrorView(error);
@@ -1350,6 +1481,16 @@ router
     try {
       const balance = await walletModel.getBalance(url, user, pass);
       const address = await walletModel.getAddress(url, user, pass);
+      const userId = SSBconfig.config.keys.id;
+      if (address && typeof address === "string") {
+        const map = readAddrMap();
+        const was = map[userId];
+        if (was !== address) {
+          map[userId] = address;
+          writeAddrMap(map);
+          try { await publishActivity({ type: 'bankWallet', address }); } catch (e) {}
+        }
+      }
       ctx.body = await walletReceiveView(balance, address);
     } catch (error) {
       ctx.body = await walletErrorView(error);
@@ -1360,6 +1501,17 @@ router
     try {
       const balance = await walletModel.getBalance(url, user, pass);
       const address = await walletModel.getAddress(url, user, pass);
+
+      const userId = SSBconfig.config.keys.id;
+      if (address && typeof address === "string") {
+        const map = readAddrMap();
+        const was = map[userId];
+        if (was !== address) {
+          map[userId] = address;
+          writeAddrMap(map);
+          try { await publishActivity({ type: 'bankWallet', address }); } catch (e) {}
+        }
+      }
       ctx.body = await walletSendFormView(balance, null, null, fee, null, address);
     } catch (error) {
       ctx.body = await walletErrorView(error);
@@ -1383,39 +1535,119 @@ router
 
   //POST backend routes   
   .post('/ai', koaBody(), async (ctx) => {
-    const axios = require('../server/node_modules/axios').default;
     const { input } = ctx.request.body;
     if (!input) {
-      ctx.status = 400;
-      ctx.body = { error: 'No input provided' };
-      return;
+        ctx.status = 400;
+        ctx.body = { error: 'No input provided' };
+        return;
     }
-    const config = getConfig();
-    const userPrompt = config.ai?.prompt?.trim() || "Provide an informative and precise response.";
-    const response = await axios.post('http://localhost:4001/ai', { input });
-    const aiResponse = response.data.answer;
+    startAI();
+    const i18nAll = require('../client/assets/translations/i18n');
+    const lang = ctx.cookies.get('lang') || 'en';
+    const translations = i18nAll[lang] || i18nAll['en'];
+    const { setLanguage } = require('../views/main_views');
+    setLanguage(lang);
     const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
     let chatHistory = [];
     try {
-      const fileData = fs.readFileSync(historyPath, 'utf-8');
-      chatHistory = JSON.parse(fileData);
-    } catch (e) {
-      chatHistory = [];
+        const fileData = fs.readFileSync(historyPath, 'utf-8');
+        chatHistory = JSON.parse(fileData);
+    } catch {
+        chatHistory = [];
     }
-    chatHistory.unshift({
-      prompt: userPrompt,
-      question: input,
-      answer: aiResponse,
-      timestamp: Date.now()
-    });
+    const config = getConfig();
+    const userPrompt = config.ai?.prompt?.trim() || 'Provide an informative and precise response.';
+    try {
+        const response = await axios.post('http://localhost:4001/ai', { input });
+        const aiResponse = response.data.answer;
+        const snippets = Array.isArray(response.data.snippets) ? response.data.snippets : [];
+        chatHistory.unshift({
+            prompt: userPrompt,
+            question: input,
+            answer: aiResponse,
+            timestamp: Date.now(),
+            trainStatus: 'pending',
+            snippets
+        });
+    } catch (e) {
+        chatHistory.unshift({
+            prompt: userPrompt,
+            question: input,
+            answer: translations.aiServerError || 'The AI could not answer. Please try again.',
+            timestamp: Date.now(),
+            trainStatus: 'rejected',
+            snippets: []
+        });
+    }
     chatHistory = chatHistory.slice(0, 20);
     fs.writeFileSync(historyPath, JSON.stringify(chatHistory, null, 2), 'utf-8');
     ctx.body = aiView(chatHistory, userPrompt);
   })
+  .post('/ai/approve', koaBody(), async (ctx) => {
+    const ts = String(ctx.request.body.ts || '');
+    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    let chatHistory = [];
+    try {
+        const fileData = fs.readFileSync(historyPath, 'utf-8');
+        chatHistory = JSON.parse(fileData);
+    } catch (err) {
+        chatHistory = [];
+    }
+    const item = chatHistory.find(e => String(e.timestamp) === ts);
+    if (item) {
+        try {
+            const contentType = item?.type || 'aiExchange';
+            let snippets = fieldsForSnippet(contentType, item);
+            if (snippets.length === 0) {
+                const context = await buildContext();
+                snippets = [context];
+            } else {
+                snippets = snippets.map(snippet => clip(snippet, 200)); 
+            }
+            await publishExchange({
+                q: item.question,
+                a: item.answer,
+                ctx: snippets,
+                tokens: {}
+            });
+            item.trainStatus = 'approved';  
+        } catch (err) {
+            item.trainStatus = 'failed';
+        }
+        fs.writeFileSync(historyPath, JSON.stringify(chatHistory, null, 2), 'utf-8');
+    }
+    const config = getConfig();
+    const userPrompt = config.ai?.prompt?.trim() || '';
+    ctx.body = aiView(chatHistory, userPrompt);
+  })
+  .post('/ai/reject', koaBody(), async (ctx) => {
+    const i18nAll = require('../client/assets/translations/i18n');
+    const lang = ctx.cookies.get('lang') || 'en';
+    const { setLanguage } = require('../views/main_views');
+    setLanguage(lang);
+    const ts = String(ctx.request.body.ts || '');
+    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    let chatHistory = [];
+    try {
+        const fileData = fs.readFileSync(historyPath, 'utf-8');
+        chatHistory = JSON.parse(fileData);
+    } catch {
+        chatHistory = [];
+    }
+    const item = chatHistory.find(e => String(e.timestamp) === ts);
+    if (item) {
+        item.trainStatus = 'rejected';
+        fs.writeFileSync(historyPath, JSON.stringify(chatHistory, null, 2), 'utf-8');
+    }
+    const config = getConfig();
+    const userPrompt = config.ai?.prompt?.trim() || '';
+    ctx.body = aiView(chatHistory, userPrompt);  
+  })
   .post('/ai/clear', async (ctx) => {
-    const fs = require('fs');
-    const path = require('path');
-    const { getConfig } = require('../configs/config-manager.js');
+    const i18nAll = require('../client/assets/translations/i18n');
+    const lang = ctx.cookies.get('lang') || 'en';
+    const { setLanguage } = require('../views/main_views');
+    setLanguage(lang);
     const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
     fs.writeFileSync(historyPath, '[]', 'utf-8');
     const config = getConfig();
@@ -2253,10 +2485,10 @@ router
     const marketItem = await marketModel.getItemById(id);
     if (marketItem.item_type === 'exchange') {
       if (marketItem.status !== 'SOLD') {
-        const buyerId = ctx.request.body.buyerId;
+        const buyerId = SSBconfig.config.keys.id;
         const { price, title, seller } = marketItem;
-        const subject = `Your item "${title}" has been sold`;
-        const text = `The item with title: "${title}" has been sold. The buyer with OASIS ID: ${buyerId} purchased it for: $${price}.`;
+        const subject = `MARKET_SOLD`;
+        const text = `item "${title}" has been sold -> /market/${id}  OASIS ID: ${buyerId}  for: $${price}`;
         await pmModel.sendMessage([seller], subject, text);
         await marketModel.setItemAsSold(id);
       }
@@ -2350,14 +2582,291 @@ router
     ctx.redirect('/jobs?filter=MINE');
   })
   .post('/jobs/subscribe/:id', koaBody(), async (ctx) => {
-    const id = ctx.params.id;
-    await jobsModel.subscribeToJob(id, config.keys.id);
+    const rawId = ctx.params.id;
+    const userId = SSBconfig.config.keys.id;
+    const latestId = await jobsModel.getJobTipId(rawId);
+    const job = await jobsModel.getJobById(latestId);
+    const subs = Array.isArray(job.subscribers) ? job.subscribers.slice() : [];
+    if (!subs.includes(userId)) subs.push(userId);
+    await jobsModel.updateJob(latestId, { subscribers: subs });
+    const subject = 'JOB_SUBSCRIBED';
+    const title = job.title || '';
+    const text = `has subscribed to your job offer "${title}" -> /jobs/${latestId}`;
+    await pmModel.sendMessage([job.author], subject, text);
     ctx.redirect('/jobs');
   })
   .post('/jobs/unsubscribe/:id', koaBody(), async (ctx) => {
-    const id = ctx.params.id;
-    await jobsModel.unsubscribeFromJob(id, config.keys.id);
+    const rawId = ctx.params.id;
+    const userId = SSBconfig.config.keys.id;
+    const latestId = await jobsModel.getJobTipId(rawId);
+    const job = await jobsModel.getJobById(latestId);
+    const subs = Array.isArray(job.subscribers) ? job.subscribers.slice() : [];
+    const next = subs.filter(uid => uid !== userId);
+    await jobsModel.updateJob(latestId, { subscribers: next });
+    const subject = 'JOB_UNSUBSCRIBED';
+    const title = job.title || '';
+    const text = `has unsubscribed from your job offer "${title}" -> /jobs/${latestId}`;
+    await pmModel.sendMessage([job.author], subject, text);
     ctx.redirect('/jobs');
+  })
+  .post('/projects/create', koaBody({ multipart: true }), async (ctx) => {
+    const b = ctx.request.body || {};
+    const imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
+    const bounties =
+        b.bountiesInput
+            ? b.bountiesInput.split('\n').filter(Boolean).map(l => {
+                const [t, a, d] = l.split('|');
+                return { title: (t || '').trim(), amount: parseFloat(a || 0) || 0, description: (d || '').trim(), milestoneIndex: null };
+            })
+            : [];
+    await projectsModel.createProject({
+        ...b,
+        title: b.title,
+        description: b.description,
+        goal: b.goal != null && b.goal !== '' ? parseFloat(b.goal) : 0,
+        deadline: b.deadline ? new Date(b.deadline).toISOString() : null,
+        progress: b.progress != null && b.progress !== '' ? parseInt(b.progress, 10) : 0,
+        bounties,
+        image: imageBlob
+    });
+    ctx.redirect('/projects?filter=MINE');
+  })
+  .post('/projects/update/:id', koaBody({ multipart: true }), async (ctx) => {
+    const id = ctx.params.id;
+    const b = ctx.request.body || {};
+    const imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : undefined;
+    await projectsModel.updateProject(id, {
+        title: b.title,
+        description: b.description,
+        goal: b.goal !== '' && b.goal != null ? parseFloat(b.goal) : undefined,
+        deadline: b.deadline ? new Date(b.deadline).toISOString() : undefined,
+        progress: b.progress !== '' && b.progress != null ? parseInt(b.progress, 10) : undefined,
+        bounties: b.bountiesInput !== undefined
+           ? b.bountiesInput.split('\n').filter(Boolean).map(l => {
+                const [t, a, d] = l.split('|');
+                return { title: (t || '').trim(), amount: parseFloat(a || 0) || 0, description: (d || '').trim(), milestoneIndex: null };
+           })
+            : undefined,
+        image: imageBlob
+    });
+    ctx.redirect('/projects?filter=MINE');
+  })
+  .post('/projects/delete/:id', koaBody(), async (ctx) => {
+    await projectsModel.deleteProject(ctx.params.id);
+    ctx.redirect('/projects?filter=MINE');
+  })
+  .post('/projects/status/:id', koaBody(), async (ctx) => {
+    await projectsModel.updateProjectStatus(ctx.params.id, String(ctx.request.body.status || '').toUpperCase());
+    ctx.redirect('/projects?filter=MINE');
+  })
+  .post('/projects/progress/:id', koaBody(), async (ctx) => {
+    const { progress } = ctx.request.body;
+    await projectsModel.updateProjectProgress(ctx.params.id, progress);
+    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/projects/pledge/:id', koaBody(), async (ctx) => {
+    const rawId = ctx.params.id;
+    const latestId = await projectsModel.getProjectTipId(rawId); 
+    const { amount, milestoneOrBounty = '' } = ctx.request.body;
+    const pledgeAmount = parseFloat(amount);
+    if (isNaN(pledgeAmount) || pledgeAmount <= 0) ctx.throw(400, 'Invalid amount');
+    const userId = SSBconfig.config.keys.id;
+    const project = await projectsModel.getProjectById(latestId);
+    if (project.author === userId) ctx.throw(403, 'Authors cannot pledge to their own project');
+    let milestoneIndex = null;
+    let bountyIndex = null;
+    if (milestoneOrBounty.startsWith('milestone:')) {
+     milestoneIndex = parseInt(milestoneOrBounty.split(':')[1], 10);
+    } else if (milestoneOrBounty.startsWith('bounty:')) {
+      bountyIndex = parseInt(milestoneOrBounty.split(':')[1], 10);
+    }
+    const deadlineISO = require('../server/node_modules/moment')().add(14, 'days').toISOString();
+    const tags = ['backer-pledge', `project:${latestId}`];
+    const transfer = await transfersModel.createTransfer(
+      project.author,
+      'Project Pledge',
+      pledgeAmount,
+      deadlineISO,
+      tags
+    );
+    const transferId = transfer.key || transfer.id;
+    const backers = Array.isArray(project.backers) ? project.backers.slice() : [];
+    backers.push({
+      userId,
+      amount: pledgeAmount,
+      at: new Date().toISOString(),
+      transferId,
+      confirmed: false,
+      milestoneIndex,
+      bountyIndex
+    });
+    const pledged = (parseFloat(project.pledged || 0) || 0) + pledgeAmount;
+    const goalProgress = project.goal ? (pledged / parseFloat(project.goal)) * 100 : 0;
+    await projectsModel.updateProject(latestId, { backers, pledged, progress: goalProgress });
+    const subject = 'PROJECT_PLEDGE';
+    const title = project.title || '';
+    const text = `has pledged ${pledgeAmount} ECO to your project "${title}" -> /projects/${latestId}`;
+    await pmModel.sendMessage([project.author], subject, text);
+    ctx.redirect(`/projects/${encodeURIComponent(latestId)}`);
+  })
+  .post('/projects/confirm-transfer/:id', koaBody(), async (ctx) => {
+    const transferId = ctx.params.id;
+    const userId = SSBconfig.config.keys.id;
+    const transfer = await transfersModel.getTransferById(transferId);
+    if (transfer.to !== userId) ctx.throw(403, 'Unauthorized action');
+    const tagProject = (transfer.tags || []).find(t => String(t).startsWith('project:'));
+    if (!tagProject) ctx.throw(400, 'Missing project tag on transfer');
+    const projectId = tagProject.split(':')[1];
+    await transfersModel.confirmTransferById(transferId);
+    const project = await projectsModel.getProjectById(projectId);
+    const backers = Array.isArray(project.backers) ? project.backers.slice() : [];
+    const idx = backers.findIndex(b => b.transferId === transferId);
+    if (idx !== -1) backers[idx].confirmed = true;
+    const goalProgress = project.goal ? (parseFloat(project.pledged || 0) / parseFloat(project.goal)) * 100 : 0;
+    await projectsModel.updateProject(projectId, { backers, progress: goalProgress });
+    ctx.redirect(`/projects/${encodeURIComponent(projectId)}`);
+  })
+  .post('/projects/follow/:id', koaBody(), async (ctx) => {
+    const userId = SSBconfig.config.keys.id;
+    const rawId = ctx.params.id;
+    const latestId = await projectsModel.getProjectTipId(rawId);
+    const project = await projectsModel.getProjectById(latestId);
+    await projectsModel.followProject(rawId, userId);
+    const subject = 'PROJECT_FOLLOWED';
+    const title = project.title || '';
+    const text = `has followed your project "${title}" -> /projects/${latestId}`;
+    await pmModel.sendMessage([project.author], subject, text);
+    ctx.redirect('/projects');
+  })
+  .post('/projects/unfollow/:id', koaBody(), async (ctx) => {
+    const userId = SSBconfig.config.keys.id;
+    const rawId = ctx.params.id;
+    const latestId = await projectsModel.getProjectTipId(rawId);
+    const project = await projectsModel.getProjectById(latestId);
+    await projectsModel.unfollowProject(rawId, userId);
+    const subject = 'PROJECT_UNFOLLOWED';
+    const title = project.title || '';
+    const text = `has unfollowed your project "${title}" -> /projects/${latestId}`;
+    await pmModel.sendMessage([project.author], subject, text);
+    ctx.redirect('/projects');
+  })
+  .post('/projects/milestones/add/:id', koaBody(), async (ctx) => {
+    const { title, description, targetPercent, dueDate } = ctx.request.body;
+    await projectsModel.addMilestone(ctx.params.id, {
+        title,
+        description: description || '',
+        targetPercent: targetPercent != null && targetPercent !== '' ? parseInt(targetPercent, 10) : 0,
+        dueDate: dueDate ? new Date(dueDate).toISOString() : null
+    });
+    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/projects/milestones/update/:id/:index', koaBody(), async (ctx) => {
+    const { title, description, targetPercent, dueDate, done } = ctx.request.body;
+    await projectsModel.updateMilestone(
+        ctx.params.id,
+        parseInt(ctx.params.index, 10),
+        {
+            title,
+            ...(description !== undefined ? { description } : {}),
+            targetPercent: targetPercent !== undefined && targetPercent !== '' ? parseInt(targetPercent, 10) : undefined,
+             dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate).toISOString() : null) : undefined,
+             done: done !== undefined ? !!done : undefined
+        }
+    );
+    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/projects/milestones/complete/:id/:index', koaBody(), async (ctx) => {
+    const userId = SSBconfig.config.keys.id;
+    await projectsModel.completeMilestone(ctx.params.id, parseInt(ctx.params.index, 10), userId);
+    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/projects/bounties/add/:id', koaBody(), async (ctx) => {
+    const { title, amount, description, milestoneIndex } = ctx.request.body;
+    await projectsModel.addBounty(ctx.params.id, {
+       title,
+       amount,
+       description,
+       milestoneIndex: (milestoneIndex === '' || milestoneIndex === undefined) ? null : parseInt(milestoneIndex, 10)
+    });
+    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/projects/bounties/update/:id/:index', koaBody(), async (ctx) => {
+     const { title, amount, description, milestoneIndex, done } = ctx.request.body;
+     await projectsModel.updateBounty(
+       ctx.params.id,
+       parseInt(ctx.params.index, 10),
+       {
+         title: title !== undefined ? title : undefined,
+         amount: amount !== undefined && amount !== '' ? parseFloat(amount) : undefined,
+         description: description !== undefined ? description : undefined,
+         milestoneIndex: milestoneIndex !== undefined ? (milestoneIndex === '' ? null : parseInt(milestoneIndex, 10)) : undefined,
+         done: done !== undefined ? !!done : undefined
+       }
+     );
+     ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/projects/bounties/claim/:id/:index', koaBody(), async (ctx) => {
+    const userId = SSBconfig.config.keys.id;
+    await projectsModel.claimBounty(ctx.params.id, parseInt(ctx.params.index, 10), userId);
+    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/projects/bounties/complete/:id/:index', koaBody(), async (ctx) => {
+    const userId = SSBconfig.config.keys.id;
+    await projectsModel.completeBounty(ctx.params.id, parseInt(ctx.params.index, 10), userId);
+    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/banking/claim/:id", koaBody(), async (ctx) => {
+    const userId = SSBconfig.config.keys.id;
+    const allocationId = ctx.params.id;
+    const allocation = await bankingModel.getAllocationById(allocationId);
+    if (!allocation) {
+      ctx.body = { error: i18n.errorNoAllocation };
+      return;
+    }
+    if (allocation.to !== userId || allocation.status !== "UNCONFIRMED") {
+      ctx.body = { error: i18n.errorInvalidClaim };
+      return;
+    }
+    const pubWalletConfig = getConfig().walletPub;
+    const { url, user, pass } = pubWalletConfig;
+    const { txid } = await bankingModel.claimAllocation({
+      transferId: allocationId,
+      claimerId: userId,
+      pubWalletUrl: url,
+      pubWalletUser: user,
+      pubWalletPass: pass,
+    });
+    await bankingModel.updateAllocationStatus(allocationId, "CLOSED", txid);
+    await bankingModel.publishBankClaim({
+      amount: allocation.amount,
+      epochId: allocation.epochId,
+      allocationId: allocation.id,
+      txid,
+    });
+    ctx.redirect(`/banking?claimed=${encodeURIComponent(txid)}`);
+  })
+  .post("/banking/simulate", koaBody(), async (ctx) => {
+    const epochId = ctx.request.body?.epochId || undefined;
+    const rules = ctx.request.body?.rules || undefined;
+    const { epoch, allocations } = await bankingModel.computeEpoch({ epochId: epochId || undefined, rules });
+    ctx.body = { epoch, allocations };
+  })
+  .post("/banking/run", koaBody(), async (ctx) => {
+    const epochId = ctx.request.body?.epochId || undefined;
+    const rules = ctx.request.body?.rules || undefined;
+    const { epoch, allocations } = await bankingModel.executeEpoch({ epochId: epochId || undefined, rules });
+    ctx.body = { epoch, allocations };
+  })
+  .post("/banking/addresses", koaBody(), async (ctx) => {
+    const userId = (ctx.request.body?.userId || "").trim();
+    const address = (ctx.request.body?.address || "").trim();
+    const res = await bankingModel.addAddress({ userId, address });
+    ctx.redirect(`/banking?filter=addresses&msg=${encodeURIComponent(res.status)}`);
+  })
+  .post("/banking/addresses/delete", koaBody(), async (ctx) => {
+    const userId = (ctx.request.body?.userId || "").trim();
+    const res = await bankingModel.removeAddress({ userId });
+    ctx.redirect(`/banking?filter=addresses&msg=${encodeURIComponent(res.status)}`);
   })
   
   // UPDATE OASIS
@@ -2436,7 +2945,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet',
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending',
     'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers',
-    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs'
+    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking'
     ];
     const currentConfig = getConfig();
     modules.forEach(mod => {
@@ -2462,13 +2971,26 @@ router
     const referer = new URL(ctx.request.header.referer);
     ctx.redirect("/settings");
   })
+  .post("/settings/pub-wallet", koaBody(), async (ctx) => {
+    const walletUrl = String(ctx.request.body.wallet_url || "").trim();
+    const walletUser = String(ctx.request.body.wallet_user || "").trim();
+    const walletPass = String(ctx.request.body.wallet_pass || "").trim();
+    const currentConfig = getConfig();
+    currentConfig.walletPub = { 
+      url: walletUrl, 
+      user: walletUser, 
+      pass: walletPass 
+    };
+    fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2));
+    ctx.redirect("/settings");
+  })
   .post('/transfers/create',
     koaBody(),
     async ctx => {
       const { to, concept, amount, deadline, tags } = ctx.request.body
       await transfersModel.createTransfer(to, concept, amount, deadline, tags)
       ctx.redirect('/transfers')
-    })
+  })
   .post('/transfers/update/:id',
     koaBody(),
     async ctx => {

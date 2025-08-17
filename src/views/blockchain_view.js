@@ -9,19 +9,22 @@ const FILTER_LABELS = {
     feed: i18n.typeFeed, event: i18n.typeEvent, task: i18n.typeTask, report: i18n.typeReport,
     image: i18n.typeImage, audio: i18n.typeAudio, video: i18n.typeVideo, post: i18n.typePost,
     forum: i18n.typeForum, about: i18n.typeAbout, contact: i18n.typeContact, pub: i18n.typePub,
-    transfer: i18n.typeTransfer, market: i18n.typeMarket, job: i18n.typeJob, tribe: i18n.typeTribe
+    transfer: i18n.typeTransfer, market: i18n.typeMarket, job: i18n.typeJob, tribe: i18n.typeTribe,
+    project: i18n.typeProject, banking: i18n.typeBanking, bankWallet: i18n.typeBankWallet, bankClaim: i18n.typeBankClaim,
+    aiExchange: i18n.typeAiExchange,
 };
 
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report'];
-const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote'];
-const CAT_BLOCK3  = ['market', 'job', 'transfer', 'feed', 'post', 'pixelia'];
+const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
+const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia'];
 const CAT_BLOCK4  = ['forum', 'bookmark', 'image', 'video', 'audio', 'document'];
 
 const filterBlocks = (blocks, filter, userId) => {
     if (filter === 'recent') return blocks.filter(b => Date.now() - b.ts < 24*60*60*1000);
-    if (filter === 'mine')   return blocks.filter(b => b.author === userId);
-    if (filter === 'all')    return blocks;
+    if (filter === 'mine') return blocks.filter(b => b.author === userId);
+    if (filter === 'all') return blocks;
+    if (filter === 'banking') return blocks.filter(b => b.type === 'bankWallet' || b.type === 'bankClaim');
     return blocks.filter(b => b.type === filter);
 };
 
@@ -40,28 +43,31 @@ const generateFilterButtons = (filters, currentFilter, action) =>
 
 const getViewDetailsAction = (type, block) => {
     switch (type) {
-        case 'votes':      return `/votes/${encodeURIComponent(block.id)}`;
-        case 'transfer':   return `/transfers/${encodeURIComponent(block.id)}`;
-        case 'pixelia':    return `/pixelia`;
-        case 'tribe':      return `/tribe/${encodeURIComponent(block.id)}`;
+        case 'votes': return `/votes/${encodeURIComponent(block.id)}`;
+        case 'transfer': return `/transfers/${encodeURIComponent(block.id)}`;
+        case 'pixelia': return `/pixelia`;
+        case 'tribe': return `/tribe/${encodeURIComponent(block.id)}`;
         case 'curriculum': return `/inhabitant/${encodeURIComponent(block.author)}`;
-        case 'image':      return `/images/${encodeURIComponent(block.id)}`;
-        case 'audio':      return `/audios/${encodeURIComponent(block.id)}`;
-        case 'video':      return `/videos/${encodeURIComponent(block.id)}`;
-        case 'forum':      return `/forum/${encodeURIComponent(block.content?.key||block.id)}`;
-        case 'document':   return `/documents/${encodeURIComponent(block.id)}`;
-        case 'bookmark':   return `/bookmarks/${encodeURIComponent(block.id)}`;
-        case 'event':      return `/events/${encodeURIComponent(block.id)}`;
-        case 'task':       return `/tasks/${encodeURIComponent(block.id)}`;
-        case 'about':      return `/author/${encodeURIComponent(block.author)}`;
-        case 'post':       return `/thread/${encodeURIComponent(block.id)}#${encodeURIComponent(block.id)}`;
-        case 'vote':       return `/thread/${encodeURIComponent(block.content.vote.link)}#${encodeURIComponent(block.content.vote.link)}`;
-        case 'contact':    return `/inhabitants`;
-        case 'pub':        return `/invites`;
-        case 'market':     return `/market/${encodeURIComponent(block.id)}`;
-        case 'job':        return `/jobs/${encodeURIComponent(block.id)}`;
-        case 'report':     return `/reports/${encodeURIComponent(block.id)}`;
-        default:           return null;
+        case 'image': return `/images/${encodeURIComponent(block.id)}`;
+        case 'audio': return `/audios/${encodeURIComponent(block.id)}`;
+        case 'video': return `/videos/${encodeURIComponent(block.id)}`;
+        case 'forum': return `/forum/${encodeURIComponent(block.content?.key||block.id)}`;
+        case 'document': return `/documents/${encodeURIComponent(block.id)}`;
+        case 'bookmark': return `/bookmarks/${encodeURIComponent(block.id)}`;
+        case 'event': return `/events/${encodeURIComponent(block.id)}`;
+        case 'task': return `/tasks/${encodeURIComponent(block.id)}`;
+        case 'about': return `/author/${encodeURIComponent(block.author)}`;
+        case 'post': return `/thread/${encodeURIComponent(block.id)}#${encodeURIComponent(block.id)}`;
+        case 'vote': return `/thread/${encodeURIComponent(block.content.vote.link)}#${encodeURIComponent(block.content.vote.link)}`;
+        case 'contact': return `/inhabitants`;
+        case 'pub': return `/invites`;
+        case 'market': return `/market/${encodeURIComponent(block.id)}`;
+        case 'job': return `/jobs/${encodeURIComponent(block.id)}`;
+        case 'project': return `/projects/${encodeURIComponent(block.id)}`;
+        case 'report': return `/reports/${encodeURIComponent(block.id)}`;
+        case 'bankWallet': return `/wallet`;
+        case 'bankClaim': return `/banking${block.content?.epochId ? `/epoch/${encodeURIComponent(block.content.epochId)}` : ''}`;
+        default: return null;
     }
 };
 
@@ -106,20 +112,20 @@ const renderSingleBlockView = (block, filter) =>
                     pre({ class:'json-content' }, JSON.stringify(block.content,null,2))
                 )
             ),
-	   div({ class:'block-row block-row--back' },
-	    form({ method:'GET', action:'/blockexplorer' },
-		button({ type:'submit', class:'filter-btn' }, `← ${i18n.blockchainBack}`)
-	    ),
-	    !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
-		form({ method:'GET', action:getViewDetailsAction(block.type, block) },
-		    button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
-		)
-	    : (block.isTombstoned || block.isReplaced) ?
-		div({ class: 'deleted-label', style: 'color:#b00;font-weight:bold;margin-top:8px;' },
-		    i18n.blockchainContentDeleted || "This content has been deleted."
-		)
-	    : null
-	    )
+            div({ class:'block-row block-row--back' },
+                form({ method:'GET', action:'/blockexplorer' },
+                    button({ type:'submit', class:'filter-btn' }, `← ${i18n.blockchainBack}`)
+                ),
+                !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
+                    form({ method:'GET', action:getViewDetailsAction(block.type, block) },
+                        button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
+                    )
+                : (block.isTombstoned || block.isReplaced) ?
+                    div({ class: 'deleted-label', style: 'color:#b00;font-weight:bold;margin-top:8px;' },
+                        i18n.blockchainContentDeleted || "This content has been deleted."
+                    )
+                : null
+            )
         )
     );
 
@@ -158,18 +164,18 @@ const renderBlockchainView = (blocks, filter, userId) =>
                     })
                     .map(block=>
                         div({ class:'block' },
-			   div({ class:'block-buttons' },
-			    a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}`, class:'btn-singleview', title:i18n.blockchainDetails },'⦿'),
-			    !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
-			    form({ method:'GET', action:getViewDetailsAction(block.type, block) },
-				button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
-			    )
-			    : (block.isTombstoned || block.isReplaced) ?
-			    div({ class: 'deleted-label', style: 'color:#b00;font-weight:bold;margin-top:8px;' },
-				i18n.blockchainContentDeleted || "This content has been deleted."
-			    )
-			    : null
-			    ),			
+                            div({ class:'block-buttons' },
+                                a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}`, class:'btn-singleview', title:i18n.blockchainDetails },'⦿'),
+                                !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
+                                    form({ method:'GET', action:getViewDetailsAction(block.type, block) },
+                                        button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
+                                    )
+                                : (block.isTombstoned || block.isReplaced) ?
+                                    div({ class: 'deleted-label', style: 'color:#b00;font-weight:bold;margin-top:8px;' },
+                                        i18n.blockchainContentDeleted || "This content has been deleted."
+                                    )
+                                : null
+                            ),
                             div({ class:'block-row block-row--meta' },
                                 table({ class:'block-info-table' },
                                     tr(td({ class:'card-label' }, i18n.blockchainBlockTimestamp), td({ class:'card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ'))),

@@ -1,16 +1,32 @@
 const pull = require('../server/node_modules/pull-stream');
 const os = require('os');
 const fs = require('fs');
+const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+
+const STORAGE_DIR = path.join(__dirname, "..", "configs");
+const ADDR_FILE = path.join(STORAGE_DIR, "wallet_addresses.json");
+
+function readAddrMap() {
+  try {
+    if (!fs.existsSync(ADDR_FILE)) return {};
+    const raw = fs.readFileSync(ADDR_FILE, 'utf8');
+    const obj = JSON.parse(raw || '{}');
+    return obj && typeof obj === 'object' ? obj : {};
+  } catch {
+    return {};
+  }
+}
 
 module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
   const types = [
-    'bookmark','event','task','votes','report','feed',
-    'image','audio','video','document','transfer','post','tribe','market','forum','job'
+    'bookmark','event','task','votes','report','feed','project',
+    'image','audio','video','document','transfer','post','tribe',
+    'market','forum','job','aiExchange'
   ];
 
   const getFolderSize = (folderPath) => {
@@ -18,8 +34,8 @@ module.exports = ({ cooler }) => {
     let totalSize = 0;
     for (const file of files) {
       const filePath = `${folderPath}/${file}`;
-      const stats = fs.statSync(filePath);
-      totalSize += stats.isDirectory() ? getFolderSize(filePath) : stats.size;
+      const st = fs.statSync(filePath);
+      totalSize += st.isDirectory() ? getFolderSize(filePath) : st.size;
     }
     return totalSize;
   };
@@ -31,6 +47,38 @@ module.exports = ({ cooler }) => {
     if (sizeInBytes < gb) return `${(sizeInBytes / mb).toFixed(2)} MB`;
     if (sizeInBytes < tb) return `${(sizeInBytes / gb).toFixed(2)} GB`;
     return `${(sizeInBytes / tb).toFixed(2)} TB`;
+  };
+
+  const N = s => String(s || '').toUpperCase();
+  const sum = arr => arr.reduce((a, b) => a + b, 0);
+  const median = arr => {
+    if (!arr.length) return 0;
+    const a = [...arr].sort((x, y) => x - y);
+    const m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  };
+
+  const parseAuctionMax = auctions_poll => {
+    if (!Array.isArray(auctions_poll) || auctions_poll.length === 0) return 0;
+    const amounts = auctions_poll.map(s => {
+      const parts = String(s).split(':');
+      const amt = parseFloat(parts[1]);
+      return isNaN(amt) ? 0 : amt;
+    });
+    return amounts.length ? Math.max(...amounts) : 0;
+  };
+
+  const dayKey = ts => new Date(ts || 0).toISOString().slice(0, 10);
+  const lastNDays = (n) => {
+    const out = [];
+    const today = new Date();
+    today.setUTCHours(0,0,0,0);
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(today.getUTCDate() - i);
+      out.push(d.toISOString().slice(0, 10));
+    }
+    return out;
   };
 
   const getStats = async (filter = 'ALL') => {
@@ -65,7 +113,7 @@ module.exports = ({ cooler }) => {
       const c = m.value.content;
       const t = c.type;
       if (!types.includes(t)) continue;
-      byType[t].set(k, { key: k, ts: m.value.timestamp, content: c });
+      byType[t].set(k, { key: k, ts: m.value.timestamp, content: c, author: m.value.author });
       if (c.replaces) parentOf[t].set(k, c.replaces);
     }
 
@@ -81,9 +129,7 @@ module.exports = ({ cooler }) => {
       tipOf[t] = new Map();
       const pMap = parentOf[t];
       const fwd = new Map();
-      for (const [child, parent] of pMap.entries()) {
-        fwd.set(parent, child);
-      }
+      for (const [child, parent] of pMap.entries()) fwd.set(parent, child);
       const allMap = byType[t];
       const roots = new Set(Array.from(allMap.keys()).map(id => findRoot(t, id)));
       for (const root of roots) {
@@ -99,11 +145,9 @@ module.exports = ({ cooler }) => {
     const opinions = {};
     for (const t of types) {
       let vals = Array.from(tipOf[t].values()).map(v => v.content);
-      if (t === 'forum') {
-        vals = vals.filter(c => !(c.root && tombTargets.has(c.root)));
-      }
-      content[t] = vals.length;
-      opinions[t] = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length;
+      if (t === 'forum') vals = vals.filter(c => !(c.root && tombTargets.has(c.root)));
+      content[t] = vals.length || 0;
+      opinions[t] = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length || 0;
     }
 
     const tribeVals = Array.from(tipOf['tribe'].values()).map(v => v.content);
@@ -120,7 +164,77 @@ module.exports = ({ cooler }) => {
     const flumeSize = getFolderSize(`${os.homedir()}/.ssb/flume`);
     const blobsSize = getFolderSize(`${os.homedir()}/.ssb/blobs`);
 
-    return {
+    const allTs = scopedMsgs.map(m => m.value.timestamp || 0).filter(Boolean);
+    const lastTs = allTs.length ? Math.max(...allTs) : 0;
+
+    const mapDay = new Map();
+    for (const m of scopedMsgs) {
+      const dk = dayKey(m.value.timestamp || 0);
+      mapDay.set(dk, (mapDay.get(dk) || 0) + 1);
+    }
+    const days7 = lastNDays(7).map(d => ({ day: d, count: mapDay.get(d) || 0 }));
+    const days30 = lastNDays(30).map(d => ({ day: d, count: mapDay.get(d) || 0 }));
+    const daily7Total = sum(days7.map(o => o.count));
+    const daily30Total = sum(days30.map(o => o.count));
+
+    const jobsVals = Array.from(tipOf['job'].values()).map(v => v.content);
+    const jobOpen = jobsVals.filter(j => N(j.status) === 'OPEN').length;
+    const jobClosed = jobsVals.filter(j => N(j.status) === 'CLOSED').length;
+    const jobSalaries = jobsVals.map(j => parseFloat(j.salary)).filter(n => isFinite(n));
+    const jobVacantsOpen = jobsVals.filter(j => N(j.status) === 'OPEN').map(j => parseInt(j.vacants || 0, 10) || 0);
+    const jobSubsTotal = jobsVals.map(j => Array.isArray(j.subscribers) ? j.subscribers.length : 0);
+
+    const marketVals = Array.from(tipOf['market'].values()).map(v => v.content);
+    const mkForSale = marketVals.filter(m => N(m.status) === 'FOR SALE').length;
+    const mkReserved = marketVals.filter(m => N(m.status) === 'RESERVED').length;
+    const mkClosed = marketVals.filter(m => N(m.status) === 'CLOSED').length;
+    const mkSold = marketVals.filter(m => N(m.status) === 'SOLD').length;
+    let revenueECO = 0;
+    const soldPrices = [];
+    for (const m of marketVals) {
+      if (N(m.status) !== 'SOLD') continue;
+      let price = 0;
+      if (String(m.item_type || '').toLowerCase() === 'auction') {
+        price = parseAuctionMax(m.auctions_poll);
+      } else {
+        price = parseFloat(m.price || 0) || 0;
+      }
+      soldPrices.push(price);
+      revenueECO += price;
+    }
+
+    const projectVals = Array.from(tipOf['project'].values()).map(v => v.content);
+    const prActive = projectVals.filter(p => N(p.status) === 'ACTIVE').length;
+    const prCompleted = projectVals.filter(p => N(p.status) === 'COMPLETED').length;
+    const prPaused = projectVals.filter(p => N(p.status) === 'PAUSED').length;
+    const prCancelled = projectVals.filter(p => N(p.status) === 'CANCELLED').length;
+    const prGoals = projectVals.map(p => parseFloat(p.goal || 0) || 0);
+    const prPledged = projectVals.map(p => parseFloat(p.pledged || 0) || 0);
+    const prProgress = projectVals.map(p => parseFloat(p.progress || 0) || 0);
+    const activeFundingRates = projectVals
+      .filter(p => N(p.status) === 'ACTIVE' && parseFloat(p.goal || 0) > 0)
+      .map(p => (parseFloat(p.pledged || 0) / parseFloat(p.goal || 1)) * 100);
+
+    const topAuthorsMap = new Map();
+    for (const m of scopedMsgs) {
+      const a = m.value.author;
+      topAuthorsMap.set(a, (topAuthorsMap.get(a) || 0) + 1);
+    }
+    const topAuthors = Array.from(topAuthorsMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([id, count]) => ({ id, count }));
+
+    const addrMap = readAddrMap();
+    const myAddress = addrMap[userId] || null;
+    const banking = {
+      ecoWalletConfigured: !!myAddress,
+      myAddress,
+      myAddressCount: myAddress ? 1 : 0,
+      totalAddresses: Object.keys(addrMap).length
+    };
+
+    const stats = {
       id: userId,
       createdAt,
       inhabitants,
@@ -131,8 +245,56 @@ module.exports = ({ cooler }) => {
       networkTombstoneCount: allMsgs.filter(m => m.value.content.type === 'tombstone').length,
       folderSize: formatSize(folderSize),
       statsBlockchainSize: formatSize(flumeSize),
-      statsBlobsSize: formatSize(blobsSize)
+      statsBlobsSize: formatSize(blobsSize),
+      activity: {
+        lastMessageAt: lastTs ? new Date(lastTs).toISOString() : null,
+        daily7: days7,
+        daily30Total,
+        daily7Total
+      },
+      jobsKPIs: {
+        total: jobsVals.length,
+        open: jobOpen,
+        closed: jobClosed,
+        avgSalary: jobSalaries.length ? (sum(jobSalaries) / jobSalaries.length) : 0,
+        medianSalary: median(jobSalaries),
+        openVacants: sum(jobVacantsOpen),
+        subscribersTotal: sum(jobSubsTotal)
+      },
+      marketKPIs: {
+        total: marketVals.length,
+        forSale: mkForSale,
+        reserved: mkReserved,
+        closed: mkClosed,
+        sold: mkSold,
+        revenueECO,
+        avgSoldPrice: soldPrices.length ? (sum(soldPrices) / soldPrices.length) : 0
+      },
+      projectsKPIs: {
+        total: projectVals.length,
+        active: prActive,
+        completed: prCompleted,
+        paused: prPaused,
+        cancelled: prCancelled,
+        ecoGoalTotal: sum(prGoals),
+        ecoPledgedTotal: sum(prPledged),
+        successRate: projectVals.length ? (prCompleted / projectVals.length) * 100 : 0,
+        avgProgress: prProgress.length ? (sum(prProgress) / prProgress.length) : 0,
+        medianProgress: median(prProgress),
+        activeFundingAvg: activeFundingRates.length ? (sum(activeFundingRates) / activeFundingRates.length) : 0
+      },
+      usersKPIs: {
+        totalInhabitants: inhabitants,
+        topAuthors
+      },
+      tombstoneKPIs: {
+        networkTombstoneCount: allMsgs.filter(m => m.value.content.type === 'tombstone').length,
+        ratio: allMsgs.length ? (allMsgs.filter(m => m.value.content.type === 'tombstone').length / allMsgs.length) * 100 : 0
+      },
+      banking
     };
+
+    return stats;
   };
 
   return { getStats };

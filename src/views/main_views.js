@@ -21,7 +21,7 @@ const getUserId = async () => {
   return userId;
 };
 
-const { a, article, br, body, button, details, div, em, footer, form, h1, h2, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, textarea, title, tr, ul } = require("../server/node_modules/hyperaxe");
+const { a, article, br, body, button, details, div, em, footer, form, h1, h2, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, textarea, title, tr, ul, strong } = require("../server/node_modules/hyperaxe");
 
 const lodash = require("../server/node_modules/lodash");
 const markdown = require("./markdown");
@@ -236,7 +236,6 @@ const renderMarketLink = () => {
   const marketMod = getConfig().modules.marketMod === 'on';
   return marketMod 
     ? [
-      hr(),
       navLink({ href: "/market", emoji: "ꕻ", text: i18n.marketTitle }),
       ]
     : '';
@@ -247,6 +246,25 @@ const renderJobsLink = () => {
   return jobsMod 
     ? [
       navLink({ href: "/jobs", emoji: "ꗒ", text: i18n.jobsTitle }),
+      ]
+    : '';
+};
+
+const renderProjectsLink = () => {
+  const projectsMod = getConfig().modules.projectsMod === 'on';
+  return projectsMod 
+    ? [
+      navLink({ href: "/projects", emoji: "ꕧ", text: i18n.projectsTitle }),
+      ]
+    : '';
+};
+
+const renderBankingLink = () => {
+  const bankingMod = getConfig().modules.bankingMod === 'on';
+  return bankingMod 
+    ? [
+      hr(),
+      navLink({ href: "/banking", emoji: "ꗴ", text: i18n.bankingTitle }),
       ]
     : '';
 };
@@ -461,7 +479,9 @@ const template = (titlePrefix, ...elements) => {
               renderForumLink(),
               renderFeedLink(),
               renderPixeliaLink(),
+              renderBankingLink(),
               renderMarketLink(),
+              renderProjectsLink(),
               renderJobsLink(),
               renderTransfersLink(),
               renderBookmarksLink(),
@@ -843,6 +863,7 @@ exports.authorView = ({
   lastPost,
   name,
   relationship,
+  ecoAddress
 }) => {
   const mention = `[@${name}](${feedId})`;
   const markdownMention = highlightJs.highlight(mention, { language: "markdown", ignoreIllegals: true }).value;
@@ -876,92 +897,99 @@ exports.authorView = ({
     }
   }
 
-const relationshipMessage = (() => {
-  if (relationship.me) return i18n.relationshipYou; 
-  const following = relationship.following === true;
-  const followsMe = relationship.followsMe === true;
-  if (following && followsMe) {
-    return i18n.relationshipMutuals;
-  }
-  const messages = [];
-  messages.push(
-    following
-      ? i18n.relationshipFollowing
-      : i18n.relationshipNone
-  );
-  messages.push(
-    followsMe
-      ? i18n.relationshipTheyFollow
-      : i18n.relationshipNotFollowing
-  );
-  return messages.join(". ") + ".";
-})();
+  const relationshipMessage = (() => {
+    if (relationship.me) return i18n.relationshipYou;
+    const following = relationship.following === true;
+    const followsMe = relationship.followsMe === true;
+    if (following && followsMe) {
+      return i18n.relationshipMutuals;
+    }
+    const messages = [];
+    messages.push(
+      following
+        ? i18n.relationshipFollowing
+        : i18n.relationshipNone
+    );
+    messages.push(
+      followsMe
+        ? i18n.relationshipTheyFollow
+        : i18n.relationshipNotFollowing
+    );
+    return messages.join(". ") + ".";
+  })();
 
-const prefix = section(
-  { class: "message" },
-  div(
-    { class: "profile" },
-    div({ class: "avatar-container" },
-      img({ class: "avatar", src: avatarUrl }),
-      h1({ class: "name" }, name),
+  const prefix = section(
+    { class: "message" },
+    div(
+      { class: "profile" },
+      div({ class: "avatar-container" },
+        img({ class: "avatar", src: avatarUrl }),
+        h1({ class: "name" }, name),
+      ),
+      pre({
+        class: "md-mention",
+        innerHTML: markdownMention,
+      })
     ),
-    pre({
-      class: "md-mention",
-      innerHTML: markdownMention,
-    })
-  ),
-  description !== "" ? article({ innerHTML: markdown(description) }) : null,
-  footer(
-  div(
-    { class: "profile" },
-    ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
-    relationship.me ? (
-      span({ class: "status you" }, i18n.relationshipYou)
-    ) : (
-      div({ class: "relationship-status" },
-        relationship.blocking && relationship.blockedBy
-          ? span({ class: "status blocked" }, i18n.relationshipMutualBlock)
-        : [
-            relationship.blocking
-              ? span({ class: "status blocked" }, i18n.relationshipBlocking)
-              : null,
-            relationship.blockedBy
-              ? span({ class: "status blocked-by" }, i18n.relationshipBlockedBy)
-              : null,
-            relationship.following && relationship.followsMe
-              ? span({ class: "status mutual" }, i18n.relationshipMutuals)
-              : [
-                  span(
-                    { class: "status supporting" },
-                    relationship.following
-                      ? i18n.relationshipFollowing
-                      : i18n.relationshipNone
-                  ),
-                  span(
-                    { class: "status supported-by" },
-                    relationship.followsMe
-                      ? i18n.relationshipTheyFollow
-                      : i18n.relationshipNotFollowing
-                  )
-               ]
-            ]
-        )
-    ),
-    relationship.me
-      ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
-      : null,
-    a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes),
-     !relationship.me
-        ? a(
-            { 
-              href: `/pm?recipients=${encodeURIComponent(feedId)}`, 
-              class: "btn" 
-            },
-            i18n.pmCreateButton
+    description !== "" ? article({ innerHTML: markdown(description) }) : null,
+    footer(
+      div(
+        { class: "profile" },
+        ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
+        relationship.me ? (
+          span({ class: "status you" }, i18n.relationshipYou)
+        ) : (
+          div({ class: "relationship-status" },
+            relationship.blocking && relationship.blockedBy
+              ? span({ class: "status blocked" }, i18n.relationshipMutualBlock)
+            : [
+                relationship.blocking
+                  ? span({ class: "status blocked" }, i18n.relationshipBlocking)
+                  : null,
+                relationship.blockedBy
+                  ? span({ class: "status blocked-by" }, i18n.relationshipBlockedBy)
+                  : null,
+                relationship.following && relationship.followsMe
+                  ? span({ class: "status mutual" }, i18n.relationshipMutuals)
+                  : [
+                      span(
+                        { class: "status supporting" },
+                        relationship.following
+                          ? i18n.relationshipFollowing
+                          : i18n.relationshipNone
+                      ),
+                      span(
+                        { class: "status supported-by" },
+                        relationship.followsMe
+                          ? i18n.relationshipTheyFollow
+                          : i18n.relationshipNotFollowing
+                      )
+                   ]
+                ]
           )
-        : null
+        ),
+	ecoAddress
+	  ? div({ class: "eco-wallet" },
+              p(`${i18n.bankWalletConnected}: `, strong(ecoAddress))
+	    )
+	  : div({ class: "eco-wallet" },
+	      p(i18n.ecoWalletNotConfigured || "ECOin Wallet not configured")
+	    ),
+        relationship.me
+          ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
+          : null,
+        a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes),
+        !relationship.me
+          ? a(
+              {
+                href: `/pm?recipients=${encodeURIComponent(feedId)}`,
+                class: "btn"
+              },
+              i18n.pmCreateButton
+            )
+          : null
       )
-   )
+    )
   );
 
   const linkUrl = relationship.me
@@ -1206,152 +1234,268 @@ exports.mentionsView = ({ messages, myFeedId }) => {
 };
 
 exports.privateView = async (messagesInput, filter) => {
-  const messages = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages;
-  const userId = await getUserId();
-  const filtered =
-    filter === 'sent' ? messages.filter(m => m.value.content.from === userId) :
-    filter === 'inbox' ? messages.filter(m => m.value.content.to?.includes(userId)) :
-    messages;
+    const messages = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages;
+    const userId = await getUserId();
 
-  function header({ sentAt, from, toLinks, botIcon = '', botLabel = '' }) {
-    return div({ class: 'pm-header' },
-      span({ class: 'date-link' }, `${moment(sentAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
-      botIcon || botLabel ? span({ class: 'pm-from' }, `${botIcon} ${botLabel}`) : null,
-      !botIcon && !botLabel
-        ? [
-            span({ class: 'pm-from' },
-              'From: ', a({ href: `/author/${encodeURIComponent(from)}`, class: 'user-link' }, from)
+    const filtered =
+        filter === 'sent' ? messages.filter(m => m.value.content.from === userId) :
+        filter === 'inbox' ? messages.filter(m => m.value.content.to?.includes(userId)) :
+        messages;
+
+    const linkAuthor = (id) =>
+        a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id);
+
+    const hrefFor = {
+        job: (id) => `/jobs/${encodeURIComponent(id)}`,
+        project: (id) => `/projects/${encodeURIComponent(id)}`,
+        market: (id) => `/market/${encodeURIComponent(id)}`
+    };
+
+    const clickableCardProps = (href, extraClass = '') => {
+        const props = { class: `pm-card ${extraClass}` };
+        if (href) {
+            props.onclick = `window.location='${href}'`;
+            props.tabindex = 0;
+            props.onkeypress = `if(event.key==='Enter') window.location='${href}'`;
+        }
+        return props;
+    };
+
+    const chip = (txt) => span({ class: 'chip' }, txt);
+
+    function header({ sentAt, from, toLinks, botIcon = '', botLabel = '' }) {
+        return div({ class: 'pm-header' },
+            span({ class: 'date-link' }, `${moment(sentAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
+            botIcon || botLabel
+                ? span({ class: 'pm-from' }, `${botIcon} ${botLabel}`)
+                : [
+                    span({ class: 'pm-from' }, i18n.pmFromLabel + ' ', linkAuthor(from)),
+                    span({ class: 'pm-to' }, i18n.pmToLabel + ' ', toLinks)
+                ]
+        );
+    }
+
+    function actions({ key, replyId }) {
+        const stop = { onclick: 'event.stopPropagation()' };
+        return div({ class: 'pm-actions' },
+            form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'delete-message-form', style: 'display:inline-block;margin-right:8px;', ...stop },
+                button({ type: 'submit', class: 'delete-btn' }, i18n.privateDelete)
             ),
-            span({ class: 'pm-to' },
-              'To: ', toLinks
+            form({ method: 'GET', action: '/pm', style: 'display:inline-block;', ...stop },
+                input({ type: 'hidden', name: 'recipients', value: replyId }),
+                button({ type: 'submit', class: 'reply-btn' }, i18n.pmCreateButton)
             )
-          ] : null
-    );
-  }
+        );
+    }
 
-  function actions({ key, replyId }) {
-    return div({ class: 'pm-actions' },
-      form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'delete-message-form', style: 'display:inline-block;margin-right:8px;' },
-        button({ type: 'submit', class: 'delete-btn' }, i18n.privateDelete)
-      ),
-      form({ method: 'GET', action: '/pm', style: 'display:inline-block;' },
-        input({ type: 'hidden', name: 'recipients', value: replyId }),
-        button({ type: 'submit', class: 'reply-btn' }, i18n.pmCreateButton || 'Write a PM')
-      )
-    );
-  }
-  
-  function clickableLinks(str) {
-    return str
-      .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g,
-        (match, userId) =>
-          `<a class="user-link" href="/author/${encodeURIComponent(userId)}">${match}</a>`
-      )
-      .replace(/\/jobs\/([%a-zA-Z0-9/+._=-]+\.sha256)/g,
-        (match, jobId) =>
-          `<a class="job-link" href="/jobs/${jobId}">${match}</a>`
-      )
-      .replace(/\/market\/([%a-zA-Z0-9/+._=-]+\.sha256)/g,
-        (match, itemId) =>
-          `<a class="market-link" href="/market/${itemId}">${match}</a>`
-      );
-  }
+    function quoted(str) {
+        const m = str.match(/"([^"]+)"/);
+        return m ? m[1] : '';
+    }
 
-  return template(
-    i18n.private,
-    section(
-      div({ class: 'tags-header' },
-        h2(i18n.private),
-        p(i18n.privateDescription)
-      ),
-      div({ class: 'filters' },
-        form({ method: 'GET', action: '/inbox' }, [
-          button({
-            type: 'submit',
-            name: 'filter',
-            value: 'inbox',
-            class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
-          }, i18n.privateInbox),
-          button({
-            type: 'submit',
-            name: 'filter',
-            value: 'sent',
-            class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
-          }, i18n.privateSent),
-          button({
-            type: 'submit',
-            name: 'filter',
-            value: 'create',
-            class: 'create-button',
-            formaction: '/pm',
-            formmethod: 'GET'
-          }, i18n.pmCreateButton)
-        ])
-      ),
-      div({ class: 'message-list' },
-        filtered.length
-          ? filtered.map(msg => {
-              const content = msg?.value?.content;
-              const author = msg?.value?.author;
-              if (!content || !author)
-                return div({ class: 'malformed-message' }, 'Invalid message');
-              const subject = content.subject || '(no subject)';
-              const text = content.text || '';
-              const sentAt = new Date(content.sentAt || msg.timestamp);
-              const from = content.from;
-              const toLinks = (content.to || []).map(addr =>
-                a({ class: 'user-link', href: `/author/${encodeURIComponent(addr)}` }, addr)
-              );
-              let jobMatch = text.match(/has subscribed to your job offer "([^"]+)"/);
-              let jobLinkMatch = text.match(/\/jobs\/([%a-zA-Z0-9/+._-]+\.sha256)/);
-              if (jobMatch && jobLinkMatch) {
-                const jobTitle = jobMatch[1];
-                const jobId = jobLinkMatch[1];
-                return div({ class: 'pm-card job-sub-notification' },
-                  header({ sentAt, from, toLinks, botIcon: '🟡', botLabel: '42-JobsBOT' }),
-                  h2({ class: 'pm-title', style: 'color:#ffe082;' }, 'New subscription to your job offer'),
-                  p(
-                    'Inhabitant with OASIS ID: ',
-                    a({ class: 'user-link', href: `/author/${encodeURIComponent(from)}` }, from),
-                    ' has subscribed to your job offer ',
-                    a({ class: "job-link", href: `/jobs/${encodeURIComponent(decodeURIComponent(jobId))}` }, `"${jobTitle}"`)
-                  ),
-                  actions({ key: msg.key, replyId: from })
-                );
-              }
-              let saleMatch = subject.match(/item "([^"]+)" has been sold/);
-              let buyerMatch = text.match(/OASIS ID: ([\w=/+.-]+)/);
-              let priceMatch = text.match(/for: \$([\d.]+)/);
-              let marketIdMatch = text.match(/\/market\/([%a-zA-Z0-9/+._-]+\.sha256)/);
-              if (saleMatch && buyerMatch && priceMatch && marketIdMatch) {
-                const itemTitle = saleMatch[1];
-                const buyerId = buyerMatch[1];
-                const price = priceMatch[1];
-                const marketId = marketIdMatch[1];
-                return div({ class: 'pm-card market-sold-notification' },
-                  header({ sentAt, from, toLinks, botIcon: '💰', botLabel: '42-MarketBOT' }),
-                  h2({ class: 'pm-title', style: 'color:#80cbc4;' }, 'Item Sold'),
-                  p(
-                    'Your item ',
-                    a({ class: 'market-link', href: `/market/${encodeURIComponent(decodeURIComponent(marketId))}` }, `"${itemTitle}"`),
-                    ' has been sold to ',
-                    a({ class: 'user-link', href: `/author/${encodeURIComponent(buyerId)}` }, buyerId),
-                    ` for $${price}.`
-                  ),
-                  actions({ key: msg.key, replyId: buyerId })
-                );
-              }
-              return div({ class: 'pm-card normal-pm' },
-                header({ sentAt, from, toLinks }),
-                h2(subject),
-                p({ class: 'message-text' }, ...renderUrl(text)),
-                actions({ key: msg.key, replyId: from })
-              );
-            })
-          : p({ class: 'empty' }, i18n.noPrivateMessages)
-      )
-    )
-  );
+    function pickLink(str, kind) {
+        if (kind === 'job') {
+            const m = str.match(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/);
+            return m ? m[1] : '';
+        }
+        if (kind === 'project') {
+            const m = str.match(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/);
+            return m ? m[1] : '';
+        }
+        if (kind === 'market') {
+            const m = str.match(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/);
+            return m ? m[1] : '';
+        }
+        return '';
+    }
+
+    function JobCard({ type, sentAt, from, toLinks, text, key }) {
+        const isSub = type === 'JOB_SUBSCRIBED';
+        const icon = isSub ? '🟡' : '🟠';
+        const titleH = isSub ? (i18n.inboxJobSubscribedTitle || 'New subscription to your job offer') : (i18n.inboxJobUnsubscribedTitle || 'Unsubscription from your job offer');
+        const jobTitle = quoted(text) || 'job';
+        const jobId = pickLink(text, 'job');
+        const href = jobId ? hrefFor.job(jobId) : null;
+        return div(
+            clickableCardProps(href, `job-notification ${isSub ? 'job-sub' : 'job-unsub'}`),
+            header({ sentAt, from, toLinks, botIcon: icon, botLabel: i18n.pmBotJobs }),
+            h2({ class: 'pm-title' }, titleH),
+            p(
+                i18n.pmInhabitantWithId, ' ',
+                linkAuthor(from), ' ',
+                isSub ? i18n.pmHasSubscribedToYourJobOffer : (i18n.pmHasUnsubscribedFromYourJobOffer || 'has unsubscribed from your job offer'),
+                ' ',
+                href ? a({ class: 'job-link', href }, `"${jobTitle}"`) : `"${jobTitle}"`
+            ),
+            actions({ key, replyId: from })
+        );
+    }
+
+    function ProjectFollowCard({ type, sentAt, from, toLinks, text, key }) {
+        const isFollow = type === 'PROJECT_FOLLOWED';
+        const icon = isFollow ? '🔔' : '🔕';
+        const titleH = isFollow
+            ? (i18n.inboxProjectFollowedTitle || 'New follower of your project')
+            : (i18n.inboxProjectUnfollowedTitle || 'Unfollowed your project');
+        const projectTitle = quoted(text) || 'project';
+        const projectId = pickLink(text, 'project');
+        const href = projectId ? hrefFor.project(projectId) : null;
+        return div(
+            clickableCardProps(href, `project-${isFollow ? 'follow' : 'unfollow'}-notification`),
+            header({ sentAt, from, toLinks, botIcon: icon, botLabel: i18n.pmBotProjects }),
+            h2({ class: 'pm-title' }, titleH),
+            p(
+                i18n.pmInhabitantWithId, ' ',
+                a({ class: 'user-link', href: `/author/${encodeURIComponent(from)}` }, from),
+                ' ',
+                isFollow ? (i18n.pmHasFollowedYourProject || 'has followed your project') : (i18n.pmHasUnfollowedYourProject || 'has unfollowed your project'),
+                ' ',
+                href ? a({ class: 'project-link', href }, `"${projectTitle}"`) : `"${projectTitle}"`
+            ),
+            actions({ key, replyId: from })
+        );
+    }
+
+    function MarketSoldCard({ sentAt, from, toLinks, subject, text, key }) {
+        const itemTitle = quoted(subject) || quoted(text) || 'item';
+        const buyerId = (text.match(/OASIS ID:\s*([\w=/+.-]+)/) || [])[1] || from;
+        const price = (text.match(/for:\s*\$([\d.]+)/) || [])[1] || '';
+        const marketId = pickLink(text, 'market');
+        const href = marketId ? hrefFor.market(marketId) : null;
+        return div(
+            clickableCardProps(href, 'market-sold-notification'),
+            header({ sentAt, from, toLinks, botIcon: '💰', botLabel: i18n.pmBotMarket }),
+            h2({ class: 'pm-title' }, i18n.inboxMarketItemSoldTitle),
+            p(
+                i18n.pmYourItem, ' ',
+                href ? a({ class: 'market-link', href }, `"${itemTitle}"`) : `"${itemTitle}"`,
+                ' ',
+                i18n.pmHasBeenSoldTo, ' ',
+                linkAuthor(buyerId),
+                price ? ` ${i18n.pmFor} $${price}.` : '.'
+            ),
+            actions({ key, replyId: buyerId })
+        );
+    }
+
+    function ProjectPledgeCard({ sentAt, from, toLinks, content, text, key }) {
+        const amount = content.meta?.amount ?? (text.match(/pledged\s+([\d.]+)/)?.[1] || '0');
+        const projectTitle = content.meta?.projectTitle ?? (text.match(/project\s+"([^"]+)"/)?.[1] || 'project');
+        const projectId = content.meta?.projectId ?? pickLink(text, 'project');
+        const href = projectId ? hrefFor.project(projectId) : null;
+        return div(
+            clickableCardProps(href, 'project-pledge-notification'),
+            header({ sentAt, from, toLinks, botIcon: '💚', botLabel: i18n.pmBotProjects }),
+            h2({ class: 'pm-title' }, i18n.inboxProjectPledgedTitle),
+            p(
+                i18n.pmInhabitantWithId, ' ',
+                linkAuthor(from), ' ',
+                i18n.pmHasPledged, ' ',
+                chip(`${amount} ECO`), ' ',
+                i18n.pmToYourProject, ' ',
+                href ? a({ class: 'project-link', href }, `"${projectTitle}"`) : `"${projectTitle}"`
+            ),
+            actions({ key, replyId: from })
+        );
+    }
+
+    function clickableLinks(str) {
+        return str
+            .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g,
+                (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${match}</a>`
+            )
+            .replace(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/g,
+                (match, id) => `<a class="job-link" href="${hrefFor.job(id)}">${match}</a>`
+            )
+            .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g,
+                (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`
+            )
+            .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g,
+                (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`
+            );
+    }
+
+    return template(
+        i18n.private,
+        section(
+            div({ class: 'tags-header' },
+                h2(i18n.private),
+                p(i18n.privateDescription)
+            ),
+            div({ class: 'filters' },
+                form({ method: 'GET', action: '/inbox' }, [
+                    button({
+                        type: 'submit',
+                        name: 'filter',
+                        value: 'inbox',
+                        class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
+                    }, i18n.privateInbox),
+                    button({
+                        type: 'submit',
+                        name: 'filter',
+                        value: 'sent',
+                        class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
+                    }, i18n.privateSent),
+                    button({
+                        type: 'submit',
+                        name: 'filter',
+                        value: 'create',
+                        class: 'create-button',
+                        formaction: '/pm',
+                        formmethod: 'GET'
+                    }, i18n.pmCreateButton)
+                ])
+            ),
+            div({ class: 'message-list' },
+                filtered.length
+                    ? filtered.map(msg => {
+                        const content = msg?.value?.content;
+                        const author = msg?.value?.author;
+                        if (!content || !author) return div({ class: 'pm-card malformed' }, i18n.pmInvalidMessage);
+                        const subjectRaw = content.subject || '';
+                        const subject = subjectRaw.toUpperCase();
+                        const text = content.text || '';
+                        const sentAt = new Date(content.sentAt || msg.timestamp);
+                        const from = content.from;
+                        const toLinks = (content.to || []).map(addr => linkAuthor(addr));
+
+                        if (subject === 'JOB_SUBSCRIBED' || subject === 'JOB_UNSUBSCRIBED') {
+                            return JobCard({ type: subject, sentAt, from, toLinks, text, key: msg.key });
+                        }
+			if (subject === 'PROJECT_FOLLOWED' || subject === 'PROJECT_UNFOLLOWED') {
+			    return ProjectFollowCard({ type: subject, sentAt, from, toLinks, text, key: msg.key });
+			}
+                        if (subject === 'MARKET_SOLD') {
+                            return MarketSoldCard({ sentAt, from, toLinks, subject: subjectRaw, text, key: msg.key });
+                        }
+                        if (subject === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
+                            return ProjectPledgeCard({ sentAt, from, toLinks, content, text, key: msg.key });
+                        }
+
+                        const jobTxt = text.match(/has subscribed to your job offer "([^"]+)"/);
+                        const jobIdLegacy = pickLink(text, 'job');
+                        if (jobTxt && jobIdLegacy) return JobCard({ type: 'JOB_SUBSCRIBED', sentAt, from, toLinks, text, key: msg.key });
+
+                        const projTxt = text.match(/has created a project "([^"]+)"/);
+                        const projIdLegacy = pickLink(text, 'project');
+                        if (projTxt && projIdLegacy) return ProjectCreatedCard({ sentAt, from, toLinks, text, key: msg.key });
+
+                        const saleTxt = subjectRaw.match(/item "([^"]+)" has been sold/) || text.match(/item "([^"]+)" has been sold/);
+                        const marketIdLegacy = pickLink(text, 'market');
+                        if (saleTxt && marketIdLegacy) return MarketSoldCard({ sentAt, from, toLinks, subject: subjectRaw, text, key: msg.key });
+
+                        return div(
+                            { class: 'pm-card normal-pm' },
+                            header({ sentAt, from, toLinks }),
+                            h2(content.subject || i18n.pmNoSubject),
+                            p({ class: 'message-text' }, ...renderUrl(clickableLinks(text))),
+                            actions({ key: msg.key, replyId: from })
+                        );
+                    })
+                    : p({ class: 'empty' }, i18n.noPrivateMessages)
+            )
+        )
+    );
 };
 
 exports.publishCustomView = async () => {

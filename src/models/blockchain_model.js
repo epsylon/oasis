@@ -14,6 +14,17 @@ module.exports = ({ cooler }) => {
   const hasBlob = async (ssbClient, url) =>
     new Promise(resolve => ssbClient.blobs.has(url, (err, has) => resolve(!err && has)));
 
+  const isClosedSold = s => String(s || '').toUpperCase() === 'SOLD' || String(s || '').toUpperCase() === 'CLOSED';
+
+  const projectRank = (status) => {
+    const S = String(status || '').toUpperCase();
+    if (S === 'COMPLETED') return 3;
+    if (S === 'ACTIVE')    return 2;
+    if (S === 'PAUSED')    return 1;
+    if (S === 'CANCELLED') return 0;
+    return -1;
+  };
+
   return {
     async listBlockchain(filter = 'all') {
       const ssbClient = await openSsb();
@@ -62,12 +73,15 @@ module.exports = ({ cooler }) => {
         let best = groupBlocks[0];
         for (const block of groupBlocks) {
           if (block.type === 'market') {
-            const isClosedSold = s => s === 'SOLD' || s === 'CLOSED';
             if (isClosedSold(block.content.status) && !isClosedSold(best.content.status)) {
               best = block;
             } else if ((block.content.status === best.content.status) && block.ts > best.ts) {
               best = block;
             }
+          } else if (block.type === 'project') {
+            const br = projectRank(best.content.status);
+            const cr = projectRank(block.content.status);
+            if (cr > br || (cr === br && block.ts > best.ts)) best = block;
           } else if (block.type === 'job' || block.type === 'forum') {
             if (block.ts > best.ts) best = block;
           } else {
@@ -148,12 +162,15 @@ module.exports = ({ cooler }) => {
         let best = groupBlocks[0];
         for (const block of groupBlocks) {
           if (block.type === 'market') {
-            const isClosedSold = s => s === 'SOLD' || s === 'CLOSED';
             if (isClosedSold(block.content.status) && !isClosedSold(best.content.status)) {
               best = block;
             } else if ((block.content.status === best.content.status) && block.ts > best.ts) {
               best = block;
             }
+          } else if (block.type === 'project') {
+            const br = projectRank(best.content.status);
+            const cr = projectRank(block.content.status);
+            if (cr > br || (cr === br && block.ts > best.ts)) best = block;
           } else if (block.type === 'job' || block.type === 'forum') {
             if (block.ts > best.ts) best = block;
           } else {

@@ -33,13 +33,20 @@
     "agendaMod": "on",
     "aiMod": "on",
     "forumMod": "on",
-    "jobsMod": "on"
+    "jobsMod": "on",
+    "projectsMod": "on",
+    "bankingMod": "on"
   },
   "wallet": {
     "url": "http://localhost:7474",
     "user": "ecoinrpc",
-    "pass": "",
+    "pass": "DLKKWE93203909238dkkKKeowxmIOw0232lsakwL02kUfoEcoinUfonet",
     "fee": "1"
+  },
+  "walletPub": {
+    "url": "",
+    "user": "",
+    "pass": ""
   },
   "ai": {
     "prompt": "Provide an informative and precise response."

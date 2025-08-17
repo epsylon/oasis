@@ -1746,7 +1746,6 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .mode-buttons-row {
   display: flex;
   flex-direction: row;
-  gap: 2em;
   align-items: flex-start;
   margin-bottom: 1.5em;
 }
@@ -2115,4 +2114,139 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .pm-title {
   font-weight: bold;
   margin-bottom: 8px;
+}
+
+/*projects*/
+.project-actions {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px; 
+}
+
+.project-card.status-completed .badge{ background:rgba(59,130,246,.12); color:#93c5fd; border-color:rgba(59,130,246,.25); }
+
+.badge{
+  position:absolute;
+  top:14px; right:14px;
+  font-size:.75rem;
+  letter-spacing:.02em;
+  padding:6px 8px;
+  border-radius:8px;
+  border:1px solid var(--line);
+  color:var(--muted);
+}
+
+.milestones, .bounties{ display:flex; flex-direction:column; gap:8px; }
+.milestone-item, .bounty-item{
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#121620;
+}
+
+.milestone-row{
+  display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+  margin-bottom:6px;
+}
+
+.milestone-title{ font-weight:600; }
+.milestone-percent{ padding:4px 8px; border-radius:8px; border:1px solid var(--line); font-size:.8rem; color:#b7c2d6; }
+.milestone-due{ color:#c9a86a; font-size:.85rem; }
+
+.bounty-main{
+  display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;
+}
+
+.bounty-title{ font-weight:600; }
+.bounty-amount{
+  font-variant-numeric: tabular-nums;
+  padding:4px 8px; border-radius:8px; background:#18202f; border:1px solid var(--line);
+}
+
+.pledge-box{
+  margin-top:6px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#121620;
+  display:grid;
+  gap:10px;
+}
+
+.pledge-box form{ display:flex; gap:10px; flex-wrap:wrap; }
+.pledge-box input[type="number"]{
+  background:#0f1420; border:1px solid #2b3240; color:var(--text);
+  padding:10px 12px; border-radius:10px; outline:none;
+}
+
+.pledge-box input[type="number"]:focus{ border-color:#3a475c; }
+
+@media (max-width: 420px){
+  .card-field{ grid-template-columns: 1fr; }
+  .milestone-row{ flex-direction:column; align-items:flex-start; gap:6px; }
+}
+
+/*banking*/
+.addr-form-card, .addr-list-card {
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  padding: 20px;
+}
+
+.addr-form-card.wide { 
+  padding: 22px; 
+}
+
+.addr-form .form-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.addr-form .form-input {
+  padding: 0 14px;
+}
+
+.addr-form .form-input.xl { 
+  height: 50px;
+  font-size: 16px; 
+}
+
+.addr-form .form-actions {
+  display: flex;
+  margin-top: 8px;
+}
+
+.addr-list-card .form-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.addr-list-card .form-input {
+  padding: 0 14px;
+}
+
+.addr-search input[type="text"]:focus,
+.addr-form .form-input:focus {
+  outline: none;
+  border-color: #ffa300;
+}
+
+.addr-form .form-actions .mini-btn {
+  background: #ffa300;
+  border: none;
+  color: #fff;
+  padding: 9px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.addr-form .form-actions .mini-btn:hover {
+  background: #ff7f00;
 }

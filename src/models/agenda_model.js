@@ -140,14 +140,15 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
-      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll] = await Promise.all([
+      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll, projectsAll] = await Promise.all([
         fetchItems('task'),
         fetchItems('event'),
         fetchItems('transfer'),
         fetchItems('tribe'),
         fetchItems('market'),
         fetchItems('report'),
-        fetchItems('job')
+        fetchItems('job'),
+        fetchItems('project')
       ]);
 
       const tasks = tasksAll.filter(c => Array.isArray(c.assignees) && c.assignees.includes(userId)).map(t => ({ ...t, type: 'task' }));
@@ -159,6 +160,7 @@ module.exports = ({ cooler }) => {
       ).map(m => ({ ...m, type: 'market' }));
       const reports = reportsAll.filter(c => c.author === userId || (Array.isArray(c.confirmations) && c.confirmations.includes(userId))).map(r => ({ ...r, type: 'report' }));
       const jobs = jobsAll.filter(c => c.author === userId || (Array.isArray(c.subscribers) && c.subscribers.includes(userId))).map(j => ({ ...j, type: 'job', title: j.title }));
+      const projects = projectsAll.map(p => ({ ...p, type: 'project' }));
 
       let combined = [
         ...tasks,
@@ -167,7 +169,8 @@ module.exports = ({ cooler }) => {
         ...tribes,
         ...marketItems,
         ...reports,
-        ...jobs
+        ...jobs,
+        ...projects
       ];
 
       let filtered;
@@ -184,6 +187,7 @@ module.exports = ({ cooler }) => {
         else if (filter === 'open') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'OPEN');
         else if (filter === 'closed') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'CLOSED');
         else if (filter === 'jobs') filtered = filtered.filter(i => i.type === 'job');
+        else if (filter === 'projects') filtered = filtered.filter(i => i.type === 'project');
       }
 
       filtered.sort((a, b) => {
@@ -208,6 +212,7 @@ module.exports = ({ cooler }) => {
           market: mainItems.filter(i => i.type === 'market').length,
           reports: mainItems.filter(i => i.type === 'report').length,
           jobs: mainItems.filter(i => i.type === 'job').length,
+          projects: mainItems.filter(i => i.type === 'project').length,
           discarded: discarded.length
         }
       };

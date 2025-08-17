@@ -39,13 +39,20 @@ if (!fs.existsSync(configFilePath)) {
       "agendaMod": "on",
       "aiMod": "on",
       "forumMod": "on",
-      "jobsMod": "on"
+      "jobsMod": "on",
+      "projectsMod": "on",
+      "bankingMod": "on"
     },
     "wallet": {
       "url": "http://localhost:7474",
-      "user": "ecoinrpc",
+      "user": "",
       "pass": "",
       "fee": "1"
+    },
+    "walletPub": {
+      "url": "",
+      "user": "",
+      "pass": ""
     },
     "ai": {
       "prompt": "Provide an informative and precise response."

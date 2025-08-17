@@ -1,124 +1,124 @@
-import pull from 'pull-stream';
-import gui from '../client/gui.js';
+const pull = require('../server/node_modules/pull-stream');
+const gui = require('../client/gui.js');
 const { getConfig } = require('../configs/config-manager.js');
-const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const path = require('path');
 
+const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const cooler = gui({ offline: false });
 
 const searchableTypes = [
   'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
-  'votes', 'report', 'task', 'event', 'bookmark', 'document',
-  'image', 'audio', 'video', 'market'
+  'votes', 'vote', 'report', 'task', 'event', 'bookmark', 'document',
+  'image', 'audio', 'video', 'market', 'forum', 'job', 'project',
+  'contact', 'pub', 'pixelia', 'bankWallet', 'bankClaim', 'aiExchange'
 ];
 
-const getRelevantFields = (type, content) => {
+const clip = (s, n) => String(s || '').slice(0, n);
+const squash = s => String(s || '').replace(/\s+/g, ' ').trim();
+const compact = s => squash(clip(s, 160));
+
+function fieldsForSnippet(type, c) {
   switch (type) {
-    case 'post':
-      return [content?.text, content?.contentWarning, ...(content?.tags || [])];
-    case 'about':
-      return [content?.about, content?.name, content?.description];
-    case 'feed':
-      return [content?.text, content?.author, content?.createdAt, ...(content?.tags || []), content?.refeeds];
-    case 'event':
-      return [content?.title, content?.description, content?.date, content?.location, content?.price, ...(content?.tags || [])];
-    case 'votes':
-      return [content?.question, content?.deadline, content?.status, content?.totalVotes];
-    case 'tribe':
-      return [content?.title, content?.description, content?.location, content?.members?.length, ...(content?.tags || [])];
-    case 'audio':
-      return [content?.title, content?.description, ...(content?.tags || [])];
-    case 'image':
-      return [content?.title, content?.description, ...(content?.tags || [])];
-    case 'video':
-      return [content?.title, content?.description, ...(content?.tags || [])];
-    case 'document':
-      return [content?.title, content?.description, ...(content?.tags || [])];
-    case 'market':
-      return [content?.title, content?.description, content?.price, content?.status, ...(content?.tags || [])];
-    case 'bookmark':
-      return [content?.url, content?.description, ...(content?.tags || [])];
-    case 'task':
-      return [content?.title, content?.description, content?.status, ...(content?.tags || [])];
-    case 'report':
-      return [content?.title, content?.description, content?.severity, content?.status, ...(content?.tags || [])];
-    case 'transfer':
-      return [content?.from, content?.to, content?.amount, content?.status, ...(content?.tags || [])];
-    case 'curriculum':
-      return [content?.name, content?.description, content?.location, content?.status, ...(content?.personalSkills || []), ...(content?.languages || [])];
-    default:
-      return [];
+    case 'aiExchange': return [c?.question, clip(squash(c?.answer || ''), 120)];
+    case 'post': return [c?.text, ...(c?.tags || [])];
+    case 'about': return [c?.about, c?.name, c?.description];
+    case 'curriculum': return [c?.name, c?.description, c?.location];
+    case 'tribe': return [c?.title, c?.description, ...(c?.tags || [])];
+    case 'transfer': return [c?.from, c?.to, String(c?.amount), c?.status];
+    case 'feed': return [c?.text, ...(c?.tags || [])];
+    case 'votes': return [c?.question, c?.status];
+    case 'vote': return [c?.vote?.link, String(c?.vote?.value)];
+    case 'report': return [c?.title, c?.severity, c?.status];
+    case 'task': return [c?.title, c?.status];
+    case 'event': return [c?.title, c?.date, c?.location];
+    case 'bookmark': return [c?.url, c?.description];
+    case 'document': return [c?.title, c?.description];
+    case 'image': return [c?.title, c?.description];
+    case 'audio': return [c?.title, c?.description];
+    case 'video': return [c?.title, c?.description];
+    case 'market': return [c?.title, String(c?.price), c?.status];
+    case 'forum': return [c?.title, c?.category, c?.text];
+    case 'job': return [c?.title, c?.job_type, String(c?.salary), c?.status];
+    case 'project': return [c?.title, c?.status, String(c?.progress)];
+    case 'contact': return [c?.contact];
+    case 'pub': return [c?.address?.key, c?.address?.host];
+    case 'pixelia': return [c?.author];
+    case 'bankWallet': return [c?.address];
+    case 'bankClaim': return [String(c?.amount), c?.epochId, c?.txid];
+    default: return [];
   }
-};
+}
+
+async function publishExchange({ q, a, ctx = [], tokens = {} }) {
+  const ssbClient = await cooler.open();
+
+  const content = {
+    type: 'aiExchange',
+    question: clip(String(q || ''), 2000),
+    answer: clip(String(a || ''), 5000),
+    ctx: ctx.slice(0, 12).map(s => clip(String(s || ''), 800)),
+    timestamp: Date.now()
+  };
+
+  return new Promise((resolve, reject) => {
+    ssbClient.publish(content, (err, res) => err ? reject(err) : resolve(res));
+  });
+}
 
 async function buildContext(maxItems = 100) {
   const ssb = await cooler.open();
   return new Promise((resolve, reject) => {
     pull(
-      ssb.createLogStream({ limit: logLimit }),
+      ssb.createLogStream({ reverse: true, limit: logLimit }),
       pull.collect((err, msgs) => {
         if (err) return reject(err);
 
         const tombstoned = new Set();
         const latest = new Map();
-        const users = new Set();
-        const events = [];
 
-        msgs.forEach(({ key, value }) => {
-          if (value.content.type === 'tombstone') tombstoned.add(value.content.target);
-        });
+        for (const { value } of msgs) {
+          const c = value?.content;
+          if (c?.type === 'tombstone' && c?.target) tombstoned.add(c.target);
+        }
 
-        msgs.forEach(({ key, value }) => {
-          const { author, content, timestamp } = value;
+        for (const { key, value } of msgs) {
+          const author = value?.author;
+          const content = value?.content || {};
           const type = content?.type;
-          if (!searchableTypes.includes(type) || tombstoned.has(key)) return;
+          const ts = value?.timestamp || 0;
 
-          users.add(author);
-          if (type === 'event' && new Date(content.date) >= new Date()) events.push({ content, timestamp });
+          if (!searchableTypes.includes(type) || tombstoned.has(key)) continue;
 
           const uniqueKey = type === 'about' ? content.about : key;
-          if (!latest.has(uniqueKey) || latest.get(uniqueKey).value.timestamp < timestamp) {
+          if (!latest.has(uniqueKey) || (latest.get(uniqueKey)?.value?.timestamp || 0) < ts) {
             latest.set(uniqueKey, { key, value });
           }
-        });
-
-        events.sort((a, b) => new Date(a.content.date) - new Date(b.content.date));
+        }
 
         const grouped = {};
         Array.from(latest.values())
-          .sort((a, b) => b.value.timestamp - a.value.timestamp)
+          .sort((a, b) => (b.value.timestamp || 0) - (a.value.timestamp || 0))
           .slice(0, maxItems)
           .forEach(({ value }) => {
-            const { content, timestamp } = value;
-            const fields = getRelevantFields(content.type, content).filter(Boolean).join(' | ');
+            const content = value.content;
+            const type = content.type;
+            const fields = fieldsForSnippet(type, content).filter(Boolean).map(compact).filter(Boolean).join(' | ');
             if (!fields) return;
-
-            const date = new Date(timestamp).toISOString().slice(0, 10);
-            grouped[content.type] = grouped[content.type] || [];
-            grouped[content.type].push(`[${date}] (${content.type}) ${fields}`);
+            const date = new Date(value.timestamp || 0).toISOString().slice(0, 10);
+            grouped[type] = grouped[type] || [];
+            grouped[type].push(`[${date}] (${type}) ${fields}`);
           });
 
-        const summary = [`## SUMMARY`, `Total Users: ${users.size}`];
-        if (events.length) {
-          const nextEvent = events[0].content;
-          summary.push(`Next Event: "${nextEvent.title}" on ${nextEvent.date} at ${nextEvent.location}`);
-        }
-
-        const upcomingEvents = events.map(({ content }) => `[${content.date}] ${content.title} | ${content.location}`).join('\n');
-
         const contextSections = Object.entries(grouped)
-          .map(([type, lines]) => `## ${type.toUpperCase()}\n\n${lines.join('\n')}`)
+          .map(([type, lines]) => `## ${type.toUpperCase()}\n\n${lines.slice(0, 20).join('\n')}`)
           .join('\n\n');
 
-        const finalContext = [
-          summary.join('\n'),
-          events.length ? `## UPCOMING EVENTS\n\n${upcomingEvents}` : '',
-          contextSections
-        ].filter(Boolean).join('\n\n');
-
+        const finalContext = contextSections ? contextSections : '';
         resolve(finalContext);
       })
     );
   });
 }
 
-export default buildContext;
+module.exports = { fieldsForSnippet, buildContext, clip, publishExchange };
+

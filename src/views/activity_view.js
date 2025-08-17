@@ -7,6 +7,10 @@ function capitalize(str) {
   return typeof str === 'string' && str.length ? str[0].toUpperCase() + str.slice(1) : '';
 }
 
+function sumAmounts(list = []) {
+  return list.reduce((s, x) => s + (parseFloat(x.amount || 0) || 0), 0);
+}
+
 function renderActionCards(actions, userId) {
   const validActions = actions
     .filter(action => {
@@ -68,6 +72,43 @@ function renderActionCards(actions, userId) {
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status))
+        )
+      );
+    }
+    
+    if (type === 'bankWallet') {
+      const { address } = content;
+      cardBody.push(
+        div({ class: 'card-section banking-wallet' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankWalletConnected + ':' ),
+            span({ class: 'card-value' }, address)
+          )
+        )
+      );
+    }
+
+    if (type === 'bankClaim') {
+      const { amount, epochId, allocationId, txid } = content;
+      const amt = Number(amount || 0);
+      cardBody.push(
+        div({ class: 'card-section banking-claim' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankUbiReceived + ':' ),
+            span({ class: 'card-value' }, `${amt.toFixed(6)} ECO`)
+          ),
+          epochId ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankEpochShort + ':' ),
+            span({ class: 'card-value' }, epochId)
+          ) : "",
+          allocationId ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankAllocId + ':' ),
+            span({ class: 'card-value' }, allocationId)
+          ) : "",
+          txid ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankTx + ':' ),
+            a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${txid}`, target: '_blank' }, txid)
+          ) : ""
         )
       );
     }
@@ -428,6 +469,66 @@ function renderActionCards(actions, userId) {
       );
     }
     
+    if (type === 'project') {
+      const { title, status, progress, goal, pledged, deadline, followers, backers } = content;
+      const ratio = goal ? Math.min(100, Math.round((parseFloat(pledged || 0) / parseFloat(goal)) * 100)) : 0;
+      const displayStatus = String(status || 'ACTIVE').toUpperCase();
+      const followersCount = Array.isArray(followers) ? followers.length : 0;
+      const backersCount = Array.isArray(backers) ? backers.length : 0;
+      const backersTotal = sumAmounts(backers || []);
+      cardBody.push(
+        div({ class: 'card-section project' },
+          title ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.title + ':'), 
+            span({ class: 'card-value' }, title)
+          ) : "",
+          typeof goal !== 'undefined' ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectGoal + ':'), 
+            span({ class: 'card-value' }, `${goal} ECO`)
+          ) : "",
+          typeof progress !== 'undefined' ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectProgress + ':'), 
+            span({ class: 'card-value' }, `${progress || 0}%`)
+          ) : "",
+          deadline ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectDeadline + ':'), 
+            span({ class: 'card-value' }, moment(deadline).format('YYYY/MM/DD HH:mm'))
+          ) : "",
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectStatus + ':'), 
+            span({ class: 'card-value' }, i18n['projectStatus' + displayStatus] || displayStatus)
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectFunding + ':'), 
+            span({ class: 'card-value' }, `${ratio}%`)
+          ),
+          typeof pledged !== 'undefined' ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectPledged + ':'), 
+            span({ class: 'card-value' }, `${pledged || 0} ECO`)
+          ) : "",
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectFollowers + ':'), 
+            span({ class: 'card-value' }, `${followersCount}`)
+          ),
+          div({ class: 'card-field' },
+           span({ class: 'card-label' }, i18n.projectBackers + ':'), 
+           span({ class: 'card-value' }, `${backersCount} · ${backersTotal} ECO`)
+          )
+        )
+      );
+    }
+  
+    if (type === 'aiExchange') {
+      const { ctx } = content;
+      cardBody.push(
+        div({ class: 'card-section ai-exchange' },
+          Array.isArray(ctx) && ctx.length
+            ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.aiSnippetsLearned || 'Snippets learned') + ':'), span({ class: 'card-value' }, String(ctx.length)))
+            : ""
+        )
+      );
+    }
+    
     if (type === 'job') {
       const { title, job_type, tasks, location, vacants, salary, status, subscribers } = content;
       cardBody.push(
@@ -471,11 +572,11 @@ function renderActionCards(actions, userId) {
 return div({ class: 'card card-rpg' },
   div({ class: 'card-header' },
     h2({ class: 'card-label' }, `[${typeLabel}]`),
-	type !== 'feed' && (!action.tipId || action.tipId === action.id)
-	  ? form({ method: "GET", action: getViewDetailsAction(type, action) },
-	      button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-	    )
-	  : ''
+    type !== 'feed' && type !== 'aiExchange' && type !== 'bankWallet' && (!action.tipId || action.tipId === action.id)
+      ? form({ method: "GET", action: getViewDetailsAction(type, action) },
+          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+        )
+      : ''
   ),
   div({ class: 'card-body' }, ...cardBody),
   p({ class: 'card-footer' },
@@ -511,7 +612,11 @@ function getViewDetailsAction(type, action) {
     case 'pub': return `/invites`;
     case 'market': return `/market/${id}`;
     case 'job': return `/jobs/${id}`;
+    case 'project': return `/projects/${id}`;
     case 'report': return `/reports/${id}`;
+    case 'bankWallet': return `/wallet`;
+    case 'bankClaim': return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
+
   }
 }
 
@@ -520,105 +625,113 @@ exports.activityView = (actions, filter, userId) => {
   const desc = i18n.activityDesc;
 
   const activityTypes = [
-    { type: 'recent', label: i18n.typeRecent },
-    { type: 'all', label: i18n.allButton },
-    { type: 'mine', label: i18n.mineButton },
-    { type: 'votes', label: i18n.typeVotes },
-    { type: 'event', label: i18n.typeEvent },
-    { type: 'task', label: i18n.typeTask },
-    { type: 'report', label: i18n.typeReport },
-    { type: 'tribe', label: i18n.typeTribe },
-    { type: 'about', label: i18n.typeAbout },
-    { type: 'curriculum', label: i18n.typeCurriculum },
-    { type: 'market', label: i18n.typeMarket },
-    { type: 'job', label: i18n.typeJob },
-    { type: 'transfer', label: i18n.typeTransfer },
-    { type: 'feed', label: i18n.typeFeed },
-    { type: 'post', label: i18n.typePost },
-    { type: 'pixelia', label: i18n.typePixelia },
-    { type: 'forum', label: i18n.typeForum },
-    { type: 'bookmark', label: i18n.typeBookmark },
-    { type: 'image', label: i18n.typeImage },
-    { type: 'video', label: i18n.typeVideo },
-    { type: 'audio', label: i18n.typeAudio },
-    { type: 'document', label: i18n.typeDocument }
+  { type: 'recent',    label: i18n.typeRecent },
+  { type: 'all',       label: i18n.allButton },
+  { type: 'mine',      label: i18n.mineButton },
+
+  { type: 'banking',   label: i18n.typeBanking },
+  { type: 'market',    label: i18n.typeMarket },
+  { type: 'project',   label: i18n.typeProject },
+  { type: 'job',       label: i18n.typeJob },
+  { type: 'transfer',  label: i18n.typeTransfer },
+
+  { type: 'votes',     label: i18n.typeVotes },
+  { type: 'event',     label: i18n.typeEvent },
+  { type: 'task',      label: i18n.typeTask },
+  { type: 'report',    label: i18n.typeReport },
+
+  { type: 'tribe',     label: i18n.typeTribe },
+  { type: 'about',     label: i18n.typeAbout },
+  { type: 'curriculum',label: i18n.typeCurriculum },
+  { type: 'feed',      label: i18n.typeFeed },
+
+  { type: 'aiExchange', label: i18n.typeAiExchange },
+  { type: 'post',      label: i18n.typePost },
+  { type: 'pixelia',   label: i18n.typePixelia },
+  { type: 'forum',     label: i18n.typeForum },
+  
+  { type: 'bookmark',  label: i18n.typeBookmark },
+  { type: 'image',     label: i18n.typeImage },
+  { type: 'video',     label: i18n.typeVideo },
+  { type: 'audio',     label: i18n.typeAudio },
+  { type: 'document',  label: i18n.typeDocument }
   ];
-  let filteredActions;
+
+ let filteredActions;
   if (filter === 'mine') {
-    filteredActions = actions.filter(action => actions.author === userId && action.type !== 'tombstone');
+    filteredActions = actions.filter(action => action.author === userId && action.type !== 'tombstone');
   } else if (filter === 'recent') {
     const now = Date.now();
-    filteredActions = actions.filter(action => 
-      action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000 
-    );
+    filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
+  } else if (filter === 'banking') {
+    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim'));
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all') && action.type !== 'tombstone');
   }
 
   let html = template(
-    title,
-    section(
-      div({ class: 'tags-header' },
-        h2(i18n.activityList),
-        p(desc)
-        ),
-        form({ method: 'GET', action: '/activity' },
-          div({ class: 'mode-buttons', style: 'display:grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px;' },
-            div({
-              style: 'display: flex; flex-direction: column; gap: 8px;'
-            },
-              activityTypes.slice(0, 3).map(({ type, label }) =>
-                form({ method: 'GET', action: '/activity' },
-                  input({ type: 'hidden', name: 'filter', value: type }),
-                  button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-                )
-              )
-            ),
-            div({
-              style: 'display: flex; flex-direction: column; gap: 8px;'
-            },
-              activityTypes.slice(3, 7).map(({ type, label }) =>
-                form({ method: 'GET', action: '/activity' },
-                  input({ type: 'hidden', name: 'filter', value: type }),
-                  button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-                )
-              )
-            ),
-            div({
-              style: 'display: flex; flex-direction: column; gap: 8px;'
-            },
-              activityTypes.slice(7, 11).map(({ type, label }) =>
-                form({ method: 'GET', action: '/activity' },
-                  input({ type: 'hidden', name: 'filter', value: type }),
-                  button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-                )
-              )
-            ),
-            div({
-              style: 'display: flex; flex-direction: column; gap: 8px;'
-            },
-              activityTypes.slice(11, 16).map(({ type, label }) =>
-                form({ method: 'GET', action: '/activity' },
-                  input({ type: 'hidden', name: 'filter', value: type }),
-                  button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-                )
-              )
-            ),
-            div({
-              style: 'display: flex; flex-direction: column; gap: 8px;'
-            },
-              activityTypes.slice(16, 22).map(({ type, label }) =>
-                form({ method: 'GET', action: '/activity' },
-                  input({ type: 'hidden', name: 'filter', value: type }),
-                  button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-                )
-              )
+  title,
+  section(
+    div({ class: 'tags-header' },
+      h2(i18n.activityList),
+      p(desc)
+    ),
+    form({ method: 'GET', action: '/activity' },
+      div({ class: 'mode-buttons', style: 'display:grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px;' },
+        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+          activityTypes.slice(0, 3).map(({ type, label }) =>
+            form({ method: 'GET', action: '/activity' },
+              input({ type: 'hidden', name: 'filter', value: type }),
+              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
             )
           )
         ),
-       section({ class: 'feed-container' }, renderActionCards(filteredActions, userId))
-    )
+        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+          activityTypes.slice(3, 8).map(({ type, label }) =>
+            form({ method: 'GET', action: '/activity' },
+              input({ type: 'hidden', name: 'filter', value: type }),
+              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+            )
+          )
+        ),
+        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+          activityTypes.slice(8, 12).map(({ type, label }) =>
+            form({ method: 'GET', action: '/activity' },
+              input({ type: 'hidden', name: 'filter', value: type }),
+              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+            )
+          )
+        ),
+        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+          activityTypes.slice(12, 16).map(({ type, label }) =>
+            form({ method: 'GET', action: '/activity' },
+              input({ type: 'hidden', name: 'filter', value: type }),
+              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+            )
+          )
+        ),
+        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+          activityTypes.slice(16, 20).map(({ type, label }) =>
+            form({ method: 'GET', action: '/activity' },
+              input({ type: 'hidden', name: 'filter', value: type }),
+              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+            )
+          )
+        ),
+        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+          activityTypes.slice(20, 25).map(({ type, label }) =>
+            form({ method: 'GET', action: '/activity' },
+              input({ type: 'hidden', name: 'filter', value: type }),
+              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+            )
+          )
+        )
+      )
+    ),
+    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId))
+  )
   );
+
   const hasDocument = actions.some(a => a && a.type === 'document');
   if (hasDocument) {
     html += `
