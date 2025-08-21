@@ -425,7 +425,7 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/modules", emoji: "ꗣ", text: i18n.modules }),
               navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
             )
-          )
+          ),
         ),
         div(
           { class: "top-bar-right" },
@@ -863,7 +863,8 @@ exports.authorView = ({
   lastPost,
   name,
   relationship,
-  ecoAddress
+  ecoAddress,
+  karmaScore = 0
 }) => {
   const mention = `[@${name}](${feedId})`;
   const markdownMention = highlightJs.highlight(mention, { language: "markdown", ignoreIllegals: true }).value;
@@ -968,6 +969,10 @@ exports.authorView = ({
                 ]
           )
         ),
+	p(
+	  `${i18n.bankingUserEngagementScore}: `,
+	  strong(karmaScore !== undefined ? karmaScore : 0)
+	),
 	ecoAddress
 	  ? div({ class: "eco-wallet" },
               p(`${i18n.bankWalletConnected}: `, strong(ecoAddress))

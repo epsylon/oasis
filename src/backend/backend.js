@@ -694,6 +694,7 @@ router
     const relationship = await friend.getRelationship(feedId);
     const avatarUrl = getAvatarUrl(image);
     const ecoAddress = await bankingModel.getUserAddress(feedId);
+    const { ecoValue, karmaScore } = await bankingModel.getBankingData(feedId);
     ctx.body = authorView({
       feedId,
       messages,
@@ -703,7 +704,8 @@ router
       description,
       avatarUrl,
       relationship,
-      ecoAddress
+      ecoAddress,
+      karmaScore
     });
   })
   .get("/search", async (ctx) => {
@@ -882,7 +884,10 @@ router
       filter,
       ...query
     });
-    ctx.body = await inhabitantsView(inhabitants, filter, query, userId);
+    const addresses = await bankingModel.listAddressesMerged();
+    const addrMap = new Map(addresses.map(x => [x.id, x.address]));
+    const inhabitantsWithAddr = inhabitants.map(u => ({ ...u, ecoAddress: addrMap.get(u.id) || null }));
+    ctx.body = await inhabitantsView(inhabitantsWithAddr, filter, query, userId);
   })
   .get('/inhabitant/:id', async (ctx) => {
     const id = ctx.params.id;
@@ -893,7 +898,7 @@ router
     ctx.body = await inhabitantsProfileView({ about, cv, feed }, currentUserId);
   })
   .get('/tribes', async ctx => {
-    const filter = ctx.query.filter || 'all';
+    const filter = ctx.query.filter || 'recent';
     const search = ctx.query.search || ''; 
     const tribes = await tribesModel.listAll();
     let filteredTribes = tribes;
@@ -950,6 +955,8 @@ router
     const lastPost = await post.latestBy(myFeedId)
     const avatarUrl = getAvatarUrl(image)
     const ecoAddress = await bankingModel.getUserAddress(myFeedId)
+    const { karmaScore, ecoValue } = await bankingModel.getBankingData(myFeedId);
+    
     ctx.body = await authorView({
       feedId: myFeedId,
       messages,
@@ -959,7 +966,8 @@ router
       description,
       avatarUrl,
       relationship: { me: true },
-      ecoAddress
+      ecoAddress,
+      karmaScore
     })
   })
   .get("/profile/edit", async (ctx) => {
@@ -1364,7 +1372,7 @@ router
     const project = await projectsModel.getProjectById(projectId)
     ctx.body = await singleProjectView(project, filter)
   })
-  .get('/banking', async (ctx) => {
+  .get("/banking", async (ctx) => {
     const bankingMod = ctx.cookies.get("bankingMod") || 'on';
     if (bankingMod !== 'on') { 
       ctx.redirect('/modules'); 
@@ -1385,6 +1393,15 @@ router
       data.search = q;
     }
     data.flash = msg || '';
+    const { ecoValue, inflationFactor, ecoInHours, currentSupply, isSynced } = await bankingModel.calculateEcoinValue();
+    data.exchange = {
+      ecoValue: ecoValue,
+      inflationFactor,
+      ecoInHours,
+      currentSupply: currentSupply,
+      totalSupply: 25500000,
+      isSynced: isSynced
+    };
     ctx.body = renderBankingView(data, filter, userId);
   })
   .get("/banking/allocation/:id", async (ctx) => {
@@ -2609,7 +2626,7 @@ router
     await pmModel.sendMessage([job.author], subject, text);
     ctx.redirect('/jobs');
   })
-  .post('/projects/create', koaBody({ multipart: true }), async (ctx) => {
+ .post('/projects/create', koaBody({ multipart: true }), async (ctx) => {
     const b = ctx.request.body || {};
     const imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
     const bounties =
@@ -2783,10 +2800,10 @@ router
   .post('/projects/bounties/add/:id', koaBody(), async (ctx) => {
     const { title, amount, description, milestoneIndex } = ctx.request.body;
     await projectsModel.addBounty(ctx.params.id, {
-       title,
-       amount,
-       description,
-       milestoneIndex: (milestoneIndex === '' || milestoneIndex === undefined) ? null : parseInt(milestoneIndex, 10)
+        title,
+        amount,
+        description,
+        milestoneIndex: (milestoneIndex === '' || milestoneIndex === undefined) ? null : parseInt(milestoneIndex, 10)
     });
     ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
   })
@@ -2808,7 +2825,7 @@ router
   .post('/projects/bounties/claim/:id/:index', koaBody(), async (ctx) => {
     const userId = SSBconfig.config.keys.id;
     await projectsModel.claimBounty(ctx.params.id, parseInt(ctx.params.index, 10), userId);
-    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`); 
   })
   .post('/projects/bounties/complete/:id/:index', koaBody(), async (ctx) => {
     const userId = SSBconfig.config.keys.id;

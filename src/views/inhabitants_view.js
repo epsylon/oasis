@@ -1,16 +1,14 @@
-const { div, h2, p, section, button, form, img, a, textarea, input, br, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, img, a, textarea, input, br, span, strong } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { renderUrl } = require('../backend/renderUrl');
 
 function resolvePhoto(photoField, size = 256) {
-  if (typeof photoField === 'string' && photoField.startsWith('/image/')) {
+  if (photoField == "/image/256/%260000000000000000000000000000000000000000000%3D.sha256"){
+    return '/assets/images/default-avatar.png';
+  } else {
     return photoField;
   }
-  if (/^&[A-Za-z0-9+/=]+\.sha256$/.test(photoField)) {
-    return `/image/${size}/${encodeURIComponent(photoField)}`;
-  }
-  return '/assets/images/default-avatar.png';
-}
+};
 
 const generateFilterButtons = (filters, currentFilter) =>
   filters.map(mode =>
@@ -41,12 +39,22 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
       filter === 'blocked' && user.isBlocked
         ? p(i18n.blockedLabel) : null,
       p(a({ class: 'user-link', href: `/author/${encodeURIComponent(user.id)}` }, user.id)),
-
+      user.ecoAddress
+        ? div({ class: "eco-wallet" },
+            p(`${i18n.bankWalletConnected}: `, strong(user.ecoAddress))
+          )
+        : div({ class: "eco-wallet" },
+            p(i18n.ecoWalletNotConfigured || "ECOin Wallet not configured")
+          ),
+      p(
+        `${i18n.bankingUserEngagementScore}: `,
+        strong(typeof user.karmaScore === 'number' ? user.karmaScore : 0)
+      ),
       div(
         { class: 'cv-actions', style: 'display:flex; flex-direction:column; gap:8px; margin-top:12px;' },
         isMe
           ? p(i18n.relationshipYou)
-          : (filter === 'CVs' || filter === 'MATCHSKILLS' || filter === 'SUGGESTED')
+          : (filter === 'CVs' || filter === 'MATCHSKILLS' || filter === 'SUGGESTED' || filter === 'TOP KARMA')
             ? form(
                 { method: 'GET', action: `/inhabitant/${encodeURIComponent(user.id)}` },
                 button({ type: 'submit', class: 'btn' }, i18n.inhabitantviewDetails)
@@ -92,10 +100,11 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
                : filter === 'SUGGESTED'   ? i18n.suggestedSectionTitle
                : filter === 'blocked'     ? i18n.blockedSectionTitle
                : filter === 'GALLERY'     ? i18n.gallerySectionTitle
+               : filter === 'TOP KARMA'    ? i18n.topkarmaSectionTitle
                                           : i18n.allInhabitants;
 
   const showCVFilters = filter === 'CVs' || filter === 'MATCHSKILLS';
-  const filters = ['all', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'];
+  const filters = ['all', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'];
 
   return template(
     title,
@@ -169,7 +178,7 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }, currentUse
         p(i18n.discoverPeople)
       ),
       div({ class: 'mode-buttons', style: 'display:flex; gap:8px; margin-top:16px;' },
-        ...generateFilterButtons(['all', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'], 'all')
+        ...generateFilterButtons(['all', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'], 'all')
       ),
       div({ class: 'inhabitant-card', style: 'margin-top:32px;' },
         img({ class: 'inhabitant-photo', src: image, alt: name }),

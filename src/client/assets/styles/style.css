@@ -2250,3 +2250,14 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .addr-form .form-actions .mini-btn:hover {
   background: #ff7f00;
 }
+
+.bank-summary .bank-info-table tbody tr .synced {
+  color: green;
+  font-weight: bold;
+}
+
+.bank-summary .bank-info-table tbody tr .outdated {
+  color: red;
+  font-weight: bold;
+}
+

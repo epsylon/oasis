@@ -13,6 +13,27 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+
+## v0.4.5 - 2025-08-21
+
+### Added
+
+ + Exchange (ECOin current value) for all inhabitants (banking plugin).
+ + Karma SCORE.
+ + Upload a set of images/collections (images plugin).
+ 
+### Fixed
+
+ + Add a new bounty (projects plugin).
+ + Activity duplications.
+ 
+### Changed
+
+- Activity.
+- Avatar.
+- Inhabitants.
+- Stats.
+
 ## v0.4.4 - 2025-08-17
 
 ### Added

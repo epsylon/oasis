@@ -11,7 +11,7 @@ exports.statsView = (stats, filter) => {
   const types = [
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project',
     'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
-    'market', 'forum', 'job', 'aiExchange'
+    'market', 'forum', 'job', 'aiExchange', 'karmaScore'
   ];
   const totalContent = types.reduce((sum, t) => sum + C(stats, t), 0);
   const totalOpinions = types.reduce((sum, t) => sum + O(stats, t), 0);
@@ -90,6 +90,7 @@ exports.statsView = (stats, filter) => {
 
         filter === 'ALL'
           ? div({ class: 'stats-container' }, [
+              div({ style: blockStyle }, h2(`${i18n.bankingUserEngagementScore}: ${C(stats, 'karmaScore')}`)),
               div({ style: blockStyle },
                 h2(i18n.statsActivity7d),
                 table({ style: 'width:100%; border-collapse: collapse;' },
@@ -162,6 +163,7 @@ exports.statsView = (stats, filter) => {
             ])
           : filter === 'MINE'
             ? div({ class: 'stats-container' }, [
+                div({ style: blockStyle }, h2(`${i18n.bankingUserEngagementScore}: ${C(stats, 'karmaScore')}`)),
                 div({ style: blockStyle },
                   h2(i18n.statsActivity7d),
                   table({ style: 'width:100%; border-collapse: collapse;' },

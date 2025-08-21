@@ -594,6 +594,7 @@ module.exports = {
     viewAvatar:        "View Avatar",
     viewCV:            "View CV",
     suggestedSectionTitle: "Suggested",
+    topkarmaSectionTitle: "Top Karma",
     blockedSectionTitle: "Blocked",
     gallerySectionTitle: "GALLERY",
     blockedButton:       "BLOCKED",
@@ -935,7 +936,7 @@ module.exports = {
     forumSendButton: "Send",
     forumVisitForum: "Visit Forum",
     noForums: "No forums found.",
-    // images
+    //images
     imageTitle: "Images",
     imagePluginTitle: "Title",
     imagePluginDescription: "Description",
@@ -1073,6 +1074,7 @@ module.exports = {
     personName:           "Inhabitant Name",
     typeBankWallet:       "BANKING/WALLET",
     typeBankClaim:        "BANKING/UBI",
+    typeKarmaScore:	  "KARMA",
     bankWalletConnected:  "ECOin Wallet",
     bankUbiReceived:      "UBI Received",
     bankTx:               "Tx",
@@ -1347,7 +1349,7 @@ module.exports = {
     //banking
     banking: 'Banking',
     bankingTitle: 'Banking',
-    bankingDescription: 'Universal Basic Income for Oasis inhabitants, distributed per epoch based on participation and trust.',
+    bankingDescription: 'Explore the current value of ECOin and the corresponding UBI allocation, distributed per epoch based on participation and trust.',
     bankOverview: 'Overview',
     bankEpochs: 'Epochs',
     bankRules: 'Rules',
@@ -1401,13 +1403,23 @@ module.exports = {
     search: 'Search!',
     bankLocal: 'Local',
     bankFromOasis: 'Oasis',
-    bankCopy: 'Copy',
-    bankCopied: 'Copied',
     bankMyAddress: 'Your address',
     bankRemoveMyAddress: 'Remove my address',
     bankNotRemovableOasis: 'Addresses cannot be removed locally',
-    bankingUserEngagementScore: "Engagement Score",
+    bankingUserEngagementScore: "KARMA Score",
     bankingFutureUBI: "Estimated UBI Allocation",
+    bankExchange: 'Exchange',
+    bankExchangeCurrentValue: 'ECOin Value (1h)',
+    bankTotalSupply: 'ECOin Total Supply',
+    bankEcoinHours: "ECOin Equivalence in Time",
+    bankHoursOfWork: 'hours',
+    bankExchangeNoData: 'No data available',
+    bankExchangeIndex: 'ECOin Value (1h)',
+    bankInflation: 'ECOin Inflation',
+    bankCurrentSupply: 'ECOin Current Supply',
+    bankingSyncStatus: 'ECOin Status',
+    bankingSyncStatusSynced: 'Synced',
+    bankingSyncStatusOutdated: 'Outdated',
     //stats
     statsTitle: 'Statistics',
     statistics: "Statistics",
@@ -1607,7 +1619,7 @@ module.exports = {
     jobsEmployeeTitle:    "Employee Jobs",
     jobTitle: "Title",
     jobLocation: "Location",
-    jobSalary: "Salary (1h)",
+    jobSalary: "Salary (ECO/1h)",
     jobVacants: "Vacants",
     jobDescription: "Description",
     jobRequirements: "Requirements",
@@ -1627,7 +1639,7 @@ module.exports = {
     jobLocationPresencial: "On-place",
     jobLocationRemote: "Remote",
     jobVacantsPlaceholder: "Number of positions",
-    jobSalaryPlaceholder: "Salary amount (1h)",
+    jobSalaryPlaceholder: "Salary in ECO for 1 dedicated hour",
     jobImage: "Upload Image (jpeg, jpg, png, gif) (max-size: 500px x 400px)",
     jobTasks: "Tasks",
     jobType: "Job Type",
@@ -1823,7 +1835,7 @@ module.exports = {
     modulesProjectsLabel: "Projects",
     modulesProjectsDescription: "Module to explore, crowd-funding and manage projects.",
     modulesBankingLabel: "Banking",
-    modulesBankingDescription: "Module to distribute a fair Universal Basic Income (UBI) using commons-treasury."
+    modulesBankingDescription: "Module to determine the real value of ECOIN and distribute a UBI using the common treasury."
      
      //END
     }

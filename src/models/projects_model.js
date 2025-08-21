@@ -262,9 +262,9 @@ module.exports = ({ cooler }) => {
     },
 
     async addBounty(id, bounty) {
-      const tip = await this.getProjectTipId(id)
-      const project = await this.getProjectById(tip)
-      const bounties = Array.isArray(project.bounties) ? project.bounties.slice() : []
+      const tip = await this.getProjectTipId(id);
+      const project = await this.getProjectById(tip);
+      const bounties = Array.isArray(project.bounties) ? project.bounties.slice() : [];
       const clean = {
         title: String(bounty.title || '').trim(),
         amount: Math.max(0, parseFloat(bounty.amount || 0) || 0),
@@ -272,35 +272,27 @@ module.exports = ({ cooler }) => {
         claimedBy: null,
         done: false,
         milestoneIndex: safeMilestoneIndex(project, bounty.milestoneIndex)
-      }
-      bounties.push(clean)
-      return this.updateProject(tip, { bounties })
+      };
+      bounties.push(clean);
+      return this.updateProject(tip, { bounties });
     },
 
     async updateBounty(id, index, patch) {
-      const tip = await this.getProjectTipId(id)
-      const project = await this.getProjectById(tip)
-      const bounties = Array.isArray(project.bounties) ? project.bounties.slice() : []
-      if (!bounties[index]) throw new Error('Bounty not found')
-      if (patch.title !== undefined) bounties[index].title = String(patch.title).trim()
-      if (patch.amount !== undefined) bounties[index].amount = Math.max(0, parseFloat(patch.amount || 0) || 0)
-      if (patch.description !== undefined) bounties[index].description = patch.description || ''
+      const tip = await this.getProjectTipId(id);
+      const project = await this.getProjectById(tip);
+      const bounties = Array.isArray(project.bounties) ? project.bounties.slice() : [];
+      if (!bounties[index]) throw new Error('Bounty not found');
+  
+      if (patch.title !== undefined) bounties[index].title = String(patch.title).trim();
+      if (patch.amount !== undefined) bounties[index].amount = Math.max(0, parseFloat(patch.amount || 0) || 0);
+      if (patch.description !== undefined) bounties[index].description = patch.description || '';
       if (patch.milestoneIndex !== undefined) {
-        const newIdx = patch.milestoneIndex == null ? null : parseInt(patch.milestoneIndex, 10)
-        bounties[index].milestoneIndex = (newIdx == null) ? null : (isNaN(newIdx) ? null : newIdx)
+        const newIdx = patch.milestoneIndex == null ? null : parseInt(patch.milestoneIndex, 10);
+        bounties[index].milestoneIndex = (newIdx == null) ? null : (isNaN(newIdx) ? null : newIdx);
       }
-      if (patch.done !== undefined) bounties[index].done = !!patch.done
-      let autoPatch = {}
-      if (bounties[index].milestoneIndex != null) {
-        const { milestones, progress, changed } =
-          autoCompleteMilestoneIfReady({ ...project, bounties }, bounties[index].milestoneIndex, clampPercent)
-        if (changed) {
-          autoPatch.milestones = milestones
-          autoPatch.progress = progress
-          if (progress >= 100) autoPatch.status = 'COMPLETED'
-        }
-      }
-      return this.updateProject(tip, { bounties, ...autoPatch })
+      if (patch.done !== undefined) bounties[index].done = !!patch.done;
+
+      return this.updateProject(tip, { bounties });
     },
 
     async updateMilestone(id, index, patch) {

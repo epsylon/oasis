@@ -26,7 +26,7 @@ module.exports = ({ cooler }) => {
   const types = [
     'bookmark','event','task','votes','report','feed','project',
     'image','audio','video','document','transfer','post','tribe',
-    'market','forum','job','aiExchange'
+    'market','forum','job','aiExchange','karmaScore'
   ];
 
   const getFolderSize = (folderPath) => {
@@ -148,6 +148,24 @@ module.exports = ({ cooler }) => {
       if (t === 'forum') vals = vals.filter(c => !(c.root && tombTargets.has(c.root)));
       content[t] = vals.length || 0;
       opinions[t] = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length || 0;
+    }
+
+    const karmaMsgsAll = allMsgs.filter(m => m.value?.content?.type === 'karmaScore' && Number.isFinite(Number(m.value.content.karmaScore)));
+    if (filter === 'MINE') {
+      const mine = karmaMsgsAll.filter(m => m.value.author === userId).sort((a, b) => (b.value.timestamp || 0) - (a.value.timestamp || 0));
+      const myKarma = mine.length ? Number(mine[0].value.content.karmaScore) || 0 : 0;
+      content['karmaScore'] = myKarma;
+    } else {
+      const latestByAuthor = new Map();
+      for (const m of karmaMsgsAll) {
+        const a = m.value.author;
+        const ts = m.value.timestamp || 0;
+        const k = Number(m.value.content.karmaScore) || 0;
+        const prev = latestByAuthor.get(a);
+        if (!prev || ts > prev.ts) latestByAuthor.set(a, { ts, k });
+      }
+      const sumKarma = Array.from(latestByAuthor.values()).reduce((s, x) => s + x.k, 0);
+      content['karmaScore'] = sumKarma;
     }
 
     const tribeVals = Array.from(tipOf['tribe'].values()).map(v => v.content);

@@ -60,7 +60,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Agenda: Module to manage all your assigned items.
  + AI: Module to talk with a LLM called '42'.
  + Audios: Module to discover and manage audios.
- + Banking: Module to distribute a fair Universal Basic Income (UBI) using commons-treasury.
+ + Banking: Module to determine the real value of ECOIN and distribute a UBI using the common treasury.
  + BlockExplorer: Module to navigate the blockchain.
  + Bookmarks: Module to discover and manage bookmarks.	
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
@@ -84,13 +84,13 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Summaries: Module to receive summaries of long discussions or posts.	
  + Tags: Module to discover and explore taxonomy patterns (tags).	
  + Tasks: Module to discover and manage tasks.	
- + Threads: Module to receive conversations grouped by topic or question.	
+ + Threads: Module to receive conversations grouped by topic or question.
+ + Topics: Module to receive discussion categories based on shared interests.	
  + Transfers: Module to discover and manage smart-contracts (transfers).	
  + Trending: Module to explore the most popular content.	
  + Tribes: Module to explore or create tribes (groups).	
  + Videos: Module to discover and manage videos.	
  + Wallet: Module to manage your digital assets (ECOin).	
- + Topics: Module to receive discussion categories based on shared interests.
 
 Both the codebase and the inhabitants can generate new modules.
 

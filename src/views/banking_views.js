@@ -1,8 +1,10 @@
 const { div, h2, p, section, button, form, a, input, span, pre, table, thead, tbody, tr, td, th, br } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require("../views/main_views");
+const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
   overview: i18n.bankOverview,
+  exchange: i18n.bankExchange,
   mine: i18n.mine,
   pending: i18n.pending,
   closed: i18n.closed,
@@ -23,6 +25,44 @@ const generateFilterButtons = (filters, currentFilter, action) =>
 
 const kvRow = (label, value) =>
   tr(td({ class: "card-label" }, label), td({ class: "card-value" }, value));
+  
+const fmtIndex = (value) => {
+    return value ? value.toFixed(6) : "0.000000";
+};
+
+const pct = (value) => {
+    if (value === undefined || value === null) return "0.000001%";
+    const formattedValue = (value).toFixed(6); 
+    const sign = value >= 0 ? "+" : "";
+    return `${sign}${formattedValue}%`;
+};
+
+const fmtDate = (timestamp) => {
+    return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
+};
+
+const renderExchange = (ex) => {
+  if (!ex) return div(p(i18n.bankExchangeNoData));
+  const syncStatus = ex.isSynced ? i18n.bankingSyncStatusSynced : i18n.bankingSyncStatusOutdated;
+  const syncStatusClass = ex.isSynced ? 'synced' : 'outdated';
+  const ecoInHours = ex.isSynced ? ex.ecoInHours : 0;
+  return div(
+    div({ class: "bank-summary" },
+      table({ class: "bank-info-table" },
+        tbody(
+          kvRow(i18n.bankingSyncStatus, 
+            span({ class: syncStatusClass }, syncStatus)
+          ),
+          kvRow(i18n.bankExchangeCurrentValue, `${fmtIndex(ex.ecoValue)} ECO`),
+          kvRow(i18n.bankCurrentSupply, `${Number(ex.currentSupply || 0).toFixed(6)} ECO`),
+          kvRow(i18n.bankTotalSupply, `${Number(ex.totalSupply || 0).toFixed(6)} ECO`),
+          kvRow(i18n.bankEcoinHours, `${ecoInHours} ${i18n.bankHoursOfWork}`),
+          kvRow(i18n.bankInflation, `${ex.inflationFactor.toFixed(2)}%`)
+        )
+      )
+    )
+  );
+};
 
 const renderOverviewSummaryTable = (s, rules) => {
   const score = Number(s.userEngagementScore || 0);
@@ -31,7 +71,6 @@ const renderOverviewSummaryTable = (s, rules) => {
   const w = 1 + score / 100;
   const cap = rules?.caps?.cap_user_epoch ?? 50;
   const future = Math.min(pool * (w / W), cap);
-
   return div({ class: "bank-summary" },
     table({ class: "bank-info-table" },
       tbody(
@@ -232,28 +271,24 @@ const renderAddresses = (data, userId) => {
 };
 
 const renderBankingView = (data, filter, userId) =>
-  template(
-    i18n.banking,
-    section(
-      div({ class: "tags-header" }, h2(i18n.banking), p(i18n.bankingDescription)),
-      generateFilterButtons(["overview", "mine", "pending", "closed", "epochs", "rules", "addresses"], filter, "/banking"),
-      filter === "overview"
-        ? div(
-            renderOverviewSummaryTable(data.summary || {}, data.rules),
-            allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
-          )
-        : filter === "epochs"
-          ? renderEpochList(data.epochs || [])
-          : filter === "rules"
-            ? rulesBlock(data.rules)
-            : filter === "addresses"
-              ? renderAddresses(data, userId)
-              : allocationsTable(
-                  (filterAllocations((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), filter, userId)),
-                  userId
+    template(
+        i18n.banking,
+        section(
+            div({ class: "tags-header" }, h2(i18n.banking), p(i18n.bankingDescription)),
+            generateFilterButtons(["overview", "exchange", "mine", "pending", "closed", "epochs", "rules", "addresses"], filter, "/banking"),
+            filter === "overview"
+                ? div(
+                    renderOverviewSummaryTable(data.summary || {}, data.rules),
+                    allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
                 )
-    )
-  );
+                : filter === "exchange"
+                    ? renderExchange(data.exchange)
+                    : allocationsTable(
+                        (filterAllocations((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), filter, userId)),
+                        userId
+                    )
+        )
+    );
 
 module.exports = { renderBankingView };
 

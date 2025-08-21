@@ -168,32 +168,32 @@ function renderFollowers(project) {
 }
 
 function renderMilestonesAndBounties(project, editable = false) {
-  const milestones = project.milestones || []
-  const bounties = project.bounties || []
-  const unassigned = bounties.filter(b => b.milestoneIndex == null)
+  const milestones = project.milestones || [];
+  const bounties = project.bounties || [];
+  const unassigned = bounties.filter(b => b.milestoneIndex == null);
 
   const blocks = milestones.map((m, idx) => {
-    const { total, count, done } = bountyTotalsForMilestone(project, idx)
-    const items = bounties.filter(b => b.milestoneIndex === idx)
+    const { total, count, done } = bountyTotalsForMilestone(project, idx);
+    const items = bounties.filter(b => b.milestoneIndex === idx);
     return div({ class: 'milestone-with-bounties' },
       div({ class: 'milestone-stats' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.projectMilestoneStatus + ':'), span({ class: 'card-value' }, m.done ? i18n.projectMilestoneDone.toUpperCase() : i18n.projectMilestoneOpen.toUpperCase())),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.projectBounties + ':'), span({ class: 'card-value' }, `${done}/${count} · ${total} ECO`))
         ),
       div({ class: 'milestone-head' },
-          span({ class: 'milestone-title' }, m.title),br(),br(),
-            span({ class: 'chip chip-pct' }, `${m.targetPercent || 0}%`),
-            m.dueDate ? span({ class: 'chip chip-due' }, `${i18n.projectMilestoneDue}: ${moment(m.dueDate).format('YYYY/MM/DD HH:mm')}`) : null,br(),
-            m.description ? p(...renderUrl(m.description)) : null,
+          span({ class: 'milestone-title' }, m.title),
+          m.dueDate ? span({ class: 'chip chip-due' }, `${i18n.projectMilestoneDue}: ${moment(m.dueDate).format('YYYY/MM/DD HH:mm')}`) : null,
+          m.description ? p(...renderUrl(m.description)) : null,
         (editable && !m.done) ? form({ method: 'POST', action: `/projects/milestones/complete/${encodeURIComponent(project.id)}/${idx}` },
           button({ class: 'btn', type: 'submit' }, i18n.projectMilestoneMarkDone)
         ) : null
       ),
       items.length
         ? ul(items.map(b => {
-            const globalIndex = bounties.indexOf(b)
+            const globalIndex = bounties.indexOf(b);
             return li({ class: 'bounty-item' },
-              field(i18n.projectBountyStatus + ':', b.done ? i18n.projectBountyDone : (b.claimedBy ? i18n.projectBountyClaimed.toUpperCase() : i18n.projectBountyOpen.toUpperCase())),br(),
+              field(i18n.projectBountyStatus + ':', b.done ? i18n.projectBountyDone.toUpperCase() : (b.claimedBy ? i18n.projectBountyClaimed.toUpperCase() : i18n.projectBountyOpen.toUpperCase())),
+              br,
               div({ class: 'bounty-main' },
                 span({ class: 'bounty-title' }, b.title),
                 span({ class: 'bounty-amount' }, `${b.amount} ECO`)
@@ -211,14 +211,14 @@ function renderMilestonesAndBounties(project, editable = false) {
             )
           }))
         : p(i18n.projectNoBounties)
-    )
-  })
+    );
+  });
 
   const unassignedBlock = unassigned.length
     ? div({ class: 'bounty-milestone-block' },
         h2(`${i18n.projectBounties} — ${i18n.projectMilestoneOpen} (no milestone)`),
         ul(unassigned.map(b => {
-          const globalIndex = bounties.indexOf(b)
+          const globalIndex = bounties.indexOf(b);
           return li({ class: 'bounty-item' },
             div({ class: 'bounty-main' },
               span({ class: 'bounty-title' }, b.title),
@@ -248,9 +248,9 @@ function renderMilestonesAndBounties(project, editable = false) {
           )
         }))
       )
-    : null
+    : null;
 
-  return div({ class: 'milestones-bounties' }, ...blocks, unassignedBlock)
+  return div({ class: 'milestones-bounties' }, ...blocks, unassignedBlock);
 }
 
 const renderProjectList = (projects, filter) =>
@@ -525,7 +525,7 @@ exports.singleProjectView = async (project, filter="ALL") => {
                 option({ value: String(idx) }, m.title)
               )
             ), br(), br(),
-            button({ class: 'btn', type: 'submit', disabled: remain <= 0 }, remain > 0 ? i18n.projectBountyCreateButton : i18n.projectNoRemainingBudget)
+            button({ class: 'btn submit-bounty', type: 'submit' }, remain > 0 ? i18n.projectBountyCreateButton : i18n.projectNoRemainingBudget)
           )
         ) : null,
         div({ class: 'card-footer' },

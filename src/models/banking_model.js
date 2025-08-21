@@ -69,16 +69,37 @@ function writeJson(p, v) {
 
 async function rpcCall(method, params, kind = "user") {
   const cfg = getWalletCfg(kind);
-  if (!cfg?.url) throw new Error(`${kind.toUpperCase()} RPC not configured`);
-  const headers = { "content-type": "application/json" };
+  if (!cfg?.url) {
+    return null; 
+  }
+  const headers = {
+    "Content-Type": "application/json",
+  };
   if (cfg.user || cfg.pass) {
     headers.authorization = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
   }
-  const res = await fetch(cfg.url, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "1.0", id: "oasis", method, params }) });
-  if (!res.ok) throw new Error(`RPC ${method} failed`);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.result;
+  try {
+    const res = await fetch(cfg.url, {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify({
+        jsonrpc: "1.0",
+        id: "oasis",
+        method: method,
+        params: params,
+      }),
+    });
+    if (!res.ok) {
+      return null;
+    }
+    const data = await res.json();
+    if (data.error) {
+      return null; 
+    }
+    return data.result; 
+  } catch (err) {
+    return null;
+  }
 }
 
 async function safeGetBalance(kind = "user") {
@@ -389,61 +410,139 @@ module.exports = ({ services } = {}) => {
     });
   }
 
-  async function fetchUserActions(userId) {
-    const me = resolveUserId(userId);
-    const actions = await listAllActions();
-    const authored = actions.filter(a =>
-      (a.author && a.author === me) || (a.value?.author && a.value.author === me)
-    );
-    if (authored.length) return authored;
-    return actions.filter(a => {
-      const c = a.content || {};
-      const fields = [c.author, c.organizer, c.seller, c.about, c.contact];
-      return fields.some(f => f && f === me);
+async function publishKarmaScore(userId, karmaScore) {
+  const ssb = await openSsb();
+  if (!ssb) return false;
+  const timestamp = new Date().toISOString();
+  const content = {
+    type: "karmaScore",
+    karmaScore: karmaScore,
+    userId: userId,
+    timestamp: timestamp,
+  };
+  return new Promise((resolve, reject) => {
+    ssb.publish(content, (err, msg) => {
+      if (err) reject(err);
+      else resolve(msg);
     });
-  }
+  });
+}
 
-  function scoreFromActions(actions) {
-    let score = 0;
-    for (const action of actions) {
-      const t = normalizeType(action);
-      const c = action.content || {};
-      if (t === "post") score += 10;
-      else if (t === "comment") score += 5;
-      else if (t === "like") score += 2;
-      else if (t === "image") score += 8;
-      else if (t === "video") score += 12;
-      else if (t === "audio") score += 8;
-      else if (t === "document") score += 6;
-      else if (t === "bookmark") score += 2;
-      else if (t === "feed") score += 6;
-      else if (t === "forum") score += c.root ? 5 : 10;
-      else if (t === "vote") score += 3 + calculateOpinionScore(c);
-      else if (t === "votes") score += Math.min(10, Number(c.totalVotes || 0));
-      else if (t === "market") score += scoreMarket(c);
-      else if (t === "project") score += scoreProject(c);
-      else if (t === "tribe") score += 6 + Math.min(10, Array.isArray(c.members) ? c.members.length * 0.5 : 0);
-      else if (t === "event") score += 4 + Math.min(10, Array.isArray(c.attendees) ? c.attendees.length : 0);
-      else if (t === "task") score += 3 + priorityBump(c.priority);
-      else if (t === "report") score += 4 + (Array.isArray(c.confirmations) ? c.confirmations.length : 0) + severityBump(c.severity);
-      else if (t === "curriculum") score += 5;
-      else if (t === "aiexchange") score += Array.isArray(c.ctx) ? Math.min(10, c.ctx.length) : 0;
-      else if (t === "job") score += 4 + (Array.isArray(c.subscribers) ? c.subscribers.length : 0);
-      else if (t === "bankclaim") score += Math.min(20, Math.log(1 + Math.max(0, Number(c.amount) || 0)) * 5);
-      else if (t === "bankwallet") score += 2;
-      else if (t === "transfer") score += 1;
-      else if (t === "about") score += 1;
-      else if (t === "contact") score += 1;
-      else if (t === "pub") score += 1;
-    }
-    return Math.max(0, Math.round(score));
-  }
+async function fetchUserActions(userId) {
+  const me = resolveUserId(userId);
+  const actions = await listAllActions();
+  const authored = actions.filter(a =>
+    (a.author && a.author === me) || (a.value?.author && a.value.author === me)
+  );
+  if (authored.length) return authored;
+  return actions.filter(a => {
+    const c = a.content || {};
+    const fields = [c.author, c.organizer, c.seller, c.about, c.contact];
+    return fields.some(f => f && f === me);
+  });
+}
 
-  async function getUserEngagementScore(userId) {
-    const actions = await fetchUserActions(userId);
-    return scoreFromActions(actions);
+function scoreFromActions(actions) {
+  let score = 0;
+  for (const action of actions) {
+    const t = normalizeType(action);
+    const c = action.content || {};
+    if (t === "post") score += 10;
+    else if (t === "comment") score += 5;
+    else if (t === "like") score += 2;
+    else if (t === "image") score += 8;
+    else if (t === "video") score += 12;
+    else if (t === "audio") score += 8;
+    else if (t === "document") score += 6;
+    else if (t === "bookmark") score += 2;
+    else if (t === "feed") score += 6;
+    else if (t === "forum") score += c.root ? 5 : 10;
+    else if (t === "vote") score += 3 + calculateOpinionScore(c);
+    else if (t === "votes") score += Math.min(10, Number(c.totalVotes || 0));
+    else if (t === "market") score += scoreMarket(c);
+    else if (t === "project") score += scoreProject(c);
+    else if (t === "tribe") score += 6 + Math.min(10, Array.isArray(c.members) ? c.members.length * 0.5 : 0);
+    else if (t === "event") score += 4 + Math.min(10, Array.isArray(c.attendees) ? c.attendees.length : 0);
+    else if (t === "task") score += 3 + priorityBump(c.priority);
+    else if (t === "report") score += 4 + (Array.isArray(c.confirmations) ? c.confirmations.length : 0) + severityBump(c.severity);
+    else if (t === "curriculum") score += 5;
+    else if (t === "aiexchange") score += Array.isArray(c.ctx) ? Math.min(10, c.ctx.length) : 0;
+    else if (t === "job") score += 4 + (Array.isArray(c.subscribers) ? c.subscribers.length : 0);
+    else if (t === "bankclaim") score += Math.min(20, Math.log(1 + Math.max(0, Number(c.amount) || 0)) * 5);
+    else if (t === "bankwallet") score += 2;
+    else if (t === "transfer") score += 1;
+    else if (t === "about") score += 1;
+    else if (t === "contact") score += 1;
+    else if (t === "pub") score += 1;
   }
+  return Math.max(0, Math.round(score));
+}
 
+async function getUserEngagementScore(userId) {
+  const actions = await fetchUserActions(userId);
+  const karmaScore = scoreFromActions(actions);
+  const previousKarmaScore = await getLastKarmaScore(userId);
+  const lastPublishedTimestamp = await getLastPublishedTimestamp(userId);
+  const currentTimestamp = Date.now();
+  const timeDifference = currentTimestamp - new Date(lastPublishedTimestamp).getTime();
+  const shouldPublish = karmaScore !== previousKarmaScore && timeDifference >= 24 * 60 * 60 * 1000;
+  if (shouldPublish) {
+    await publishKarmaScore(userId, karmaScore);
+  }
+  return karmaScore;
+}
+
+async function getLastKarmaScore(userId) {
+  const ssb = await openSsb();
+  if (!ssb) return 0;
+  return new Promise(resolve => {
+    const source = ssb.messagesByType
+      ? ssb.messagesByType({ type: "karmaScore", reverse: true })
+      : ssb.createLogStream && ssb.createLogStream({ reverse: true });
+    if (!source) return resolve(0);
+    pull(
+      source,
+      pull.filter(msg => {
+        const v = msg.value || msg;
+        const c = v.content || {};
+        return v.author === userId && c.type === "karmaScore" && typeof c.karmaScore !== "undefined";
+      }),
+      pull.take(1),
+      pull.collect((err, arr) => {
+        if (err || !arr || !arr.length) return resolve(0);
+        const v = arr[0].value || arr[0];
+        resolve(v.content.karmaScore || 0);
+      })
+    );
+  });
+}
+
+async function getLastPublishedTimestamp(userId) {
+  const ssb = await openSsb();
+  if (!ssb) return new Date(0).toISOString();
+  return new Promise(resolve => {
+    const source = ssb.messagesByType
+      ? ssb.messagesByType({ type: "karmaScore", reverse: true })
+      : ssb.createLogStream && ssb.createLogStream({ reverse: true });
+    if (!source) return resolve(new Date(0).toISOString());
+    pull(
+      source,
+      pull.filter(msg => {
+        const v = msg.value || msg;
+        const c = v.content || {};
+        return v.author === userId && c.type === "karmaScore";
+      }),
+      pull.take(1),
+      pull.collect((err, arr) => {
+        if (err || !arr || !arr.length) return resolve(new Date(0).toISOString());
+        const v = arr[0].value || arr[0];
+        const c = v.content || {};
+        resolve(c.timestamp || new Date(0).toISOString());
+      })
+    );
+  });
+}
+ 
   function computePoolVars(pubBal, rules) {
     const alphaCap = (rules.alpha || DEFAULT_RULES.alpha) * pubBal;
     const available = Math.max(0, pubBal - (rules.reserveMin || DEFAULT_RULES.reserveMin));
@@ -572,6 +671,80 @@ module.exports = ({ services } = {}) => {
       id: t.id, concept: t.concept, from: t.from, to: t.to, amount: t.amount, status: t.status, createdAt: t.createdAt || new Date().toISOString(), txid: t.txid
     }));
   }
+  
+  async function calculateEcoinValue() {
+    let isSynced = false;
+    let circulatingSupply = 0;
+    try {
+      circulatingSupply = await getCirculatingSupply();
+      isSynced = circulatingSupply > 0;
+    } catch (error) {
+      circulatingSupply = 0;
+      isSynced = false;
+    }
+    const totalSupply = 25500000;
+    const ecoValuePerHour = await calculateEcoValuePerHour(circulatingSupply);
+    const ecoInHours = calculateEcoinHours(circulatingSupply, ecoValuePerHour);
+    const inflationFactor = await calculateInflationFactor(circulatingSupply, totalSupply);
+    return {
+      ecoValue: ecoValuePerHour,
+      ecoInHours: Number(ecoInHours.toFixed(2)),
+      totalSupply: totalSupply,
+      inflationFactor: inflationFactor ? Number(inflationFactor.toFixed(2)) : 0,
+      currentSupply: circulatingSupply,
+      isSynced: isSynced
+    };
+  }
+
+  async function calculateEcoValuePerHour(circulatingSupply) {
+    const issuanceRate = await getIssuanceRate();
+    const inflation = await calculateInflationFactor(circulatingSupply, 25500000);
+    const ecoValuePerHour = (circulatingSupply / 100000) * (1 + inflation / 100);
+    return ecoValuePerHour;
+  }
+
+  function calculateEcoinHours(circulatingSupply, ecoValuePerHour) {
+    const ecoInHours = circulatingSupply / ecoValuePerHour;
+    return ecoInHours;
+  }
+
+  async function calculateInflationFactor(circulatingSupply, totalSupply) {
+    const issuanceRate = await getIssuanceRate();
+    if (circulatingSupply > 0) {
+      const inflationRate = (issuanceRate / circulatingSupply) * 100;
+      return inflationRate;
+    }
+    return 0;
+  }
+
+  async function getIssuanceRate() {
+    try {
+      const result = await rpcCall("getmininginfo", []);
+      const blockValue = result?.blockvalue || 0;
+      const blocks = result?.blocks || 0;
+      return (blockValue / 1e8) * blocks;
+    } catch (error) {
+      return 0.02;
+    }
+  }
+
+  async function getCirculatingSupply() {
+    try {
+      const result = await rpcCall("getinfo", []);
+      return result?.moneysupply || 0;
+    } catch (error) {
+      return 0; 
+    }
+  }
+  
+  async function getBankingData(userId) {
+    const ecoValue = await calculateEcoinValue();
+    const karmaScore = await getUserEngagementScore(userId);
+    return {
+      ecoValue,
+      karmaScore,
+    };
+  }
 
   return {
     DEFAULT_RULES,
@@ -589,7 +762,9 @@ module.exports = ({ services } = {}) => {
     ensureSelfAddressPublished,
     getUserAddress,
     setUserAddress,
-    listAddressesMerged
+    listAddressesMerged,
+    calculateEcoinValue,
+    getBankingData
   };
 };
 

@@ -158,11 +158,11 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
     : [...searched].sort((a, b) => b.createdAt - a.createdAt);
 
   const title =
+    filter === 'recent' ? i18n.tribeRecentSectionTitle :
     filter === 'mine' ? i18n.tribeMineSectionTitle :
     filter === 'create' ? i18n.tribeCreateSectionTitle :
     filter === 'edit' ? i18n.tribeUpdateSectionTitle :
     filter === 'gallery' ? i18n.tribeGallerySectionTitle :
-    filter === 'recent' ? i18n.tribeRecentSectionTitle :
     filter === 'top' ? i18n.tribeTopSectionTitle :
     filter === 'larp' ? i18n.tribeLarpSectionTitle :
     i18n.tribeAllSectionTitle;
@@ -180,7 +180,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
   );
 
   const modeButtons = div({ class: 'mode-buttons', style: 'display:flex; gap:8px; margin-top:16px;' },
-    ['all','mine','membership','larp','recent','top','gallery'].map(f =>
+    ['recent','all','mine','membership','larp','top','gallery'].map(f =>
     form({ method: 'GET', action: '/tribes' },
       input({ type: 'hidden', name: 'filter', value: f }),
       button({ type: 'submit', class: filter === f ? 'filter-btn active' : 'filter-btn' },
@@ -268,7 +268,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
       p(`${i18n.tribeIsAnonymousLabel}: ${t.isAnonymous ? i18n.tribePrivate : i18n.tribePublic}`),
       p(`${i18n.tribeModeLabel}: ${t.inviteMode.toUpperCase()}`),
       p(`${i18n.tribeLARPLabel}: ${t.isLARP ? i18n.tribeYes : i18n.tribeNo}`),
-      p(`${i18n.tribeLocationLabel}: ${t.location}`),
+      t.location ? p(`${i18n.tribeLocationLabel}: `, ...renderUrl(t.location)) : null,
       img({ src: imageSrc }),
       t.description ? p(...renderUrl(t.description)) : null,
       h2(`${i18n.tribeMembersCount}: ${t.members.length}`),
@@ -381,7 +381,7 @@ exports.tribeView = async (tribe, userId, query) => {
     p(`${i18n.tribeIsAnonymousLabel}: ${tribe.isAnonymous ? i18n.tribePrivate : i18n.tribePublic}`),
     p(`${i18n.tribeModeLabel}: ${tribe.inviteMode.toUpperCase()}`),
     p(`${i18n.tribeLARPLabel}: ${tribe.isLARP ? i18n.tribeYes : i18n.tribeNo}`),
-    p(`${i18n.tribeLocationLabel}: ${tribe.location}`),
+    tribe.location ? p(`${i18n.tribeLocationLabel}: `, ...renderUrl(tribe.location)) : null,
     img({ src: imageSrc, alt: tribe.title }),
     tribe.description ? p(...renderUrl(tribe.description)) : null,
     h2(`${i18n.tribeMembersCount}: ${tribe.members.length}`),

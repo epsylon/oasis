@@ -39,8 +39,8 @@
   },
   "wallet": {
     "url": "http://localhost:7474",
-    "user": "ecoinrpc",
-    "pass": "DLKKWE93203909238dkkKKeowxmIOw0232lsakwL02kUfoEcoinUfonet",
+    "user": "",
+    "pass": "",
     "fee": "1"
   },
   "walletPub": {

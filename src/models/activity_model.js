@@ -7,22 +7,26 @@ const ORDER_MARKET = ['FOR_SALE','OPEN','RESERVED','CLOSED','SOLD'];
 const SCORE_MARKET = s => {
   const i = ORDER_MARKET.indexOf(N(s));
   return i < 0 ? -1 : i;
-}
-
+};
 const ORDER_PROJECT = ['CANCELLED','PAUSED','ACTIVE','COMPLETED'];
 const SCORE_PROJECT = s => {
   const i = ORDER_PROJECT.indexOf(N(s));
   return i < 0 ? -1 : i;
 };
 
+function inferType(c = {}) {
+  if (c.type === 'wallet' && c.coin === 'ECO' && typeof c.address === 'string') return 'bankWallet';
+  if (c.type === 'bankClaim') return 'bankClaim';
+  if (c.type === 'karmaScore') return 'karmaScore';
+  return c.type || '';
+}
+
 module.exports = ({ cooler }) => {
   let ssb;
-
   const openSsb = async () => {
     if (!ssb) ssb = await cooler.open();
     return ssb;
   };
-
   const hasBlob = async (ssbClient, url) => {
     return new Promise((resolve) => {
       ssbClient.blobs.has(url, (err, has) => {
@@ -30,12 +34,10 @@ module.exports = ({ cooler }) => {
       });
     });
   };
-
   return {
     async listFeed(filter = 'all') {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
-
       const results = await new Promise((resolve, reject) => {
         pull(
           ssbClient.createLogStream({ reverse: true, limit: logLimit }),
@@ -60,7 +62,7 @@ module.exports = ({ cooler }) => {
           id: k,
           author: v?.author,
           ts: v?.timestamp || 0,
-          type: c.type,
+          type: inferType(c),
           content: c
         });
         if (c.replaces) parentOf.set(k, c.replaces);
@@ -84,7 +86,6 @@ module.exports = ({ cooler }) => {
       for (const [root, arr] of groups.entries()) {
         if (!arr.length) continue;
         const type = arr[0].type;
-
         let tip;
         if (type === 'market') {
           tip = arr[0];
@@ -107,50 +108,70 @@ module.exports = ({ cooler }) => {
         } else {
           tip = arr.reduce((best, a) => (a.ts > best.ts ? a : best), arr[0]);
         }
-
         if (tombstoned.has(tip.id)) {
           const nonTomb = arr.filter(a => !tombstoned.has(a.id));
           if (!nonTomb.length) continue;
           tip = nonTomb.reduce((best, a) => (a.ts > best.ts ? a : best), nonTomb[0]);
         }
-
         for (const a of arr) idToTipId.set(a.id, tip.id);
       }
 
-    const latest = [];
-    for (const a of idToAction.values()) {
-      if (tombstoned.has(a.id)) continue;
-      const c = a.content || {};
-      if (c.root && tombstoned.has(c.root)) continue;
-      if (a.type === 'vote' && tombstoned.has(c.vote?.link)) continue;
-      if (c.key && tombstoned.has(c.key)) continue;
-      if (c.branch && tombstoned.has(c.branch)) continue;
-      if (c.target && tombstoned.has(c.target)) continue;
-
-      if (a.type === 'document') {
-        const url = c.url;
-        const ok = await hasBlob(ssbClient, url);
-        if (!ok) continue;
+      const latest = [];
+      for (const a of idToAction.values()) {
+        if (tombstoned.has(a.id)) continue;
+        const c = a.content || {};
+        if (c.root && tombstoned.has(c.root)) continue;
+        if (a.type === 'vote' && tombstoned.has(c.vote?.link)) continue;
+        if (c.key && tombstoned.has(c.key)) continue;
+        if (c.branch && tombstoned.has(c.branch)) continue;
+        if (c.target && tombstoned.has(c.target)) continue;
+        if (a.type === 'document') {
+          const url = c.url;
+          const ok = await hasBlob(ssbClient, url);
+          if (!ok) continue;
+        }
+        latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
       }
-      latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
-    }
-    
-    let out;
-    if (filter === 'mine') {
-      out = latest.filter(a => a.author === userId);
-    } else if (filter === 'recent') {
-      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-      out = latest.filter(a => (a.ts || 0) >= cutoff);
-    } else if (filter === 'all') {
-      out = latest;
-    } else if (filter === 'banking') {
-      out = latest.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
-    } else {
-      out = latest.filter(a => a.type === filter);
-    }
-    out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    return out;
+
+      let deduped = latest.filter(a => !a.tipId || a.tipId === a.id);
+
+      const mediaTypes = new Set(['image','video','audio','document','bookmark']);
+      const perAuthorUnique = new Set(['karmaScore']);
+      const byKey = new Map();
+      for (const a of deduped) {
+        if (mediaTypes.has(a.type)) {
+          const u = a.content?.url || a.content?.title || `${a.type}:${a.id}`;
+          const key = `${a.type}:${u}`;
+          const prev = byKey.get(key);
+          if (!prev || a.ts > prev.ts) byKey.set(key, a);
+        } else if (perAuthorUnique.has(a.type)) {
+          const key = `${a.type}:${a.author}`;
+          const prev = byKey.get(key);
+          if (!prev || a.ts > prev.ts) byKey.set(key, a);
+        } else {
+          const key = `id:${a.id}`;
+          byKey.set(key, a);
+        }
+      }
+      deduped = Array.from(byKey.values());
+
+      let out;
+      if (filter === 'mine') {
+        out = deduped.filter(a => a.author === userId);
+      } else if (filter === 'recent') {
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        out = deduped.filter(a => (a.ts || 0) >= cutoff);
+      } else if (filter === 'all') {
+        out = deduped;
+      } else if (filter === 'banking') {
+        out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
+      } else if (filter === 'karma') {
+        out = deduped.filter(a => a.type === 'karmaScore');
+      } else {
+        out = deduped.filter(a => a.type === filter);
+      }
+      out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      return out;
     }
   };
 };
-

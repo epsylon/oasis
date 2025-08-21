@@ -6,7 +6,6 @@ const { renderUrl } = require('../backend/renderUrl');
 function capitalize(str) {
   return typeof str === 'string' && str.length ? str[0].toUpperCase() + str.slice(1) : '';
 }
-
 function sumAmounts(list = []) {
   return list.reduce((s, x) => s + (parseFloat(x.amount || 0) || 0), 0);
 }
@@ -23,7 +22,7 @@ function renderActionCards(actions, userId) {
       if (content.type === 'event' && content.isPublic === "private") return false;
       if (content.type === 'market') {
         if (content.stock === 0 && content.status !== 'SOLD') {
-          return false; 
+          return false;
         }
       }
       return true;
@@ -31,9 +30,9 @@ function renderActionCards(actions, userId) {
     .sort((a, b) => b.ts - a.ts);
 
   if (!validActions.length) {
-    return div({ class: "no-actions" }, p(i18n.noActions)); 
+    return div({ class: "no-actions" }, p(i18n.noActions));
   }
-  
+
   const seenDocumentTitles = new Set();
 
   return validActions.map(action => {
@@ -52,7 +51,7 @@ function renderActionCards(actions, userId) {
         ? Object.entries(votes).map(([option, count]) => ({ option, count }))
         : [];
       cardBody.push(
-        div({ class: 'card-section votes' }, 
+        div({ class: 'card-section votes' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.question + ':'), span({ class: 'card-value' }, question)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteTotalVotes + ':'), span({ class: 'card-value' }, totalVotes)),
@@ -67,7 +66,7 @@ function renderActionCards(actions, userId) {
     if (type === 'transfer') {
       const { from, to, concept, amount, deadline, status, confirmedBy } = content;
       cardBody.push(
-        div({ class: 'card-section transfer' }, 
+        div({ class: 'card-section transfer' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.concept + ':'), span({ class: 'card-value' }, concept)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
@@ -75,7 +74,7 @@ function renderActionCards(actions, userId) {
         )
       );
     }
-    
+
     if (type === 'bankWallet') {
       const { address } = content;
       cardBody.push(
@@ -114,14 +113,14 @@ function renderActionCards(actions, userId) {
     }
 
     if (type === 'pixelia') {
-       const { author } = content;
-       cardBody.push(
-	 div({ class: 'card-section pixelia' },
-	   div({ class: 'card-field' },
-	      a({ href: `/author/${encodeURIComponent(author)}`, class: 'activityVotePost' }, author)
-	   )
-	 )
-       );
+      const { author } = content;
+      cardBody.push(
+        div({ class: 'card-section pixelia' },
+          div({ class: 'card-field' },
+            a({ href: `/author/${encodeURIComponent(author)}`, class: 'activityVotePost' }, author)
+          )
+        )
+      );
     }
 
     if (type === 'tribe') {
@@ -129,10 +128,10 @@ function renderActionCards(actions, userId) {
       const validTags = Array.isArray(tags) ? tags : [];
       cardBody.push(
         div({ class: 'card-section tribe' },
-	h2({ class: 'tribe-title' }, 
-	  a({ href: `/tribe/${encodeURIComponent(action.id)}`, class: "user-link" }, title)
-	),
-          typeof isAnonymous === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel+ ':'), span({ class: 'card-value' }, isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : "",      
+          h2({ class: 'tribe-title' },
+            a({ href: `/tribe/${encodeURIComponent(action.id)}`, class: "user-link" }, title)
+          ),
+          typeof isAnonymous === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel+ ':'), span({ class: 'card-value' }, isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : "",
           inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeModeLabel) + ':'), span({ class: 'card-value' }, inviteMode.toUpperCase())) : "",
           typeof isLARP === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel+ ':'), span({ class: 'card-value' }, isLARP ? i18n.tribeYes : i18n.tribeNo)) : "",
           Array.isArray(members) ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeMembersCount) + ':'), span({ class: 'card-value' }, members.length)) : "",
@@ -155,49 +154,49 @@ function renderActionCards(actions, userId) {
         div({ class: 'card-section curriculum' },
           h2(a({ href: `/author/${encodeURIComponent(author)}`, class: "user-link" }, `@`, name)),
           div(
-          { class: 'card-fields-container' },
-	  createdAt ? 
-	   div(
-	    { class: 'card-field' },
-	    span({ class: 'card-label' }, i18n.cvCreatedAt + ':'),
-	    span({ class: 'card-value' }, moment(createdAt).format('YYYY-MM-DD HH:mm:ss'))
-	  ) 
-	  : "",
-	  updatedAt ? 
-	  div(
-	    { class: 'card-field' },
-	    span({ class: 'card-label' }, i18n.cvUpdatedAt + ':'),
-	    span({ class: 'card-value' }, moment(updatedAt).format('YYYY-MM-DD HH:mm:ss'))
-	  ) 
-     	  : ""
-     	  ),
+            { class: 'card-fields-container' },
+            createdAt ?
+              div(
+                { class: 'card-field' },
+                span({ class: 'card-label' }, i18n.cvCreatedAt + ':'),
+                span({ class: 'card-value' }, moment(createdAt).format('YYYY-MM-DD HH:mm:ss'))
+              )
+              : "",
+            updatedAt ?
+              div(
+                { class: 'card-field' },
+                span({ class: 'card-label' }, i18n.cvUpdatedAt + ':'),
+                span({ class: 'card-value' }, moment(updatedAt).format('YYYY-MM-DD HH:mm:ss'))
+              )
+              : ""
+          ),
           status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.cvStatusLabel + ':'), span({ class: 'card-value' }, status)) : "",
           preferences ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.cvPreferencesLabel || 'Preferences') + ':'), span({ class: 'card-value' }, preferences)) : "",
           languages ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.cvLanguagesLabel || 'Languages') + ':'), span({ class: 'card-value' }, languages.toUpperCase())) : "",
-	  photo ? 
-	  [
-	    br(),
-	    img({ class: "cv-photo", src: `/blob/${encodeURIComponent(photo)}` }),
-	    br()
-	  ]
-	: "",
-	  p(...renderUrl(description || "")),
-	  personalSkills && personalSkills.length
-	  ? div({ class: 'card-tags' }, personalSkills.map(skill =>
-	      a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
-	  )) : "",
-	  oasisSkills && oasisSkills.length
-	  ? div({ class: 'card-tags' }, oasisSkills.map(skill =>
-	      a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
-	  )) : "",
-	  educationalSkills && educationalSkills.length
-	  ? div({ class: 'card-tags' }, educationalSkills.map(skill =>
-	      a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
-	  )) : "",
-	  professionalSkills && professionalSkills.length
-	  ? div({ class: 'card-tags' }, professionalSkills.map(skill =>
-	      a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
-	  )) : "",
+          photo ?
+            [
+              br(),
+              img({ class: "cv-photo", src: `/blob/${encodeURIComponent(photo)}` }),
+              br()
+            ]
+            : "",
+          p(...renderUrl(description || "")),
+          personalSkills && personalSkills.length
+            ? div({ class: 'card-tags' }, personalSkills.map(skill =>
+                a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
+              )) : "",
+          oasisSkills && oasisSkills.length
+            ? div({ class: 'card-tags' }, oasisSkills.map(skill =>
+                a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
+              )) : "",
+          educationalSkills && educationalSkills.length
+            ? div({ class: 'card-tags' }, educationalSkills.map(skill =>
+                a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
+              )) : "",
+          professionalSkills && professionalSkills.length
+            ? div({ class: 'card-tags' }, professionalSkills.map(skill =>
+                a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
+              )) : ""
         )
       );
     }
@@ -205,7 +204,7 @@ function renderActionCards(actions, userId) {
     if (type === 'image') {
       const { url } = content;
       cardBody.push(
-        div({ class: 'card-section image' },    
+        div({ class: 'card-section image' },
           img({ src: `/blob/${encodeURIComponent(url)}`, class: 'feed-image img-content' })
         )
       );
@@ -214,7 +213,7 @@ function renderActionCards(actions, userId) {
     if (content.type === 'audio') {
       const { url, mimeType, title } = content;
       cardBody.push(
-        div({ class: 'card-section audio' }, 
+        div({ class: 'card-section audio' },
           title?.trim() ? h2({ class: 'audio-title' }, title) : "",
           url
             ? div({ class: "audio-container" },
@@ -224,7 +223,7 @@ function renderActionCards(actions, userId) {
                   type: mimeType
                 })
               )
-            : p(i18n.audioNoFile),
+            : p(i18n.audioNoFile)
         )
       );
     }
@@ -232,7 +231,7 @@ function renderActionCards(actions, userId) {
     if (type === 'video') {
       const { url, mimeType, title } = content;
       cardBody.push(
-        div({ class: 'card-section video' },     
+        div({ class: 'card-section video' },
           title?.trim() ? h2({ class: 'video-title' }, title) : "",
           url
             ? div({ class: "video-container" },
@@ -254,10 +253,10 @@ function renderActionCards(actions, userId) {
       const { url, title, key } = content;
       if (title && seenDocumentTitles.has(title.trim())) {
         return null;
-     }
+      }
       if (title) seenDocumentTitles.add(title.trim());
       cardBody.push(
-        div({ class: 'card-section document' },      
+        div({ class: 'card-section document' },
           title?.trim() ? h2({ class: 'document-title' }, title) : "",
           div({
             id: `pdf-container-${key || url}`,
@@ -271,7 +270,7 @@ function renderActionCards(actions, userId) {
     if (type === 'bookmark') {
       const { url } = content;
       cardBody.push(
-        div({ class: 'card-section bookmark' },       
+        div({ class: 'card-section bookmark' },
           h2(url ? p(a({ href: url, target: '_blank', class: "bookmark-url" }, url)) : "")
         )
       );
@@ -280,15 +279,15 @@ function renderActionCards(actions, userId) {
     if (type === 'event') {
       const { title, description, date, location, price, attendees, organizer, isPublic } = content;
       cardBody.push(
-        div({ class: 'card-section event' },    
-        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
-        date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.date + ':'), span({ class: 'card-value' }, new Date(date).toLocaleString())) : "",
-        location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.location || 'Location') + ':'), span({ class: 'card-value' }, location)) : "",
-        typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
-        price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
-        br,
-        organizer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.organizer || 'Organizer') + ': '), a({ class: "user-link", href: `/author/${encodeURIComponent(organizer)}` }, organizer)) : "",
-          Array.isArray(attendees) ? h2({ class: 'card-label' }, (i18n.attendees || 'Attendees') + ': ' + attendees.length) : "",   
+        div({ class: 'card-section event' },
+          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
+          date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.date + ':'), span({ class: 'card-value' }, new Date(date).toLocaleString())) : "",
+          location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.location || 'Location') + ':'), span({ class: 'card-value' }, location)) : "",
+          typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
+          price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
+          br,
+          organizer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.organizer || 'Organizer') + ': '), a({ class: "user-link", href: `/author/${encodeURIComponent(organizer)}` }, organizer)) : "",
+          Array.isArray(attendees) ? h2({ class: 'card-label' }, (i18n.attendees || 'Attendees') + ': ' + attendees.length) : ""
         )
       );
     }
@@ -301,7 +300,7 @@ function renderActionCards(actions, userId) {
           priority ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.priority || 'Priority') + ':'), span({ class: 'card-value' }, priority)) : "",
           startTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskStartTimeLabel || 'Start') + ':'), span({ class: 'card-value' }, new Date(startTime).toLocaleString())) : "",
           endTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskEndTimeLabel || 'End') + ':'), span({ class: 'card-value' }, new Date(endTime).toLocaleString())) : "",
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : "",
+          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : ""
         )
       );
     }
@@ -310,7 +309,7 @@ function renderActionCards(actions, userId) {
       const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
       const { text, refeeds } = content;
       cardBody.push(
-        div({ class: 'card-section feed' }, 
+        div({ class: 'card-section feed' },
           div({ class: 'feed-text', innerHTML: renderTextWithStyles(text) }),
           h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-label' }, refeeds))
         )
@@ -322,57 +321,56 @@ function renderActionCards(actions, userId) {
       cardBody.push(
         div({ class: 'card-section post' },
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
-          p({ innerHTML: text }) 
+          p({ innerHTML: text })
         )
       );
     }
-    
+
     if (type === 'forum') {
-        const { root, category, title, text, key } = content;
-        if (!root) {
-            cardBody.push(
-                div({ class: 'card-section forum' },
-                    div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
-                        span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
-                        a({ href: `/forum/${encodeURIComponent(key || action.id)}`, style: "font-weight:800;color:#4fc3f7;" }, title)
-                    ),
-                )
+      const { root, category, title, text, key } = content;
+      if (!root) {
+        cardBody.push(
+          div({ class: 'card-section forum' },
+            div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
+              span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
+              a({ href: `/forum/${encodeURIComponent(key || action.id)}`, style: "font-weight:800;color:#4fc3f7;" }, title)
             )
-        } else {
-            let parentForum = actions.find(a => a.type === 'forum' && !a.content.root && (a.id === root || a.content.key === root));
-            let parentCategory = parentForum?.content?.category || '';
-            let parentTitle = parentForum?.content?.title || '';
-            cardBody.push(
-                div({ class: 'card-section forum' },
-                    div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
-                        span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
-                        a({ href: `/forum/${encodeURIComponent(root)}`, style: "font-weight:800;color:#4fc3f7;" }, parentTitle)
-                    ),
-                    br(),
-                    div({ class: 'card-field', style: 'margin-bottom:12px;' },
-                        p({ style: "margin:0 0 8px 0; word-break:break-all;" }, ...renderUrl(text))
-                    )
-                )
+          )
+        );
+      } else {
+        let parentForum = actions.find(a => a.type === 'forum' && !a.content.root && (a.id === root || a.content.key === root));
+        let parentTitle = parentForum?.content?.title || '';
+        cardBody.push(
+          div({ class: 'card-section forum' },
+            div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
+              span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
+              a({ href: `/forum/${encodeURIComponent(root)}`, style: "font-weight:800;color:#4fc3f7;" }, parentTitle)
+            ),
+            br(),
+            div({ class: 'card-field', style: 'margin-bottom:12px;' },
+              p({ style: "margin:0 0 8px 0; word-break:break-all;" }, ...renderUrl(text))
             )
-        }
+          )
+        );
+      }
     }
 
     if (type === 'vote') {
       const { vote } = content;
       cardBody.push(
         div({ class: 'card-section vote' },
-           p(
-        	a({ href: `/thread/${encodeURIComponent(vote.link)}#${encodeURIComponent(vote.link)}`, class: 'activityVotePost' }, vote.link)
-	      )
-	    )
-	  );
-	}
+          p(
+            a({ href: `/thread/${encodeURIComponent(vote.link)}#${encodeURIComponent(vote.link)}`, class: 'activityVotePost' }, vote.link)
+          )
+        )
+      );
+    }
 
     if (type === 'about') {
       const { about, name, image } = content;
       cardBody.push(
         div({ class: 'card-section about' },
-        h2(a({ href: `/author/${encodeURIComponent(about)}`, class: "user-link" }, `@`, name)),
+          h2(a({ href: `/author/${encodeURIComponent(about)}`, class: "user-link" }, `@`, name)),
           image
             ? img({ src: `/blob/${encodeURIComponent(image)}` })
             : img({ src: '/assets/images/default-avatar.png', alt: name })
@@ -383,22 +381,22 @@ function renderActionCards(actions, userId) {
     if (type === 'contact') {
       const { contact } = content;
       cardBody.push(
-	div({ class: 'card-section contact' },
-	   p({ class: 'card-field' }, 
+        div({ class: 'card-section contact' },
+          p({ class: 'card-field' },
             a({ href: `/author/${encodeURIComponent(contact)}`, class: 'activitySpreadInhabitant2' }, contact)
-	   )
-	 )
+          )
+        )
       );
-     }
+    }
 
     if (type === 'pub') {
       const { address } = content;
-      const { host, key } = address;
+      const { host, key } = address || {};
       cardBody.push(
         div({ class: 'card-section pub' },
-	   p({ class: 'card-field' },
-            a({ href: `/author/${encodeURIComponent(key)}`, class: 'activitySpreadInhabitant2' }, key)
-	   )
+          p({ class: 'card-field' },
+            a({ href: `/author/${encodeURIComponent(key || '')}`, class: 'activitySpreadInhabitant2' }, key || '')
+          )
         )
       );
     }
@@ -407,7 +405,7 @@ function renderActionCards(actions, userId) {
       const { item_type, title, price, status, deadline, stock, image, auctions_poll, seller } = content;
       const isSeller = seller && userId && seller === userId;
       cardBody.push(
-        div({ class: 'card-section market' }, 
+        div({ class: 'card-section market' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemTitle + ':'), span({ class: 'card-value' }, title)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, item_type.toUpperCase())),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStatus + ": " ), span({ class: 'card-value' }, status.toUpperCase())),
@@ -421,7 +419,7 @@ function renderActionCards(actions, userId) {
           div({ class: "market-card price" },
             p(`${i18n.marketItemPrice}: ${price} ECO`)
           ),
-            item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
+          item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? div({ class: "auction-info" },
                 auctions_poll && auctions_poll.length > 0
                   ? [
@@ -432,8 +430,8 @@ function renderActionCards(actions, userId) {
                           th(i18n.marketAuctionUser),
                           th(i18n.marketAuctionBidAmount)
                         ),
-                            ...auctions_poll.map(bid => {
-                            const [bidderId, bidAmount, bidTime] = bid.split(':');
+                        ...(auctions_poll || []).map(bid => {
+                          const [bidderId, bidAmount, bidTime] = bid.split(':');
                           return tr(
                             td(moment(bidTime).format('YYYY-MM-DD HH:mm:ss')),
                             td(a({ href: `/author/${encodeURIComponent(userId)}` }, userId)),
@@ -449,7 +447,7 @@ function renderActionCards(actions, userId) {
                   button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
                 )
               ) : "",
-            item_type === 'exchange' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
+          item_type === 'exchange' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? form({ method: "POST", action: `/market/buy/${encodeURIComponent(action.id)}` },
                 button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
               ) : ""
@@ -460,22 +458,25 @@ function renderActionCards(actions, userId) {
     if (type === 'report') {
       const { title, confirmations, severity, status } = content;
       cardBody.push(
-        div({ class: 'card-section report' },      
+        div({ class: 'card-section report' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
           status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : "",
           severity ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.severity || 'Severity') + ':'), span({ class: 'card-value' }, severity.toUpperCase())) : "",
-          Array.isArray(confirmations) ? h2({ class: 'card-label' }, (i18n.transfersConfirmations) + ': ' + confirmations.length) : "",   
+          Array.isArray(confirmations) ? h2({ class: 'card-label' }, (i18n.transfersConfirmations) + ': ' + confirmations.length) : ""
         )
       );
     }
-    
+
     if (type === 'project') {
-      const { title, status, progress, goal, pledged, deadline, followers, backers } = content;
+      const { title, status, progress, goal, pledged, deadline, followers, backers, milestones, bounty, bountyAmount, bounty_currency } = content;
       const ratio = goal ? Math.min(100, Math.round((parseFloat(pledged || 0) / parseFloat(goal)) * 100)) : 0;
       const displayStatus = String(status || 'ACTIVE').toUpperCase();
       const followersCount = Array.isArray(followers) ? followers.length : 0;
       const backersCount = Array.isArray(backers) ? backers.length : 0;
       const backersTotal = sumAmounts(backers || []);
+      const msCount = Array.isArray(milestones) ? milestones.length : 0;
+      const lastMs = Array.isArray(milestones) && milestones.length ? milestones[milestones.length - 1] : null;
+      const bountyVal = typeof bountyAmount !== 'undefined' ? bountyAmount : (typeof bounty === 'number' ? bounty : null);
       cardBody.push(
         div({ class: 'card-section project' },
           title ? div({ class: 'card-field' },
@@ -511,13 +512,21 @@ function renderActionCards(actions, userId) {
             span({ class: 'card-value' }, `${followersCount}`)
           ),
           div({ class: 'card-field' },
-           span({ class: 'card-label' }, i18n.projectBackers + ':'), 
-           span({ class: 'card-value' }, `${backersCount} · ${backersTotal} ECO`)
-          )
+            span({ class: 'card-label' }, i18n.projectBackers + ':'), 
+            span({ class: 'card-value' }, `${backersCount} · ${backersTotal} ECO`)
+          ),
+          msCount ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.projectMilestones || 'Milestones') + ':'), 
+            span({ class: 'card-value' }, `${msCount}${lastMs && lastMs.title ? ' · ' + lastMs.title : ''}`)
+          ) : "",
+          bountyVal != null ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.projectBounty || 'Bounty') + ':'), 
+            span({ class: 'card-value' }, `${bountyVal} ${(bounty_currency || 'ECO').toUpperCase()}`)
+          ) : ""
         )
       );
     }
-  
+
     if (type === 'aiExchange') {
       const { ctx } = content;
       cardBody.push(
@@ -528,63 +537,74 @@ function renderActionCards(actions, userId) {
         )
       );
     }
-    
-    if (type === 'job') {
-      const { title, job_type, tasks, location, vacants, salary, status, subscribers } = content;
+
+    if (type === 'karmaScore') {
+      const { karmaScore } = content;
       cardBody.push(
-        div({ class: 'card-section report' },
-            div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.title + ':'),
-                span({ class: 'card-value' }, title)
-            ),
-            salary && div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.jobSalary + ':'),
-                span({ class: 'card-value' }, salary + ' ECO')
-            ),
-            status && div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.jobStatus + ':'),
-                span({ class: 'card-value' }, status.toUpperCase())
-            ),
-            job_type && div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.jobType + ':'),
-                span({ class: 'card-value' }, job_type.toUpperCase())
-            ),
-            location && div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.jobLocation + ':'),
-                span({ class: 'card-value' }, location.toUpperCase())
-            ),
-            vacants && div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.jobVacants + ':'),
-                span({ class: 'card-value' }, vacants)
-            ),
-            div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.jobSubscribers + ':'),
-                span({ class: 'card-value' },
-                    Array.isArray(subscribers) && subscribers.length > 0
-                        ? `${subscribers.length}`
-                        : i18n.noSubscribers.toUpperCase()
-                )
-            ),
+        div({ class: 'card-section ai-exchange' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankingUserEngagementScore + ':'),
+            span({ class: 'card-value' }, karmaScore)
+          )
         )
       );
     }
 
-return div({ class: 'card card-rpg' },
-  div({ class: 'card-header' },
-    h2({ class: 'card-label' }, `[${typeLabel}]`),
-    type !== 'feed' && type !== 'aiExchange' && type !== 'bankWallet' && (!action.tipId || action.tipId === action.id)
-      ? form({ method: "GET", action: getViewDetailsAction(type, action) },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+    if (type === 'job') {
+      const { title, job_type, tasks, location, vacants, salary, status, subscribers } = content;
+      cardBody.push(
+        div({ class: 'card-section report' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.title + ':'),
+            span({ class: 'card-value' }, title)
+          ),
+          salary && div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.jobSalary + ':'),
+            span({ class: 'card-value' }, salary + ' ECO')
+          ),
+          status && div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.jobStatus + ':'),
+            span({ class: 'card-value' }, status.toUpperCase())
+          ),
+          job_type && div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.jobType + ':'),
+            span({ class: 'card-value' }, job_type.toUpperCase())
+          ),
+          location && div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.jobLocation + ':'),
+            span({ class: 'card-value' }, location.toUpperCase())
+          ),
+          vacants && div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.jobVacants + ':'),
+            span({ class: 'card-value' }, vacants)
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.jobSubscribers + ':'),
+            span({ class: 'card-value' },
+              Array.isArray(subscribers) && subscribers.length > 0
+                ? `${subscribers.length}`
+                : i18n.noSubscribers.toUpperCase()
+            )
+          )
         )
-      : ''
-  ),
-  div({ class: 'card-body' }, ...cardBody),
-  p({ class: 'card-footer' },
-    span({ class: 'date-link' }, `${date} ${i18n.performed} `),
-    a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
-  )
-);
+      );
+    }
 
+    return div({ class: 'card card-rpg' },
+      div({ class: 'card-header' },
+        h2({ class: 'card-label' }, `[${typeLabel}]`),
+        type !== 'feed' && type !== 'aiExchange' && type !== 'bankWallet' && (!action.tipId || action.tipId === action.id)
+          ? form({ method: "GET", action: getViewDetailsAction(type, action) },
+              button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+            )
+          : ''
+      ),
+      div({ class: 'card-body' }, ...cardBody),
+      p({ class: 'card-footer' },
+        span({ class: 'date-link' }, `${date} ${i18n.performed} `),
+        a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
+      )
+    );
   });
 }
 
@@ -596,6 +616,7 @@ function getViewDetailsAction(type, action) {
     case 'pixelia': return `/pixelia`;
     case 'tribe': return `/tribe/${id}`;
     case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
+    case 'karmaScore': return `/author/${encodeURIComponent(action.author)}`;
     case 'image': return `/images/${id}`;
     case 'audio': return `/audios/${id}`;
     case 'video': return `/videos/${id}`;
@@ -616,7 +637,6 @@ function getViewDetailsAction(type, action) {
     case 'report': return `/reports/${id}`;
     case 'bankWallet': return `/wallet`;
     case 'bankClaim': return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
-
   }
 }
 
@@ -625,39 +645,35 @@ exports.activityView = (actions, filter, userId) => {
   const desc = i18n.activityDesc;
 
   const activityTypes = [
-  { type: 'recent',    label: i18n.typeRecent },
-  { type: 'all',       label: i18n.allButton },
-  { type: 'mine',      label: i18n.mineButton },
-
-  { type: 'banking',   label: i18n.typeBanking },
-  { type: 'market',    label: i18n.typeMarket },
-  { type: 'project',   label: i18n.typeProject },
-  { type: 'job',       label: i18n.typeJob },
-  { type: 'transfer',  label: i18n.typeTransfer },
-
-  { type: 'votes',     label: i18n.typeVotes },
-  { type: 'event',     label: i18n.typeEvent },
-  { type: 'task',      label: i18n.typeTask },
-  { type: 'report',    label: i18n.typeReport },
-
-  { type: 'tribe',     label: i18n.typeTribe },
-  { type: 'about',     label: i18n.typeAbout },
-  { type: 'curriculum',label: i18n.typeCurriculum },
-  { type: 'feed',      label: i18n.typeFeed },
-
-  { type: 'aiExchange', label: i18n.typeAiExchange },
-  { type: 'post',      label: i18n.typePost },
-  { type: 'pixelia',   label: i18n.typePixelia },
-  { type: 'forum',     label: i18n.typeForum },
-  
-  { type: 'bookmark',  label: i18n.typeBookmark },
-  { type: 'image',     label: i18n.typeImage },
-  { type: 'video',     label: i18n.typeVideo },
-  { type: 'audio',     label: i18n.typeAudio },
-  { type: 'document',  label: i18n.typeDocument }
+    { type: 'recent',    label: i18n.typeRecent },
+    { type: 'all',       label: i18n.allButton },
+    { type: 'mine',      label: i18n.mineButton },
+    { type: 'banking',   label: i18n.typeBanking },
+    { type: 'market',    label: i18n.typeMarket },
+    { type: 'project',   label: i18n.typeProject },
+    { type: 'job',       label: i18n.typeJob },
+    { type: 'transfer',  label: i18n.typeTransfer },
+    { type: 'votes',     label: i18n.typeVotes },
+    { type: 'event',     label: i18n.typeEvent },
+    { type: 'task',      label: i18n.typeTask },
+    { type: 'report',    label: i18n.typeReport },
+    { type: 'tribe',     label: i18n.typeTribe },
+    { type: 'about',     label: i18n.typeAbout },
+    { type: 'curriculum',label: i18n.typeCurriculum },
+    { type: 'karmaScore',label: i18n.typeKarmaScore },
+    { type: 'feed',      label: i18n.typeFeed },
+    { type: 'aiExchange',label: i18n.typeAiExchange },
+    { type: 'post',      label: i18n.typePost },
+    { type: 'pixelia',   label: i18n.typePixelia },
+    { type: 'forum',     label: i18n.typeForum },
+    { type: 'bookmark',  label: i18n.typeBookmark },
+    { type: 'image',     label: i18n.typeImage },
+    { type: 'video',     label: i18n.typeVideo },
+    { type: 'audio',     label: i18n.typeAudio },
+    { type: 'document',  label: i18n.typeDocument }
   ];
 
- let filteredActions;
+  let filteredActions;
   if (filter === 'mine') {
     filteredActions = actions.filter(action => action.author === userId && action.type !== 'tombstone');
   } else if (filter === 'recent') {
@@ -670,66 +686,66 @@ exports.activityView = (actions, filter, userId) => {
   }
 
   let html = template(
-  title,
-  section(
-    div({ class: 'tags-header' },
-      h2(i18n.activityList),
-      p(desc)
-    ),
-    form({ method: 'GET', action: '/activity' },
-      div({ class: 'mode-buttons', style: 'display:grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px;' },
-        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-          activityTypes.slice(0, 3).map(({ type, label }) =>
-            form({ method: 'GET', action: '/activity' },
-              input({ type: 'hidden', name: 'filter', value: type }),
-              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+    title,
+    section(
+      div({ class: 'tags-header' },
+        h2(i18n.activityList),
+        p(desc)
+      ),
+      form({ method: 'GET', action: '/activity' },
+        div({ class: 'mode-buttons', style: 'display:grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px;' },
+          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+            activityTypes.slice(0, 3).map(({ type, label }) =>
+              form({ method: 'GET', action: '/activity' },
+                input({ type: 'hidden', name: 'filter', value: type }),
+                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+              )
             )
-          )
-        ),
-        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-          activityTypes.slice(3, 8).map(({ type, label }) =>
-            form({ method: 'GET', action: '/activity' },
-              input({ type: 'hidden', name: 'filter', value: type }),
-              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+          ),
+          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+            activityTypes.slice(3, 8).map(({ type, label }) =>
+              form({ method: 'GET', action: '/activity' },
+                input({ type: 'hidden', name: 'filter', value: type }),
+                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+              )
             )
-          )
-        ),
-        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-          activityTypes.slice(8, 12).map(({ type, label }) =>
-            form({ method: 'GET', action: '/activity' },
-              input({ type: 'hidden', name: 'filter', value: type }),
-              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+          ),
+          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+            activityTypes.slice(8, 12).map(({ type, label }) =>
+              form({ method: 'GET', action: '/activity' },
+                input({ type: 'hidden', name: 'filter', value: type }),
+                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+              )
             )
-          )
-        ),
-        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-          activityTypes.slice(12, 16).map(({ type, label }) =>
-            form({ method: 'GET', action: '/activity' },
-              input({ type: 'hidden', name: 'filter', value: type }),
-              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+          ),
+          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+            activityTypes.slice(12, 17).map(({ type, label }) =>
+              form({ method: 'GET', action: '/activity' },
+                input({ type: 'hidden', name: 'filter', value: type }),
+                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+              )
             )
-          )
-        ),
-        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-          activityTypes.slice(16, 20).map(({ type, label }) =>
-            form({ method: 'GET', action: '/activity' },
-              input({ type: 'hidden', name: 'filter', value: type }),
-              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+          ),
+          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+            activityTypes.slice(17, 21).map(({ type, label }) =>
+              form({ method: 'GET', action: '/activity' },
+                input({ type: 'hidden', name: 'filter', value: type }),
+                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+              )
             )
-          )
-        ),
-        div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-          activityTypes.slice(20, 25).map(({ type, label }) =>
-            form({ method: 'GET', action: '/activity' },
-              input({ type: 'hidden', name: 'filter', value: type }),
-              button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+          ),
+          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
+            activityTypes.slice(21, 26).map(({ type, label }) =>
+              form({ method: 'GET', action: '/activity' },
+                input({ type: 'hidden', name: 'filter', value: type }),
+                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
+              )
             )
           )
         )
-      )
-    ),
-    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId))
-  )
+      ),
+      section({ class: 'feed-container' }, renderActionCards(filteredActions, userId))
+    )
   );
 
   const hasDocument = actions.some(a => a && a.type === 'document');

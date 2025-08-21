@@ -13,6 +13,30 @@ module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
+  async function getLastKarmaScore(feedId) {
+    const ssbClient = await openSsb();
+    return new Promise(resolve => {
+      const src = ssbClient.messagesByType
+        ? ssbClient.messagesByType({ type: "karmaScore", reverse: true })
+        : ssbClient.createLogStream && ssbClient.createLogStream({ reverse: true });
+      if (!src) return resolve(0);
+      pull(
+        src,
+        pull.filter(msg => {
+          const v = msg.value || msg;
+          const c = v.content || {};
+          return v.author === feedId && c.type === "karmaScore" && typeof c.karmaScore !== "undefined";
+        }),
+        pull.take(1),
+        pull.collect((err, arr) => {
+          if (err || !arr || !arr.length) return resolve(0);
+          const v = arr[0].value || arr[0];
+          resolve(v.content.karmaScore || 0);
+        })
+      );
+    });
+  }
+
   return {
     async listInhabitants(options = {}) {
       const { filter = 'all', search = '', location = '', language = '', skills = '' } = options;
@@ -58,7 +82,7 @@ module.exports = ({ cooler }) => {
         );
         return users;
       }
-      if (filter === 'all') {
+      if (filter === 'all' || filter === 'TOP KARMA') {
         const feedIds = await new Promise((res, rej) => {
           pull(
             ssbClient.createLogStream({ limit: logLimit }),
@@ -75,9 +99,8 @@ module.exports = ({ cooler }) => {
             pull.collect((err, msgs) => err ? rej(err) : res(msgs))
           );
         });
-
         const uniqueFeedIds = Array.from(new Set(feedIds.map(r => r.value.author).filter(Boolean)));
-        const users = await Promise.all(
+        let users = await Promise.all(
           uniqueFeedIds.map(async (feedId) => {
             const name = await about.name(feedId);
             const description = await about.description(feedId);
@@ -86,21 +109,26 @@ module.exports = ({ cooler }) => {
               typeof image === 'string'
                 ? `/image/256/${encodeURIComponent(image)}`
                 : '/assets/images/default-avatar.png';
-
             return { id: feedId, name, description, photo };
           })
         );
-        const deduplicated = Array.from(new Map(users.filter(u => u && u.id).map(u => [u.id, u])).values());
-        let filtered = deduplicated;
+        users = Array.from(new Map(users.filter(u => u && u.id).map(u => [u.id, u])).values());
         if (search) {
           const q = search.toLowerCase();
-          filtered = filtered.filter(u =>
+          users = users.filter(u =>
             u.name?.toLowerCase().includes(q) ||
             u.description?.toLowerCase().includes(q) ||
             u.id?.toLowerCase().includes(q)
           );
         }
-        return filtered;
+        const withKarma = await Promise.all(users.map(async u => {
+          const karmaScore = await getLastKarmaScore(u.id);
+          return { ...u, karmaScore };
+        }));
+        if (filter === 'TOP KARMA') {
+          return withKarma.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
+        }
+        return withKarma;
       }
       if (filter === 'contacts') {
         const all = await this.listInhabitants({ filter: 'all' });
@@ -219,9 +247,9 @@ module.exports = ({ cooler }) => {
       };
     },
     
-      async getLatestAboutById(id) {
-        const ssbClient = await openSsb();
-        const records = await new Promise((res, rej) => {
+    async getLatestAboutById(id) {
+      const ssbClient = await openSsb();
+      const records = await new Promise((res, rej) => {
         pull(
           ssbClient.createUserStream({ id }),
           pull.filter(msg =>
@@ -240,21 +268,21 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const targetId = id || ssbClient.id;
       const records = await new Promise((res, rej) => {
-      pull(
-      ssbClient.createUserStream({ id: targetId }),
-      pull.filter(msg =>
-        msg.value &&
-        msg.value.content &&
-        typeof msg.value.content.text === 'string' &&
-        msg.value.content?.type !== 'tombstone'
-      ),
-      pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-      );
-    });
-    return records
-    .filter(m => typeof m.value.content.text === 'string')
-    .sort((a, b) => b.value.timestamp - a.value.timestamp)
-    .slice(0, 10);
+        pull(
+          ssbClient.createUserStream({ id: targetId }),
+          pull.filter(msg =>
+            msg.value &&
+            msg.value.content &&
+            typeof msg.value.content.text === 'string' &&
+            msg.value.content?.type !== 'tombstone'
+          ),
+          pull.collect((err, msgs) => err ? rej(err) : res(msgs))
+        );
+      });
+      return records
+        .filter(m => typeof m.value.content.text === 'string')
+        .sort((a, b) => b.value.timestamp - a.value.timestamp)
+        .slice(0, 10);
     },
 
     async getCVByUserId(id) {
