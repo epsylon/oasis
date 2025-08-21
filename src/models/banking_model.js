@@ -416,7 +416,7 @@ async function publishKarmaScore(userId, karmaScore) {
   const timestamp = new Date().toISOString();
   const content = {
     type: "karmaScore",
-    karmaScore: karmaScore,
+    karmaScore,
     userId: userId,
     timestamp: timestamp,
   };
@@ -486,7 +486,8 @@ async function getUserEngagementScore(userId) {
   const currentTimestamp = Date.now();
   const timeDifference = currentTimestamp - new Date(lastPublishedTimestamp).getTime();
   const shouldPublish = karmaScore !== previousKarmaScore && timeDifference >= 24 * 60 * 60 * 1000;
-  if (shouldPublish) {
+  const canPublish = Boolean(services?.ssb || global.ssb);
+  if (shouldPublish && canPublish) {
     await publishKarmaScore(userId, karmaScore);
   }
   return karmaScore;
@@ -495,23 +496,28 @@ async function getUserEngagementScore(userId) {
 async function getLastKarmaScore(userId) {
   const ssb = await openSsb();
   if (!ssb) return 0;
-  return new Promise(resolve => {
+  const matchOne = (arr) => {
+    if (!arr || !arr.length) return 0;
+    const v = arr[0].value || arr[0];
+    const c = v.content || {};
+    return Number(c.karmaScore) || 0;
+  };
+  return new Promise((resolve) => {
     const source = ssb.messagesByType
       ? ssb.messagesByType({ type: "karmaScore", reverse: true })
       : ssb.createLogStream && ssb.createLogStream({ reverse: true });
     if (!source) return resolve(0);
     pull(
       source,
-      pull.filter(msg => {
+      pull.filter((msg) => {
         const v = msg.value || msg;
         const c = v.content || {};
-        return v.author === userId && c.type === "karmaScore" && typeof c.karmaScore !== "undefined";
+        return c && c.type === "karmaScore" && c.userId === userId;
       }),
       pull.take(1),
       pull.collect((err, arr) => {
-        if (err || !arr || !arr.length) return resolve(0);
-        const v = arr[0].value || arr[0];
-        resolve(v.content.karmaScore || 0);
+        if (err) return resolve(0);
+        resolve(matchOne(arr));
       })
     );
   });
@@ -520,24 +526,25 @@ async function getLastKarmaScore(userId) {
 async function getLastPublishedTimestamp(userId) {
   const ssb = await openSsb();
   if (!ssb) return new Date(0).toISOString();
-  return new Promise(resolve => {
+  const fallback = new Date(0).toISOString();
+  return new Promise((resolve) => {
     const source = ssb.messagesByType
       ? ssb.messagesByType({ type: "karmaScore", reverse: true })
       : ssb.createLogStream && ssb.createLogStream({ reverse: true });
-    if (!source) return resolve(new Date(0).toISOString());
+    if (!source) return resolve(fallback);
     pull(
       source,
-      pull.filter(msg => {
+      pull.filter((msg) => {
         const v = msg.value || msg;
         const c = v.content || {};
-        return v.author === userId && c.type === "karmaScore";
+        return c && c.type === "karmaScore" && c.userId === userId;
       }),
       pull.take(1),
       pull.collect((err, arr) => {
-        if (err || !arr || !arr.length) return resolve(new Date(0).toISOString());
+        if (err || !arr || !arr.length) return resolve(fallback);
         const v = arr[0].value || arr[0];
         const c = v.content || {};
-        resolve(c.timestamp || new Date(0).toISOString());
+        resolve(c.timestamp || fallback);
       })
     );
   });

@@ -271,7 +271,6 @@ module.exports = {
     //search
     searchTitle: "Bilatu",
     searchDescriptionLabel: "Bilatu edukia zure sarean.",
-    search:"Bilatu",
     searchLanguagesLabel: "Hizkuntzak",
     searchSkillsLabel: "Trebetasunak",
     searchPlaceholder:"Bilatu edukia...",
@@ -296,7 +295,6 @@ module.exports = {
     createdAtLabel:"Noiz",
     hashtagDescription:"Traola honekin erlazionatutako edukia arakatu.",
     tribeDescriptionLabel:"Deskribapena",
-    searchTitle:"Bilaketaren Emaitzak",
     votesOption:"Bozkatzeko Aukerak",
     voteYesLabel:"Bai",
     voteNoLabel:"Ez",
@@ -1492,6 +1490,7 @@ module.exports = {
     statsActivity7d: "Aktibitatea (azken 7 egunetan)",
     statsActivity7dTotal: "7 egunerako guztira",
     statsActivity30dTotal: "30 egunerako guztira",
+    statsKarmaScore: "KARMA Puntuazioa",
     day: "Eguna",
     messages: "Mezuak",
     statsProject: "Proiektuak",

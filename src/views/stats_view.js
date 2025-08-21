@@ -17,7 +17,6 @@ exports.statsView = (stats, filter) => {
   const totalOpinions = types.reduce((sum, t) => sum + O(stats, t), 0);
   const blockStyle = 'padding:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:24px;';
   const headerStyle = 'background-color:#f8f9fa; padding:24px; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 2px 8px rgba(0,0,0,0.1);';
-
   return template(
     title,
     section(

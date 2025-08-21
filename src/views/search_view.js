@@ -194,7 +194,8 @@ const renderContentHtml = (content) => {
     case 'document':
       return div({ class: 'search-document' },
         content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.documentTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
-        content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.description)) : null,
+        br,
+        content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null,
         br,
         div({
           id: `pdf-container-${content.key || content.url}`,
@@ -376,13 +377,13 @@ const resultSection = Object.entries(results).length > 0
           authorUrl = `/author/${encodeURIComponent(msg.value.author)}`;
         } else if (content.type === 'report') {
           author = content.author || i18n.anonymous || "Anonymous";
-          authorUrl = `/author/${encodeURIComponent(content.author || 'anonymous')}`;
+          authorUrl = `/author/${encodeURIComponent(content.author || 'Anonymous')}`;
         } else if (content.type === 'votes') {
           author = content.createdBy || i18n.anonymous || "Anonymous";
-          authorUrl = `/author/${encodeURIComponent(content.createdBy || 'anonymous')}`;   
+          authorUrl = `/author/${encodeURIComponent(content.createdBy || 'Anonymous')}`;   
         } else {
           author = content.author
-          authorUrl = `/author/${encodeURIComponent(content.author || 'anonymous')}`;
+          authorUrl = `/author/${encodeURIComponent(content.author || 'Anonymous')}`;
         }
         
         const contentId = msg.key;
@@ -407,10 +408,10 @@ const resultSection = Object.entries(results).length > 0
   : div({ class: 'no-results' }, p(i18n.noResultsFound));
 
   let html = template(
-    hashtag ? `#${hashtag}` : i18n.search,
+    hashtag ? `#${hashtag}` : i18n.searchTitle,
     section(
       div({ class: "tags-header" },
-        h2(hashtag ? `#${hashtag}` : i18n.search),
+        h2(hashtag ? `#${hashtag}` : i18n.searchTitle),
         p(hashtag ? i18n.hashtagDescription : i18n.searchDescriptionLabel)
       ),
       form(

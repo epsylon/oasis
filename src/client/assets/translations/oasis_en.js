@@ -271,7 +271,6 @@ module.exports = {
     //search
     searchTitle: "Search",
     searchDescriptionLabel: "Search for content in your network.",
-    search:"Search",
     searchLanguagesLabel: "Languages",
     searchSkillsLabel: "Skills",
     searchPlaceholder:"Search for content...",
@@ -296,7 +295,6 @@ module.exports = {
     createdAtLabel:"Created at",
     hashtagDescription:"Explore the content associated with this hashtag",
     tribeDescriptionLabel:"Description",
-    searchTitle:"Search Results",
     votesOption:"Vote Options",
     voteYesLabel:"Yes",
     voteNoLabel:"No",
@@ -1479,6 +1477,7 @@ module.exports = {
     statsActivity7d: "Activity (last 7 days)",
     statsActivity7dTotal: "7-day total",
     statsActivity30dTotal: "30-day total",
+    statsKarmaScore: "KARMA Score",
     day: "Day",
     messages: "Messages",
     statsProject: "Projects",

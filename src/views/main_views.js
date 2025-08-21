@@ -436,7 +436,7 @@ const template = (titlePrefix, ...elements) => {
              navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
              renderAILink(),
              renderTagsLink(),
-             navLink({ href: "/search", emoji: "ꔅ", text: i18n.search })
+             navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
              )
           ),
         )
