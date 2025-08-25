@@ -26,7 +26,7 @@ module.exports = ({ cooler }) => {
   const types = [
     'bookmark','event','task','votes','report','feed','project',
     'image','audio','video','document','transfer','post','tribe',
-    'market','forum','job','aiExchange','karmaScore'
+    'market','forum','job','aiExchange'
   ];
 
   const getFolderSize = (folderPath) => {
@@ -144,6 +144,7 @@ module.exports = ({ cooler }) => {
     const content = {};
     const opinions = {};
     for (const t of types) {
+      if (t === 'karmaScore') continue;
       let vals = Array.from(tipOf[t].values()).map(v => v.content);
       if (t === 'forum') vals = vals.filter(c => !(c.root && tombTargets.has(c.root)));
       content[t] = vals.length || 0;
@@ -233,6 +234,20 @@ module.exports = ({ cooler }) => {
       .filter(p => N(p.status) === 'ACTIVE' && parseFloat(p.goal || 0) > 0)
       .map(p => (parseFloat(p.pledged || 0) / parseFloat(p.goal || 1)) * 100);
 
+    const projectsKPIs = {
+      total: projectVals.length,
+      active: prActive,
+      completed: prCompleted,
+      paused: prPaused,
+      cancelled: prCancelled,
+      ecoGoalTotal: sum(prGoals),
+      ecoPledgedTotal: sum(prPledged),
+      successRate: projectVals.length ? (prCompleted / projectVals.length) * 100 : 0,
+      avgProgress: prProgress.length ? (sum(prProgress) / prProgress.length) : 0,
+      medianProgress: median(prProgress),
+      activeFundingAvg: activeFundingRates.length ? (sum(activeFundingRates) / activeFundingRates.length) : 0
+    };
+
     const topAuthorsMap = new Map();
     for (const m of scopedMsgs) {
       const a = m.value.author;
@@ -288,19 +303,7 @@ module.exports = ({ cooler }) => {
         revenueECO,
         avgSoldPrice: soldPrices.length ? (sum(soldPrices) / soldPrices.length) : 0
       },
-      projectsKPIs: {
-        total: projectVals.length,
-        active: prActive,
-        completed: prCompleted,
-        paused: prPaused,
-        cancelled: prCancelled,
-        ecoGoalTotal: sum(prGoals),
-        ecoPledgedTotal: sum(prPledged),
-        successRate: projectVals.length ? (prCompleted / projectVals.length) * 100 : 0,
-        avgProgress: prProgress.length ? (sum(prProgress) / prProgress.length) : 0,
-        medianProgress: median(prProgress),
-        activeFundingAvg: activeFundingRates.length ? (sum(activeFundingRates) / activeFundingRates.length) : 0
-      },
+      projectsKPIs,
       usersKPIs: {
         totalInhabitants: inhabitants,
         topAuthors

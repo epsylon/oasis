@@ -210,7 +210,7 @@ function renderActionCards(actions, userId) {
       );
     }
 
-    if (content.type === 'audio') {
+    if (type === 'audio') {
       const { url, mimeType, title } = content;
       cardBody.push(
         div({ class: 'card-section audio' },
@@ -468,65 +468,111 @@ function renderActionCards(actions, userId) {
     }
 
     if (type === 'project') {
-      const { title, status, progress, goal, pledged, deadline, followers, backers, milestones, bounty, bountyAmount, bounty_currency } = content;
-      const ratio = goal ? Math.min(100, Math.round((parseFloat(pledged || 0) / parseFloat(goal)) * 100)) : 0;
-      const displayStatus = String(status || 'ACTIVE').toUpperCase();
-      const followersCount = Array.isArray(followers) ? followers.length : 0;
-      const backersCount = Array.isArray(backers) ? backers.length : 0;
-      const backersTotal = sumAmounts(backers || []);
-      const msCount = Array.isArray(milestones) ? milestones.length : 0;
-      const lastMs = Array.isArray(milestones) && milestones.length ? milestones[milestones.length - 1] : null;
-      const bountyVal = typeof bountyAmount !== 'undefined' ? bountyAmount : (typeof bounty === 'number' ? bounty : null);
-      cardBody.push(
+      const {
+        title, status, progress, goal, pledged,
+        deadline, followers, backers, milestones,
+        bounty, bountyAmount, bounty_currency,
+        activity, activityActor
+    } = content;
+
+    const ratio = goal ? Math.min(100, Math.round((parseFloat(pledged || 0) / parseFloat(goal)) * 100)) : 0;
+    const displayStatus = String(status || 'ACTIVE').toUpperCase();
+    const followersCount = Array.isArray(followers) ? followers.length : 0;
+    const backersCount = Array.isArray(backers) ? backers.length : 0;
+    const backersTotal = sumAmounts(backers || []);
+    const msCount = Array.isArray(milestones) ? milestones.length : 0;
+    const lastMs = Array.isArray(milestones) && milestones.length ? milestones[milestones.length - 1] : null;
+    const bountyVal = typeof bountyAmount !== 'undefined'
+        ? bountyAmount
+        : (typeof bounty === 'number' ? bounty : null);
+
+    if (activity && activity.kind) {
+        const tmpl =
+            activity.kind === 'follow'
+                ? (i18n.activityProjectFollow || '%OASIS% is now %ACTION% this project: %PROJECT%')
+                : activity.kind === 'unfollow'
+                    ? (i18n.activityProjectUnfollow || '%OASIS% is now %ACTION% this project: %PROJECT%')
+                    : '%OASIS% performed an unknown action on %PROJECT%';
+
+        const actionWord =
+            activity.kind === 'follow'
+                ? (i18n.following || 'FOLLOWING')
+                : activity.kind === 'unfollow'
+                    ? (i18n.unfollowing || 'UNFOLLOWING')
+                    : 'ACTION';
+
+        const msgHtml = tmpl
+            .replace('%OASIS%', `<a class="user-link" href="/author/${encodeURIComponent(activity.activityActor || '')}">${activity.activityActor || ''}</a>`)
+            .replace('%PROJECT%', `<a class="user-link" href="/projects/${encodeURIComponent(action.tipId || action.id)}">${title || ''}</a>`)
+            .replace('%ACTION%', `<strong>${actionWord}</strong>`);
+
+        return div({ class: 'card card-rpg' },
+            div({ class: 'card-header' },
+                h2({ class: 'card-label' }, `[${(i18n.typeProject || 'PROJECT').toUpperCase()}]`),
+                form({ method: "GET", action: `/projects/${encodeURIComponent(action.tipId || action.id)}` },
+                    button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+                )
+            ),
+            div(
+                p({ innerHTML: msgHtml })
+            ),
+            p({ class: 'card-footer' },
+                span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
+                a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
+            )
+        );
+    }
+
+    cardBody.push(
         div({ class: 'card-section project' },
-          title ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.title + ':'), 
-            span({ class: 'card-value' }, title)
-          ) : "",
-          typeof goal !== 'undefined' ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectGoal + ':'), 
-            span({ class: 'card-value' }, `${goal} ECO`)
-          ) : "",
-          typeof progress !== 'undefined' ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectProgress + ':'), 
-            span({ class: 'card-value' }, `${progress || 0}%`)
-          ) : "",
-          deadline ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectDeadline + ':'), 
-            span({ class: 'card-value' }, moment(deadline).format('YYYY/MM/DD HH:mm'))
-          ) : "",
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectStatus + ':'), 
-            span({ class: 'card-value' }, i18n['projectStatus' + displayStatus] || displayStatus)
-          ),
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectFunding + ':'), 
-            span({ class: 'card-value' }, `${ratio}%`)
-          ),
-          typeof pledged !== 'undefined' ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectPledged + ':'), 
-            span({ class: 'card-value' }, `${pledged || 0} ECO`)
-          ) : "",
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectFollowers + ':'), 
-            span({ class: 'card-value' }, `${followersCount}`)
-          ),
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectBackers + ':'), 
-            span({ class: 'card-value' }, `${backersCount} · ${backersTotal} ECO`)
-          ),
-          msCount ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.projectMilestones || 'Milestones') + ':'), 
-            span({ class: 'card-value' }, `${msCount}${lastMs && lastMs.title ? ' · ' + lastMs.title : ''}`)
-          ) : "",
-          bountyVal != null ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.projectBounty || 'Bounty') + ':'), 
-            span({ class: 'card-value' }, `${bountyVal} ${(bounty_currency || 'ECO').toUpperCase()}`)
-          ) : ""
+            title ? div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.title + ':'),
+                span({ class: 'card-value' }, title)
+            ) : "",
+            typeof goal !== 'undefined' ? div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.projectGoal + ':'),
+                span({ class: 'card-value' }, `${goal} ECO`)
+            ) : "",
+            typeof progress !== 'undefined' ? div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.projectProgress + ':'),
+                span({ class: 'card-value' }, `${progress || 0}%`)
+            ) : "",
+            deadline ? div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.projectDeadline + ':'),
+                span({ class: 'card-value' }, moment(deadline).format('YYYY/MM/DD HH:mm'))
+            ) : "",
+            div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.projectStatus + ':'),
+                span({ class: 'card-value' }, i18n['projectStatus' + displayStatus] || displayStatus)
+            ),
+            div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.projectFunding + ':'),
+                span({ class: 'card-value' }, `${ratio}%`)
+            ),
+            typeof pledged !== 'undefined' ? div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.projectPledged + ':'),
+                span({ class: 'card-value' }, `${pledged || 0} ECO`)
+            ) : "",
+            div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.projectFollowers + ':'),
+                span({ class: 'card-value' }, `${followersCount}`)
+            ),
+            div({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.projectBackers + ':'),
+                span({ class: 'card-value' }, `${backersCount} · ${backersTotal} ECO`)
+            ),
+            msCount ? div({ class: 'card-field' },
+                span({ class: 'card-label' }, (i18n.projectMilestones || 'Milestones') + ':'),
+                span({ class: 'card-value' }, `${msCount}${lastMs && lastMs.title ? ' · ' + lastMs.title : ''}`)
+            ) : "",
+            bountyVal != null ? div({ class: 'card-field' },
+                span({ class: 'card-label' }, (i18n.projectBounty || 'Bounty') + ':'),
+                span({ class: 'card-value' }, `${bountyVal} ${(bounty_currency || 'ECO').toUpperCase()}`)
+            ) : ""
         )
       );
     }
-
+      
     if (type === 'aiExchange') {
       const { ctx } = content;
       cardBody.push(

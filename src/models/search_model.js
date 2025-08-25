@@ -13,7 +13,8 @@ module.exports = ({ cooler }) => {
   const searchableTypes = [
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
-    'image', 'audio', 'video', 'market'
+    'image', 'audio', 'video', 'market', 'bankWallet', 'bankClaim',
+    'project', 'job', 'forum', 'vote', 'contact', 'pub'
   ];
 
   const getRelevantFields = (type, content) => {
@@ -39,7 +40,7 @@ module.exports = ({ cooler }) => {
       case 'document':
         return [content?.url, content?.title, content?.description, ...(content?.tags || []), content?.key];
       case 'market':
-        return [content?.item_type, content?.title, content?.description, content?.price, ...(content?.tags || []), content?.status, content?.item_status, content?.deadline, content?.includesShipping, content?.seller, content?.image, content?.auctions_poll];
+        return [content?.item_type, content?.title, content?.description, content?.price, ...(content?.tags || []), content?.status, content?.item_status, content?.deadline, content?.includesShipping, content?.seller, content?.image, content?.auctions_poll, content?.stock];
       case 'bookmark':
         return [content?.author, content?.url, ...(content?.tags || []), content?.description, content?.category, content?.lastVisit];
       case 'task':
@@ -50,6 +51,22 @@ module.exports = ({ cooler }) => {
         return [content?.from, content?.to, content?.concept, content?.amount, content?.deadline, content?.status, ...(content?.tags || []), content?.confirmedBy?.length];
       case 'curriculum':
         return [content?.author, content?.name, content?.description, content?.photo, ...(content?.personalSkills || []), ...(content?.personalExperiences || []), ...(content?.oasisExperiences || []), ...(content?.oasisSkills || []), ...(content?.educationExperiences || []), ...(content?.educationalSkills || []), ...(content?.languages || []), ...(content?.professionalExperiences || []), ...(content?.professionalSkills || []), content?.location, content?.status, content?.preferences, content?.createdAt];
+      case 'bankWallet':
+        return [content?.address];
+      case 'bankClaim':
+        return [content?.amount, content?.epochId, content?.allocationId, content?.txid];
+      case 'project':
+        return [content?.title, content?.status, content?.progress, content?.goal, content?.pledged, content?.deadline, (content?.followers || []).length, (content?.backers || []).length, (content?.milestones || []).length, content?.bounty, content?.bountyAmount, content?.bounty_currency, content?.activity?.kind, content?.activityActor];
+      case 'job':
+        return [content?.title, content?.job_type, ...(content?.tasks || []), content?.location, content?.vacants, content?.salary, content?.status, (content?.subscribers || []).length];
+      case 'forum':
+        return [content?.root, content?.category, content?.title, content?.text, content?.key];
+      case 'vote':
+        return [content?.vote?.link];
+      case 'contact':
+        return [content?.contact];
+      case 'pub':
+        return [content?.address?.host, content?.address?.key];
       default:
         return [];
     }
@@ -119,4 +136,3 @@ module.exports = ({ cooler }) => {
 
   return { search };
 };
-

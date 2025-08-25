@@ -144,7 +144,6 @@ module.exports = ({ cooler }) => {
     async updateProject(id, patch) {
       const ssbClient = await openSsb()
       const current = await getById(id)
-      if (current.author !== ssbClient.id) throw new Error('Unauthorized')
 
       let blobId = (patch.image === undefined ? current.image : patch.image)
       blobId = extractBlobId(blobId)
@@ -211,54 +210,39 @@ module.exports = ({ cooler }) => {
     },
 
     async followProject(id, userId) {
-      const tip = await this.getProjectTipId(id)
-      const project = await this.getProjectById(tip)
-      const followers = Array.isArray(project.followers) ? project.followers.slice() : []
-      if (!followers.includes(userId)) followers.push(userId)
-      return this.updateProject(tip, { followers })
+      const tip = await this.getProjectTipId(id);
+      const project = await this.getProjectById(tip);
+      const followers = Array.isArray(project.followers) ? project.followers.slice() : [];
+      if (!followers.includes(userId)) followers.push(userId);
+      const activity = {
+        kind: 'follow',
+        amount: null,
+        activityActor: userId
+      };
+      return this.updateProject(tip, { followers, activity });
     },
 
     async unfollowProject(id, userId) {
-      const tip = await this.getProjectTipId(id)
-      const project = await this.getProjectById(tip)
-      const followers = (project.followers || []).filter(uid => uid !== userId)
-      return this.updateProject(tip, { followers })
+      const tip = await this.getProjectTipId(id);
+      const project = await this.getProjectById(tip);
+      const followers = (project.followers || []).filter(uid => uid !== userId);
+      const activity = {
+        kind: 'unfollow',
+        amount: null,
+        activityActor: userId
+      };
+      return this.updateProject(tip, { followers, activity });
     },
 
     async pledgeToProject(id, userId, amount) {
-      openSsb().then(ssbClient => {
-        const tip = getProjectTipId(id);
-        getProjectById(tip).then(project => {
-          const amt = Math.max(0, parseFloat(amount || 0) || 0);
-          if (amt <= 0) throw new Error('Invalid amount');     
-          const backers = Array.isArray(project.backers) ? project.backers.slice() : [];
-          backers.push({ userId, amount: amt, at: new Date().toISOString() });    
-          const pledged = (parseFloat(project.pledged || 0) || 0) + amt;  
-          updateProject(tip, { backers, pledged }).then(updated => {
-            if (project.author == userId) {
-              const recipients = [project.author];
-              const content = {
-               type: 'post',
-               from: ssbClient.id,
-               to: recipients,
-               subject: 'PROJECT_PLEDGE',
-               text: `${userId} has pledged ${amt} ECO to your project "${project.title}" /projects/${encodeURIComponent(tip)}`,
-               sentAt: new Date().toISOString(),
-               private: true,
-               meta: {
-                 type: 'project-pledge',
-                 projectId: tip,
-                 projectTitle: project.title,
-                 amount: amt,
-                 pledgedBy: userId
-               }
-             };
-             ssbClient.private.publish(content, recipients);
-            }
-           return updated;
-          });
-        });
-     });
+      const tip = await this.getProjectTipId(id);
+      const project = await this.getProjectById(tip);
+      const amt = Math.max(0, parseFloat(amount || 0) || 0);
+      if (amt <= 0) throw new Error('Invalid amount');
+      const backers = Array.isArray(project.backers) ? project.backers.slice() : [];
+      backers.push({ userId, amount: amt, at: new Date().toISOString() });
+      const pledged = (parseFloat(project.pledged || 0) || 0) + amt;
+      await this.updateProject(tip, { backers, pledged });
     },
 
     async addBounty(id, bounty) {

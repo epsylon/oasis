@@ -11,9 +11,11 @@ exports.statsView = (stats, filter) => {
   const types = [
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project',
     'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
-    'market', 'forum', 'job', 'aiExchange', 'karmaScore'
+    'market', 'forum', 'job', 'aiExchange'
   ];
-  const totalContent = types.reduce((sum, t) => sum + C(stats, t), 0);
+  const totalContent = types
+  .filter(t => t !== 'karmaScore') 
+  .reduce((sum, t) => sum + C(stats, t), 0);
   const totalOpinions = types.reduce((sum, t) => sum + O(stats, t), 0);
   const blockStyle = 'padding:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:24px;';
   const headerStyle = 'background-color:#f8f9fa; padding:24px; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 2px 8px rgba(0,0,0,0.1);';
@@ -33,7 +35,6 @@ exports.statsView = (stats, filter) => {
           )
         )
       ),
-
       section(
         div({ style: headerStyle },
           h3({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsCreatedAt}: `, span({ style: 'color:#888;' }, stats.createdAt)),
@@ -56,6 +57,8 @@ exports.statsView = (stats, filter) => {
             )
           )
         ),
+        
+        div({ style: headerStyle }, h3(`${i18n.bankingUserEngagementScore}: ${C(stats, 'karmaScore')}`)),
 
         div({ style: headerStyle },
           h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' }, i18n.statsBankingTitle),
@@ -85,11 +88,10 @@ exports.statsView = (stats, filter) => {
               span({ style: 'color:#888;' }, String(C(stats, 'aiExchange') || 0))
             )
           )
-        ),
+        ),     
 
         filter === 'ALL'
           ? div({ class: 'stats-container' }, [
-              div({ style: blockStyle }, h2(`${i18n.bankingUserEngagementScore}: ${C(stats, 'karmaScore')}`)),
               div({ style: blockStyle },
                 h2(i18n.statsActivity7d),
                 table({ style: 'width:100%; border-collapse: collapse;' },
@@ -155,14 +157,17 @@ exports.statsView = (stats, filter) => {
                 h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
                 ul(types.map(t => O(stats, t) > 0 ? li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${O(stats, t)}`) : null).filter(Boolean))
               ),
-              div({ style: blockStyle },
-                h2(`${i18n.statsNetworkContent}: ${totalContent}`),
-                ul(types.map(t => C(stats, t) > 0 ? li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${C(stats, t)}`) : null).filter(Boolean))
-              )
+	      div({ style: blockStyle },
+		  h2(`${i18n.statsNetworkContent}: ${totalContent}`),
+		  ul(types
+		    .filter(t => t !== 'karmaScore')
+		    .map(t => C(stats, t) > 0 ? li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${C(stats, t)}`) : null)
+		    .filter(Boolean)
+		  )
+	      )
             ])
           : filter === 'MINE'
             ? div({ class: 'stats-container' }, [
-                div({ style: blockStyle }, h2(`${i18n.bankingUserEngagementScore}: ${C(stats, 'karmaScore')}`)),
                 div({ style: blockStyle },
                   h2(i18n.statsActivity7d),
                   table({ style: 'width:100%; border-collapse: collapse;' },
@@ -215,10 +220,14 @@ exports.statsView = (stats, filter) => {
                   h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),
                   ul(types.map(t => O(stats, t) > 0 ? li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${O(stats, t)}`) : null).filter(Boolean))
                 ),
-                div({ style: blockStyle },
-                  h2(`${i18n.statsYourContent}: ${totalContent}`),
-                  ul(types.map(t => C(stats, t) > 0 ? li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${C(stats, t)}`) : null).filter(Boolean))
-                )
+		div({ style: blockStyle },
+		  h2(`${i18n.statsYourContent}: ${totalContent}`),
+		  ul(types
+		    .filter(t => t !== 'karmaScore') 
+		    .map(t => C(stats, t) > 0 ? li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${C(stats, t)}`) : null)
+		    .filter(Boolean)
+		  )
+		)
               ])
             : div({ class: 'stats-container' }, [
                 div({ style: blockStyle },

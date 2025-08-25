@@ -165,7 +165,7 @@ module.exports = ({ cooler }) => {
       if (filter === 'CVs' || filter === 'MATCHSKILLS') {
         const records = await new Promise((res, rej) => {
           pull(
-            ssbClient.createLogStream({ limit: logLimit }),
+            ssbClient.createLogStream({ limit: logLimit, reverse: true}),
             pull.filter(msg =>
               msg.value.content?.type === 'curriculum' &&
               msg.value.content?.type !== 'tombstone'

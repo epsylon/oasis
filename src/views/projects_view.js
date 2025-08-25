@@ -253,20 +253,21 @@ function renderMilestonesAndBounties(project, editable = false) {
   return div({ class: 'milestones-bounties' }, ...blocks, unassignedBlock);
 }
 
-const renderProjectList = (projects, filter) =>
+const renderProjectList = (projects, filter) => 
   projects.length > 0 ? projects.map(pr => {
-    const isMineFilter = String(filter).toUpperCase() === 'MINE'
-    const isAuthor = pr.author === userId
-    const statusUpper = String(pr.status || 'ACTIVE').toUpperCase()
-    const isActive = statusUpper === 'ACTIVE'
-    const pct = parseFloat(pr.progress || 0) || 0
-    const ratio = pr.goal ? Math.min(100, Math.round((parseFloat(pr.pledged || 0) / parseFloat(pr.goal)) * 100)) : 0
-    const mileDone = (pr.milestones || []).filter(m => m.done).length
-    const mileTotal = (pr.milestones || []).length
-    const statusClass = `status-${statusUpper.toLowerCase()}`
-    const remain = budgetSummary(pr).remaining
-    const followers = Array.isArray(pr.followers) ? pr.followers.length : 0
-    const backers = Array.isArray(pr.backers) ? pr.backers.length : 0
+    const isMineFilter = String(filter).toUpperCase() === 'MINE';
+    const isAuthor = pr.author === userId;
+    const statusUpper = String(pr.status || 'ACTIVE').toUpperCase();
+    const isActive = statusUpper === 'ACTIVE';
+    const pct = parseFloat(pr.progress || 0) || 0;
+    const ratio = pr.goal ? Math.min(100, Math.round((parseFloat(pr.pledged || 0) / parseFloat(pr.goal)) * 100)) : 0;
+    const mileDone = (pr.milestones || []).filter(m => m.done).length;
+    const mileTotal = (pr.milestones || []).length;
+    const statusClass = `status-${statusUpper.toLowerCase()}`;
+    const remain = budgetSummary(pr).remaining;
+    const followers = Array.isArray(pr.followers) ? pr.followers.length : 0;
+    const backers = Array.isArray(pr.backers) ? pr.backers.length : 0;
+
 
     return div({ class: `project-card ${statusClass}` },
       isMineFilter && isAuthor ? div({ class: "project-actions" },
@@ -290,18 +291,18 @@ const renderProjectList = (projects, filter) =>
           button({ class: "status-btn", type: "submit" }, i18n.projectSetProgress)
         )
       ) : null,
-
-      !isMineFilter && !isAuthor && isActive ? (Array.isArray(pr.followers) && pr.followers.includes(userId) ?
-        form({ method: "POST", action: `/projects/unfollow/${encodeURIComponent(pr.id)}` },
-          button({ type: "submit", class: "unsubscribe-btn" }, i18n.projectUnfollowButton)
-        ) :
-        form({ method: "POST", action: `/projects/follow/${encodeURIComponent(pr.id)}` },
-          button({ type: "submit", class: "subscribe-btn" }, i18n.projectFollowButton)
-        )
-      ) : null,
-
-      form({ method: "GET", action: `/projects/${encodeURIComponent(pr.id)}` },
-        button({ type: "submit", class: "filter-btn" }, i18n.viewDetailsButton)
+      div({ class: 'project-actions' },
+        !isMineFilter && !isAuthor && isActive ? (Array.isArray(pr.followers) && pr.followers.includes(userId) ?
+          form({ method: "POST", action: `/projects/unfollow/${encodeURIComponent(pr.id)}` },
+            button({ type: "submit", class: "unsubscribe-btn" }, i18n.projectUnfollowButton)
+          ) :
+          form({ method: "POST", action: `/projects/follow/${encodeURIComponent(pr.id)}` },
+            button({ type: "submit", class: "subscribe-btn" }, i18n.projectFollowButton)
+          )
+        ) : null,
+        form({ method: "GET", action: `/projects/${encodeURIComponent(pr.id)}` },
+          button({ type: "submit", class: "filter-btn" }, i18n.viewDetailsButton)
+        ),
       ),
       br(),
       h2(pr.title),
@@ -466,8 +467,9 @@ exports.singleProjectView = async (project, filter="ALL") => {
             button({ class: "status-btn", type: "submit" }, i18n.projectSetProgress)
           )
         ) : null,
-        (!isAuthor && Array.isArray(project.followers) && project.followers.includes(userId))
-          ? p({ class: 'hint' }, i18n.projectYouFollowHint) : null,
+	(!isAuthor && Array.isArray(project.followers) && project.followers.includes(userId)) 
+	  ? div({ class: 'hint' }, p({ class: 'hint' }, i18n.projectYouFollowHint)) 
+	  : null,
         h2(project.title),
         project.image ? div({ class: 'activity-image-preview' }, img({ src: `/blob/${encodeURIComponent(project.image)}` })) : null,
         field(i18n.projectDescription + ':', ''), p(...renderUrl(project.description)),

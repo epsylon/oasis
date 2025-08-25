@@ -4,15 +4,9 @@ const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const N = s => String(s || '').toUpperCase().replace(/\s+/g, '_');
 const ORDER_MARKET = ['FOR_SALE','OPEN','RESERVED','CLOSED','SOLD'];
-const SCORE_MARKET = s => {
-  const i = ORDER_MARKET.indexOf(N(s));
-  return i < 0 ? -1 : i;
-};
 const ORDER_PROJECT = ['CANCELLED','PAUSED','ACTIVE','COMPLETED'];
-const SCORE_PROJECT = s => {
-  const i = ORDER_PROJECT.indexOf(N(s));
-  return i < 0 ? -1 : i;
-};
+const SCORE_MARKET = s => { const i = ORDER_MARKET.indexOf(N(s)); return i < 0 ? -1 : i };
+const SCORE_PROJECT = s => { const i = ORDER_PROJECT.indexOf(N(s)); return i < 0 ? -1 : i };
 
 function inferType(c = {}) {
   if (c.type === 'wallet' && c.coin === 'ECO' && typeof c.address === 'string') return 'bankWallet';
@@ -23,21 +17,14 @@ function inferType(c = {}) {
 
 module.exports = ({ cooler }) => {
   let ssb;
-  const openSsb = async () => {
-    if (!ssb) ssb = await cooler.open();
-    return ssb;
-  };
-  const hasBlob = async (ssbClient, url) => {
-    return new Promise((resolve) => {
-      ssbClient.blobs.has(url, (err, has) => {
-        resolve(!err && has);
-      });
-    });
-  };
+  const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb };
+  const hasBlob = async (ssbClient, url) => new Promise(resolve => ssbClient.blobs.has(url, (err, has) => resolve(!err && has)));
+
   return {
     async listFeed(filter = 'all') {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
+
       const results = await new Promise((resolve, reject) => {
         pull(
           ssbClient.createLogStream({ reverse: true, limit: logLimit }),
@@ -48,31 +35,20 @@ module.exports = ({ cooler }) => {
       const tombstoned = new Set();
       const parentOf = new Map();
       const idToAction = new Map();
+      const rawById = new Map();
 
       for (const msg of results) {
         const k = msg.key;
         const v = msg.value;
         const c = v?.content;
         if (!c?.type) continue;
-        if (c.type === 'tombstone' && c.target) {
-          tombstoned.add(c.target);
-          continue;
-        }
-        idToAction.set(k, {
-          id: k,
-          author: v?.author,
-          ts: v?.timestamp || 0,
-          type: inferType(c),
-          content: c
-        });
+        if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue }
+        idToAction.set(k, { id: k, author: v?.author, ts: v?.timestamp || 0, type: inferType(c), content: c });
+        rawById.set(k, msg);
         if (c.replaces) parentOf.set(k, c.replaces);
       }
 
-      const rootOf = (id) => {
-        let cur = id;
-        while (parentOf.has(cur)) cur = parentOf.get(cur);
-        return cur;
-      };
+      const rootOf = (id) => { let cur = id; while (parentOf.has(cur)) cur = parentOf.get(cur); return cur };
 
       const groups = new Map();
       for (const [id, action] of idToAction.entries()) {
@@ -86,34 +62,56 @@ module.exports = ({ cooler }) => {
       for (const [root, arr] of groups.entries()) {
         if (!arr.length) continue;
         const type = arr[0].type;
-        let tip;
-        if (type === 'market') {
-          tip = arr[0];
-          let bestScore = SCORE_MARKET(tip.content.status);
-          for (const a of arr) {
-            const s = SCORE_MARKET(a.content.status);
-            if (s > bestScore || (s === bestScore && a.ts > tip.ts)) {
-              tip = a; bestScore = s;
-            }
-          }
-        } else if (type === 'project') {
-          tip = arr[0];
-          let bestScore = SCORE_PROJECT(tip.content.status);
-          for (const a of arr) {
-            const s = SCORE_PROJECT(a.content.status);
-            if (s > bestScore || (s === bestScore && a.ts > tip.ts)) {
-              tip = a; bestScore = s;
-            }
-          }
-        } else {
-          tip = arr.reduce((best, a) => (a.ts > best.ts ? a : best), arr[0]);
+
+        if (type !== 'project') {
+          const tip = arr.reduce((best, a) => (a.ts > best.ts ? a : best), arr[0]);
+          for (const a of arr) idToTipId.set(a.id, tip.id);
+          continue;
         }
-        if (tombstoned.has(tip.id)) {
-          const nonTomb = arr.filter(a => !tombstoned.has(a.id));
-          if (!nonTomb.length) continue;
-          tip = nonTomb.reduce((best, a) => (a.ts > best.ts ? a : best), nonTomb[0]);
+
+        let tip = arr[0];
+        let bestScore = SCORE_PROJECT(tip.content.status);
+        for (const a of arr) {
+          const s = SCORE_PROJECT(a.content.status);
+          if (s > bestScore || (s === bestScore && a.ts > tip.ts)) { tip = a; bestScore = s }
         }
         for (const a of arr) idToTipId.set(a.id, tip.id);
+
+        const baseTitle = (tip.content && tip.content.title) || '';
+        const overlays = arr
+          .filter(a => a.type === 'project' && (a.content.followersOp || a.content.backerPledge))
+          .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
+        for (const ev of overlays) {
+          if (tombstoned.has(ev.id)) continue;
+
+          let kind = null;
+          let amount = null;
+
+          if (ev.content.followersOp === 'follow') kind = 'follow';
+          else if (ev.content.followersOp === 'unfollow') kind = 'unfollow';
+
+          if (ev.content.backerPledge && typeof ev.content.backerPledge.amount !== 'undefined') {
+            const amt = Math.max(0, parseFloat(ev.content.backerPledge.amount || 0) || 0);
+            if (amt > 0) { kind = kind || 'pledge'; amount = amt }
+          }
+
+          if (!kind) continue;
+
+          const augmented = {
+            ...ev,
+            type: 'project',
+            content: {
+              ...ev.content,
+              title: baseTitle,
+              projectId: tip.id,
+              activity: { kind, amount },
+              activityActor: ev.author
+            }
+          };
+          idToAction.set(ev.id, augmented);
+          idToTipId.set(ev.id, ev.id); 
+        }
       }
 
       const latest = [];
@@ -156,22 +154,16 @@ module.exports = ({ cooler }) => {
       deduped = Array.from(byKey.values());
 
       let out;
-      if (filter === 'mine') {
-        out = deduped.filter(a => a.author === userId);
-      } else if (filter === 'recent') {
-        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-        out = deduped.filter(a => (a.ts || 0) >= cutoff);
-      } else if (filter === 'all') {
-        out = deduped;
-      } else if (filter === 'banking') {
-        out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
-      } else if (filter === 'karma') {
-        out = deduped.filter(a => a.type === 'karmaScore');
-      } else {
-        out = deduped.filter(a => a.type === filter);
-      }
+      if (filter === 'mine') out = deduped.filter(a => a.author === userId);
+      else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff) }
+      else if (filter === 'all') out = deduped;
+      else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
+      else if (filter === 'karma') out = deduped.filter(a => a.type === 'karmaScore');
+      else out = deduped.filter(a => a.type === filter);
+
       out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
       return out;
     }
   };
 };
+

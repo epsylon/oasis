@@ -13,6 +13,18 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.4.6 - 2025-08-24
+ 
+### Fixed
+
+ + Follow/Unfollow and Pledges (projects plugin).
+ + Karma SCORE (inhabitants plugin).
+ 
+### Changed
+
+- Activity.
+- Inhabitants.
+- Search.
 
 ## v0.4.5 - 2025-08-21
 

@@ -872,22 +872,44 @@ router
   .get('/inhabitants', async (ctx) => {
     const filter = ctx.query.filter || 'all';
     const query = {
-      search: ctx.query.search || ''
+        search: ctx.query.search || ''
     };
     if (['CVs', 'MATCHSKILLS'].includes(filter)) {
-      query.location = ctx.query.location || '';
-      query.language = ctx.query.language || '';
-      query.skills = ctx.query.skills || '';
+        query.location = ctx.query.location || '';
+        query.language = ctx.query.language || '';
+        query.skills = ctx.query.skills || '';
     }
     const userId = SSBconfig.config.keys.id;
     const inhabitants = await inhabitantsModel.listInhabitants({
-      filter,
-      ...query
+        filter,
+        ...query
     });
-    const addresses = await bankingModel.listAddressesMerged();
+    const [addresses, karmaList] = await Promise.all([
+        bankingModel.listAddressesMerged(),
+        Promise.all(
+            inhabitants.map(async (u) => {
+                try {
+                    const { karmaScore } = await bankingModel.getBankingData(u.id);
+                    return { id: u.id, karmaScore: typeof karmaScore === 'number' ? karmaScore : 0 };
+                } catch {
+                    return { id: u.id, karmaScore: 0 };
+                }
+            })
+        )
+    ]);
     const addrMap = new Map(addresses.map(x => [x.id, x.address]));
-    const inhabitantsWithAddr = inhabitants.map(u => ({ ...u, ecoAddress: addrMap.get(u.id) || null }));
-    ctx.body = await inhabitantsView(inhabitantsWithAddr, filter, query, userId);
+    const karmaMap = new Map(karmaList.map(x => [x.id, x.karmaScore]));
+    let enriched = inhabitants.map(u => ({
+        ...u,
+        ecoAddress: addrMap.get(u.id) || null,
+        karmaScore: karmaMap.has(u.id)
+            ? karmaMap.get(u.id)
+            : (typeof u.karmaScore === 'number' ? u.karmaScore : 0)
+    }));
+    if (filter === 'TOP KARMA') {
+        enriched = enriched.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
+    }
+    ctx.body = await inhabitantsView(enriched, filter, query, userId);
   })
   .get('/inhabitant/:id', async (ctx) => {
     const id = ctx.params.id;
@@ -938,8 +960,9 @@ router
   })
   .get('/activity', async ctx => {
     const filter = ctx.query.filter || 'recent';
-    const actions = await activityModel.listFeed(filter);
     const userId = SSBconfig.config.keys.id;
+    try { await bankingModel.getUserEngagementScore(userId); } catch (_) {}
+    const actions = await activityModel.listFeed(filter);
     ctx.body = activityView(actions, filter, userId);
   })
   .get("/profile", async (ctx) => {
@@ -1351,15 +1374,20 @@ router
     ctx.body = await singleJobsView(job, filter);
   })
   .get('/projects', async (ctx) => {
-    const projectsMod = ctx.cookies.get("projectsMod") || 'on'
-    if (projectsMod !== 'on') { ctx.redirect('/modules'); return }
-    const filter = ctx.query.filter || 'ALL'
+    const projectsMod = ctx.cookies.get("projectsMod") || 'on';
+    if (projectsMod !== 'on') { ctx.redirect('/modules'); return; }
+    const filter = ctx.query.filter || 'ALL';
     if (filter === 'CREATE') {
-      ctx.body = await projectsView([], 'CREATE'); return
+      ctx.body = await projectsView([], 'CREATE');
+      return;
     }
-    const modelFilter = (filter === 'BACKERS') ? 'ALL' : filter
-    const projects = await projectsModel.listProjects(modelFilter)
-    ctx.body = await projectsView(projects, filter)
+    const modelFilter = (filter === 'BACKERS') ? 'ALL' : filter;
+    let projects = await projectsModel.listProjects(modelFilter);
+    if (filter === 'MINE') {
+      const userId = SSBconfig.config.keys.id;
+      projects = projects.filter(project => project.author === userId);
+    }
+    ctx.body = await projectsView(projects, filter);
   })
   .get('/projects/edit/:id', async (ctx) => {
     const id = ctx.params.id

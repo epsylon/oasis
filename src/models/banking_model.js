@@ -162,7 +162,6 @@ module.exports = ({ services } = {}) => {
   };
 
   async function openSsb() {
-    if (services?.ssb) return services.ssb;
     if (services?.cooler?.open) return services.cooler.open();
     if (global.ssb) return global.ssb;
     try {
@@ -171,7 +170,7 @@ module.exports = ({ services } = {}) => {
       if (srv?.server) return srv.server;
       if (srv?.default) return srv.default;
     } catch (_) {}
-    return null;
+    return null; 
   }
 
   async function getWalletFromSSB(userId) {
@@ -412,19 +411,11 @@ module.exports = ({ services } = {}) => {
 
 async function publishKarmaScore(userId, karmaScore) {
   const ssb = await openSsb();
-  if (!ssb) return false;
+  if (!ssb || !ssb.publish) return false;
   const timestamp = new Date().toISOString();
-  const content = {
-    type: "karmaScore",
-    karmaScore,
-    userId: userId,
-    timestamp: timestamp,
-  };
+  const content = { type: "karmaScore", karmaScore, userId, timestamp };
   return new Promise((resolve, reject) => {
-    ssb.publish(content, (err, msg) => {
-      if (err) reject(err);
-      else resolve(msg);
-    });
+    ssb.publish(content, (err, msg) => err ? reject(err) : resolve(msg));
   });
 }
 
@@ -479,45 +470,49 @@ function scoreFromActions(actions) {
 }
 
 async function getUserEngagementScore(userId) {
-  const actions = await fetchUserActions(userId);
+  const ssb = await openSsb();
+  const uid = resolveUserId(userId);
+  const actions = await fetchUserActions(uid);
   const karmaScore = scoreFromActions(actions);
-  const previousKarmaScore = await getLastKarmaScore(userId);
-  const lastPublishedTimestamp = await getLastPublishedTimestamp(userId);
-  const currentTimestamp = Date.now();
-  const timeDifference = currentTimestamp - new Date(lastPublishedTimestamp).getTime();
-  const shouldPublish = karmaScore !== previousKarmaScore && timeDifference >= 24 * 60 * 60 * 1000;
-  const canPublish = Boolean(services?.ssb || global.ssb);
-  if (shouldPublish && canPublish) {
-    await publishKarmaScore(userId, karmaScore);
+
+  const prev = await getLastKarmaScore(uid);
+  const lastPublishedTimestamp = await getLastPublishedTimestamp(uid);
+
+  const isSelf = idsEqual(uid, ssb.id);
+  const hasSSB = !!(ssb && ssb.publish);
+
+  const changed = (prev === null) || (karmaScore !== prev); 
+  const nowMs = Date.now();
+  const lastMs = lastPublishedTimestamp ? new Date(lastPublishedTimestamp).getTime() : 0;
+  const cooldownOk = (nowMs - lastMs) >= 24 * 60 * 60 * 1000;
+
+  if (isSelf && hasSSB && changed && cooldownOk) {
+    await publishKarmaScore(uid, karmaScore);
   }
   return karmaScore;
 }
 
 async function getLastKarmaScore(userId) {
   const ssb = await openSsb();
-  if (!ssb) return 0;
-  const matchOne = (arr) => {
-    if (!arr || !arr.length) return 0;
-    const v = arr[0].value || arr[0];
-    const c = v.content || {};
-    return Number(c.karmaScore) || 0;
-  };
+  if (!ssb) return null;
   return new Promise((resolve) => {
     const source = ssb.messagesByType
       ? ssb.messagesByType({ type: "karmaScore", reverse: true })
       : ssb.createLogStream && ssb.createLogStream({ reverse: true });
-    if (!source) return resolve(0);
+    if (!source) return resolve(null);
     pull(
       source,
-      pull.filter((msg) => {
+      pull.filter(msg => {
         const v = msg.value || msg;
         const c = v.content || {};
         return c && c.type === "karmaScore" && c.userId === userId;
       }),
       pull.take(1),
       pull.collect((err, arr) => {
-        if (err) return resolve(0);
-        resolve(matchOne(arr));
+        if (err || !arr || !arr.length) return resolve(null);
+        const v = arr[0].value || arr[0];
+        const c = v.content || {};
+        resolve(Number(c.karmaScore) || 0);
       })
     );
   });
@@ -534,7 +529,7 @@ async function getLastPublishedTimestamp(userId) {
     if (!source) return resolve(fallback);
     pull(
       source,
-      pull.filter((msg) => {
+      pull.filter(msg => {
         const v = msg.value || msg;
         const c = v.content || {};
         return c && c.type === "karmaScore" && c.userId === userId;
