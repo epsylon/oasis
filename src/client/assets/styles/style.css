@@ -2261,3 +2261,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   font-weight: bold;
 }
 
+.pub-item{border:1;border-radius:10px;background:none}
+.error-box{background:#222326;border:none;color:#f5c242;padding:12px;border-radius:8px;margin-top:8px}
+.error-title{margin:0 0 6px 0;font-weight:600}
+.error-pre{margin:0;white-space:pre-wrap;font-family:monospace}

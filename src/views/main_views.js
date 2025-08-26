@@ -1204,7 +1204,7 @@ exports.mentionsView = ({ messages, myFeedId }) => {
   }
   const filteredMessages = messages.filter(msg => {
     const mentions = lodash.get(msg, "value.content.mentions", {});
-    return Object.keys(mentions).length > 0;
+    return Object.keys(mentions).some(key => mentions[key].link === myFeedId);
   });
   if (filteredMessages.length === 0) {
     return template(

@@ -88,7 +88,11 @@ exports.statsView = (stats, filter) => {
               span({ style: 'color:#888;' }, String(C(stats, 'aiExchange') || 0))
             )
           )
-        ),     
+        ),  
+        
+        div({ style: headerStyle },
+	  h3(`${i18n.statsPUBs}: ${String(stats.pubsCount || 0)}`)
+	),   
 
         filter === 'ALL'
           ? div({ class: 'stats-container' }, [

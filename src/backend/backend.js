@@ -365,6 +365,25 @@ const maxSize = 50 * megabyte;
 // koaMiddleware to manage files
 const homeDir = os.homedir();
 const blobsPath = path.join(homeDir, '.ssb', 'blobs', 'tmp');
+const gossipPath = path.join(homeDir, '.ssb', 'gossip.json')
+const unfollowedPath = path.join(homeDir, '.ssb', 'gossip_unfollowed.json')
+
+function readJSON(p) {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8') || '[]') } catch { return [] }
+}
+function writeJSON(p, data) {
+  fs.mkdirSync(path.dirname(p), { recursive: true })
+  fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf8')
+}
+function canonicalKey(key) {
+  let core = String(key).replace(/^@/, '').replace(/\.ed25519$/, '').replace(/-/g, '+').replace(/_/g, '/')
+  if (!core.endsWith('=')) core += '='
+  return `@${core}.ed25519`
+}
+function msAddrFrom(host, port, key) {
+  const core = canonicalKey(key).replace(/^@/, '').replace(/\.ed25519$/, '')
+  return `net:${host}:${Number(port) || 8008}~shs:${core}`
+}
 
 const koaBodyMiddleware = koaBody({
   multipart: true,
@@ -1121,35 +1140,13 @@ router
     });
   })
   .get("/peers", async (ctx) => {
-    const theme = ctx.cookies.get("theme") || config.theme;
-    const getMeta = async () => {
-      const allPeers = await meta.peers();
-      const connected = allPeers.filter(([, data]) => data.state === "connected");
-      const offline = allPeers.filter(([, data]) => data.state !== "connected");
-      const enrich = async (peers) => {
-        return await Promise.all(
-          peers.map(async ([address, data]) => {
-            const feedId = data.key || data.id;
-            const name = await about.name(feedId);
-            return [
-              address,
-              {
-                ...data,
-                key: feedId,
-                name: name || feedId,
-              },
-            ];
-          })
-        );
-      };
-      const connectedPeers = await enrich(connected);
-      const offlinePeers = await enrich(offline);
-      return peersView({
-        connectedPeers,
-        peers: offlinePeers,
-      });
-    };
-    ctx.body = await getMeta();
+    const onlinePeers = await meta.onlinePeers();
+    const { discoveredPeers, unknownPeers } = await meta.discovered();
+    ctx.body = await peersView({
+      onlinePeers,
+      discoveredPeers,
+      unknownPeers
+    });
   })
   .get("/invites", async (ctx) => {
     const theme = ctx.cookies.get("theme") || config.theme;
@@ -2963,12 +2960,78 @@ router
     ctx.redirect("/peers");
   })
   .post("/settings/invite/accept", koaBody(), async (ctx) => {
-    try {
-      const invite = String(ctx.request.body.invite);
-      await meta.acceptInvite(invite);
-    } catch (e) {
+   try {
+     const invite = String(ctx.request.body.invite);
+     await meta.acceptInvite(invite);
+   } catch (e) {
+   }
+   ctx.redirect("/invites");
+  })
+  .post('/settings/invite/unfollow', async (ctx) => {
+    const { key } = ctx.request.body || {}
+    if (!key) { ctx.redirect('/invites'); return }
+    const pubs = readJSON(gossipPath);
+    const idx = pubs.findIndex(x => x && canonicalKey(x.key) === canonicalKey(key));
+    let removed = null;
+    if (idx >= 0) {
+      removed = pubs.splice(idx, 1)[0];
+      writeJSON(gossipPath, pubs);
     }
-    ctx.redirect("/invites");
+    const ssb = await cooler.open();
+    let addr = null;
+    if (removed && removed.host) addr = msAddrFrom(removed.host, removed.port, removed.key);
+    if (addr) {
+      try { await new Promise(res => ssb.conn.disconnect(addr, res)); } catch {}
+      try { ssb.conn.forget(addr); } catch {}
+    }
+    try {
+      await new Promise((resolve, reject) => {
+        ssb.publish({ type: 'contact', contact: canonicalKey(key), following: false, blocking: true }, (err) => err ? reject(err) : resolve());
+      });
+    } catch {}
+    const unf = readJSON(unfollowedPath);
+    if (removed && !unf.find(x => x && canonicalKey(x.key) === canonicalKey(removed.key))) {
+      unf.push(removed);
+      writeJSON(unfollowedPath, unf);
+    } else if (!removed && !unf.find(x => x && canonicalKey(x.key) === canonicalKey(key))) {
+      unf.push({ key: canonicalKey(key) });
+      writeJSON(unfollowedPath, unf);
+    }
+    ctx.redirect('/invites');
+   })
+  .post('/settings/invite/follow', async (ctx) => {
+    const { key, host, port } = ctx.request.body || {};
+    if (!key || !host) { ctx.redirect('/invites'); return; }
+    const isInErrorState = (host) => {
+      const pubs = readJSON(gossipPath);
+      const pub = pubs.find(p => p.host === host);
+      return pub && pub.error;
+    };
+    if (isInErrorState(host)) {
+      ctx.redirect('/invites');
+      return;
+    }
+    const ssb = await cooler.open();
+    const unf = readJSON(unfollowedPath);
+    const kcanon = canonicalKey(key);
+    const saved = unf.find(x => x && canonicalKey(x.key) === kcanon);
+    const rec = saved || { host, port: Number(port) || 8008, key: kcanon };
+    const pubs = readJSON(gossipPath);
+    if (!pubs.find(x => x && canonicalKey(x.key) === kcanon)) {
+      pubs.push({ host: rec.host, port: Number(rec.port) || 8008, key: kcanon });
+      writeJSON(gossipPath, pubs);
+    }
+    const addr = msAddrFrom(rec.host, rec.port, kcanon);
+    try { ssb.conn.remember(addr, { type: 'pub', autoconnect: true, key: kcanon }); } catch {}
+    try { await new Promise(res => ssb.conn.connect(addr, { type: 'pub' }, res)); } catch {}
+    try {
+      await new Promise((resolve, reject) => {
+        ssb.publish({ type: 'contact', contact: kcanon, blocking: false }, (err) => err ? reject(err) : resolve());
+       });
+    } catch {}
+    const nextUnf = unf.filter(x => !(x && canonicalKey(x.key) === kcanon));
+    writeJSON(unfollowedPath, nextUnf);
+    ctx.redirect('/invites');
   })
   .post("/settings/ssb-logstream", koaBody(), async (ctx) => {
     const logLimit = parseInt(ctx.request.body.ssb_log_limit, 10);

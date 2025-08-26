@@ -13,6 +13,24 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.4.7 - 2025-08-27
+
+### Added
+
+ + Online, discovered, unknown listing (peers plugin).
+ + Federated, unfederated, unreachable networks (invites plugin).
+ 
+### Fixed
+
+ + Fixed mentioning (mentions plugin).
+ 
+### Changed
+
+- Stats.
+- Mentions.
+- Peers.
+- Invites.
+
 ## v0.4.6 - 2025-08-24
  
 ### Fixed

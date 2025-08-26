@@ -62,7 +62,68 @@ const publicOnlyFilter = pull.filter(isNotPrivate);
 
 const configure = (...customOptions) =>
   Object.assign({}, defaultOptions, ...customOptions);
+ 
+// peers 
+const ebtDir = path.join(os.homedir(), '.ssb', 'ebt');
 
+async function loadPeersFromEbt() {
+  let result = [];
+  try {
+    await fs.access(ebtDir);
+    const files = await fs.readdir(ebtDir);
+    for (const file of files) {
+      if (!file.endsWith('.ed25519')) continue;
+      const base = file.replace(/^@/, '').replace('.ed25519', '');
+      let core = base.replace(/_/g, '/').replace(/-/g, '+');
+      if (!core.endsWith('=')) core += '=';
+      const filePath = path.join(ebtDir, file);
+      try {
+        const data = await fs.readFile(filePath, 'utf8');
+        const users = JSON.parse(data);
+        const userList = Object.keys(users).map(u => ({
+          id: u,
+          link: `/author/${encodeURIComponent(u)}`
+        }));
+        result.push({
+          pub: `@${core}.ed25519`,
+          users: userList
+        });
+      } catch {}
+    }
+  } catch {}
+  return result;
+}
+
+async function loadConnectedUsersFromEbt(pubId) {
+  const filePath = path.join(ebtDir, `@${pubId.replace(/\//g, '_')}.ed25519`);
+  try {
+    const data = await fs.readFile(filePath, 'utf8');
+    const users = JSON.parse(data);
+    return Object.keys(users).map(userId => ({
+      id: userId,
+      link: `/author/${encodeURIComponent(userId)}`
+    }));
+  } catch {
+    return [];
+  }
+}
+
+const canonicalizePubId = (s) => {
+  const core0 = String(s).replace(/^@/, '').replace(/\.ed25519$/, '');
+  let core = core0.replace(/_/g, '/').replace(/-/g, '+');
+  if (!core.endsWith('=')) core += '=';
+  return `@${core}.ed25519`;
+};
+
+const parseRemote = (remote) => {
+  const m = /^net:([^:]+):\d+~shs:([^=]+)=/.exec(remote);
+  if (!m) return { host: null, pubId: null };
+  const host = m[1];
+  const pubId = canonicalizePubId(m[2]);
+  return { host, pubId };
+};
+
+// core modules
 module.exports = ({ cooler, isPublic }) => {
   const models = {};
   const getAbout = async ({ key, feedId }) => {
@@ -161,6 +222,34 @@ module.exports = ({ cooler, isPublic }) => {
         .catch(reject);
     });
   };
+  
+  async function enrichEntries(entries) {
+  const ebtList = await loadPeersFromEbt();
+  const ebtMap = new Map(ebtList.map(e => [e.pub, e.users]));
+  const ssb = await cooler.open();
+  return Promise.all(
+    entries.map(async ([remote, data]) => {
+      const { host, pubId } = parseRemote(remote);
+      const name = host || (pubId ? await models.about.name(pubId).catch(() => pubId) : remote);
+      const users = pubId && ebtMap.has(pubId) ? ebtMap.get(pubId) : [];
+      const usersWithNames = await Promise.all(
+        users.map(async (user) => {
+          const userName = await models.about.name(user.id).catch(() => user.id);
+          return { ...user, name: userName };
+        })
+      );
+      return [
+        remote,
+        {
+          ...data,
+          key: pubId || remote,
+          name,
+          users: usersWithNames
+        }
+      ];
+    })
+  );
+};
   
 //ABOUT MODEL
 models.about = {
@@ -482,9 +571,35 @@ models.meta = {
       const peers = await models.meta.peers();
       return peers.filter(([_, data]) => data.state === "connected");
     },
+    onlinePeers: async () => {
+      const entries = await models.meta.connectedPeers();
+      return enrichEntries(entries);
+    },
+    discovered: async () => {
+      const ssb = await cooler.open();
+      const snapshot = await ssb.conn.dbPeers();
+      const discoveredPeers = await enrichEntries(snapshot);
+      const discoveredIds = new Set(discoveredPeers.map(([, d]) => d.key));
+      const ebtList = await loadPeersFromEbt();
+      const ebtMap = new Map(ebtList.map(e => [e.pub, e.users]));
+      const unknownPeers = [];
+      for (const { pub } of ebtList) {
+        if (!discoveredIds.has(pub)) {
+          const name = await models.about.name(pub).catch(() => pub);
+          unknownPeers.push([
+             pub,
+            {
+              key: pub,
+              name,
+              users: ebtMap.get(pub) || []
+            }
+          ]);
+        }
+      }
+      return { discoveredPeers, unknownPeers };
+    },
     connStop: async () => {
       const ssb = await cooler.open();
-
       try {
         const result = await ssb.conn.stop();
         return result;
@@ -889,22 +1004,14 @@ const post = {
       ssb,
       query,
       filter: (msg) => {
-      const content = msg.value.content;
-      if (content.mentions) {
-        if (Array.isArray(content.mentions)) {
-          if (content.mentions.some(m => {
-            return m.link === myFeedId || m.name === myUsername || m.name === '@' + myUsername;
-          })) {
-            return true; 
+        const content = msg.value.content;
+        if (content.mentions) {
+          if (Array.isArray(content.mentions)) {
+            return content.mentions.some(m => m.link === myFeedId || m.name === myUsername || m.name === '@' + myUsername);
           }
-        }
-        if (typeof content.mentions === 'object' && !Array.isArray(content.mentions)) {
-          const values = Object.values(content.mentions);
-          if (values.some(v => {
-            return v.link === myFeedId || v.name === myUsername || v.name === '@' + myUsername;
-          })) {
-            return true;
-            }
+          if (typeof content.mentions === 'object' && !Array.isArray(content.mentions)) {
+            const values = Object.values(content.mentions);
+            return values.some(v => v.link === myFeedId || v.name === myUsername || v.name === '@' + myUsername);
           }
         }
         const mentionsText = lodash.get(content, "text", "");

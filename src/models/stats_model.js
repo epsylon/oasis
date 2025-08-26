@@ -19,6 +19,16 @@ function readAddrMap() {
   }
 }
 
+const listPubsFromEbt = () => {
+  try {
+    const ebtDir = path.join(os.homedir(), '.ssb', 'ebt');
+    const files = fs.readdirSync(ebtDir);
+    return files.filter(f => f.endsWith('.ed25519'));
+  } catch {
+    return [];
+  }
+};
+
 module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
@@ -266,7 +276,8 @@ module.exports = ({ cooler }) => {
       myAddressCount: myAddress ? 1 : 0,
       totalAddresses: Object.keys(addrMap).length
     };
-
+    const pubsCount = listPubsFromEbt().length;
+    
     const stats = {
       id: userId,
       createdAt,
@@ -279,6 +290,7 @@ module.exports = ({ cooler }) => {
       folderSize: formatSize(folderSize),
       statsBlockchainSize: formatSize(flumeSize),
       statsBlobsSize: formatSize(blobsSize),
+      pubsCount,
       activity: {
         lastMessageAt: lastTs ? new Date(lastTs).toISOString() : null,
         daily7: days7,
