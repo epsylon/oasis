@@ -115,21 +115,27 @@ module.exports = ({ cooler }) => {
       }
 
       const latest = [];
-      for (const a of idToAction.values()) {
-        if (tombstoned.has(a.id)) continue;
-        const c = a.content || {};
-        if (c.root && tombstoned.has(c.root)) continue;
-        if (a.type === 'vote' && tombstoned.has(c.vote?.link)) continue;
-        if (c.key && tombstoned.has(c.key)) continue;
-        if (c.branch && tombstoned.has(c.branch)) continue;
-        if (c.target && tombstoned.has(c.target)) continue;
-        if (a.type === 'document') {
-          const url = c.url;
-          const ok = await hasBlob(ssbClient, url);
-          if (!ok) continue;
-        }
-        latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
-      }
+	for (const a of idToAction.values()) {
+	  if (tombstoned.has(a.id)) continue;
+	  const c = a.content || {};
+	  if (c.root && tombstoned.has(c.root)) continue;
+	  if (a.type === 'vote' && tombstoned.has(c.vote?.link)) continue;
+	  if (c.key && tombstoned.has(c.key)) continue;
+	  if (c.branch && tombstoned.has(c.branch)) continue;
+	  if (c.target && tombstoned.has(c.target)) continue;
+	  if (a.type === 'document') {
+	    const url = c.url;
+	    const ok = await hasBlob(ssbClient, url);
+	    if (!ok) continue;
+	  }
+	  if (a.type === 'forum' && c.root) {
+	    const rootId = typeof c.root === 'string' ? c.root : (c.root?.key || c.root?.id || '');
+	    const rootAction = idToAction.get(rootId);
+	    a.content.rootTitle = rootAction?.content?.title || a.content.rootTitle || '';
+	    a.content.rootKey = rootId || a.content.rootKey || '';
+	  }
+	  latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
+	}
 
       let deduped = latest.filter(a => !a.tipId || a.tipId === a.id);
 

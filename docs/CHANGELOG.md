@@ -23,6 +23,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
  + Fixed mentioning (mentions plugin).
+ + Forum feed (activity plugin).
  
 ### Changed
 
@@ -30,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - Mentions.
 - Peers.
 - Invites.
+- Activity.
 
 ## v0.4.6 - 2025-08-24
  

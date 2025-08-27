@@ -327,24 +327,28 @@ function renderActionCards(actions, userId) {
     }
 
     if (type === 'forum') {
-      const { root, category, title, text, key } = content;
+      const { root, category, title, text, key, rootTitle, rootKey } = content;
       if (!root) {
+        const linkKey = key || action.id;
+        const linkText = (title && String(title).trim()) ? title : '(sin título)';
         cardBody.push(
           div({ class: 'card-section forum' },
             div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
               span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
-              a({ href: `/forum/${encodeURIComponent(key || action.id)}`, style: "font-weight:800;color:#4fc3f7;" }, title)
+              a({ href: `/forum/${encodeURIComponent(linkKey)}`, style: "font-weight:800;color:#4fc3f7;" }, linkText)
             )
           )
         );
       } else {
-        let parentForum = actions.find(a => a.type === 'forum' && !a.content.root && (a.id === root || a.content.key === root));
-        let parentTitle = parentForum?.content?.title || '';
+        const rootId = typeof root === 'string' ? root : (root?.key || root?.id || '');
+        const parentForum = actions.find(a => a.type === 'forum' && !a.content?.root && (a.id === rootId || a.content?.key === rootId));
+        const parentTitle = (parentForum?.content?.title && String(parentForum.content.title).trim()) ? parentForum.content.title : ((rootTitle && String(rootTitle).trim()) ? rootTitle : '(sin título)');
+        const hrefKey = rootKey || rootId;
         cardBody.push(
           div({ class: 'card-section forum' },
             div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
               span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
-              a({ href: `/forum/${encodeURIComponent(root)}`, style: "font-weight:800;color:#4fc3f7;" }, parentTitle)
+              a({ href: `/forum/${encodeURIComponent(hrefKey)}`, style: "font-weight:800;color:#4fc3f7;" }, parentTitle)
             ),
             br(),
             div({ class: 'card-field', style: 'margin-bottom:12px;' },
