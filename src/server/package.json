@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "Oasis Social Networking Project Utopia",
   "repository": {
     "type": "git",
@@ -100,7 +100,7 @@
     "ssb-conn-staging": "^1.0.0",
     "ssb-db": "^20.4.1",
     "ssb-device-address": "^1.1.6",
-    "ssb-ebt": "^9.0.0",
+    "ssb-ebt": "^9.1.2",
     "ssb-friend-pub": "^1.0.7",
     "ssb-friends": "^5.0.0",
     "ssb-gossip": "^1.1.1",

@@ -27,10 +27,10 @@ Paste this:
 
 {
   "logging": {
-    "level": "notice"
+    "level": "info"
   },
   "caps": {
-    "shs": "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
+    "shs": "iKOzhqNVTcKEZvUhW3A7TuKZ1d6qIbtsGIJ6+SBOaEQ="
   },
   "pub": true,
   "local": false,
@@ -49,13 +49,13 @@ Paste this:
   "connections": {
     "incoming": {
       "net": [
-        { 
+        {
           "port": 8008,
           "scope": "public",
           "transform": "shs",
           "external": "{your-hostname}"
         },
-        { 
+        {
           "port": 8008,
           "host": "localhost",
           "scope": "device",
@@ -63,15 +63,19 @@ Paste this:
         }
       ],
       "unix": [
-        { 
-          "scope": ["device", "local", "private"],
+        {
+          "scope": [
+            "device",
+            "local",
+            "private"
+          ],
           "transform": "noauth"
         }
       ]
     },
     "outgoing": {
       "net": [
-        { 
+        {
           "transform": "shs"
         }
       ]
@@ -93,7 +97,14 @@ Be sure to replace {your-hostname} with your server’s domain or IP.
 
 ## 3) Install ssb-server and plugins locally
 
-   npm -g install ssb-server ssb-master ssb-gossip ssb-ebt ssb-friends ssb-blobs ssb-conn ssb-logging ssb-replication-scheduler
+   npm -g install ssb-server
+
+   mkdir -p ~/.ssb
+   cd ~/.ssb
+   npm init -y
+
+   npm install ssb-ebt ssb-conn ssb-replication-scheduler ssb-blobs ssb-friends ssb-logging
+   
    npm audit fix
    
 ## 4) Create the launch script and some patches

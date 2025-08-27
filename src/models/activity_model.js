@@ -43,7 +43,8 @@ module.exports = ({ cooler }) => {
         const c = v?.content;
         if (!c?.type) continue;
         if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue }
-        idToAction.set(k, { id: k, author: v?.author, ts: v?.timestamp || 0, type: inferType(c), content: c });
+        const ts = v?.timestamp || Number(c?.timestamp || 0) || (c?.updatedAt ? Date.parse(c.updatedAt) : 0) || 0;
+        idToAction.set(k, { id: k, author: v?.author, ts, type: inferType(c), content: c });
         rawById.set(k, msg);
         if (c.replaces) parentOf.set(k, c.replaces);
       }

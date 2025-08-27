@@ -85,7 +85,7 @@ module.exports = ({ cooler }) => {
       if (filter === 'all' || filter === 'TOP KARMA') {
         const feedIds = await new Promise((res, rej) => {
           pull(
-            ssbClient.createLogStream({ limit: logLimit }),
+            ssbClient.createLogStream({ limit: logLimit, reverse: true }),
             pull.filter(msg => {
               const c = msg.value?.content;
               const a = msg.value?.author;

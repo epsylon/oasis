@@ -3,20 +3,13 @@
     "level": "notice"
   },
   "caps": {
-    "shs": "1KHLiKZvAvjbY1ziZEHMXawbCEIM6qwjCDm3VYRan/s="
+    "shs": "iKOzhqNVTcKEZvUhW3A7TuKZ1d6qIbtsGIJ6+SBOaEQ="
   },
   "pub": false,
   "local": true,
   "friends": {
     "dunbar": 300,
     "hops": 2
-  },
-  "autofollow": {
-    "legacy": false,
-    "enabled": false,
-    "feeds": [
-      "@HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519"
-    ]
   },
   "gossip": {
     "connections": 20,
@@ -29,9 +22,13 @@
     "autostart": true,
     "partialReplication": null
   },
+  "autofollow": {
+    "enabled": false,
+    "feeds": []
+  },
   "connections": {
     "seeds": [
-      "solarnethub.com:8008~shs:HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519"
+      "net:solarnethub.com:8008~shs:HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519"
     ],
     "incoming": {
       "net": [
@@ -43,7 +40,11 @@
       ],
       "unix": [
         {
-          "scope": ["device", "local", "private"],
+          "scope": [
+            "device",
+            "local",
+            "private"
+          ],
           "transform": "noauth"
         }
       ]
@@ -54,25 +55,9 @@
           "transform": "shs"
         }
       ],
-      "tunnel": [
-        {
-          "scope": "public",
-          "portal": "@HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519",
-          "transform": "shs"
-        }
-      ],
-      "onion": [
-        {
-          "scope": "public",
-          "transform": "shs"
-        }
-      ],
-      "ws": [
-        {
-          "scope": "public",
-          "transform": "shs"
-        }
-      ]
+      "tunnel": [],
+      "onion": [],
+      "ws": []
     }
   }
 }

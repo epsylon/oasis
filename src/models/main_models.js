@@ -65,6 +65,7 @@ const configure = (...customOptions) =>
  
 // peers 
 const ebtDir = path.join(os.homedir(), '.ssb', 'ebt');
+const unfollowedPath = path.join(os.homedir(), '.ssb', 'gossip_unfollowed.json');
 
 async function loadPeersFromEbt() {
   let result = [];
@@ -122,6 +123,38 @@ const parseRemote = (remote) => {
   const pubId = canonicalizePubId(m[2]);
   return { host, pubId };
 };
+
+async function ensureJSONFile(p, initial = []) {
+  await fs.mkdir(path.dirname(p), { recursive: true });
+  try { await fs.access(p) } catch { await fs.writeFile(p, JSON.stringify(initial, null, 2), 'utf8') }
+}
+
+async function readJSON(p) {
+  await ensureJSONFile(p, []);
+  try { return JSON.parse((await fs.readFile(p, 'utf8')) || '[]') } catch { return [] }
+}
+
+function canonicalKey(key) {
+  let core = String(key).replace(/^@/, '').replace(/\.ed25519$/, '').replace(/-/g, '+').replace(/_/g, '/');
+  if (!core.endsWith('=')) core += '=';
+  return `@${core}.ed25519`;
+}
+
+async function loadUnfollowedSet() {
+  const list = await readJSON(unfollowedPath);
+  return new Set(list.map(x => canonicalKey(x && x.key)));
+}
+
+function toLegacyInvite(s) {
+  const t = String(s || '').trim();
+  if (/^[^:]+:\d+:@[^~]+~[^~]+$/.test(t)) return t;
+  let m = t.match(/^net:([^:]+):(\d+)~shs:([^~]+)~invite:([^~]+)$/);
+  if (!m) m = t.match(/^([^:]+):(\d+)~shs:([^~]+)~invite:([^~]+)$/);
+  if (!m) return t;
+  let key = m[3].replace(/^@/, '');
+  if (!/\.ed25519$/.test(key)) key += '.ed25519';
+  return `${m[1]}:${m[2]}:@${key}~${m[4]}`;
+}
 
 // core modules
 module.exports = ({ cooler, isPublic }) => {
@@ -586,14 +619,7 @@ models.meta = {
       for (const { pub } of ebtList) {
         if (!discoveredIds.has(pub)) {
           const name = await models.about.name(pub).catch(() => pub);
-          unknownPeers.push([
-             pub,
-            {
-              key: pub,
-              name,
-              users: ebtMap.get(pub) || []
-            }
-          ]);
+          unknownPeers.push([pub, { key: pub, name, users: ebtMap.get(pub) || [] }]);
         }
       }
       return { discoveredPeers, unknownPeers };
@@ -662,7 +688,10 @@ models.meta = {
     },
     acceptInvite: async (invite) => {
       const ssb = await cooler.open();
-      return await ssb.invite.accept(invite);
+      const code = toLegacyInvite(String(invite || ''));
+      return await new Promise((resolve, reject) => {
+        ssb.invite.accept(code, (err, res) => err ? reject(err) : resolve(res));
+      });
     },
     rebuild: async () => {
       const ssb = await cooler.open();

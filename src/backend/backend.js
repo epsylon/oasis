@@ -239,7 +239,7 @@ const forumModel = require('../models/forum_model')({ cooler, isPublic: config.p
 const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic: config.public });
 const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
-const bankingModel = require("../models/banking_model")({ cooler, isPublic: config.public });
+const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public })
 
 // starting warmup
 about._startNameWarmup();
@@ -365,25 +365,37 @@ const maxSize = 50 * megabyte;
 // koaMiddleware to manage files
 const homeDir = os.homedir();
 const blobsPath = path.join(homeDir, '.ssb', 'blobs', 'tmp');
-const gossipPath = path.join(homeDir, '.ssb', 'gossip.json')
-const unfollowedPath = path.join(homeDir, '.ssb', 'gossip_unfollowed.json')
+const gossipPath = path.join(homeDir, '.ssb', 'gossip.json');
+const unfollowedPath = path.join(homeDir, '.ssb', 'gossip_unfollowed.json');
+
+function ensureJSONFile(p, initial = []) {
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  if (!fs.existsSync(p)) fs.writeFileSync(p, JSON.stringify(initial, null, 2), 'utf8');
+}
 
 function readJSON(p) {
+  ensureJSONFile(p, []);
   try { return JSON.parse(fs.readFileSync(p, 'utf8') || '[]') } catch { return [] }
 }
+
 function writeJSON(p, data) {
-  fs.mkdirSync(path.dirname(p), { recursive: true })
-  fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf8')
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(data, null, 2), 'utf8');
 }
+
 function canonicalKey(key) {
-  let core = String(key).replace(/^@/, '').replace(/\.ed25519$/, '').replace(/-/g, '+').replace(/_/g, '/')
-  if (!core.endsWith('=')) core += '='
-  return `@${core}.ed25519`
+  let core = String(key).replace(/^@/, '').replace(/\.ed25519$/, '').replace(/-/g, '+').replace(/_/g, '/');
+  if (!core.endsWith('=')) core += '=';
+  return `@${core}.ed25519`;
 }
+
 function msAddrFrom(host, port, key) {
-  const core = canonicalKey(key).replace(/^@/, '').replace(/\.ed25519$/, '')
-  return `net:${host}:${Number(port) || 8008}~shs:${core}`
+  const core = canonicalKey(key).replace(/^@/, '').replace(/\.ed25519$/, '');
+  return `net:${host}:${Number(port) || 8008}~shs:${core}`;
 }
+
+ensureJSONFile(gossipPath, []);
+ensureJSONFile(unfollowedPath, []);
 
 const koaBodyMiddleware = koaBody({
   multipart: true,
@@ -980,6 +992,7 @@ router
   .get('/activity', async ctx => {
     const filter = ctx.query.filter || 'recent';
     const userId = SSBconfig.config.keys.id;
+    try { await bankingModel.ensureSelfAddressPublished(); } catch (_) {}
     try { await bankingModel.getUserEngagementScore(userId); } catch (_) {}
     const actions = await activityModel.listFeed(filter);
     ctx.body = activityView(actions, filter, userId);
@@ -1140,8 +1153,8 @@ router
     });
   })
   .get("/peers", async (ctx) => {
-    const onlinePeers = await meta.onlinePeers();
     const { discoveredPeers, unknownPeers } = await meta.discovered();
+    const onlinePeers = await meta.onlinePeers();
     ctx.body = await peersView({
       onlinePeers,
       discoveredPeers,
@@ -2960,16 +2973,13 @@ router
     ctx.redirect("/peers");
   })
   .post("/settings/invite/accept", koaBody(), async (ctx) => {
-   try {
-     const invite = String(ctx.request.body.invite);
-     await meta.acceptInvite(invite);
-   } catch (e) {
-   }
-   ctx.redirect("/invites");
+    const invite = String(ctx.request.body.invite);
+    await meta.acceptInvite(invite);
+    ctx.redirect("/invites");
   })
-  .post('/settings/invite/unfollow', async (ctx) => {
-    const { key } = ctx.request.body || {}
-    if (!key) { ctx.redirect('/invites'); return }
+  .post("/settings/invite/unfollow", koaBody(), async (ctx) => {
+    const { key } = ctx.request.body || {};
+    if (!key) { ctx.redirect("/invites"); return; }
     const pubs = readJSON(gossipPath);
     const idx = pubs.findIndex(x => x && canonicalKey(x.key) === canonicalKey(key));
     let removed = null;
@@ -2981,12 +2991,12 @@ router
     let addr = null;
     if (removed && removed.host) addr = msAddrFrom(removed.host, removed.port, removed.key);
     if (addr) {
-      try { await new Promise(res => ssb.conn.disconnect(addr, res)); } catch {}
-      try { ssb.conn.forget(addr); } catch {}
-    }
+     try { await new Promise(res => ssb.conn.disconnect(addr, res)); } catch {}
+     try { ssb.conn.forget(addr); } catch {}
+    } 
     try {
       await new Promise((resolve, reject) => {
-        ssb.publish({ type: 'contact', contact: canonicalKey(key), following: false, blocking: true }, (err) => err ? reject(err) : resolve());
+        ssb.publish({ type: "contact", contact: canonicalKey(key), following: false, blocking: true }, (err) => err ? reject(err) : resolve());
       });
     } catch {}
     const unf = readJSON(unfollowedPath);
@@ -2997,18 +3007,18 @@ router
       unf.push({ key: canonicalKey(key) });
       writeJSON(unfollowedPath, unf);
     }
-    ctx.redirect('/invites');
-   })
-  .post('/settings/invite/follow', async (ctx) => {
+    ctx.redirect("/invites");
+  })
+  .post("/settings/invite/follow", koaBody(), async (ctx) => {
     const { key, host, port } = ctx.request.body || {};
-    if (!key || !host) { ctx.redirect('/invites'); return; }
+    if (!key || !host) { ctx.redirect("/invites"); return; }
     const isInErrorState = (host) => {
       const pubs = readJSON(gossipPath);
       const pub = pubs.find(p => p.host === host);
       return pub && pub.error;
     };
     if (isInErrorState(host)) {
-      ctx.redirect('/invites');
+      ctx.redirect("/invites");
       return;
     }
     const ssb = await cooler.open();
@@ -3022,16 +3032,16 @@ router
       writeJSON(gossipPath, pubs);
     }
     const addr = msAddrFrom(rec.host, rec.port, kcanon);
-    try { ssb.conn.remember(addr, { type: 'pub', autoconnect: true, key: kcanon }); } catch {}
-    try { await new Promise(res => ssb.conn.connect(addr, { type: 'pub' }, res)); } catch {}
+    try { ssb.conn.remember(addr, { type: "pub", autoconnect: true, key: kcanon }); } catch {}
+    try { await new Promise(res => ssb.conn.connect(addr, { type: "pub" }, res)); } catch {}
     try {
       await new Promise((resolve, reject) => {
-        ssb.publish({ type: 'contact', contact: kcanon, blocking: false }, (err) => err ? reject(err) : resolve());
-       });
+        ssb.publish({ type: "contact", contact: kcanon, blocking: false }, (err) => err ? reject(err) : resolve());
+      });
     } catch {}
     const nextUnf = unf.filter(x => !(x && canonicalKey(x.key) === kcanon));
     writeJSON(unfollowedPath, nextUnf);
-    ctx.redirect('/invites');
+    ctx.redirect("/invites");
   })
   .post("/settings/ssb-logstream", koaBody(), async (ctx) => {
     const logLimit = parseInt(ctx.request.body.ssb_log_limit, 10);
@@ -3139,8 +3149,8 @@ router
     if (pass) currentConfig.wallet.pass = pass;
     if (fee) currentConfig.wallet.fee = fee;
     saveConfig(currentConfig);
-    const referer = new URL(ctx.request.header.referer);
-    ctx.redirect(referer.href);
+    const res = await bankingModel.ensureSelfAddressPublished();
+    ctx.redirect(`/banking?filter=addresses&msg=${encodeURIComponent(res.status)}`);
   })
   .post("/wallet/send", koaBody(), async (ctx) => {
     const action = String(ctx.request.body.action);
@@ -3149,13 +3159,11 @@ router
     const fee = Number(ctx.request.body.fee);
     const { url, user, pass } = getConfig().wallet;
     let balance = null
-
     try {
       balance = await walletModel.getBalance(url, user, pass);
     } catch (error) {
       ctx.body = await walletErrorView(error);
     }
-
     switch (action) {
       case 'confirm':
         const validation = await walletModel.validateSend(url, user, pass, destination, amount, fee);

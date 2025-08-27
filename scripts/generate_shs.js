@@ -1,2 +1,4 @@
-const caps = require('ssb-caps');
-console.log('SHS (caps) Key:', caps.shs);
+const crypto = require('crypto');
+
+const cap = crypto.randomBytes(32).toString('base64');
+console.log('New SHS cap:', cap);

@@ -40,6 +40,27 @@ function epochIdNow() {
   return `${yyyy}-${String(weekNo).padStart(2, "0")}`;
 }
 
+async function getAnyWalletAddress() {
+  const tryOne = async (method, params = []) => {
+    const r = await rpcCall(method, params, "user");
+    if (!r) return null;
+    if (typeof r === "string" && isValidEcoinAddress(r)) return r;
+    if (Array.isArray(r) && r.length && isValidEcoinAddress(r[0])) return r[0];
+    if (r && typeof r === "object") {
+      const keys = Object.keys(r);
+      if (keys.length && isValidEcoinAddress(keys[0])) return keys[0];
+      if (r.address && isValidEcoinAddress(r.address)) return r.address;
+    }
+    return null;
+  };
+  return await tryOne("getnewaddress")
+      || await tryOne("getaddress")
+      || await tryOne("getaccountaddress", [""])
+      || await tryOne("getaddressesbyaccount", [""])
+      || await tryOne("getaddressesbylabel", [""])
+      || await tryOne("getaddressesbylabel", ["default"]);
+}
+
 async function ensureSelfAddressPublished() {
   const me = config.keys.id;
   const local = readAddrMap();
@@ -47,16 +68,33 @@ async function ensureSelfAddressPublished() {
   if (current && isValidEcoinAddress(current)) return { status: "present", address: current };
   const cfg = getWalletCfg("user") || {};
   if (!cfg.url) return { status: "skipped" };
-  try {
-    const addr = await rpcCall("getaddress", []);
-    if (addr && isValidEcoinAddress(addr)) {
-      await setUserAddress(me, addr, true);
-      return { status: "published", address: addr };
+  const addr = await getAnyWalletAddress();
+  if (addr && isValidEcoinAddress(addr)) {
+    const m = readAddrMap();
+    m[me] = addr;
+    writeAddrMap(m);
+    let ssb = null;
+    try {
+      if (services?.cooler?.open) ssb = await services.cooler.open();
+      else if (global.ssb) ssb = global.ssb;
+      else {
+        try {
+          const srv = require("../server/SSB_server.js");
+          ssb = srv?.ssb || srv?.server || srv?.default || null;
+        } catch (_) {}
+      }
+    } catch (_) {}
+    if (ssb && ssb.publish) {
+      await new Promise((resolve, reject) =>
+	   ssb.publish(
+	      { type: "wallet", coin: "ECO", address: addr, timestamp: Date.now(), updatedAt: new Date().toISOString() },
+	      (err) => err ? reject(err) : resolve()
+	    )
+      );
     }
-  } catch (_) {
-    return { status: "error" };
+    return { status: "published", address: addr };
   }
-  return { status: "noop" };
+  return { status: "error" };
 }
 
 function readJson(p, d) {
@@ -161,16 +199,21 @@ module.exports = ({ services } = {}) => {
     get: async (id) => { ensureStoreFiles(); return readJson(EPOCHS_PATH, []).find(e => e.id === id) || null; }
   };
 
+  let ssbInstance;
   async function openSsb() {
-    if (services?.cooler?.open) return services.cooler.open();
-    if (global.ssb) return global.ssb;
-    try {
-      const srv = require("../server/SSB_server.js");
-      if (srv?.ssb) return srv.ssb;
-      if (srv?.server) return srv.server;
-      if (srv?.default) return srv.default;
-    } catch (_) {}
-    return null; 
+    if (ssbInstance) return ssbInstance;
+    if (services?.cooler?.open) ssbInstance = await services.cooler.open();
+    else if (cooler?.open) ssbInstance = await cooler.open();
+    else if (global.ssb) ssbInstance = global.ssb;
+    else {
+      try {
+        const srv = require("../server/SSB_server.js");
+        ssbInstance = srv?.ssb || srv?.server || srv?.default || null;
+      } catch (_) {
+        ssbInstance = null;
+      }
+    }
+    return ssbInstance;
   }
 
   async function getWalletFromSSB(userId) {
@@ -239,7 +282,7 @@ module.exports = ({ services } = {}) => {
     const m = readAddrMap();
     m[userId] = address;
     writeAddrMap(m);
-    if (publishIfSelf && userId === config.keys.id) await publishSelfAddress(address);
+    if (publishIfSelf && idsEqual(userId, config.keys.id)) await publishSelfAddress(address);
     return true;
   }
 
@@ -247,11 +290,10 @@ module.exports = ({ services } = {}) => {
     if (!userId || !address || !isValidEcoinAddress(address)) return { status: "invalid" };
     const m = readAddrMap();
     const prev = m[userId];
-    if (prev && (prev === address || (prev.address && prev.address === address))) return { status: "exists" };
     m[userId] = address;
     writeAddrMap(m);
-    if (userId === config.keys.id) await publishSelfAddress(address);
-    return { status: prev ? "updated" : "added" };
+    if (idsEqual(userId, config.keys.id)) await publishSelfAddress(address);
+    return { status: prev ? (prev === address || (prev && prev.address === address) ? "exists" : "updated") : "added" };
   }
 
   async function removeAddress({ userId }) {
@@ -649,7 +691,8 @@ async function getLastPublishedTimestamp(userId) {
       userEngagementScore: engagementScore,
       futureUBI
     };
-    return { summary, allocations, epochs, rules: DEFAULT_RULES, addresses };
+    const exchange = await calculateEcoinValue();
+    return { summary, allocations, epochs, rules: DEFAULT_RULES, addresses, exchange };
   }
 
   async function getAllocationById(id) {

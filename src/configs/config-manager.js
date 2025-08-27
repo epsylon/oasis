@@ -58,7 +58,7 @@ if (!fs.existsSync(configFilePath)) {
       "prompt": "Provide an informative and precise response."
     },
     "ssbLogStream": {
-      "limit": 1000
+      "limit": 2000
     }
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));

@@ -41,7 +41,7 @@
     "url": "http://localhost:7474",
     "user": "",
     "pass": "",
-    "fee": "1"
+    "fee": ""
   },
   "walletPub": {
     "url": "",
@@ -52,6 +52,6 @@
     "prompt": "Provide an informative and precise response."
   },
   "ssbLogStream": {
-    "limit": 1000
+    "limit": 2000
   }
 }

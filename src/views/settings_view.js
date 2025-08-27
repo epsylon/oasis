@@ -24,7 +24,7 @@ const settingsView = ({ version, aiPrompt }) => {
   const currentConfig = getConfig();
   const walletUrl = currentConfig.wallet.url;
   const walletUser = currentConfig.wallet.user;
-  const walletFee = currentConfig.wallet.feee;
+  const walletFee = currentConfig.wallet.fee;
   const pubWalletUrl = currentConfig.walletPub.url || '';
   const pubWalletUser = currentConfig.walletPub.user || '';
   const pubWalletPass = currentConfig.walletPub.pass || '';

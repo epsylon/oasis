@@ -271,24 +271,30 @@ const renderAddresses = (data, userId) => {
 };
 
 const renderBankingView = (data, filter, userId) =>
-    template(
-        i18n.banking,
-        section(
-            div({ class: "tags-header" }, h2(i18n.banking), p(i18n.bankingDescription)),
-            generateFilterButtons(["overview", "exchange", "mine", "pending", "closed", "epochs", "rules", "addresses"], filter, "/banking"),
-            filter === "overview"
-                ? div(
-                    renderOverviewSummaryTable(data.summary || {}, data.rules),
-                    allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
-                )
-                : filter === "exchange"
-                    ? renderExchange(data.exchange)
-                    : allocationsTable(
-                        (filterAllocations((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), filter, userId)),
-                        userId
-                    )
-        )
-    );
-
+  template(
+    i18n.banking,
+    section(
+      div({ class: "tags-header" }, h2(i18n.banking), p(i18n.bankingDescription)),
+      generateFilterButtons(["overview","exchange","mine","pending","closed","epochs","rules","addresses"], filter, "/banking"),
+      filter === "overview"
+        ? div(
+            renderOverviewSummaryTable(data.summary || {}, data.rules),
+            allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
+          )
+        : filter === "exchange"
+        ? renderExchange(data.exchange)
+        : filter === "epochs"
+        ? renderEpochList(data.epochs || [])
+        : filter === "rules"
+        ? rulesBlock(data.rules || {})
+        : filter === "addresses"
+        ? renderAddresses(data, userId)
+        : allocationsTable(
+            filterAllocations((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), filter, userId),
+            userId
+          )
+    )
+  )
+  
 module.exports = { renderBankingView };
 

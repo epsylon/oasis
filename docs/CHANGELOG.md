@@ -13,6 +13,21 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.4.8 - 2025-08-27
+ 
+### Fixed
+
+ + Fixed legacy codes (invites plugin).
+ + Fixed SHS generator (script).
+ 
+### Changed
+
+- SHS CAPS (for private gardering).
+- Deploy PUB documentation.
+- Invites.
+- Banking.
+- Inhabitants.
+
 ## v0.4.7 - 2025-08-27
 
 ### Added
