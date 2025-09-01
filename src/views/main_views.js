@@ -21,7 +21,7 @@ const getUserId = async () => {
   return userId;
 };
 
-const { a, article, br, body, button, details, div, em, footer, form, h1, h2, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, textarea, title, tr, ul, strong } = require("../server/node_modules/hyperaxe");
+const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, textarea, title, tr, ul, strong } = require("../server/node_modules/hyperaxe");
 
 const lodash = require("../server/node_modules/lodash");
 const markdown = require("./markdown");
@@ -40,7 +40,7 @@ exports.setLanguage = (language) => {
 exports.i18n = i18n;
 exports.selectedLanguage = selectedLanguage;
 
-//markdown
+// markdown
 const markdownUrl = "https://commonmark.org/help/";
 
 const doctypeString = "<!DOCTYPE html>";
@@ -1239,269 +1239,297 @@ exports.mentionsView = ({ messages, myFeedId }) => {
 };
 
 exports.privateView = async (messagesInput, filter) => {
-    const messages = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages;
-    const userId = await getUserId();
+  const messagesRaw = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages
+  const messages = (messagesRaw || []).filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true)
+  const userId = await getUserId()
 
-    const filtered =
-        filter === 'sent' ? messages.filter(m => m.value.content.from === userId) :
-        filter === 'inbox' ? messages.filter(m => m.value.content.to?.includes(userId)) :
-        messages;
+  const isSent = m => (m?.value?.author === userId) || (m?.value?.content?.from === userId)
+  const isToUser = m => Array.isArray(m?.value?.content?.to) && m.value.content.to.includes(userId)
 
-    const linkAuthor = (id) =>
-        a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id);
+  const linkAuthor = (id) =>
+    a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)
 
-    const hrefFor = {
-        job: (id) => `/jobs/${encodeURIComponent(id)}`,
-        project: (id) => `/projects/${encodeURIComponent(id)}`,
-        market: (id) => `/market/${encodeURIComponent(id)}`
-    };
+  const hrefFor = {
+    job: (id) => `/jobs/${encodeURIComponent(id)}`,
+    project: (id) => `/projects/${encodeURIComponent(id)}`,
+    market: (id) => `/market/${encodeURIComponent(id)}`
+  }
 
-    const clickableCardProps = (href, extraClass = '') => {
-        const props = { class: `pm-card ${extraClass}` };
-        if (href) {
-            props.onclick = `window.location='${href}'`;
-            props.tabindex = 0;
-            props.onkeypress = `if(event.key==='Enter') window.location='${href}'`;
-        }
-        return props;
-    };
-
-    const chip = (txt) => span({ class: 'chip' }, txt);
-
-    function header({ sentAt, from, toLinks, botIcon = '', botLabel = '' }) {
-        return div({ class: 'pm-header' },
-            span({ class: 'date-link' }, `${moment(sentAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
-            botIcon || botLabel
-                ? span({ class: 'pm-from' }, `${botIcon} ${botLabel}`)
-                : [
-                    span({ class: 'pm-from' }, i18n.pmFromLabel + ' ', linkAuthor(from)),
-                    span({ class: 'pm-to' }, i18n.pmToLabel + ' ', toLinks)
-                ]
-        );
+  const clickableCardProps = (href, extraClass = '') => {
+    const props = { class: `pm-card ${extraClass}` }
+    if (href) {
+      props.onclick = `window.location='${href}'`
+      props.tabindex = 0
+      props.onkeypress = `if(event.key==='Enter') window.location='${href}'`
     }
+    return props
+  }
 
-    function actions({ key, replyId }) {
-        const stop = { onclick: 'event.stopPropagation()' };
-        return div({ class: 'pm-actions' },
-            form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'delete-message-form', style: 'display:inline-block;margin-right:8px;', ...stop },
-                button({ type: 'submit', class: 'delete-btn' }, i18n.privateDelete)
-            ),
-            form({ method: 'GET', action: '/pm', style: 'display:inline-block;', ...stop },
-                input({ type: 'hidden', name: 'recipients', value: replyId }),
-                button({ type: 'submit', class: 'reply-btn' }, i18n.pmCreateButton)
-            )
-        );
+  const chip = (txt) => span({ class: 'chip' }, txt)
+
+  function headerLine({ sentAt, from, toLinks, textLen }) {
+    return div({ class: 'pm-header' },
+      span({ class: 'date-link' }, `${moment(sentAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
+      span({ class: 'pm-from' }, ' ', i18n.pmFromLabel, ' ', linkAuthor(from)),
+      span({ class: 'pm-to' }, ' ', '→', ' ', i18n.pmToLabel, ' ', toLinks)
+    )
+  }
+
+  function actions({ key, replyId, subjectRaw, text }) {
+    const stop = { onclick: 'event.stopPropagation()' }
+    const subjectReply = /^(\s*RE:\s*)/i.test(subjectRaw || '') ? (subjectRaw || '') : `RE: ${subjectRaw || ''}`
+    return div({ class: 'pm-actions' },
+      form({ method: 'GET', action: '/pm', class: 'pm-action-form', ...stop },
+        input({ type: 'hidden', name: 'recipients', value: replyId }),
+        input({ type: 'hidden', name: 'subject', value: subjectReply }),
+        input({ type: 'hidden', name: 'quote', value: text || '' }),
+        button({ type: 'submit', class: 'pm-btn reply-btn' }, i18n.pmReply.toUpperCase())
+      ),
+      form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
+        button({ type: 'submit', class: 'pm-btn delete-btn' }, i18n.privateDelete.toUpperCase())
+      )
+    )
+  }
+
+  function canonicalSubject(s) {
+    return (s || '').replace(/^\s*(RE:\s*)+/i, '').trim()
+  }
+
+  function participantsKey(m) {
+    const c = m?.value?.content || {}
+    const set = new Set([m?.value?.author, ...(Array.isArray(c.to) ? c.to : [])])
+    return Array.from(set).sort().join('|')
+  }
+
+  function threadId(m) {
+    return canonicalSubject(m?.value?.content?.subject || '') + '||' + participantsKey(m)
+  }
+
+  function threadLevel(s) {
+    const m = (s || '').match(/RE:/gi)
+    return m ? Math.min(m.length, 8) : 0
+  }
+
+  function quoted(str) {
+    const m = str.match(/"([^"]+)"/)
+    return m ? m[1] : ''
+  }
+
+  function pickLink(str, kind) {
+    if (kind === 'job') {
+      const m = str.match(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/)
+      return m ? m[1] : ''
     }
-
-    function quoted(str) {
-        const m = str.match(/"([^"]+)"/);
-        return m ? m[1] : '';
+    if (kind === 'project') {
+      const m = str.match(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/)
+      return m ? m[1] : ''
     }
-
-    function pickLink(str, kind) {
-        if (kind === 'job') {
-            const m = str.match(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/);
-            return m ? m[1] : '';
-        }
-        if (kind === 'project') {
-            const m = str.match(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/);
-            return m ? m[1] : '';
-        }
-        if (kind === 'market') {
-            const m = str.match(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/);
-            return m ? m[1] : '';
-        }
-        return '';
+    if (kind === 'market') {
+      const m = str.match(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/)
+      return m ? m[1] : ''
     }
+    return ''
+  }
 
-    function JobCard({ type, sentAt, from, toLinks, text, key }) {
-        const isSub = type === 'JOB_SUBSCRIBED';
-        const icon = isSub ? '🟡' : '🟠';
-        const titleH = isSub ? (i18n.inboxJobSubscribedTitle || 'New subscription to your job offer') : (i18n.inboxJobUnsubscribedTitle || 'Unsubscription from your job offer');
-        const jobTitle = quoted(text) || 'job';
-        const jobId = pickLink(text, 'job');
-        const href = jobId ? hrefFor.job(jobId) : null;
-        return div(
-            clickableCardProps(href, `job-notification ${isSub ? 'job-sub' : 'job-unsub'}`),
-            header({ sentAt, from, toLinks, botIcon: icon, botLabel: i18n.pmBotJobs }),
-            h2({ class: 'pm-title' }, titleH),
-            p(
-                i18n.pmInhabitantWithId, ' ',
-                linkAuthor(from), ' ',
-                isSub ? i18n.pmHasSubscribedToYourJobOffer : (i18n.pmHasUnsubscribedFromYourJobOffer || 'has unsubscribed from your job offer'),
-                ' ',
-                href ? a({ class: 'job-link', href }, `"${jobTitle}"`) : `"${jobTitle}"`
-            ),
-            actions({ key, replyId: from })
-        );
-    }
+  function clickableLinks(str) {
+    return str
+      .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g, (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${match}</a>`)
+      .replace(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="job-link" href="${hrefFor.job(id)}">${match}</a>`)
+      .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`)
+      .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`)
+  }
 
-    function ProjectFollowCard({ type, sentAt, from, toLinks, text, key }) {
-        const isFollow = type === 'PROJECT_FOLLOWED';
-        const icon = isFollow ? '🔔' : '🔕';
-        const titleH = isFollow
-            ? (i18n.inboxProjectFollowedTitle || 'New follower of your project')
-            : (i18n.inboxProjectUnfollowedTitle || 'Unfollowed your project');
-        const projectTitle = quoted(text) || 'project';
-        const projectId = pickLink(text, 'project');
-        const href = projectId ? hrefFor.project(projectId) : null;
-        return div(
-            clickableCardProps(href, `project-${isFollow ? 'follow' : 'unfollow'}-notification`),
-            header({ sentAt, from, toLinks, botIcon: icon, botLabel: i18n.pmBotProjects }),
-            h2({ class: 'pm-title' }, titleH),
-            p(
-                i18n.pmInhabitantWithId, ' ',
-                a({ class: 'user-link', href: `/author/${encodeURIComponent(from)}` }, from),
-                ' ',
-                isFollow ? (i18n.pmHasFollowedYourProject || 'has followed your project') : (i18n.pmHasUnfollowedYourProject || 'has unfollowed your project'),
-                ' ',
-                href ? a({ class: 'project-link', href }, `"${projectTitle}"`) : `"${projectTitle}"`
-            ),
-            actions({ key, replyId: from })
-        );
-    }
+  const threads = {}
+  for (const m of messages) {
+    const tid = threadId(m)
+    if (!threads[tid]) threads[tid] = []
+    threads[tid].push(m)
+  }
 
-    function MarketSoldCard({ sentAt, from, toLinks, subject, text, key }) {
-        const itemTitle = quoted(subject) || quoted(text) || 'item';
-        const buyerId = (text.match(/OASIS ID:\s*([\w=/+.-]+)/) || [])[1] || from;
-        const price = (text.match(/for:\s*\$([\d.]+)/) || [])[1] || '';
-        const marketId = pickLink(text, 'market');
-        const href = marketId ? hrefFor.market(marketId) : null;
-        return div(
-            clickableCardProps(href, 'market-sold-notification'),
-            header({ sentAt, from, toLinks, botIcon: '💰', botLabel: i18n.pmBotMarket }),
-            h2({ class: 'pm-title' }, i18n.inboxMarketItemSoldTitle),
-            p(
-                i18n.pmYourItem, ' ',
-                href ? a({ class: 'market-link', href }, `"${itemTitle}"`) : `"${itemTitle}"`,
-                ' ',
-                i18n.pmHasBeenSoldTo, ' ',
-                linkAuthor(buyerId),
-                price ? ` ${i18n.pmFor} $${price}.` : '.'
-            ),
-            actions({ key, replyId: buyerId })
-        );
-    }
+  const inboxSet = new Set()
+  for (const arr of Object.values(threads)) {
+    const hasInbound = arr.some(isToUser)
+    if (hasInbound) for (const m of arr) inboxSet.add(m)
+  }
 
-    function ProjectPledgeCard({ sentAt, from, toLinks, content, text, key }) {
-        const amount = content.meta?.amount ?? (text.match(/pledged\s+([\d.]+)/)?.[1] || '0');
-        const projectTitle = content.meta?.projectTitle ?? (text.match(/project\s+"([^"]+)"/)?.[1] || 'project');
-        const projectId = content.meta?.projectId ?? pickLink(text, 'project');
-        const href = projectId ? hrefFor.project(projectId) : null;
-        return div(
-            clickableCardProps(href, 'project-pledge-notification'),
-            header({ sentAt, from, toLinks, botIcon: '💚', botLabel: i18n.pmBotProjects }),
-            h2({ class: 'pm-title' }, i18n.inboxProjectPledgedTitle),
-            p(
-                i18n.pmInhabitantWithId, ' ',
-                linkAuthor(from), ' ',
-                i18n.pmHasPledged, ' ',
-                chip(`${amount} ECO`), ' ',
-                i18n.pmToYourProject, ' ',
-                href ? a({ class: 'project-link', href }, `"${projectTitle}"`) : `"${projectTitle}"`
-            ),
-            actions({ key, replyId: from })
-        );
-    }
+  const data =
+    filter === 'sent' ? messages.filter(isSent) :
+    filter === 'inbox' ? Array.from(inboxSet) :
+    messages
 
-    function clickableLinks(str) {
-        return str
-            .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g,
-                (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${match}</a>`
-            )
-            .replace(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/g,
-                (match, id) => `<a class="job-link" href="${hrefFor.job(id)}">${match}</a>`
-            )
-            .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g,
-                (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`
-            )
-            .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g,
-                (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`
-            );
-    }
+  const inboxCount = Array.from(inboxSet).length
+  const sentCount = messages.filter(isSent).length
 
-    return template(
-        i18n.private,
-        section(
-            div({ class: 'tags-header' },
-                h2(i18n.private),
-                p(i18n.privateDescription)
-            ),
-            div({ class: 'filters' },
-                form({ method: 'GET', action: '/inbox' }, [
-                    button({
-                        type: 'submit',
-                        name: 'filter',
-                        value: 'inbox',
-                        class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
-                    }, i18n.privateInbox),
-                    button({
-                        type: 'submit',
-                        name: 'filter',
-                        value: 'sent',
-                        class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
-                    }, i18n.privateSent),
-                    button({
-                        type: 'submit',
-                        name: 'filter',
-                        value: 'create',
-                        class: 'create-button',
-                        formaction: '/pm',
-                        formmethod: 'GET'
-                    }, i18n.pmCreateButton)
-                ])
-            ),
-            div({ class: 'message-list' },
-                filtered.length
-                    ? filtered.map(msg => {
-                        const content = msg?.value?.content;
-                        const author = msg?.value?.author;
-                        if (!content || !author) return div({ class: 'pm-card malformed' }, i18n.pmInvalidMessage);
-                        const subjectRaw = content.subject || '';
-                        const subject = subjectRaw.toUpperCase();
-                        const text = content.text || '';
-                        const sentAt = new Date(content.sentAt || msg.timestamp);
-                        const from = content.from;
-                        const toLinks = (content.to || []).map(addr => linkAuthor(addr));
+  const sorted = [...data].sort((a, b) => {
+    const ta = threadId(a)
+    const tb = threadId(b)
+    if (ta < tb) return -1
+    if (ta > tb) return 1
+    const sa = new Date(a?.value?.content?.sentAt || a.timestamp || 0).getTime()
+    const sb = new Date(b?.value?.content?.sentAt || b.timestamp || 0).getTime()
+    return sa - sb
+  })
 
-                        if (subject === 'JOB_SUBSCRIBED' || subject === 'JOB_UNSUBSCRIBED') {
-                            return JobCard({ type: subject, sentAt, from, toLinks, text, key: msg.key });
-                        }
-			if (subject === 'PROJECT_FOLLOWED' || subject === 'PROJECT_UNFOLLOWED') {
-			    return ProjectFollowCard({ type: subject, sentAt, from, toLinks, text, key: msg.key });
-			}
-                        if (subject === 'MARKET_SOLD') {
-                            return MarketSoldCard({ sentAt, from, toLinks, subject: subjectRaw, text, key: msg.key });
-                        }
-                        if (subject === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
-                            return ProjectPledgeCard({ sentAt, from, toLinks, content, text, key: msg.key });
-                        }
+  function JobCard({ type, sentAt, from, toLinks, text, key }) {
+    const isSub = type === 'JOB_SUBSCRIBED'
+    const icon = isSub ? '🟡' : '🟠'
+    const titleH = isSub ? (i18n.inboxJobSubscribedTitle || 'New subscription to your job offer') : (i18n.inboxJobUnsubscribedTitle || 'Unsubscription from your job offer')
+    const jobTitle = quoted(text) || 'job'
+    const jobId = pickLink(text, 'job')
+    const href = jobId ? hrefFor.job(jobId) : null
+    return div(
+      clickableCardProps(href, `job-notification thread-level-0`),
+      headerLine({ sentAt, from, toLinks, textLen: text.length }),
+      h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotJobs} · ${titleH}`),
+      p(
+        i18n.pmInhabitantWithId, ' ',
+        linkAuthor(from), ' ',
+        isSub ? i18n.pmHasSubscribedToYourJobOffer : (i18n.pmHasUnsubscribedFromYourJobOffer || 'has unsubscribed from your job offer'),
+        ' ',
+        href ? a({ class: 'job-link', href }, `"${jobTitle}"`) : `"${jobTitle}"`
+      ),
+      actions({ key, replyId: from, subjectRaw: jobTitle, text })
+    )
+  }
 
-                        const jobTxt = text.match(/has subscribed to your job offer "([^"]+)"/);
-                        const jobIdLegacy = pickLink(text, 'job');
-                        if (jobTxt && jobIdLegacy) return JobCard({ type: 'JOB_SUBSCRIBED', sentAt, from, toLinks, text, key: msg.key });
+  function ProjectFollowCard({ type, sentAt, from, toLinks, text, key }) {
+    const isFollow = type === 'PROJECT_FOLLOWED'
+    const icon = isFollow ? '🔔' : '🔕'
+    const titleH = isFollow
+      ? (i18n.inboxProjectFollowedTitle || 'New follower of your project')
+      : (i18n.inboxProjectUnfollowedTitle || 'Unfollowed your project')
+    const projectTitle = quoted(text) || 'project'
+    const projectId = pickLink(text, 'project')
+    const href = projectId ? hrefFor.project(projectId) : null
+    return div(
+      clickableCardProps(href, `project-${isFollow ? 'follow' : 'unfollow'}-notification thread-level-0`),
+      headerLine({ sentAt, from, toLinks, textLen: text.length }),
+      h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotProjects} · ${titleH}`),
+      p(
+        i18n.pmInhabitantWithId, ' ',
+        a({ class: 'user-link', href: `/author/${encodeURIComponent(from)}` }, from),
+        ' ',
+        isFollow ? (i18n.pmHasFollowedYourProject || 'has followed your project') : (i18n.pmHasUnfollowedYourProject || 'has unfollowed your project'),
+        ' ',
+        href ? a({ class: 'project-link', href }, `"${projectTitle}"`) : `"${projectTitle}"`
+      ),
+      actions({ key, replyId: from, subjectRaw: projectTitle, text })
+    )
+  }
 
-                        const projTxt = text.match(/has created a project "([^"]+)"/);
-                        const projIdLegacy = pickLink(text, 'project');
-                        if (projTxt && projIdLegacy) return ProjectCreatedCard({ sentAt, from, toLinks, text, key: msg.key });
+  function MarketSoldCard({ sentAt, from, toLinks, subject, text, key }) {
+    const itemTitle = quoted(subject) || quoted(text) || 'item'
+    const buyerId = (text.match(/OASIS ID:\s*([\w=/+.-]+)/) || [])[1] || from
+    const price = (text.match(/for:\s*\$([\d.]+)/) || [])[1] || ''
+    const marketId = pickLink(text, 'market')
+    const href = marketId ? hrefFor.market(marketId) : null
+    return div(
+      clickableCardProps(href, 'market-sold-notification thread-level-0'),
+      headerLine({ sentAt, from, toLinks, textLen: text.length }),
+      h2({ class: 'pm-title' }, `💰 ${i18n.pmBotMarket} · ${i18n.inboxMarketItemSoldTitle}`),
+      p(
+        i18n.pmYourItem, ' ',
+        href ? a({ class: 'market-link', href }, `"${itemTitle}"`) : `"${itemTitle}"`,
+        ' ',
+        i18n.pmHasBeenSoldTo, ' ',
+        linkAuthor(buyerId),
+        price ? ` ${i18n.pmFor} $${price}.` : '.'
+      ),
+      actions({ key, replyId: buyerId, subjectRaw: itemTitle, text })
+    )
+  }
 
-                        const saleTxt = subjectRaw.match(/item "([^"]+)" has been sold/) || text.match(/item "([^"]+)" has been sold/);
-                        const marketIdLegacy = pickLink(text, 'market');
-                        if (saleTxt && marketIdLegacy) return MarketSoldCard({ sentAt, from, toLinks, subject: subjectRaw, text, key: msg.key });
+  function ProjectPledgeCard({ sentAt, from, toLinks, content, text, key }) {
+    const amount = content.meta?.amount ?? (text.match(/pledged\s+([\d.]+)/)?.[1] || '0')
+    const projectTitle = content.meta?.projectTitle ?? (text.match(/project\s+"([^"]+)"/)?.[1] || 'project')
+    const projectId = content.meta?.projectId ?? pickLink(text, 'project')
+    const href = projectId ? hrefFor.project(projectId) : null
+    return div(
+      clickableCardProps(href, 'project-pledge-notification thread-level-0'),
+      headerLine({ sentAt, from, toLinks, textLen: text.length }),
+      h2({ class: 'pm-title' }, `💚 ${i18n.pmBotProjects} · ${i18n.inboxProjectPledgedTitle}`),
+      p(
+        i18n.pmInhabitantWithId, ' ',
+        linkAuthor(from), ' ',
+        i18n.pmHasPledged, ' ',
+        chip(`${amount} ECO`), ' ',
+        i18n.pmToYourProject, ' ',
+        href ? a({ class: 'project-link', href }, `"${projectTitle}"`) : `"${projectTitle}"`
+      ),
+      actions({ key, replyId: from, subjectRaw: projectTitle, text })
+    )
+  }
 
-                        return div(
-                            { class: 'pm-card normal-pm' },
-                            header({ sentAt, from, toLinks }),
-                            h2(content.subject || i18n.pmNoSubject),
-                            p({ class: 'message-text' }, ...renderUrl(clickableLinks(text))),
-                            actions({ key: msg.key, replyId: from })
-                        );
-                    })
-                    : p({ class: 'empty' }, i18n.noPrivateMessages)
-            )
-        )
-    );
-};
+  return template(
+    i18n.private,
+    section(
+      div({ class: 'tags-header' },
+        h2(i18n.private),
+        p(i18n.privateDescription)
+      ),
+      div({ class: 'filters' },
+        form({ method: 'GET', action: '/inbox' }, [
+          button({
+            type: 'submit',
+            name: 'filter',
+            value: 'inbox',
+            class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
+          }, `${i18n.privateInbox} (${inboxCount})`),
+          button({
+            type: 'submit',
+            name: 'filter',
+            value: 'sent',
+            class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
+          }, `${i18n.privateSent} (${sentCount})`),
+          button({
+            type: 'submit',
+            name: 'filter',
+            value: 'create',
+            class: 'create-button',
+            formaction: '/pm',
+            formmethod: 'GET'
+          }, i18n.pmCreateButton)
+        ])
+      ),
+      div({ class: 'message-list' },
+        sorted.length
+          ? sorted.map(msg => {
+              const content = msg.value.content
+              const author = msg.value.author
+              const subjectRaw = content.subject || ''
+              const subjectU = subjectRaw.toUpperCase()
+              const text = content.text || ''
+              const sentAt = new Date(content.sentAt || msg.timestamp)
+              const fromResolved = content.from || author
+              const toLinks = Array.isArray(content.to) ? content.to.map(addr => linkAuthor(addr)) : []
+              const level = threadLevel(subjectRaw)
+
+              if (subjectU === 'JOB_SUBSCRIBED' || subjectU === 'JOB_UNSUBSCRIBED') {
+                return JobCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key })
+              }
+              if (subjectU === 'PROJECT_FOLLOWED' || subjectU === 'PROJECT_UNFOLLOWED') {
+                return ProjectFollowCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key })
+              }
+              if (subjectU === 'MARKET_SOLD') {
+                return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key })
+              }
+              if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
+                return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key })
+              }
+
+              return div(
+                { class: `pm-card normal-pm thread-level-${level}` },
+                headerLine({ sentAt, from: fromResolved, toLinks, textLen: text.length }),
+                h2(subjectRaw || i18n.pmNoSubject),
+                p({ class: 'message-text' }, ...renderUrl(clickableLinks(text))),
+                actions({ key: msg.key, replyId: fromResolved, subjectRaw, text })
+              )
+            })
+          : p({ class: 'empty' }, i18n.noPrivateMessages)
+      )
+    )
+  )
+}
 
 exports.publishCustomView = async () => {
   const action = "/publish/custom";

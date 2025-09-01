@@ -1248,12 +1248,6 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
     margin-top: 10px;
 }
 
-.pm-actions{
-    display: flex;
-    gap: 10px;
-    margin-top: 10px;
-}
-
 .audio-actions {
     display: flex;
     gap: 10px;
@@ -2094,27 +2088,34 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 
 /*inbox/pm*/
-.pm-card {
-  border-radius: 10px;
-  margin-bottom: 24px;
-  background: #262626;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.16);
-  padding: 22px 28px;
+.pm-card.normal-pm { padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ffa300; background: transparent }
+.pm-headerline { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-bottom: 4px }
+.pm-date { font-size: 12px; opacity: .7 }
+.pm-sep { opacity: .8 }
+.pm-spacer { flex: 1 }
+.pm-chars { font-size: 12px; opacity: .7 }
+.pm-subject { margin: 0 0 6px 0; font-size: 14px; font-weight: 600; line-height: 1.2; white-space: pre-wrap }
+.pm-bot { opacity: .85 }
+.pm-body { margin-top: 6px }
+.pm-action-form { display: inline-block; margin: 0 }
+.pm-actions-block {
+  width: 100%;
+  max-width: 720px;
+  border: 0;
 }
-
-.pm-header {
+.pm-actions {
   display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-bottom: 12px;
-  font-size: 1em;
-  color: #ffd54f;
+  gap: 10px;
 }
-
-.pm-title {
-  font-weight: bold;
-  margin-bottom: 8px;
-}
+.thread-level-0 { margin-left: 0 }
+.thread-level-1 { margin-left: 12px; border-left: 1px solid #e5e7eb; padding-left: 10px }
+.thread-level-2 { margin-left: 24px; border-left: 1px solid #e5e7eb; padding-left: 10px }
+.thread-level-3 { margin-left: 36px; border-left: 1px solid #e5e7eb; padding-left: 10px }
+.thread-level-4 { margin-left: 48px; border-left: 1px solid #e5e7eb; padding-left: 10px }
+.thread-level-5 { margin-left: 60px; border-left: 1px solid #e5e7eb; padding-left: 10px }
+.thread-level-6 { margin-left: 72px; border-left: 1px solid #e5e7eb; padding-left: 10px }
+.thread-level-7 { margin-left: 84px; border-left: 1px solid #e5e7eb; padding-left: 10px }
+.thread-level-8 { margin-left: 96px; border-left: 1px solid #e5e7eb; padding-left: 10px }
 
 /*projects*/
 .project-actions {
@@ -2265,3 +2266,5 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .error-box{background:#222326;border:none;color:#f5c242;padding:12px;border-radius:8px;margin-top:8px}
 .error-title{margin:0 0 6px 0;font-weight:600}
 .error-pre{margin:0;white-space:pre-wrap;font-family:monospace}
+
+

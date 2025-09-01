@@ -13,6 +13,16 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.4.9 - 2025-09-01
+
+### Added
+
+ + French translation.
+ 
+### Changed
+
+- Inbox (PM plugin).
+
 ## v0.4.8 - 2025-08-27
  
 ### Fixed

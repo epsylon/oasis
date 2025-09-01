@@ -86,7 +86,8 @@ const settingsView = ({ version, aiPrompt }) => {
           { action: "/language", method: "post" },
           select({ name: "language" }, [
             languageOption("English", "en"),
-            languageOption("Castellano", "es"),
+            languageOption("Español", "es"),
+            languageOption("Français", "fr"),
             languageOption("Euskara", "eu")
           ]),
           br(),

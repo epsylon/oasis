@@ -40,11 +40,8 @@ Paste this:
   },
   "gossip": {
     "connections": 50,
-    "seed": true,
-    "seeds": [
-      "solarnethub.com:8008~shs:HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4="
-    ],
-    "global": true
+    "seed": false,
+    "global": false
   },
   "connections": {
     "incoming": {

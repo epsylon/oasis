@@ -211,7 +211,7 @@ const legacyModel = require('../models/legacy_model');
 const walletModel = require('../models/wallet_model')
 
 // load plugin models (cooler)
-const pmModel = require('../models/privatemessages_model')({ cooler, isPublic: config.public });
+const pmModel = require('../models/pm_model')({ cooler, isPublic: config.public });
 const bookmarksModel = require("../models/bookmarking_model")({ cooler, isPublic: config.public });
 const opinionsModel = require('../models/opinions_model')({ cooler, isPublic: config.public });
 const eventsModel = require('../models/events_model')({ cooler, isPublic: config.public });
@@ -848,20 +848,16 @@ router
     ctx.body = await createCVView(cv, true)
   })
   .get('/pm', async ctx => {
-    const { recipients = '' } = ctx.query;
-    ctx.body = await pmView(recipients);
+    const { recipients = '', subject = '', quote = '', preview = '' } = ctx.query;
+    const quoted = quote ? quote.split('\n').map(l => '> ' + l).join('\n') + '\n\n' : '';
+    const showPreview = preview === '1';
+    ctx.body = await pmView(recipients, subject, quoted, showPreview);
   })
-  .get("/inbox", async (ctx) => {
-    const inboxMod = ctx.cookies.get("inboxMod") || 'on';
-    if (inboxMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
-    }
-    const inboxMessages = async () => {
-      const messages = await post.inbox();
-      return privateView({ messages });
-    };
-    ctx.body = await inboxMessages();
+  .get('/inbox', async ctx => {
+    const inboxMod = ctx.cookies.get('inboxMod') || 'on';
+    if (inboxMod !== 'on') { ctx.redirect('/modules'); return; }
+    const messages = await pmModel.listAllPrivate();
+    ctx.body = await privateView({ messages }, ctx.query.filter || undefined);
   })
   .get('/tags', async ctx => {
     const filter = ctx.query.filter || 'all'
@@ -1722,9 +1718,18 @@ router
   })
   .post('/pm', koaBody(), async ctx => {
     const { recipients, subject, text } = ctx.request.body;
-    const recipientsArr = recipients.split(',').map(s => s.trim()).filter(Boolean);
+    const recipientsArr = (recipients || '').split(',').map(s => s.trim()).filter(Boolean);
     await pmModel.sendMessage(recipientsArr, subject, text);
-    ctx.redirect('/pm');
+    ctx.redirect('/inbox?filter=sent');
+  })
+  .post('/pm/preview', koaBody(), async ctx => {
+    const { recipients = '', subject = '', text = '' } = ctx.request.body;
+    ctx.body = await pmView(recipients, subject, text, true);
+  })
+  .post('/inbox/delete/:id', koaBody(), async ctx => {
+    const { id } = ctx.params;
+    await pmModel.deleteMessageById(id);
+    ctx.redirect('/inbox');
   })
   .post('/inbox/delete/:id', koaBody(), async ctx => {
     const { id } = ctx.params;
