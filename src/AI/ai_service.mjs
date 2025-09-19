@@ -54,20 +54,17 @@ app.post('/ai', async (req, res) => {
     } catch {}
 
     const config = getConfig?.() || {};
-    const userPrompt = config.ai?.prompt?.trim() || 'Provide an informative and precise response.';
+    const baseContext = 'Context: You are an AI assistant called "42" in Oasis, a distributed, encrypted and federated social network.';
+    const userPrompt = [baseContext, config.ai?.prompt?.trim() || 'Provide an informative and precise response.'].join('\n');
 
     const prompt = [
-      'Context: You are an AI assistant called "42" in Oasis, a distributed, encrypted and federated social network.',
       userContext ? `User Data:\n${userContext}` : '',
       `Query: "${userInput}"`,
       userPrompt
     ].filter(Boolean).join('\n\n');
     const answer = await session.prompt(prompt);
     res.json({ answer: String(answer || '').trim(), snippets });
-  } catch (err) {
-    lastError = err;
-    res.status(500).json({ error: 'Internal Server Error', details: String(err.message || err) });
-  }
+  } catch {}
 });
 
 app.post('/ai/train', async (req, res) => {
@@ -75,4 +72,3 @@ app.post('/ai/train', async (req, res) => {
 });
 
 app.listen(4001);
-

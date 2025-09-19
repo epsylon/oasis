@@ -41,6 +41,16 @@ a:hover {
   text-decoration: underline !important;
 }
 
+p {
+  color: black !important;
+  text-decoration: none !important;
+}
+
+.created-at, .about-time, .time {
+  font-size: 0.9rem;
+  color: black;
+}
+
 table {
   background-color: #FFFFFF !important;
   color: #2C2C2C !important;

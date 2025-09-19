@@ -1563,9 +1563,11 @@ module.exports = {
     aiTrainPending: "Pending approval",
     aiTrainApproved: "Approved for training",
     aiTrainRejected: "Rejected for training",
-    aiSnippetsUsed: "Context lines used",
+    aiSnippetsUsed: "Snippets used",
     aiSnippetsLearned: "Snippets learned",
     statsAITraining: "AI training",
+    aiApproveCustomTrain: "Train using this custom answer",
+    aiCustomAnswerPlaceholder: "Write your custom answer…",
     statsAIExchanges: "Model Exchanges",
     //market
     marketMineSectionTitle: "Your Items",

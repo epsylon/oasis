@@ -13,6 +13,18 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+
+## v0.5.0 - 2025-09-20
+
+### Added
+
+ + Custom answer training (AI plugin).
+
+### Fixed
+
+ + Clean-SNH theme.
+ + AI learning (AI plugin).
+
 ## v0.4.9 - 2025-09-01
 
 ### Added

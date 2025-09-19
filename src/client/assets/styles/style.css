@@ -1356,8 +1356,6 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 
 .refeed-column {
-  width: 80px;
-  min-width: 80px;
   text-align: center;
   border-right: 1px solid #555;
   padding-right: 12px;

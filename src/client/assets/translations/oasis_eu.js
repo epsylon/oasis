@@ -1576,9 +1576,11 @@ module.exports = {
     aiTrainPending: "Onartzearen zain",
     aiTrainApproved: "Entrenamendurako onartua",
     aiTrainRejected: "Entrenamendurako baztertua",
-    aiSnippetsUsed: "Erabilitako testuinguru lerroak",
+    aiSnippetsUsed: "Erabilitako zatiak",
     aiSnippetsLearned: "Ikasitako fragementuak",
     statsAITraining: "IA prestakuntza",
+    aiApproveCustomTrain: "Erantzun pertsonalizatu hau erabiliz trebatu",
+    aiCustomAnswerPlaceholder: "Idatzi zure erantzun pertsonalizatua…",
     statsAIExchanges: "Ereduen trukea",
     //market
     marketMineSectionTitle: "Zure Elementuak",

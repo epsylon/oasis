@@ -46,7 +46,7 @@ const axiosMod = require('../server/node_modules/axios');
 const axios = axiosMod.default || axiosMod;
 const { spawn } = require('child_process');
 
-const { fieldsForSnippet, buildContext, clip, publishExchange } = require('../AI/buildAIContext.js');
+const { fieldsForSnippet, buildContext, clip, publishExchange, getBestTrainedAnswer } = require('../AI/buildAIContext.js');
 
 let aiStarted = false;
 function startAI() {
@@ -1588,9 +1588,9 @@ router
   .post('/ai', koaBody(), async (ctx) => {
     const { input } = ctx.request.body;
     if (!input) {
-        ctx.status = 400;
-        ctx.body = { error: 'No input provided' };
-        return;
+      ctx.status = 400;
+      ctx.body = { error: 'No input provided' };
+      return;
     }
     startAI();
     const i18nAll = require('../client/assets/translations/i18n');
@@ -1601,34 +1601,42 @@ router
     const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
     let chatHistory = [];
     try {
-        const fileData = fs.readFileSync(historyPath, 'utf-8');
-        chatHistory = JSON.parse(fileData);
+      const fileData = fs.readFileSync(historyPath, 'utf-8');
+      chatHistory = JSON.parse(fileData);
     } catch {
-        chatHistory = [];
+      chatHistory = [];
     }
     const config = getConfig();
     const userPrompt = config.ai?.prompt?.trim() || 'Provide an informative and precise response.';
     try {
+      let aiResponse = '';
+      let snippets = [];
+      const trained = await getBestTrainedAnswer(input);
+      if (trained && trained.answer) {
+        aiResponse = trained.answer;
+        snippets = Array.isArray(trained.ctx) ? trained.ctx : [];
+      } else {
         const response = await axios.post('http://localhost:4001/ai', { input });
-        const aiResponse = response.data.answer;
-        const snippets = Array.isArray(response.data.snippets) ? response.data.snippets : [];
-        chatHistory.unshift({
-            prompt: userPrompt,
-            question: input,
-            answer: aiResponse,
-            timestamp: Date.now(),
-            trainStatus: 'pending',
-            snippets
-        });
+        aiResponse = response.data.answer;
+        snippets = Array.isArray(response.data.snippets) ? response.data.snippets : [];
+      }
+      chatHistory.unshift({
+        prompt: userPrompt,
+        question: input,
+        answer: aiResponse,
+        timestamp: Date.now(),
+        trainStatus: 'pending',
+        snippets
+      });
     } catch (e) {
-        chatHistory.unshift({
-            prompt: userPrompt,
-            question: input,
-            answer: translations.aiServerError || 'The AI could not answer. Please try again.',
-            timestamp: Date.now(),
-            trainStatus: 'rejected',
-            snippets: []
-        });
+      chatHistory.unshift({
+        prompt: userPrompt,
+        question: input,
+        answer: translations.aiServerError || 'The AI could not answer. Please try again.',
+        timestamp: Date.now(),
+        trainStatus: 'rejected',
+        snippets: []
+      });
     }
     chatHistory = chatHistory.slice(0, 20);
     fs.writeFileSync(historyPath, JSON.stringify(chatHistory, null, 2), 'utf-8');
@@ -1636,36 +1644,38 @@ router
   })
   .post('/ai/approve', koaBody(), async (ctx) => {
     const ts = String(ctx.request.body.ts || '');
+    const custom = String(ctx.request.body.custom || '').trim();
     const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
     let chatHistory = [];
     try {
-        const fileData = fs.readFileSync(historyPath, 'utf-8');
-        chatHistory = JSON.parse(fileData);
-    } catch (err) {
-        chatHistory = [];
+      const fileData = fs.readFileSync(historyPath, 'utf-8');
+      chatHistory = JSON.parse(fileData);
+    } catch {
+      chatHistory = [];
     }
     const item = chatHistory.find(e => String(e.timestamp) === ts);
     if (item) {
-        try {
-            const contentType = item?.type || 'aiExchange';
-            let snippets = fieldsForSnippet(contentType, item);
-            if (snippets.length === 0) {
-                const context = await buildContext();
-                snippets = [context];
-            } else {
-                snippets = snippets.map(snippet => clip(snippet, 200)); 
-            }
-            await publishExchange({
-                q: item.question,
-                a: item.answer,
-                ctx: snippets,
-                tokens: {}
-            });
-            item.trainStatus = 'approved';  
-        } catch (err) {
-            item.trainStatus = 'failed';
+      try {
+        if (custom) item.answer = custom;
+        item.type = 'aiExchange';
+        let snippets = fieldsForSnippet('aiExchange', item);
+        if (snippets.length === 0) {
+          const context = await buildContext();
+          snippets = [context];
+        } else {
+          snippets = snippets.map(snippet => clip(snippet, 200));
         }
-        fs.writeFileSync(historyPath, JSON.stringify(chatHistory, null, 2), 'utf-8');
+        await publishExchange({
+          q: item.question,
+          a: item.answer,
+          ctx: snippets,
+          tokens: {}
+        });
+        item.trainStatus = 'approved';
+      } catch {
+        item.trainStatus = 'failed';
+      }
+      fs.writeFileSync(historyPath, JSON.stringify(chatHistory, null, 2), 'utf-8');
     }
     const config = getConfig();
     const userPrompt = config.ai?.prompt?.trim() || '';
