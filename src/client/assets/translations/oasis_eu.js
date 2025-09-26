@@ -248,6 +248,9 @@ module.exports = {
     indexes: "Indizeak",
     indexesDescription:
       "Indizeak birsortzea segurua da eta hutsegite mota batzuk konpon ditzake.",
+    homePageTitle: "Hasierako orria",
+    homePageDescription: "Hautatu nahi duzun moduluaren orria hasiera gisa.",
+    saveHomePage: "Gorde hasierako orria",
     //invites
     invites: "Gonbidapenak",
     invitesTitle: "Gonbidapenak",
@@ -606,6 +609,7 @@ module.exports = {
     viewCV:            "Ikusi CV-a",
     suggestedSectionTitle: "Gomendatuta",
     topkarmaSectionTitle: "Top Karma",
+    topactivitySectionTitle: "Top Jarduera",
     blockedSectionTitle: "Blokeatuta",
     gallerySectionTitle: "GALERIA",
     blockedButton:       "BLOKETATUTA",
@@ -614,6 +618,7 @@ module.exports = {
     viewDetails: "Ikusi Xehetasunak",
     oasisId: "ID-a",
     noInhabitantsFound:  "Bizilagunik ez, oraindik.",
+    inhabitantActivityLevel: "Jarduera Maila",
     //trending
     trendingTitle: "Pil-pilean",
     exploreTrending: "Aurkitu pil-pileko edukia zure sarean.",
@@ -947,6 +952,7 @@ module.exports = {
     forumSendButton: "Bidali",
     forumVisitForum: "Bisitatu Foroaren",
     noForums: "Ez da fororik aurkitu.",
+    forumVisitButton: "Foroa bisitatu", 
     // images
     imageTitle: "Irudiak",
     imagePluginTitle: "Izenburua",

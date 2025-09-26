@@ -21,10 +21,38 @@ const generateFilterButtons = (filters, currentFilter) =>
     )
   );
 
+function formatRange(bucket, i18n) {
+  const ws = i18n.weeksShort || 'w';
+  const ms = i18n.monthsShort || 'm';
+  if (bucket === 'green') return `<2 ${ws}`;
+  if (bucket === 'orange') return `2 ${ws}–6 ${ms}`;
+  return `≥6 ${ms}`;
+}
+
+function lastActivityBadge(user) {
+  const label = i18n.inhabitantActivityLevel;
+  const bucket = user.lastActivityBucket || 'red';
+  const dotClass = bucket === 'green' ? 'green' : bucket === 'orange' ? 'orange' : 'red';
+  return div(
+    { class: 'inhabitant-last-activity' },
+    span({ class: 'label' }, `${label}: `),
+    span({ class: `activity-dot ${dotClass}` }, '')
+  );
+}
+
 const renderInhabitantCard = (user, filter, currentUserId) => {
   const isMe = user.id === currentUserId;
   return div({ class: 'inhabitant-card' },
-    img({ class: 'inhabitant-photo', src: resolvePhoto(user.photo) }),
+    div({ class: 'inhabitant-left' },
+      a(
+         { href: `/author/${encodeURIComponent(user.id)}` },
+         img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo), alt: user.name })
+      ),
+      br(),
+      span(`${i18n.bankingUserEngagementScore}: `),
+     h2(strong(typeof user.karmaScore === 'number' ? user.karmaScore : 0)),
+     lastActivityBadge(user)
+    ),
     div({ class: 'inhabitant-details' },
       h2(user.name),
       user.description ? p(...renderUrl(user.description)) : null,
@@ -46,10 +74,6 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
         : div({ class: "eco-wallet" },
             p(i18n.ecoWalletNotConfigured || "ECOin Wallet not configured")
           ),
-      p(
-        `${i18n.bankingUserEngagementScore}: `,
-        strong(typeof user.karmaScore === 'number' ? user.karmaScore : 0)
-      ),
       div(
         { class: 'cv-actions', style: 'display:flex; flex-direction:column; gap:8px; margin-top:12px;' },
         isMe
@@ -101,10 +125,11 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
                : filter === 'blocked'     ? i18n.blockedSectionTitle
                : filter === 'GALLERY'     ? i18n.gallerySectionTitle
                : filter === 'TOP KARMA'    ? i18n.topkarmaSectionTitle
+               : filter === 'TOP ACTIVITY' ? (i18n.topactivitySectionTitle)
                                           : i18n.allInhabitants;
 
   const showCVFilters = filter === 'CVs' || filter === 'MATCHSKILLS';
-  const filters = ['all', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'];
+  const filters = ['all', 'TOP ACTIVITY', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'];
 
   return template(
     title,
@@ -170,6 +195,16 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }, currentUse
   const isMe = id === currentUserId;
   const title = i18n.inhabitantProfileTitle || i18n.inhabitantviewDetails;
 
+  const lastFromFeed = Array.isArray(feed) && feed.length ? feed.reduce((mx, m) => Math.max(mx, m.value?.timestamp || 0), 0) : null;
+  const now = Date.now();
+  const delta = lastFromFeed ? Math.max(0, now - lastFromFeed) : Number.POSITIVE_INFINITY;
+  const days = delta / 86400000;
+  const bucket = days < 14 ? 'green' : days < 182.5 ? 'orange' : 'red';
+  const ws = i18n.weeksShort || 'w';
+  const ms = i18n.monthsShort || 'm';
+  const range = bucket === 'green' ? `<2 ${ws}` : bucket === 'orange' ? `2 ${ws}–6 ${ms}` : `≥6 ${ms}`;
+  const dotClass = bucket === 'green' ? 'green' : bucket === 'orange' ? 'orange' : 'red';
+
   return template(
     name,
     section(
@@ -181,14 +216,20 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }, currentUse
         ...generateFilterButtons(['all', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'], 'all')
       ),
       div({ class: 'inhabitant-card', style: 'margin-top:32px;' },
-        img({ class: 'inhabitant-photo', src: image, alt: name }),
         div({ class: 'inhabitant-details' },
+          img({ class: 'inhabitant-photo-details', src: image, alt: name }),
           h2(name),
           p(a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)),
           description ? p(...renderUrl(description)) : null,
           location ? p(`${i18n.locationLabel}: ${location}`) : null,
           languages.length ? p(`${i18n.languagesLabel}: ${languages.join(', ').toUpperCase()}`) : null,
           skills.length ? p(`${i18n.skillsLabel}: ${skills.join(', ')}`) : null,
+          div(
+            { class: 'inhabitant-last-activity' },
+            span({ class: 'label' }, `${i18n.inhabitantActivityLevel}:`),
+            span({ class: `activity-dot ${dotClass}` }, ''),
+            span({ class: 'range' }, range)
+          ),
           status ? p(`${i18n.statusLabel || 'Status'}: ${status}`) : null,
           preferences ? p(`${i18n.preferencesLabel || 'Preferences'}: ${preferences}`) : null,
           createdAt ? p(`${i18n.createdAtLabel || 'Created at'}: ${createdAt}`) : null,

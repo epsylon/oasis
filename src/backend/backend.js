@@ -534,7 +534,9 @@ router
   
   //GET backend routes
   .get("/", async (ctx) => {
-    ctx.redirect("/activity"); // default view when starting Oasis
+    const currentConfig = getConfig();
+    const homePage = currentConfig.homePage || "activity";
+    ctx.redirect(`/${homePage}`);
   })
   .get("/robots.txt", (ctx) => {
     ctx.body = "User-agent: *\nDisallow: /";
@@ -726,7 +728,31 @@ router
     const avatarUrl = getAvatarUrl(image);
     const ecoAddress = await bankingModel.getUserAddress(feedId);
     const { ecoValue, karmaScore } = await bankingModel.getBankingData(feedId);
-    ctx.body = authorView({
+    const normTs = (t) => {
+      const n = Number(t || 0);
+      if (!isFinite(n) || n <= 0) return 0;
+      return n < 1e12 ? n * 1000 : n;
+    };
+    const pull = require('../server/node_modules/pull-stream');
+    const ssbClientGUI = require('../client/gui');
+    const coolerInstance = ssbClientGUI({ offline: require('../server/ssb_config').offline });
+    const ssb = await coolerInstance.open();
+    const latestFromStream = await new Promise((resolve) => {
+      pull(
+        ssb.createUserStream({ id: feedId, reverse: true }),
+        pull.filter(m => m && m.value && m.value.content && m.value.content.type !== 'tombstone'),
+        pull.take(1),
+        pull.collect((err, arr) => {
+          if (err || !arr || !arr.length) return resolve(0);
+          const m = arr[0];
+          const ts = normTs((m.value && m.value.timestamp) || m.timestamp);
+          resolve(ts || null);
+        })
+      );
+    });
+    const days = latestFromStream ? (Date.now() - latestFromStream) / 86400000 : Infinity;
+    const lastActivityBucket = days < 14 ? 'green' : days < 182.5 ? 'orange' : 'red';
+    ctx.body = await authorView({
       feedId,
       messages,
       firstPost,
@@ -736,7 +762,8 @@ router
       avatarUrl,
       relationship,
       ecoAddress,
-      karmaScore
+      karmaScore,
+      lastActivityBucket
     });
   })
   .get("/search", async (ctx) => {
@@ -947,7 +974,7 @@ router
     ctx.body = await inhabitantsProfileView({ about, cv, feed }, currentUserId);
   })
   .get('/tribes', async ctx => {
-    const filter = ctx.query.filter || 'recent';
+    const filter = ctx.query.filter || 'all';
     const search = ctx.query.search || ''; 
     const tribes = await tribesModel.listAll();
     let filteredTribes = tribes;
@@ -1006,8 +1033,42 @@ router
     const lastPost = await post.latestBy(myFeedId)
     const avatarUrl = getAvatarUrl(image)
     const ecoAddress = await bankingModel.getUserAddress(myFeedId)
-    const { karmaScore, ecoValue } = await bankingModel.getBankingData(myFeedId);
-    
+    const { karmaScore } = await bankingModel.getBankingData(myFeedId)
+    const normTs = (t) => {
+    const n = Number(t || 0)
+      if (!isFinite(n) || n <= 0) return 0
+      return n < 1e12 ? n * 1000 : n
+    }
+    const pickTs = (obj) => {
+      if (!obj) return 0
+      const v = obj.value || obj
+      return normTs(v.timestamp || v.ts || v.time || (v.meta && v.meta.timestamp) || 0)
+    }
+    const msgTs = Array.isArray(messages) && messages.length ? Math.max(...messages.map(pickTs)) : 0
+    const tsLastPost = pickTs(lastPost)
+    const tsFirstPost = pickTs(firstPost)
+    let lastActivityTs = Math.max(msgTs, tsLastPost, tsFirstPost)
+
+    if (!lastActivityTs) {
+      const pull = require("../server/node_modules/pull-stream")
+      const ssbClientGUI = require("../client/gui")
+      const coolerInstance = ssbClientGUI({ offline: require("../server/ssb_config").offline })
+      const ssb = await coolerInstance.open()
+      lastActivityTs = await new Promise((resolve) => {
+        pull(
+          ssb.createUserStream({ id: myFeedId, reverse: true }),
+          pull.filter(m => m && m.value && m.value.content && m.value.content.type !== "tombstone"),
+          pull.take(1),
+          pull.collect((err, arr) => {
+            if (err || !arr || !arr.length) return resolve(0)
+            const m = arr[0]
+            resolve(normTs((m.value && m.value.timestamp) || m.timestamp))
+          })
+        )
+      })
+    }
+    const days = lastActivityTs ? (Date.now() - lastActivityTs) / 86400000 : Infinity
+    const lastActivityBucket = days < 14 ? "green" : days < 182.5 ? "orange" : "red"
     ctx.body = await authorView({
       feedId: myFeedId,
       messages,
@@ -1018,7 +1079,8 @@ router
       avatarUrl,
       relationship: { me: true },
       ecoAddress,
-      karmaScore
+      karmaScore,
+      lastActivityBucket
     })
   })
   .get("/profile/edit", async (ctx) => {
@@ -3067,6 +3129,13 @@ router
       config.ssbLogStream.limit = logLimit;
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     }
+    ctx.redirect("/settings");
+  })
+  .post("/settings/home-page", koaBody(), async (ctx) => {
+    const homePage = String(ctx.request.body.homePage || "").trim();
+    const currentConfig = getConfig();
+    currentConfig.homePage = homePage || "activity";
+    saveConfig(currentConfig);
     ctx.redirect("/settings");
   })
   .post("/settings/rebuild", async (ctx) => {

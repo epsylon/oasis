@@ -13,6 +13,21 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.5.1 - 2025-09-26
+
+### Added
+
+ + Activity level measurement (Inhabitants plugin).
+ + Home page settings (Settings plugin).
+
+### Fixed
+
+ + ECOIn wallet addresses (Banking plugin).
+ + Tribes view (Tribes plugin).
+ + Inhabitants view (Inhabitants plugin).
+ + Avatar view (Main module).
+ + Forum posts (Forums plugin).
+ + Tribes info display (Search plugin).
 
 ## v0.5.0 - 2025-09-20
 

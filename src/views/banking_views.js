@@ -251,16 +251,16 @@ const renderAddresses = (data, userId) => {
                     td(a({ href: `/author/${encodeURIComponent(r.id)}`, class: "user-link" }, r.id)),
                     td(r.address),
                     td(r.source === "local" ? i18n.bankLocal : i18n.bankFromOasis),
-                    td(
-                      div({ class: "row-actions" },
-                        r.source === "local"
-                          ? form({ method: "POST", action: "/banking/addresses/delete", class: "addr-del" },
-                              input({ type: "hidden", name: "userId", value: r.id }),
-                              button({ type: "submit", class: "delete-btn", onclick: `return confirm(${JSON.stringify(i18n.bankAddressDeleteConfirm)})` }, i18n.bankAddressDelete)
-                            )
-                          : null
-                      )
-                    )
+			td(
+			  r.source === "local"
+			    ? div({ class: "row-actions" },
+				form({ method: "POST", action: "/banking/addresses/delete", class: "addr-del" },
+				  input({ type: "hidden", name: "userId", value: r.id }),
+				  button({ type: "submit", class: "delete-btn", onclick: `return confirm(${JSON.stringify(i18n.bankAddressDeleteConfirm)})` }, i18n.bankAddressDelete)
+				)
+			      )
+			    : null
+			)
                   )
                 )
               )

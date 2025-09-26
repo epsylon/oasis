@@ -41,7 +41,7 @@
     "url": "http://localhost:7474",
     "user": "",
     "pass": "",
-    "fee": ""
+    "fee": "5"
   },
   "walletPub": {
     "url": "",
@@ -53,5 +53,6 @@
   },
   "ssbLogStream": {
     "limit": 2000
-  }
+  },
+  "homePage": "activity"
 }

@@ -124,22 +124,25 @@ function renderActionCards(actions, userId) {
     }
 
     if (type === 'tribe') {
-      const { title, image, description, tags, isLARP, inviteMode, isAnonymous, members } = content;
+      const { title, image, description, location, tags, isLARP, inviteMode, isAnonymous, members } = content;
       const validTags = Array.isArray(tags) ? tags : [];
       cardBody.push(
         div({ class: 'card-section tribe' },
           h2({ class: 'tribe-title' },
             a({ href: `/tribe/${encodeURIComponent(action.id)}`, class: "user-link" }, title)
           ),
-          typeof isAnonymous === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel+ ':'), span({ class: 'card-value' }, isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : "",
-          inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeModeLabel) + ':'), span({ class: 'card-value' }, inviteMode.toUpperCase())) : "",
-          typeof isLARP === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel+ ':'), span({ class: 'card-value' }, isLARP ? i18n.tribeYes : i18n.tribeNo)) : "",
-          Array.isArray(members) ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeMembersCount) + ':'), span({ class: 'card-value' }, members.length)) : "",
-          br(),
-          image
+           div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
+            location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeLocationLabel.toUpperCase()) + ':'), span({ class: 'card-value' }, ...renderUrl(location))) : "",
+            typeof isAnonymous === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel+ ':'), span({ class: 'card-value' }, isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : "",
+            inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeModeLabel) + ':'), span({ class: 'card-value' }, inviteMode.toUpperCase())) : "",
+            typeof isLARP === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel+ ':'), span({ class: 'card-value' }, isLARP ? i18n.tribeYes : i18n.tribeNo)) : "",
+         ), 
+          Array.isArray(members) ? h2(`${i18n.tribeMembersCount}: ${members.length}`) : "",
+          image  
             ? img({ src: `/blob/${encodeURIComponent(image)}`, class: 'feed-image tribe-image' })
             : img({ src: '/assets/images/default-tribe.png', class: 'feed-image tribe-image' }),
           p({ class: 'tribe-description' }, ...renderUrl(description || '')),
+         
           validTags.length
             ? div({ class: 'card-tags' }, validTags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))

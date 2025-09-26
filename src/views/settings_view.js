@@ -98,6 +98,48 @@ const settingsView = ({ version, aiPrompt }) => {
     ),
     section(
       div({ class: "tags-header" },
+        h2(i18n.homePageTitle),
+        p(i18n.homePageDescription),
+        form(
+          { action: "/settings/home-page", method: "POST" },
+          select({ name: "homePage" },
+            option({ value: "activity", selected: currentConfig.homePage === "activity" ? true : undefined }, i18n.activityTitle),
+            option({ value: "ai", selected: currentConfig.homePage === "ai" ? true : undefined }, i18n.aiTitle),
+            option({ value: "trending", selected: currentConfig.homePage === "trending" ? true : undefined }, i18n.trendingTitle),
+            option({ value: "opinions", selected: currentConfig.homePage === "opinions" ? true : undefined }, i18n.opinionsTitle),
+            option({ value: "forum", selected: currentConfig.homePage === "forum" ? true : undefined }, i18n.forumTitle),
+            option({ value: "feed", selected: currentConfig.homePage === "feed" ? true : undefined }, i18n.feedTitle),
+            option({ value: "mentions", selected: currentConfig.homePage === "mentions" ? true : undefined }, i18n.mentions),
+            option({ value: "inbox", selected: currentConfig.homePage === "inbox" ? true : undefined }, i18n.inbox),
+            option({ value: "agenda", selected: currentConfig.homePage === "agenda" ? true : undefined }, i18n.agendaTitle),
+            option({ value: "stats", selected: currentConfig.homePage === "stats" ? true : undefined }, i18n.statsTitle),
+            option({ value: "blockexplorer", selected: currentConfig.homePage === "blockexplorer" ? true : undefined }, i18n.blockchain)
+          ),
+          br(), br(),
+          button({ type: "submit" }, i18n.saveHomePage)
+        )
+      )
+    ),
+    section(
+      div({ class: "tags-header" },
+      h2(i18n.ssbLogStream),
+      p(i18n.ssbLogStreamDescription),
+      form(
+        { action: "/settings/ssb-logstream", method: "POST" },
+        input({
+          type: "number",
+          id: "ssb_log_limit",
+          name: "ssb_log_limit",
+          min: 1,
+          max: 100000,
+          value: currentConfig.ssbLogStream?.limit || 1000
+        }), br(),br(),
+        button({ type: "submit" }, i18n.saveSettings)
+      )
+     )
+    ),
+    section(
+      div({ class: "tags-header" },
         h2(i18n.wallet),
 	p(
 	  i18n.walletSettingsDescription, " ",
@@ -167,24 +209,6 @@ const settingsView = ({ version, aiPrompt }) => {
           button({ type: "submit" }, i18n.aiConfiguration)
         )
       )
-    ),
-    section(
-      div({ class: "tags-header" },
-      h2(i18n.ssbLogStream),
-      p(i18n.ssbLogStreamDescription),
-      form(
-        { action: "/settings/ssb-logstream", method: "POST" },
-        input({
-          type: "number",
-          id: "ssb_log_limit",
-          name: "ssb_log_limit",
-          min: 1,
-          max: 100000,
-          value: currentConfig.ssbLogStream?.limit || 1000
-        }), br(),br(),
-        button({ type: "submit" }, i18n.saveSettings)
-      )
-     )
     ),
     section(
       div({ class: "tags-header" },

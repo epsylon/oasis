@@ -47,7 +47,7 @@ if (!fs.existsSync(configFilePath)) {
       "url": "http://localhost:7474",
       "user": "",
       "pass": "",
-      "fee": "1"
+      "fee": "5"
     },
     "walletPub": {
       "url": "",
@@ -59,7 +59,8 @@ if (!fs.existsSync(configFilePath)) {
     },
     "ssbLogStream": {
       "limit": 2000
-    }
+    },
+    "homePage": "activity"
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
 }

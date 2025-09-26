@@ -37,6 +37,34 @@ module.exports = ({ cooler }) => {
     });
   }
 
+  async function getLastActivityTimestamp(feedId) {
+    const ssbClient = await openSsb();
+    const norm = (t) => (t && t < 1e12 ? t * 1000 : t || 0);
+    return new Promise((resolve) => {
+      pull(
+        ssbClient.createUserStream({ id: feedId, reverse: true }),
+        pull.filter(m => m && m.value && m.value.content && m.value.content.type !== 'tombstone'),
+        pull.take(1),
+        pull.collect((err, arr) => {
+          if (err || !arr || !arr.length) return resolve(null);
+          const m = arr[0];
+          const ts = norm((m.value && m.value.timestamp) || m.timestamp);
+          resolve(ts || null);
+        })
+      );
+    });
+  }
+
+  function bucketLastActivity(ts) {
+    if (!ts) return { bucket: 'red', range: '≥6m' };
+    const now = Date.now();
+    const delta = Math.max(0, now - ts);
+    const days = delta / 86400000;
+    if (days < 14) return { bucket: 'green', range: '<2w' };
+    if (days < 182.5) return { bucket: 'orange', range: '2w–6m' };
+    return { bucket: 'red', range: '≥6m' };
+  }
+
   return {
     async listInhabitants(options = {}) {
       const { filter = 'all', search = '', location = '', language = '', skills = '' } = options;
@@ -46,8 +74,8 @@ module.exports = ({ cooler }) => {
       const fetchUserImage = (feedId) => {
         return Promise.race([
           about.image(feedId),
-          timeoutPromise(5000) 
-        ]).catch(() => '/assets/images/default-avatar.png'); 
+          timeoutPromise(5000)
+        ]).catch(() => '/assets/images/default-avatar.png');
       };
       if (filter === 'GALLERY') {
         const feedIds = await new Promise((res, rej) => {
@@ -72,7 +100,7 @@ module.exports = ({ cooler }) => {
           uniqueFeedIds.map(async (feedId) => {
             const name = await about.name(feedId);
             const description = await about.description(feedId);
-            const image = await fetchUserImage(feedId); 
+            const image = await fetchUserImage(feedId);
             const photo =
               typeof image === 'string'
                 ? `/image/256/${encodeURIComponent(image)}`
@@ -82,7 +110,7 @@ module.exports = ({ cooler }) => {
         );
         return users;
       }
-      if (filter === 'all' || filter === 'TOP KARMA') {
+      if (filter === 'all' || filter === 'TOP KARMA' || filter === 'TOP ACTIVITY') {
         const feedIds = await new Promise((res, rej) => {
           pull(
             ssbClient.createLogStream({ limit: logLimit, reverse: true }),
@@ -109,7 +137,9 @@ module.exports = ({ cooler }) => {
               typeof image === 'string'
                 ? `/image/256/${encodeURIComponent(image)}`
                 : '/assets/images/default-avatar.png';
-            return { id: feedId, name, description, photo };
+            const lastActivityTs = await getLastActivityTimestamp(feedId);
+            const { bucket, range } = bucketLastActivity(lastActivityTs);
+            return { id: feedId, name, description, photo, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
           })
         );
         users = Array.from(new Map(users.filter(u => u && u.id).map(u => [u.id, u])).values());
@@ -121,14 +151,17 @@ module.exports = ({ cooler }) => {
             u.id?.toLowerCase().includes(q)
           );
         }
-        const withKarma = await Promise.all(users.map(async u => {
+        const withMetrics = await Promise.all(users.map(async u => {
           const karmaScore = await getLastKarmaScore(u.id);
           return { ...u, karmaScore };
         }));
         if (filter === 'TOP KARMA') {
-          return withKarma.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
+          return withMetrics.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
         }
-        return withKarma;
+        if (filter === 'TOP ACTIVITY') {
+          return withMetrics.sort((a, b) => (b.lastActivityTs || 0) - (a.lastActivityTs || 0));
+        }
+        return withMetrics;
       }
       if (filter === 'contacts') {
         const all = await this.listInhabitants({ filter: 'all' });
@@ -302,4 +335,3 @@ module.exports = ({ cooler }) => {
     }
   };
 };
-

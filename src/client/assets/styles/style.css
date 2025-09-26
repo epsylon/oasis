@@ -486,6 +486,20 @@ thread-container {
   margin-bottom: 10px;
 }
 
+.profile-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-metrics .inhabitant-last-activity {
+  align-self: center;
+}
+
+.inhabitant-last-activity .label {
+  margin-right: 6px;
+}
+
 .avatar-container {
   display: flex;
   flex-direction: column;
@@ -493,7 +507,7 @@ thread-container {
   padding: 20px;
   border-radius: 16px;
   box-shadow: 0 8px 20px rgba(255, 165, 0, 0.25);
-  max-width: 180px;
+  max-width: 300px;
   margin: 0 auto 20px auto;
   transition: transform 0.3s ease;
 }
@@ -764,73 +778,77 @@ button.create-button:hover {
 }
 
 /* Inhabitants */
-.inhabitants-header {
-  margin-bottom: 1rem;
-}
-
-.filters {
-  margin-top: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.inhabitants-container {
+.inhabitant-card {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   gap: 1rem;
 }
 
-.inhabitant-card {
+.inhabitant-left {
   display: flex;
-  align-items: flex-start;
-  background-color: #1e1e1e;
-  border-radius: 12px;
-  padding: 1rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 300px;
+  flex: 0 0 300px;
+}
+
+.inhabitant-left a {
+  display: block;
   width: 100%;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  transition: transform 0.2s ease;
+}
+
+.inhabitant-left h2 {
+  margin: 4px 0 0;
+  line-height: 1.1;
 }
 
 .inhabitant-photo {
-  width: 64px;
-  height: 64px !important;;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50%;
+  border: 3px solid #ffa500;
+  display: block;
+  margin: 0 auto;
+}
+
+.inhabitant-photo-details {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
   object-fit: cover;
   border-radius: 50%;
-  margin-right: 1rem;
   border: 2px solid #ffa500;
+  display: block;
+  margin: 0 auto;
 }
 
-.inhabitant-info {
-  flex: 1;
-}
-
-.inhabitant-id {
-  font-weight: bold;
-  color: #ffa500;
-  text-decoration: none;
-  font-size: 1.1rem;
-}
-
-.inhabitant-bio {
-  margin-top: 0.25rem;
-  color: #ccc;
-  font-size: 0.95rem;
-}
-
-.inhabitant-status {
-  margin-top: 0.5rem;
+.inhabitant-details {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.inhabitant-last-activity {
+  margin-top: 4px;
+  display: flex;
+  border: 0;
   align-items: center;
+  gap: 6px;
 }
 
-.status-online {
-  color: #4caf50;
-  font-weight: bold;
+.activity-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
 }
 
-.status-offline {
-  color: #999;
-  font-weight: normal;
-}
+.activity-dot.green { background-color: #2ecc71; }
+.activity-dot.orange { background-color: #f39c12; }
+.activity-dot.red { background-color: #e74c3c; }
 
 /* Documents */
 .pdf-viewer-container {
@@ -1045,11 +1063,32 @@ display:flex; gap:8px; margin-top:16px;
 }
 
 .tribes-container{ 
-display:grid; grid-template-columns:repeat(auto-fill,minmax(400px,1fr)); gap:20px; margin-top:16px;
+  display:grid; grid-template-columns:repeat(auto-fill,minmax(400px,1fr)); gap:20px; margin-top:16px;
  }
  
 .tribe-card { 
-padding:16px; background:#2c2f33; border-radius:8px; border:1px solid #444; 
+  padding:16px; background:#2c2f33; border-radius:8px; border:1px solid #444; 
+}
+
+.tribe-details {
+  display: flex;
+  background: #2c2f33;
+  border-radius: 12px;
+  padding: 24px;
+  grid-template-columns: 1fr 2fr;
+  gap: 24px;
+}
+
+.tribe-main {
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tribe-side {
+  background: #2c2f33;
+  width: 60%;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .filter-btn,.create-button,.edit-btn,.delete-btn,.join-btn,.leave-btn,.buy-btn                                  
@@ -1616,6 +1655,11 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   gap: 1.1em;
   background: none;
 }
+.visit-forum-form {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px; 
+}
 .forum-score-col {
   min-width: 78px;
   display: flex;
@@ -1713,6 +1757,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 .forum-meta {
   font-size: 1em;
+  align-items: center;
   color: #ffd740;
   margin: 0.1em 0 0 0;
   display: flex;

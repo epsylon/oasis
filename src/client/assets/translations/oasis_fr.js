@@ -248,6 +248,9 @@ module.exports = {
     indexes: "Index",
     indexesDescription:
       "Reconstruire les index est sans risque et peut corriger certains problèmes dans votre blockchain.",
+    homePageTitle: "Page d'accueil",
+    homePageDescription: "Sélectionnez le module que vous souhaitez comme page d'accueil.",
+    saveHomePage: "Enregistrer la page d'accueil",
     //invites
     invites: "Invitations",
     invitesTitle: "Invitations",
@@ -605,6 +608,7 @@ module.exports = {
     viewCV:            "Voir le CV",
     suggestedSectionTitle: "Suggérés",
     topkarmaSectionTitle: "Top Karma",
+    topactivitySectionTitle: "Top activité",
     blockedSectionTitle: "Bloqués",
     gallerySectionTitle: "GALERIE",
     blockedButton:       "BLOQUÉS",
@@ -613,6 +617,7 @@ module.exports = {
     viewDetails: "Voir les détails",
     oasisId: "ID",
     noInhabitantsFound:    "Aucun habitant trouvé pour l’instant.",
+    inhabitantActivityLevel: "Niveau Activité",
     //trending
     trendingTitle: "Tendances",
     exploreTrending: "Explorez le contenu le plus populaire dans votre réseau.",
@@ -946,6 +951,7 @@ module.exports = {
     forumSendButton: "Envoyer",
     forumVisitForum: "Visiter le forum",
     noForums: "Aucun forum disponible pour l’instant.",
+    forumVisitButton: "Visiter le forum",
     // images
     imageTitle: "Images",
     imagePluginTitle: "Titre",

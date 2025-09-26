@@ -140,7 +140,7 @@ const renderThread = (nodes, level = 0, forumId) => {
         div({ class: 'new-reply' },
           form({
             method: 'POST',
-            action: `/forum/${forumId}/message`,
+            action: `/forum/${encodeURIComponent(forumId)}/message`,
             class: 'comment-form'
           },
             input({ type: 'hidden', name: 'parentId', value: m.key }),
@@ -188,7 +188,10 @@ const renderForumList = (forums, currentFilter) =>
               span({ class: 'forum-participants' },
                 `${i18n.forumParticipants.toUpperCase()}: ${f.participants?.length || 1}`),
               span({ class: 'forum-messages' },
-                `${i18n.forumMessages.toUpperCase()}: ${f.messagesCount - 1}`)
+                `${i18n.forumMessages.toUpperCase()}: ${f.messagesCount - 1}`),
+              form({ method: 'GET', action: `/forum/${encodeURIComponent(f.key)}`, style: 'visit-forum-form' },
+                button({ type: 'submit', class: 'filter-btn' }, i18n.forumVisitButton)
+              )
             ),
             div({ class: 'forum-footer' },
               span({ class: 'date-link' },
@@ -330,7 +333,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter) =>
       },
         form({
           method: 'POST',
-          action: `/forum/${forum.key}/message`,
+          action: `/forum/${encodeURIComponent(forum.key)}/message`,
           class: 'new-message-form'
         },
           textarea({

@@ -2,6 +2,7 @@ const { form, button, div, h2, p, section, input, select, option, img, audio: au
 const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
+const { renderUrl } = require('../backend/renderUrl');
 
 const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, resultCount = "10" }) => {
   const searchInput = input({
@@ -141,24 +142,32 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
             )
           ) : null
         );
-      case 'tribe':
-        return div({ class: 'search-tribe' },
-          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
-          content.isAnonymous !== undefined ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel + ':'), span({ class: 'card-value' }, content.isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : null,
-          content.inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeModeLabel + ':'), span({ class: 'card-value' }, content.inviteMode.toUpperCase())) : null,
-          content.isLARP !== undefined ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel + ':'), span({ class: 'card-value' }, content.isLARP ? i18n.tribeYes : i18n.tribeNo)) : null,
-          br,
-          content.image ? img({ src: `/blob/${encodeURIComponent(content.image)}`, class: 'feed-image' }) : img({ src: '/assets/images/default-tribe.png', class: 'feed-image' }),
-          br,
-          content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
-          content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.location + ':'), span({ class: 'card-value' }, content.location)) : null,
-          Array.isArray(content.members) ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeMembersCount + ':'), span({ class: 'card-value' }, content.members.length)) : null,
-          content.tags && content.tags.length
-            ? div({ class: 'card-tags' }, content.tags.map(tag =>
+    case 'tribe':
+      return div({ class: 'search-tribe' },
+        content.title ? h2(content.title) : null,
+        content.image ? img({ src: `/blob/${encodeURIComponent(content.image)}`, class: 'feed-image' }) : img({ src: '/assets/images/default-tribe.png', class: 'feed-image' }),
+        br,
+        content.description ? content.description : null,
+        br,br,
+        div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
+          content.location ? p({ style: 'color:#9aa3b2;' }, `${i18n.tribeLocationLabel.toUpperCase()}: `, ...renderUrl(content.location)) : null,
+          p({ style: 'color:#9aa3b2;' }, `${i18n.tribeIsAnonymousLabel}: ${content.isAnonymous ? i18n.tribePrivate : i18n.tribePublic}`),
+          content.inviteMode ? p({ style: 'color:#9aa3b2;' }, `${i18n.tribeModeLabel}: ${content.inviteMode.toUpperCase()}`) : null,
+          p({ style: 'color:#9aa3b2;' }, `${i18n.tribeLARPLabel}: ${content.isLARP ? i18n.tribeYes : i18n.tribeNo}`)
+        ),
+        Array.isArray(content.members)
+          ? div({},
+              div({ class: 'card-field' },
+               h2(`${i18n.tribeMembersCount}: ${content.members.length}`),
+              )  
+            )
+          : null,
+        content.tags && content.tags.length
+          ? div({ class: 'card-tags' }, content.tags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
             ))
-            : null
-        );
+          : null
+      );
       case 'audio':
         return content.url ? div({ class: 'search-audio' },
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.audioTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,

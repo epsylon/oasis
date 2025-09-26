@@ -864,142 +864,89 @@ exports.authorView = ({
   name,
   relationship,
   ecoAddress,
-  karmaScore = 0
+  karmaScore = 0,
+  lastActivityBucket
 }) => {
   const mention = `[@${name}](${feedId})`;
   const markdownMention = highlightJs.highlight(mention, { language: "markdown", ignoreIllegals: true }).value;
 
   const contactForms = [];
-
   const addForm = ({ action }) =>
     contactForms.push(
       form(
-        {
-          action: `/${action}/${encodeURIComponent(feedId)}`,
-          method: "post",
-        },
-        button(
-          {
-            type: "submit",
-          },
-          i18n[action]
-        )
+        { action: `/${action}/${encodeURIComponent(feedId)}`, method: "post" },
+        button({ type: "submit" }, i18n[action])
       )
     );
 
   if (relationship.me === false) {
-    if (relationship.following) {
-      addForm({ action: "unfollow" });
-    } else if (relationship.blocking) {
-      addForm({ action: "unblock" });
-    } else {
-      addForm({ action: "follow" });
-      addForm({ action: "block" });
-    }
+    if (relationship.following) addForm({ action: "unfollow" });
+    else if (relationship.blocking) addForm({ action: "unblock" });
+    else { addForm({ action: "follow" }); addForm({ action: "block" }) }
   }
 
   const relationshipMessage = (() => {
     if (relationship.me) return i18n.relationshipYou;
     const following = relationship.following === true;
     const followsMe = relationship.followsMe === true;
-    if (following && followsMe) {
-      return i18n.relationshipMutuals;
-    }
-    const messages = [];
-    messages.push(
-      following
-        ? i18n.relationshipFollowing
-        : i18n.relationshipNone
-    );
-    messages.push(
-      followsMe
-        ? i18n.relationshipTheyFollow
-        : i18n.relationshipNotFollowing
-    );
-    return messages.join(". ") + ".";
+    if (following && followsMe) return i18n.relationshipMutuals;
+    const messagesArr = [];
+    messagesArr.push(following ? i18n.relationshipFollowing : i18n.relationshipNone);
+    messagesArr.push(followsMe ? i18n.relationshipTheyFollow : i18n.relationshipNotFollowing);
+    return messagesArr.join(". ") + ".";
   })();
+
+  const bucket = lastActivityBucket || 'red';
+  const dotClass = bucket === "green" ? "green" : bucket === "orange" ? "orange" : "red";
 
   const prefix = section(
     { class: "message" },
     div(
       { class: "profile" },
       div({ class: "avatar-container" },
-        img({ class: "avatar", src: avatarUrl }),
+        img({ class: "inhabitant-photo-details", src: avatarUrl }),
         h1({ class: "name" }, name),
       ),
-      pre({
-        class: "md-mention",
-        innerHTML: markdownMention,
-      })
+      pre({ class: "md-mention", innerHTML: markdownMention }),
+      p(a({ class: "user-link", href: `/author/${encodeURIComponent(feedId)}` }, feedId)),
+      div({ class: "profile-metrics" },
+        p(`${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)),
+        div({ class: "inhabitant-last-activity" },
+          span({ class: "label" }, `${i18n.inhabitantActivityLevel}:`),
+          span({ class: `activity-dot ${dotClass}` }, "")
+        ),
+        ecoAddress
+          ? div({ class: "eco-wallet" }, p(`${i18n.bankWalletConnected}: `, strong(ecoAddress)))
+          : div({ class: "eco-wallet" }, p(i18n.ecoWalletNotConfigured || "ECOin Wallet not configured"))
+      )
     ),
     description !== "" ? article({ innerHTML: markdown(description) }) : null,
     footer(
       div(
         { class: "profile" },
         ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
-        relationship.me ? (
-          span({ class: "status you" }, i18n.relationshipYou)
-        ) : (
-          div({ class: "relationship-status" },
-            relationship.blocking && relationship.blockedBy
-              ? span({ class: "status blocked" }, i18n.relationshipMutualBlock)
-            : [
-                relationship.blocking
-                  ? span({ class: "status blocked" }, i18n.relationshipBlocking)
-                  : null,
-                relationship.blockedBy
-                  ? span({ class: "status blocked-by" }, i18n.relationshipBlockedBy)
-                  : null,
-                relationship.following && relationship.followsMe
-                  ? span({ class: "status mutual" }, i18n.relationshipMutuals)
-                  : [
-                      span(
-                        { class: "status supporting" },
-                        relationship.following
-                          ? i18n.relationshipFollowing
-                          : i18n.relationshipNone
-                      ),
-                      span(
-                        { class: "status supported-by" },
-                        relationship.followsMe
-                          ? i18n.relationshipTheyFollow
-                          : i18n.relationshipNotFollowing
-                      )
-                   ]
-                ]
-          )
-        ),
-	p(
-	  `${i18n.bankingUserEngagementScore}: `,
-	  strong(karmaScore !== undefined ? karmaScore : 0)
-	),
-	ecoAddress
-	  ? div({ class: "eco-wallet" },
-              p(`${i18n.bankWalletConnected}: `, strong(ecoAddress))
-	    )
-	  : div({ class: "eco-wallet" },
-	      p(i18n.ecoWalletNotConfigured || "ECOin Wallet not configured")
-	    ),
         relationship.me
-          ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile)
-          : null,
+          ? span({ class: "status you" }, i18n.relationshipYou)
+          : div({ class: "relationship-status" },
+              relationship.blocking && relationship.blockedBy
+                ? span({ class: "status blocked" }, i18n.relationshipMutualBlock)
+                : [
+                    relationship.blocking ? span({ class: "status blocked" }, i18n.relationshipBlocking) : null,
+                    relationship.blockedBy ? span({ class: "status blocked-by" }, i18n.relationshipBlockedBy) : null,
+                    relationship.following && relationship.followsMe
+                      ? span({ class: "status mutual" }, i18n.relationshipMutuals)
+                      : [
+                          span({ class: "status supporting" }, relationship.following ? i18n.relationshipFollowing : i18n.relationshipNone),
+                          span({ class: "status supported-by" }, relationship.followsMe ? i18n.relationshipTheyFollow : i18n.relationshipNotFollowing)
+                        ]
+                  ]
+            ),
+        relationship.me ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile) : null,
         a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes),
-        !relationship.me
-          ? a(
-              {
-                href: `/pm?recipients=${encodeURIComponent(feedId)}`,
-                class: "btn"
-              },
-              i18n.pmCreateButton
-            )
-          : null
+        !relationship.me ? a({ href: `/pm?recipients=${encodeURIComponent(feedId)}`, class: "btn" }, i18n.pmCreateButton) : null
       )
     )
   );
-
-  const linkUrl = relationship.me
-    ? "/profile/"
-    : `/author/${encodeURIComponent(feedId)}/`;
 
   let items = messages.map((msg) => post({ msg }));
   if (items.length === 0) {
@@ -1060,7 +1007,7 @@ exports.authorView = ({
   }
 
   return template(i18n.profile, prefix, items);
-};
+}
 
 exports.previewCommentView = async ({
   previewData,
