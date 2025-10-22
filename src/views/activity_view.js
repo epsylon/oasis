@@ -41,7 +41,16 @@ function renderActionCards(actions, userId) {
       ? a({ href: `/author/${encodeURIComponent(action.author)}` }, action.author)
       : 'unknown';
     const type = action.type || 'unknown';
-    const typeLabel = i18n[`type${capitalize(type)}`] || type;
+
+    let headerText;
+    if (type.startsWith('parliament')) {
+      const sub = type.replace('parliament', '');
+      headerText = `[PARLIAMENT · ${sub.toUpperCase()}]`;
+    } else {
+      const typeLabel = i18n[`type${capitalize(type)}`] || type;
+      headerText = `[${String(typeLabel).toUpperCase()}]`;
+    }
+
     const content = action.content || {};
     const cardBody = [];
 
@@ -643,12 +652,132 @@ function renderActionCards(actions, userId) {
       );
     }
 
+    if (type === 'parliamentCandidature') {
+      const { targetType, targetId, targetTitle, method, votes, proposer } = content;
+      const link = targetType === 'tribe'
+        ? a({ href: `/tribe/${encodeURIComponent(targetId)}`, class: 'user-link' }, targetTitle || targetId)
+        : a({ href: `/author/${encodeURIComponent(targetId)}`, class: 'user-link' }, targetId);
+
+      const methodUpper = String(
+        i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
+      ).toUpperCase();
+
+      cardBody.push(
+        div({ class: 'card-section parliament' },
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (String(i18n.parliamentCandidatureId || 'Candidature').toUpperCase()) + ':'), span({ class: 'card-value' }, link)),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'METHOD') + ':'), span({ class: 'card-value' }, methodUpper)),
+          typeof votes !== 'undefined'
+            ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesReceived || 'VOTES RECEIVED') + ':'), span({ class: 'card-value' }, String(votes)))
+            : ''
+        )
+      );
+    }
+
+    if (type === 'parliamentTerm') {
+      const { method, powerType, powerId, powerTitle, winnerVotes, totalVotes, startAt, endAt } = content;
+      const powerTypeNorm = String(powerType || '').toLowerCase();
+      const winnerLink =
+        powerTypeNorm === 'tribe'
+          ? a({ href: `/tribe/${encodeURIComponent(powerId)}`, class: 'user-link' }, powerTitle || powerId)
+          : powerTypeNorm === 'none' || !powerTypeNorm
+            ? a({ href: `/parliament?filter=government`, class: 'user-link' }, (i18n.parliamentAnarchy || 'ANARCHY'))
+            : a({ href: `/author/${encodeURIComponent(powerId)}`, class: 'user-link' }, powerTitle || powerId);
+
+      const methodUpper = String(
+        i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
+      ).toUpperCase();
+
+      cardBody.push(
+        div({ class: 'card-section parliament' },
+          startAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsStart.toUpperCase() || 'Elections start') + ':'), span({ class: 'card-value' }, new Date(startAt).toLocaleString())) : '',
+          endAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsEnd.toUpperCase() || 'Elections end') + ':'), span({ class: 'card-value' }, new Date(endAt).toLocaleString())) : '',
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentCurrentLeader.toUpperCase() || 'Winning candidature') + ':'), span({ class: 'card-value' }, winnerLink)),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod.toUpperCase() || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesReceived.toUpperCase() || 'Votes received') + ':'), span({ class: 'card-value' }, `${Number(winnerVotes || 0)} (${Number(totalVotes || 0)})`))
+        )
+      );
+    }
+
+    if (type === 'parliamentProposal') {
+      const { title, description, method, status, voteId, createdAt } = content;
+
+      const methodUpper = String(
+        i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
+      ).toUpperCase();
+
+      cardBody.push(
+        div({ class: 'card-section parliament' },
+          title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
+          description ? p({ style: 'margin:.4rem 0' }, description) : '',
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
+          createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, new Date(createdAt).toLocaleString())) : '',
+          voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
+          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentStatus.toUpperCase() || 'Status') + ':'), span({ class: 'card-value' }, status)) : ''
+        )
+      );
+    }
+    
+    if (type === 'parliamentRevocation') {
+      const { title, reasons, method, status, voteId, createdAt } = content;
+      const methodUpper = String(
+        i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
+      ).toUpperCase();
+
+      cardBody.push(
+        div({ class: 'card-section parliament' },
+          title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
+          reasons ? p({ style: 'margin:.4rem 0' }, reasons) : '',
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
+          createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, new Date(createdAt).toLocaleString())) : '',
+          voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
+          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentStatus.toUpperCase() || 'Status') + ':'), span({ class: 'card-value' }, status)) : ''
+        )
+      );
+    }
+
+    if (type === 'parliamentLaw') {
+      const { question, description, method, proposer, enactedAt, votes } = content;
+      const yes = Number(votes?.YES || 0);
+      const total = Number(votes?.total || votes?.TOTAL || 0);
+
+      const methodUpper = String(
+        i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
+      ).toUpperCase();
+
+      cardBody.push(
+        div({ class: 'card-section parliament' },
+          question ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawQuestion || 'Question') + ':'), span({ class: 'card-value' }, question)) : '',
+          description ? p({ style: 'margin:.4rem 0' }, description) : '',
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
+          proposer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawProposer || 'Proposer') + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(proposer)}`, class: 'user-link' }, proposer))) : '',
+          enactedAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawEnacted || 'Enacted at') + ':'), span({ class: 'card-value' }, new Date(enactedAt).toLocaleString())) : '',
+          (total || yes) ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawVotes || 'Votes') + ':'), span({ class: 'card-value' }, `${yes}/${total}`)) : ''
+        )
+      );
+    }
+
+    const viewHref = getViewDetailsAction(type, action);
+    const isParliamentTarget =
+      viewHref === '/parliament?filter=candidatures' ||
+      viewHref === '/parliament?filter=government'   ||
+      viewHref === '/parliament?filter=proposals'    ||
+      viewHref === '/parliament?filter=revocations'    ||
+      viewHref === '/parliament?filter=laws';
+    const parliamentFilter = isParliamentTarget ? (viewHref.split('filter=')[1] || '') : '';
+
     return div({ class: 'card card-rpg' },
       div({ class: 'card-header' },
-        h2({ class: 'card-label' }, `[${typeLabel}]`),
+        h2({ class: 'card-label' }, headerText),
         type !== 'feed' && type !== 'aiExchange' && type !== 'bankWallet' && (!action.tipId || action.tipId === action.id)
-          ? form({ method: "GET", action: getViewDetailsAction(type, action) },
-              button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+          ? (
+              isParliamentTarget
+                ? form({ method: "GET", action: "/parliament" },
+                    input({ type: "hidden", name: "filter", value: parliamentFilter }),
+                    button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+                  )
+                : form({ method: "GET", action: viewHref },
+                    button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+                  )
             )
           : ''
       ),
@@ -662,35 +791,40 @@ function renderActionCards(actions, userId) {
 }
 
 function getViewDetailsAction(type, action) {
-  const id = encodeURIComponent(action.tipId || action.id);
-  switch (type) {
-    case 'votes': return `/votes/${id}`;
-    case 'transfer': return `/transfers/${id}`;
-    case 'pixelia': return `/pixelia`;
-    case 'tribe': return `/tribe/${id}`;
-    case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
-    case 'karmaScore': return `/author/${encodeURIComponent(action.author)}`;
-    case 'image': return `/images/${id}`;
-    case 'audio': return `/audios/${id}`;
-    case 'video': return `/videos/${id}`;
-    case 'forum':
-      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
-    case 'document': return `/documents/${id}`;
-    case 'bookmark': return `/bookmarks/${id}`;
-    case 'event': return `/events/${id}`;
-    case 'task': return `/tasks/${id}`;
-    case 'about': return `/author/${encodeURIComponent(action.author)}`;
-    case 'post': return `/thread/${id}#${id}`;
-    case 'vote': return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
-    case 'contact': return `/inhabitants`;
-    case 'pub': return `/invites`;
-    case 'market': return `/market/${id}`;
-    case 'job': return `/jobs/${id}`;
-    case 'project': return `/projects/${id}`;
-    case 'report': return `/reports/${id}`;
-    case 'bankWallet': return `/wallet`;
-    case 'bankClaim': return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
-  }
+    const id = encodeURIComponent(action.tipId || action.id);
+    switch (type) {
+        case 'parliamentCandidature': return `/parliament?filter=candidatures`;
+        case 'parliamentTerm':        return `/parliament?filter=government`;
+        case 'parliamentProposal':    return `/parliament?filter=proposals`;
+        case 'parliamentRevocation':  return `/parliament?filter=revocations`;
+        case 'parliamentLaw':         return `/parliament?filter=laws`;
+        case 'votes':      return `/votes/${id}`;
+        case 'transfer':   return `/transfers/${id}`;
+        case 'pixelia':    return `/pixelia`;
+        case 'tribe':      return `/tribe/${id}`;
+        case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
+        case 'karmaScore': return `/author/${encodeURIComponent(action.author)}`;
+        case 'image':      return `/images/${id}`;
+        case 'audio':      return `/audios/${id}`;
+        case 'video':      return `/videos/${id}`;
+        case 'forum':      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
+        case 'document':   return `/documents/${id}`;
+        case 'bookmark':   return `/bookmarks/${id}`;
+        case 'event':      return `/events/${id}`;
+        case 'task':       return `/tasks/${id}`;
+        case 'about':      return `/author/${encodeURIComponent(action.author)}`;
+        case 'post':       return `/thread/${id}#${id}`;
+        case 'vote':       return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
+        case 'contact':    return `/inhabitants`;
+        case 'pub':        return `/invites`;
+        case 'market':     return `/market/${id}`;
+        case 'job':        return `/jobs/${id}`;
+        case 'project':    return `/projects/${id}`;
+        case 'report':     return `/reports/${id}`;
+        case 'bankWallet': return `/wallet`;
+        case 'bankClaim':  return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
+        default:           return `/activity`;
+    }
 }
 
 exports.activityView = (actions, filter, userId) => {
@@ -706,6 +840,7 @@ exports.activityView = (actions, filter, userId) => {
     { type: 'project',   label: i18n.typeProject },
     { type: 'job',       label: i18n.typeJob },
     { type: 'transfer',  label: i18n.typeTransfer },
+    { type: 'parliament',label: i18n.typeParliament },
     { type: 'votes',     label: i18n.typeVotes },
     { type: 'event',     label: i18n.typeEvent },
     { type: 'task',      label: i18n.typeTask },
@@ -734,6 +869,8 @@ exports.activityView = (actions, filter, userId) => {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
   } else if (filter === 'banking') {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim'));
+  } else if (filter === 'parliament') {
+    filteredActions = actions.filter(action => ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(action.type));
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all') && action.type !== 'tombstone');
   }
@@ -810,3 +947,4 @@ exports.activityView = (actions, filter, userId) => {
   }
   return html;
 };
+

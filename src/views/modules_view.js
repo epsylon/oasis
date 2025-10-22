@@ -15,7 +15,6 @@ const modulesView = () => {
     { name: 'events', label: i18n.modulesEventsLabel, description: i18n.modulesEventsDescription },
     { name: 'feed', label: i18n.modulesFeedLabel, description: i18n.modulesFeedDescription },
     { name: 'forum', label: i18n.modulesForumLabel, description: i18n.modulesForumDescription },
-    { name: 'governance', label: i18n.modulesGovernanceLabel, description: i18n.modulesGovernanceDescription },
     { name: 'images', label: i18n.modulesImagesLabel, description: i18n.modulesImagesDescription },
     { name: 'invites', label: i18n.modulesInvitesLabel, description: i18n.modulesInvitesDescription },
     { name: 'jobs', label: i18n.modulesJobsLabel, description: i18n.modulesJobsDescription },
@@ -24,6 +23,7 @@ const modulesView = () => {
     { name: 'market', label: i18n.modulesMarketLabel, description: i18n.modulesMarketDescription },
     { name: 'multiverse', label: i18n.modulesMultiverseLabel, description: i18n.modulesMultiverseDescription },
     { name: 'opinions', label: i18n.modulesOpinionsLabel, description: i18n.modulesOpinionsDescription },
+    { name: 'parliament', label: i18n.modulesParliamentLabel, description: i18n.modulesParliamentDescription },
     { name: 'pixelia', label: i18n.modulesPixeliaLabel, description: i18n.modulesPixeliaDescription },
     { name: 'projects', label: i18n.modulesProjectsLabel, description: i18n.modulesProjectsDescription },
     { name: 'popular', label: i18n.modulesPopularLabel, description: i18n.modulesPopularDescription },
@@ -36,6 +36,7 @@ const modulesView = () => {
     { name: 'trending', label: i18n.modulesTrendingLabel, description: i18n.modulesTrendingDescription },
     { name: 'tribes', label: i18n.modulesTribesLabel, description: i18n.modulesTribesDescription },
     { name: 'videos', label: i18n.modulesVideosLabel, description: i18n.modulesVideosDescription },
+    { name: 'votes', label: i18n.modulesVotationsLabel, description: i18n.modulesVotationsDescription },
     { name: 'wallet', label: i18n.modulesWalletLabel, description: i18n.modulesWalletDescription },
     { name: 'topics', label: i18n.modulesTopicsLabel, description: i18n.modulesTopicsDescription }
   ];

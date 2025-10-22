@@ -2310,4 +2310,72 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .error-title{margin:0 0 6px 0;font-weight:600}
 .error-pre{margin:0;white-space:pre-wrap;font-family:monospace}
 
+/* parliament */
+.cycle-info {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+  margin-bottom: 1rem;
+}
+.kpi {
+  border: 1px solid rgba(0,0,0,.08);
+  border-radius: 8px;
+  padding: .75rem;
+}
+.kpi__label {
+  display: block;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--parl-accent, #ff9f1a);
+  opacity: 1;
+}
+.kpi__value {
+  font-weight: 600;
+}
+.method-badge,
+.method-hero {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+}
+.method-cell {
+  text-align: center;
+}
+.leader-cell {
+  text-align: center;
+}
+.mt-2 { margin-top: .5rem; }
 
+.parliament-actor-table {
+  table-layout: auto;
+  width: 100%;
+}
+.parliament-actor-table th,
+.parliament-actor-table td {
+  vertical-align: top;
+}
+
+.parliament-actor-col {
+  white-space: nowrap;
+  width: 1%;
+  text-align: left;
+}
+.parliament-actor-col .user-link {
+  display: inline-block;
+}
+
+.parliament-description-col {
+  white-space: normal;
+  text-align: left;
+}
+
+.parliament-members-row td {
+  padding-top: .5rem;
+}
+.parliament-members-list {
+  margin: .25rem 0 0;
+  padding-left: 1.25rem;
+}
+.parliament-members-list li {
+  margin: .125rem 0;
+}

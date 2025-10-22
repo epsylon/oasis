@@ -13,6 +13,16 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.5.2 - 2025-10-22
+
+### Added
+
+ + Government system (Parliament plugin).
+ 
+### Fixed
+
+ + Forum category translations (Forum plugin).
+
 ## v0.5.1 - 2025-09-26
 
 ### Added

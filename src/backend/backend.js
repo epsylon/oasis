@@ -77,6 +77,66 @@ function readWalletMap() {
   return {};
 }
 
+//parliament
+async function buildState(filter) {
+  const f = (filter || 'government').toLowerCase();
+  const [govCard, candidatures, proposals, canPropose, laws, historical] = await Promise.all([
+    parliamentModel.getGovernmentCard(),
+    parliamentModel.listCandidatures('OPEN'),
+    parliamentModel.listProposalsCurrent(),
+    parliamentModel.canPropose(),
+    parliamentModel.listLaws(),
+    parliamentModel.listHistorical()
+  ]);
+  return { filter: f, governmentCard: govCard, candidatures, proposals, canPropose, laws, historical };
+}
+
+function pickLeader(cands = []) {
+  if (!cands.length) return null;
+  return [...cands].sort((a, b) => {
+    const va = Number(a.votes || 0), vb = Number(b.votes || 0);
+    if (vb !== va) return vb - va;
+    const ka = Number(a.karma || 0), kb = Number(b.karma || 0);
+    if (kb !== ka) return kb - ka;
+    const sa = Number(a.profileSince || 0), sb = Number(b.profileSince || 0);
+    if (sa !== sb) return sa - sb;
+    const ca = new Date(a.createdAt).getTime(), cb = new Date(b.createdAt).getTime();
+    if (ca !== cb) return ca - cb;
+    return String(a.targetId).localeCompare(String(b.targetId));
+  })[0];
+}
+
+async function buildLeaderMeta(leader) {
+  if (!leader) return null;
+  if (leader.targetType === 'inhabitant') {
+    let name = null;
+    let image = null;
+    let description = null;
+    try { if (about && typeof about.name === 'function') name = await about.name(leader.targetId); } catch {}
+    try { if (about && typeof about.image === 'function') image = await about.image(leader.targetId); } catch {}
+    try { if (about && typeof about.description === 'function') description = await about.description(leader.targetId); } catch {}
+    const imgId = typeof image === 'string' ? image : (image && (image.link || image.url)) || null;
+    const avatarUrl = imgId ? `/image/256/${encodeURIComponent(imgId)}` : '/assets/images/default-avatar.png';
+    return {
+      isTribe: false,
+      name: name || leader.targetId,
+      avatarUrl,
+      bio: typeof description === 'string' ? description : ''
+    };
+  } else {
+    let tribe = null;
+    try { tribe = await tribesModel.getTribeById(leader.targetId); } catch {}
+    const imgId = tribe && tribe.image ? tribe.image : null;
+    const avatarUrl = imgId ? `/image/256/${encodeURIComponent(imgId)}` : '/assets/images/default-tribe.png';
+    return {
+      isTribe: true,
+      name: leader.targetTitle || (tribe && (tribe.title || tribe.name)) || leader.targetId,
+      avatarUrl,
+      bio: (tribe && tribe.description) || ''
+    };
+  }
+}
+
 //custom styles
 const customStyleFile = path.join(
   envPaths("oasis", { suffix: "" }).config,
@@ -240,6 +300,8 @@ const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic
 const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public })
+const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel }
+});
 
 // starting warmup
 about._startNameWarmup();
@@ -483,6 +545,7 @@ const { renderBlockchainView, renderSingleBlockView } = require("../views/blockc
 const { jobsView, singleJobsView, renderJobForm } = require("../views/jobs_view");
 const { projectsView, singleProjectView } = require("../views/projects_view")
 const { renderBankingView, renderSingleAllocationView, renderEpochView } = require("../views/banking_views")
+const { parliamentView } = require("../views/parliament_view");
 
 let sharp;
 
@@ -608,8 +671,8 @@ router
     const modules = [
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 
-    'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers', 
-    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking'
+    'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers', 
+    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament'
     ];
     const moduleStates = modules.reduce((acc, mod) => {
       acc[`${mod}Mod`] = configMods[`${mod}Mod`];
@@ -972,6 +1035,76 @@ router
     const feed = await inhabitantsModel.getFeedByUserId(id);
     const currentUserId = SSBconfig.config.keys.id;
     ctx.body = await inhabitantsProfileView({ about, cv, feed }, currentUserId);
+  })
+ .get('/parliament', async (ctx) => {
+    const mod = ctx.cookies.get('parliamentMod') || 'on';
+    if (mod !== 'on') { ctx.redirect('/modules'); return }
+    const filter = (ctx.query.filter || 'government').toLowerCase();
+    let governmentCard = await parliamentModel.getGovernmentCard();
+    if (!governmentCard || !governmentCard.end || moment().isAfter(moment(governmentCard.end))) {
+      await parliamentModel.resolveElection();
+      governmentCard = await parliamentModel.getGovernmentCard();
+    }
+    const [
+      candidatures, proposals, futureLaws, canPropose, laws,
+      historical, leaders, revocations, futureRevocations, revocationsEnactedCount,
+      inhabitantsAll
+      ] = await Promise.all([
+      parliamentModel.listCandidatures('OPEN'),
+      parliamentModel.listProposalsCurrent(),
+      parliamentModel.listFutureLawsCurrent(),
+      parliamentModel.canPropose(),
+      parliamentModel.listLaws(),
+      parliamentModel.listHistorical(),
+      parliamentModel.listLeaders(),
+      parliamentModel.listRevocationsCurrent(),
+      parliamentModel.listFutureRevocationsCurrent(),
+      parliamentModel.countRevocationsEnacted(),
+      inhabitantsModel.listInhabitants({ filter: 'all' })
+    ]); 
+    const inhabitantsTotal = Array.isArray(inhabitantsAll) ? inhabitantsAll.length : 0;
+    const leader = pickLeader(candidatures || []);
+    const leaderMeta = leader ? await parliamentModel.getActorMeta({ targetType: leader.targetType || leader.powerType || 'inhabitant', targetId: leader.targetId || leader.powerId }) : null;
+    const powerMeta = (governmentCard && (governmentCard.powerType === 'tribe' || governmentCard.powerType === 'inhabitant'))
+      ? await parliamentModel.getActorMeta({ targetType: governmentCard.powerType, targetId: governmentCard.powerId })
+      : null;
+    const historicalMetas = {};
+    for (const g of (historical || []).slice(0, 12)) {
+      if (g.powerType === 'tribe' || g.powerType === 'inhabitant') {
+        const k = `${g.powerType}:${g.powerId}`;
+        if (!historicalMetas[k]) {
+          historicalMetas[k] = await parliamentModel.getActorMeta({ targetType: g.powerType, targetId: g.powerId });
+        }
+      }
+    }
+    const leadersMetas = {};
+    for (const r of (leaders || []).slice(0, 20)) {
+      if (r.powerType === 'tribe' || r.powerType === 'inhabitant') {
+        const k = `${r.powerType}:${r.powerId}`;
+        if (!leadersMetas[k]) {
+          leadersMetas[k] = await parliamentModel.getActorMeta({ targetType: r.powerType, targetId: r.powerId });
+        }
+      }
+    }
+    const govWithPopulation = governmentCard ? { ...governmentCard, inhabitantsTotal } : { inhabitantsTotal };
+    ctx.body = await parliamentView({
+      filter,
+      governmentCard: govWithPopulation,
+      candidatures,
+      proposals,
+      futureLaws,
+      canPropose,
+      laws,
+      historical,
+      leaders,
+      leaderMeta,
+      powerMeta,
+      historicalMetas,
+      leadersMetas,
+      revocations,
+      futureRevocations,
+      revocationsEnactedCount
+    });
   })
   .get('/tribes', async ctx => {
     const filter = ctx.query.filter || 'all';
@@ -2563,6 +2696,48 @@ router
     await votesModel.createOpinion(voteId, category);
     ctx.redirect('/votes');
   })
+  .post('/parliament/candidatures/propose', koaBody(), async (ctx) => {
+    const { candidateId = '', method = '' } = ctx.request.body || {};
+    const id = String(candidateId || '').trim();
+    const m = String(method || '').trim().toUpperCase();
+    const ALLOWED = new Set(['DEMOCRACY','MAJORITY','MINORITY','DICTATORSHIP','KARMATOCRACY']);
+    if (!id) ctx.throw(400, 'Candidate is required.');
+    if (!ALLOWED.has(m)) ctx.throw(400, 'Invalid method.');
+    await parliamentModel.proposeCandidature({ candidateId: id, method: m }).catch(e => ctx.throw(400, String((e && e.message) || e)));
+    ctx.redirect('/parliament?filter=candidatures');
+  })
+  .post('/parliament/candidatures/:id/vote', koaBody(), async (ctx) => {
+    await parliamentModel.voteCandidature(ctx.params.id).catch(e => ctx.throw(400, String((e && e.message) || e)));
+    ctx.redirect('/parliament?filter=candidatures');
+  })
+  .post('/parliament/proposals/create', koaBody(), async (ctx) => {
+    const { title = '', description = '' } = ctx.request.body || {};
+    const t = String(title || '').trim();
+    const d = String(description || '').trim();
+    if (!t) ctx.throw(400, 'Title is required.');
+    if (d.length > 1000) ctx.throw(400, 'Description must be ≤ 1000 chars.');
+    await parliamentModel.createProposal({ title: t, description: d }).catch(e => ctx.throw(400, String((e && e.message) || e)));
+    ctx.redirect('/parliament?filter=proposals');
+  })
+  .post('/parliament/proposals/close/:id', koaBody(), async (ctx) => {
+    await parliamentModel.closeProposal(ctx.params.id).catch(e => ctx.throw(400, String((e && e.message) || e)));
+    ctx.redirect('/parliament?filter=proposals');
+  })
+  .post('/parliament/resolve', koaBody(), async (ctx) => {
+    await parliamentModel.resolveElection().catch(e => ctx.throw(400, String((e && e.message) || e)));
+    ctx.redirect('/parliament?filter=government');
+  })
+  .post('/parliament/revocations/create', koaBody(), async (ctx) => {
+    const body = ctx.request.body || {};
+    const rawLawId =
+      Array.isArray(body.lawId) ? body.lawId[0] :
+      (body.lawId ?? body['lawId[]'] ?? body.law_id ?? '');
+    const lawId = String(rawLawId || '').trim();
+    if (!lawId) ctx.throw(400, 'Law required');
+    const { title, reasons } = body;
+    await parliamentModel.createRevocation({ lawId, title, reasons });
+    ctx.redirect('/parliament?filter=revocations');
+  })
   .post('/market/create', koaBody({ multipart: true }), async ctx => {
     const { item_type, title, description, price, tags, item_status, deadline, includesShipping, stock } = ctx.request.body;
     const image = await handleBlobUpload(ctx, 'image');
@@ -3146,8 +3321,8 @@ router
     const modules = [
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet',
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending',
-    'events', 'tasks', 'market', 'tribes', 'governance', 'reports', 'opinions', 'transfers',
-    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking'
+    'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers',
+    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament'
     ];
     const currentConfig = getConfig();
     modules.forEach(mod => {

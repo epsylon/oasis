@@ -274,16 +274,25 @@ const renderTribesLink = () => {
   return tribesMod 
     ? [
         navLink({ href: "/tribes", emoji: "ꖥ", text: i18n.tribesTitle, class: "tribes-link enabled" }),
+      ]
+    : '';
+};
+
+const renderParliamentLink = () => {
+  const parliamentMod = getConfig().modules.parliamentMod === 'on';
+  return parliamentMod 
+    ? [
+        navLink({ href: "/parliament", emoji: "ꗞ", text: i18n.parliamentTitle, class: "parliament-link enabled" }),
         hr(),
       ]
     : '';
 };
 
-const renderGovernanceLink = () => {
-  const governanceMod = getConfig().modules.governanceMod === 'on';
-  return governanceMod 
+const renderVotationsLink = () => {
+  const votesMod = getConfig().modules.votesMod === 'on';
+  return votesMod 
     ? [
-       navLink({ href: "/votes", emoji: "ꔰ", text: i18n.governanceTitle, class: "votes-link enabled" }),
+       navLink({ href: "/votes", emoji: "ꔰ", text: i18n.votationsTitle, class: "votations-link enabled" }),
       ]
     : '';
 };
@@ -460,7 +469,8 @@ const template = (titlePrefix, ...elements) => {
               renderPopularLink(),
               navLink({ href: "/inhabitants", emoji: "ꖘ", text: i18n.inhabitantsLabel }),
               renderTribesLink(),
-              renderGovernanceLink(),
+              renderParliamentLink(),
+              renderVotationsLink(),
               renderEventsLink(),
               renderTasksLink(),
               renderReportsLink(),

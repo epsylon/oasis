@@ -166,6 +166,10 @@ module.exports = ({ cooler }) => {
       else if (filter === 'all') out = deduped;
       else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
       else if (filter === 'karma') out = deduped.filter(a => a.type === 'karmaScore');
+      else if (filter === 'parliament')
+      out = deduped.filter(a =>
+        ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(a.type)
+      );
       else out = deduped.filter(a => a.type === filter);
 
       out.sort((a, b) => (b.ts || 0) - (a.ts || 0));

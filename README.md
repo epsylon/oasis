@@ -77,6 +77,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Market: Module to exchange goods or services.
  + Multiverse: Module to receive content from other federated peers.	
  + Opinions: Module to discover and vote on opinions.	
+ + Parliament: Module to elect governments and vote on laws.	
  + Pixelia: Module to draw on a collaborative grid.	
  + Projects: Module to explore, crowd-funding and manage projects.
  + Popular: Module to receive posts that are trending, most viewed, or most commented on.	
@@ -110,6 +111,12 @@ Our AI is trained with content from the OASIS network and its purpose is to take
 
 ----------
 
+## Parliament (politics)
+
+Oasis contains its own Parliament (Government system).
+
+  ![SNH](https://solarnethub.com/git/oasis-parliament.png "SolarNET.HuB")
+  
 ## ECOin (crypto-economy)
 
 Oasis contains its own cryptocurrency. With it, you can exchange items and services in the marketplace. 

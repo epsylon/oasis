@@ -126,8 +126,8 @@ exports.voteView = async (votes, filter, voteId) => {
   const secondRow = ['CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'];
 
   const header = div({ class: 'tags-header' },
-    h2(i18n.governanceTitle),
-    p(i18n.governanceDescription)
+    h2(i18n.votationsTitle),
+    p(i18n.votationsDescription)
   );
 
   return template(

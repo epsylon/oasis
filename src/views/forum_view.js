@@ -12,6 +12,10 @@ const BASE_FILTERS = ['hot','all','mine','recent','top'];
 const CAT_BLOCK1 = ['GENERAL','OASIS','L.A.R.P.','POLITICS','TECH'];
 const CAT_BLOCK2 = ['SCIENCE','MUSIC','ART','GAMING','BOOKS','FILMS'];
 const CAT_BLOCK3 = ['PHILOSOPHY','SOCIETY','PRIVACY','CYBERWARFARE','SURVIVALISM'];
+const ALL_CATS = [...CAT_BLOCK1, ...CAT_BLOCK2, ...CAT_BLOCK3];
+
+const catKey = (c) => 'forumCat' + String(c || '').replace(/\./g,'').replace(/[\s-]/g,'').toUpperCase();
+const catLabel = (c) => i18n[catKey(c)] || c;
 
 const Z = 1.96;
 function wilsonScore(pos, neg) {
@@ -29,7 +33,7 @@ function getFilteredForums(filter, forums) {
   if (filter === 'hot')     return forums
     .filter(f => new Date(f.createdAt).getTime() >= now - 86400000)
     .sort((a,b) => b.score - a.score);
-  if ([...CAT_BLOCK1, ...CAT_BLOCK2, ...CAT_BLOCK3].includes(filter))
+  if (ALL_CATS.includes(filter))
     return forums.filter(f => f.category === filter);
   return forums;
 }
@@ -40,7 +44,7 @@ const generateFilterButtons = (filters, currentFilter, action, i18nMap = {}) =>
       form({ method: 'GET', action },
         input({ type: 'hidden', name: 'filter', value: mode }),
         button({ type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' },
-          i18nMap[mode] || mode.toUpperCase()
+          String(i18nMap[mode] || mode).toUpperCase()
         )
       )
     )
@@ -71,9 +75,7 @@ const renderForumForm = () =>
     form({ action: '/forum/create', method: 'POST' },
       label(i18n.forumCategoryLabel), br(),
       select({ name: 'category', required: true },
-        [...CAT_BLOCK1, ...CAT_BLOCK2, ...CAT_BLOCK3].map(cat =>
-          option({ value: cat }, cat)
-        )
+        ALL_CATS.map(cat => option({ value: cat }, catLabel(cat)))
       ), br(), br(),
       label(i18n.forumTitleLabel), br(),
       input({
@@ -173,7 +175,7 @@ const renderForumList = (forums, currentFilter) =>
               a({
                 class: 'forum-category',
                 href: `/forum?filter=${encodeURIComponent(f.category)}`
-              }, `[${f.category}]`),
+              }, `[${catLabel(f.category)}]`),
               a({
                 class: 'forum-title',
                 href: `/forum/${encodeURIComponent(f.key)}`
@@ -220,8 +222,9 @@ const renderForumList = (forums, currentFilter) =>
       : p(i18n.noForums)
   );
 
-exports.forumView = async (forums, currentFilter) =>
-  template(i18n.forumTitle,
+exports.forumView = async (forums, currentFilter) => {
+  const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
+  return template(i18n.forumTitle,
     section(
       div({ class: 'tags-header' },
         h2(currentFilter === 'create'
@@ -237,9 +240,9 @@ exports.forumView = async (forums, currentFilter) =>
           recent: i18n.forumFilterRecent,
           top: i18n.forumFilterTop
         }),
-        generateFilterButtons(CAT_BLOCK1, currentFilter, '/forum'),
-        generateFilterButtons(CAT_BLOCK2, currentFilter, '/forum'),
-        generateFilterButtons(CAT_BLOCK3, currentFilter, '/forum'),
+        generateFilterButtons(CAT_BLOCK1, currentFilter, '/forum', CAT_I18N_MAP_UP),
+        generateFilterButtons(CAT_BLOCK2, currentFilter, '/forum', CAT_I18N_MAP_UP),
+        generateFilterButtons(CAT_BLOCK3, currentFilter, '/forum', CAT_I18N_MAP_UP),
         renderCreateForumButton()
       ),
       currentFilter === 'create'
@@ -250,9 +253,11 @@ exports.forumView = async (forums, currentFilter) =>
         )
     )
   );
+};
 
-exports.singleForumView = async (forum, messagesData, currentFilter) =>
-  template(forum.title,
+exports.singleForumView = async (forum, messagesData, currentFilter) => {
+  const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
+  return template(forum.title,
     section(
       div({ class: 'tags-header' },
         h2(i18n.forumTitle),
@@ -260,14 +265,15 @@ exports.singleForumView = async (forum, messagesData, currentFilter) =>
       ),
       div({ class: 'mode-buttons' },
         generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
+          hot: i18n.forumFilterHot,
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,
           recent: i18n.forumFilterRecent,
           top: i18n.forumFilterTop
         }),
-        generateFilterButtons(CAT_BLOCK1, currentFilter, '/forum'),
-        generateFilterButtons(CAT_BLOCK2, currentFilter, '/forum'),
-        generateFilterButtons(CAT_BLOCK3, currentFilter, '/forum'),
+        generateFilterButtons(CAT_BLOCK1, currentFilter, '/forum', CAT_I18N_MAP_UP),
+        generateFilterButtons(CAT_BLOCK2, currentFilter, '/forum', CAT_I18N_MAP_UP),
+        generateFilterButtons(CAT_BLOCK3, currentFilter, '/forum', CAT_I18N_MAP_UP),
         renderCreateForumButton()
       )
     ),
@@ -292,7 +298,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter) =>
             a({
               class: 'forum-category',
               href: `/forum?filter=${encodeURIComponent(forum.category)}`
-            }, `[${forum.category}]`),
+            }, `[${catLabel(forum.category)}]`),
             a({
               class: 'forum-title',
               href: `/forum/${encodeURIComponent(forum.key)}`
@@ -353,4 +359,5 @@ exports.singleForumView = async (forum, messagesData, currentFilter) =>
       ...renderThread(messagesData.messages, 0, forum.key)
     )
   );
+};
 

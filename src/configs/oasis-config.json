@@ -23,7 +23,7 @@
     "eventsMod": "on",
     "tasksMod": "on",
     "marketMod": "on",
-    "governanceMod": "on",
+    "votesMod": "on",
     "tribesMod": "on",
     "reportsMod": "on",
     "opinionsMod": "on",
@@ -35,7 +35,8 @@
     "forumMod": "on",
     "jobsMod": "on",
     "projectsMod": "on",
-    "bankingMod": "on"
+    "bankingMod": "on",
+    "parliamentMod": "on"
   },
   "wallet": {
     "url": "http://localhost:7474",
