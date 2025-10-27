@@ -43,7 +43,6 @@ module.exports = ({ cooler }) => {
     async generateInvite(tribeId) {
       const ssb = await openSsb();
       const userId = ssb.id;
-
       const tribe = await this.getTribeById(tribeId);
       if (tribe.inviteMode === 'strict' && tribe.author !== userId) {
         throw new Error('Only the author can generate invites in strict mode');
@@ -51,10 +50,8 @@ module.exports = ({ cooler }) => {
       if (tribe.inviteMode === 'open' && !tribe.members.includes(userId)) {
         throw new Error('Only tribe members can generate invites in open mode');
       }
-
       const code = Math.random().toString(36).substring(2, 10);
       const invites = Array.isArray(tribe.invites) ? [...tribe.invites, code] : [code];
-
       await this.updateTribeInvites(tribeId, invites);
       return code;
     },
@@ -94,7 +91,7 @@ module.exports = ({ cooler }) => {
       members.splice(idx, 1);
       const updatedTribe = {
         type: 'tribe',
-        replaces: tribeId, 
+        replaces: tribeId,
         title: tribe.title,
         description: tribe.description,
         image: tribe.image,
@@ -132,7 +129,7 @@ module.exports = ({ cooler }) => {
       const updatedInvites = tribe.invites.filter(c => c !== code);
       const updatedTribe = {
         type: 'tribe',
-        replaces: tribe.id, 
+        replaces: tribe.id,
         title: tribe.title,
         description: tribe.description,
         image: tribe.image,
@@ -159,7 +156,6 @@ module.exports = ({ cooler }) => {
     async updateTribeMembers(tribeId, members) {
       const ssb = await openSsb();
       const tribe = await this.getTribeById(tribeId);
-
       const updatedTribe = {
         type: 'tribe',
         replaces: tribeId,
@@ -184,7 +180,6 @@ module.exports = ({ cooler }) => {
     async updateTribeFeed(tribeId, newFeed) {
       const ssb = await openSsb();
       const tribe = await this.getTribeById(tribeId);
-
       const updatedTribe = {
         type: 'tribe',
         replaces: tribeId,
@@ -208,10 +203,9 @@ module.exports = ({ cooler }) => {
 
     async publishUpdatedTribe(tribeId, updatedTribe) {
       const ssb = await openSsb();
-      const userId = ssb.id;
-      await this.publishTombstone(tribeId);
       const updatedTribeData = {
         type: 'tribe',
+        replaces: updatedTribe.replaces || tribeId,
         title: updatedTribe.title,
         description: updatedTribe.description,
         image: updatedTribe.image,
@@ -277,62 +271,46 @@ module.exports = ({ cooler }) => {
       ));
     },
 
-    async listAll() {
+     async listAll() {
       const ssb = await openSsb();
       return new Promise((res, rej) => pull(
         ssb.createLogStream({ limit: logLimit }),
         pull.collect((err, msgs) => {
           if (err) return rej(err);
-          const tombstoned = new Set();
-          const replaces = new Map();
-          const tribes = new Map();
-          for (const msg of msgs) {
-            const k = msg.key;
-            const c = msg.value?.content;
-            if (!c) continue;
-            if (c.type === 'tombstone' && c.target) tombstoned.add(c.target);
-            if (c.type === 'tribe') {
-              if (tombstoned.has(k)) continue;
-              if (c.replaces) replaces.set(c.replaces, k);
-              tribes.set(k, { id: k, content: c });
-            }
+          const norm = s => (s || '').toString().trim().toLowerCase();
+          const pickNewest = (a, b) => {
+            const ta = Date.parse(a.updatedAt || a.createdAt) || a._ts || 0;
+            const tb = Date.parse(b.updatedAt || b.createdAt) || b._ts || 0;
+            return tb > ta ? b : a;
+          };
+          const byKey = new Map();
+          for (const m of msgs) {
+            const c = m.value?.content;
+            if (!c || c.type !== 'tribe') continue;
+            const item = {
+              id: m.key,
+              type: c.type,
+              title: c.title,
+              description: c.description,
+              image: c.image || null,
+              location: c.location,
+              tags: Array.isArray(c.tags) ? c.tags : [],
+              isLARP: !!c.isLARP,
+              isAnonymous: c.isAnonymous !== false,
+              members: Array.isArray(c.members) ? c.members : [],
+              invites: Array.isArray(c.invites) ? c.invites : [],
+              inviteMode: c.inviteMode || 'strict',
+              createdAt: c.createdAt,
+              updatedAt: c.updatedAt,
+              author: c.author,
+              feed: Array.isArray(c.feed) ? c.feed : [],
+              _ts: m.value?.timestamp
+            };
+            const key = `${norm(item.title)}::${norm(item.author)}`;
+            if (!byKey.has(key)) byKey.set(key, item);
+            else byKey.set(key, pickNewest(byKey.get(key), item));
           }
-          const seen = new Set();
-          const finalTribes = [];
-
-          for (const [originalId, { content }] of tribes.entries()) {
-            let latestId = originalId;
-            let latestVersion = content;
-            while (replaces.has(latestId)) {
-              latestId = replaces.get(latestId);
-              const nextTribe = tribes.get(latestId);
-              if (nextTribe && nextTribe.content.updatedAt > latestVersion.updatedAt) {
-                latestVersion = nextTribe.content;
-              }
-            }
-            if (!seen.has(latestId) && !tombstoned.has(latestId)) {
-              seen.add(latestId);
-              finalTribes.push({
-                id: latestId,
-                type: latestVersion.type,
-                title: latestVersion.title,
-                description: latestVersion.description,
-                image: latestVersion.image || null,
-                location: latestVersion.location,
-                tags: Array.isArray(latestVersion.tags) ? latestVersion.tags : [],
-                isLARP: latestVersion.isLARP || false,
-                isAnonymous: latestVersion.isAnonymous === false ? false : true,
-                members: Array.isArray(latestVersion.members) ? latestVersion.members : [],
-                invites: Array.isArray(latestVersion.invites) ? latestVersion.invites : [],
-                inviteMode: latestVersion.inviteMode || 'strict',
-                createdAt: latestVersion.createdAt,
-                updatedAt: latestVersion.updatedAt,
-                author: latestVersion.author,
-                feed: Array.isArray(latestVersion.feed) ? latestVersion.feed : []
-              });
-            }
-          }
-          res(finalTribes);
+          res(Array.from(byKey.values()));
         })
       ));
     },
@@ -345,6 +323,7 @@ module.exports = ({ cooler }) => {
         type: 'tribe',
         ...tribe,
         ...updatedContent,
+        replaces: tribeId,
         updatedAt: new Date().toISOString()
       };
       return this.publishUpdatedTribe(tribeId, updatedTribe);
@@ -353,41 +332,19 @@ module.exports = ({ cooler }) => {
     async publishTombstone(tribeId) {
       const ssb = await openSsb();
       const userId = ssb.id;
-
       const tombstone = {
         type: 'tombstone',
         target: tribeId,
         deletedAt: new Date().toISOString(),
         author: userId
       };
-
       await new Promise((resolve, reject) => {
-      ssb.publish(tombstone, (err) => {
-        if (err) return reject(err);
-        resolve();
+        ssb.publish(tombstone, (err) => {
+          if (err) return reject(err);
+          resolve();
         });
       });
-      const tribe = await this.getTribeById(tribeId); 
-      const tombstonedTribe = {
-        type: 'tombstone',
-        title: tribe.title,
-        description: tribe.description,
-        image: tribe.image,
-        location: tribe.location,
-        tags: tribe.tags,
-        isLARP: tribe.isLARP,
-        isAnonymous: tribe.isAnonymous,
-        members: [],
-        invites: [],
-        inviteMode: tribe.inviteMode,
-        createdAt: tribe.createdAt,
-        updatedAt: new Date().toISOString(),
-        author: tribe.author,
-        feed: tribe.feed
-      };
-      return new Promise((resolve, reject) => {
-        ssb.publish(tombstonedTribe, (err, result) => err ? reject(err) : resolve(result));
-      });
+      return;
     },
 
     async refeed(tribeId, messageId) {

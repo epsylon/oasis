@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.5.2 - 2025-10-27
+
+### Fixed
+
+ + Tribes duplication (Tribes plugin).
+
 ## v0.5.2 - 2025-10-22
 
 ### Added

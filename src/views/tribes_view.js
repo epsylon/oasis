@@ -12,7 +12,6 @@ const paginateFeedTribesView = (feed, page = 1, itemsPerPage = 5) => {
 
 const renderPaginationTribesView = (page, totalPages, filter) => {
   if (totalPages <= 1) return '';
-
   return div({ class: 'pagination' },
     page > 1 ? form({ method: 'GET', action: '/tribes' },
       input({ type: 'hidden', name: 'filter', value: filter }),
@@ -31,7 +30,6 @@ const renderFeedTribesView = (tribe, page, query, filter) => {
   const feed = Array.isArray(tribe.feed) ? tribe.feed : [];
   const feedFilter = (query.feedFilter || 'TOP').toUpperCase();
   let filteredFeed = feed;
-
   if (feedFilter === 'MINE') filteredFeed = feed.filter(m => m.author === userId);
   if (feedFilter === 'RECENT') {
     const last24h = Date.now() - 86400000;
@@ -46,12 +44,14 @@ const renderFeedTribesView = (tribe, page, query, filter) => {
         return dateB - dateA;
       });
   }
-  if (feedFilter === 'ALL') filteredFeed = [...feed].sort((a, b) => b.date - a.date);
+  if (feedFilter === 'ALL') filteredFeed = [...feed].sort((a, b) => {
+    const da = typeof a.date === "string" ? Date.parse(a.date) : a.date;
+    const db = typeof b.date === "string" ? Date.parse(b.date) : b.date;
+    return db - da;
+  });
   if (feedFilter === 'TOP') filteredFeed = [...feed].sort((a, b) => (b.refeeds || 0) - (a.refeeds || 0));
-
   const totalPages = Math.ceil(filteredFeed.length / 5);
   const paginatedFeed = paginateFeedTribesView(filteredFeed, page);
-
   return div({ class: 'tribe-feed' },
     div({ class: 'feed-actions', style: 'margin-bottom:8px;' },
       ['TOP', 'MINE', 'ALL', 'RECENT'].map(f =>
@@ -155,7 +155,11 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
 
   const sorted = filter === 'top'
     ? [...searched].sort((a, b) => b.members.length - a.members.length)
-    : [...searched].sort((a, b) => b.createdAt - a.createdAt);
+    : [...searched].sort((a, b) => {
+        const ca = typeof a.createdAt === 'string' ? Date.parse(a.createdAt) : a.createdAt;
+        const cb = typeof b.createdAt === 'string' ? Date.parse(b.createdAt) : b.createdAt;
+        return cb - ca;
+      });
 
   const title =
     filter === 'recent' ? i18n.tribeRecentSectionTitle :
@@ -236,15 +240,6 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
       option({ value: 'open', selected: tribeToEdit.inviteMode === 'open' ? 'selected' : undefined }, i18n.tribeOpen)
     ),
     br(), br(),   
-    
-    // label({ for: 'isLARP' }, i18n.tribeIsLARPLabel),
-    // br,
-    // select({ name: 'isLARP', id: 'isLARP' },
-    //   option({ value: 'true', selected: tribeToEdit.isLARP === true ? 'selected' : undefined }, i18n.tribeYes),
-    //   option({ value: 'false', selected: tribeToEdit.isLARP === false ? 'selected' : undefined }, i18n.tribeNo)
-    // ),
-    // br(), br(),
-    
     button({ type: 'submit' }, isEdit ? i18n.tribeUpdateButton : i18n.tribeCreateButton)
     )
   ) : null;
@@ -313,7 +308,6 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}) => {
   );
 };
 
-
 const renderFeedTribeView = async (tribe, query = {}, filter) => {
   const feed = Array.isArray(tribe.feed) ? tribe.feed : [];
   const feedFilter = (query.feedFilter || 'RECENT').toUpperCase();
@@ -335,7 +329,11 @@ const renderFeedTribeView = async (tribe, query = {}, filter) => {
       });
   }
   if (feedFilter === 'ALL') {
-    filteredFeed = [...feed].sort((a, b) => b.date - a.date);
+    filteredFeed = [...feed].sort((a, b) => {
+      const da = typeof a.date === 'string' ? Date.parse(a.date) : a.date;
+      const db = typeof b.date === 'string' ? Date.parse(b.date) : b.date;
+      return db - da;
+    });
   }
   if (feedFilter === 'TOP') {
     filteredFeed = [...feed].sort((a, b) => (b.refeeds || 0) - (a.refeeds || 0));
@@ -372,7 +370,7 @@ const renderFeedTribeView = async (tribe, query = {}, filter) => {
   );
 };
 
-exports.tribeView = async (tribe, userId, query) => {
+exports.tribeView = async (tribe, userIdParam, query) => {
   if (!tribe) {
     return div({ class: 'error' }, 'Tribe not found!');
   }
@@ -430,3 +428,4 @@ exports.tribeView = async (tribe, userId, query) => {
     tribeDetails
   );
 };
+
