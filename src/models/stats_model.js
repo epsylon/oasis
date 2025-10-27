@@ -91,6 +91,26 @@ module.exports = ({ cooler }) => {
     return out;
   };
 
+  const norm = s => String(s || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+  const bestContentTs = (c, fallbackTs = 0) =>
+    Number(c?.updatedAt ? Date.parse(c.updatedAt) : 0) ||
+    Number(c?.createdAt ? Date.parse(c.createdAt) : 0) ||
+    Number(c?.timestamp || 0) ||
+    Number(fallbackTs || 0);
+  const dedupeTribesNodes = (nodes = []) => {
+    const pick = new Map();
+    for (const n of nodes) {
+      const c = n?.content || {};
+      const title = c.title || c.name || '';
+      const author = n?.author || '';
+      const key = `${norm(title)}::${author}`;
+      const ts = bestContentTs(c, n?.ts || 0);
+      const prev = pick.get(key);
+      if (!prev || ts > prev._ts) pick.set(key, { ...n, _ts: ts });
+    }
+    return Array.from(pick.values());
+  };
+
   const getStats = async (filter = 'ALL') => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
@@ -151,12 +171,21 @@ module.exports = ({ cooler }) => {
       }
     }
 
+    const tribeTipNodes = Array.from(tipOf['tribe'].values());
+    const tribeDedupNodes = dedupeTribesNodes(tribeTipNodes);
+    const tribeDedupContents = tribeDedupNodes.map(n => n.content);
+
     const content = {};
     const opinions = {};
     for (const t of types) {
       if (t === 'karmaScore') continue;
-      let vals = Array.from(tipOf[t].values()).map(v => v.content);
-      if (t === 'forum') vals = vals.filter(c => !(c.root && tombTargets.has(c.root)));
+      let vals;
+      if (t === 'tribe') {
+        vals = tribeDedupContents;
+      } else {
+        vals = Array.from(tipOf[t].values()).map(v => v.content);
+        if (t === 'forum') vals = vals.filter(c => !(c.root && tombTargets.has(c.root)));
+      }
       content[t] = vals.length || 0;
       opinions[t] = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length || 0;
     }
@@ -179,8 +208,7 @@ module.exports = ({ cooler }) => {
       content['karmaScore'] = sumKarma;
     }
 
-    const tribeVals = Array.from(tipOf['tribe'].values()).map(v => v.content);
-    const memberTribes = tribeVals
+    const memberTribes = tribeDedupContents
       .filter(c => Array.isArray(c.members) && c.members.includes(userId))
       .map(c => c.name || c.title || c.id);
 

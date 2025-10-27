@@ -111,54 +111,72 @@ module.exports = ({ cooler }) => {
             }
           };
           idToAction.set(ev.id, augmented);
-          idToTipId.set(ev.id, ev.id); 
+          idToTipId.set(ev.id, ev.id);
         }
       }
 
       const latest = [];
-	for (const a of idToAction.values()) {
-	  if (tombstoned.has(a.id)) continue;
-	  const c = a.content || {};
-	  if (c.root && tombstoned.has(c.root)) continue;
-	  if (a.type === 'vote' && tombstoned.has(c.vote?.link)) continue;
-	  if (c.key && tombstoned.has(c.key)) continue;
-	  if (c.branch && tombstoned.has(c.branch)) continue;
-	  if (c.target && tombstoned.has(c.target)) continue;
-	  if (a.type === 'document') {
-	    const url = c.url;
-	    const ok = await hasBlob(ssbClient, url);
-	    if (!ok) continue;
-	  }
-	  if (a.type === 'forum' && c.root) {
-	    const rootId = typeof c.root === 'string' ? c.root : (c.root?.key || c.root?.id || '');
-	    const rootAction = idToAction.get(rootId);
-	    a.content.rootTitle = rootAction?.content?.title || a.content.rootTitle || '';
-	    a.content.rootKey = rootId || a.content.rootKey || '';
-	  }
-	  latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
-	}
+      for (const a of idToAction.values()) {
+        if (tombstoned.has(a.id)) continue;
+        const c = a.content || {};
+        if (c.root && tombstoned.has(c.root)) continue;
+        if (a.type === 'vote' && tombstoned.has(c.vote?.link)) continue;
+        if (c.key && tombstoned.has(c.key)) continue;
+        if (c.branch && tombstoned.has(c.branch)) continue;
+        if (c.target && tombstoned.has(c.target)) continue;
+        if (a.type === 'document') {
+          const url = c.url;
+          const ok = await hasBlob(ssbClient, url);
+          if (!ok) continue;
+        }
+        if (a.type === 'forum' && c.root) {
+          const rootId = typeof c.root === 'string' ? c.root : (c.root?.key || c.root?.id || '');
+          const rootAction = idToAction.get(rootId);
+          a.content.rootTitle = rootAction?.content?.title || a.content.rootTitle || '';
+          a.content.rootKey = rootId || a.content.rootKey || '';
+        }
+        latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
+      }
 
       let deduped = latest.filter(a => !a.tipId || a.tipId === a.id);
 
       const mediaTypes = new Set(['image','video','audio','document','bookmark']);
       const perAuthorUnique = new Set(['karmaScore']);
       const byKey = new Map();
+      const norm = s => String(s || '').trim().toLowerCase();
+
       for (const a of deduped) {
+        const c = a.content || {};
+        const effTs =
+          (c.updatedAt && Date.parse(c.updatedAt)) ||
+          (c.createdAt && Date.parse(c.createdAt)) ||
+          (a.ts || 0);
+
         if (mediaTypes.has(a.type)) {
-          const u = a.content?.url || a.content?.title || `${a.type}:${a.id}`;
+          const u = c.url || c.title || `${a.type}:${a.id}`;
           const key = `${a.type}:${u}`;
           const prev = byKey.get(key);
-          if (!prev || a.ts > prev.ts) byKey.set(key, a);
+          if (!prev || effTs > prev.__effTs) byKey.set(key, { ...a, __effTs: effTs });
         } else if (perAuthorUnique.has(a.type)) {
           const key = `${a.type}:${a.author}`;
           const prev = byKey.get(key);
-          if (!prev || a.ts > prev.ts) byKey.set(key, a);
+          if (!prev || effTs > prev.__effTs) byKey.set(key, { ...a, __effTs: effTs });
+        } else if (a.type === 'tribe') {
+          const t = norm(c.title);
+          if (t) {
+            const key = `tribe:${t}::${a.author}`;
+            const prev = byKey.get(key);
+            if (!prev || effTs > prev.__effTs) byKey.set(key, { ...a, __effTs: effTs });
+          } else {
+            const key = `id:${a.id}`;
+            byKey.set(key, { ...a, __effTs: effTs });
+          }
         } else {
           const key = `id:${a.id}`;
-          byKey.set(key, a);
+          byKey.set(key, { ...a, __effTs: effTs });
         }
       }
-      deduped = Array.from(byKey.values());
+      deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; return x });
 
       let out;
       if (filter === 'mine') out = deduped.filter(a => a.author === userId);

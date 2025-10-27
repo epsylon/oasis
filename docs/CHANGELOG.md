@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
- + Tribes duplication (Tribes plugin).
+ + Tribes duplication (Tribes plugin + Activity plugin + Stats plugin).
 
 ## v0.5.2 - 2025-10-22
 
