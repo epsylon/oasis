@@ -2,13 +2,46 @@ const { div, h2, p, section, button, form, img, a, textarea, input, br, span, st
 const { template, i18n } = require('./main_views');
 const { renderUrl } = require('../backend/renderUrl');
 
-function resolvePhoto(photoField, size = 256) {
-  if (photoField == "/image/256/%260000000000000000000000000000000000000000000%3D.sha256"){
-    return '/assets/images/default-avatar.png';
-  } else {
-    return photoField;
+const DEFAULT_HASH_ENC = "%260000000000000000000000000000000000000000000%3D.sha256";
+const DEFAULT_HASH_PATH_RE = /\/image\/\d+\/%260000000000000000000000000000000000000000000%3D\.sha256$/;
+
+function isDefaultImageId(v){
+  if (!v) return true;
+  if (typeof v === 'string') {
+    if (v === DEFAULT_HASH_ENC) return true;
+    if (DEFAULT_HASH_PATH_RE.test(v)) return true;
   }
-};
+  return false;
+}
+
+function toImageUrl(imgId, size=256){
+  if (!imgId || isDefaultImageId(imgId)) return '/assets/images/default-avatar.png';
+  if (typeof imgId === 'string' && imgId.startsWith('/image/')) {
+    return imgId.replace('/image/256/','/image/'+size+'/').replace('/image/512/','/image/'+size+'/');
+  }
+  return `/image/${size}/${encodeURIComponent(imgId)}`;
+}
+
+function extractAboutImageId(about){
+  if (!about || typeof about !== 'object') return null;
+  const aimg = about.image;
+  if (!aimg) return null;
+  if (typeof aimg === 'string') return aimg;
+  return aimg.link || aimg.url || null;
+}
+
+function resolvePhoto(photoField, size = 256) {
+  if (!photoField) return '/assets/images/default-avatar.png';
+  if (typeof photoField === 'string') {
+    if (photoField.startsWith('/assets/')) return photoField;
+    if (photoField.startsWith('/blob/')) return photoField;
+    if (photoField.startsWith('/image/')) {
+      if (isDefaultImageId(photoField)) return '/assets/images/default-avatar.png';
+      return photoField.replace('/image/256/','/image/'+size+'/').replace('/image/512/','/image/'+size+'/');
+    }
+  }
+  return toImageUrl(photoField, size);
+}
 
 const generateFilterButtons = (filters, currentFilter) =>
   filters.map(mode =>
@@ -21,14 +54,6 @@ const generateFilterButtons = (filters, currentFilter) =>
     )
   );
 
-function formatRange(bucket, i18n) {
-  const ws = i18n.weeksShort || 'w';
-  const ms = i18n.monthsShort || 'm';
-  if (bucket === 'green') return `<2 ${ws}`;
-  if (bucket === 'orange') return `2 ${ws}–6 ${ms}`;
-  return `≥6 ${ms}`;
-}
-
 function lastActivityBadge(user) {
   const label = i18n.inhabitantActivityLevel;
   const bucket = user.lastActivityBucket || 'red';
@@ -40,21 +65,23 @@ function lastActivityBadge(user) {
   );
 }
 
+const lightboxId = (id) => 'inhabitant_' + String(id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+
 const renderInhabitantCard = (user, filter, currentUserId) => {
   const isMe = user.id === currentUserId;
   return div({ class: 'inhabitant-card' },
     div({ class: 'inhabitant-left' },
       a(
          { href: `/author/${encodeURIComponent(user.id)}` },
-         img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo), alt: user.name })
+         img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo, 256), alt: user.name || 'Anonymous' })
       ),
       br(),
       span(`${i18n.bankingUserEngagementScore}: `),
-     h2(strong(typeof user.karmaScore === 'number' ? user.karmaScore : 0)),
-     lastActivityBadge(user)
+      h2(strong(typeof user.karmaScore === 'number' ? user.karmaScore : 0)),
+      lastActivityBadge(user)
     ),
     div({ class: 'inhabitant-details' },
-      h2(user.name),
+      h2(user.name || 'Anonymous'),
       user.description ? p(...renderUrl(user.description)) : null,
       filter === 'MATCHSKILLS' && user.commonSkills?.length
         ? div({ class: 'matchskills' },
@@ -75,15 +102,13 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
             p(i18n.ecoWalletNotConfigured || "ECOin Wallet not configured")
           ),
       div(
-        { class: 'cv-actions', style: 'display:flex; flex-direction:column; gap:8px; margin-top:12px;' },
-        isMe
-          ? p(i18n.relationshipYou)
-          : (filter === 'CVs' || filter === 'MATCHSKILLS' || filter === 'SUGGESTED' || filter === 'TOP KARMA')
-            ? form(
-                { method: 'GET', action: `/inhabitant/${encodeURIComponent(user.id)}` },
-                button({ type: 'submit', class: 'btn' }, i18n.inhabitantviewDetails)
-              )
-            : null,
+        { class: 'cv-actions' },
+        !isMe
+          ? form(
+              { method: 'GET', action: `/inhabitant/${encodeURIComponent(user.id)}` },
+              button({ type: 'submit', class: 'btn' }, i18n.inhabitantviewDetails)
+            )
+          : p(i18n.relationshipYou),
         !isMe
           ? form(
               { method: 'GET', action: '/pm' },
@@ -98,11 +123,11 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
 
 const renderGalleryInhabitants = inhabitants =>
   div(
-    { class: "gallery", style: 'display:grid; grid-template-columns: repeat(3, 1fr); gap:16px;' },
+    { class: "gallery" },
     inhabitants.length
       ? inhabitants.map(u =>
-          a({ href: `#inhabitant-${encodeURIComponent(u.id)}`, class: "gallery-item" },
-            img({ src: resolvePhoto(u.photo), alt: u.name || "Anonymous", class: "gallery-image" })
+          a({ href: `#${lightboxId(u.id)}`, class: "gallery-item" },
+            img({ src: resolvePhoto(u.photo, 256), alt: u.name || "Anonymous", class: "gallery-image" })
           )
         )
       : p(i18n.noInhabitantsFound)
@@ -111,11 +136,26 @@ const renderGalleryInhabitants = inhabitants =>
 const renderLightbox = inhabitants =>
   inhabitants.map(u =>
     div(
-      { id: `inhabitant-${encodeURIComponent(u.id)}`, class: "lightbox" },
+      { id: lightboxId(u.id), class: "lightbox" },
       a({ href: "#", class: "lightbox-close" }, "×"),
-      img({ src: resolvePhoto(u.photo), class: "lightbox-image", alt: u.name || "Anonymous" })
+      img({ src: resolvePhoto(u.photo, 256), class: "lightbox-image", alt: u.name || "Anonymous" })
     )
   );
+
+function stripAndCollectImgs(text) {
+  if (!text || typeof text !== 'string') return { clean: '', imgs: [] };
+  const imgs = [];
+  let clean = text;
+  const rawImgRe = /<img[^>]*src="([^"]+)"[^>]*>/gi;
+  clean = clean.replace(rawImgRe, (_, src) => { imgs.push(src); return ''; });
+  const encImgRe = /&lt;img[^&]*src=&quot;([^&]*)&quot;[^&]*&gt;/gi;
+  clean = clean.replace(encImgRe, (_, src) => { imgs.push(src.replace(/&amp;/g, '&')); return ''; });
+  return { clean, imgs };
+}
+
+function msgIdOf(m) {
+  return m && (m.key || m.value?.key || m.value?.content?.root || m.value?.content?.branch || null);
+}
 
 exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
   const title = filter === 'contacts'    ? i18n.yourContacts
@@ -125,8 +165,8 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
                : filter === 'blocked'     ? i18n.blockedSectionTitle
                : filter === 'GALLERY'     ? i18n.gallerySectionTitle
                : filter === 'TOP KARMA'    ? i18n.topkarmaSectionTitle
-               : filter === 'TOP ACTIVITY' ? (i18n.topactivitySectionTitle)
-                                          : i18n.allInhabitants;
+               : filter === 'TOP ACTIVITY' ? i18n.topactivitySectionTitle
+               : i18n.allInhabitants;
 
   const showCVFilters = filter === 'CVs' || filter === 'MATCHSKILLS';
   const filters = ['all', 'TOP ACTIVITY', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'];
@@ -145,20 +185,20 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
             type: 'text',
             name: 'search',
             placeholder: i18n.searchInhabitantsPlaceholder,
-            value: query.search || ''
+            value: (query && query.search) || ''
           }),
           showCVFilters
             ? [
-                input({ type: 'text', name: 'location', placeholder: i18n.filterLocation, value: query.location || '' }),
-                input({ type: 'text', name: 'language', placeholder: i18n.filterLanguage, value: query.language || '' }),
-                input({ type: 'text', name: 'skills', placeholder: i18n.filterSkills, value: query.skills || '' })
+                input({ type: 'text', name: 'location', placeholder: i18n.filterLocation, value: (query && query.location) || '' }),
+                input({ type: 'text', name: 'language', placeholder: i18n.filterLanguage, value: (query && query.language) || '' }),
+                input({ type: 'text', name: 'skills', placeholder: i18n.filterSkills, value: (query && query.skills) || '' })
               ]
             : null,
           br(),
           button({ type: 'submit' }, i18n.applyFilters)
         )
       ),
-      div({ class: 'inhabitant-action', style: 'margin-top:1em;' },
+      div({ class: 'inhabitant-action' },
         ...generateFilterButtons(filters, filter)
       ),
       filter === 'GALLERY'
@@ -173,37 +213,58 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
   );
 };
 
-exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }, currentUserId) => {
-  const profile = Object.keys(cv).length ? cv : about;
-  const id = cv.author || about.about || 'unknown';
-  const name = cv.name || about.name || 'Unnamed';
-  const description = cv.description || about.description || '';
-  const image = resolvePhoto(cv.photo) || '/assets/images/default-oasis.jpg';
-  const location = cv.location || '';
-  const languages = typeof cv.languages === 'string'
-    ? cv.languages.split(',').map(x => x.trim()).filter(Boolean)
-    : Array.isArray(cv.languages) ? cv.languages : [];
-  const skills = [
-    ...(cv.personalSkills || []),
-    ...(cv.oasisSkills || []),
-    ...(cv.educationalSkills || []),
-    ...(cv.professionalSkills || [])
-  ];
-  const status = cv.status || '';
-  const preferences = cv.preferences || '';
-  const createdAt = cv.createdAt ? new Date(cv.createdAt).toLocaleString() : '';
-  const isMe = id === currentUserId;
-  const title = i18n.inhabitantProfileTitle || i18n.inhabitantviewDetails;
+exports.inhabitantsProfileView = (payload, currentUserId) => {
+  const safe = payload && typeof payload === 'object' ? payload : {};
+  const about = (safe.about && typeof safe.about === 'object') ? safe.about : {};
+  const cv = (safe.cv && typeof safe.cv === 'object') ? safe.cv : {};
+  const feed = Array.isArray(safe.feed) ? safe.feed : [];
 
-  const lastFromFeed = Array.isArray(feed) && feed.length ? feed.reduce((mx, m) => Math.max(mx, m.value?.timestamp || 0), 0) : null;
-  const now = Date.now();
-  const delta = lastFromFeed ? Math.max(0, now - lastFromFeed) : Number.POSITIVE_INFINITY;
-  const days = delta / 86400000;
-  const bucket = days < 14 ? 'green' : days < 182.5 ? 'orange' : 'red';
-  const ws = i18n.weeksShort || 'w';
-  const ms = i18n.monthsShort || 'm';
-  const range = bucket === 'green' ? `<2 ${ws}` : bucket === 'orange' ? `2 ${ws}–6 ${ms}` : `≥6 ${ms}`;
-  const dotClass = bucket === 'green' ? 'green' : bucket === 'orange' ? 'orange' : 'red';
+  const viewedId = typeof safe.viewedId === 'string' ? safe.viewedId : '';
+  const id = (cv && cv.author) || (about && about.about) || viewedId || '';
+  const baseName = ((cv && cv.name) || (about && about.name) || '').trim();
+  const name = baseName || (i18n.unnamed || 'Anonymous');
+  const description = (cv && cv.description) || (about && about.description) || '';
+
+  const listPhoto = (typeof safe.photo === 'string' && safe.photo.trim()) ? safe.photo : null;
+  const rawCandidate = listPhoto || extractAboutImageId(about) || (cv && cv.photo) || null;
+  const image = (
+    typeof rawCandidate === 'string' &&
+    rawCandidate.startsWith('/image/') &&
+    !DEFAULT_HASH_PATH_RE.test(rawCandidate) &&
+    rawCandidate.indexOf(DEFAULT_HASH_ENC) === -1
+  )
+    ? rawCandidate.replace('/image/512/','/image/256/').replace('/image/1024/','/image/256/')
+    : resolvePhoto(rawCandidate, 256);
+
+  const location = (cv && cv.location) || '';
+  const languages = typeof (cv && cv.languages) === 'string'
+    ? (cv.languages || '').split(',').map(x => x.trim()).filter(Boolean)
+    : Array.isArray(cv && cv.languages) ? cv.languages : [];
+  const skills = [
+    ...((cv && cv.personalSkills) || []),
+    ...((cv && cv.oasisSkills) || []),
+    ...((cv && cv.educationalSkills) || []),
+    ...((cv && cv.professionalSkills) || [])
+  ];
+  const status = (cv && cv.status) || '';
+  const preferences = (cv && cv.preferences) || '';
+  const createdAt = (cv && cv.createdAt) ? new Date(cv.createdAt).toLocaleString() : '';
+  const isMe = id && id === currentUserId;
+  const title = i18n.inhabitantProfileTitle || i18n.inhabitantviewDetails;
+  const karmaScore = typeof safe.karmaScore === 'number' ? safe.karmaScore : 0;
+
+  const providedBucket = typeof safe.lastActivityBucket === 'string' ? safe.lastActivityBucket : null;
+  const dotClass = providedBucket === 'green' ? 'green' : providedBucket === 'orange' ? 'orange' : 'red';
+
+  const detailNodes = [
+    description ? p(...renderUrl(description)) : null,
+    location ? p(`${i18n.locationLabel}: ${location}`) : null,
+    languages.length ? p(`${i18n.languagesLabel}: ${languages.join(', ').toUpperCase()}`) : null,
+    skills.length ? p(`${i18n.skillsLabel}: ${skills.join(', ')}`) : null,
+    status ? p(`${i18n.statusLabel || 'Status'}: ${status}`) : null,
+    preferences ? p(`${i18n.preferencesLabel || 'Preferences'}: ${preferences}`) : null,
+    createdAt ? p(`${i18n.createdAtLabel || 'Created at'}: ${createdAt}`) : null
+  ].filter(Boolean);
 
   return template(
     name,
@@ -212,45 +273,51 @@ exports.inhabitantsProfileView = ({ about = {}, cv = {}, feed = [] }, currentUse
         h2(title),
         p(i18n.discoverPeople)
       ),
-      div({ class: 'mode-buttons', style: 'display:flex; gap:8px; margin-top:16px;' },
-        ...generateFilterButtons(['all', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'], 'all')
+      div({ class: 'mode-buttons' },
+        ...generateFilterButtons(['all', 'TOP ACTIVITY', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'], 'all')
       ),
-      div({ class: 'inhabitant-card', style: 'margin-top:32px;' },
-        div({ class: 'inhabitant-details' },
-          img({ class: 'inhabitant-photo-details', src: image, alt: name }),
-          h2(name),
-          p(a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)),
-          description ? p(...renderUrl(description)) : null,
-          location ? p(`${i18n.locationLabel}: ${location}`) : null,
-          languages.length ? p(`${i18n.languagesLabel}: ${languages.join(', ').toUpperCase()}`) : null,
-          skills.length ? p(`${i18n.skillsLabel}: ${skills.join(', ')}`) : null,
+      div({ class: 'inhabitant-card' },
+        div({ class: 'inhabitant-left' },
+          img({ class: 'inhabitant-photo-details', src: image, alt: name || 'Anonymous' }),
+          h2(name || 'Anonymous'),
+          span(`${i18n.bankingUserEngagementScore}: `),
+          h2(strong(karmaScore)),
           div(
             { class: 'inhabitant-last-activity' },
             span({ class: 'label' }, `${i18n.inhabitantActivityLevel}:`),
-            span({ class: `activity-dot ${dotClass}` }, ''),
-            span({ class: 'range' }, range)
+            span({ class: `activity-dot ${dotClass}` }, '')
           ),
-          status ? p(`${i18n.statusLabel || 'Status'}: ${status}`) : null,
-          preferences ? p(`${i18n.preferencesLabel || 'Preferences'}: ${preferences}`) : null,
-          createdAt ? p(`${i18n.createdAtLabel || 'Created at'}: ${createdAt}`) : null,
-          !isMe
+          (!isMe && (id || viewedId))
             ? form(
                 { method: 'GET', action: '/pm' },
-                input({ type: 'hidden', name: 'recipients', value: id }),
-                button({ type: 'submit', class: 'btn', style: 'margin-top:1em;' }, i18n.pmCreateButton)
+                input({ type: 'hidden', name: 'recipients', value: id || viewedId }),
+                button({ type: 'submit', class: 'btn' }, i18n.pmCreateButton)
               )
             : null
-        )
+        ),
+        detailNodes.length ? div({ class: 'inhabitant-details' }, ...detailNodes) : null
       ),
       feed.length
         ? section({ class: 'profile-feed' },
             h2(i18n.latestInteractions),
             ...feed.map(m => {
-              const text = (m.value.content.text || '').replace(/<br\s*\/?>/g, '');
-              return div({ class: 'post' }, p(...renderUrl(text)));
+              const raw = (m.value?.content?.text || '').replace(/<br\s*\/?>/g, '');
+              const parts = stripAndCollectImgs(raw);
+              const tid = msgIdOf(m);
+              const visitBtn = tid
+                ? form({ method: 'GET', action: `/thread/${encodeURIComponent(tid)}#${encodeURIComponent(tid)}` },
+                    button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
+                  )
+                : null;
+              return div({ class: 'post' },
+                visitBtn,
+                parts.clean && parts.clean.trim() ? p(...renderUrl(parts.clean)) : null,
+                ...(parts.imgs || []).map(src => img({ src, class: 'post-image', alt: 'image' }))
+              );
             })
           )
         : null
     )
   );
 };
+

@@ -175,6 +175,26 @@ module.exports = ({ cooler }) => {
     const tribeDedupNodes = dedupeTribesNodes(tribeTipNodes);
     const tribeDedupContents = tribeDedupNodes.map(n => n.content);
 
+    const tribePublic = tribeDedupContents.filter(c => c.isAnonymous === false);
+    const tribePrivate = tribeDedupContents.filter(c => c.isAnonymous !== false);
+    const tribePublicNames = tribePublic.map(c => c.name || c.title || c.id).filter(Boolean);
+    const tribePublicCount = tribePublicNames.length;
+    const tribePrivateCount = tribePrivate.length;
+
+    const allTribesPublic = tribeDedupNodes
+      .filter(n => n.content?.isAnonymous === false)
+      .map(n => ({ id: n.key, name: n.content.name || n.content.title || n.key }));
+
+    const allTribes = allTribesPublic.map(t => t.name);
+
+    const memberTribesDetailed = tribeDedupNodes
+      .filter(n => Array.isArray(n.content?.members) && n.content.members.includes(userId))
+      .map(n => ({ id: n.key, name: n.content.name || n.content.title || n.key }));
+
+    const myPrivateTribesDetailed = tribeDedupNodes
+      .filter(n => n.content?.isAnonymous !== false && Array.isArray(n.content?.members) && n.content.members.includes(userId))
+      .map(n => ({ id: n.key, name: n.content.name || n.content.title || n.key }));
+
     const content = {};
     const opinions = {};
     for (const t of types) {
@@ -207,10 +227,6 @@ module.exports = ({ cooler }) => {
       const sumKarma = Array.from(latestByAuthor.values()).reduce((s, x) => s + x.k, 0);
       content['karmaScore'] = sumKarma;
     }
-
-    const memberTribes = tribeDedupContents
-      .filter(c => Array.isArray(c.members) && c.members.includes(userId))
-      .map(c => c.name || c.title || c.id);
 
     const inhabitants = new Set(allMsgs.map(m => m.value.author)).size;
 
@@ -305,14 +321,21 @@ module.exports = ({ cooler }) => {
       totalAddresses: Object.keys(addrMap).length
     };
     const pubsCount = listPubsFromEbt().length;
-    
+
     const stats = {
       id: userId,
       createdAt,
       inhabitants,
       content,
       opinions,
-      memberTribes,
+      memberTribes: memberTribesDetailed.map(t => t.name),
+      memberTribesDetailed,
+      myPrivateTribesDetailed,
+      allTribes,
+      allTribesPublic,
+      tribePublicNames,
+      tribePublicCount,
+      tribePrivateCount,
       userTombstoneCount: scopedMsgs.filter(m => m.value.content.type === 'tombstone').length,
       networkTombstoneCount: allMsgs.filter(m => m.value.content.type === 'tombstone').length,
       folderSize: formatSize(folderSize),

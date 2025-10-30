@@ -236,7 +236,8 @@ module.exports = ({ cooler, services = {} }) => {
 
   async function listTermsBase(filter = 'all') {
     const all = await listByType('parliamentTerm');
-    let arr = all.map(t => ({ ...t, status: moment().isAfter(parseISO(t.endAt)) ? 'EXPIRED' : 'ACTIVE' }));
+    const collapsed = collapseOverlappingTerms(all);
+    let arr = collapsed.map(t => ({ ...t, status: moment().isAfter(parseISO(t.endAt)) ? 'EXPIRED' : 'ACTIVE' }));
     if (filter === 'active') arr = arr.filter(t => t.status === 'ACTIVE');
     if (filter === 'expired') arr = arr.filter(t => t.status === 'EXPIRED');
     return arr.sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
@@ -444,65 +445,57 @@ module.exports = ({ cooler, services = {} }) => {
   }
 
   async function createRevocation({ lawId, title, reasons }) {
-  const term = await getCurrentTermBase();
-  if (!term) throw new Error('No active government');
-
-  const allowed = await this.canPropose();
-  if (!allowed) throw new Error('You are not in the goverment, yet.');
-
-  const lawIdStr = String(lawId || '').trim();
-  if (!lawIdStr) throw new Error('Law required');
-
-  const laws = await listByType('parliamentLaw');
-  const law = laws.find(l => l.id === lawIdStr);
-  if (!law) throw new Error('Law not found');
-
-  const method = String(term.method || 'DEMOCRACY').toUpperCase();
-  const ssbClient = await openSsb();
-  const deadline = moment().add(REVOCATION_DAYS, 'days').toISOString();
-
-  if (method === 'DICTATORSHIP' || method === 'KARMATOCRACY') {
+    const term = await getCurrentTermBase();
+    if (!term) throw new Error('No active government');
+    const allowed = await this.canPropose();
+    if (!allowed) throw new Error('You are not in the goverment, yet.');
+    const lawIdStr = String(lawId || '').trim();
+    if (!lawIdStr) throw new Error('Law required');
+    const laws = await listByType('parliamentLaw');
+    const law = laws.find(l => l.id === lawIdStr);
+    if (!law) throw new Error('Law not found');
+    const method = String(term.method || 'DEMOCRACY').toUpperCase();
+    const ssbClient = await openSsb();
+    const deadline = moment().add(REVOCATION_DAYS, 'days').toISOString();
+    if (method === 'DICTATORSHIP' || method === 'KARMATOCRACY') {
+      const rev = {
+        type: 'parliamentRevocation',
+        lawId: lawIdStr,
+        title: title || law.question || '',
+        reasons: reasons || '',
+        method,
+        termId: term.id || term.startAt,
+        proposer: userId,
+        status: 'OPEN',
+        deadline,
+        createdAt: nowISO()
+      };
+      return await new Promise((resolve, reject) =>
+        ssbClient.publish(rev, (e, r) => (e ? reject(e) : resolve(r)))
+      );
+    }
+    const voteMsg = await services.votes.createVote(
+      `Revoke: ${title || law.question || ''}`,
+      deadline,
+      ['YES', 'NO', 'ABSTENTION'],
+      [`gov:${term.id || term.startAt}`, `govMethod:${method}`, 'revocation']
+    );
     const rev = {
       type: 'parliamentRevocation',
       lawId: lawIdStr,
       title: title || law.question || '',
       reasons: reasons || '',
       method,
+      voteId: voteMsg.key || voteMsg.id,
       termId: term.id || term.startAt,
       proposer: userId,
       status: 'OPEN',
-      deadline,
       createdAt: nowISO()
     };
     return await new Promise((resolve, reject) =>
       ssbClient.publish(rev, (e, r) => (e ? reject(e) : resolve(r)))
     );
   }
-
-  const voteMsg = await services.votes.createVote(
-    `Revoke: ${title || law.question || ''}`,
-    deadline,
-    ['YES', 'NO', 'ABSTENTION'],
-    [`gov:${term.id || term.startAt}`, `govMethod:${method}`, 'revocation']
-  );
-
-  const rev = {
-    type: 'parliamentRevocation',
-    lawId: lawIdStr,
-    title: title || law.question || '',
-    reasons: reasons || '',
-    method,
-    voteId: voteMsg.key || voteMsg.id,
-    termId: term.id || term.startAt,
-    proposer: userId,
-    status: 'OPEN',
-    createdAt: nowISO()
-  };
-
-  return await new Promise((resolve, reject) =>
-    ssbClient.publish(rev, (e, r) => (e ? reject(e) : resolve(r)))
-  );
-}
 
   async function closeRevocation(revId) {
     const ssbClient = await openSsb();
@@ -955,6 +948,15 @@ module.exports = ({ cooler, services = {} }) => {
       const resAnarchy = await new Promise((resolve, reject) =>
         ssbClient.publish(termAnarchy, (e, r) => (e ? reject(e) : resolve(r)))
       );
+      try {
+        await sleep(250);
+        const canonical = await getCurrentTermBase();
+        if (canonical && canonical.id !== (resAnarchy.key || resAnarchy.id)) {
+          const tomb = { type: 'tombstone', target: resAnarchy.key || resAnarchy.id, deletedAt: nowISO(), author: userId };
+          await new Promise((resolve) => ssbClient.publish(tomb, () => resolve()));
+          return canonical;
+        }
+      } catch {}
       await archiveAllCandidatures();
       return resAnarchy;
     }
@@ -977,6 +979,15 @@ module.exports = ({ cooler, services = {} }) => {
     const res = await new Promise((resolve, reject) =>
       ssbClient.publish(term, (e, r) => (e ? reject(e) : resolve(r)))
     );
+    try {
+      await sleep(250);
+      const canonical = await getCurrentTermBase();
+      if (canonical && canonical.id !== (res.key || res.id)) {
+        const tomb = { type: 'tombstone', target: res.key || res.id, deletedAt: nowISO(), author: userId };
+        await new Promise((resolve) => ssbClient.publish(tomb, () => resolve()));
+        return canonical;
+      }
+    } catch {}
     await archiveAllCandidatures();
     return res;
   }
@@ -1045,4 +1056,42 @@ module.exports = ({ cooler, services = {} }) => {
     countRevocationsEnacted
   };
 };
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function collapseOverlappingTerms(terms = []) {
+  if (!terms.length) return [];
+  const sorted = [...terms].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
+  const groups = [];
+  for (const t of sorted) {
+    const tStart = new Date(t.startAt).getTime();
+    const tEnd = new Date(t.endAt).getTime();
+    let placed = false;
+    for (const g of groups) {
+      if (tStart < g.maxEnd && tEnd > g.minStart) {
+        g.items.push(t);
+        if (tStart < g.minStart) g.minStart = tStart;
+        if (tEnd > g.maxEnd) g.maxEnd = tEnd;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) groups.push({ items: [t], minStart: tStart, maxEnd: tEnd });
+  }
+  const winners = groups.map(g => {
+    g.items.sort((a, b) => {
+      const aAn = String(a.method || '').toUpperCase() === 'ANARCHY' ? 1 : 0;
+      const bAn = String(b.method || '').toUpperCase() === 'ANARCHY' ? 1 : 0;
+      if (aAn !== bAn) return aAn - bAn;
+      const aC = new Date(a.createdAt || a.startAt).getTime();
+      const bC = new Date(b.createdAt || b.startAt).getTime();
+      if (aC !== bC) return aC - bC;
+      const aS = new Date(a.startAt).getTime();
+      const bS = new Date(b.startAt).getTime();
+      if (aS !== bS) return aS - bS;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+    return g.items[0];
+  });
+  return winners.sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
+}
 

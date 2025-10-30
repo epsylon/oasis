@@ -988,55 +988,57 @@ router
    })
   .get('/inhabitants', async (ctx) => {
     const filter = ctx.query.filter || 'all';
-    const query = {
-        search: ctx.query.search || ''
-    };
+    const query = { search: ctx.query.search || '' };
     if (['CVs', 'MATCHSKILLS'].includes(filter)) {
-        query.location = ctx.query.location || '';
-        query.language = ctx.query.language || '';
-        query.skills = ctx.query.skills || '';
+      query.location = ctx.query.location || '';
+      query.language = ctx.query.language || '';
+      query.skills = ctx.query.skills || '';
     }
     const userId = SSBconfig.config.keys.id;
-    const inhabitants = await inhabitantsModel.listInhabitants({
-        filter,
-        ...query
-    });
+    const inhabitants = await inhabitantsModel.listInhabitants({ filter, ...query });
     const [addresses, karmaList] = await Promise.all([
-        bankingModel.listAddressesMerged(),
-        Promise.all(
-            inhabitants.map(async (u) => {
-                try {
-                    const { karmaScore } = await bankingModel.getBankingData(u.id);
-                    return { id: u.id, karmaScore: typeof karmaScore === 'number' ? karmaScore : 0 };
-                } catch {
-                    return { id: u.id, karmaScore: 0 };
-                }
-            })
-        )
+    bankingModel.listAddressesMerged(),
+    Promise.all(
+      inhabitants.map(async (u) => {
+          try {
+            const { karmaScore } = await bankingModel.getBankingData(u.id);
+            return { id: u.id, karmaScore: typeof karmaScore === 'number' ? karmaScore : 0 };
+          } catch {
+            return { id: u.id, karmaScore: 0 };
+          }
+        })
+      )
     ]);
     const addrMap = new Map(addresses.map(x => [x.id, x.address]));
     const karmaMap = new Map(karmaList.map(x => [x.id, x.karmaScore]));
     let enriched = inhabitants.map(u => ({
-        ...u,
-        ecoAddress: addrMap.get(u.id) || null,
-        karmaScore: karmaMap.has(u.id)
-            ? karmaMap.get(u.id)
-            : (typeof u.karmaScore === 'number' ? u.karmaScore : 0)
+      ...u,
+      ecoAddress: addrMap.get(u.id) || null,
+      karmaScore: karmaMap.has(u.id)
+        ? karmaMap.get(u.id)
+        : (typeof u.karmaScore === 'number' ? u.karmaScore : 0)
     }));
     if (filter === 'TOP KARMA') {
-        enriched = enriched.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
+      enriched = enriched.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
     }
     ctx.body = await inhabitantsView(enriched, filter, query, userId);
   })
   .get('/inhabitant/:id', async (ctx) => {
     const id = ctx.params.id;
-    const about = await inhabitantsModel.getLatestAboutById(id);
-    const cv = await inhabitantsModel.getCVByUserId(id);
-    const feed = await inhabitantsModel.getFeedByUserId(id);
+    const [about, cv, feed, photo, bank, lastTs] = await Promise.all([
+      inhabitantsModel.getLatestAboutById(id),
+      inhabitantsModel.getCVByUserId(id),
+      inhabitantsModel.getFeedByUserId(id),
+      inhabitantsModel.getPhotoUrlByUserId(id, 256),
+      bankingModel.getBankingData(id).catch(() => ({ karmaScore: 0 })),
+      inhabitantsModel.getLastActivityTimestampByUserId(id).catch(() => null)
+    ]);
+    const bucketInfo = inhabitantsModel.bucketLastActivity(lastTs || null);
     const currentUserId = SSBconfig.config.keys.id;
-    ctx.body = await inhabitantsProfileView({ about, cv, feed }, currentUserId);
+    const karmaScore = bank && typeof bank.karmaScore === 'number' ? bank.karmaScore : 0;
+    ctx.body = await inhabitantsProfileView({ about, cv, feed, photo, karmaScore, lastActivityBucket: bucketInfo.bucket, viewedId: id }, currentUserId);
   })
- .get('/parliament', async (ctx) => {
+  .get('/parliament', async (ctx) => {
     const mod = ctx.cookies.get('parliamentMod') || 'on';
     if (mod !== 'on') { ctx.redirect('/modules'); return }
     const filter = (ctx.query.filter || 'government').toLowerCase();
@@ -1049,7 +1051,7 @@ router
       candidatures, proposals, futureLaws, canPropose, laws,
       historical, leaders, revocations, futureRevocations, revocationsEnactedCount,
       inhabitantsAll
-      ] = await Promise.all([
+     ] = await Promise.all([
       parliamentModel.listCandidatures('OPEN'),
       parliamentModel.listProposalsCurrent(),
       parliamentModel.listFutureLawsCurrent(),
@@ -1061,7 +1063,7 @@ router
       parliamentModel.listFutureRevocationsCurrent(),
       parliamentModel.countRevocationsEnacted(),
       inhabitantsModel.listInhabitants({ filter: 'all' })
-    ]); 
+    ]);
     const inhabitantsTotal = Array.isArray(inhabitantsAll) ? inhabitantsAll.length : 0;
     const leader = pickLeader(candidatures || []);
     const leaderMeta = leader ? await parliamentModel.getActorMeta({ targetType: leader.targetType || leader.powerType || 'inhabitant', targetId: leader.targetId || leader.powerId }) : null;
@@ -1100,10 +1102,10 @@ router
       leaderMeta,
       powerMeta,
       historicalMetas,
-      leadersMetas,
+      leadersMetas,  
       revocations,
       futureRevocations,
-      revocationsEnactedCount
+      revocationsEnactedCount 
     });
   })
   .get('/tribes', async ctx => {

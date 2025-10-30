@@ -13,7 +13,18 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
-## v0.5.2 - 2025-10-27
+## v0.5.4 - 2025-10-30
+
+### Fixed
+
+ + Content stats (Stats plugin).
+ + Non-avatar inhabitants listing (Inhabitants plugin).
+ + Inhabitants suggestions (Inhabitants plugin).
+ + Activity level (Inhabitants plugin).
+ + Parliament duplication (Parliament plugin).
+ + Added Parliament to blockexplorer (Blockexplorer plugin).
+
+## v0.5.3 - 2025-10-27
 
 ### Fixed
 

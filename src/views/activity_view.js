@@ -10,6 +10,35 @@ function sumAmounts(list = []) {
   return list.reduce((s, x) => s + (parseFloat(x.amount || 0) || 0), 0);
 }
 
+function pickActiveParliamentTerm(terms) {
+  if (!terms.length) return null;
+  const now = Date.now();
+  const getC = t => t.value?.content || t.content || {};
+  const isActive = t => {
+    const c = getC(t);
+    const s = new Date(c.startAt || 0).getTime();
+    const e = new Date(c.endAt || 0).getTime();
+    return s && e && s <= now && now < e;
+  };
+  const cmp = (a, b) => {
+    const ca = getC(a);
+    const cb = getC(b);
+    const aAn = String(ca.method || '').toUpperCase() === 'ANARCHY' ? 1 : 0;
+    const bAn = String(cb.method || '').toUpperCase() === 'ANARCHY' ? 1 : 0;
+    if (aAn !== bAn) return aAn - bAn;
+    const aC = new Date(ca.createdAt || ca.startAt || 0).getTime();
+    const bC = new Date(cb.createdAt || cb.startAt || 0).getTime();
+    if (aC !== bC) return aC - bC;
+    const aS = new Date(ca.startAt || 0).getTime();
+    const bS = new Date(cb.startAt || 0).getTime();
+    if (aS !== bS) return aS - bS;
+    return String(a.id || '').localeCompare(String(b.id || ''));
+  };
+  const active = terms.filter(isActive);
+  if (active.length) return active.sort(cmp)[0];
+  return terms.sort(cmp)[0];
+}
+
 function renderActionCards(actions, userId) {
   const validActions = actions
     .filter(action => {
@@ -29,13 +58,20 @@ function renderActionCards(actions, userId) {
     })
     .sort((a, b) => b.ts - a.ts);
 
-  if (!validActions.length) {
+  const terms = validActions.filter(a => a.type === 'parliamentTerm');
+  let chosenTerm = null;
+  if (terms.length) chosenTerm = pickActiveParliamentTerm(terms);
+  const deduped = chosenTerm
+    ? validActions.filter(a => a.type !== 'parliamentTerm' || a === chosenTerm)
+    : validActions;
+
+  if (!deduped.length) {
     return div({ class: "no-actions" }, p(i18n.noActions));
   }
 
   const seenDocumentTitles = new Set();
 
-  return validActions.map(action => {
+  return deduped.map(action => {
     const date = action.ts ? new Date(action.ts).toLocaleString() : "";
     const userLink = action.author
       ? a({ href: `/author/${encodeURIComponent(action.author)}` }, action.author)
@@ -51,7 +87,7 @@ function renderActionCards(actions, userId) {
       headerText = `[${String(typeLabel).toUpperCase()}]`;
     }
 
-    const content = action.content || {};
+    const content = action.value?.content || action.content || {};
     const cardBody = [];
 
     if (type === 'votes') {

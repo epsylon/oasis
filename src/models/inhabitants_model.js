@@ -9,6 +9,12 @@ const { about, friend } = models({
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
+function toImageUrl(imgId, size=256){
+  if (!imgId) return '/assets/images/default-avatar.png';
+  if (typeof imgId === 'string' && imgId.startsWith('/image/')) return imgId.replace('/image/256/','/image/'+size+'/').replace('/image/512/','/image/'+size+'/');
+  return `/image/${size}/${encodeURIComponent(imgId)}`;
+}
+
 module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
@@ -65,136 +71,121 @@ module.exports = ({ cooler }) => {
     return { bucket: 'red', range: '≥6m' };
   }
 
+  const timeoutPromise = (timeout) => new Promise((_, reject) => setTimeout(() => reject('Timeout'), timeout));
+  const fetchUserImageUrl = async (feedId, size=256) => {
+    try{
+      const img = await Promise.race([about.image(feedId), timeoutPromise(5000)]);
+      const id = typeof img === 'string' ? img : (img && (img.link || img.url));
+      return toImageUrl(id, size);
+    }catch{
+      return '/assets/images/default-avatar.png';
+    }
+  };
+
+  async function listAllBase(ssbClient) {
+    const authorsMsgs = await new Promise((res, rej) => {
+      pull(
+        ssbClient.createLogStream({ limit: logLimit, reverse: true }),
+        pull.filter(msg => !!msg.value?.author && msg.value?.content?.type !== 'tombstone'),
+        pull.collect((err, msgs) => err ? rej(err) : res(msgs))
+      );
+    });
+    const uniqueFeedIds = Array.from(new Set(authorsMsgs.map(r => r.value.author).filter(Boolean)));
+    const users = await Promise.all(
+      uniqueFeedIds.map(async (feedId) => {
+        const rawName = await about.name(feedId);
+        const name = rawName || feedId.slice(0, 10);
+        const description = await about.description(feedId);
+        const photo = await fetchUserImageUrl(feedId, 256);
+        const lastActivityTs = await getLastActivityTimestamp(feedId);
+        const { bucket, range } = bucketLastActivity(lastActivityTs);
+        return { id: feedId, name, description, photo, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
+      })
+    );
+    return Array.from(new Map(users.filter(u => u && u.id).map(u => [u.id, u])).values());
+  }
+
+  function normalizeRel(rel) {
+    const r = rel || {};
+    const iFollow = !!(r.following || r.iFollow || r.youFollow || r.i_follow || r.isFollowing);
+    const followsMe = !!(r.followsMe || r.followingMe || r.follows_me || r.theyFollow || r.isFollowedBy);
+    const blocking = !!(r.blocking || r.iBlock || r.isBlocking);
+    const blockedBy = !!(r.blocked || r.blocksMe || r.isBlockedBy);
+    return { iFollow, followsMe, blocking, blockedBy };
+  }
+
   return {
     async listInhabitants(options = {}) {
       const { filter = 'all', search = '', location = '', language = '', skills = '' } = options;
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
-      const timeoutPromise = (timeout) => new Promise((_, reject) => setTimeout(() => reject('Timeout'), timeout));
-      const fetchUserImage = (feedId) => {
-        return Promise.race([
-          about.image(feedId),
-          timeoutPromise(5000)
-        ]).catch(() => '/assets/images/default-avatar.png');
-      };
-      if (filter === 'GALLERY') {
-        const feedIds = await new Promise((res, rej) => {
-          pull(
-            ssbClient.createLogStream({ limit: logLimit }),
-            pull.filter(msg => {
-              const c = msg.value?.content;
-              const a = msg.value?.author;
-              return c &&
-                c.type === 'about' &&
-                c.type !== 'tombstone' &&
-                typeof c.name === 'string' &&
-                typeof c.about === 'string' &&
-                c.about === a;
-            }),
-            pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-          );
-        });
 
-        const uniqueFeedIds = Array.from(new Set(feedIds.map(r => r.value.author).filter(Boolean)));
-        const users = await Promise.all(
-          uniqueFeedIds.map(async (feedId) => {
-            const name = await about.name(feedId);
-            const description = await about.description(feedId);
-            const image = await fetchUserImage(feedId);
-            const photo =
-              typeof image === 'string'
-                ? `/image/256/${encodeURIComponent(image)}`
-                : '/assets/images/default-avatar.png';
-            return { id: feedId, name, description, photo };
-          })
-        );
+      if (filter === 'GALLERY') {
+        const users = await listAllBase(ssbClient);
         return users;
       }
+
       if (filter === 'all' || filter === 'TOP KARMA' || filter === 'TOP ACTIVITY') {
-        const feedIds = await new Promise((res, rej) => {
-          pull(
-            ssbClient.createLogStream({ limit: logLimit, reverse: true }),
-            pull.filter(msg => {
-              const c = msg.value?.content;
-              const a = msg.value?.author;
-              return c &&
-                c.type === 'about' &&
-                c.type !== 'tombstone' &&
-                typeof c.name === 'string' &&
-                typeof c.about === 'string' &&
-                c.about === a;
-            }),
-            pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-          );
-        });
-        const uniqueFeedIds = Array.from(new Set(feedIds.map(r => r.value.author).filter(Boolean)));
-        let users = await Promise.all(
-          uniqueFeedIds.map(async (feedId) => {
-            const name = await about.name(feedId);
-            const description = await about.description(feedId);
-            const image = await fetchUserImage(feedId);
-            const photo =
-              typeof image === 'string'
-                ? `/image/256/${encodeURIComponent(image)}`
-                : '/assets/images/default-avatar.png';
-            const lastActivityTs = await getLastActivityTimestamp(feedId);
-            const { bucket, range } = bucketLastActivity(lastActivityTs);
-            return { id: feedId, name, description, photo, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
-          })
-        );
-        users = Array.from(new Map(users.filter(u => u && u.id).map(u => [u.id, u])).values());
+        let users = await listAllBase(ssbClient);
         if (search) {
           const q = search.toLowerCase();
           users = users.filter(u =>
-            u.name?.toLowerCase().includes(q) ||
-            u.description?.toLowerCase().includes(q) ||
-            u.id?.toLowerCase().includes(q)
+            (u.name || '').toLowerCase().includes(q) ||
+            (u.description || '').toLowerCase().includes(q) ||
+            (u.id || '').toLowerCase().includes(q)
           );
         }
         const withMetrics = await Promise.all(users.map(async u => {
           const karmaScore = await getLastKarmaScore(u.id);
           return { ...u, karmaScore };
         }));
-        if (filter === 'TOP KARMA') {
-          return withMetrics.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
-        }
-        if (filter === 'TOP ACTIVITY') {
-          return withMetrics.sort((a, b) => (b.lastActivityTs || 0) - (a.lastActivityTs || 0));
-        }
+        if (filter === 'TOP KARMA') return withMetrics.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
+        if (filter === 'TOP ACTIVITY') return withMetrics.sort((a, b) => (b.lastActivityTs || 0) - (a.lastActivityTs || 0));
         return withMetrics;
       }
+
       if (filter === 'contacts') {
         const all = await this.listInhabitants({ filter: 'all' });
         const result = [];
         for (const user of all) {
-          const rel = await friend.getRelationship(user.id);
-          if (rel.following) result.push(user);
+          const rel = await friend.getRelationship(user.id).catch(() => ({}));
+          if (rel && (rel.following || rel.iFollow)) result.push(user);
         }
         return Array.from(new Map(result.map(u => [u.id, u])).values());
       }
+
       if (filter === 'blocked') {
         const all = await this.listInhabitants({ filter: 'all' });
         const result = [];
         for (const user of all) {
-          const rel = await friend.getRelationship(user.id);
-          if (rel.blocking) result.push({ ...user, isBlocked: true });
+          const rel = await friend.getRelationship(user.id).catch(() => ({}));
+          const n = normalizeRel(rel);
+          if (n.blocking) result.push({ ...user, isBlocked: true });
         }
         return Array.from(new Map(result.map(u => [u.id, u])).values());
       }
+
       if (filter === 'SUGGESTED') {
-        const all = await this.listInhabitants({ filter: 'all' });
-        const result = [];
-        for (const user of all) {
-          if (user.id === userId) continue;
-          const rel = await friend.getRelationship(user.id);
-          if (!rel.following && !rel.blocking && rel.followsMe) {
-            const cv = await this.getCVByUserId(user.id);
-            if (cv) result.push({ ...this._normalizeCurriculum(cv), mutualCount: 1 });
-          }
-        }
-        return Array.from(new Map(result.map(u => [u.id, u])).values())
-          .sort((a, b) => (b.mutualCount || 0) - (a.mutualCount || 0));
+        const base = await listAllBase(ssbClient);
+        const rels = await Promise.all(
+          base.map(async u => {
+            if (u.id === userId) return null;
+            const rel = await friend.getRelationship(u.id).catch(() => ({}));
+            const n = normalizeRel(rel);
+            const karmaScore = await getLastKarmaScore(u.id);
+            return { user: u, rel: n, karmaScore };
+          })
+        );
+        const candidates = rels.filter(Boolean).filter(x => !x.rel.iFollow && !x.rel.blocking && !x.rel.blockedBy);
+        const enriched = candidates.map(x => ({
+          ...x.user,
+          karmaScore: x.karmaScore,
+          mutualCount: x.rel.followsMe ? 1 : 0
+        }));
+        const unique = Array.from(new Map(enriched.map(u => [u.id, u])).values());
+        return unique.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0) || (b.lastActivityTs || 0) - (a.lastActivityTs || 0));
       }
+
       if (filter === 'CVs' || filter === 'MATCHSKILLS') {
         const records = await new Promise((res, rej) => {
           pull(
@@ -207,44 +198,55 @@ module.exports = ({ cooler }) => {
           );
         });
 
-        let cvs = records.map(r => this._normalizeCurriculum(r.value.content));
-        cvs = Array.from(new Map(cvs.map(u => [u.id, u])).values());
+        let cvs = records.map(r => r.value.content);
+        cvs = Array.from(new Map(cvs.map(u => [u.author, u])).values());
 
         if (filter === 'CVs') {
+          let out = await Promise.all(cvs.map(async c => {
+            const photo = await fetchUserImageUrl(c.author, 256);
+            const lastActivityTs = await getLastActivityTimestamp(c.author);
+            const { bucket, range } = bucketLastActivity(lastActivityTs);
+            const base = this._normalizeCurriculum(c, photo);
+            return { ...base, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
+          }));
           if (search) {
             const q = search.toLowerCase();
-            cvs = cvs.filter(u =>
-              u.name.toLowerCase().includes(q) ||
-              u.description.toLowerCase().includes(q) ||
-              u.skills.some(s => s.toLowerCase().includes(q))
+            out = out.filter(u =>
+              (u.name || '').toLowerCase().includes(q) ||
+              (u.description || '').toLowerCase().includes(q) ||
+              u.skills.some(s => (s || '').toLowerCase().includes(q))
             );
           }
-          if (location) {
-            cvs = cvs.filter(u => u.location?.toLowerCase() === location.toLowerCase());
-          }
-          if (language) {
-            cvs = cvs.filter(u => u.languages.map(l => l.toLowerCase()).includes(language.toLowerCase()));
-          }
+          if (location) out = out.filter(u => (u.location || '').toLowerCase() === location.toLowerCase());
+          if (language) out = out.filter(u => u.languages.map(l => l.toLowerCase()).includes(language.toLowerCase()));
           if (skills) {
             const skillList = skills.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-            cvs = cvs.filter(u => skillList.every(s => u.skills.map(k => k.toLowerCase()).includes(s)));
+            out = out.filter(u => skillList.every(s => u.skills.map(k => (k || '').toLowerCase()).includes(s)));
           }
-          return cvs;
+          return out;
         }
+
         if (filter === 'MATCHSKILLS') {
-          const cv = await this.getCVByUserId();
-          const userSkills = cv
+          const base = await Promise.all(cvs.map(async c => {
+            const photo = await fetchUserImageUrl(c.author, 256);
+            const lastActivityTs = await getLastActivityTimestamp(c.author);
+            const { bucket, range } = bucketLastActivity(lastActivityTs);
+            const norm = this._normalizeCurriculum(c, photo);
+            return { ...norm, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
+          }));
+          const mecv = await this.getCVByUserId();
+          const userSkills = mecv
             ? [
-                ...cv.personalSkills,
-                ...cv.oasisSkills,
-                ...cv.educationalSkills,
-                ...cv.professionalSkills
-              ].map(s => s.toLowerCase())
+                ...(mecv.personalSkills || []),
+                ...(mecv.oasisSkills || []),
+                ...(mecv.educationalSkills || []),
+                ...(mecv.professionalSkills || [])
+              ].map(s => (s || '').toLowerCase())
             : [];
           if (!userSkills.length) return [];
-          const matches = cvs.map(c => {
+          const matches = base.map(c => {
             if (c.id === userId) return null;
-            const common = c.skills.map(s => s.toLowerCase()).filter(s => userSkills.includes(s));
+            const common = c.skills.map(s => (s || '').toLowerCase()).filter(s => userSkills.includes(s));
             if (!common.length) return null;
             const matchScore = common.length / userSkills.length;
             return { ...c, commonSkills: common, matchScore };
@@ -252,25 +254,22 @@ module.exports = ({ cooler }) => {
           return matches.sort((a, b) => b.matchScore - a.matchScore);
         }
       }
+
       return [];
     },
 
-    _normalizeCurriculum(c) {
-      const photo =
-        typeof c.photo === 'string'
-          ? `/image/256/${encodeURIComponent(c.photo)}`
-          : '/assets/images/default-avatar.png';
-
+    _normalizeCurriculum(c, photoUrl) {
+      const photo = photoUrl || toImageUrl(c.photo, 256);
       return {
         id: c.author,
         name: c.name,
         description: c.description,
         photo,
         skills: [
-          ...c.personalSkills,
-          ...c.oasisSkills,
-          ...c.educationalSkills,
-          ...c.professionalSkills
+          ...(c.personalSkills || []),
+          ...(c.oasisSkills || []),
+          ...(c.educationalSkills || []),
+          ...(c.professionalSkills || [])
         ],
         location: c.location,
         languages: typeof c.languages === 'string'
@@ -279,7 +278,7 @@ module.exports = ({ cooler }) => {
         createdAt: c.createdAt
       };
     },
-    
+
     async getLatestAboutById(id) {
       const ssbClient = await openSsb();
       const records = await new Promise((res, rej) => {
@@ -296,7 +295,7 @@ module.exports = ({ cooler }) => {
       const latest = records.sort((a, b) => b.value.timestamp - a.value.timestamp)[0];
       return latest.value.content;
     },
-    
+
     async getFeedByUserId(id) {
       const ssbClient = await openSsb();
       const targetId = id || ssbClient.id;
@@ -332,6 +331,19 @@ module.exports = ({ cooler }) => {
         );
       });
       return records.length ? records[records.length - 1].value.content : null;
+    },
+
+    async getPhotoUrlByUserId(id, size = 256) {
+      return await fetchUserImageUrl(id, size);
+    },
+
+    async getLastActivityTimestampByUserId(id) {
+      return await getLastActivityTimestamp(id);
+    },
+
+    bucketLastActivity(ts) {
+      return bucketLastActivity(ts);
     }
   };
 };
+

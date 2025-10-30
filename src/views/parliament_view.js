@@ -24,11 +24,8 @@ const showVoteMetrics = (method) => {
   const m = String(method || '').toUpperCase();
   return !(m === 'DICTATORSHIP' || m === 'KARMATOCRACY');
 };
-
 const applyEl = (fn, attrs, kids) => fn.apply(null, [attrs || {}].concat(kids || []));
-
 const methodImageSrc = (method) => `assets/images/${String(method || '').toUpperCase().toLowerCase()}.png`;
-
 const MethodBadge = (method) => {
   const m = String(method || '').toUpperCase();
   const label = String(i18n[`parliamentMethod${m}`] || m).toUpperCase();
@@ -39,7 +36,6 @@ const MethodBadge = (method) => {
     img({ src: methodImageSrc(m), alt: label, class: 'method-badge__icon' })
   );
 };
-
 const MethodHero = (method) => {
   const m = String(method || '').toUpperCase();
   const label = String(i18n[`parliamentMethod${m}`] || m).toUpperCase();
@@ -50,13 +46,11 @@ const MethodHero = (method) => {
     img({ src: methodImageSrc(m), alt: label, class: 'method-hero__icon' })
   );
 };
-
 const KPI = (label, value) =>
   div({ class: 'kpi' },
     span({ class: 'kpi__label' }, label),
     span({ class: 'kpi__value' }, value)
   );
-
 const CycleInfo = (start, end, labels = {
   since: i18n.parliamentLegSince,
   end: i18n.parliamentLegEnd,
@@ -67,7 +61,6 @@ const CycleInfo = (start, end, labels = {
     KPI((labels.end + ': ').toUpperCase(), fmt(end)),
     KPI((labels.remaining + ': ').toUpperCase(), timeLeft(end))
   );
-
 const Tabs = (active) =>
   div(
     { class: 'filters' },
@@ -78,7 +71,6 @@ const Tabs = (active) =>
       )
     )
   );
-
 const GovHeader = (g) => {
   const termStart = g && g.since ? g.since : moment().toISOString();
   const termEnd = g && g.end ? g.end : moment(termStart).add(1, 'minutes').toISOString();
@@ -91,7 +83,6 @@ const GovHeader = (g) => {
   const votesReceivedNum = Number.isFinite(Number(g.votesReceived)) ? Number(g.votesReceived) : 0;
   const totalVotesNum = Number.isFinite(Number(g.totalVotes)) ? Number(g.totalVotes) : 0;
   const votesDisplay = `${votesReceivedNum} (${totalVotesNum})`;
-
   return div(
     { class: 'cycle-info' },
     div({ class: 'kpi' },
@@ -122,29 +113,23 @@ const GovHeader = (g) => {
       : null
   );
 };
-
 const GovernmentCard = (g, meta) => {
   const termStart = g && g.since ? g.since : moment().toISOString();
   const termEnd   = g && g.end   ? g.end   : moment(termStart).add(1, 'minutes').toISOString();
-
   const actorLabel =
     g.powerType === 'tribe'
       ? (i18n.parliamentActorInPowerTribe || i18n.parliamentActorInPower || 'TRIBE RULING')
       : (i18n.parliamentActorInPowerInhabitant || i18n.parliamentActorInPower || 'INHABITANT RULING');
-
   const methodKeyRaw = g && g.method ? String(g.method) : 'ANARCHY';
   const methodKey    = methodKeyRaw.toUpperCase();
   const i18nMeth     = i18n[`parliamentMethod${methodKey}`];
   const methodLabel  = (i18nMeth && String(i18nMeth).trim() ? String(i18nMeth) : methodKey).toUpperCase();
-
   const actorLink =
     g.powerType === 'tribe'
       ? a({ class: 'user-link', href: `/tribe/${encodeURIComponent(g.powerId)}` }, g.powerTitle || g.powerId)
       : a({ class: 'user-link', href: `/author/${encodeURIComponent(g.powerId)}` }, g.powerTitle || g.powerId);
-
   const actorBio = meta && meta.bio ? meta.bio : '';
   const memberIds = Array.isArray(g.membersList) ? g.membersList : (Array.isArray(g.members) ? g.members : []);
-
   const membersRow =
     g.powerType === 'tribe'
       ? tr(
@@ -160,7 +145,6 @@ const GovernmentCard = (g, meta) => {
           )
         )
       : null;
-
   return div(
     { class: 'card' },
     h2(i18n.parliamentGovernmentCard),
@@ -208,13 +192,11 @@ const GovernmentCard = (g, meta) => {
       : null
   );
 };
-
 const NoGovernment = () => div({ class: 'empty' }, p(i18n.parliamentNoStableGov));
 const NoProposals = () => div({ class: 'empty' }, p(i18n.parliamentNoProposals));
 const NoLaws = () => div({ class: 'empty' }, p(i18n.parliamentNoLaws));
 const NoGovernments = () => div({ class: 'empty' }, p(i18n.parliamentNoGovernments));
 const NoRevocations = () => null;
-
 const CandidatureForm = () =>
   div(
     { class: 'div-center' },
@@ -230,7 +212,6 @@ const CandidatureForm = () =>
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentCandidatureProposeBtn)
     )
   );
-
 const pickLeader = (arr) => {
   if (!arr || !arr.length) return null;
   const sorted = [...arr].sort((a, b) => {
@@ -246,37 +227,30 @@ const pickLeader = (arr) => {
   });
   return sorted[0];
 };
-
 const CandidatureStats = (cands, govCard, leaderMeta) => {
   if (!cands || !cands.length) return null;
-
   const leader      = pickLeader(cands || []);
   const methodKey   = String(leader.method || '').toUpperCase();
   const methodLabel = String(i18n[`parliamentMethod${methodKey}`] || methodKey).toUpperCase();
   const votes       = String(leader.votes || 0);
   const avatarSrc   = (leaderMeta && leaderMeta.avatarUrl) ? leaderMeta.avatarUrl : '/assets/images/default-avatar.png';
-
   const winLbl = (i18n.parliamentWinningCandidature || i18n.parliamentCurrentLeader || 'WINNING CANDIDATURE').toUpperCase();
   const idLink = leader
     ? (leader.targetType === 'inhabitant'
         ? a({ class: 'user-link', href: `/author/${encodeURIComponent(leader.targetId)}` }, leader.targetId)
         : a({ class: 'tag-link', href: `/tribe/${encodeURIComponent(leader.targetId)}?` }, leader.targetTitle || leader.targetId))
     : null;
-
   return div(
     { class: 'card' },
     h2(i18n.parliamentElectionsStatusTitle),
-
     div({ class: 'card-field card-field--spaced' },
       span({ class: 'card-label' }, winLbl + ': '),
       span({ class: 'card-value' }, idLink)
     ),
-
     div({ class: 'card-field card-field--spaced' },
       span({ class: 'card-label' }, (i18n.parliamentGovMethod + ': ').toUpperCase()),
       span({ class: 'card-value' }, methodLabel)
     ),
-
     div(
       { class: 'table-wrap mt-2' },
       applyEl(table, [
@@ -298,7 +272,6 @@ const CandidatureStats = (cands, govCard, leaderMeta) => {
     )
   );
 };
-
 const CandidaturesTable = (candidatures) => {
   const rows = (candidatures || []).map(c => {
     const idLink =
@@ -330,7 +303,6 @@ const CandidaturesTable = (candidatures) => {
     ])
   );
 };
-
 const ProposalForm = () =>
   div(
     { class: 'div-center' },
@@ -344,7 +316,6 @@ const ProposalForm = () =>
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentProposalPublish)
     )
   );
-
 const ProposalsList = (proposals) => {
   if (!proposals || !proposals.length) return null;
   const cards = proposals.map(pItem =>
@@ -374,7 +345,6 @@ const ProposalsList = (proposals) => {
     applyEl(div, null, cards)
   );
 };
-
 const FutureLawsList = (rows) => {
   if (!rows || !rows.length) return null;
   const cards = rows.map(pItem =>
@@ -394,7 +364,6 @@ const FutureLawsList = (rows) => {
     applyEl(div, null, cards)
   );
 };
-
 const RevocationForm = (laws = []) =>
   div(
     { class: 'div-center' },
@@ -421,7 +390,6 @@ const RevocationForm = (laws = []) =>
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentRevocationPublish || 'Publish Revocation')
     )
   );
-
 const RevocationsList = (revocations) => {
   if (!revocations || !revocations.length) return null;
   const cards = revocations.map(pItem =>
@@ -493,7 +461,6 @@ const RevocationsList = (revocations) => {
     applyEl(div, null, cards)
   );
 };
-
 const FutureRevocationsList = (rows) => {
   if (!rows || !rows.length) return null;
   const cards = rows.map(pItem =>
@@ -513,7 +480,6 @@ const FutureRevocationsList = (rows) => {
     applyEl(div, null, cards)
   );
 };
-
 const LawsStats = (laws = [], revocatedCount = 0) => {
   const proposed = laws.length;
   const approved = laws.length;
@@ -543,7 +509,6 @@ const LawsStats = (laws = [], revocatedCount = 0) => {
     ])
   );
 };
-
 const LawsList = (laws) => {
   if (!laws || !laws.length) return NoLaws();
   const cards = laws.map(l => {
@@ -569,7 +534,6 @@ const LawsList = (laws) => {
     applyEl(div, null, cards)
   );
 };
-
 const HistoricalGovsSummary = (rows = []) => {
   const byMethod = new Map();
   for (const g of rows) {
@@ -589,7 +553,6 @@ const HistoricalGovsSummary = (rows = []) => {
     ])
   );
 };
-
 const HistoricalList = (rows, metasByKey = {}) => {
   if (!rows || !rows.length) return NoGovernments();
   const cards = rows.map(g => {
@@ -672,7 +635,6 @@ const HistoricalList = (rows, metasByKey = {}) => {
     applyEl(div, null, cards)
   );
 };
-
 const countCandidaturesByActor = (cands = []) => {
   const m = new Map();
   for (const c of cands) {
@@ -681,7 +643,6 @@ const countCandidaturesByActor = (cands = []) => {
   }
   return m;
 };
-
 const LeadersSummary = (leaders = [], candidatures = []) => {
   const candCounts = countCandidaturesByActor(candidatures);
   const totals = leaders.reduce((acc, l) => {
@@ -727,7 +688,6 @@ const LeadersSummary = (leaders = [], candidatures = []) => {
     ])
   );
 };
-
 const LeadersList = (leaders, metas = {}, candidatures = []) => {
   if (!leaders || !leaders.length) return div({ class: 'empty' }, p(i18n.parliamentNoLeaders));
   const rows = leaders.map(l => {
@@ -765,7 +725,6 @@ const LeadersList = (leaders, metas = {}, candidatures = []) => {
     ])
   );
 };
-
 const RulesContent = () =>
   div(
     { class: 'card' },
@@ -786,7 +745,6 @@ const RulesContent = () =>
       li(i18n.parliamentRulesLeaders)
     )
   );
-
 const CandidaturesSection = (governmentCard, candidatures, leaderMeta) => {
   const termStart = governmentCard && governmentCard.since ? governmentCard.since : moment().toISOString();
   const termEnd   = governmentCard && governmentCard.end   ? governmentCard.end   : moment(termStart).add(1, 'minutes').toISOString();
@@ -798,7 +756,6 @@ const CandidaturesSection = (governmentCard, candidatures, leaderMeta) => {
     candidatures && candidatures.length ? CandidaturesTable(candidatures) : null
   );
 };
-
 const ProposalsSection = (governmentCard, proposals, futureLaws, canPropose) => {
   const has = proposals && proposals.length > 0;
   const fl = FutureLawsList(futureLaws || []);
@@ -806,7 +763,6 @@ const ProposalsSection = (governmentCard, proposals, futureLaws, canPropose) => 
   if (!has && !canPropose) return div(h2(i18n.parliamentGovernmentCard), GovHeader(governmentCard || {}), NoProposals(), fl);
   return div(h2(i18n.parliamentGovernmentCard), GovHeader(governmentCard || {}), ProposalForm(), ProposalsList(proposals), fl);
 };
-
 const RevocationsSection = (governmentCard, laws, revocations, futureRevocations) =>
   div(
     h2(i18n.parliamentGovernmentCard),
@@ -815,8 +771,7 @@ const RevocationsSection = (governmentCard, laws, revocations, futureRevocations
     RevocationsList(revocations || []) || '',
     FutureRevocationsList(futureRevocations || []) || ''
   );
-
-exports.parliamentView = async (state) => {
+const parliamentView = async (state) => {
   const {
     filter,
     governmentCard,
@@ -835,13 +790,11 @@ exports.parliamentView = async (state) => {
     historicalMetas = {},
     leadersMetas = {}
   } = state;
-
   const LawsSectionWrap = () =>
     div(
       LawsStats(laws || [], revocationsEnactedCount || 0),
       LawsList(laws || [])
     );
-
   const fallbackAnarchy = {
     method: 'ANARCHY',
     votesReceived: 0,
@@ -853,7 +806,6 @@ exports.parliamentView = async (state) => {
     revocated: 0,
     efficiency: 0
   };
-
   return template(
     i18n.parliamentTitle,
     section(div({ class: 'tags-header' }, h2(i18n.parliamentTitle), p(i18n.parliamentDescription)), Tabs(filter)),
@@ -869,4 +821,5 @@ exports.parliamentView = async (state) => {
     )
   );
 };
+module.exports = { parliamentView, pickLeader };
 
