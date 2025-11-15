@@ -71,17 +71,26 @@ function renderActionCards(actions, userId) {
 
   const seenDocumentTitles = new Set();
 
-  return deduped.map(action => {
+  const cards = deduped.map(action => {
     const date = action.ts ? new Date(action.ts).toLocaleString() : "";
     const userLink = action.author
       ? a({ href: `/author/${encodeURIComponent(action.author)}` }, action.author)
       : 'unknown';
     const type = action.type || 'unknown';
+    let skip = false;
 
     let headerText;
     if (type.startsWith('parliament')) {
       const sub = type.replace('parliament', '');
       headerText = `[PARLIAMENT · ${sub.toUpperCase()}]`;
+    } else if (type.startsWith('courts')) {
+      const rawSub = type.slice('courts'.length);
+      const pretty = rawSub
+        .replace(/^[_\s]+/, '')
+        .replace(/[_\s]+/g, ' · ')
+        .replace(/([a-z])([A-Z])/g, '$1 · $2');
+      const finalSub = pretty || 'EVENT';
+      headerText = `[COURTS · ${finalSub.toUpperCase()}]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -180,14 +189,13 @@ function renderActionCards(actions, userId) {
             location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeLocationLabel.toUpperCase()) + ':'), span({ class: 'card-value' }, ...renderUrl(location))) : "",
             typeof isAnonymous === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel+ ':'), span({ class: 'card-value' }, isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : "",
             inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeModeLabel) + ':'), span({ class: 'card-value' }, inviteMode.toUpperCase())) : "",
-            typeof isLARP === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel+ ':'), span({ class: 'card-value' }, isLARP ? i18n.tribeYes : i18n.tribeNo)) : "",
+            typeof isLARP === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel+ ':'), span({ class: 'card-value' }, isLARP ? i18n.tribeYes : i18n.tribeNo)) : ""
          ), 
           Array.isArray(members) ? h2(`${i18n.tribeMembersCount}: ${members.length}`) : "",
           image  
             ? img({ src: `/blob/${encodeURIComponent(image)}`, class: 'feed-image tribe-image' })
             : img({ src: '/assets/images/default-tribe.png', class: 'feed-image tribe-image' }),
           p({ class: 'tribe-description' }, ...renderUrl(description || '')),
-         
           validTags.length
             ? div({ class: 'card-tags' }, validTags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
@@ -333,7 +341,7 @@ function renderActionCards(actions, userId) {
           location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.location || 'Location') + ':'), span({ class: 'card-value' }, location)) : "",
           typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
           price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
-          br,
+          br(),
           organizer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.organizer || 'Organizer') + ': '), a({ class: "user-link", href: `/author/${encodeURIComponent(organizer)}` }, organizer)) : "",
           Array.isArray(attendees) ? h2({ class: 'card-label' }, (i18n.attendees || 'Attendees') + ': ' + attendees.length) : ""
         )
@@ -463,19 +471,18 @@ function renderActionCards(actions, userId) {
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStatus + ": " ), span({ class: 'card-value' }, status.toUpperCase())),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : "")),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
-          br,
+          br(),
           image
             ? img({ src: `/blob/${encodeURIComponent(image)}` })
             : img({ src: '/assets/images/default-market.png', alt: title }),
-          br,
+          br(),
           div({ class: "market-card price" },
             p(`${i18n.marketItemPrice}: ${price} ECO`)
           ),
           item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? div({ class: "auction-info" },
                 auctions_poll && auctions_poll.length > 0
-                  ? [
-                      p({ class: "auction-bid-text" }, i18n.marketAuctionBids),
+                  ?
                       table({ class: 'auction-bid-table' },
                         tr(
                           th(i18n.marketAuctionBidTime),
@@ -491,7 +498,6 @@ function renderActionCards(actions, userId) {
                           );
                         })
                       )
-                    ]
                   : p(i18n.marketNoBids),
                 form({ method: "POST", action: `/market/bid/${encodeURIComponent(action.id)}` },
                   input({ type: "number", name: "bidAmount", step: "0.000001", min: "0.000001", placeholder: i18n.marketYourBid, required: true }),
@@ -525,102 +531,102 @@ function renderActionCards(actions, userId) {
         deadline, followers, backers, milestones,
         bounty, bountyAmount, bounty_currency,
         activity, activityActor
-    } = content;
+      } = content;
 
-    const ratio = goal ? Math.min(100, Math.round((parseFloat(pledged || 0) / parseFloat(goal)) * 100)) : 0;
-    const displayStatus = String(status || 'ACTIVE').toUpperCase();
-    const followersCount = Array.isArray(followers) ? followers.length : 0;
-    const backersCount = Array.isArray(backers) ? backers.length : 0;
-    const backersTotal = sumAmounts(backers || []);
-    const msCount = Array.isArray(milestones) ? milestones.length : 0;
-    const lastMs = Array.isArray(milestones) && milestones.length ? milestones[milestones.length - 1] : null;
-    const bountyVal = typeof bountyAmount !== 'undefined'
+      const ratio = goal ? Math.min(100, Math.round((parseFloat(pledged || 0) / parseFloat(goal)) * 100)) : 0;
+      const displayStatus = String(status || 'ACTIVE').toUpperCase();
+      const followersCount = Array.isArray(followers) ? followers.length : 0;
+      const backersCount = Array.isArray(backers) ? backers.length : 0;
+      const backersTotal = sumAmounts(backers || []);
+      const msCount = Array.isArray(milestones) ? milestones.length : 0;
+      const lastMs = Array.isArray(milestones) && milestones.length ? milestones[milestones.length - 1] : null;
+      const bountyVal = typeof bountyAmount !== 'undefined'
         ? bountyAmount
         : (typeof bounty === 'number' ? bounty : null);
 
-    if (activity && activity.kind) {
+      if (activity && activity.kind) {
         const tmpl =
-            activity.kind === 'follow'
-                ? (i18n.activityProjectFollow || '%OASIS% is now %ACTION% this project: %PROJECT%')
-                : activity.kind === 'unfollow'
-                    ? (i18n.activityProjectUnfollow || '%OASIS% is now %ACTION% this project: %PROJECT%')
-                    : '%OASIS% performed an unknown action on %PROJECT%';
+          activity.kind === 'follow'
+            ? (i18n.activityProjectFollow || '%OASIS% is now %ACTION% this project: %PROJECT%')
+            : activity.kind === 'unfollow'
+              ? (i18n.activityProjectUnfollow || '%OASIS% is now %ACTION% this project: %PROJECT%')
+              : '%OASIS% performed an unknown action on %PROJECT%';
 
         const actionWord =
-            activity.kind === 'follow'
-                ? (i18n.following || 'FOLLOWING')
-                : activity.kind === 'unfollow'
-                    ? (i18n.unfollowing || 'UNFOLLOWING')
-                    : 'ACTION';
+          activity.kind === 'follow'
+            ? (i18n.following || 'FOLLOWING')
+            : activity.kind === 'unfollow'
+              ? (i18n.unfollowing || 'UNFOLLOWING')
+              : 'ACTION';
 
         const msgHtml = tmpl
-            .replace('%OASIS%', `<a class="user-link" href="/author/${encodeURIComponent(activity.activityActor || '')}">${activity.activityActor || ''}</a>`)
-            .replace('%PROJECT%', `<a class="user-link" href="/projects/${encodeURIComponent(action.tipId || action.id)}">${title || ''}</a>`)
-            .replace('%ACTION%', `<strong>${actionWord}</strong>`);
+          .replace('%OASIS%', `<a class="user-link" href="/author/${encodeURIComponent(activity.activityActor || '')}">${activity.activityActor || ''}</a>`)
+          .replace('%PROJECT%', `<a class="user-link" href="/projects/${encodeURIComponent(action.tipId || action.id)}">${title || ''}</a>`)
+          .replace('%ACTION%', `<strong>${actionWord}</strong>`);
 
         return div({ class: 'card card-rpg' },
-            div({ class: 'card-header' },
-                h2({ class: 'card-label' }, `[${(i18n.typeProject || 'PROJECT').toUpperCase()}]`),
-                form({ method: "GET", action: `/projects/${encodeURIComponent(action.tipId || action.id)}` },
-                    button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-                )
-            ),
-            div(
-                p({ innerHTML: msgHtml })
-            ),
-            p({ class: 'card-footer' },
-                span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
-                a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
+          div({ class: 'card-header' },
+            h2({ class: 'card-label' }, `[${(i18n.typeProject || 'PROJECT').toUpperCase()}]`),
+            form({ method: "GET", action: `/projects/${encodeURIComponent(action.tipId || action.id)}` },
+              button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
             )
+          ),
+          div(
+            p({ innerHTML: msgHtml })
+          ),
+          p({ class: 'card-footer' },
+            span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
+            a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
+          )
         );
-    }
+      }
 
-    cardBody.push(
+      cardBody.push(
         div({ class: 'card-section project' },
-            title ? div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.title + ':'),
-                span({ class: 'card-value' }, title)
-            ) : "",
-            typeof goal !== 'undefined' ? div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.projectGoal + ':'),
-                span({ class: 'card-value' }, `${goal} ECO`)
-            ) : "",
-            typeof progress !== 'undefined' ? div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.projectProgress + ':'),
-                span({ class: 'card-value' }, `${progress || 0}%`)
-            ) : "",
-            deadline ? div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.projectDeadline + ':'),
-                span({ class: 'card-value' }, moment(deadline).format('YYYY/MM/DD HH:mm'))
-            ) : "",
-            div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.projectStatus + ':'),
-                span({ class: 'card-value' }, i18n['projectStatus' + displayStatus] || displayStatus)
-            ),
-            div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.projectFunding + ':'),
-                span({ class: 'card-value' }, `${ratio}%`)
-            ),
-            typeof pledged !== 'undefined' ? div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.projectPledged + ':'),
-                span({ class: 'card-value' }, `${pledged || 0} ECO`)
-            ) : "",
-            div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.projectFollowers + ':'),
-                span({ class: 'card-value' }, `${followersCount}`)
-            ),
-            div({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.projectBackers + ':'),
-                span({ class: 'card-value' }, `${backersCount} · ${backersTotal} ECO`)
-            ),
-            msCount ? div({ class: 'card-field' },
-                span({ class: 'card-label' }, (i18n.projectMilestones || 'Milestones') + ':'),
-                span({ class: 'card-value' }, `${msCount}${lastMs && lastMs.title ? ' · ' + lastMs.title : ''}`)
-            ) : "",
-            bountyVal != null ? div({ class: 'card-field' },
-                span({ class: 'card-label' }, (i18n.projectBounty || 'Bounty') + ':'),
-                span({ class: 'card-value' }, `${bountyVal} ${(bounty_currency || 'ECO').toUpperCase()}`)
-            ) : ""
+          title ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.title + ':'),
+            span({ class: 'card-value' }, title)
+          ) : "",
+          typeof goal !== 'undefined' ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectGoal + ':'),
+            span({ class: 'card-value' }, `${goal} ECO`)
+          ) : "",
+          typeof progress !== 'undefined' ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectProgress + ':'),
+            span({ class: 'card-value' }, `${progress || 0}%`)
+          ) : "",
+          deadline ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectDeadline + ':'),
+            span({ class: 'card-value' }, moment(deadline).format('YYYY/MM/DD HH:mm'))
+          ) : "",
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectStatus + ':'),
+            span({ class: 'card-value' }, i18n['projectStatus' + displayStatus] || displayStatus)
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectFunding + ':'),
+            span({ class: 'card-value' }, `${ratio}%`)
+          ),
+          typeof pledged !== 'undefined' ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectPledged + ':'),
+            span({ class: 'card-value' }, `${pledged || 0} ECO`)
+          ) : "",
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectFollowers + ':'),
+            span({ class: 'card-value' }, `${followersCount}`)
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.projectBackers + ':'),
+            span({ class: 'card-value' }, `${backersCount} · ${backersTotal} ECO`)
+          ),
+          msCount ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.projectMilestones || 'Milestones') + ':'),
+            span({ class: 'card-value' }, `${msCount}${lastMs && lastMs.title ? ' · ' + lastMs.title : ''}`)
+          ) : "",
+          bountyVal != null ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.projectBounty || 'Bounty') + ':'),
+            span({ class: 'card-value' }, `${bountyVal} ${(bounty_currency || 'ECO').toUpperCase()}`)
+          ) : ""
         )
       );
     }
@@ -792,14 +798,58 @@ function renderActionCards(actions, userId) {
       );
     }
 
+    if (type.startsWith('courts')) {
+      if (type === 'courtsCase') {
+        const { title, method, accuser, status, answerBy, evidenceBy, decisionBy, needed, yes, total, voteId } = content;
+        cardBody.push(
+          div({ class: 'card-section courts' },
+            title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsCaseTitle.toUpperCase() + ':'), span({ class: 'card-value' }, title)) : '',
+            status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThStatus.toUpperCase() + ':'), span({ class: 'card-value' }, status)) : '',
+            method ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsMethod.toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['courtsMethod' + String(method).toUpperCase()] || method).toUpperCase())) : '',
+            answerBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThAnswerBy + ':'), span({ class: 'card-value' }, new Date(answerBy).toLocaleString())) : '',
+            evidenceBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThEvidenceBy + ':'), span({ class: 'card-value' }, new Date(evidenceBy).toLocaleString())) : '',
+            decisionBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThDecisionBy + ':'), span({ class: 'card-value' }, new Date(decisionBy).toLocaleString())) : '',
+            accuser ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsAccuser + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(accuser)}`, class: 'user-link' }, accuser))) : '',
+            typeof needed !== 'undefined' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsVotesNeeded + ':'), span({ class: 'card-value' }, String(needed))) : '',
+            (typeof yes !== 'undefined' || typeof total !== 'undefined') ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsVotesSlashTotal + ':'), span({ class: 'card-value' }, `${Number(yes || 0)}/${Number(total || 0)}`)) : '',
+            voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsOpenVote + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : ''
+          )
+        );
+      } else if (type === 'courtsNomination') {
+        const { judgeId } = content;
+        cardBody.push(
+          div({ class: 'card-section courts' },
+            judgeId ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsJudge + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(judgeId)}`, class: 'user-link' }, judgeId))) : ''
+          )
+        );
+      } else {
+        skip = true;
+      }
+    }
+
     const viewHref = getViewDetailsAction(type, action);
     const isParliamentTarget =
       viewHref === '/parliament?filter=candidatures' ||
       viewHref === '/parliament?filter=government'   ||
       viewHref === '/parliament?filter=proposals'    ||
-      viewHref === '/parliament?filter=revocations'    ||
+      viewHref === '/parliament?filter=revocations'  ||
       viewHref === '/parliament?filter=laws';
+
+    const isCourtsTarget =
+      viewHref === '/courts?filter=cases'    ||
+      viewHref === '/courts?filter=mycases'  ||
+      viewHref === '/courts?filter=actions'  ||
+      viewHref === '/courts?filter=judges'   ||
+      viewHref === '/courts?filter=history'  ||
+      viewHref === '/courts?filter=rules'    ||
+      viewHref === '/courts?filter=open';
+
     const parliamentFilter = isParliamentTarget ? (viewHref.split('filter=')[1] || '') : '';
+    const courtsFilter     = isCourtsTarget     ? (viewHref.split('filter=')[1] || '') : '';
+
+    if (skip) {
+      return null;
+    }
 
     return div({ class: 'card card-rpg' },
       div({ class: 'card-header' },
@@ -807,13 +857,21 @@ function renderActionCards(actions, userId) {
         type !== 'feed' && type !== 'aiExchange' && type !== 'bankWallet' && (!action.tipId || action.tipId === action.id)
           ? (
               isParliamentTarget
-                ? form({ method: "GET", action: "/parliament" },
+                ? form(
+                    { method: "GET", action: "/parliament" },
                     input({ type: "hidden", name: "filter", value: parliamentFilter }),
                     button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
                   )
-                : form({ method: "GET", action: viewHref },
-                    button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-                  )
+                : isCourtsTarget
+                  ? form(
+                      { method: "GET", action: "/courts" },
+                      input({ type: "hidden", name: "filter", value: courtsFilter }),
+                      button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+                    )
+                  : form(
+                      { method: "GET", action: viewHref },
+                      button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+                    )
             )
           : ''
       ),
@@ -824,43 +882,58 @@ function renderActionCards(actions, userId) {
       )
     );
   });
+
+  const filteredCards = cards.filter(Boolean);
+  if (!filteredCards.length) {
+    return div({ class: "no-actions" }, p(i18n.noActions));
+  }
+  return filteredCards;
 }
 
 function getViewDetailsAction(type, action) {
-    const id = encodeURIComponent(action.tipId || action.id);
-    switch (type) {
-        case 'parliamentCandidature': return `/parliament?filter=candidatures`;
-        case 'parliamentTerm':        return `/parliament?filter=government`;
-        case 'parliamentProposal':    return `/parliament?filter=proposals`;
-        case 'parliamentRevocation':  return `/parliament?filter=revocations`;
-        case 'parliamentLaw':         return `/parliament?filter=laws`;
-        case 'votes':      return `/votes/${id}`;
-        case 'transfer':   return `/transfers/${id}`;
-        case 'pixelia':    return `/pixelia`;
-        case 'tribe':      return `/tribe/${id}`;
-        case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
-        case 'karmaScore': return `/author/${encodeURIComponent(action.author)}`;
-        case 'image':      return `/images/${id}`;
-        case 'audio':      return `/audios/${id}`;
-        case 'video':      return `/videos/${id}`;
-        case 'forum':      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
-        case 'document':   return `/documents/${id}`;
-        case 'bookmark':   return `/bookmarks/${id}`;
-        case 'event':      return `/events/${id}`;
-        case 'task':       return `/tasks/${id}`;
-        case 'about':      return `/author/${encodeURIComponent(action.author)}`;
-        case 'post':       return `/thread/${id}#${id}`;
-        case 'vote':       return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
-        case 'contact':    return `/inhabitants`;
-        case 'pub':        return `/invites`;
-        case 'market':     return `/market/${id}`;
-        case 'job':        return `/jobs/${id}`;
-        case 'project':    return `/projects/${id}`;
-        case 'report':     return `/reports/${id}`;
-        case 'bankWallet': return `/wallet`;
-        case 'bankClaim':  return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
-        default:           return `/activity`;
-    }
+  const id = encodeURIComponent(action.tipId || action.id);
+  switch (type) {
+    case 'parliamentCandidature':   return `/parliament?filter=candidatures`;
+    case 'parliamentTerm':          return `/parliament?filter=government`;
+    case 'parliamentProposal':      return `/parliament?filter=proposals`;
+    case 'parliamentRevocation':    return `/parliament?filter=revocations`;
+    case 'parliamentLaw':           return `/parliament?filter=laws`;
+    case 'courtsCase':              return `/courts/cases/${encodeURIComponent(action.id)}`;
+    case 'courtsEvidence':          return `/courts?filter=actions`;
+    case 'courtsAnswer':            return `/courts?filter=actions`;
+    case 'courtsVerdict':           return `/courts?filter=actions`;
+    case 'courtsSettlement':        return `/courts?filter=actions`;
+    case 'courtsSettlementProposal':return `/courts?filter=actions`;
+    case 'courtsSettlementAccepted':return `/courts?filter=actions`;
+    case 'courtsNomination':        return `/courts?filter=judges`;
+    case 'courtsNominationVote':    return `/courts?filter=judges`;
+    case 'votes':      return `/votes/${id}`;
+    case 'transfer':   return `/transfers/${id}`;
+    case 'pixelia':    return `/pixelia`;
+    case 'tribe':      return `/tribe/${id}`;
+    case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
+    case 'karmaScore': return `/author/${encodeURIComponent(action.author)}`;
+    case 'image':      return `/images/${id}`;
+    case 'audio':      return `/audios/${id}`;
+    case 'video':      return `/videos/${id}`;
+    case 'forum':      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
+    case 'document':   return `/documents/${id}`;
+    case 'bookmark':   return `/bookmarks/${id}`;
+    case 'event':      return `/events/${id}`;
+    case 'task':       return `/tasks/${id}`;
+    case 'about':      return `/author/${encodeURIComponent(action.author)}`;
+    case 'post':       return `/thread/${id}#${id}`;
+    case 'vote':       return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
+    case 'contact':    return `/inhabitants`;
+    case 'pub':        return `/invites`;
+    case 'market':     return `/market/${id}`;
+    case 'job':        return `/jobs/${id}`;
+    case 'project':    return `/projects/${id}`;
+    case 'report':     return `/reports/${id}`;
+    case 'bankWallet': return `/wallet`;
+    case 'bankClaim':  return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
+    default:           return `/activity`;
+  }
 }
 
 exports.activityView = (actions, filter, userId) => {
@@ -877,6 +950,7 @@ exports.activityView = (actions, filter, userId) => {
     { type: 'job',       label: i18n.typeJob },
     { type: 'transfer',  label: i18n.typeTransfer },
     { type: 'parliament',label: i18n.typeParliament },
+    { type: 'courts',    label: i18n.typeCourts },
     { type: 'votes',     label: i18n.typeVotes },
     { type: 'event',     label: i18n.typeEvent },
     { type: 'task',      label: i18n.typeTask },
@@ -907,6 +981,11 @@ exports.activityView = (actions, filter, userId) => {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim'));
   } else if (filter === 'parliament') {
     filteredActions = actions.filter(action => ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(action.type));
+  } else if (filter === 'courts') {
+    filteredActions = actions.filter(action => {
+      const t = String(action.type || '').toLowerCase();
+      return t === 'courtscase' || t === 'courtsnomination' || t === 'courtsnominationvote';
+    });
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all') && action.type !== 'tombstone');
   }

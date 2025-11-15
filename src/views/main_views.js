@@ -283,6 +283,15 @@ const renderParliamentLink = () => {
   return parliamentMod 
     ? [
         navLink({ href: "/parliament", emoji: "ꗞ", text: i18n.parliamentTitle, class: "parliament-link enabled" }),
+      ]
+    : '';
+};
+
+const renderCourtsLink = () => {
+  const courtsMod = getConfig().modules.courtsMod === 'on';
+  return courtsMod 
+    ? [
+        navLink({ href: "/courts", emoji: "ꖻ", text: i18n.courtsTitle, class: "courts-link enabled" }),
         hr(),
       ]
     : '';
@@ -470,6 +479,7 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/inhabitants", emoji: "ꖘ", text: i18n.inhabitantsLabel }),
               renderTribesLink(),
               renderParliamentLink(),
+              renderCourtsLink(),
               renderVotationsLink(),
               renderEventsLink(),
               renderTasksLink(),

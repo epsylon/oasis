@@ -12,6 +12,15 @@ function inferType(c = {}) {
   if (c.type === 'wallet' && c.coin === 'ECO' && typeof c.address === 'string') return 'bankWallet';
   if (c.type === 'bankClaim') return 'bankClaim';
   if (c.type === 'karmaScore') return 'karmaScore';
+  if (c.type === 'courts_case') return 'courtsCase';
+  if (c.type === 'courts_evidence') return 'courtsEvidence';
+  if (c.type === 'courts_answer') return 'courtsAnswer';
+  if (c.type === 'courts_verdict') return 'courtsVerdict';
+  if (c.type === 'courts_settlement') return 'courtsSettlement';
+  if (c.type === 'courts_nomination') return 'courtsNomination';
+  if (c.type === 'courts_nom_vote') return 'courtsNominationVote';
+  if (c.type === 'courts_public_pref') return 'courtsPublicPref';
+  if (c.type === 'courts_mediators') return 'courtsMediators';
   return c.type || '';
 }
 
@@ -91,14 +100,11 @@ module.exports = ({ cooler }) => {
 
           if (ev.content.followersOp === 'follow') kind = 'follow';
           else if (ev.content.followersOp === 'unfollow') kind = 'unfollow';
-
           if (ev.content.backerPledge && typeof ev.content.backerPledge.amount !== 'undefined') {
             const amt = Math.max(0, parseFloat(ev.content.backerPledge.amount || 0) || 0);
             if (amt > 0) { kind = kind || 'pledge'; amount = amt }
           }
-
           if (!kind) continue;
-
           const augmented = {
             ...ev,
             type: 'project',
@@ -114,7 +120,6 @@ module.exports = ({ cooler }) => {
           idToTipId.set(ev.id, ev.id);
         }
       }
-
       const latest = [];
       for (const a of idToAction.values()) {
         if (tombstoned.has(a.id)) continue;
@@ -137,21 +142,17 @@ module.exports = ({ cooler }) => {
         }
         latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
       }
-
       let deduped = latest.filter(a => !a.tipId || a.tipId === a.id);
-
       const mediaTypes = new Set(['image','video','audio','document','bookmark']);
       const perAuthorUnique = new Set(['karmaScore']);
       const byKey = new Map();
       const norm = s => String(s || '').trim().toLowerCase();
-
       for (const a of deduped) {
         const c = a.content || {};
         const effTs =
           (c.updatedAt && Date.parse(c.updatedAt)) ||
           (c.createdAt && Date.parse(c.createdAt)) ||
           (a.ts || 0);
-
         if (mediaTypes.has(a.type)) {
           const u = c.url || c.title || `${a.type}:${a.id}`;
           const key = `${a.type}:${u}`;
@@ -177,7 +178,6 @@ module.exports = ({ cooler }) => {
         }
       }
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; return x });
-
       let out;
       if (filter === 'mine') out = deduped.filter(a => a.author === userId);
       else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff) }
@@ -185,9 +185,14 @@ module.exports = ({ cooler }) => {
       else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
       else if (filter === 'karma') out = deduped.filter(a => a.type === 'karmaScore');
       else if (filter === 'parliament')
-      out = deduped.filter(a =>
-        ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(a.type)
-      );
+        out = deduped.filter(a =>
+          ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(a.type)
+        );
+      else if (filter === 'courts')
+        out = deduped.filter(a => {
+          const t = String(a.type || '').toLowerCase();
+          return t === 'courtscase' || t === 'courtsnomination' || t === 'courtsnominationvote';
+        });
       else out = deduped.filter(a => a.type === filter);
 
       out.sort((a, b) => (b.ts || 0) - (a.ts || 0));

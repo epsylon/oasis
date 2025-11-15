@@ -42,7 +42,8 @@ if (!fs.existsSync(configFilePath)) {
       "jobsMod": "on",
       "projectsMod": "on",
       "bankingMod": "on",
-      "parliamentMod": "on"
+      "parliamentMod": "on",
+      "courtsMod": "on"
     },
     "wallet": {
       "url": "http://localhost:7474",

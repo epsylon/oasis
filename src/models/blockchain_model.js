@@ -115,6 +115,10 @@ module.exports = ({ cooler }) => {
         const pset = new Set(['parliamentTerm','parliamentProposal','parliamentLaw','parliamentCandidature','parliamentRevocation']);
         filtered = blockData.filter(b => b && pset.has(b.type));
       }
+      if (filter === 'COURTS' || filter === 'courts') {
+        const cset = new Set(['courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote']);
+        filtered = blockData.filter(b => b && cset.has(b.type));
+      }
 
       return filtered.filter(Boolean);
     },

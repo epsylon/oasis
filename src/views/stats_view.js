@@ -1,6 +1,23 @@
 const { div, h2, p, section, button, form, input, ul, li, a, h3, span, strong, table, tr, td, th } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 
+Object.assign(i18n, {
+  statsParliamentCandidature: "Parliament candidatures",
+  statsParliamentTerm: "Parliament terms",
+  statsParliamentProposal: "Parliament proposals",
+  statsParliamentRevocation: "Parliament revocations",
+  statsParliamentLaw: "Parliament laws",
+  statsCourtsCase: "Court cases",
+  statsCourtsEvidence: "Court evidence",
+  statsCourtsAnswer: "Court answers",
+  statsCourtsVerdict: "Court verdicts",
+  statsCourtsSettlement: "Court settlements",
+  statsCourtsSettlementProposal: "Settlement proposals",
+  statsCourtsSettlementAccepted: "Settlements accepted",
+  statsCourtsNomination: "Judge nominations",
+  statsCourtsNominationVote: "Nomination votes"
+});
+
 const C = (stats, t) => Number((stats && stats.content && stats.content[t]) || 0);
 const O = (stats, t) => Number((stats && stats.opinions && stats.opinions[t]) || 0);
 
@@ -11,8 +28,44 @@ exports.statsView = (stats, filter) => {
   const types = [
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project',
     'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
-    'market', 'forum', 'job', 'aiExchange'
+    'market', 'forum', 'job', 'aiExchange',
+    'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
+    'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
+  const labels = {
+    bookmark: i18n.statsBookmark,
+    event: i18n.statsEvent,
+    task: i18n.statsTask,
+    votes: i18n.statsVotes,
+    report: i18n.statsReport,
+    feed: i18n.statsFeed,
+    project: i18n.statsProject,
+    image: i18n.statsImage,
+    audio: i18n.statsAudio,
+    video: i18n.statsVideo,
+    document: i18n.statsDocument,
+    transfer: i18n.statsTransfer,
+    post: i18n.statsPost,
+    tribe: i18n.statsTribe,
+    market: i18n.statsMarket,
+    forum: i18n.statsForum,
+    job: i18n.statsJob,
+    aiExchange: i18n.statsAiExchange,
+    parliamentCandidature: i18n.statsParliamentCandidature,
+    parliamentTerm: i18n.statsParliamentTerm,
+    parliamentProposal: i18n.statsParliamentProposal,
+    parliamentRevocation: i18n.statsParliamentRevocation,
+    parliamentLaw: i18n.statsParliamentLaw,
+    courtsCase: i18n.statsCourtsCase,
+    courtsEvidence: i18n.statsCourtsEvidence,
+    courtsAnswer: i18n.statsCourtsAnswer,
+    courtsVerdict: i18n.statsCourtsVerdict,
+    courtsSettlement: i18n.statsCourtsSettlement,
+    courtsSettlementProposal: i18n.statsCourtsSettlementProposal,
+    courtsSettlementAccepted: i18n.statsCourtsSettlementAccepted,
+    courtsNomination: i18n.statsCourtsNomination,
+    courtsNominationVote: i18n.statsCourtsNominationVote
+  };
   const totalContent = types.filter(t => t !== 'karmaScore').reduce((sum, t) => sum + C(stats, t), 0);
   const totalOpinions = types.reduce((sum, t) => sum + O(stats, t), 0);
   const blockStyle = 'padding:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:24px;';
@@ -113,29 +166,17 @@ exports.statsView = (stats, filter) => {
                 ])
               ),
               div({ style: blockStyle },
-                h2(i18n.statsJobsTitle),
-                ul([
-                  li(`${i18n.statsJobsTotal}: ${stats.jobsKPIs?.total || 0}`),
-                  li(`${i18n.statsJobsOpen}: ${stats.jobsKPIs?.open || 0}`),
-                  li(`${i18n.statsJobsClosed}: ${stats.jobsKPIs?.closed || 0}`),
-                  li(`${i18n.statsJobsOpenVacants}: ${stats.jobsKPIs?.openVacants || 0}`),
-                  li(`${i18n.statsJobsSubscribersTotal}: ${stats.jobsKPIs?.subscribersTotal || 0}`),
-                  li(`${i18n.statsJobsAvgSalary}: ${((stats.jobsKPIs?.avgSalary || 0)).toFixed(2)} ECO`),
-                  li(`${i18n.statsJobsMedianSalary}: ${((stats.jobsKPIs?.medianSalary || 0)).toFixed(2)} ECO`)
-                ])
-              ),
-              div({ style: blockStyle },
                 h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
-                ul(types.map(t => O(stats, t) > 0 ? li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${O(stats, t)}`) : null).filter(Boolean))
+                ul(types.map(t => O(stats, t) > 0 ? li(`${labels[t]}: ${O(stats, t)}`) : null).filter(Boolean))
               ),
               div({ style: blockStyle },
                 h2(`${i18n.statsNetworkContent}: ${totalContent}`),
                 ul(
                   types.filter(t => t !== 'karmaScore').map(t => {
                     if (C(stats, t) <= 0) return null;
-                    if (t !== 'tribe') return li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${C(stats, t)}`);
+                    if (t !== 'tribe') return li(`${labels[t]}: ${C(stats, t)}`);
                     return li(
-                      span(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${C(stats, t)}`),
+                      span(`${labels[t]}: ${C(stats, t)}`),
                       ul([
                         li(`${i18n.statsPublic}: ${stats.tribePublicCount || 0}`),
                         li(`${i18n.statsPrivate}: ${stats.tribePrivateCount || 0}`)
@@ -202,16 +243,16 @@ exports.statsView = (stats, filter) => {
                 ),
                 div({ style: blockStyle },
                   h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),
-                  ul(types.map(t => O(stats, t) > 0 ? li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${O(stats, t)}`) : null).filter(Boolean))
+                  ul(types.map(t => O(stats, t) > 0 ? li(`${labels[t]}: ${O(stats, t)}`) : null).filter(Boolean))
                 ),
                 div({ style: blockStyle },
                   h2(`${i18n.statsYourContent}: ${totalContent}`),
                   ul(
                     types.filter(t => t !== 'karmaScore').map(t => {
                       if (C(stats, t) <= 0) return null;
-                      if (t !== 'tribe') return li(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${C(stats, t)}`);
+                      if (t !== 'tribe') return li(`${labels[t]}: ${C(stats, t)}`);
                       return li(
-                        span(`${i18n[`stats${t.charAt(0).toUpperCase() + t.slice(1)}`]}: ${C(stats, t)}`),
+                        span(`${labels[t]}: ${C(stats, t)}`),
                         ul([
                           li(`${i18n.statsPublic}: ${stats.tribePublicCount || 0}`),
                           li(`${i18n.statsPrivate}: ${stats.tribePrivateCount || 0}`),

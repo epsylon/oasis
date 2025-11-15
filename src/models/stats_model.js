@@ -36,7 +36,9 @@ module.exports = ({ cooler }) => {
   const types = [
     'bookmark','event','task','votes','report','feed','project',
     'image','audio','video','document','transfer','post','tribe',
-    'market','forum','job','aiExchange'
+    'market','forum','job','aiExchange',
+    'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
+    'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
 
   const getFolderSize = (folderPath) => {
@@ -141,10 +143,10 @@ module.exports = ({ cooler }) => {
     for (const m of scopedMsgs) {
       const k = m.key;
       const c = m.value.content;
-      const t = c.type;
-      if (!types.includes(t)) continue;
-      byType[t].set(k, { key: k, ts: m.value.timestamp, content: c, author: m.value.author });
-      if (c.replaces) parentOf[t].set(k, c.replaces);
+      theType = c.type;
+      if (!types.includes(theType)) continue;
+      byType[theType].set(k, { key: k, ts: m.value.timestamp, content: c, author: m.value.author });
+      if (c.replaces) parentOf[theType].set(k, c.replaces);
     }
 
     const findRoot = (t, id) => {
@@ -198,7 +200,6 @@ module.exports = ({ cooler }) => {
     const content = {};
     const opinions = {};
     for (const t of types) {
-      if (t === 'karmaScore') continue;
       let vals;
       if (t === 'tribe') {
         vals = tribeDedupContents;

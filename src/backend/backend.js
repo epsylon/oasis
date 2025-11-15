@@ -299,9 +299,9 @@ const forumModel = require('../models/forum_model')({ cooler, isPublic: config.p
 const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic: config.public });
 const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
-const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public })
-const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel }
-});
+const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
+const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
+const courtsModel = require('../models/courts_model')({ cooler, services: { votes: votesModel, inhabitants: inhabitantsModel, tribes: tribesModel, banking: bankingModel } });
 
 // starting warmup
 about._startNameWarmup();
@@ -546,6 +546,7 @@ const { jobsView, singleJobsView, renderJobForm } = require("../views/jobs_view"
 const { projectsView, singleProjectView } = require("../views/projects_view")
 const { renderBankingView, renderSingleAllocationView, renderEpochView } = require("../views/banking_views")
 const { parliamentView } = require("../views/parliament_view");
+const { courtsView, courtsCaseView } = require('../views/courts_view');
 
 let sharp;
 
@@ -672,7 +673,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 
     'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers', 
-    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament'
+    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament', 'courts'
     ];
     const moduleStates = modules.reduce((acc, mod) => {
       acc[`${mod}Mod`] = configMods[`${mod}Mod`];
@@ -1107,6 +1108,155 @@ router
       futureRevocations,
       revocationsEnactedCount 
     });
+  })
+  .get('/courts', async (ctx) => {
+    const mod = ctx.cookies.get('courtsMod') || 'on';
+    if (mod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    const filter = String(ctx.query.filter || 'cases').toLowerCase();
+    const search = String(ctx.query.search || '').trim();
+    const state = {
+      filter,
+      search,
+      cases: [],
+      myCases: [],
+      trials: [],
+      history: [],
+      nominations: [],
+      userId: null
+    };
+    const currentUserId = await courtsModel.getCurrentUserId();
+    state.userId = currentUserId;
+    if (filter === 'cases') {
+      let allCases = await courtsModel.listCases('open');
+      allCases = allCases.map((c) => ({
+        ...c,
+        respondent: c.respondentId || c.respondent
+      }));
+      if (search) {
+        const sLower = search.toLowerCase();
+        allCases = allCases.filter((c) => {
+          const t = String(c.title || '').toLowerCase();
+          const d = String(c.description || '').toLowerCase();
+          return t.includes(sLower) || d.includes(sLower);
+        });
+      }
+      state.cases = allCases;
+    }
+    if (filter === 'mycases' || filter === 'actions') {
+      let myCases = await courtsModel.listCasesForUser(currentUserId);
+      if (search) {
+        const sLower = search.toLowerCase();
+        myCases = myCases.filter((c) => {
+          const t = String(c.title || '').toLowerCase();
+          const d = String(c.description || '').toLowerCase();
+          return t.includes(sLower) || d.includes(sLower);
+        });
+      }
+      if (filter === 'actions') {
+        myCases = myCases.filter((c) => {
+          const status = String(c.status || '').toUpperCase();
+          const method = String(c.method || '').toUpperCase();
+          const isAccuser = !!c.isAccuser;
+          const isRespondent = !!c.isRespondent;
+          const isMediator = !!c.isMediator;
+          const isJudge = !!c.isJudge;
+          const isDictator = !!c.isDictator;
+          const canAnswer =
+            isRespondent && (status === 'OPEN' || status === 'IN_PROGRESS');
+          const canAssignJudge =
+            method === 'JUDGE' &&
+            !c.judgeId &&
+            (isAccuser || isRespondent) &&
+            (status === 'OPEN' || status === 'IN_PROGRESS');
+          const canIssueVerdict =
+            (isJudge || isDictator || isMediator) &&
+            status === 'OPEN';
+          const canProposeSettlement =
+            (isAccuser || isRespondent || isMediator) &&
+            method === 'MEDIATION' &&
+            (status === 'OPEN' || status === 'IN_PROGRESS');
+          const canAddEvidence =
+            (isAccuser ||
+              isRespondent ||
+              isMediator ||
+              isJudge ||
+              isDictator) &&
+            (status === 'OPEN' || status === 'IN_PROGRESS');
+          return (
+            canAnswer ||
+            canAssignJudge ||
+            canIssueVerdict ||
+            canProposeSettlement ||
+            canAddEvidence
+          );
+        });
+      }
+      state.myCases = myCases;
+    }
+    if (filter === 'judges') {
+      const nominations = await courtsModel.listNominations();
+      state.nominations = nominations || [];
+    }
+    if (filter === 'history') {
+      let history = await courtsModel.listCases('history');
+      history = history.map((c) => {
+        const id = String(currentUserId || '');
+        const isAccuser = String(c.accuser || '') === id;
+        const isRespondent = String(c.respondentId || '') === id;
+        const ma = Array.isArray(c.mediatorsAccuser)
+          ? c.mediatorsAccuser
+          : [];
+        const mr = Array.isArray(c.mediatorsRespondent)
+          ? c.mediatorsRespondent
+          : [];
+        const isMediator = ma.includes(id) || mr.includes(id);
+        const isJudge = String(c.judgeId || '') === id;
+        const mine = isAccuser || isRespondent || isMediator || isJudge;
+        const publicDetails =
+          c.publicPrefAccuser === true &&
+          c.publicPrefRespondent === true;
+        const decidedAt =
+          c.verdictAt ||
+          c.closedAt ||
+          c.decidedAt;
+        return {
+          ...c,
+          respondent: c.respondentId || c.respondent,
+          mine,
+          publicDetails,
+          decidedAt
+        };
+      });
+      if (search) {
+        const sLower = search.toLowerCase();
+        history = history.filter((c) => {
+          const t = String(c.title || '').toLowerCase();
+          const d = String(c.description || '').toLowerCase();
+          return t.includes(sLower) || d.includes(sLower);
+        });
+      }
+      state.history = history;
+    }
+    ctx.body = await courtsView(state);
+  })
+  .get('/courts/cases/:id', async (ctx) => {
+    const mod = ctx.cookies.get('courtsMod') || 'on';
+    if (mod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    const caseId = ctx.params.id;
+    let caseData = null;
+    try {
+      caseData = await courtsModel.getCaseDetails({ caseId });
+    } catch (e) {
+      caseData = null;
+    }
+    const state = { caseData };
+    ctx.body = await courtsCaseView(state);
   })
   .get('/tribes', async ctx => {
     const filter = ctx.query.filter || 'all';
@@ -2740,6 +2890,305 @@ router
     await parliamentModel.createRevocation({ lawId, title, reasons });
     ctx.redirect('/parliament?filter=revocations');
   })
+  .post('/courts/cases/create', koaBody(), async (ctx) => {
+    const body = ctx.request.body || {};
+    const titleSuffix = String(body.titleSuffix || '').trim();
+    const titlePreset = String(body.titlePreset || '').trim();
+    const respondentRaw = String(body.respondentId || '').trim();
+    const methodRaw = String(body.method || '').trim().toUpperCase();
+    const ALLOWED = new Set(['JUDGE', 'DICTATOR', 'POPULAR', 'MEDIATION', 'KARMATOCRACY']);
+    if (!titleSuffix && !titlePreset) {
+      ctx.flash = { message: 'Title is required.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    if (!respondentRaw) {
+      ctx.flash = { message: 'Accused / Respondent is required.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    if (!ALLOWED.has(methodRaw)) {
+      ctx.flash = { message: 'Invalid resolution method.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    const parts = [];
+    if (titlePreset) parts.push(titlePreset);
+    if (titleSuffix) parts.push(titleSuffix);
+    const titleBase = parts.join(' - ');
+    try {
+      await courtsModel.openCase({
+        titleBase,
+        respondentInput: respondentRaw,
+        method: methodRaw
+      });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect('/courts?filter=mycases');
+  })
+  .post('/courts/cases/:id/evidence/add', koaBody({ multipart: true }), async (ctx) => {
+    const caseId = ctx.params.id;
+    const body = ctx.request.body || {};
+    const text = String(body.text || '');
+    const link = String(body.link || '');
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    try {
+      const imageMarkdown = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
+      await courtsModel.addEvidence({
+        caseId,
+        text,
+        link,
+        imageMarkdown
+      });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/answer', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    const body = ctx.request.body || {};
+    const answer = String(body.answer || '');
+    const stance = String(body.stance || '').toUpperCase();
+    const ALLOWED = new Set(['DENY', 'ADMIT', 'PARTIAL']);
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    if (!answer) {
+      ctx.flash = { message: 'Response brief is required.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    if (!ALLOWED.has(stance)) {
+      ctx.flash = { message: 'Invalid stance.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    try {
+      await courtsModel.answerCase({ caseId, stance, text: answer });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/decide', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    const body = ctx.request.body || {};
+    const result = String(body.outcome || '').trim();
+    const orders = String(body.orders || '');
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    if (!result) {
+      ctx.flash = { message: 'Result is required.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    try {
+      await courtsModel.issueVerdict({ caseId, result, orders });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/settlements/propose', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    const body = ctx.request.body || {};
+    const terms = String(body.terms || '');
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    if (!terms) {
+      ctx.flash = { message: 'Terms are required.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    try {
+      await courtsModel.proposeSettlement({ caseId, terms });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/settlements/accept', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    try {
+      await courtsModel.acceptSettlement({ caseId });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/mediators/accuser', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    const body = ctx.request.body || {};
+    const raw = String(body.mediators || '');
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    const mediators = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (!mediators.length) {
+      ctx.flash = { message: 'At least one mediator is required.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    const currentUserId = ctx.state && ctx.state.user && ctx.state.user.id;
+    if (currentUserId && mediators.includes(currentUserId)) {
+      ctx.flash = { message: 'You cannot appoint yourself as mediator.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    try {
+      await courtsModel.setMediators({ caseId, side: 'accuser', mediators });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/mediators/respondent', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    const body = ctx.request.body || {};
+    const raw = String(body.mediators || '');
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    const mediators = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (!mediators.length) {
+      ctx.flash = { message: 'At least one mediator is required.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    const currentUserId = ctx.state && ctx.state.user && ctx.state.user.id;
+    if (currentUserId && mediators.includes(currentUserId)) {
+      ctx.flash = { message: 'You cannot appoint yourself as mediator.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    try {
+      await courtsModel.setMediators({ caseId, side: 'respondent', mediators });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/judge', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    const body = ctx.request.body || {};
+    const judgeId = String(body.judgeId || '').trim();
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    if (!judgeId) {
+      ctx.flash = { message: 'Judge is required.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    const currentUserId = ctx.state && ctx.state.user && ctx.state.user.id;
+    if (currentUserId && judgeId === currentUserId) {
+      ctx.flash = { message: 'You cannot assign yourself as judge.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    try {
+      await courtsModel.assignJudge({ caseId, judgeId });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/public', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    const body = ctx.request.body || {};
+    const pref = String(body.preference || '').toUpperCase();
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    if (pref !== 'YES' && pref !== 'NO') {
+      ctx.flash = { message: 'Invalid visibility preference.' };
+      ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+      return;
+    }
+    const preference = pref === 'YES';
+    try {
+      await courtsModel.setPublicPreference({ caseId, preference });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/cases/:id/openVote', koaBody(), async (ctx) => {
+    const caseId = ctx.params.id;
+    if (!caseId) {
+      ctx.flash = { message: 'Case not found.' };
+      ctx.redirect('/courts?filter=cases');
+      return;
+    }
+    try {
+      await courtsModel.openPopularVote({ caseId });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+  })
+  .post('/courts/judges/nominate', koaBody(), async (ctx) => {
+    const body = ctx.request.body || {};
+    const judgeId = String(body.judgeId || '').trim();
+    if (!judgeId) {
+      ctx.flash = { message: 'Judge is required.' };
+      ctx.redirect('/courts?filter=judges');
+      return;
+    }
+    try {
+      await courtsModel.nominateJudge({ judgeId });
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect('/courts?filter=judges');
+  })
+  .post('/courts/judges/:id/vote', koaBody(), async (ctx) => {
+    const nominationId = ctx.params.id;
+    if (!nominationId) {
+      ctx.flash = { message: 'Nomination not found.' };
+      ctx.redirect('/courts?filter=judges');
+      return;
+    }
+    try {
+      await courtsModel.voteNomination(nominationId);
+    } catch (e) {
+      ctx.flash = { message: String((e && e.message) || e) };
+    }
+    ctx.redirect('/courts?filter=judges');
+  })  
   .post('/market/create', koaBody({ multipart: true }), async ctx => {
     const { item_type, title, description, price, tags, item_status, deadline, includesShipping, stock } = ctx.request.body;
     const image = await handleBlobUpload(ctx, 'image');
@@ -3324,7 +3773,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet',
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending',
     'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers',
-    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament'
+    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament', 'courts'
     ];
     const currentConfig = getConfig();
     modules.forEach(mod => {

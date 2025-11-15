@@ -13,6 +13,12 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.5.5 - 2025-11-15
+
+### Added
+
+ + Conflicts resolution system (Courts plugin).
+ 
 ## v0.5.4 - 2025-10-30
 
 ### Fixed

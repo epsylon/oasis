@@ -11,11 +11,11 @@ const FILTER_LABELS = {
   forum: i18n.typeForum, about: i18n.typeAbout, contact: i18n.typeContact, pub: i18n.typePub,
   transfer: i18n.typeTransfer, market: i18n.typeMarket, job: i18n.typeJob, tribe: i18n.typeTribe,
   project: i18n.typeProject, banking: i18n.typeBanking, bankWallet: i18n.typeBankWallet, bankClaim: i18n.typeBankClaim,
-  aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament
+  aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts
 };
 
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone'];
-const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'parliament'];
+const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
 const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia'];
 const CAT_BLOCK4  = ['forum', 'bookmark', 'image', 'video', 'audio', 'document'];
@@ -28,6 +28,10 @@ const filterBlocks = (blocks, filter, userId) => {
   if (filter === 'parliament') {
     const pset = new Set(['parliamentTerm','parliamentProposal','parliamentLaw','parliamentCandidature','parliamentRevocation']);
     return blocks.filter(b => pset.has(b.type));
+  }
+  if (filter === 'courts') {
+    const cset = new Set(['courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote']);
+    return blocks.filter(b => cset.has(b.type));
   }
   return blocks.filter(b => b.type === filter);
 };
@@ -76,6 +80,15 @@ const getViewDetailsAction = (type, block) => {
     case 'parliamentLaw': return `/parliament`;
     case 'parliamentCandidature': return `/parliament`;
     case 'parliamentRevocation': return `/parliament`;
+    case 'courtsCase': return `/courts`;
+    case 'courtsEvidence': return `/courts`;
+    case 'courtsAnswer': return `/courts`;
+    case 'courtsVerdict': return `/courts`;
+    case 'courtsSettlement': return `/courts`;
+    case 'courtsSettlementProposal': return `/courts`;
+    case 'courtsSettlementAccepted': return `/courts`;
+    case 'courtsNomination': return `/courts`;
+    case 'courtsNominationVote': return `/courts`;
     default: return null;
   }
 };

@@ -64,6 +64,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + BlockExplorer: Module to navigate the blockchain.
  + Bookmarks: Module to discover and manage bookmarks.	
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
+ + Courts: Module to resolve conflicts and emit veredicts.	
  + Documents: Module to discover and manage documents.	
  + Events: Module to discover and manage events.	
  + Feed: Module to discover and share short-texts (feeds).
@@ -116,6 +117,12 @@ Our AI is trained with content from the OASIS network and its purpose is to take
 Oasis contains its own Parliament (Government system).
 
   ![SNH](https://solarnethub.com/git/oasis-parliament.png "SolarNET.HuB")
+  
+## Courts (justice)
+
+Oasis contains its own Courts (Justice system).
+
+  ![SNH](https://solarnethub.com/git/oasis-courts.png "SolarNET.HuB")
   
 ## ECOin (crypto-economy)
 

@@ -475,11 +475,13 @@ async function fetchUserActions(userId) {
   });
 }
 
+// karma scoring table
 function scoreFromActions(actions) {
   let score = 0;
   for (const action of actions) {
     const t = normalizeType(action);
     const c = action.content || {};
+    const rawType = String(c.type || "").toLowerCase();
     if (t === "post") score += 10;
     else if (t === "comment") score += 5;
     else if (t === "like") score += 2;
@@ -507,6 +509,23 @@ function scoreFromActions(actions) {
     else if (t === "about") score += 1;
     else if (t === "contact") score += 1;
     else if (t === "pub") score += 1;
+    else if (t === "parliamentcandidature" || rawType === "parliamentcandidature") score += 12;
+    else if (t === "parliamentterm" || rawType === "parliamentterm") score += 25;
+    else if (t === "parliamentproposal" || rawType === "parliamentproposal") score += 8;
+    else if (t === "parliamentlaw" || rawType === "parliamentlaw") score += 16;
+    else if (t === "parliamentrevocation" || rawType === "parliamentrevocation") score += 10;
+    else if (t === "courts_case" || t === "courtscase" || rawType === "courts_case") score += 4;
+    else if (t === "courts_evidence" || t === "courtsevidence" || rawType === "courts_evidence") score += 3;
+    else if (t === "courts_answer" || t === "courtsanswer" || rawType === "courts_answer") score += 4;
+    else if (t === "courts_verdict" || t === "courtsverdict" || rawType === "courts_verdict") score += 10;
+    else if (t === "courts_settlement" || t === "courtssettlement" || rawType === "courts_settlement") score += 8;
+    else if (t === "courts_nomination" || t === "courtsnomination" || rawType === "courts_nomination") score += 6;
+    else if (t === "courts_nom_vote" || t === "courtsnomvote" || rawType === "courts_nom_vote") score += 3;
+    else if (t === "courts_public_pref" || t === "courtspublicpref" || rawType === "courts_public_pref") score += 1;
+    else if (t === "courts_mediators" || t === "courtsmediators" || rawType === "courts_mediators") score += 6;
+    else if (t === "courts_open_support" || t === "courtsopensupport" || rawType === "courts_open_support") score += 2;
+    else if (t === "courts_verdict_vote" || t === "courtsverdictvote" || rawType === "courts_verdict_vote") score += 3;
+    else if (t === "courts_judge_assign" || t === "courtsjudgeassign" || rawType === "courts_judge_assign") score += 5;
   }
   return Math.max(0, Math.round(score));
 }
