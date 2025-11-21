@@ -16,15 +16,29 @@ To install **Oasis** with a single command, run:
 
 ## 2) Manual Installation 
 
+### dependencies
+
+You need 
+* curl
+* node 22.21.1
+* git
+
+on debian you can install the following:
+
+``` bash
+sudo apt-get install git curl
+curl -sL http://deb.nodesource.com/setup_22.x | sudo bash -
+sudo apt-get install -y nodejs
+```
+
+### install it
 Try to execute the following steps (from a shell):
 
-    sudo apt-get install git curl
-    curl -sL http://deb.nodesource.com/setup_22.x | sudo bash -
-    sudo apt-get install -y nodejs
-    git clone https://code.03c8.net/KrakensLab/oasis
-    cd oasis
-    npm install .
-    
+``` bash
+git clone https://code.03c8.net/KrakensLab/oasis
+cd oasis
+npm install .
+```
 ---
 
 ## 3) Run Oasis
