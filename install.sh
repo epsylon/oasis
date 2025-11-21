@@ -6,10 +6,16 @@ printf "==========================\n"
 printf "|| OASIS Installer v0.2 ||\n"
 printf "==========================\n"
 
-sudo apt-get install -y git curl tar
-
-curl -sL http://deb.nodesource.com/setup_22.x | sudo bash -
-sudo apt-get install -y nodejs
+read -p "Install dependencies? (debian, ubuntu, mint and all debian like distribution only) [Y/n]" -n 1 -r
+echo    
+REPLY=${REPLY:-y}
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+  sudo apt-get install -y git curl tar
+  
+  curl -sL http://deb.nodesource.com/setup_22.x | sudo bash -
+  sudo apt-get install -y nodejs
+fi
 npm install .
 npm audit fix
 
