@@ -303,6 +303,19 @@ const bankingModel = require("../models/banking_model")({ services: { cooler }, 
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const courtsModel = require('../models/courts_model')({ cooler, services: { votes: votesModel, inhabitants: inhabitantsModel, tribes: tribesModel, banking: bankingModel } });
 
+//votes (comments)
+const getVoteComments = async (voteId) => {
+  const rawComments = await post.topicComments(voteId);
+  const filtered = (rawComments || []).filter(c => {
+    const content = c.value && c.value.content;
+    if (!content) return false;
+    return content.type === 'post' &&
+           content.root === voteId &&
+           content.dest === voteId;
+  });
+  return filtered;
+};
+
 // starting warmup
 about._startNameWarmup();
 
@@ -857,9 +870,20 @@ router
       ctx.redirect('/modules');
       return;
     }
-    const filter = ctx.query.filter || 'all'
+    const filter = ctx.query.filter || 'all';
     const images = await imagesModel.listAll(filter);
-    ctx.body = await imageView(images, filter, null);
+    const commentsCountByImageId = {};
+    await Promise.all(
+      images.map(async img => {
+        const comments = await getVoteComments(img.key);
+        commentsCountByImageId[img.key] = comments.length;
+      })
+    );
+    const enrichedImages = images.map(img => ({
+      ...img,
+      commentCount: commentsCountByImageId[img.key] || 0
+    }));
+    ctx.body = await imageView(enrichedImages, filter, null);
    })
   .get('/images/edit/:id', async ctx => {
     const imageId = ctx.params.id;
@@ -870,18 +894,31 @@ router
     const imageId = ctx.params.imageId;
     const filter = ctx.query.filter || 'all'; 
     const image = await imagesModel.getImageById(imageId);
-    ctx.body = await singleImageView(image, filter);
+    const comments = await getVoteComments(imageId); // o getImageComments(imageId)
+    const imageWithCount = { ...image, commentCount: comments.length };
+    ctx.body = await singleImageView(imageWithCount, filter, comments);
    })
   .get('/audios', async (ctx) => {
-      const audiosMod = ctx.cookies.get("audiosMod") || 'on';
-      if (audiosMod !== 'on') {
-        ctx.redirect('/modules');
-        return;
-      }
-      const filter = ctx.query.filter || 'all';
-      const audios = await audiosModel.listAll(filter);
-      ctx.body = await audioView(audios, filter, null);
-   })
+    const audiosMod = ctx.cookies.get("audiosMod") || 'on';
+    if (audiosMod !== 'on') {
+      ctx.redirect('/modules');
+      return;
+    }
+    const filter = ctx.query.filter || 'all';
+    const audios = await audiosModel.listAll(filter);
+    const commentsCountByAudioId = {};
+    await Promise.all(
+      audios.map(async a => {
+        const comments = await getVoteComments(a.key);
+        commentsCountByAudioId[a.key] = comments.length;
+      })
+    );
+    const enrichedAudios = audios.map(a => ({
+      ...a,
+      commentCount: commentsCountByAudioId[a.key] || 0
+    }));
+    ctx.body = await audioView(enrichedAudios, filter, null);
+  })
   .get('/audios/edit/:id', async (ctx) => {
       const audiosMod = ctx.cookies.get("audiosMod") || 'on';
       if (audiosMod !== 'on') {
@@ -895,12 +932,25 @@ router
     const audioId = ctx.params.audioId;
     const filter = ctx.query.filter || 'all'; 
     const audio = await audiosModel.getAudioById(audioId);
-    ctx.body = await singleAudioView(audio, filter); 
+    const comments = await getVoteComments(audioId);
+    const audioWithCount = { ...audio, commentCount: comments.length };
+    ctx.body = await singleAudioView(audioWithCount, filter, comments); 
   })
   .get('/videos', async (ctx) => {
-      const filter = ctx.query.filter || 'all';
-      const videos = await videosModel.listAll(filter);
-      ctx.body = await videoView(videos, filter, null);
+    const filter = ctx.query.filter || 'all';
+    const videos = await videosModel.listAll(filter);
+    const commentsCountByVideoId = {};
+    await Promise.all(
+      videos.map(async v => {
+        const comments = await getVoteComments(v.key);
+        commentsCountByVideoId[v.key] = comments.length;
+      })
+    );
+    const enrichedVideos = videos.map(v => ({
+      ...v,
+      commentCount: commentsCountByVideoId[v.key] || 0
+    }));
+    ctx.body = await videoView(enrichedVideos, filter, null);
   })
   .get('/videos/edit/:id', async (ctx) => {
     const video = await videosModel.getVideoById(ctx.params.id);
@@ -910,12 +960,25 @@ router
     const videoId = ctx.params.videoId;
     const filter = ctx.query.filter || 'all'; 
     const video = await videosModel.getVideoById(videoId);
-    ctx.body = await singleVideoView(video, filter); 
+    const comments = await getVoteComments(videoId);
+    const videoWithCount = { ...video, commentCount: comments.length };
+    ctx.body = await singleVideoView(videoWithCount, filter, comments); 
   })
   .get('/documents', async (ctx) => {
     const filter = ctx.query.filter || 'all';
     const documents = await documentsModel.listAll(filter);
-    ctx.body = await documentView(documents, filter, null);
+    const commentsCountByDocumentId = {};
+    await Promise.all(
+      documents.map(async d => {
+        const comments = await getVoteComments(d.key);
+        commentsCountByDocumentId[d.key] = comments.length;
+      })
+    );
+    const enrichedDocuments = documents.map(d => ({
+      ...d,
+      commentCount: commentsCountByDocumentId[d.key] || 0
+    }));
+    ctx.body = await documentView(enrichedDocuments, filter, null);
   })
   .get('/documents/edit/:id', async (ctx) => {
     const document = await documentsModel.getDocumentById(ctx.params.id);
@@ -925,7 +988,9 @@ router
     const documentId = ctx.params.documentId;
     const filter = ctx.query.filter || 'all'; 
     const document = await documentsModel.getDocumentById(documentId);
-    ctx.body = await singleDocumentView(document, filter);
+    const comments = await getVoteComments(documentId);
+    const documentWithCount = { ...document, commentCount: comments.length };
+    ctx.body = await singleDocumentView(documentWithCount, filter, comments);
   })
   .get('/cv', async ctx => {
     const cv = await cvModel.getCVByUserId()
@@ -957,8 +1022,19 @@ router
   })
   .get('/reports', async ctx => {
     const filter = ctx.query.filter || 'all';
-    const reports = await reportsModel.listAll(filter);
-    ctx.body = await reportView(reports, filter, null);
+    const reports = await reportsModel.listAll();
+    const commentsCountById = {};
+    await Promise.all(
+      reports.map(async r => {
+        const comments = await getVoteComments(r.id);
+        commentsCountById[r.id] = comments.length;
+      })
+    );
+    const enrichedReports = reports.map(r => ({
+      ...r,
+      commentCount: commentsCountById[r.id] || 0
+    }));
+    ctx.body = await reportView(enrichedReports, filter, null);
   })
   .get('/reports/edit/:id', async ctx => {
     const report = await reportsModel.getReportById(ctx.params.id);
@@ -967,8 +1043,10 @@ router
   .get('/reports/:reportId', async ctx => {
     const reportId = ctx.params.reportId;
     const filter = ctx.query.filter || 'all'; 
-    const report = await reportsModel.getReportById(reportId, filter);
-    ctx.body = await singleReportView(report, filter);
+    const report = await reportsModel.getReportById(reportId);
+    const comments = await getVoteComments(reportId);
+    const reportWithCount = { ...report, commentCount: comments.length };
+    ctx.body = await singleReportView(reportWithCount, filter, comments);
   })
   .get('/trending', async (ctx) => {
     const filter = ctx.query.filter || 'RECENT'; 
@@ -1591,7 +1669,18 @@ router
     }
     const filter = ctx.query.filter || 'all';
     const bookmarks = await bookmarksModel.listAll(null, filter);
-    ctx.body = await bookmarkView(bookmarks, filter, null); 
+    const commentsCountByBookmarkId = {};
+    await Promise.all(
+      bookmarks.map(async b => {
+        const comments = await getVoteComments(b.id);
+        commentsCountByBookmarkId[b.id] = comments.length;
+      })
+    );
+    const enrichedBookmarks = bookmarks.map(b => ({
+      ...b,
+      commentCount: commentsCountByBookmarkId[b.id] || 0
+    }));
+    ctx.body = await bookmarkView(enrichedBookmarks, filter, null); 
   })
   .get('/bookmarks/edit/:id', async (ctx) => {
     const bookmarksMod = ctx.cookies.get("bookmarksMod") || 'on';
@@ -1611,12 +1700,25 @@ router
     const bookmarkId = ctx.params.bookmarkId;
     const filter = ctx.query.filter || 'all'; 
     const bookmark = await bookmarksModel.getBookmarkById(bookmarkId);
-    ctx.body = await singleBookmarkView(bookmark, filter);
+    const comments = await getVoteComments(bookmarkId);
+    const bookmarkWithCount = { ...bookmark, commentCount: comments.length };
+    ctx.body = await singleBookmarkView(bookmarkWithCount, filter, comments);
   })
-  .get('/tasks', async ctx=>{
-    const filter = ctx.query.filter||'all';
+  .get('/tasks', async ctx => {
+    const filter = ctx.query.filter || 'all';
     const tasks = await tasksModel.listAll(filter);
-    ctx.body = await taskView(tasks,filter,null);
+    const commentsCountByTaskId = {};
+    await Promise.all(
+      tasks.map(async t => {
+        const comments = await getVoteComments(t.id);
+        commentsCountByTaskId[t.id] = comments.length;
+      })
+    );
+    const enrichedTasks = tasks.map(t => ({
+      ...t,
+      commentCount: commentsCountByTaskId[t.id] || 0
+    }));
+    ctx.body = await taskView(enrichedTasks, filter, null);
   })
   .get('/tasks/edit/:id', async ctx=>{
     const id = ctx.params.id;
@@ -1626,8 +1728,10 @@ router
   .get('/tasks/:taskId', async ctx => {
     const taskId = ctx.params.taskId;
     const filter = ctx.query.filter || 'all'; 
-    const task = await tasksModel.getTaskById(taskId, filter);
-    ctx.body = await taskView([task], filter, taskId);
+    const task = await tasksModel.getTaskById(taskId);
+    const comments = await getVoteComments(taskId);
+    const taskWithCount = { ...task, commentCount: comments.length };
+    ctx.body = await singleTaskView(taskWithCount, filter, comments);
   })
   .get('/events', async (ctx) => {
     const eventsMod = ctx.cookies.get("eventsMod") || 'on';
@@ -1637,7 +1741,18 @@ router
     }
     const filter = ctx.query.filter || 'all';
     const events = await eventsModel.listAll(null, filter);
-    ctx.body = await eventView(events, filter, null);
+    const commentsCountByEventId = {};
+    await Promise.all(
+      events.map(async e => {
+        const comments = await getVoteComments(e.id);
+        commentsCountByEventId[e.id] = comments.length;
+      })
+    );
+    const enrichedEvents = events.map(e => ({
+      ...e,
+      commentCount: commentsCountByEventId[e.id] || 0
+    }));
+    ctx.body = await eventView(enrichedEvents, filter, null);
   })
   .get('/events/edit/:id', async (ctx) => {
     const eventsMod = ctx.cookies.get("eventsMod") || 'on';
@@ -1649,27 +1764,42 @@ router
     const event = await eventsModel.getEventById(eventId);
     ctx.body = await eventView([event], 'edit', eventId);
    })
-  .get('/events/:eventId', async ctx => {
+ .get('/events/:eventId', async ctx => {
     const eventId = ctx.params.eventId;
     const filter = ctx.query.filter || 'all'; 
     const event = await eventsModel.getEventById(eventId);
-    ctx.body = await singleEventView(event, filter);
+    const comments = await getVoteComments(eventId);
+    const eventWithCount = { ...event, commentCount: comments.length };
+    ctx.body = await singleEventView(eventWithCount, filter, comments);
   })
   .get('/votes', async ctx => {
     const filter = ctx.query.filter || 'all';
     const voteList = await votesModel.listAll(filter);
-    ctx.body = await voteView(voteList, filter, null);
-   })
+    const commentsCountByVoteId = {};
+    await Promise.all(
+      voteList.map(async v => {
+        const comments = await getVoteComments(v.id);
+        commentsCountByVoteId[v.id] = comments.length;
+      })
+    );
+    const enrichedVotes = voteList.map(v => ({
+      ...v,
+      commentCount: commentsCountByVoteId[v.id] || 0
+    }));
+    ctx.body = await voteView(enrichedVotes, filter, null, []);
+  })
   .get('/votes/edit/:id', async ctx => {
     const id = ctx.params.id;
-    const vote = await votesModel.getVoteById(id);
-    ctx.body = await voteView([vote], 'edit', id);
-   })
+    const voteData = await votesModel.getVoteById(id);
+    ctx.body = await voteView([voteData], 'edit', id, []);
+  })
   .get('/votes/:voteId', async ctx => {
     const voteId = ctx.params.voteId;
-    const vote = await votesModel.getVoteById(voteId);
-    ctx.body = await voteView(vote);
-   })
+    const voteData = await votesModel.getVoteById(voteId);
+    const comments = await getVoteComments(voteId);
+    const voteWithCount = { ...voteData, commentCount: comments.length };
+    ctx.body = await voteView([voteWithCount], 'detail', voteId, comments);
+  })
   .get('/market', async ctx => {
     const marketMod = ctx.cookies.get("marketMod") || 'on';
     if (marketMod !== 'on') {
@@ -1677,9 +1807,20 @@ router
       return;
     }
     const filter = ctx.query.filter || 'all';
-    const marketItems = await marketModel.listAllItems(filter);
+    let marketItems = await marketModel.listAllItems(filter);
+    const commentsCountById = {};
+    await Promise.all(
+      marketItems.map(async item => {
+        const comments = await getVoteComments(item.id);
+        commentsCountById[item.id] = comments.length;
+      })
+    );
+    marketItems = marketItems.map(item => ({
+      ...item,
+      commentCount: commentsCountById[item.id] || 0
+    }));
     ctx.body = await marketView(marketItems, filter, null);
-   })
+  })
   .get('/market/edit/:id', async ctx => {
     const id = ctx.params.id;
     const marketItem = await marketModel.getItemById(id);
@@ -1689,8 +1830,10 @@ router
     const itemId = ctx.params.itemId;
     const filter = ctx.query.filter || 'all'; 
     const item = await marketModel.getItemById(itemId); 
-    ctx.body = await singleMarketView(item, filter);
-   })
+    const comments = await getVoteComments(itemId);
+    const itemWithCount = { ...item, commentCount: comments.length };
+    ctx.body = await singleMarketView(itemWithCount, filter, comments);
+  })
   .get('/jobs', async (ctx) => {
     const jobsMod = ctx.cookies.get("jobsMod") || 'on';
     if (jobsMod !== 'on') {
@@ -1705,14 +1848,25 @@ router
       query.location = ctx.query.location || '';
       query.language = ctx.query.language || '';
       query.skills = ctx.query.skills || '';
-      const inhabitants = await inhabitantsModel.listInhabitants({ 
-        filter: 'CVs', 
-        ...query 
+      const inhabitants = await inhabitantsModel.listInhabitants({
+        filter: 'CVs',
+        ...query
       });
       ctx.body = await jobsView(inhabitants, filter, query);
       return;
     }
-    const jobs = await jobsModel.listJobs(filter, ctx.state.user?.id, query);
+    let jobs = await jobsModel.listJobs(filter, ctx.state.user?.id, query);
+    const commentsCountById = {};
+    await Promise.all(
+      jobs.map(async job => {
+        const comments = await getVoteComments(job.id);
+        commentsCountById[job.id] = comments.length;
+      })
+    );
+    jobs = jobs.map(job => ({
+      ...job,
+      commentCount: commentsCountById[job.id] || 0
+    }));
     ctx.body = await jobsView(jobs, filter, query);
   })
   .get('/jobs/edit/:id', async (ctx) => {
@@ -1724,7 +1878,9 @@ router
     const jobId = ctx.params.jobId;
     const filter = ctx.query.filter || 'ALL';
     const job = await jobsModel.getJobById(jobId);
-    ctx.body = await singleJobsView(job, filter);
+    const comments = await getVoteComments(jobId);
+    const jobWithCount = { ...job, commentCount: comments.length };
+    ctx.body = await singleJobsView(jobWithCount, filter, comments);
   })
   .get('/projects', async (ctx) => {
     const projectsMod = ctx.cookies.get("projectsMod") || 'on';
@@ -1740,6 +1896,17 @@ router
       const userId = SSBconfig.config.keys.id;
       projects = projects.filter(project => project.author === userId);
     }
+    const commentsCountById = {};
+    await Promise.all(
+      projects.map(async pr => {
+        const comments = await getVoteComments(pr.id);
+        commentsCountById[pr.id] = comments.length;
+      })
+    );
+    projects = projects.map(pr => ({
+      ...pr,
+      commentCount: commentsCountById[pr.id] || 0
+    }));
     ctx.body = await projectsView(projects, filter);
   })
   .get('/projects/edit/:id', async (ctx) => {
@@ -1748,10 +1915,12 @@ router
     ctx.body = await projectsView([pr], 'EDIT')
   })
   .get('/projects/:projectId', async (ctx) => {
-    const projectId = ctx.params.projectId
-    const filter = ctx.query.filter || 'ALL'
-    const project = await projectsModel.getProjectById(projectId)
-    ctx.body = await singleProjectView(project, filter)
+    const projectId = ctx.params.projectId;
+    const filter = ctx.query.filter || 'ALL';
+    const project = await projectsModel.getProjectById(projectId);
+    const comments = await getVoteComments(projectId);
+    const projectWithCount = { ...project, commentCount: comments.length };
+    ctx.body = await singleProjectView(projectWithCount, filter, comments);
   })
   .get("/banking", async (ctx) => {
     const bankingMod = ctx.cookies.get("bankingMod") || 'on';
@@ -2438,6 +2607,21 @@ router
     await opinionsModel.createVote(bookmarkId, category, 'bookmark');
     ctx.redirect('/bookmarks');
   })
+  .post('/bookmarks/:bookmarkId/comments', koaBody(), async (ctx) => {
+    const { bookmarkId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/bookmarks/${encodeURIComponent(bookmarkId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: bookmarkId,
+      dest: bookmarkId
+    });
+    ctx.redirect(`/bookmarks/${encodeURIComponent(bookmarkId)}`);
+  })
   .post('/images/create', koaBody({ multipart: true }), async ctx => {
     const blob = await handleBlobUpload(ctx, 'image');
     const { tags, title, description, meme } = ctx.request.body;
@@ -2468,6 +2652,21 @@ router
     await imagesModel.createOpinion(imageId, category, 'image');
     ctx.redirect('/images');
   })
+  .post('/images/:imageId/comments', koaBody(), async ctx => {
+    const { imageId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/images/${encodeURIComponent(imageId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: imageId,
+      dest: imageId
+    });
+    ctx.redirect(`/images/${encodeURIComponent(imageId)}`);
+  })
   .post('/audios/create', koaBody({ multipart: true }), async (ctx) => {
     const audioBlob = await handleBlobUpload(ctx, 'audio');
     const { tags, title, description } = ctx.request.body;
@@ -2495,6 +2694,21 @@ router
     }
     await audiosModel.createOpinion(audioId, category);
     ctx.redirect('/audios');
+  })
+  .post('/audios/:audioId/comments', koaBody(), async ctx => {
+    const { audioId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/audios/${encodeURIComponent(audioId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: audioId,
+      dest: audioId
+    });
+    ctx.redirect(`/audios/${encodeURIComponent(audioId)}`);
   })
   .post('/videos/create', koaBody({ multipart: true }), async (ctx) => {
     const videoBlob = await handleBlobUpload(ctx, 'video');
@@ -2524,6 +2738,21 @@ router
     await videosModel.createOpinion(videoId, category);
     ctx.redirect('/videos');
   })
+  .post('/videos/:videoId/comments', koaBody(), async ctx => {
+    const { videoId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/videos/${encodeURIComponent(videoId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: videoId,
+      dest: videoId
+    });
+    ctx.redirect(`/videos/${encodeURIComponent(videoId)}`);
+  })
   .post('/documents/create', koaBody({ multipart: true }), async (ctx) => {
     const docBlob = await handleBlobUpload(ctx, 'document');
     const { tags, title, description } = ctx.request.body;
@@ -2551,6 +2780,21 @@ router
     }
     await documentsModel.createOpinion(documentId, category);
      ctx.redirect('/documents');
+  })
+  .post('/documents/:documentId/comments', koaBody(), async (ctx) => {
+    const { documentId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/documents/${encodeURIComponent(documentId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: documentId,
+      dest: documentId
+    });
+    ctx.redirect(`/documents/${encodeURIComponent(documentId)}`);
   })
   .post('/cv/upload', koaBody({ multipart: true }), async ctx => {
     const photoUrl = await handleBlobUpload(ctx, 'image')
@@ -2743,6 +2987,21 @@ router
     await tasksModel.updateTaskStatus(taskId, status);
     ctx.redirect('/tasks?filter=mine');
    })
+   .post('/tasks/:taskId/comments', koaBody(), async ctx => {
+    const { taskId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/tasks/${encodeURIComponent(taskId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: taskId,
+      dest: taskId
+    });
+    ctx.redirect(`/tasks/${encodeURIComponent(taskId)}`);
+  })
   .post('/reports/create', koaBody({ multipart: true }), async ctx => {
       const { title, description, category, tags, severity } = ctx.request.body;
       const image = await handleBlobUpload(ctx, 'image');
@@ -2770,6 +3029,21 @@ router
     const { status } = ctx.request.body;
     await reportsModel.updateReportById(reportId, { status });
     ctx.redirect('/reports?filter=mine');
+  })
+  .post('/reports/:reportId/comments', koaBody(), async ctx => {
+    const { reportId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/reports/${encodeURIComponent(reportId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: reportId,
+      dest: reportId
+    });
+    ctx.redirect(`/reports/${encodeURIComponent(reportId)}`);
   })
   .post('/events/create', koaBody(), async (ctx) => {
     const { title, description, date, location, price, url, attendees, tags, isPublic } = ctx.request.body;
@@ -2805,6 +3079,21 @@ router
     await eventsModel.deleteEventById(eventId);
     ctx.redirect('/events?filter=mine');
   })
+  .post('/events/:eventId/comments', koaBody(), async (ctx) => {
+    const { eventId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/events/${encodeURIComponent(eventId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: eventId,
+      dest: eventId
+    });
+    ctx.redirect(`/events/${encodeURIComponent(eventId)}`);
+  })
   .post('/votes/create', koaBody(), async ctx => {
     const { question, deadline, options, tags = '' } = ctx.request.body;
     const defaultOptions = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'];
@@ -2836,17 +3125,32 @@ router
     await votesModel.voteOnVote(id, choice);
     ctx.redirect('/votes?filter=open');
   })
-  .post('/votes/opinions/:voteId/:category', async (ctx) => {
+  .post('/votes/opinions/:voteId/:category', async ctx => {
     const { voteId, category } = ctx.params;
     const voterId = SSBconfig?.keys?.id;
-    const vote = await votesModel.getVoteById(voteId);
-    if (vote.opinions_inhabitants && vote.opinions_inhabitants.includes(voterId)) {
+    const voteData = await votesModel.getVoteById(voteId);
+    if (voteData.opinions_inhabitants && voteData.opinions_inhabitants.includes(voterId)) {
       ctx.flash = { message: "You have already opined." };
       ctx.redirect('/votes');
       return;
     }
     await votesModel.createOpinion(voteId, category);
     ctx.redirect('/votes');
+  })
+  .post('/votes/:voteId/comments', koaBody(), async ctx => {
+    const { voteId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/votes/${encodeURIComponent(voteId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: voteId,
+      dest: voteId
+    });
+    ctx.redirect(`/votes/${encodeURIComponent(voteId)}`);
   })
   .post('/parliament/candidatures/propose', koaBody(), async (ctx) => {
     const { candidateId = '', method = '' } = ctx.request.body || {};
@@ -3265,6 +3569,21 @@ router
     }
     ctx.redirect('/market?filter=auctions');
   })
+  .post('/market/:itemId/comments', koaBody(), async ctx => {
+    const { itemId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/market/${encodeURIComponent(itemId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: itemId,
+      dest: itemId
+    });
+    ctx.redirect(`/market/${encodeURIComponent(itemId)}`);
+  })
   .post('/jobs/create', koaBody({ multipart: true }), async (ctx) => {
    const {
       job_type,
@@ -3366,6 +3685,21 @@ router
     const text = `has unsubscribed from your job offer "${title}" -> /jobs/${latestId}`;
     await pmModel.sendMessage([job.author], subject, text);
     ctx.redirect('/jobs');
+  })
+  .post('/jobs/:jobId/comments', koaBody(), async (ctx) => {
+    const { jobId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/jobs/${encodeURIComponent(jobId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: jobId,
+      dest: jobId
+    });
+    ctx.redirect(`/jobs/${encodeURIComponent(jobId)}`);
   })
  .post('/projects/create', koaBody({ multipart: true }), async (ctx) => {
     const b = ctx.request.body || {};
@@ -3572,6 +3906,21 @@ router
     const userId = SSBconfig.config.keys.id;
     await projectsModel.completeBounty(ctx.params.id, parseInt(ctx.params.index, 10), userId);
     ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/projects/:projectId/comments', koaBody(), async (ctx) => {
+    const { projectId } = ctx.params;
+    const { text } = ctx.request.body;
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+      ctx.redirect(`/projects/${encodeURIComponent(projectId)}`);
+      return;
+    }
+    await post.publish({
+      text: trimmed,
+      root: projectId,
+      dest: projectId
+    });
+    ctx.redirect(`/projects/${encodeURIComponent(projectId)}`);
   })
   .post("/banking/claim/:id", koaBody(), async (ctx) => {
     const userId = SSBconfig.config.keys.id;

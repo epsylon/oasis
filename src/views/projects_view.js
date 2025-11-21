@@ -23,6 +23,69 @@ const field = (labelText, value) =>
     span({ class: 'card-label' }, labelText),
     span({ class: 'card-value' }, value)
   )
+  
+const renderProjectCommentsSection = (projectId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/projects/${encodeURIComponent(projectId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+            const rootId = c.value && c.value.content ? (c.value.content.fork || c.value.content.root) : null;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`)
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate && rootId
+                  ? a({
+                      href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}`
+                    }, relDate)
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};  
 
 function sumAmounts(list = []) {
   return list.reduce((s, x) => s + (parseFloat(x.amount || 0) || 0), 0)
@@ -354,6 +417,14 @@ const renderProjectList = (projects, filter) =>
           )
         )
       ] : null,
+      div({ class: 'card-comments-summary' },
+        span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+        span({ class: 'card-value' }, String(pr.commentCount || 0)),
+        br(), br(),
+        form({ method: 'GET', action: `/projects/${encodeURIComponent(pr.id)}` },
+          button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+        )
+      ),
 
       div({ class: 'card-footer' },
         span({ class: 'date-link' }, `${moment(pr.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
@@ -426,7 +497,7 @@ exports.projectsView = async (projectsOrForm, filter="ALL") => {
   )
 }
 
-exports.singleProjectView = async (project, filter="ALL") => {
+exports.singleProjectView = async (project, filter="ALL", comments = []) => {
   const isAuthor = project.author === userId
   const statusUpper = String(project.status || 'ACTIVE').toUpperCase()
   const isActive = statusUpper === 'ACTIVE'
@@ -530,11 +601,12 @@ exports.singleProjectView = async (project, filter="ALL") => {
             button({ class: 'btn submit-bounty', type: 'submit' }, remain > 0 ? i18n.projectBountyCreateButton : i18n.projectNoRemainingBudget)
           )
         ) : null,
-        div({ class: 'card-footer' },
+                div({ class: 'card-footer' },
           span({ class: 'date-link' }, `${moment(project.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(project.author)}`, class: 'user-link' }, project.author)
         )
-      )
+      ),
+      renderProjectCommentsSection(project.id, comments)
     )
   )
 }

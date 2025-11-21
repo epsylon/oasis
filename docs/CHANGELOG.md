@@ -13,6 +13,22 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+
+## v0.5.6 - 2025-11-21
+
+### Added
+
+ + Extended post-commenting into various modules (bookmarks, images, audios, videos, documents, votations, events, tasks, reports, market, projects, jobs).
+ 
+### Changed
+
+ + Added details about current proposals at Courts (Courts plugin).
+ + Parliament proposal listing when voting process has started (Parliament plugin).
+ 
+### Fixed
+
+ + Votations deduplication applied when directly voting from Parliament (Votes plugin).
+ 
 ## v0.5.5 - 2025-11-15
 
 ### Added

@@ -101,14 +101,37 @@ function renderActionCards(actions, userId) {
 
     if (type === 'votes') {
       const { question, deadline, status, votes, totalVotes } = content;
+      const commentCount =
+        typeof action.commentCount === 'number'
+          ? action.commentCount
+          : (typeof content.commentCount === 'number' ? content.commentCount : 0);
+
       const votesList = votes && typeof votes === 'object'
         ? Object.entries(votes).map(([option, count]) => ({ option, count }))
         : [];
+
       cardBody.push(
         div({ class: 'card-section votes' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.question + ':'), span({ class: 'card-value' }, question)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteTotalVotes + ':'), span({ class: 'card-value' }, totalVotes)),
+          div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.question + ':'),
+            span({ class: 'card-value' }, question)
+          ),
+          div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.deadline + ':'),
+            span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')
+          ),
+          div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.voteTotalVotes + ':'),
+            span({ class: 'card-value' }, totalVotes)
+          ),
+          div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+            span({ class: 'card-value' }, String(commentCount))
+          ),
           table(
             tr(...votesList.map(({ option }) => th(i18n[option] || option))),
             tr(...votesList.map(({ count }) => td(count)))

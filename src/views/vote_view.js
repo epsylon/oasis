@@ -27,6 +27,9 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, userId, filter) => 
   const showUpdateButton = filter === 'mine' && !Object.values(v.opinions || {}).length;
   const showDeleteButton = filter === 'mine';
 
+  const commentCount = typeof v.commentCount === 'number' ? v.commentCount : 0;
+  const showCommentsSummaryInCard = filter !== 'detail';
+
   return div({ class: 'card card-section vote' },
     filter === 'mine' ? div({ class: 'vote-actions' },
       showUpdateButton
@@ -85,7 +88,17 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, userId, filter) => 
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           )
         )
-      : null,    
+      : null,
+    showCommentsSummaryInCard
+      ? div({ class: 'card-comments-summary' },
+          span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+          span({ class: 'card-value' }, String(commentCount)),
+          br,br,
+          form({ method: 'GET', action: `/votes/${encodeURIComponent(v.id)}` },
+            button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+          )
+        )
+      : null,
     br,
     p({ class: 'card-footer' },
       span({ class: 'date-link' }, `${moment(v.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
@@ -101,7 +114,70 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, userId, filter) => 
   );
 };
 
-exports.voteView = async (votes, filter, voteId) => {
+const renderCommentsSection = (voteId, comments) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({ method: 'POST', action: `/votes/${encodeURIComponent(voteId)}/comments`, class: 'comment-form' },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author.split('@')[1]; 
+            return div({ class: 'votations-comment-card' },
+             span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a(
+                      { href: `/author/${encodeURIComponent(author)}` },
+                      `@${userName}`
+                    )
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate
+                  ? a(
+                      { 
+                        href: `/thread/${encodeURIComponent(c.value.content.fork || c.value.content.root)}#${encodeURIComponent(c.key)}`
+                      },
+                      relDate
+                    )
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};
+
+exports.voteView = async (votes, filter, voteId, comments = []) => {
   const list = Array.isArray(votes) ? votes : [votes];
   const title =
     filter === 'mine'   ? i18n.voteMineSectionTitle :
@@ -109,6 +185,7 @@ exports.voteView = async (votes, filter, voteId) => {
     filter === 'edit'   ? i18n.voteUpdateSectionTitle :
     filter === 'open'   ? i18n.voteOpenTitle :
     filter === 'closed' ? i18n.voteClosedTitle :
+    filter === 'detail' ? (i18n.voteDetailSectionTitle || i18n.voteAllSectionTitle) :
                            i18n.voteAllSectionTitle;
 
   const voteToEdit = list.find(v => v.id === voteId) || {};
@@ -164,7 +241,8 @@ exports.voteView = async (votes, filter, voteId) => {
             filtered.length > 0
               ? filtered.map(v => renderVoteCard(v, voteOptions, firstRow, secondRow, userId, filter))
               : p(i18n.novotes)
-          )
+          ),
+      (filter === 'detail' && voteId) ? renderCommentsSection(voteId, comments) : null
     )
   );
 };

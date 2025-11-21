@@ -11,6 +11,74 @@ const renderStyledField = (labelText, valueElement) =>
     span({ class: 'card-label' }, labelText),
     span({ class: 'card-value' }, ...renderUrl(valueElement))
   );
+  
+const renderEventCommentsSection = (eventId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/events/${encodeURIComponent(eventId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a(
+                      { href: `/author/${encodeURIComponent(author)}` },
+                      `@${userName}`
+                    )
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate
+                  ? a(
+                      {
+                        href: `/thread/${encodeURIComponent(c.value.content.fork || c.value.content.root)}#${encodeURIComponent(c.key)}`
+                      },
+                      relDate
+                    )
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};  
 
 const renderEventItem = (e, filter, userId) => {
   const actions = [];
@@ -35,6 +103,9 @@ const renderEventItem = (e, filter, userId) => {
       )
     );
   }
+
+  const commentCount = typeof e.commentCount === 'number' ? e.commentCount : 0;
+
   return div({ class:"card card-section event" },
     actions.length ? div({ class:"event-actions" }, ...actions) : null,
     form({ method:"GET", action:`/events/${encodeURIComponent(e.id)}` },
@@ -70,13 +141,20 @@ const renderEventItem = (e, filter, userId) => {
           )
         )
       : null,
+    div({ class: 'card-comments-summary' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+      span({ class: 'card-value' }, String(commentCount)),
+      br, br,
+      form({ method: 'GET', action: `/events/${encodeURIComponent(e.id)}` },
+        button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+      )
+    ),
     br,
     p({ class: 'card-footer' },
       span({ class: 'date-link' }, `${e.createdAt} ${i18n.performed} `),
       a({ href: `/author/${encodeURIComponent(e.organizer)}`, class: 'user-link' }, `${e.organizer}`)
     )
-    
-  )
+  );
 };
 
 exports.eventView = async (events, filter, eventId) => {
@@ -198,7 +276,7 @@ exports.eventView = async (events, filter, eventId) => {
   )
 }
 
-exports.singleEventView = async (event, filter) => {
+exports.singleEventView = async (event, filter, comments = []) => {
   return template(
     event.title,
     section(
@@ -225,7 +303,7 @@ exports.singleEventView = async (event, filter) => {
       ),
       div({ class: "card card-section event" },
         form({ method:"GET", action:`/events/${encodeURIComponent(event.id)}` },
-         button({ type:"submit", class:"filter-btn" }, i18n.viewDetails)
+          button({ type:"submit", class:"filter-btn" }, i18n.viewDetails)
         ),
         br,
         renderStyledField(i18n.eventTitleLabel + ':', event.title),
@@ -254,13 +332,13 @@ exports.singleEventView = async (event, filter) => {
               )
             )
           : null,
-              br,
+        br,
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, `${moment(event.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(event.organizer)}`, class: 'user-link' }, `${event.organizer}`)
         )
-      )
+      ),
+      renderEventCommentsSection(event.id, comments)
     )
   );
 };
-

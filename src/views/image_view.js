@@ -34,40 +34,63 @@ const renderImageActions = (filter, imgObj) => {
 
 const renderImageList = (filteredImages, filter) => {
   return filteredImages.length > 0
-    ? filteredImages.map(imgObj =>
-        div({ class: "tags-header" },
-         renderImageActions(filter, imgObj),
+    ? filteredImages.map(imgObj => {
+        const commentCount = typeof imgObj.commentCount === 'number' ? imgObj.commentCount : 0;
+        return div({ class: "tags-header" },
+          renderImageActions(filter, imgObj),
           form({ method: "GET", action: `/images/${encodeURIComponent(imgObj.key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
-          
+          ), 
           imgObj.title ? h2(imgObj.title) : null,
-          a({ href: `#img-${encodeURIComponent(imgObj.key)}` }, img({ src: `/blob/${encodeURIComponent(imgObj.url)}` })),
+          a({ href: `#img-${encodeURIComponent(imgObj.key)}` },
+            img({ src: `/blob/${encodeURIComponent(imgObj.url)}` })
+          ),
           imgObj.description ? p(...renderUrl(imgObj.description)) : null,
           imgObj.tags?.length
             ? div({ class: "card-tags" }, 
                 imgObj.tags.map(tag =>
-                  a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
+                  a({
+                      href: `/search?query=%23${encodeURIComponent(tag)}`,
+                      class: "tag-link",
+                      style: "margin-right: 0.8em; margin-bottom: 0.5em;"
+                    },
+                    `#${tag}`
+                  )
                 )
               )
             : null,
+          div({ class: 'card-comments-summary' },
+            span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+            span({ class: 'card-value' }, String(commentCount)),
+            br, br,
+            form({ method: 'GET', action: `/images/${encodeURIComponent(imgObj.key)}` },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+            )
+          ),
           br,
           p({ class: 'card-footer' },
-            span({ class: 'date-link' }, `${moment(imgObj.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(imgObj.author)}`, class: 'user-link' }, `${imgObj.author}`)
+            span(
+              { class: 'date-link' },
+              `${moment(imgObj.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `
+            ),
+            a(
+              { href: `/author/${encodeURIComponent(imgObj.author)}`, class: 'user-link' },
+              `${imgObj.author}`
+            )
           ),
           div({ class: "voting-buttons" },
             ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam']
               .map(category =>
                 form({ method: "POST", action: `/images/opinions/${encodeURIComponent(imgObj.key)}/${category}` },
-                  button({ class: "vote-btn" },
+                  button(
+                    { class: "vote-btn" },
                     `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${imgObj.opinions?.[category] || 0}]`
                   )
                 )
               )
           )
-        )
-      )
+        );
+      })
     : div(i18n.noImages);
 };
 
@@ -118,6 +141,74 @@ const renderLightbox = (sortedImages) => {
   );
 };
 
+const renderImageCommentsSection = (imageId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/images/${encodeURIComponent(imageId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a(
+                      { href: `/author/${encodeURIComponent(author)}` },
+                      `@${userName}`
+                    )
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate
+                  ? a(
+                      {
+                        href: `/thread/${encodeURIComponent(c.value.content.fork || c.value.content.root)}#${encodeURIComponent(c.key)}`
+                      },
+                      relDate
+                    )
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};
+
 exports.imageView = async (images, filter, imageId) => {
   const title = filter === 'mine' ? i18n.imageMineSectionTitle :
                 filter === 'create' ? i18n.imageCreateSectionTitle :
@@ -165,7 +256,7 @@ exports.imageView = async (images, filter, imageId) => {
   );
 };
 
-exports.singleImageView = async (image, filter) => {
+exports.singleImageView = async (image, filter, comments = []) => {
   const isAuthor = image.author === userId;
   const hasOpinions = Object.keys(image.opinions || {}).length > 0;
 
@@ -184,38 +275,55 @@ exports.singleImageView = async (image, filter) => {
       ),
       div({ class: "tags-header" },
         isAuthor ? div({ class: "image-actions" },
-        !hasOpinions
-          ? form({ method: "GET", action: `/images/edit/${encodeURIComponent(image.key)}` },
-              button({ class: "update-btn", type: "submit" }, i18n.imageUpdateButton)
-            )
-          : null,
-        form({ method: "POST", action: `/images/delete/${encodeURIComponent(image.key)}` },
-          button({ class: "delete-btn", type: "submit" }, i18n.imageDeleteButton)
-        )
-      ) : null,
+          !hasOpinions
+            ? form({ method: "GET", action: `/images/edit/${encodeURIComponent(image.key)}` },
+                button({ class: "update-btn", type: "submit" }, i18n.imageUpdateButton)
+              )
+            : null,
+          form({ method: "POST", action: `/images/delete/${encodeURIComponent(image.key)}` },
+            button({ class: "delete-btn", type: "submit" }, i18n.imageDeleteButton)
+          )
+        ) : null,
         h2(image.title),
         image.url ? img({ src: `/blob/${encodeURIComponent(image.url)}` }) : null,
         p(...renderUrl(image.description)),
         image.tags?.length
-            ? div({ class: "card-tags" }, 
+          ? div({ class: "card-tags" }, 
               image.tags.map(tag =>
-                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
+                a({
+                    href: `/search?query=%23${encodeURIComponent(tag)}`,
+                    class: "tag-link",
+                    style: "margin-right: 0.8em; margin-bottom: 0.5em;"
+                  },
+                  `#${tag}`
+                )
               )
             )
           : null,
-          br,
-          p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${moment(image.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(image.author)}`, class: 'user-link' }, `${image.author}`)
+        br,
+        p({ class: 'card-footer' },
+          span(
+            { class: 'date-link' },
+            `${moment(image.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `
           ),
-      ),
-      div({ class: "voting-buttons" },
-        ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
-          form({ method: "POST", action: `/images/opinions/${encodeURIComponent(image.key)}/${category}` },
-            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${image.opinions?.[category] || 0}]`)
+          a(
+            { href: `/author/${encodeURIComponent(image.author)}`, class: 'user-link' },
+            `${image.author}`
           )
         )
-      )
+      ),
+      div({ class: "voting-buttons" },
+        ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam']
+          .map(category =>
+            form({ method: "POST", action: `/images/opinions/${encodeURIComponent(image.key)}/${category}` },
+              button(
+                { class: "vote-btn" },
+                `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${image.opinions?.[category] || 0}]`
+              )
+            )
+          )
+      ),
+      renderImageCommentsSection(image.key, comments)
     )
   );
 };

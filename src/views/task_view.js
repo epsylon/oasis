@@ -11,13 +11,85 @@ const renderStyledField = (labelText, valueElement) =>
     span({ class: 'card-label' }, labelText),
     span({ class: 'card-value' }, ...renderUrl(valueElement))
   );
+  
+const renderTaskCommentsSection = (taskId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/tasks/${encodeURIComponent(taskId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a(
+                      { href: `/author/${encodeURIComponent(author)}` },
+                      `@${userName}`
+                    )
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate
+                  ? a(
+                      {
+                        href: `/thread/${encodeURIComponent(c.value.content.fork || c.value.content.root)}#${encodeURIComponent(c.key)}`
+                      },
+                      relDate
+                    )
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};  
 
 const renderTaskItem = (task, filter, userId) => {
   const actions = [];
   if (filter === 'mine' && task.author === userId) {
     actions.push(
-      form({ method: 'GET', action: `/tasks/edit/${encodeURIComponent(task.id)}` }, button({ type: 'submit', class: 'update-btn' }, i18n.taskUpdateButton)),
-      form({ method: 'POST', action: `/tasks/delete/${encodeURIComponent(task.id)}` }, button({ type: 'submit', class: 'delete-btn' }, i18n.taskDeleteButton)),
+      form({ method: 'GET', action: `/tasks/edit/${encodeURIComponent(task.id)}` },
+        button({ type: 'submit', class: 'update-btn' }, i18n.taskUpdateButton)
+      ),
+      form({ method: 'POST', action: `/tasks/delete/${encodeURIComponent(task.id)}` },
+        button({ type: 'submit', class: 'delete-btn' }, i18n.taskDeleteButton)
+      ),
       form({ method: 'POST', action: `/tasks/status/${encodeURIComponent(task.id)}` },
         button({ type: 'submit', name: 'status', value: 'OPEN' }, i18n.taskStatusOpen), br(),
         button({ type: 'submit', name: 'status', value: 'IN-PROGRESS' }, i18n.taskStatusInProgress), br(),
@@ -28,13 +100,21 @@ const renderTaskItem = (task, filter, userId) => {
   if (task.status !== 'CLOSED') {
     actions.push(
       form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(task.id)}` },
-        button({ type: 'submit' }, task.assignees.includes(userId) ? i18n.taskUnassignButton : i18n.taskAssignButton)
+        button(
+          { type: 'submit' },
+          task.assignees.includes(userId) ? i18n.taskUnassignButton : i18n.taskAssignButton
+        )
       )
     );
   }
+
+  const commentCount = typeof task.commentCount === 'number' ? task.commentCount : 0;
+
   return div({ class: 'card card-section task' },
     actions.length > 0 ? div({ class: 'task-actions' }, ...actions) : null,
-    form({ method: 'GET', action: `/tasks/${encodeURIComponent(task.id)}` }, button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)),
+    form({ method: 'GET', action: `/tasks/${encodeURIComponent(task.id)}` },
+      button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
+    ),
     br,
     renderStyledField(i18n.taskTitleLabel + ':', task.title),
     renderStyledField(i18n.taskDescriptionLabel + ':'),
@@ -44,29 +124,37 @@ const renderTaskItem = (task, filter, userId) => {
     renderStyledField(i18n.taskPriorityLabel + ':', task.priority),
     renderStyledField(i18n.taskVisibilityLabel + ':', task.isPublic),
     renderStyledField(i18n.taskStartTimeLabel + ':', moment(task.startTime).format('YYYY/MM/DD HH:mm:ss')),
-    renderStyledField(i18n.taskEndTimeLabel + ':', moment(task.endTime).format('YYYY/MM/DD HH:mm:ss')),  
+    renderStyledField(i18n.taskEndTimeLabel + ':', moment(task.endTime).format('YYYY/MM/DD HH:mm:ss')),
     br,
     div({ class: 'card-field' },
       span({ class: 'card-label' }, i18n.taskAssignedTo + ':'),
       span({ class: 'card-value' },
         Array.isArray(task.assignees) && task.assignees.length
-          ? task.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ class: "user-link", href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
+          ? task.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
           : i18n.noAssignees
       )
     ),
     br,
-      Array.isArray(task.tags) && task.tags.length
+    Array.isArray(task.tags) && task.tags.length
       ? div({ class: 'card-tags' },
           task.tags.map(tag =>
             a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
           )
         )
-      : null, 
+      : null,
+    div({ class: 'card-comments-summary' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+      span({ class: 'card-value' }, String(commentCount)),
+      br, br,
+      form({ method: 'GET', action: `/tasks/${encodeURIComponent(task.id)}` },
+        button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+      )
+    ),
     br,
     p({ class: 'card-footer' },
       span({ class: 'date-link' }, `${moment(task.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
       a({ href: `/author/${encodeURIComponent(task.author)}`, class: 'user-link' }, `${task.author}`)
-    )   
+    )
   );
 };
 
@@ -166,7 +254,7 @@ exports.taskView = async (tasks, filter, taskId) => {
   );
 };
 
-exports.singleTaskView = async (task, filter) => {
+exports.singleTaskView = async (task, filter, comments = []) => {
   return template(
     task.title,
     section(
@@ -205,7 +293,7 @@ exports.singleTaskView = async (task, filter) => {
               : i18n.noAssignees
           )
         ),
-          Array.isArray(task.tags) && task.tags.length
+        Array.isArray(task.tags) && task.tags.length
           ? div({ class: 'card-tags' },
               task.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
@@ -221,8 +309,8 @@ exports.singleTaskView = async (task, filter) => {
               : i18n.taskAssignButton
           )
         )
-      )
+      ),
+      renderTaskCommentsSection(task.id, comments)
     )
   );
 };
-

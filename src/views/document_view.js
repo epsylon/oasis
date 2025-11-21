@@ -23,6 +23,74 @@ const getFilteredDocuments = (filter, documents, userId) => {
   return filtered;
 };
 
+const renderDocumentCommentsSection = (documentId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/documents/${encodeURIComponent(documentId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a(
+                      { href: `/author/${encodeURIComponent(author)}` },
+                      `@${userName}`
+                    )
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate
+                  ? a(
+                      {
+                        href: `/thread/${encodeURIComponent(c.value.content.fork || c.value.content.root)}#${encodeURIComponent(c.key)}`
+                      },
+                      relDate
+                    )
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};
+
 const renderDocumentActions = (filter, doc) => {
   return filter === 'mine' ? div({ class: "document-actions" },
     form({ method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
@@ -44,8 +112,10 @@ const renderDocumentList = (filteredDocs, filter) => {
   }
 
   return unique.length > 0
-    ? unique.map(doc =>
-        div({ class: "tags-header" },
+    ? unique.map(doc => {
+        const commentCount = typeof doc.commentCount === 'number' ? doc.commentCount : 0;
+
+        return div({ class: "tags-header" },
           renderDocumentActions(filter, doc),
           form({ method: "GET", action: `/documents/${encodeURIComponent(doc.key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
@@ -62,6 +132,15 @@ const renderDocumentList = (filteredDocs, filter) => {
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
               ))
             : null,
+          div({ class: 'card-comments-summary' },
+            span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+            span({ class: 'card-value' }, String(commentCount)),
+            br(),
+            br(),
+            form({ method: 'GET', action: `/documents/${encodeURIComponent(doc.key)}` },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+            )
+          ),
           br(),
           p({ class: 'card-footer' },
             span({ class: 'date-link' }, `${moment(doc.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
@@ -77,8 +156,8 @@ const renderDocumentList = (filteredDocs, filter) => {
                 )
               )
           )
-        )
-      )
+        );
+      })
     : div(i18n.noDocuments);
 };
 
@@ -145,7 +224,7 @@ exports.documentView = async (documents, filter, documentId) => {
       : ''}`;
 };
 
-exports.singleDocumentView = async (doc, filter) => {
+exports.singleDocumentView = async (doc, filter, comments = []) => {
   const isAuthor = doc.author === userId;
   const hasOpinions = Object.keys(doc.opinions || {}).length > 0;
 
@@ -162,16 +241,16 @@ exports.singleDocumentView = async (doc, filter) => {
         )
       ),
       div({ class: "tags-header" },
-       isAuthor ? div({ class: "document-actions" },
-        !hasOpinions
-          ? form({ method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
-              button({ class: "update-btn", type: "submit" }, i18n.documentUpdateButton)
-            )
-          : null,
-        form({ method: "POST", action: `/documents/delete/${encodeURIComponent(doc.key)}` },
-          button({ class: "delete-btn", type: "submit" }, i18n.documentDeleteButton)
-        )
-      ) : null,
+        isAuthor ? div({ class: "document-actions" },
+          !hasOpinions
+            ? form({ method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
+                button({ class: "update-btn", type: "submit" }, i18n.documentUpdateButton)
+              )
+            : null,
+          form({ method: "POST", action: `/documents/delete/${encodeURIComponent(doc.key)}` },
+            button({ class: "delete-btn", type: "submit" }, i18n.documentDeleteButton)
+          )
+        ) : null,
         h2(doc.title),
         div({
           id: `pdf-container-${doc.key}`,
@@ -179,16 +258,16 @@ exports.singleDocumentView = async (doc, filter) => {
           'data-pdf-url': `/blob/${encodeURIComponent(doc.url)}`
         }),
         p(...renderUrl(doc.description)),
-          doc.tags.length
-            ? div({ class: "card-tags" }, doc.tags.map(tag =>
-                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
-              ))
-            : null,
-            br,
-          p({ class: 'card-footer' },
+        doc.tags.length
+          ? div({ class: "card-tags" }, doc.tags.map(tag =>
+              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
+            ))
+          : null,
+        br(),
+        p({ class: 'card-footer' },
           span({ class: 'date-link' }, `${moment(doc.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(doc.author)}`, class: 'user-link' }, `${doc.author}`)
-          ),
+        )
       ),
       div({ class: "voting-buttons" },
         ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
@@ -196,7 +275,8 @@ exports.singleDocumentView = async (doc, filter) => {
             button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${doc.opinions?.[category] || 0}]`)
           )
         )
-      )
+      ),
+      renderDocumentCommentsSection(doc.key, comments)
     )
   );
 

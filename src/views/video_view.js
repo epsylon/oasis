@@ -21,6 +21,74 @@ const getFilteredVideos = (filter, videos, userId) => {
   return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 };
 
+const renderVideoCommentsSection = (videoId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/videos/${encodeURIComponent(videoId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a(
+                      { href: `/author/${encodeURIComponent(author)}` },
+                      `@${userName}`
+                    )
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate
+                  ? a(
+                      {
+                        href: `/thread/${encodeURIComponent(c.value.content.fork || c.value.content.root)}#${encodeURIComponent(c.key)}`
+                      },
+                      relDate
+                    )
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};
+
 const renderVideoActions = (filter, video) => {
   return filter === 'mine' ? div({ class: "video-actions" },
     form({ method: "GET", action: `/videos/edit/${encodeURIComponent(video.key)}` },
@@ -34,11 +102,14 @@ const renderVideoActions = (filter, video) => {
 
 const renderVideoList = (filteredVideos, filter) => {
   return filteredVideos.length > 0
-    ? filteredVideos.map(video =>
-        div({ class: "tags-header" },
+    ? filteredVideos.map(video => {
+        const commentCount = typeof video.commentCount === 'number' ? video.commentCount : 0;
+
+        return div({ class: "tags-header" },
           renderVideoActions(filter, video),
           form({ method: "GET", action: `/videos/${encodeURIComponent(video.key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
+            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+          ),
           video.title?.trim() ? h2(video.title) : null,
           video.url
             ? div({ class: "video-container" },
@@ -51,7 +122,7 @@ const renderVideoList = (filteredVideos, filter) => {
                   height: '360'
                 })
               )
-            : p(i18n.videoNoFile),        
+            : p(i18n.videoNoFile),
           video.description?.trim() ? p(...renderUrl(video.description)) : null,
           video.tags?.length
             ? div({ class: "card-tags" },
@@ -60,10 +131,18 @@ const renderVideoList = (filteredVideos, filter) => {
                 )
               )
             : null,
+          div({ class: 'card-comments-summary' },
+            span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+            span({ class: 'card-value' }, String(commentCount)),
+            br, br,
+            form({ method: 'GET', action: `/videos/${encodeURIComponent(video.key)}` },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+            )
+          ),
           br,
           p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${moment(video.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(video.author)}`, class: 'user-link' }, `${video.author}`)
+            span({ class: 'date-link' }, `${moment(video.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+            a({ href: `/author/${encodeURIComponent(video.author)}`, class: 'user-link' }, `${video.author}`)
           ),
           div({ class: "voting-buttons" },
             ['interesting','necessary','funny','disgusting','sensible',
@@ -76,8 +155,8 @@ const renderVideoList = (filteredVideos, filter) => {
                 )
               )
           )
-        )
-      )
+        );
+      })
     : div(i18n.noVideos);
 };
 
@@ -142,7 +221,7 @@ exports.videoView = async (videos, filter, videoId) => {
   );
 };
 
-exports.singleVideoView = async (video, filter) => {
+exports.singleVideoView = async (video, filter, comments = []) => {
   const isAuthor = video.author === userId;
   const hasOpinions = Object.keys(video.opinions || {}).length > 0; 
 
@@ -160,15 +239,15 @@ exports.singleVideoView = async (video, filter) => {
       ),
       div({ class: "tags-header" },
         isAuthor ? div({ class: "video-actions" },
-        !hasOpinions
-          ? form({ method: "GET", action: `/videos/edit/${encodeURIComponent(video.key)}` },
-              button({ class: "update-btn", type: "submit" }, i18n.videoUpdateButton)
-            )
-          : null,
-        form({ method: "POST", action: `/videos/delete/${encodeURIComponent(video.key)}` },
-          button({ class: "delete-btn", type: "submit" }, i18n.videoDeleteButton)
-        )
-      ) : null,
+          !hasOpinions
+            ? form({ method: "GET", action: `/videos/edit/${encodeURIComponent(video.key)}` },
+                button({ class: "update-btn", type: "submit" }, i18n.videoUpdateButton)
+              )
+            : null,
+          form({ method: "POST", action: `/videos/delete/${encodeURIComponent(video.key)}` },
+            button({ class: "delete-btn", type: "submit" }, i18n.videoDeleteButton)
+          )
+        ) : null,
         h2(video.title),
         video.url
           ? div({ class: "video-container" },
@@ -190,11 +269,11 @@ exports.singleVideoView = async (video, filter) => {
                 )
               )
             : null,
-          br,
-          p({ class: 'card-footer' },
+        br,
+        p({ class: 'card-footer' },
           span({ class: 'date-link' }, `${moment(video.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(video.author)}`, class: 'user-link' }, `${video.author}`)
-          ),
+        )
       ),
       div({ class: "voting-buttons" },
         ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
@@ -202,8 +281,8 @@ exports.singleVideoView = async (video, filter) => {
             button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${video.opinions?.[category] || 0}]`)
           )
         )
-      )
+      ),
+      renderVideoCommentsSection(video.key, comments)
     )
   );
 };
-

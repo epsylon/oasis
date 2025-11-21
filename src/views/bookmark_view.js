@@ -19,6 +19,74 @@ const renderBookmarkActions = (filter, bookmark) => {
     : null;
 };
 
+const renderBookmarkCommentsSection = (bookmarkId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/bookmarks/${encodeURIComponent(bookmarkId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a(
+                      { href: `/author/${encodeURIComponent(author)}` },
+                      `@${userName}`
+                    )
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate
+                  ? a(
+                      {
+                        href: `/thread/${encodeURIComponent(c.value.content.fork || c.value.content.root)}#${encodeURIComponent(c.key)}`
+                      },
+                      relDate
+                    )
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};
+
 const renderCardField = (labelText, value) =>
   div({ class: 'card-field' },
     span({ class: 'card-label' }, labelText),
@@ -27,8 +95,10 @@ const renderCardField = (labelText, value) =>
 
 const renderBookmarkList = (filteredBookmarks, filter) => {
   return filteredBookmarks.length > 0
-    ? filteredBookmarks.map(bookmark =>
-        div({ class: "tags-header" },
+    ? filteredBookmarks.map(bookmark => {
+        const commentCount = typeof bookmark.commentCount === 'number' ? bookmark.commentCount : 0;
+
+        return div({ class: "tags-header" },
           renderBookmarkActions(filter, bookmark),
           form({ method: "GET", action: `/bookmarks/${encodeURIComponent(bookmark.id)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
@@ -46,18 +116,26 @@ const renderBookmarkList = (filteredBookmarks, filter) => {
           ),
           bookmark.category?.trim()
             ? renderCardField(i18n.bookmarkCategory + ":", bookmark.category)
-            : null,  
-	  bookmark.description
-	    ? [
-	      renderCardField(i18n.bookmarkDescriptionLabel + ":"),
-	      p(...renderUrl(bookmark.description))
-	    ]
-	  : null,
+            : null,
+          bookmark.description
+            ? [
+                renderCardField(i18n.bookmarkDescriptionLabel + ":"),
+                p(...renderUrl(bookmark.description))
+              ]
+            : null,
           bookmark.tags?.length
             ? div({ class: "card-tags" }, bookmark.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
               ))
             : null,
+          div({ class: 'card-comments-summary' },
+            span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+            span({ class: 'card-value' }, String(commentCount)),
+            br, br,
+            form({ method: 'GET', action: `/bookmarks/${encodeURIComponent(bookmark.id)}` },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+            )
+          ),
           br,
           div({ class: 'card-footer' },
             span({ class: 'date-link' }, `${moment(bookmark.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
@@ -70,8 +148,8 @@ const renderBookmarkList = (filteredBookmarks, filter) => {
               )
             )
           )
-        )
-      )
+        );
+      })
     : p(i18n.nobookmarks);
 };
 
@@ -162,7 +240,7 @@ exports.bookmarkView = async (bookmarks, filter, bookmarkId) => {
   );
 };
 
-exports.singleBookmarkView = async (bookmark, filter) => {
+exports.singleBookmarkView = async (bookmark, filter, comments = []) => {
   const isAuthor = bookmark.author === userId; 
   const hasOpinions = Object.keys(bookmark.opinions || {}).length > 0;
 
@@ -181,8 +259,8 @@ exports.singleBookmarkView = async (bookmark, filter) => {
         )
       ),
       div({ class: "bookmark-item card" },
-      br,
-          isAuthor ? div({ class: "bookmark-actions" },
+        br,
+        isAuthor ? div({ class: "bookmark-actions" },
           !hasOpinions
             ? form({ method: "GET", action: `/bookmarks/edit/${encodeURIComponent(bookmark.id)}` },
                 button({ class: "update-btn", type: "submit" }, i18n.bookmarkUpdateButton)
@@ -225,8 +303,8 @@ exports.singleBookmarkView = async (bookmark, filter) => {
             )
           )
         )
-      )
+      ),
+      renderBookmarkCommentsSection(bookmark.id, comments)
     )
   );
 };
-

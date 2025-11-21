@@ -212,6 +212,7 @@ const CandidatureForm = () =>
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentCandidatureProposeBtn)
     )
   );
+  
 const pickLeader = (arr) => {
   if (!arr || !arr.length) return null;
   const sorted = [...arr].sort((a, b) => {
@@ -227,6 +228,7 @@ const pickLeader = (arr) => {
   });
   return sorted[0];
 };
+
 const CandidatureStats = (cands, govCard, leaderMeta) => {
   if (!cands || !cands.length) return null;
   const leader      = pickLeader(cands || []);
@@ -272,6 +274,7 @@ const CandidatureStats = (cands, govCard, leaderMeta) => {
     )
   );
 };
+
 const CandidaturesTable = (candidatures) => {
   const rows = (candidatures || []).map(c => {
     const idLink =
@@ -303,6 +306,7 @@ const CandidaturesTable = (candidatures) => {
     ])
   );
 };
+
 const ProposalForm = () =>
   div(
     { class: 'div-center' },
@@ -316,35 +320,89 @@ const ProposalForm = () =>
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentProposalPublish)
     )
   );
+
 const ProposalsList = (proposals) => {
   if (!proposals || !proposals.length) return null;
-  const cards = proposals.map(pItem =>
-    div(
+  const cards = proposals.map(pItem => {
+    const titleNode = pItem && pItem.voteId
+      ? a({ class: 'proposal-title-link', href: `/votes/${encodeURIComponent(pItem.voteId)}` }, pItem.title || '')
+      : (pItem.title || '');
+    const onTrackLabel = pItem && pItem.onTrack
+      ? (i18n.parliamentProposalOnTrackYes || 'THRESHOLD REACHED')
+      : (i18n.parliamentProposalOnTrackNo || 'BELOW THRESHOLD');
+    return div(
       { class: 'card' },
       br(),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '), span({ class: 'card-value' }, fmt(pItem.createdAt))),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(pItem.proposer)}` }, pItem.proposer))),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentGovMethod.toUpperCase() + ': '), span({ class: 'card-value' }, pItem.method)),
+      div(
+        { class: 'card-field' },
+        span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '),
+        span({ class: 'card-value' }, fmt(pItem.createdAt))
+      ),
+      div(
+        { class: 'card-field' },
+        span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '),
+        span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(pItem.proposer)}` }, pItem.proposer))
+      ),
+      div(
+        { class: 'card-field' },
+        span({ class: 'card-label' }, i18n.parliamentGovMethod.toUpperCase() + ': '),
+        span({ class: 'card-value' }, pItem.method)
+      ),
       br(),
       div(
-      h2(pItem.title || ''),
-      p(pItem.description || '')
+        h2(titleNode),
+        p(pItem.description || '')
       ),
-      pItem.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentProposalDeadlineLabel.toUpperCase() + ': '), span({ class: 'card-value' }, fmt(pItem.deadline))) : null,
-      pItem.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentProposalTimeLeft.toUpperCase() + ': '), span({ class: 'card-value' }, timeLeft(pItem.deadline))) : null,
-      showVoteMetrics(pItem.method) ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentVotesNeeded.toUpperCase() + ': '), span({ class: 'card-value' }, String(pItem.needed || reqVotes(pItem.method, pItem.total)))) : null,
-      showVoteMetrics(pItem.method) ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentVotesSlashTotal.toUpperCase() + ': '), span({ class: 'card-value' }, `${Number(pItem.yes||0)}/${Number(pItem.total||0)}`)) : null,
+      pItem.deadline
+        ? div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.parliamentProposalDeadlineLabel.toUpperCase() + ': '),
+            span({ class: 'card-value' }, fmt(pItem.deadline))
+          )
+        : null,
+      pItem.deadline
+        ? div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.parliamentProposalTimeLeft.toUpperCase() + ': '),
+            span({ class: 'card-value' }, timeLeft(pItem.deadline))
+          )
+        : null,
+      showVoteMetrics(pItem.method)
+        ? div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.parliamentVotesNeeded.toUpperCase() + ': '),
+            span({ class: 'card-value' }, String(pItem.needed || reqVotes(pItem.method, pItem.total)))
+          )
+        : null,
+      showVoteMetrics(pItem.method)
+        ? div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.parliamentVotesSlashTotal.toUpperCase() + ': '),
+            span({ class: 'card-value' }, `${Number(pItem.yes || 0)}/${Number(pItem.total || 0)}`)
+          )
+        : null,
+      showVoteMetrics(pItem.method)
+        ? div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.parliamentProposalVoteStatusLabel.toUpperCase() + ': '),
+            span({ class: 'card-value' }, onTrackLabel)
+          )
+        : null,
       pItem && pItem.voteId
-        ? form({ method: 'GET', action: `/votes/${encodeURIComponent(pItem.voteId)}` }, button({ type: 'submit', class: 'vote-btn' }, i18n.parliamentVoteAction))
+        ? form(
+            { method: 'GET', action: `/votes/${encodeURIComponent(pItem.voteId)}` },
+            button({ type: 'submit', class: 'vote-btn' }, i18n.parliamentVoteAction)
+          )
         : null
-    )
-  );
+    );
+  });
   return div(
     { class: 'cards' },
     h2(i18n.parliamentCurrentProposalsTitle),
     applyEl(div, null, cards)
   );
 };
+
 const FutureLawsList = (rows) => {
   if (!rows || !rows.length) return null;
   const cards = rows.map(pItem =>
@@ -364,6 +422,7 @@ const FutureLawsList = (rows) => {
     applyEl(div, null, cards)
   );
 };
+
 const RevocationForm = (laws = []) =>
   div(
     { class: 'div-center' },
@@ -390,10 +449,17 @@ const RevocationForm = (laws = []) =>
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentRevocationPublish || 'Publish Revocation')
     )
   );
+  
 const RevocationsList = (revocations) => {
   if (!revocations || !revocations.length) return null;
-  const cards = revocations.map(pItem =>
-    div(
+  const cards = revocations.map(pItem => {
+    const titleNode = pItem && pItem.voteId
+      ? a({ class: 'revocation-title-link', href: `/votes/${encodeURIComponent(pItem.voteId)}` }, pItem.title || pItem.lawTitle || '')
+      : (pItem.title || pItem.lawTitle || '');
+    const onTrackLabel = pItem && pItem.onTrack
+      ? (i18n.parliamentProposalOnTrackYes || 'THRESHOLD REACHED')
+      : (i18n.parliamentProposalOnTrackNo || 'BELOW THRESHOLD');
+    return div(
       { class: 'card' },
       br(),
       div(
@@ -416,7 +482,7 @@ const RevocationsList = (revocations) => {
       ),
       br(),
       div(
-        h2(pItem.title || pItem.lawTitle || ''),
+        h2(titleNode),
         p(pItem.reasons || '')
       ),
       pItem.deadline
@@ -447,20 +513,28 @@ const RevocationsList = (revocations) => {
             span({ class: 'card-value' }, `${Number(pItem.yes || 0)}/${Number(pItem.total || 0)}`)
           )
         : null,
+      showVoteMetrics(pItem.method)
+        ? div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, i18n.parliamentProposalVoteStatusLabel.toUpperCase() + ': '),
+            span({ class: 'card-value' }, onTrackLabel)
+          )
+        : null,
       pItem && pItem.voteId
         ? form(
             { method: 'GET', action: `/votes/${encodeURIComponent(pItem.voteId)}` },
             button({ type: 'submit', class: 'vote-btn' }, i18n.parliamentVoteAction)
           )
         : null
-    )
-  );
+    );
+  });
   return div(
     { class: 'cards' },
     h2(i18n.parliamentCurrentRevocationsTitle),
     applyEl(div, null, cards)
   );
 };
+
 const FutureRevocationsList = (rows) => {
   if (!rows || !rows.length) return null;
   const cards = rows.map(pItem =>
@@ -480,6 +554,7 @@ const FutureRevocationsList = (rows) => {
     applyEl(div, null, cards)
   );
 };
+
 const LawsStats = (laws = [], revocatedCount = 0) => {
   const proposed = laws.length;
   const approved = laws.length;
@@ -509,6 +584,7 @@ const LawsStats = (laws = [], revocatedCount = 0) => {
     ])
   );
 };
+
 const LawsList = (laws) => {
   if (!laws || !laws.length) return NoLaws();
   const cards = laws.map(l => {
@@ -534,6 +610,7 @@ const LawsList = (laws) => {
     applyEl(div, null, cards)
   );
 };
+
 const HistoricalGovsSummary = (rows = []) => {
   const byMethod = new Map();
   for (const g of rows) {
@@ -553,6 +630,7 @@ const HistoricalGovsSummary = (rows = []) => {
     ])
   );
 };
+
 const HistoricalList = (rows, metasByKey = {}) => {
   if (!rows || !rows.length) return NoGovernments();
   const cards = rows.map(g => {
@@ -635,6 +713,7 @@ const HistoricalList = (rows, metasByKey = {}) => {
     applyEl(div, null, cards)
   );
 };
+
 const countCandidaturesByActor = (cands = []) => {
   const m = new Map();
   for (const c of cands) {
@@ -643,6 +722,7 @@ const countCandidaturesByActor = (cands = []) => {
   }
   return m;
 };
+
 const LeadersSummary = (leaders = [], candidatures = []) => {
   const candCounts = countCandidaturesByActor(candidatures);
   const totals = leaders.reduce((acc, l) => {
@@ -688,6 +768,7 @@ const LeadersSummary = (leaders = [], candidatures = []) => {
     ])
   );
 };
+
 const LeadersList = (leaders, metas = {}, candidatures = []) => {
   if (!leaders || !leaders.length) return div({ class: 'empty' }, p(i18n.parliamentNoLeaders));
   const rows = leaders.map(l => {
@@ -725,6 +806,7 @@ const LeadersList = (leaders, metas = {}, candidatures = []) => {
     ])
   );
 };
+
 const RulesContent = () =>
   div(
     { class: 'card' },
@@ -745,6 +827,7 @@ const RulesContent = () =>
       li(i18n.parliamentRulesLeaders)
     )
   );
+  
 const CandidaturesSection = (governmentCard, candidatures, leaderMeta) => {
   const termStart = governmentCard && governmentCard.since ? governmentCard.since : moment().toISOString();
   const termEnd   = governmentCard && governmentCard.end   ? governmentCard.end   : moment(termStart).add(1, 'minutes').toISOString();
@@ -756,6 +839,7 @@ const CandidaturesSection = (governmentCard, candidatures, leaderMeta) => {
     candidatures && candidatures.length ? CandidaturesTable(candidatures) : null
   );
 };
+
 const ProposalsSection = (governmentCard, proposals, futureLaws, canPropose) => {
   const has = proposals && proposals.length > 0;
   const fl = FutureLawsList(futureLaws || []);
@@ -763,6 +847,7 @@ const ProposalsSection = (governmentCard, proposals, futureLaws, canPropose) => 
   if (!has && !canPropose) return div(h2(i18n.parliamentGovernmentCard), GovHeader(governmentCard || {}), NoProposals(), fl);
   return div(h2(i18n.parliamentGovernmentCard), GovHeader(governmentCard || {}), ProposalForm(), ProposalsList(proposals), fl);
 };
+
 const RevocationsSection = (governmentCard, laws, revocations, futureRevocations) =>
   div(
     h2(i18n.parliamentGovernmentCard),
@@ -771,6 +856,7 @@ const RevocationsSection = (governmentCard, laws, revocations, futureRevocations
     RevocationsList(revocations || []) || '',
     FutureRevocationsList(futureRevocations || []) || ''
   );
+  
 const parliamentView = async (state) => {
   const {
     filter,

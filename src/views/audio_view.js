@@ -21,6 +21,74 @@ const getFilteredAudios = (filter, audios, userId) => {
   return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 };
 
+const renderAudioCommentsSection = (audioId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/audios/${encodeURIComponent(audioId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a(
+                      { href: `/author/${encodeURIComponent(author)}` },
+                      `@${userName}`
+                    )
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate
+                  ? a(
+                      {
+                        href: `/thread/${encodeURIComponent(c.value.content.fork || c.value.content.root)}#${encodeURIComponent(c.key)}`
+                      },
+                      relDate
+                    )
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};
+
 const renderCardField = (label, value) =>
   div({ class: "card-field" }, 
     span({ class: "card-label" }, label), 
@@ -40,12 +108,15 @@ const renderAudioActions = (filter, audio) => {
 
 const renderAudioList = (filteredAudios, filter) => {
   return filteredAudios.length > 0
-    ? filteredAudios.map(audio =>
-        div({ class: "audio-item card" },
-         br,
+    ? filteredAudios.map(audio => {
+        const commentCount = typeof audio.commentCount === 'number' ? audio.commentCount : 0;
+
+        return div({ class: "audio-item card" },
+          br,
           renderAudioActions(filter, audio),
           form({ method: "GET", action: `/audios/${encodeURIComponent(audio.key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
+            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+          ),
           audio.title?.trim() ? h2(audio.title) : null,
           audio.url
             ? div({ class: "audio-container" },
@@ -65,11 +136,19 @@ const renderAudioList = (filteredAudios, filter) => {
                 )
               )
             : null,
-         br,
-         p({ class: 'card-footer' },
-           span({ class: 'date-link' }, `${moment(audio.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
-           a({ href: `/author/${encodeURIComponent(audio.author)}`, class: 'user-link' }, `${audio.author}`)
-         ),
+          div({ class: 'card-comments-summary' },
+            span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+            span({ class: 'card-value' }, String(commentCount)),
+            br, br,
+            form({ method: 'GET', action: `/audios/${encodeURIComponent(audio.key)}` },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+            )
+          ),
+          br,
+          p({ class: 'card-footer' },
+            span({ class: 'date-link' }, `${moment(audio.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
+            a({ href: `/author/${encodeURIComponent(audio.author)}`, class: 'user-link' }, `${audio.author}`)
+          ),
           div({ class: "voting-buttons" },
             ['interesting','necessary','funny','disgusting','sensible',
              'propaganda','adultOnly','boring','confusing','inspiring','spam']
@@ -80,9 +159,9 @@ const renderAudioList = (filteredAudios, filter) => {
                   )
                 )
               )
-          ),
-        )
-      )
+          )
+        );
+      })
     : div(i18n.noAudios);
 };
 
@@ -147,7 +226,7 @@ exports.audioView = async (audios, filter, audioId) => {
   );
 };
 
-exports.singleAudioView = async (audio, filter) => {
+exports.singleAudioView = async (audio, filter, comments = []) => {
   const isAuthor = audio.author === userId; 
   const hasOpinions = Object.keys(audio.opinions || {}).length > 0; 
 
@@ -165,17 +244,18 @@ exports.singleAudioView = async (audio, filter) => {
       ),
       div({ class: "tags-header" },
         isAuthor ? div({ class: "audio-actions" },
-        !hasOpinions
-          ? form({ method: "GET", action: `/audios/edit/${encodeURIComponent(audio.key)}` },
-              button({ class: "update-btn", type: "submit" }, i18n.audioUpdateButton)
-            )
-          : null,
-        form({ method: "POST", action: `/audios/delete/${encodeURIComponent(audio.key)}` },
-          button({ class: "delete-btn", type: "submit" }, i18n.audioDeleteButton)
-        )
-      ) : null,
+          !hasOpinions
+            ? form({ method: "GET", action: `/audios/edit/${encodeURIComponent(audio.key)}` },
+                button({ class: "update-btn", type: "submit" }, i18n.audioUpdateButton)
+              )
+            : null,
+          form({ method: "POST", action: `/audios/delete/${encodeURIComponent(audio.key)}` },
+            button({ class: "delete-btn", type: "submit" }, i18n.audioDeleteButton)
+          )
+        ) : null,
         form({ method: "GET", action: `/audios/${encodeURIComponent(audio.key)}` },
-        button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
+          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+        ),
         h2(audio.title),
         audio.url
           ? div({ class: "audio-container" },
@@ -195,11 +275,11 @@ exports.singleAudioView = async (audio, filter) => {
               )
             )
           : null,
-          br,
-          p({ class: 'card-footer' },
+        br,
+        p({ class: 'card-footer' },
           span({ class: 'date-link' }, `${moment(audio.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(audio.author)}`, class: 'user-link' }, `${audio.author}`)
-          ),
+        )
       ),
       div({ class: "voting-buttons" },
         ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
@@ -207,8 +287,8 @@ exports.singleAudioView = async (audio, filter) => {
             button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${audio.opinions?.[category] || 0}]`)
           )
         )
-      )
+      ),
+      renderAudioCommentsSection(audio.key, comments)
     )
   );
 };
-

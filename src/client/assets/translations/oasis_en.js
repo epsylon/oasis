@@ -761,6 +761,9 @@ module.exports = {
     parliamentRulesLaws: "When a proposal meets its threshold, it becomes a Law and appears in the Laws tab with its enactment date.",
     parliamentRulesHistorical: "In the Historical tab you can see every government cycle that has occurred and data about its management.",
     parliamentRulesLeaders: "In the Leaders tab you can see a ranking of inhabitants/tribes that have governed (or stood as candidates), ordered by efficiency.",
+    parliamentProposalVoteStatusLabel: "Vote status",
+    parliamentProposalOnTrackYes: "Threshold reached",
+    parliamentProposalOnTrackNo: "Below threshold",
     //courts
     courtsTitle: "Courts",
     courtsDescription: "Explore forms of conflict resolution and collective justice management.",
@@ -1140,7 +1143,15 @@ module.exports = {
     errorDeletingOldVote: "Error deleting old opinion",
     errorCreatingUpdatedVote: "Error creating updated opinion",
     errorCreatingTombstone: "Error creating tombstone",
-    // CV
+    voteDetailSectionTitle: 'Vote details',
+    voteCommentsLabel: 'Comments',
+    voteCommentsForumButton: 'Open discussion',
+    voteCommentsSectionTitle: 'Open discussion',
+    voteNoCommentsYet: 'There are no comments yet. Be the first to reply.',
+    voteNewCommentPlaceholder: 'Write your comment here…',
+    voteNewCommentButton: 'Post comment',
+    voteNewCommentLabel: 'Add a comment',
+    //CV
     cvTitle: "CV",
     cvLabel: "Curriculum Vitae (CV)",
     cvEditSectionTitle: "Edit CV",

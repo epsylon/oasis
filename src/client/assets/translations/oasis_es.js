@@ -756,6 +756,9 @@ module.exports = {
     parliamentRulesLaws: "Cuando una propuesta alcanza su umbral, se convierte en Ley y aparece en la pestaña Leyes con su fecha de entrada en vigor.",
     parliamentRulesHistorical: "En Histórico se puede ver cada ciclo de gobierno que ha habido y datos sobre su gestión.",
     parliamentRulesLeaders: "En Líderes se puede ver un ranking de habitantes/tribus que han gobernado (o se han presentado), ordenados por eficacia.",
+    parliamentProposalVoteStatusLabel: "Estado de la votación",
+    parliamentProposalOnTrackYes: "Umbral alcanzado",
+    parliamentProposalOnTrackNo: "Por debajo del umbral",
      //courts
     courtsTitle: "Tribunales",
     courtsDescription: "Explora formas de resolución de conflictos y de gestión colectiva de la justicia.",
@@ -1135,7 +1138,15 @@ module.exports = {
     errorDeletingOldVote: "Error al eliminar opinión anterior",
     errorCreatingUpdatedVote: "Error al crear opinión actualizada",
     errorCreatingTombstone: "Error al crear lápida",
-    // CV
+    voteDetailSectionTitle: 'Detalles de la votación',
+    voteCommentsLabel: 'Comentarios',
+    voteCommentsForumButton: 'Abrir conversación',
+    voteCommentsSectionTitle: 'Conversación abierta',
+    voteNoCommentsYet: 'Todavía no hay comentarios. Sé la primera persona en opinar.',
+    voteNewCommentPlaceholder: 'Escribe aquí tu comentario…',
+    voteNewCommentButton: 'Publicar comentario',
+    voteNewCommentLabel: 'Añade un comentario',
+    //CV
     cvTitle: "CV",
     cvLabel: "Currículum Vitae (CV)",
     cvEditSectionTitle: "Editar CV",

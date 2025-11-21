@@ -117,6 +117,14 @@ const renderJobList = (jobs, filter) =>
           br(),
           div({ class: 'card-label' }, h2(`${job.salary} ECO`)),
           br(),
+          div({ class: 'card-comments-summary' },
+            span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+            span({ class: 'card-value' }, String(job.commentCount || 0)),
+            br(), br(),
+            form({ method: 'GET', action: `/jobs/${encodeURIComponent(job.id)}` },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+            )
+          ),
           div({ class: 'card-footer' },
             span({ class: 'date-link' }, `${moment(job.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
             a({ href: `/author/${encodeURIComponent(job.author)}`, class: 'user-link' }, job.author)
@@ -202,6 +210,69 @@ const renderCVList = (inhabitants) =>
       : p({ class: 'no-results' }, i18n.noInhabitantsFound)
   );
 
+const renderJobCommentsSection = (jobId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
+
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/jobs/${encodeURIComponent(jobId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+            const rootId = c.value && c.value.content ? (c.value.content.fork || c.value.content.root) : null;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`)
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate && rootId
+                  ? a({
+                      href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}`
+                    }, relDate)
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};
+
 exports.jobsView = async (jobsOrCVs, filter = "ALL", cvQuery = {}) => {
   const filterObj = FILTERS.find(f => f.key === filter) || FILTERS[0];
   const sectionTitle = i18n[filterObj.title] || i18n.jobsTitle;
@@ -239,10 +310,9 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", cvQuery = {}) => {
   );
 };
 
-exports.singleJobsView = async (job, filter = "ALL") => {
+exports.singleJobsView = async (job, filter = "ALL", comments = []) => {
   const isAuthor = job.author === userId;
   const isOpen = String(job.status).toUpperCase() === 'OPEN';
-
   return template(
     i18n.jobsTitle,
     section(
@@ -309,7 +379,8 @@ exports.singleJobsView = async (job, filter = "ALL") => {
           span({ class: 'date-link' }, `${moment(job.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(job.author)}`, class: 'user-link' }, job.author)
         )
-      )
+      ),
+      renderJobCommentsSection(job.id, comments)
     )
   );
 };

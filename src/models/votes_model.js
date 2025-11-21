@@ -5,50 +5,205 @@ const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
-  const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
+  const openSsb = async () => {
+    if (!ssb) ssb = await cooler.open();
+    return ssb;
+  };
+
+  const TYPE = 'votes';
+
+  async function getAllMessages(ssbClient) {
+    return new Promise((resolve, reject) => {
+      pull(
+        ssbClient.createLogStream({ limit: logLimit }),
+        pull.collect((err, results) => (err ? reject(err) : resolve(results)))
+      );
+    });
+  }
+
+  function buildIndex(messages) {
+    const tombstoned = new Set();
+    const replaced = new Map();
+    const votes = new Map();
+    const parent = new Map();
+
+    for (const m of messages) {
+      const key = m.key;
+      const v = m.value;
+      const c = v && v.content;
+      if (!c) continue;
+      if (c.type === 'tombstone' && c.target) {
+        tombstoned.add(c.target);
+        continue;
+      }
+      if (c.type !== TYPE) continue;
+      const node = {
+        key,
+        ts: v.timestamp || m.timestamp || 0,
+        content: c
+      };
+      votes.set(key, node);
+      if (c.replaces) {
+        replaced.set(c.replaces, key);
+        parent.set(key, c.replaces);
+      }
+    }
+
+    return { tombstoned, replaced, votes, parent };
+  }
+
+  function statusFromContent(content, now) {
+    const raw = String(content.status || 'OPEN').toUpperCase();
+    if (raw === 'OPEN') {
+      const dl = content.deadline ? moment(content.deadline) : null;
+      if (dl && dl.isValid() && dl.isBefore(now)) return 'CLOSED';
+    }
+    return raw;
+  }
+
+  function computeActiveVotes(index) {
+    const { tombstoned, replaced, votes, parent } = index;
+    const active = new Map(votes);
+
+    tombstoned.forEach(id => active.delete(id));
+    replaced.forEach((_, oldId) => active.delete(oldId));
+
+    const rootOf = id => {
+      let cur = id;
+      while (parent.has(cur)) cur = parent.get(cur);
+      return cur;
+    };
+
+    const groups = new Map();
+    for (const [id, node] of active.entries()) {
+      const root = rootOf(id);
+      if (!groups.has(root)) groups.set(root, []);
+      groups.get(root).push(node);
+    }
+
+    const now = moment();
+    const result = [];
+
+    for (const nodes of groups.values()) {
+      if (!nodes.length) continue;
+      let best = nodes[0];
+      let bestStatus = statusFromContent(best.content, now);
+
+      for (let i = 1; i < nodes.length; i++) {
+        const candidate = nodes[i];
+        const cStatus = statusFromContent(candidate.content, now);
+        if (cStatus === bestStatus) {
+          const bestTime = new Date(best.content.updatedAt || best.content.createdAt || best.ts || 0);
+          const cTime = new Date(candidate.content.updatedAt || candidate.content.createdAt || candidate.ts || 0);
+          if (cTime > bestTime) {
+            best = candidate;
+            bestStatus = cStatus;
+          }
+        } else if (cStatus === 'CLOSED' && bestStatus !== 'CLOSED') {
+          best = candidate;
+          bestStatus = cStatus;
+        } else if (cStatus === 'OPEN' && bestStatus !== 'OPEN') {
+          best = candidate;
+          bestStatus = cStatus;
+        }
+      }
+
+      result.push({
+        id: best.key,
+        latestId: best.key,
+        ...best.content,
+        status: bestStatus
+      });
+    }
+
+    return result;
+  }
+
+  async function resolveCurrentId(voteId) {
+    const ssbClient = await openSsb();
+    const messages = await getAllMessages(ssbClient);
+    const forward = new Map();
+
+    for (const m of messages) {
+      const c = m.value && m.value.content;
+      if (!c) continue;
+      if (c.type === TYPE && c.replaces) {
+        forward.set(c.replaces, m.key);
+      }
+    }
+
+    let cur = voteId;
+    while (forward.has(cur)) cur = forward.get(cur);
+    return cur;
+  }
 
   return {
     async createVote(question, deadline, options = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'], tagsRaw = []) {
-      const ssb = await openSsb();
-      const userId = ssb.id;
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
       const parsedDeadline = moment(deadline, moment.ISO_8601, true);
       if (!parsedDeadline.isValid() || parsedDeadline.isBefore(moment())) throw new Error('Invalid deadline');
-      const tags = Array.isArray(tagsRaw) ? tagsRaw.filter(Boolean) : tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+
+      const tags = Array.isArray(tagsRaw)
+        ? tagsRaw.filter(Boolean)
+        : String(tagsRaw).split(',').map(t => t.trim()).filter(Boolean);
+
       const content = {
-        type: 'votes',
+        type: TYPE,
         question,
         options,
         deadline: parsedDeadline.toISOString(),
         createdBy: userId,
         status: 'OPEN',
-        votes: options.reduce((acc, opt) => ({ ...acc, [opt]: 0 }), {}),
+        votes: options.reduce((acc, opt) => {
+          acc[opt] = 0;
+          return acc;
+        }, {}),
         totalVotes: 0,
         voters: [],
         tags,
         opinions: {},
         opinions_inhabitants: [],
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        updatedAt: null
       };
-      return new Promise((res, rej) => ssb.publish(content, (err, msg) => err ? rej(err) : res(msg)));
+
+      return new Promise((res, rej) =>
+        ssbClient.publish(content, (err, msg) => (err ? rej(err) : res(msg)))
+      );
     },
 
     async deleteVoteById(id) {
-      const ssb = await openSsb();
-      const userId = ssb.id;
-      const vote = await new Promise((res, rej) => ssb.get(id, (err, vote) => err ? rej(new Error('Vote not found')) : res(vote)));
-      if (vote.content.createdBy !== userId) throw new Error('Not the author');
-      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
-      return new Promise((res, rej) => ssb.publish(tombstone, (err, result) => err ? rej(err) : res(result)));
-    },
-    
-    async updateVoteById(id, { question, deadline, options, tags }) {
-      const ssb = await openSsb();
-      const userId = ssb.id;
-      const oldMsg = await new Promise((res, rej) =>
-        ssb.get(id, (err, msg) => err || !msg ? rej(new Error('Vote not found')) : res(msg))
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const tipId = await resolveCurrentId(id);
+      const vote = await new Promise((res, rej) =>
+        ssbClient.get(tipId, (err, msg) => (err || !msg ? rej(new Error('Vote not found')) : res(msg)))
       );
+      if (!vote.content || vote.content.createdBy !== userId) throw new Error('Not the author');
+      const tombstone = {
+        type: 'tombstone',
+        target: tipId,
+        deletedAt: new Date().toISOString(),
+        author: userId
+      };
+      return new Promise((res, rej) =>
+        ssbClient.publish(tombstone, (err, result) => (err ? rej(err) : res(result)))
+      );
+    },
+
+    async updateVoteById(id, payload) {
+      const { question, deadline, options, tags } = payload || {};
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const tipId = await resolveCurrentId(id);
+
+      const oldMsg = await new Promise((res, rej) =>
+        ssbClient.get(tipId, (err, msg) => (err || !msg ? rej(new Error('Vote not found')) : res(msg)))
+      );
+
       const c = oldMsg.content;
-      if (c.type !== 'votes') throw new Error('Invalid type');
+      if (!c || c.type !== TYPE) throw new Error('Invalid type');
       if (c.createdBy !== userId) throw new Error('Not the author');
 
       let newDeadline = c.deadline;
@@ -58,31 +213,38 @@ module.exports = ({ cooler }) => {
         newDeadline = parsed.toISOString();
       }
 
-      let newOptions = c.options;
-      let newVotesMap = c.votes;
-      let newTotalVotes = c.totalVotes;
-      const optionsCambiaron = Array.isArray(options) && (
-        options.length !== c.options.length ||
-        options.some((o, i) => o !== c.options[i])
+      let newOptions = c.options || [];
+      let newVotesMap = c.votes || {};
+      let newTotalVotes = c.totalVotes || 0;
+
+      const optionsChanged = Array.isArray(options) && (
+        options.length !== newOptions.length ||
+        options.some((o, i) => o !== newOptions[i])
       );
-      if (optionsCambiaron) {
-        if (c.totalVotes > 0) {
+
+      if (optionsChanged) {
+        if ((c.totalVotes || 0) > 0) {
           throw new Error('Cannot change options after voting has started');
         }
         newOptions = options;
-        newVotesMap = newOptions.reduce((acc, opt) => (acc[opt] = 0, acc), {});
+        newVotesMap = newOptions.reduce((acc, opt) => {
+          acc[opt] = 0;
+          return acc;
+        }, {});
         newTotalVotes = 0;
       }
 
-      const newTags =
-        Array.isArray(tags) ? tags.filter(Boolean)
-        : typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean)
-        : c.tags || [];
+      let newTags = c.tags || [];
+      if (Array.isArray(tags)) {
+        newTags = tags.filter(Boolean);
+      } else if (typeof tags === 'string') {
+        newTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+      }
 
       const updated = {
         ...c,
-        replaces: id,
-        question: question ?? c.question,
+        replaces: tipId,
+        question: question != null ? question : c.question,
         deadline: newDeadline,
         options: newOptions,
         votes: newVotesMap,
@@ -90,122 +252,154 @@ module.exports = ({ cooler }) => {
         tags: newTags,
         updatedAt: new Date().toISOString()
       };
-      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+
+      return new Promise((res, rej) =>
+        ssbClient.publish(updated, (err, result) => (err ? rej(err) : res(result)))
+      );
     },
 
     async voteOnVote(id, choice) {
-      const ssb = await openSsb();
-      const userId = ssb.id;
-      const vote = await new Promise((res, rej) => ssb.get(id, (err, vote) => err ? rej(new Error('Vote not found')) : res(vote)));
-      if (!vote.content.options.includes(choice)) throw new Error('Invalid choice');
-      if (vote.content.voters.includes(userId)) throw new Error('Already voted');
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const tipId = await resolveCurrentId(id);
 
-      vote.content.votes[choice] += 1;
-      vote.content.voters.push(userId);
-      vote.content.totalVotes += 1;
+      const vote = await new Promise((res, rej) =>
+        ssbClient.get(tipId, (err, msg) => (err || !msg ? rej(new Error('Vote not found')) : res(msg)))
+      );
 
-      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
-      const updated = { ...vote.content, updatedAt: new Date().toISOString(), replaces: id };
+      const content = vote.content || {};
+      const options = Array.isArray(content.options) ? content.options : [];
+      if (!options.includes(choice)) throw new Error('Invalid choice');
 
-      await new Promise((res, rej) => ssb.publish(tombstone, err => err ? rej(err) : res()));
-      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+      const voters = Array.isArray(content.voters) ? content.voters.slice() : [];
+      if (voters.includes(userId)) throw new Error('Already voted');
+
+      const votesMap = Object.assign({}, content.votes || {});
+      votesMap[choice] = (votesMap[choice] || 0) + 1;
+      voters.push(userId);
+      const totalVotes = (parseInt(content.totalVotes || 0, 10) || 0) + 1;
+
+      const tombstone = {
+        type: 'tombstone',
+        target: tipId,
+        deletedAt: new Date().toISOString(),
+        author: userId
+      };
+
+      const updated = {
+        ...content,
+        votes: votesMap,
+        voters,
+        totalVotes,
+        updatedAt: new Date().toISOString(),
+        replaces: tipId
+      };
+
+      await new Promise((res, rej) =>
+        ssbClient.publish(tombstone, err => (err ? rej(err) : res()))
+      );
+
+      return new Promise((res, rej) =>
+        ssbClient.publish(updated, (err, result) => (err ? rej(err) : res(result)))
+      );
     },
 
     async getVoteById(id) {
-      const ssb = await openSsb();
-      const now = moment();
+      const ssbClient = await openSsb();
+      const messages = await getAllMessages(ssbClient);
+      const index = buildIndex(messages);
+      const activeList = computeActiveVotes(index);
+      const byId = new Map(activeList.map(v => [v.id, v]));
 
-      const results = await new Promise((resolve, reject) => {
-        pull(
-          ssb.createLogStream({ limit: logLimit }),
-          pull.collect((err, arr) => err ? reject(err) : resolve(arr))
-        );
-      });
-
-      const votesByKey = new Map();
-      const latestByRoot = new Map();
-
-      for (const r of results) {
-        const key = r.key;
-        const v = r.value;
-        const c = v && v.content;
-        if (!c) continue;
-        if (c.type === 'votes') {
-          votesByKey.set(key, c);
-          const ts = Number(v.timestamp || r.timestamp || Date.now());
-          const root = c.replaces || key;
-          const prev = latestByRoot.get(root);
-          if (!prev || ts > prev.ts) latestByRoot.set(root, { key, ts });
-        }
+      if (byId.has(id)) {
+        return byId.get(id);
       }
 
-      const latestEntry = latestByRoot.get(id);
-      let latestId = latestEntry ? latestEntry.key : id;
-      let content = votesByKey.get(latestId);
+      const parent = index.parent;
+      const rootOf = key => {
+        let cur = key;
+        while (parent.has(cur)) cur = parent.get(cur);
+        return cur;
+      };
 
-      if (!content) {
-        const orig = await new Promise((res, rej) => ssb.get(id, (err, vote) => err ? rej(new Error('Vote not found')) : res(vote)));
-        content = orig.content;
-        latestId = id;
+      const root = rootOf(id);
+      const candidate = activeList.find(v => rootOf(v.id) === root);
+      if (candidate) {
+        return candidate;
       }
 
-      const status = content.status === 'OPEN' && moment(content.deadline).isBefore(now) ? 'CLOSED' : content.status;
-      return { id, latestId, ...content, status };
+      const msg = await new Promise((res, rej) =>
+        ssbClient.get(id, (err, vote) => (err || !vote ? rej(new Error('Vote not found')) : res(vote)))
+      );
+
+      const content = msg.content || {};
+      const status = statusFromContent(content, moment());
+
+      return {
+        id,
+        latestId: id,
+        ...content,
+        status
+      };
     },
 
     async listAll(filter = 'all') {
-      const ssb = await openSsb();
-      const userId = ssb.id;
-      const now = moment();
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const messages = await getAllMessages(ssbClient);
+      const index = buildIndex(messages);
+      let list = computeActiveVotes(index);
 
-      return new Promise((resolve, reject) => {
-        pull(ssb.createLogStream({ limit: logLimit }), 
-        pull.collect((err, results) => {
-          if (err) return reject(err);
-          const tombstoned = new Set();
-          const replaced = new Map();
-          const votes = new Map();
+      if (filter === 'mine') {
+        list = list.filter(v => v.createdBy === userId);
+      } else if (filter === 'open') {
+        list = list.filter(v => v.status === 'OPEN');
+      } else if (filter === 'closed') {
+        list = list.filter(v => v.status === 'CLOSED');
+      }
 
-          for (const r of results) {
-            const { key, value: { content: c } } = r;
-            if (!c) continue;
-            if (c.type === 'tombstone') tombstoned.add(c.target);
-            if (c.type === 'votes') {
-              if (c.replaces) replaced.set(c.replaces, key);
-              const status = c.status === 'OPEN' && moment(c.deadline).isBefore(now) ? 'CLOSED' : c.status;
-              votes.set(key, { id: key, ...c, status });
-            }
-          }
-
-          tombstoned.forEach(id => votes.delete(id));
-          replaced.forEach((_, oldId) => votes.delete(oldId));
-
-          const out = [...votes.values()];
-          if (filter === 'mine') return resolve(out.filter(v => v.createdBy === userId));
-          if (filter === 'open') return resolve(out.filter(v => v.status === 'OPEN'));
-          if (filter === 'closed') return resolve(out.filter(v => v.status === 'CLOSED'));
-          resolve(out);
-        }));
-      });
+      return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
     async createOpinion(id, category) {
-      const ssb = await openSsb();
-      const userId = ssb.id;
-      const vote = await new Promise((res, rej) => ssb.get(id, (err, vote) => err ? rej(new Error('Vote not found')) : res(vote)));
-      if (vote.content.opinions_inhabitants.includes(userId)) throw new Error('Already voted');
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const tipId = await resolveCurrentId(id);
 
-      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
-      const updated = {
-        ...vote.content,
-        opinions: { ...vote.content.opinions, [category]: (vote.content.opinions[category] || 0) + 1 },
-        opinions_inhabitants: [...vote.content.opinions_inhabitants, userId],
-        updatedAt: new Date().toISOString(),
-        replaces: id
+      const vote = await new Promise((res, rej) =>
+        ssbClient.get(tipId, (err, msg) => (err || !msg ? rej(new Error('Vote not found')) : res(msg)))
+      );
+
+      const content = vote.content || {};
+      const list = Array.isArray(content.opinions_inhabitants) ? content.opinions_inhabitants : [];
+
+      if (list.includes(userId)) throw new Error('Already voted');
+
+      const opinions = Object.assign({}, content.opinions || {});
+      opinions[category] = (opinions[category] || 0) + 1;
+
+      const tombstone = {
+        type: 'tombstone',
+        target: tipId,
+        deletedAt: new Date().toISOString(),
+        author: userId
       };
 
-      await new Promise((res, rej) => ssb.publish(tombstone, err => err ? rej(err) : res()));
-      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+      const updated = {
+        ...content,
+        opinions,
+        opinions_inhabitants: list.concat(userId),
+        updatedAt: new Date().toISOString(),
+        replaces: tipId
+      };
+
+      await new Promise((res, rej) =>
+        ssbClient.publish(tombstone, err => (err ? rej(err) : res()))
+      );
+
+      return new Promise((res, rej) =>
+        ssbClient.publish(updated, (err, result) => (err ? rej(err) : res(result)))
+      );
     }
   };
 };

@@ -790,7 +790,7 @@ const post = ({ msg, aside = false, preview = false }) => {
           { href: url.author },
           img({ class: "avatar-profile", src: url.avatar, alt: "" })
         ),
-        span({ class: "created-at" }, `${i18n.createdBy} `, a({ href: url.author }, "@", name), ` | ${timeAbsolute} | ${i18n.sendTime} `, a({ href: url.link }, timeAgo), ` ${i18n.timeAgo}`),
+        span({ class: "created-at" }, `${i18n.createdBy} `, a({ href: url.author }, "@", name), ` | ${timeAbsolute} | ${i18n.sendTime} `, a({ href: url.link }, timeAgo)),
         isPrivate ? "🔒" : null,
         isPrivate ? recps : null
       )

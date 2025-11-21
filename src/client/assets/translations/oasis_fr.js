@@ -756,6 +756,9 @@ module.exports = {
     parliamentRulesLaws: "Lorsqu’une proposition atteint son seuil, elle devient une Loi et apparaît dans l’onglet Lois avec sa date d’entrée en vigueur.",
     parliamentRulesHistorical: "Dans l’onglet Historique, vous pouvez voir chaque cycle de gouvernement qui a eu lieu ainsi que des données sur sa gestion.",
     parliamentRulesLeaders: "Dans l’onglet Dirigeants, vous pouvez voir un classement des habitants/tribus qui ont gouverné (ou se sont présentés), classés par efficacité.",
+    parliamentProposalVoteStatusLabel: "Statut du vote",
+    parliamentProposalOnTrackYes: "Seuil atteint",
+    parliamentProposalOnTrackNo: "En dessous du seuil",
     //courts
     courtsTitle: "Tribunaux",
     courtsDescription: "Explorez des formes de résolution des conflits et de gestion collective de la justice.",
@@ -1135,7 +1138,15 @@ module.exports = {
     errorDeletingOldVote: "Erreur lors de la suppression du vote précédent",
     errorCreatingUpdatedVote: "Erreur lors de la création du vote mis à jour",
     errorCreatingTombstone: "Erreur lors de la création de la pierre tombale",
-    // CV
+    voteDetailSectionTitle: 'Détails du vote',
+    voteCommentsLabel: 'Commentaires',
+    voteCommentsForumButton: 'Ouvrir la discussion',
+    voteCommentsSectionTitle: 'Discussion ouverte',
+    voteNoCommentsYet: 'Il n’y a pas encore de commentaires. Soyez le premier à répondre.',
+    voteNewCommentPlaceholder: 'Écrivez votre commentaire ici…',
+    voteNewCommentButton: 'Publier le commentaire',
+    voteNewCommentLabel: 'Ajouter un commentaire',
+    //CV
     cvTitle: "CV",
     cvLabel: "Curriculum Vitae (CV)",
     cvEditSectionTitle: "Modifier le CV",

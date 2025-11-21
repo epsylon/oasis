@@ -11,7 +11,70 @@ const renderCardField = (labelText, value) =>
     span({ class: 'card-label' }, labelText),
     span({ class: 'card-value' }, ...renderUrl(value))
   );
+  
+const renderMarketCommentsSection = (itemId, comments = []) => {
+  const commentsCount = Array.isArray(comments) ? comments.length : 0;
 
+  return div({ class: 'vote-comments-section' },
+    div({ class: 'comments-count' },
+      span({ class: 'card-label' }, i18n.voteCommentsLabel + ': '),
+      span({ class: 'card-value' }, String(commentsCount))
+    ),
+    div({ class: 'comment-form-wrapper' },
+      h2({ class: 'comment-form-title' }, i18n.voteNewCommentLabel),
+      form({
+        method: 'POST',
+        action: `/market/${encodeURIComponent(itemId)}/comments`,
+        class: 'comment-form'
+      },
+        textarea({
+          id: 'comment-text',
+          name: 'text',
+          required: true,
+          rows: 4,
+          class: 'comment-textarea',
+          placeholder: i18n.voteNewCommentPlaceholder
+        }),
+        br(),
+        button({ type: 'submit', class: 'comment-submit-btn' }, i18n.voteNewCommentButton)
+      )
+    ),
+    comments && comments.length
+      ? div({ class: 'comments-list' },
+          comments.map(c => {
+            const author = c.value && c.value.author ? c.value.author : '';
+            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
+            const absDate = ts ? moment(ts).format('YYYY/MM/DD HH:mm:ss') : '';
+            const relDate = ts ? moment(ts).fromNow() : '';
+            const userName = author && author.includes('@') ? author.split('@')[1] : author;
+            const rootId = c.value && c.value.content ? (c.value.content.fork || c.value.content.root) : null;
+
+            return div({ class: 'votations-comment-card' },
+              span({ class: 'created-at' },
+                span(i18n.createdBy),
+                author
+                  ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`)
+                  : span('(unknown)'),
+                absDate ? span(' | ') : '',
+                absDate ? span({ class: 'votations-comment-date' }, absDate) : '',
+                relDate ? span({ class: 'votations-comment-date' }, ' | ', i18n.sendTime) : '',
+                relDate && rootId
+                  ? a({
+                      href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}`
+                    }, relDate)
+                  : ''
+              ),
+              p({
+                class: 'votations-comment-text',
+                innerHTML: (c.value && c.value.content && c.value.content.text) || ''
+              })
+            );
+          })
+        )
+      : p({ class: 'votations-no-comments' }, i18n.voteNoCommentsYet)
+  );
+};
+  
 exports.marketView = async (items, filter, itemToEdit = null) => {
     const list = Array.isArray(items) ? items : [];
     let title = i18n.marketAllSectionTitle;
@@ -152,10 +215,10 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
                                         ))
                                         : null,
                                 ),
-                                div({ class: "market-card right-col" },
+                                 div({ class: "market-card right-col" },
                                     renderCardField(`${i18n.marketItemStock}:`, item.stock > 0 ? item.stock : i18n.marketOutOfStock),
                                     div({ class: "market-card price" },
-                                        renderCardField(`${i18n.marketItemPrice}:`, `${item.price} ECO`),
+                                        renderCardField(`${i18n.marketItemPrice}:`, `${item.price} ECO`)
                                     ),
                                     renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
                                     renderCardField(`${i18n.marketItemIncludesShipping}:`, item.includesShipping ? i18n.YESLabel : i18n.NOLabel),
@@ -163,7 +226,8 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
                                     div({ class: "market-card image" },
                                         div({ class: 'card-field' },
                                             a({ class: 'user-link', href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)
-                                        )),
+                                        )
+                                    ),
                                     item.item_type === 'auction' && item.auctions_poll.length > 0
                                         ? div({ class: "auction-info" },
                                             p({ class: "auction-bid-text" }, i18n.marketAuctionBids),
@@ -184,6 +248,14 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
                                             )
                                         )
                                         : null,
+                                    div({ class: 'card-comments-summary' },
+                                      span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
+                                      span({ class: 'card-value' }, String(item.commentCount || 0)),
+                                      br(), br(),
+                                      form({ method: 'GET', action: `/market/${encodeURIComponent(item.id)}` },
+                                        button({ type: 'submit', class: 'filter-btn' }, i18n.voteCommentsForumButton)
+                                      )
+                                    ),
                                     div({ class: "market-card buttons" },
                                         (item.seller === userId) ? [
                                             form({ method: "POST", action: `/market/delete/${encodeURIComponent(item.id)}` },
@@ -225,7 +297,7 @@ exports.marketView = async (items, filter, itemToEdit = null) => {
     );
 };
 
-exports.singleMarketView = async (item, filter) => {
+exports.singleMarketView = async (item, filter, comments = []) => {
     return template(
         item.title,
         section(
@@ -269,7 +341,7 @@ exports.singleMarketView = async (item, filter) => {
                 renderCardField(`${i18n.marketItemPrice}:`),
                 br,
                 div({ class: 'card-label' },
-                    h2(`${item.price} ECO`),
+                    h2(`${item.price} ECO`)
                 ),
                 br,
                 renderCardField(`${i18n.marketItemStock}:`, item.stock > 0 ? item.stock : i18n.marketOutOfStock),
@@ -308,26 +380,27 @@ exports.singleMarketView = async (item, filter) => {
                         : null
                 )
                 : null,
-		div({ class: "market-item actions" },
-		    (item.seller === userId && item.status !== 'SOLD' && item.status !== 'DISCARDED' && item.item_type !== 'auction') ? [
-			form({ method: "POST", action: `/market/delete/${encodeURIComponent(item.id)}` },
-			    button({ class: "delete-btn", type: "submit" }, i18n.marketActionsDelete)
-			),
-			form({ method: "GET", action: `/market/edit/${encodeURIComponent(item.id)}` },
-			    button({ class: "update-btn", type: "submit" }, i18n.marketActionsUpdate)
-			),
-			(item.status === 'FOR SALE')
-			    ? form({ method: "POST", action: `/market/sold/${encodeURIComponent(item.id)}` },
-				button({ class: "sold-btn", type: "submit" }, i18n.marketActionsSold)
-			    )
-			    : null
-		    ] : null,
-		    (item.status === 'FOR SALE' && item.item_type !== 'auction' && item.seller !== userId)
-			? form({ method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
-			    button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
-			)
-			: null
-		)
+            div({ class: "market-item actions" },
+                (item.seller === userId && item.status !== 'SOLD' && item.status !== 'DISCARDED' && item.item_type !== 'auction') ? [
+                    form({ method: "POST", action: `/market/delete/${encodeURIComponent(item.id)}` },
+                        button({ class: "delete-btn", type: "submit" }, i18n.marketActionsDelete)
+                    ),
+                    form({ method: "GET", action: `/market/edit/${encodeURIComponent(item.id)}` },
+                        button({ class: "update-btn", type: "submit" }, i18n.marketActionsUpdate)
+                    ),
+                    (item.status === 'FOR SALE')
+                        ? form({ method: "POST", action: `/market/sold/${encodeURIComponent(item.id)}` },
+                            button({ class: "sold-btn", type: "submit" }, i18n.marketActionsSold)
+                        )
+                        : null
+                ] : null,
+                (item.status === 'FOR SALE' && item.item_type !== 'auction' && item.seller !== userId)
+                    ? form({ method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
+                        button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
+                    )
+                    : null
+            ),
+            renderMarketCommentsSection(item.id, comments)
         )
     );
 };
