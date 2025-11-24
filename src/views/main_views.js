@@ -657,16 +657,6 @@ const template = (titlePrefix, ...elements) => {
                   title: i18n.menuPersonal
                 },
                 navLink({
-                  href: "/settings",
-                  emoji: "⚙",
-                  text: i18n.settings
-                }),
-                navLink({
-                  href: "/modules",
-                  emoji: "ꗣ",
-                  text: i18n.modules
-                }),
-                navLink({
                   href: "/profile",
                   emoji: "⚉",
                   text: i18n.profile
@@ -676,19 +666,17 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "ꕛ",
                   text: i18n.cvTitle
                 }),
-                renderLegacyLink(),
-                renderWalletLink(),
-                renderInvitesLink(),
                 renderAgendaLink(),
+                renderWalletLink(),
                 navLink({
-                  href: "/stats",
-                  emoji: "ꕷ",
-                  text: i18n.statistics
+                  href: "/modules",
+                  emoji: "ꗣ",
+                  text: i18n.modules
                 }),
                 navLink({
-                  href: "/blockexplorer",
-                  emoji: "ꖸ",
-                  text: i18n.blockchain
+                  href: "/settings",
+                  emoji: "⚙",
+                  text: i18n.settings
                 })
               ),
               navGroup(
@@ -741,8 +729,19 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "⚒",
                   title: i18n.menuTools
                 },
+                renderAILink(),
+                navLink({
+                  href: "/stats",
+                  emoji: "ꕷ",
+                  text: i18n.statistics
+                }),
+                navLink({
+                  href: "/blockexplorer",
+                  emoji: "ꖸ",
+                  text: i18n.blockchain
+                }),
                 renderCipherLink(),
-                renderAILink()
+                renderLegacyLink()
               )
             )
           )
@@ -766,6 +765,7 @@ const template = (titlePrefix, ...elements) => {
                 renderTrendingLink(),
                 renderOpinionsLink(),
                 renderForumLink(),
+                renderInvitesLink(),
                 navLink({
                   href: "/peers",
                   emoji: "⧖",
