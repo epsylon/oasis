@@ -261,7 +261,7 @@ const { about, blob, friend, meta, post, vote } = models({
   cooler,
   isPublic: config.public,
 });
-const { handleBlobUpload } = require('../backend/blobHandler.js');
+const { handleBlobUpload, serveBlob } = require('../backend/blobHandler.js');
 
 // load plugin models (static)
 const exportmodeModel = require('../models/exportmode_model');
@@ -303,17 +303,21 @@ const bankingModel = require("../models/banking_model")({ services: { cooler }, 
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const courtsModel = require('../models/courts_model')({ cooler, services: { votes: votesModel, inhabitants: inhabitantsModel, tribes: tribesModel, banking: bankingModel } });
 
-//votes (comments)
+// content (comments)
 const getVoteComments = async (voteId) => {
   const rawComments = await post.topicComments(voteId);
-  const filtered = (rawComments || []).filter(c => {
-    const content = c.value && c.value.content;
-    if (!content) return false;
-    return content.type === 'post' &&
-           content.root === voteId &&
-           content.dest === voteId;
-  });
-  return filtered;
+  const comments = (rawComments || [])
+    .filter(c => {
+      const content = c.value && c.value.content;
+      if (!content) return false;
+      return content.type === 'post' && content.root === voteId;
+    })
+    .sort((a, b) => {
+      const ta = a.value && a.value.timestamp ? a.value.timestamp : 0;
+      const tb = b.value && b.value.timestamp ? b.value.timestamp : 0;
+      return ta - tb;
+    });
+  return comments;
 };
 
 // starting warmup
@@ -1486,25 +1490,7 @@ router
     };
     ctx.body = await json(message);
   })
-  .get("/blob/:blobId", async (ctx) => {
-    const { blobId } = ctx.params;
-    const id = blobId.startsWith('&') ? blobId : `&${blobId}`;
-    const buffer = await blob.getResolved({ blobId });
-    let fileType;
-    try {
-      fileType = await FileType.fromBuffer(buffer);
-    } catch {
-      fileType = null;
-    }
-    let mime = fileType?.mime || "application/octet-stream";
-    if (mime === "application/octet-stream" && buffer.slice(0, 4).toString() === "%PDF") {
-      mime = "application/pdf";
-    }
-    ctx.set("Content-Type", mime);
-    ctx.set("Content-Disposition", `inline; filename="${blobId}"`);
-    ctx.set("Cache-Control", "public, max-age=31536000, immutable");
-    ctx.body = buffer;
-  })
+  .get("/blob/:blobId", serveBlob)
   .get("/image/:imageSize/:blobId", async (ctx) => {
     const { blobId, imageSize } = ctx.params;
     const size = Number(imageSize);

@@ -396,11 +396,27 @@ function renderActionCards(actions, userId) {
     }
 
     if (type === 'post') {
-      const { contentWarning, text } = content;
+      const { contentWarning, text } = content || {};
+      const rawText = text || '';
+      const isHtml = typeof rawText === 'string' && /<\/?[a-z][\s\S]*>/i.test(rawText);
+      let bodyNode;
+      if (isHtml) {
+        const hasAnchor = /<a\b[^>]*>/i.test(rawText);
+        const linkified = hasAnchor
+          ? rawText
+          : rawText.replace(
+              /(https?:\/\/[^\s<]+)/g,
+              (url) =>
+                `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+            );
+        bodyNode = div({ class: 'post-text', innerHTML: linkified });
+      } else {
+        bodyNode = p({ class: 'post-text' }, ...renderUrl(rawText));
+      }
       cardBody.push(
         div({ class: 'card-section post' },
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
-          p({ innerHTML: text })
+          bodyNode
         )
       );
     }

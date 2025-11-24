@@ -37,14 +37,15 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     return true;
   };
 
-  app.on("error", (err, ctx) => {
+   app.on("error", (err, ctx) => {
+    if (err && (err.code === 'ECONNRESET' || err.code === 'EPIPE')) {
+      return;
+    }
     console.error(err);
-
-    if (isValidRequest(ctx.request)) {
+    if (ctx && isValidRequest(ctx.request)) {
       err.message = err.stack;
       err.expose = true;
     }
-
     return null;
   });
 

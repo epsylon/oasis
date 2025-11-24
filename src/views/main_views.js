@@ -56,10 +56,15 @@ const nbsp = "\xa0";
 const { getConfig } = require('../configs/config-manager.js');
 
 // menu INIT
-const navLink = ({ href, emoji, text, current }) =>
+const navLink = ({ href, emoji, text, current, class: extraClass }) =>
   li(
     a(
-      { href, class: current ? "current" : "" },
+      {
+        href,
+        class: [current ? "current" : "", extraClass]
+          .filter(Boolean)
+          .join(" ")
+      },
       span({ class: "emoji" }, emoji),
       nbsp,
       text
@@ -80,330 +85,500 @@ const customCSS = (filename) => {
   }
 };
 
+const navGroup = ({ id, emoji, title, defaultOpen = false }, ...items) =>
+  li(
+    { class: "oasis-nav-group" },
+    input({
+      type: "checkbox",
+      id: `oasis-nav-group-${id}`,
+      class: "oasis-nav-toggle",
+      ...(defaultOpen ? { checked: true } : {})
+    }),
+    label(
+      { for: `oasis-nav-group-${id}`, class: "oasis-nav-header" },
+      span({ class: "emoji" }, emoji),
+      nbsp,
+      title,
+      span({ class: "oasis-nav-arrow" }, "▾")
+    ),
+    ul({ class: "oasis-nav-list" }, ...items)
+  );
+
 const renderPopularLink = () => {
-  const popularMod = getConfig().modules.popularMod === 'on';
-  if (popularMod) {
-    return [
-      navLink({ href: "/public/popular/day", emoji: "⌘", text: i18n.popular, class: "popular-link enabled" }),
-      hr,
-    ];
-  }
-  return ''; 
+  const popularMod = getConfig().modules.popularMod === "on";
+  return popularMod
+    ? navLink({
+        href: "/public/popular/day",
+        emoji: "⌘",
+        text: i18n.popular,
+        class: "popular-link enabled"
+      })
+    : "";
 };
 
 const renderTopicsLink = () => {
-  const topicsMod = getConfig().modules.topicsMod === 'on';
-  return topicsMod 
-    ? navLink({ href: "/public/latest/topics", emoji: "ϟ", text: i18n.topics, class: "topics-link enabled" }) 
-    : ''; 
+  const topicsMod = getConfig().modules.topicsMod === "on";
+  return topicsMod
+    ? navLink({
+        href: "/public/latest/topics",
+        emoji: "ϟ",
+        text: i18n.topics,
+        class: "topics-link enabled"
+      })
+    : "";
 };
 
 const renderSummariesLink = () => {
-  const summariesMod = getConfig().modules.summariesMod === 'on';
+  const summariesMod = getConfig().modules.summariesMod === "on";
   if (summariesMod) {
     return [
-     navLink({ href: "/public/latest/summaries", emoji: "※", text: i18n.summaries, class: "summaries-link enabled" }),
+      navLink({
+        href: "/public/latest/summaries",
+        emoji: "※",
+        text: i18n.summaries,
+        class: "summaries-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderLatestLink = () => {
-  const latestMod = getConfig().modules.latestMod === 'on';
-  return latestMod 
-    ? navLink({ href: "/public/latest", emoji: "☄", text: i18n.latest, class: "latest-link enabled" }) 
-    : ''; 
+  const latestMod = getConfig().modules.latestMod === "on";
+  return latestMod
+    ? navLink({
+        href: "/public/latest",
+        emoji: "☄",
+        text: i18n.latest,
+        class: "latest-link enabled"
+      })
+    : "";
 };
 
 const renderThreadsLink = () => {
-  const threadsMod = getConfig().modules.threadsMod === 'on';
+  const threadsMod = getConfig().modules.threadsMod === "on";
   if (threadsMod) {
     return [
-      navLink({ href: "/public/latest/threads", emoji: "♺", text: i18n.threads, class: "threads-link enabled" }),
+      navLink({
+        href: "/public/latest/threads",
+        emoji: "♺",
+        text: i18n.threads,
+        class: "threads-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderInvitesLink = () => {
-  const invitesMod = getConfig().modules.invitesMod === 'on';
-  return invitesMod 
-    ? navLink({ href: "/invites", emoji: "ꔹ", text: i18n.invites, class: "invites-link enabled" }) 
-    : ''; 
+  const invitesMod = getConfig().modules.invitesMod === "on";
+  return invitesMod
+    ? navLink({
+        href: "/invites",
+        emoji: "ꔹ",
+        text: i18n.invites,
+        class: "invites-link enabled"
+      })
+    : "";
 };
 
 const renderWalletLink = () => {
-  const walletMod = getConfig().modules.walletMod === 'on';
+  const walletMod = getConfig().modules.walletMod === "on";
   if (walletMod) {
     return [
-      navLink({ href: "/wallet", emoji: "❄", text: i18n.wallet, class: "wallet-link enabled" }),
+      navLink({
+        href: "/wallet",
+        emoji: "❄",
+        text: i18n.wallet,
+        class: "wallet-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderLegacyLink = () => {
-  const legacyMod = getConfig().modules.legacyMod === 'on';
+  const legacyMod = getConfig().modules.legacyMod === "on";
   if (legacyMod) {
     return [
-      navLink({ href: "/legacy", emoji: "ꖤ", text: i18n.legacy, class: "legacy-link enabled" }),
+      navLink({
+        href: "/legacy",
+        emoji: "ꖤ",
+        text: i18n.legacy,
+        class: "legacy-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderCipherLink = () => {
-  const cipherMod = getConfig().modules.cipherMod === 'on';
+  const cipherMod = getConfig().modules.cipherMod === "on";
   if (cipherMod) {
     return [
-      navLink({ href: "/cipher", emoji: "ꗄ", text: i18n.cipher, class: "cipher-link enabled" }),
+      navLink({
+        href: "/cipher",
+        emoji: "ꗄ",
+        text: i18n.cipher,
+        class: "cipher-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderBookmarksLink = () => {
-  const bookmarksMod = getConfig().modules.bookmarksMod === 'on';
-  if (bookmarksMod) {
-    return [
-      hr(),
-      navLink({ href: "/bookmarks", emoji: "ꔪ", text: i18n.bookmarksLabel, class: "bookmark-link enabled" }),
-    ];
-  }
-  return ''; 
+  const bookmarksMod = getConfig().modules.bookmarksMod === "on";
+  return bookmarksMod
+    ? navLink({
+        href: "/bookmarks",
+        emoji: "ꔪ",
+        text: i18n.bookmarksLabel,
+        class: "bookmark-link enabled"
+      })
+    : "";
 };
 
 const renderImagesLink = () => {
-  const imagesMod = getConfig().modules.imagesMod === 'on';
+  const imagesMod = getConfig().modules.imagesMod === "on";
   if (imagesMod) {
     return [
-      navLink({ href: "/images", emoji: "ꕥ", text: i18n.imagesLabel, class: "images-link enabled" }),
+      navLink({
+        href: "/images",
+        emoji: "ꕥ",
+        text: i18n.imagesLabel,
+        class: "images-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderVideosLink = () => {
-  const videosMod = getConfig().modules.videosMod === 'on';
+  const videosMod = getConfig().modules.videosMod === "on";
   if (videosMod) {
     return [
-      navLink({ href: "/videos", emoji: "ꗟ", text: i18n.videosLabel, class: "videos-link enabled" }),
+      navLink({
+        href: "/videos",
+        emoji: "ꗟ",
+        text: i18n.videosLabel,
+        class: "videos-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderAudiosLink = () => {
-  const audiosMod = getConfig().modules.audiosMod === 'on';
+  const audiosMod = getConfig().modules.audiosMod === "on";
   if (audiosMod) {
     return [
-      navLink({ href: "/audios", emoji: "ꔿ", text: i18n.audiosLabel, class: "audios-link enabled" }),
+      navLink({
+        href: "/audios",
+        emoji: "ꔿ",
+        text: i18n.audiosLabel,
+        class: "audios-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderDocsLink = () => {
-  const docsMod = getConfig().modules.docsMod === 'on';
+  const docsMod = getConfig().modules.docsMod === "on";
   if (docsMod) {
     return [
-      navLink({ href: "/documents", emoji: "ꕨ", text: i18n.docsLabel, class: "docs-link enabled" }),
+      navLink({
+        href: "/documents",
+        emoji: "ꕨ",
+        text: i18n.docsLabel,
+        class: "docs-link enabled"
+      })
     ];
   }
-  return ''; 
+  return "";
 };
 
 const renderTagsLink = () => {
-  const tagsMod = getConfig().modules.tagsMod === 'on';
-  return tagsMod 
+  const tagsMod = getConfig().modules.tagsMod === "on";
+  return tagsMod
     ? [
-        navLink({ href: "/tags", emoji: "ꖶ", text: i18n.tagsLabel, class: "tags-link enabled" }) 
+        navLink({
+          href: "/tags",
+          emoji: "ꖶ",
+          text: i18n.tagsLabel,
+          class: "tags-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderMultiverseLink = () => {
-  const multiverseMod = getConfig().modules.multiverseMod === 'on';
-  return multiverseMod 
-    ? [
-        hr,
-        navLink({ href: "/public/latest/extended", emoji: "∞", text: i18n.multiverse, class: "multiverse-link enabled" }) 
-      ]
-    : '';
+  const multiverseMod = getConfig().modules.multiverseMod === "on";
+  return multiverseMod
+    ? navLink({
+        href: "/public/latest/extended",
+        emoji: "∞",
+        text: i18n.multiverse,
+        class: "multiverse-link enabled"
+      })
+    : "";
 };
 
 const renderMarketLink = () => {
-  const marketMod = getConfig().modules.marketMod === 'on';
-  return marketMod 
+  const marketMod = getConfig().modules.marketMod === "on";
+  return marketMod
     ? [
-      navLink({ href: "/market", emoji: "ꕻ", text: i18n.marketTitle }),
+        navLink({
+          href: "/market",
+          emoji: "ꕻ",
+          text: i18n.marketTitle
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderJobsLink = () => {
-  const jobsMod = getConfig().modules.jobsMod === 'on';
-  return jobsMod 
+  const jobsMod = getConfig().modules.jobsMod === "on";
+  return jobsMod
     ? [
-      navLink({ href: "/jobs", emoji: "ꗒ", text: i18n.jobsTitle }),
+        navLink({
+          href: "/jobs",
+          emoji: "ꗒ",
+          text: i18n.jobsTitle
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderProjectsLink = () => {
-  const projectsMod = getConfig().modules.projectsMod === 'on';
-  return projectsMod 
+  const projectsMod = getConfig().modules.projectsMod === "on";
+  return projectsMod
     ? [
-      navLink({ href: "/projects", emoji: "ꕧ", text: i18n.projectsTitle }),
+        navLink({
+          href: "/projects",
+          emoji: "ꕧ",
+          text: i18n.projectsTitle
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderBankingLink = () => {
-  const bankingMod = getConfig().modules.bankingMod === 'on';
-  return bankingMod 
-    ? [
-      hr(),
-      navLink({ href: "/banking", emoji: "ꗴ", text: i18n.bankingTitle }),
-      ]
-    : '';
+  const bankingMod = getConfig().modules.bankingMod === "on";
+  return bankingMod
+    ? navLink({
+        href: "/banking",
+        emoji: "ꗴ",
+        text: i18n.bankingTitle
+      })
+    : "";
 };
 
 const renderTribesLink = () => {
-  const tribesMod = getConfig().modules.tribesMod === 'on';
-  return tribesMod 
+  const tribesMod = getConfig().modules.tribesMod === "on";
+  return tribesMod
     ? [
-        navLink({ href: "/tribes", emoji: "ꖥ", text: i18n.tribesTitle, class: "tribes-link enabled" }),
+        navLink({
+          href: "/tribes",
+          emoji: "ꖥ",
+          text: i18n.tribesTitle,
+          class: "tribes-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderParliamentLink = () => {
-  const parliamentMod = getConfig().modules.parliamentMod === 'on';
-  return parliamentMod 
+  const parliamentMod = getConfig().modules.parliamentMod === "on";
+  return parliamentMod
     ? [
-        navLink({ href: "/parliament", emoji: "ꗞ", text: i18n.parliamentTitle, class: "parliament-link enabled" }),
+        navLink({
+          href: "/parliament",
+          emoji: "ꗞ",
+          text: i18n.parliamentTitle,
+          class: "parliament-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderCourtsLink = () => {
-  const courtsMod = getConfig().modules.courtsMod === 'on';
-  return courtsMod 
-    ? [
-        navLink({ href: "/courts", emoji: "ꖻ", text: i18n.courtsTitle, class: "courts-link enabled" }),
-        hr(),
-      ]
-    : '';
+  const courtsMod = getConfig().modules.courtsMod === "on";
+  return courtsMod
+    ? navLink({
+        href: "/courts",
+        emoji: "ꖻ",
+        text: i18n.courtsTitle,
+        class: "courts-link enabled"
+      })
+    : "";
 };
 
 const renderVotationsLink = () => {
-  const votesMod = getConfig().modules.votesMod === 'on';
-  return votesMod 
+  const votesMod = getConfig().modules.votesMod === "on";
+  return votesMod
     ? [
-       navLink({ href: "/votes", emoji: "ꔰ", text: i18n.votationsTitle, class: "votations-link enabled" }),
+        navLink({
+          href: "/votes",
+          emoji: "ꔰ",
+          text: i18n.votationsTitle,
+          class: "votations-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderTrendingLink = () => {
-  const trendingMod = getConfig().modules.trendingMod === 'on';
-  return trendingMod 
+  const trendingMod = getConfig().modules.trendingMod === "on";
+  return trendingMod
     ? [
-        navLink({ href: "/trending", emoji: "ꗝ", text: i18n.trendingLabel, class: "trending-link enabled" }),
+        navLink({
+          href: "/trending",
+          emoji: "ꗝ",
+          text: i18n.trendingLabel,
+          class: "trending-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderReportsLink = () => {
-  const reportsMod = getConfig().modules.reportsMod === 'on';
-  return reportsMod 
+  const reportsMod = getConfig().modules.reportsMod === "on";
+  return reportsMod
     ? [
-       navLink({ href: "/reports", emoji: "ꕥ", text: i18n.reportsTitle, class: "reports-link enabled" }),
+        navLink({
+          href: "/reports",
+          emoji: "ꕥ",
+          text: i18n.reportsTitle,
+          class: "reports-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderOpinionsLink = () => {
-  const opinionsMod = getConfig().modules.opinionsMod === 'on';
-  return opinionsMod 
+  const opinionsMod = getConfig().modules.opinionsMod === "on";
+  return opinionsMod
     ? [
-      navLink({ href: "/opinions", emoji: "ꔍ", text: i18n.opinionsTitle, class: "opinions-link enabled" }),
+        navLink({
+          href: "/opinions",
+          emoji: "ꔍ",
+          text: i18n.opinionsTitle,
+          class: "opinions-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderTransfersLink = () => {
-  const transfersMod = getConfig().modules.transfersMod === 'on';
-  return transfersMod 
+  const transfersMod = getConfig().modules.transfersMod === "on";
+  return transfersMod
     ? [
-      navLink({ href: "/transfers", emoji: "ꘉ", text: i18n.transfersTitle, class: "transfers-link enabled" }),
+        navLink({
+          href: "/transfers",
+          emoji: "ꘉ",
+          text: i18n.transfersTitle,
+          class: "transfers-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderFeedLink = () => {
-  const feedMod = getConfig().modules.feedMod === 'on';
-  return feedMod 
-    ? [
-      hr(),
-      navLink({ href: "/feed", emoji: "ꕿ", text: i18n.feedTitle, class: "feed-link enabled" }),
-      ]
-    : '';
+  const feedMod = getConfig().modules.feedMod === "on";
+  return feedMod
+    ? navLink({
+        href: "/feed",
+        emoji: "ꕿ",
+        text: i18n.feedTitle,
+        class: "feed-link enabled"
+      })
+    : "";
 };
 
 const renderPixeliaLink = () => {
-  const pixeliaMod = getConfig().modules.pixeliaMod === 'on';
-  return pixeliaMod 
+  const pixeliaMod = getConfig().modules.pixeliaMod === "on";
+  return pixeliaMod
     ? [
-     navLink({ href: "/pixelia", emoji: "ꔘ", text: i18n.pixeliaTitle, class: "pixelia-link enabled" }),
+        navLink({
+          href: "/pixelia",
+          emoji: "ꔘ",
+          text: i18n.pixeliaTitle,
+          class: "pixelia-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderForumLink = () => {
-  const forumMod = getConfig().modules.forumMod === 'on';
-  return forumMod 
+  const forumMod = getConfig().modules.forumMod === "on";
+  return forumMod
     ? [
-     navLink({ href: "/forum", emoji: "ꕒ", text: i18n.forumTitle, class: "forum-link enabled" }),
+        navLink({
+          href: "/forum",
+          emoji: "ꕒ",
+          text: i18n.forumTitle,
+          class: "forum-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderAgendaLink = () => {
-  const agendaMod = getConfig().modules.agendaMod === 'on';
-  return agendaMod 
+  const agendaMod = getConfig().modules.agendaMod === "on";
+  return agendaMod
     ? [
-      navLink({ href: "/agenda", emoji: "ꗤ", text: i18n.agendaTitle, class: "agenda-link enabled" }),
+        navLink({
+          href: "/agenda",
+          emoji: "ꗤ",
+          text: i18n.agendaTitle,
+          class: "agenda-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderAILink = () => {
-  const aiMod = getConfig().modules.aiMod === 'on';
-  return aiMod 
+  const aiMod = getConfig().modules.aiMod === "on";
+  return aiMod
     ? [
-      navLink({ href: "/ai", emoji: "ꘜ", text: i18n.ai, class: "ai-link enabled" }),
+        navLink({
+          href: "/ai",
+          emoji: "ꘜ",
+          text: i18n.ai,
+          class: "ai-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderEventsLink = () => {
-  const eventsMod = getConfig().modules.eventsMod === 'on';
-  return eventsMod 
+  const eventsMod = getConfig().modules.eventsMod === "on";
+  return eventsMod
     ? [
-        navLink({ href: "/events", emoji: "ꕆ", text: i18n.eventsLabel, class: "events-link enabled" }),
+        navLink({
+          href: "/events",
+          emoji: "ꕆ",
+          text: i18n.eventsLabel,
+          class: "events-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const renderTasksLink = () => {
-  const tasksMod = getConfig().modules.tasksMod === 'on';
-  return tasksMod 
+  const tasksMod = getConfig().modules.tasksMod === "on";
+  return tasksMod
     ? [
-        navLink({ href: "/tasks", emoji: "ꖧ", text: i18n.tasksTitle, class: "tasks-link enabled" }),     
+        navLink({
+          href: "/tasks",
+          emoji: "ꖧ",
+          text: i18n.tasksTitle,
+          class: "tasks-link enabled"
+        })
       ]
-    : '';
+    : "";
 };
 
 const template = (titlePrefix, ...elements) => {
@@ -422,41 +597,51 @@ const template = (titlePrefix, ...elements) => {
       link({ rel: "icon", href: "/assets/images/favicon.svg" }),
       meta({ charset: "utf-8" }),
       meta({ name: "description", content: i18n.oasisDescription }),
-      meta({ name: "viewport", content: toAttributes({ width: "device-width", "initial-scale": 1 }) })
+      meta({
+        name: "viewport",
+        content: toAttributes({
+          width: "device-width",
+          "initial-scale": 1
+        })
+      })
     ),
     body(
       div(
         { class: "header" },
         div(
           { class: "top-bar-left" },
-          a({ class: "logo-icon", href: "/" },
-            img({ class: "logo-icon", src: "/assets/images/snh-oasis.jpg", alt: "Oasis Logo" })
+          a(
+            { class: "logo-icon", href: "/" },
+            img({
+              class: "logo-icon",
+              src: "/assets/images/snh-oasis.jpg",
+              alt: "Oasis Logo"
+            })
           ),
           nav(
             ul(
-              navLink({ href: "/profile", emoji: "⚉", text: i18n.profile }),
-              navLink({ href: "/cv", emoji: "ꕛ", text: i18n.cvTitle }),
-              renderLegacyLink(),            
-              renderWalletLink(),
-              navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
-              renderInvitesLink(),
-              navLink({ href: "/modules", emoji: "ꗣ", text: i18n.modules }),
-              navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
+              navLink({
+                href: "/inbox",
+                emoji: "☂",
+                text: i18n.inbox
+              }),
+              navLink({
+                href: "/pm",
+                emoji: "ꕕ",
+                text: i18n.privateMessage
+              }),
+              navLink({ href: "/publish", emoji: "❂", text: i18n.publish })
             )
-          ),
+          )
         ),
         div(
           { class: "top-bar-right" },
           nav(
             ul(
-             renderCipherLink(),
-             navLink({ href: "/pm", emoji: "ꕕ", text: i18n.privateMessage }),
-             navLink({ href: "/publish", emoji: "❂", text: i18n.publish }),
-             renderAILink(),
-             renderTagsLink(),
-             navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
-             )
-          ),
+              renderTagsLink(),
+              navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
+            )
+          )
         )
       ),
       div(
@@ -465,26 +650,100 @@ const template = (titlePrefix, ...elements) => {
           { class: "sidebar-left" },
           nav(
             ul(
-              navLink({ href: "/mentions", emoji: "✺", text: i18n.mentions }),
-              navLink({ href: "/inbox", emoji: "☂", text: i18n.inbox }),
-              renderAgendaLink(),
-              navLink({ href: "/stats", emoji: "ꕷ", text: i18n.statistics }),
-              navLink({ href: "/blockexplorer", emoji: "ꖸ", text: i18n.blockchain }),
-              hr,
-              renderLatestLink(),
-              renderThreadsLink(),
-              renderTopicsLink(),
-              renderSummariesLink(),
-              renderPopularLink(),
-              navLink({ href: "/inhabitants", emoji: "ꖘ", text: i18n.inhabitantsLabel }),
-              renderTribesLink(),
-              renderParliamentLink(),
-              renderCourtsLink(),
-              renderVotationsLink(),
-              renderEventsLink(),
-              renderTasksLink(),
-              renderReportsLink(),
-              renderMultiverseLink()
+              navGroup(
+                {
+                  id: "personal",
+                  emoji: "⚉",
+                  title: i18n.menuPersonal
+                },
+                navLink({
+                  href: "/settings",
+                  emoji: "⚙",
+                  text: i18n.settings
+                }),
+                navLink({
+                  href: "/modules",
+                  emoji: "ꗣ",
+                  text: i18n.modules
+                }),
+                navLink({
+                  href: "/profile",
+                  emoji: "⚉",
+                  text: i18n.profile
+                }),
+                navLink({
+                  href: "/cv",
+                  emoji: "ꕛ",
+                  text: i18n.cvTitle
+                }),
+                renderLegacyLink(),
+                renderWalletLink(),
+                renderInvitesLink(),
+                renderAgendaLink(),
+                navLink({
+                  href: "/stats",
+                  emoji: "ꕷ",
+                  text: i18n.statistics
+                }),
+                navLink({
+                  href: "/blockexplorer",
+                  emoji: "ꖸ",
+                  text: i18n.blockchain
+                })
+              ),
+              navGroup(
+                {
+                  id: "content",
+                  emoji: "✦",
+                  title: i18n.menuContent
+                },
+                navLink({
+                  href: "/mentions",
+                  emoji: "✺",
+                  text: i18n.mentions
+                }),
+                renderLatestLink(),
+                renderThreadsLink(),
+                renderTopicsLink(),
+                renderSummariesLink(),
+                renderPopularLink(),
+                renderMultiverseLink()
+              ),
+              navGroup(
+                {
+                  id: "governance",
+                  emoji: "⚖",
+                  title: i18n.menuGovernance
+                },
+                navLink({
+                  href: "/inhabitants",
+                  emoji: "ꖘ",
+                  text: i18n.inhabitantsLabel
+                }),
+                renderTribesLink(),
+                renderParliamentLink(),
+                renderCourtsLink()
+              ),
+              navGroup(
+                {
+                  id: "office",
+                  emoji: "⌂",
+                  title: i18n.menuOffice
+                },
+                renderVotationsLink(),
+                renderEventsLink(),
+                renderTasksLink(),
+                renderReportsLink()
+              ),
+              navGroup(
+                {
+                  id: "tools",
+                  emoji: "⚒",
+                  title: i18n.menuTools
+                },
+                renderCipherLink(),
+                renderAILink()
+              )
             )
           )
         ),
@@ -493,25 +752,62 @@ const template = (titlePrefix, ...elements) => {
           { class: "sidebar-right" },
           nav(
             ul(
-              navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
-              renderTrendingLink(),
-              renderOpinionsLink(),
-              renderForumLink(),
-              renderFeedLink(),
-              renderPixeliaLink(),
-              renderBankingLink(),
-              renderMarketLink(),
-              renderProjectsLink(),
-              renderJobsLink(),
-              renderTransfersLink(),
-              renderBookmarksLink(),
-              renderImagesLink(),
-              renderVideosLink(),
-              renderAudiosLink(),
-              renderDocsLink(),
+              navGroup(
+                {
+                  id: "network",
+                  emoji: "☍",
+                  title: i18n.menuNetwork
+                },
+                navLink({
+                  href: "/activity",
+                  emoji: "ꔙ",
+                  text: i18n.activityTitle
+                }),
+                renderTrendingLink(),
+                renderOpinionsLink(),
+                renderForumLink(),
+                navLink({
+                  href: "/peers",
+                  emoji: "⧖",
+                  text: i18n.peers
+                })
+              ),
+              navGroup(
+                {
+                  id: "creative",
+                  emoji: "✎",
+                  title: i18n.menuCreative
+                },
+                renderFeedLink(),
+                renderPixeliaLink()
+              ),
+              navGroup(
+                {
+                  id: "economy",
+                  emoji: "¤",
+                  title: i18n.menuEconomy
+                },
+                renderBankingLink(),
+                renderMarketLink(),
+                renderProjectsLink(),
+                renderJobsLink(),
+                renderTransfersLink()
+              ),
+              navGroup(
+                {
+                  id: "media",
+                  emoji: "▤",
+                  title: i18n.menuMedia
+                },
+                renderBookmarksLink(),
+                renderImagesLink(),
+                renderVideosLink(),
+                renderAudiosLink(),
+                renderDocsLink()
+              )
             )
           )
-        ),
+        )
       )
     )
   );
@@ -676,20 +972,41 @@ const post = ({ msg, aside = false, preview = false }) => {
 
   const { name } = msg.value?.meta?.author || { name: "Anonymous" };
 
-  const markdownContent = msg.value?.content?.text;
+  const rawText = msg.value?.content?.text || "";
   const emptyContent = "<p>undefined</p>\n";
-  const articleElement =
-    markdownContent === emptyContent
-      ? article(
-          { class: "content" },
-          pre({
-            innerHTML: highlightJs.highlight(
-              JSON.stringify(msg, null, 2),
-              { language: "json", ignoreIllegals: true }
-            ).value,
-          })
-        )
-      : article({ class: "content", innerHTML: markdownContent });
+
+  const isProbablyHtml =
+    typeof rawText === "string" &&
+    /<\/?[a-z][\s\S]*>/i.test(rawText.trim());
+
+  let articleElement;
+
+  if (rawText === emptyContent) {
+    articleElement = article(
+      { class: "content" },
+      pre({
+        innerHTML: highlightJs.highlight(
+          JSON.stringify(msg, null, 2),
+          { language: "json", ignoreIllegals: true }
+        ).value,
+      })
+    );
+  } else if (isProbablyHtml) {
+    let html = rawText;
+    if (!/<a\b[^>]*>/i.test(html)) {
+      html = html.replace(
+        /(https?:\/\/[^\s<]+)/g,
+        (url) =>
+          `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+      );
+    }
+    articleElement = article({ class: "content", innerHTML: html });
+  } else {
+    articleElement = article(
+      { class: "content" },
+      p({ class: "post-text" }, ...renderUrl(rawText))
+    );
+  }
 
   if (preview) {
     return section(
@@ -1040,7 +1357,7 @@ exports.previewCommentView = async ({
     throw new Error("Missing parentMessage or value");
   }
 
-  const publishAction = `/comment/${encodeURIComponent(messages[0].key)}`;
+  const publishAction = `/comment/${encodeURIComponent(parentMessage.key)}`;
   const preview = generatePreview({
     previewData,
     contentWarning,
@@ -1062,19 +1379,15 @@ exports.commentView = async (
 ) => {
   let markdownMention;
   const authorName = parentMessage?.value?.meta?.author?.name || "Anonymous";
-  
   const messageElements = await Promise.all(
     messages.reverse().map(async (message) => {  
-      const isRootMessage = message.key === parentMessage.key;
-      const messageAuthorName = message.value?.meta?.author?.name || "Anonymous";
-      const authorFeedId = myFeedId;
-      
-      if (authorFeedId !== myFeedId) {
-        if (message.key === parentMessage.key) {
-          const x = `[@${messageAuthorName}](${authorFeedId})\n\n`;
-          markdownMention = x;
-        }
-      }
+    const isRootMessage = message.key === parentMessage.key;
+    const messageAuthorName = message.value?.meta?.author?.name || "Anonymous";
+    const authorFeedId = message.value?.author;
+    if (authorFeedId && authorFeedId !== myFeedId && isRootMessage) {
+      const x = `[@${messageAuthorName}](${authorFeedId})\n\n`;
+      markdownMention = x;
+    }
       const timestamp = message?.value?.meta?.timestamp?.received;
       const validTimestamp = moment(timestamp, moment.ISO_8601, true); 
       const timeAgo = validTimestamp.isValid() 
@@ -1086,7 +1399,7 @@ exports.commentView = async (
     })
   );
 
-  const action = `/comment/preview/${encodeURIComponent(messages[0].key)}`;
+  const action = `/comment/preview/${encodeURIComponent(parentMessage.key)}`;
   const method = "post";
   const isPrivate = parentMessage?.value?.meta?.private;
   const publicOrPrivate = isPrivate ? i18n.commentPrivate : i18n.commentPublic;

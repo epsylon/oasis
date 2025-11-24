@@ -13,6 +13,18 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.5.7 - 2025-11-25
+
+### Added
+
+ + Collapsible menu entries (Core plugin).
+
+### Fixed
+
+ + Remote videos fail to load at Firefox/LibreWolf (Core plugin).
+ + Fixed the comment query to return all posts whose root is the topic ID (Core plugin).
+ + Fixed render-format for latest posts (Core plugin).
+ + Fixed inhabitants listing for short-time activities (Activity plugin).
 
 ## v0.5.6 - 2025-11-21
 

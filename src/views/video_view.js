@@ -127,7 +127,13 @@ const renderVideoList = (filteredVideos, filter) => {
           video.tags?.length
             ? div({ class: "card-tags" },
                 video.tags.map(tag =>
-                  a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
+                  a(
+                    {
+                      href: `/search?query=%23${encodeURIComponent(tag)}`,
+                      class: "tag-link"
+                    },
+                    `#${tag}`
+                  )
                 )
               )
             : null,
@@ -223,7 +229,7 @@ exports.videoView = async (videos, filter, videoId) => {
 
 exports.singleVideoView = async (video, filter, comments = []) => {
   const isAuthor = video.author === userId;
-  const hasOpinions = Object.keys(video.opinions || {}).length > 0; 
+  const hasOpinions = Object.keys(video.opinions || {}).length > 0;
 
   return template(
     i18n.videoTitle,
@@ -263,12 +269,18 @@ exports.singleVideoView = async (video, filter, comments = []) => {
           : p(i18n.videoNoFile),
         p(...renderUrl(video.description)),
         video.tags?.length
-            ? div({ class: "card-tags" },
-                video.tags.map(tag =>
-                  a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right: 0.8em; margin-bottom: 0.5em;" }, `#${tag}`)
+          ? div({ class: "card-tags" },
+              video.tags.map(tag =>
+                a(
+                  {
+                    href: `/search?query=%23${encodeURIComponent(tag)}`,
+                    class: "tag-link"
+                  },
+                  `#${tag}`
                 )
               )
-            : null,
+            )
+          : null,
         br,
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, `${moment(video.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed} `),
@@ -286,3 +298,4 @@ exports.singleVideoView = async (video, filter, comments = []) => {
     )
   );
 };
+

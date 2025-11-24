@@ -162,6 +162,11 @@ module.exports = ({ cooler }) => {
           const key = `${a.type}:${a.author}`;
           const prev = byKey.get(key);
           if (!prev || effTs > prev.__effTs) byKey.set(key, { ...a, __effTs: effTs });
+        } else if (a.type === 'about') {
+          const target = c.about || a.author;
+          const key = `about:${target}`;
+          const prev = byKey.get(key);
+          if (!prev || effTs > prev.__effTs) byKey.set(key, { ...a, __effTs: effTs });
         } else if (a.type === 'tribe') {
           const t = norm(c.title);
           if (t) {

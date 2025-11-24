@@ -196,8 +196,123 @@ nav ul li a:hover {
   text-decoration: underline;
 }
 
-/* Main content area + Menu */
+/* nav menus */
+.oasis-nav-group {
+  list-style: none;
+  margin-bottom: 0.75rem;
+}
 
+.oasis-nav-toggle {
+  display: none;
+}
+
+.oasis-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #ffb400;
+  transition: background 0.2s ease, color 0.2s ease;
+  text-align: left;
+  border: 1px solid rgba(255, 180, 0, 0.6);
+  border-radius: 4px;
+  margin: 0 0.25rem;
+  box-sizing: border-box;
+}
+
+.oasis-nav-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffd36a;
+}
+
+.oasis-nav-arrow {
+  font-size: 0.7rem;
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.oasis-nav-header + .oasis-nav-list {
+  margin-top: 0.35rem;
+}
+
+.oasis-nav-list {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease-out;
+  padding-left: 0;
+  margin: 0 0 0 0.75rem;
+}
+
+.oasis-nav-toggle:checked + .oasis-nav-header + .oasis-nav-list {
+  max-height: 1000px;
+}
+
+.oasis-nav-toggle:checked + .oasis-nav-header .oasis-nav-arrow {
+  transform: rotate(180deg);
+}
+
+.oasis-nav-list li {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.oasis-nav-list li a {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 1.25rem 0.35rem 1.5rem;
+  font-size: 0.85rem;
+  text-decoration: none;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+
+.oasis-nav-list li a:hover {
+  opacity: 1;
+}
+
+.oasis-nav-list .emoji {
+  margin-right: 0.4rem;
+}
+
+.oasis-header-marquee {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: #ffc45a;
+}
+
+.oasis-header-marquee-inner {
+  display: inline-block;
+  padding: 0 1rem;
+  animation: oasis-marquee 30s linear infinite;
+}
+
+.oasis-marquee-item {
+  margin: 0 0.4rem;
+  opacity: 0.9;
+}
+
+.oasis-marquee-separator {
+  margin: 0 0.4rem;
+  opacity: 0.5;
+}
+
+@keyframes oasis-marquee {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+
+/* Main content area + Menu */
 /* 
 .main-content { border: 2px solid red !important; }
 .sidebar-left { border: 2px solid blue !important; }

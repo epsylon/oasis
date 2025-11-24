@@ -111,6 +111,17 @@ module.exports = {
     marketTitle: "Merkatua",
     opinionsTitle: "Iritziak",
     saveSettings: "Gorde konfigurazioa",
+    // menu categories
+    menuPersonal: "Pertsonala",
+    menuContent: "Edukia",
+    menuGovernance: "Gobernantza",
+    menuOffice: "Bulegoa",
+    menuMultiverse: "Multibertsoa",
+    menuNetwork: "Sarea",
+    menuCreative: "Sortzailea",
+    menuEconomy: "Ekonomia",
+    menuMedia: "Multimedia",
+    menuTools: "Tresnak",
     // post actions
     comment: "Iruzkindu",
     subtopic: "Azpi-gaia",

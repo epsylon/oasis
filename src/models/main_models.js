@@ -1080,33 +1080,37 @@ const post = {
     const ssb = await cooler.open();
     const myFeedId = ssb.id;
     const query = [
-    {
-      $filter: {
-        dest: rootId,
+      {
+        $filter: {
+          value: {
+            content: {
+              type: "post",
+              root: rootId,
+            },
+          },
+        },
       },
-    },
-  ];
-  const messages = await getMessages({
-    myFeedId,
-    customOptions,
-    ssb,
-    query,
-    filter: (msg) => msg.value.content.root === rootId && hasNoFork(msg),
-  });
-  const fullMessages = await Promise.all(
-    messages.map(async (msg) => {
-      if (typeof msg === 'string') {
-        return new Promise((resolve, reject) => {
-          ssb.get({ id: msg, meta: true, private: true }, (err, fullMsg) => {
-            if (err) reject(err);
-            else resolve(fullMsg);
+    ];
+    const messages = await getMessages({
+      myFeedId,
+      customOptions,
+      ssb,
+      query,
+    });
+    const fullMessages = await Promise.all(
+      messages.map(async (msg) => {
+        if (typeof msg === "string") {
+          return new Promise((resolve, reject) => {
+            ssb.get({ id: msg, meta: true, private: true }, (err, fullMsg) => {
+              if (err) reject(err);
+              else resolve(fullMsg);
+            });
           });
-        });
-      }
-      return msg;
-    })
-  );
-  return fullMessages;
+        }
+        return msg;
+      })
+    );
+    return fullMessages;
   },
   likes: async ({ feed }, customOptions = {}) => {
       const ssb = await cooler.open();
@@ -1870,7 +1874,6 @@ const post = {
 
   };
   models.post = post;
-
 
 // SPREAD MODEL
 models.vote = {

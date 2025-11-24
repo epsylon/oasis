@@ -111,6 +111,17 @@ module.exports = {
     marketTitle: "Mercado",
     opinionsTitle: "Opiniones",
     saveSettings: "Guardar configuración",
+    // menu categories
+    menuPersonal: "Personal",
+    menuContent: "Contenido",
+    menuGovernance: "Gobernanza",
+    menuOffice: "Oficina",
+    menuMultiverse: "Multiverso",
+    menuNetwork: "Red",
+    menuCreative: "Creativo",
+    menuEconomy: "Economía",
+    menuMedia: "Multimedia",
+    menuTools: "Herramientas",
     // post actions
     comment: "Comentar",
     subtopic: "Subtopic",
