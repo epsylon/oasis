@@ -21,7 +21,7 @@ const getUserId = async () => {
   return userId;
 };
 
-const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, textarea, title, tr, ul, strong } = require("../server/node_modules/hyperaxe");
+const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
 
 const lodash = require("../server/node_modules/lodash");
 const markdown = require("./markdown");
@@ -946,204 +946,420 @@ const postAside = ({ key, value }) => {
 };
 
 const post = ({ msg, aside = false, preview = false }) => {
-  const encoded = {
-    key: encodeURIComponent(msg.key),
-    author: encodeURIComponent(msg.value?.author),
-    parent: encodeURIComponent(msg.value?.content?.root),
-  };
+    const encoded = {
+        key: encodeURIComponent(msg.key),
+        author: encodeURIComponent(msg.value?.author),
+        parent: encodeURIComponent(msg.value?.content?.root),
+    };
 
-  const url = {
-    author: `/author/${encoded.author}`,
-    likeForm: `/like/${encoded.key}`,
-    link: `/thread/${encoded.key}#${encoded.key}`,
-    parent: `/thread/${encoded.parent}#${encoded.parent}`,
-    avatar: msg.value?.meta?.author?.avatar?.url || '/assets/images/default-avatar.png',
-    json: `/json/${encoded.key}`,
-    subtopic: `/subtopic/${encoded.key}`,
-    comment: `/comment/${encoded.key}`,
-  };
+    const url = {
+        author: `/author/${encoded.author}`,
+        likeForm: `/like/${encoded.key}`,
+        link: `/thread/${encoded.key}#${encoded.key}`,
+        parent: `/thread/${encoded.parent}#${encoded.parent}`,
+        avatar: msg.value?.meta?.author?.avatar?.url || '/assets/images/default-avatar.png',
+        json: `/json/${encoded.key}`,
+        subtopic: `/subtopic/${encoded.key}`,
+        comment: `/comment/${encoded.key}`,
+    };
 
-  const isPrivate = Boolean(msg.value?.meta?.private); 
-  const isBlocked = Boolean(msg.value?.meta?.blocking);
-  const isRoot = msg.value?.content?.root == null;
-  const isFork = msg.value?.meta?.postType === "subtopic";
-  const hasContentWarning = typeof msg.value?.content?.contentWarning === "string";
-  const isThreadTarget = Boolean(lodash.get(msg, "value.meta.thread.target", false));
+    const isPrivate = Boolean(msg.value?.meta?.private);
+    const isBlocked = Boolean(msg.value?.meta?.blocking);
+    const isRoot = msg.value?.content?.root == null;
+    const isFork = msg.value?.meta?.postType === "subtopic";
+    const hasContentWarning = typeof msg.value?.content?.contentWarning === "string";
+    const isThreadTarget = Boolean(lodash.get(msg, "value.meta.thread.target", false));
 
-  const { name } = msg.value?.meta?.author || { name: "Anonymous" };
+    const { name } = msg.value?.meta?.author || { name: "Anonymous" };
 
-  const rawText = msg.value?.content?.text || "";
-  const emptyContent = "<p>undefined</p>\n";
+    const content = msg.value?.content || {};
+    const contentType = String(content.type || "");
 
-  const isProbablyHtml =
-    typeof rawText === "string" &&
-    /<\/?[a-z][\s\S]*>/i.test(rawText.trim());
+    const THREAD_ENTITY_TYPES = new Set([
+        'bookmark',
+        'image',
+        'audio',
+        'video',
+        'document',
+        'votes',
+        'event',
+        'task',
+        'report',
+        'market',
+        'project',
+        'job'
+    ]);
 
-  let articleElement;
+    const safeUpper = (s) => String(s || '').toUpperCase();
+    const safeStr = (v) => (v == null ? '' : String(v));
+    const isMsgId = (s) => typeof s === 'string' && (s.startsWith('%') || s.startsWith('&') || s.startsWith('@'));
+    const fmtDate = (v) => {
+        if (!v) return '';
+        const m = moment(v, moment.ISO_8601, true);
+        if (m.isValid()) return m.format('YYYY-MM-DD HH:mm:ss');
+        const n = typeof v === 'number' ? v : Date.parse(v);
+        if (!Number.isFinite(n)) return '';
+        return moment(n).format('YYYY-MM-DD HH:mm:ss');
+    };
 
-  if (rawText === emptyContent) {
-    articleElement = article(
-      { class: "content" },
-      pre({
-        innerHTML: highlightJs.highlight(
-          JSON.stringify(msg, null, 2),
-          { language: "json", ignoreIllegals: true }
-        ).value,
-      })
-    );
-  } else if (isProbablyHtml) {
-    let html = rawText;
-    if (!/<a\b[^>]*>/i.test(html)) {
-      html = html.replace(
-        /(https?:\/\/[^\s<]+)/g,
-        (url) =>
-          `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
-      );
+    const renderField = (labelText, valueNode) => {
+        if (valueNode == null || valueNode === '') return null;
+        return div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, labelText),
+            span({ class: 'card-value' }, valueNode)
+        );
+    };
+
+    const entityTitle = (c) => {
+        const t = String(c.type || '').toLowerCase();
+        if (t === 'votes') return safeStr(c.question || c.title);
+        if (t === 'bookmark') return safeStr(c.title || c.name || c.url);
+        if (t === 'market') return safeStr(c.title);
+        if (t === 'project') return safeStr(c.title);
+        if (t === 'job') return safeStr(c.title);
+        if (t === 'report') return safeStr(c.title);
+        if (t === 'task') return safeStr(c.title);
+        if (t === 'event') return safeStr(c.title);
+        if (t === 'document') return safeStr(c.title || c.name || c.url);
+        if (t === 'image' || t === 'audio' || t === 'video') return safeStr(c.title || c.name || c.url);
+        return safeStr(c.title || c.name || c.question || c.url);
+    };
+
+    const renderEntityRoot = (c) => {
+        const t = String(c.type || '').toLowerCase();
+        const header = `[${safeUpper(t)}]`;
+        const titleText = entityTitle(c) || '(sin título)';
+
+        const nodes = [];
+        nodes.push(
+            div(
+                { class: 'card-field', style: 'margin-bottom:10px;' },
+                span({ class: 'card-label', style: 'font-weight:800;' }, header),
+                span({ class: 'card-value', style: 'margin-left:10px; font-weight:800;' }, titleText)
+            )
+        );
+
+        if (t === 'votes') {
+            const status = safeStr(c.status);
+            const deadline = fmtDate(c.deadline);
+            const totalVotes = (typeof c.totalVotes !== 'undefined') ? safeStr(c.totalVotes) : '';
+            const tags = Array.isArray(c.tags) ? c.tags.filter(Boolean) : [];
+
+            const f1 = renderField((i18n.status || 'Status') + ':', status ? safeUpper(status) : '');
+            const f2 = renderField((i18n.deadline || 'Deadline') + ':', deadline);
+            const f3 = renderField((i18n.voteTotalVotes || 'Total votes') + ':', totalVotes);
+            if (f1) nodes.push(f1);
+            if (f2) nodes.push(f2);
+            if (f3) nodes.push(f3);
+
+            if (tags.length) {
+                nodes.push(
+                    div(
+                        { class: 'card-tags', style: 'margin-top:10px;' },
+                        ...tags.map(tag =>
+                            a(
+                                { href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' },
+                                `#${tag}`
+                            )
+                        )
+                    )
+                );
+            }
+        } else if (t === 'report') {
+            const status = safeStr(c.status);
+            const severity = safeStr(c.severity);
+            const r1 = renderField((i18n.status || 'Status') + ':', status ? safeUpper(status) : '');
+            const r2 = renderField((i18n.severity || 'Severity') + ':', severity ? safeUpper(severity) : '');
+            if (r1) nodes.push(r1);
+            if (r2) nodes.push(r2);
+        } else if (t === 'task') {
+            const status = safeStr(c.status);
+            const priority = safeStr(c.priority);
+            const startTime = fmtDate(c.startTime);
+            const endTime = fmtDate(c.endTime);
+
+            const r1 = renderField((i18n.status || 'Status') + ':', status ? safeUpper(status) : '');
+            const r2 = renderField((i18n.priority || 'Priority') + ':', priority ? safeUpper(priority) : '');
+            const r3 = renderField((i18n.taskStartTimeLabel || 'Start') + ':', startTime);
+            const r4 = renderField((i18n.taskEndTimeLabel || 'End') + ':', endTime);
+
+            if (r1) nodes.push(r1);
+            if (r2) nodes.push(r2);
+            if (r3) nodes.push(r3);
+            if (r4) nodes.push(r4);
+        } else if (t === 'event') {
+            const dateStr = fmtDate(c.date);
+            const location = safeStr(c.location);
+            const price = (typeof c.price !== 'undefined') ? safeStr(c.price) : '';
+
+            const r1 = renderField((i18n.date || 'Date') + ':', dateStr);
+            const r2 = renderField((i18n.location || 'Location') + ':', location);
+            const r3 = renderField((i18n.price || 'Price') + ':', price ? `${price} ECO` : '');
+
+            if (r1) nodes.push(r1);
+            if (r2) nodes.push(r2);
+            if (r3) nodes.push(r3);
+        } else if (t === 'bookmark') {
+            const u = safeStr(c.url);
+            if (u) {
+                nodes.push(
+                    renderField((i18n.url || 'URL') + ':', a({ href: u, target: '_blank', rel: 'noopener noreferrer' }, u))
+                );
+            }
+        } else if (t === 'image') {
+            const u = safeStr(c.url);
+            if (u && isMsgId(u)) {
+                nodes.push(
+                    div({ class: 'card-field', style: 'margin-top:10px;' },
+                        img({ src: `/blob/${encodeURIComponent(u)}`, class: 'feed-image img-content' })
+                    )
+                );
+            }
+        } else if (t === 'audio') {
+            const u = safeStr(c.url);
+            if (u && isMsgId(u)) {
+                nodes.push(
+                    div({ class: 'card-field', style: 'margin-top:10px;' },
+                        audioHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(u)}` })
+                    )
+                );
+            }
+        } else if (t === 'video') {
+            const u = safeStr(c.url);
+            if (u && isMsgId(u)) {
+                nodes.push(
+                    div({ class: 'card-field', style: 'margin-top:10px;' },
+                        videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(u)}` })
+                    )
+                );
+            }
+	} else if (t === 'document') {
+	  const u = safeStr(c.url);
+	  if (u && isMsgId(u)) {
+	    const safeId = String(msg.key || u).replace(/[^a-zA-Z0-9_-]/g, '');
+	    nodes.push(
+	      div({ class: 'card-field', style: 'margin-top:10px;' },
+		div({
+		  id: `pdf-container-${safeId}`,
+		  class: 'pdf-viewer-container',
+		  'data-pdf-url': `/blob/${encodeURIComponent(u)}`
+		})
+	      )
+	    );
+	  }
+
+        } else if (t === 'market') {
+            const status = safeStr(c.status);
+            const price = (typeof c.price !== 'undefined') ? safeStr(c.price) : '';
+            const r1 = renderField((i18n.status || 'Status') + ':', status ? safeUpper(status) : '');
+            const r2 = renderField((i18n.price || 'Price') + ':', price ? `${price} ECO` : '');
+            if (r1) nodes.push(r1);
+            if (r2) nodes.push(r2);
+        } else if (t === 'project') {
+            const status = safeStr(c.status);
+            const r1 = renderField((i18n.status || 'Status') + ':', status ? safeUpper(status) : '');
+            if (r1) nodes.push(r1);
+        } else if (t === 'job') {
+            const status = safeStr(c.status);
+            const location = safeStr(c.location);
+            const salary = (typeof c.salary !== 'undefined') ? safeStr(c.salary) : '';
+
+            const r1 = renderField((i18n.status || 'Status') + ':', status ? safeUpper(status) : '');
+            const r2 = renderField((i18n.jobLocation || 'Location') + ':', location ? safeUpper(location) : '');
+            const r3 = renderField((i18n.jobSalary || 'Salary') + ':', salary ? `${salary} ECO` : '');
+
+            if (r1) nodes.push(r1);
+            if (r2) nodes.push(r2);
+            if (r3) nodes.push(r3);
+        }
+
+        return article({ class: 'content' }, ...nodes.filter(Boolean));
+    };
+
+    const rawText = content.text || "";
+    const emptyContent = "<p>undefined</p>\n";
+
+    const isProbablyHtml =
+        typeof rawText === "string" &&
+        /<\/?[a-z][\s\S]*>/i.test(rawText.trim());
+
+    let articleElement;
+
+    if (contentType !== 'post' && contentType !== 'blog' && THREAD_ENTITY_TYPES.has(contentType)) {
+        articleElement = renderEntityRoot(content);
+    } else if (rawText === emptyContent) {
+        articleElement = article(
+            { class: "content" },
+            div(
+                { class: "card-field", style: "margin-bottom:10px;" },
+                span({ class: "card-label" }, (i18n.invalidPost || 'Invalid content') + ':'),
+                span({ class: "card-value" }, (i18n.invalidPostHint || 'This message has invalid/empty text.'))
+            ),
+            details(
+                summary(i18n.viewJson || 'View JSON'),
+                pre({
+                    innerHTML: highlightJs.highlight(
+                        JSON.stringify(msg, null, 2),
+                        { language: "json", ignoreIllegals: true }
+                    ).value,
+                })
+            )
+        );
+    } else if (isProbablyHtml) {
+        let html = rawText;
+        if (!/<a\b[^>]*>/i.test(html)) {
+            html = html.replace(
+                /(https?:\/\/[^\s<]+)/g,
+                (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`
+            );
+        }
+        articleElement = article({ class: "content", innerHTML: html });
+    } else {
+        articleElement = article(
+            { class: "content" },
+            p({ class: "post-text" }, ...renderUrl(rawText))
+        );
     }
-    articleElement = article({ class: "content", innerHTML: html });
-  } else {
-    articleElement = article(
-      { class: "content" },
-      p({ class: "post-text" }, ...renderUrl(rawText))
-    );
-  }
 
-  if (preview) {
-    return section(
-      { id: msg.key, class: "post-preview" },
-      hasContentWarning
-        ? details(summary(msg.value?.content?.contentWarning), articleElement)
-        : articleElement
-    );
-  }
+    if (preview) {
+        return section(
+            { id: msg.key, class: "post-preview" },
+            hasContentWarning
+                ? details(summary(msg.value?.content?.contentWarning), articleElement)
+                : articleElement
+        );
+    }
 
-  const ts_received = msg.value?.meta?.timestamp?.received;
+    const ts_received = msg.value?.meta?.timestamp?.received;
+    const iso =
+        (ts_received && ts_received.iso8601) ||
+        (typeof msg.value?.timestamp === 'number' ? new Date(msg.value.timestamp).toISOString() : null) ||
+        (content.createdAt ? new Date(content.createdAt).toISOString() : null);
 
-  if (!ts_received || !ts_received.iso8601 || !moment(ts_received.iso8601, moment.ISO_8601, true).isValid()) {
-    return null;
-  }
+    if (!iso || !moment(iso, moment.ISO_8601, true).isValid()) {
+        return null;
+    }
 
-  const validTimestamp = moment(ts_received.iso8601, moment.ISO_8601);
-  const timeAgo = validTimestamp.fromNow();
-  const timeAbsolute = validTimestamp.toISOString().split(".")[0].replace("T", " ");
+    const validTimestamp = moment(iso, moment.ISO_8601);
+    const timeAgo = validTimestamp.fromNow();
+    const timeAbsolute = validTimestamp.toISOString().split(".")[0].replace("T", " ");
 
-  const likeButton = msg.value?.meta?.voted
-    ? { value: 0, class: "liked" }
-    : { value: 1, class: null };
+    const likeButton = msg.value?.meta?.voted
+        ? { value: 0, class: "liked" }
+        : { value: 1, class: null };
 
-  const likeCount = msg.value?.meta?.votes?.length || 0;
-  const maxLikedNameLength = 16;
-  const maxLikedNames = 16;
+    const likeCount = msg.value?.meta?.votes?.length || 0;
+    const maxLikedNameLength = 16;
+    const maxLikedNames = 16;
 
-  const likedByNames = msg.value?.meta?.votes
-    .slice(0, maxLikedNames)
-    .map((person) => person.name)
-    .map((name) => name.slice(0, maxLikedNameLength))
-    .join(", ");
+    const likedByNames = msg.value?.meta?.votes
+        .slice(0, maxLikedNames)
+        .map((person) => person.name)
+        .map((n) => n.slice(0, maxLikedNameLength))
+        .join(", ");
 
-  const additionalLikesMessage =
-    likeCount > maxLikedNames ? `+${likeCount - maxLikedNames} more` : ``;
+    const additionalLikesMessage =
+        likeCount > maxLikedNames ? `+${likeCount - maxLikedNames} more` : ``;
 
-  const likedByMessage =
-    likeCount > 0 ? `${likedByNames} ${additionalLikesMessage}` : null;
+    const likedByMessage =
+        likeCount > 0 ? `${likedByNames} ${additionalLikesMessage}` : null;
 
-  const messageClasses = ["post"];
+    const messageClasses = ["post"];
+    const recps = [];
 
-  const recps = [];
+    const addRecps = (recpsInfo) => {
+        recpsInfo.forEach((recp) => {
+            recps.push(
+                a(
+                    { href: `/author/${encodeURIComponent(recp.feedId)}` },
+                    img({ class: "avatar", src: recp.avatarUrl, alt: "" })
+                )
+            );
+        });
+    };
 
-  const addRecps = (recpsInfo) => {
-    recpsInfo.forEach((recp) => {
-      recps.push(
-        a(
-          { href: `/author/${encodeURIComponent(recp.feedId)}` },
-          img({ class: "avatar", src: recp.avatarUrl, alt: "" })
-        )
-      );
-    });
-  };
+    if (isPrivate) {
+        messageClasses.push("private");
+        addRecps(msg.value?.meta?.recpsInfo || []);
+    }
 
-  if (isPrivate) {
-    messageClasses.push("private");
-    addRecps(msg.value?.meta?.recpsInfo || []);
-  }
+    if (isThreadTarget) {
+        messageClasses.push("thread-target");
+    }
 
-  if (isThreadTarget) {
-    messageClasses.push("thread-target");
-  }
-
-  if (isBlocked) {
-    messageClasses.push("blocked");
-    return section(
-      {
-        id: msg.key,
-        class: messageClasses.join(" "),
-      },
-      i18n.relationshipBlockingPost
-    );
-  }
-
-  const postOptions = {
-    post: null,
-    comment: i18n.commentDescription({ parentUrl: url.parent }),
-    subtopic: i18n.subtopicDescription({ parentUrl: url.parent }),
-    mystery: i18n.mysteryDescription,
-  };
-
-  const articleContent = article(
-    { class: "content" },
-    hasContentWarning ? div({ class: "post-subject" }, msg.value?.content?.contentWarning) : null,
-    articleElement
-  );
-
-  const fragment = section(
-    {
-      id: msg.key,
-      class: messageClasses.join(" "),
-    },
-    header(
-      div(
-        { class: "header-content" },
-        a(
-          { href: url.author },
-          img({ class: "avatar-profile", src: url.avatar, alt: "" })
-        ),
-        span({ class: "created-at" }, `${i18n.createdBy} `, a({ href: url.author }, "@", name), ` | ${timeAbsolute} | ${i18n.sendTime} `, a({ href: url.link }, timeAgo)),
-        isPrivate ? "🔒" : null,
-        isPrivate ? recps : null
-      )
-    ),
-    articleContent,
-    footer(
-      div(
-        form(
-          { action: url.likeForm, method: "post" },
-          button(
+    if (isBlocked) {
+        messageClasses.push("blocked");
+        return section(
             {
-              name: "voteValue",
-              type: "submit",
-              value: likeButton.value,
-              class: likeButton.class,
-              title: likedByMessage,
+                id: msg.key,
+                class: messageClasses.join(" "),
             },
-            `☉ ${likeCount}`
-          )
+            i18n.relationshipBlockingPost
+        );
+    }
+
+    const articleContent = article(
+        { class: "content" },
+        hasContentWarning ? div({ class: "post-subject" }, msg.value?.content?.contentWarning) : null,
+        articleElement
+    );
+
+    const fragment = section(
+        {
+            id: msg.key,
+            class: messageClasses.join(" "),
+        },
+        header(
+            div(
+                { class: "header-content" },
+                a(
+                    { href: url.author },
+                    img({ class: "avatar-profile", src: url.avatar, alt: "" })
+                ),
+                span(
+                    { class: "created-at" },
+                    `${i18n.createdBy} `,
+                    a({ href: url.author }, "@", name),
+                    ` | ${timeAbsolute} | ${i18n.sendTime} `,
+                    a({ href: url.link }, timeAgo)
+                ),
+                isPrivate ? "🔒" : null,
+                isPrivate ? recps : null
+            )
         ),
-        a({ href: url.comment }, i18n.comment),
-        isPrivate || isRoot || isFork
-          ? null
-          : a({ href: url.subtopic }, nbsp, i18n.subtopic)
-      ),
-      br()
-    )
-  );
+        articleContent,
+        footer(
+            div(
+                form(
+                    { action: url.likeForm, method: "post" },
+                    button(
+                        {
+                            name: "voteValue",
+                            type: "submit",
+                            value: likeButton.value,
+                            class: likeButton.class,
+                            title: likedByMessage,
+                        },
+                        `☉ ${likeCount}`
+                    )
+                ),
+                a({ href: url.comment }, i18n.comment),
+                isPrivate || isRoot || isFork
+                    ? null
+                    : a({ href: url.subtopic }, nbsp, i18n.subtopic)
+            ),
+            br()
+        )
+    );
 
-  const threadSeparator = [br()];
+    const threadSeparator = [br()];
 
-  if (aside) {
-    return [fragment, postAside(msg), isRoot ? threadSeparator : null];
-  } else {
-    return fragment;
-  }
+    if (aside) {
+        return [fragment, postAside(msg), isRoot ? threadSeparator : null];
+    } else {
+        return fragment;
+    }
 };
 
 exports.editProfileView = ({ name, description }) =>
@@ -1853,14 +2069,23 @@ exports.publishCustomView = async () => {
 exports.threadView = ({ messages }) => {
   const rootMessage = messages[0];
   const rootAuthorName = rootMessage.value.meta.author.name;
-  const rootSnippet = postSnippet(
-    lodash.get(rootMessage, "value.content.text", i18n.mysteryDescription)
+
+  const needsPdfViewer = Array.isArray(messages) && messages.some((m) => {
+    const t = String(m?.value?.content?.type || "").toLowerCase();
+    return t === "document";
+  });
+
+  const tpl = template(
+    [`@${rootAuthorName}`],
+    div(thread(messages))
   );
-  return template([`@${rootAuthorName}`], 
-    div(
-    thread(messages)
-    )
-  );
+
+  return `${tpl}${
+    needsPdfViewer
+      ? `<script type="module" src="/js/pdf.min.mjs"></script>
+         <script src="/js/pdf-viewer.js"></script>`
+      : ""
+  }`;
 };
 
 exports.publishView = (preview, text, contentWarning) => {
@@ -2023,13 +2248,13 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
 };
 
 exports.previewView = ({ previewData, contentWarning }) => {
-  const publishAction = "/publish";
-  const preview = generatePreview({
-    previewData,
-    contentWarning,
-    action: publishAction,
-  });
-  return exports.publishView(preview, previewData.formattedText, contentWarning);
+    const publishAction = "/publish";
+    const preview = generatePreview({
+        previewData,
+        contentWarning,
+        action: publishAction,
+    });
+    return exports.publishView(preview, previewData.text || "", contentWarning);
 };
 
 const viewInfoBox = ({ viewTitle = null, viewDescription = null }) => {

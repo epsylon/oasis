@@ -289,7 +289,7 @@ exports.singleTaskView = async (task, filter, comments = []) => {
           span({ class: 'card-label' }, i18n.taskAssignedTo + ':'),
           span({ class: 'card-value' },
             Array.isArray(task.assignees) && task.assignees.length
-              ? task.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
+              ? task.assignees.map((id, i) => [i > 0 ? ', ' : '', a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
               : i18n.noAssignees
           )
         ),

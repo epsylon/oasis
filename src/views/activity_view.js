@@ -91,6 +91,8 @@ function renderActionCards(actions, userId) {
         .replace(/([a-z])([A-Z])/g, '$1 · $2');
       const finalSub = pretty || 'EVENT';
       headerText = `[COURTS · ${finalSub.toUpperCase()}]`;
+    } else if (type === 'taskAssignment') {
+      headerText = `[${String(i18n.typeTask || 'TASK').toUpperCase()} · ASSIGNMENT]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -382,6 +384,34 @@ function renderActionCards(actions, userId) {
           status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : ""
         )
       );
+    }
+    
+    if (type === 'taskAssignment') {
+        const { title, added, removed } = content || {};
+        const addList = Array.isArray(added) ? added : [];
+        const remList = Array.isArray(removed) ? removed : [];
+        const renderUserList = (ids) =>
+            ids.map((id, i) => [i > 0 ? ', ' : '', a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)]).flat();
+        cardBody.push(
+            div({ class: 'card-section task' },
+                div({ class: 'card-field' },
+                    span({ class: 'card-label' }, i18n.title + ':'),
+                    span({ class: 'card-value' }, title || '')
+                ),
+                addList.length
+                    ? div({ class: 'card-field' },
+                        span({ class: 'card-label' }, (i18n.taskAssignedTo || 'Assigned to') + ':'),
+                        span({ class: 'card-value' }, ...renderUserList(addList))
+                    )
+                    : '',
+                remList.length
+                    ? div({ class: 'card-field' },
+                        span({ class: 'card-label' }, (i18n.taskUnassignedFrom || 'Unassigned from') + ':'),
+                        span({ class: 'card-value' }, ...renderUserList(remList))
+                    )
+                    : ''
+            )
+        );
     }
 
     if (type === 'feed') {
@@ -960,6 +990,7 @@ function getViewDetailsAction(type, action) {
     case 'bookmark':   return `/bookmarks/${id}`;
     case 'event':      return `/events/${id}`;
     case 'task':       return `/tasks/${id}`;
+    case 'taskAssignment': return `/tasks/${encodeURIComponent(action.content?.taskId || action.tipId || action.id)}`;
     case 'about':      return `/author/${encodeURIComponent(action.author)}`;
     case 'post':       return `/thread/${id}#${id}`;
     case 'vote':       return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
@@ -1025,6 +1056,8 @@ exports.activityView = (actions, filter, userId) => {
       const t = String(action.type || '').toLowerCase();
       return t === 'courtscase' || t === 'courtsnomination' || t === 'courtsnominationvote';
     });
+  } else if (filter === 'task') {
+    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment'));
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all') && action.type !== 'tombstone');
   }

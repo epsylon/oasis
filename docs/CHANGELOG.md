@@ -13,7 +13,15 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
-## v0.5.7 - 2025-11-25
+## v0.5.8 - 2025-11-25
+
+### Fixed
+
+ + Fixed post preview from a pre-cached context (Core plugin).
+ + Fixed tasks assignement to others different to the author (Core plugin).
+ + Fixed comments context adding different to blog/post (Core plugin).
+
+## v0.5.7 - 2025-11-24
 
 ### Added
 

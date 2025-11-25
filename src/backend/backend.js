@@ -362,7 +362,6 @@ async function renderBlobMarkdown(text, mentions = {}, myFeedId, myUsername) {
   return text;
 }
 
-let formattedTextCache = null; 
 const ADDR_PATH = path.join(__dirname, "..", "configs", "wallet-addresses.json");
 function readAddrMap() {
   try { return JSON.parse(fs.readFileSync(ADDR_PATH, "utf8")); } catch { return {}; }
@@ -373,68 +372,84 @@ function writeAddrMap(map) {
 }
 
 const preparePreview = async function (ctx) {
-  let text = String(ctx.request.body.text || "");
-  const mentions = {};
-  const rex = /(^|\s)(?!\[)@([a-zA-Z0-9\-/.=+]{3,})\b/g;
-  let m;
-  while ((m = rex.exec(text)) !== null) {
-    const token = m[2];
-    const key = token;
-    let found = mentions[key] || [];
-    if (/\.ed25519$/.test(token)) {
-      const name = await about.name(token);
-      const img = await about.image(token);
-      found.push({
-        feed: token,
-        name,
-        img,
-        rel: { followsMe: false, following: false, blocking: false, me: false }
-      });
-    } else {
-      const matches = about.named(token);
-      for (const match of matches) {
-        found.push(match);
-      }
+    let text = String(ctx.request.body.text || "");
+    const contentWarning = String(ctx.request.body.contentWarning || "");
+    const mentions = {};
+    const rex = /(^|\s)(?!\[)@([a-zA-Z0-9\-/.=+]{3,})\b/g;
+    let m;
+
+    while ((m = rex.exec(text)) !== null) {
+        const token = m[2];
+        const key = token;
+        let found = mentions[key] || [];
+
+        if (/\.ed25519$/.test(token)) {
+            const name = await about.name(token);
+            const img = await about.image(token);
+            found.push({
+                feed: token,
+                name,
+                img,
+                rel: { followsMe: false, following: false, blocking: false, me: false }
+            });
+        } else {
+            const matches = about.named(token);
+            for (const match of matches) {
+                found.push(match);
+            }
+        }
+
+        if (found.length > 0) {
+            mentions[key] = found;
+        }
     }
-    if (found.length > 0) {
-      mentions[key] = found;
+
+    Object.keys(mentions).forEach((key) => {
+        const matches = mentions[key];
+        const meaningful = matches.filter(
+            (m) => (m.rel?.followsMe || m.rel?.following) && !m.rel?.blocking
+        );
+        mentions[key] = meaningful.length > 0 ? meaningful : matches;
+    });
+
+    const replacer = (match, prefix, token) => {
+        const matches = mentions[token];
+        if (matches && matches.length === 1) {
+            return `${prefix}[@${matches[0].name}](${matches[0].feed})`;
+        }
+        return match;
+    };
+
+    text = text.replace(rex, replacer);
+
+    const blobMarkdown = await handleBlobUpload(ctx, "blob");
+    if (blobMarkdown) {
+        text += blobMarkdown;
     }
-  }
-  Object.keys(mentions).forEach((key) => {
-    let matches = mentions[key];
-    const meaningful = matches.filter((m) => (m.rel?.followsMe || m.rel?.following) && !m.rel?.blocking);
-    mentions[key] = meaningful.length > 0 ? meaningful : matches;
-  });
-  const replacer = (match, prefix, token) => {
-    const matches = mentions[token];
-    if (matches && matches.length === 1) {
-      return `${prefix}[@${matches[0].name}](${matches[0].feed})`;
+
+    const ssbClient = await cooler.open();
+    const authorMeta = {
+        id: ssbClient.id,
+        name: await about.name(ssbClient.id),
+        image: await about.image(ssbClient.id),
+    };
+
+    const renderedText = await renderBlobMarkdown(
+        text,
+        mentions,
+        authorMeta.id,
+        authorMeta.name
+    );
+
+    const hasBrTags = /<br\s*\/?>/i.test(renderedText);
+    const hasBlockTags = /<(p|div|ul|ol|li|pre|blockquote|h[1-6]|table|tr|td|th|section|article)\b/i.test(renderedText);
+
+    let formattedText = renderedText;
+    if (!hasBrTags && !hasBlockTags && /[\r\n]/.test(renderedText)) {
+        formattedText = renderedText.replace(/\r\n|\r|\n/g, "<br>");
     }
-    return match;
-  };
-  text = text.replace(rex, replacer);
-  const blobMarkdown = await handleBlobUpload(ctx, "blob");
-  if (blobMarkdown) {
-    text += blobMarkdown;
-  }
-  const ssbClient = await cooler.open();
-  const authorMeta = {
-    id: ssbClient.id,
-    name: await about.name(ssbClient.id),
-    image: await about.image(ssbClient.id),
-  };
-  const renderedText = await renderBlobMarkdown(text, mentions, authorMeta.id, authorMeta.name);
-  const hasBrTags = /<br\s*\/?>/.test(renderedText);
-  const formattedText = formattedTextCache || (!hasBrTags ? renderedText.replace(/\n/g, '<br>') : renderedText);
-  if (!formattedTextCache && !hasBrTags) {
-    formattedTextCache = formattedText;
-  }
-  const contentWarning = ctx.request.body.contentWarning || '';
-  let finalContent = formattedText;
-  if (contentWarning && !finalContent.startsWith(contentWarning)) {
-    finalContent = `<br>${finalContent}`;
-  }
-  return { authorMeta, text: renderedText, formattedText: finalContent, mentions };
+
+    return { authorMeta, text, formattedText, mentions, contentWarning };
 };
 
 // set koaMiddleware maxSize: 50 MiB (voted by community at: 09/04/2025)
@@ -898,7 +913,7 @@ router
     const imageId = ctx.params.imageId;
     const filter = ctx.query.filter || 'all'; 
     const image = await imagesModel.getImageById(imageId);
-    const comments = await getVoteComments(imageId); // o getImageComments(imageId)
+    const comments = await getVoteComments(imageId);
     const imageWithCount = { ...image, commentCount: comments.length };
     ctx.body = await singleImageView(imageWithCount, filter, comments);
    })

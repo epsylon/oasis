@@ -53,8 +53,25 @@ module.exports = ({ cooler }) => {
       );
       const c = old.content;
       if (c.type !== 'task') throw new Error('Invalid type');
-      if (c.author !== userId) throw new Error('Not the author');
+      const keys = Object.keys(updatedData || {}).filter(k => updatedData[k] !== undefined);
+      const assigneesOnly = keys.length === 1 && keys[0] === 'assignees';
+      const taskCreator = old.author || c.author;
+      if (!assigneesOnly && taskCreator !== userId) throw new Error('Not the author');
       if (c.status === 'CLOSED') throw new Error('Cannot edit a closed task');
+          const uniq = (arr) => Array.from(new Set((Array.isArray(arr) ? arr : []).filter(x => typeof x === 'string' && x.trim().length)));
+          let nextAssignees = Array.isArray(c.assignees) ? uniq(c.assignees) : [];
+      if (assigneesOnly) {
+        const proposed = uniq(updatedData.assignees);
+        const oldNoSelf = uniq(nextAssignees.filter(x => x !== userId)).sort();
+        const newNoSelf = uniq(proposed.filter(x => x !== userId)).sort();
+        if (oldNoSelf.length !== newNoSelf.length || oldNoSelf.some((v, i) => v !== newNoSelf[i])) {
+          throw new Error('Not allowed');
+        }
+        const hadSelf = nextAssignees.includes(userId);
+        const hasSelfNow = proposed.includes(userId);
+        if (hadSelf === hasSelfNow) throw new Error('Not allowed');
+        nextAssignees = proposed;
+      }
       let newStart = c.startTime;
       if (updatedData.startTime != null && updatedData.startTime !== '') {
         const m = moment(updatedData.startTime);
@@ -96,6 +113,7 @@ module.exports = ({ cooler }) => {
         tags: newTags,
         isPublic: newVisibility,
         status: updatedData.status ?? c.status,
+        assignees: assigneesOnly ? nextAssignees : (updatedData.assignees !== undefined ? uniq(updatedData.assignees) : nextAssignees),
         updatedAt: new Date().toISOString(),
         replaces: taskId
       };

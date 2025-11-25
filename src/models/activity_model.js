@@ -76,6 +76,45 @@ module.exports = ({ cooler }) => {
         if (type !== 'project') {
           const tip = arr.reduce((best, a) => (a.ts > best.ts ? a : best), arr[0]);
           for (const a of arr) idToTipId.set(a.id, tip.id);
+
+          if (type === 'task' && tip && tip.content && tip.content.isPublic !== 'PRIVATE') {
+            const uniq = (xs) => Array.from(new Set((Array.isArray(xs) ? xs : []).filter(x => typeof x === 'string' && x.trim().length)));
+            const sorted = arr
+              .filter(a => a.type === 'task' && a.content && typeof a.content === 'object')
+              .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
+            let prev = null;
+
+            for (const ev of sorted) {
+              const cur = uniq(ev.content.assignees);
+              if (prev) {
+                const prevSet = new Set(prev);
+                const curSet = new Set(cur);
+                const added = cur.filter(x => !prevSet.has(x));
+                const removed = prev.filter(x => !curSet.has(x));
+
+                if (added.length || removed.length) {
+                  const overlayId = `${ev.id}:assignees:${added.join(',')}:${removed.join(',')}`;
+                  idToAction.set(overlayId, {
+                    id: overlayId,
+                    author: ev.author,
+                    ts: ev.ts,
+                    type: 'taskAssignment',
+                    content: {
+                      taskId: tip.id,
+                      title: tip.content.title || ev.content.title || '',
+                      added,
+                      removed,
+                      isPublic: tip.content.isPublic
+                    }
+                  });
+                  idToTipId.set(overlayId, overlayId);
+                }
+              }
+              prev = cur;
+            }
+          }
+
           continue;
         }
 
@@ -147,12 +186,14 @@ module.exports = ({ cooler }) => {
       const perAuthorUnique = new Set(['karmaScore']);
       const byKey = new Map();
       const norm = s => String(s || '').trim().toLowerCase();
+
       for (const a of deduped) {
         const c = a.content || {};
         const effTs =
           (c.updatedAt && Date.parse(c.updatedAt)) ||
           (c.createdAt && Date.parse(c.createdAt)) ||
           (a.ts || 0);
+
         if (mediaTypes.has(a.type)) {
           const u = c.url || c.title || `${a.type}:${a.id}`;
           const key = `${a.type}:${u}`;
@@ -166,7 +207,17 @@ module.exports = ({ cooler }) => {
           const target = c.about || a.author;
           const key = `about:${target}`;
           const prev = byKey.get(key);
-          if (!prev || effTs > prev.__effTs) byKey.set(key, { ...a, __effTs: effTs });
+          const prevContent = prev && (prev.content || {});
+          const prevHasImage = !!(prevContent && prevContent.image);
+          const newHasImage = !!c.image;
+
+          if (!prev) {
+            byKey.set(key, { ...a, __effTs: effTs, __hasImage: newHasImage });
+          } else if (!prevHasImage && newHasImage) {
+            byKey.set(key, { ...a, __effTs: effTs, __hasImage: newHasImage });
+          } else if (prevHasImage === newHasImage && effTs > prev.__effTs) {
+            byKey.set(key, { ...a, __effTs: effTs, __hasImage: newHasImage });
+          }
         } else if (a.type === 'tribe') {
           const t = norm(c.title);
           if (t) {
@@ -182,7 +233,8 @@ module.exports = ({ cooler }) => {
           byKey.set(key, { ...a, __effTs: effTs });
         }
       }
-      deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; return x });
+
+      deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
       let out;
       if (filter === 'mine') out = deduped.filter(a => a.author === userId);
       else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff) }
@@ -198,8 +250,9 @@ module.exports = ({ cooler }) => {
           const t = String(a.type || '').toLowerCase();
           return t === 'courtscase' || t === 'courtsnomination' || t === 'courtsnominationvote';
         });
+      else if (filter === 'task')
+        out = deduped.filter(a => a.type === 'task' || a.type === 'taskAssignment');
       else out = deduped.filter(a => a.type === filter);
-
       out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
       return out;
     }
