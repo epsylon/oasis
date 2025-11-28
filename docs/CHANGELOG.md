@@ -13,6 +13,16 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.5.9 - 2025-11-28
+
+### Added
+
+ + Added fixed (also linked) threads into activity feed (Activity plugin).
+ 
+### Fixed
+
+ + Fixed laws stats (Parliament plugin).
+
 ## v0.5.8 - 2025-11-25
 
 ### Fixed

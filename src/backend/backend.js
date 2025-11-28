@@ -78,8 +78,30 @@ function readWalletMap() {
 }
 
 //parliament
+let electionInFlight = null;
+async function ensureTerm() {
+  const current = await parliamentModel.getCurrentTerm().catch(() => null);
+  if (current) return current;
+  if (electionInFlight) return electionInFlight;
+  electionInFlight = (async () => {
+    try { return await parliamentModel.resolveElection(); } catch { return null; }
+    finally { electionInFlight = null; }
+  })();
+  return electionInFlight;
+}
+let sweepInFlight = null;
+async function runSweepOnce() {
+  if (sweepInFlight) return sweepInFlight;
+  sweepInFlight = (async () => {
+    try { await parliamentModel.sweepProposals(); } catch {}
+    finally { sweepInFlight = null; }
+  })();
+  return sweepInFlight;
+}
 async function buildState(filter) {
   const f = (filter || 'government').toLowerCase();
+  await ensureTerm();
+  await runSweepOnce();
   const [govCard, candidatures, proposals, canPropose, laws, historical] = await Promise.all([
     parliamentModel.getGovernmentCard(),
     parliamentModel.listCandidatures('OPEN'),
@@ -1138,18 +1160,17 @@ router
   })
   .get('/parliament', async (ctx) => {
     const mod = ctx.cookies.get('parliamentMod') || 'on';
-    if (mod !== 'on') { ctx.redirect('/modules'); return }
+    if (mod !== 'on') { ctx.redirect('/modules'); return; }
     const filter = (ctx.query.filter || 'government').toLowerCase();
-    let governmentCard = await parliamentModel.getGovernmentCard();
-    if (!governmentCard || !governmentCard.end || moment().isAfter(moment(governmentCard.end))) {
-      await parliamentModel.resolveElection();
-      governmentCard = await parliamentModel.getGovernmentCard();
-    }
+    await ensureTerm();
+    await runSweepOnce();
     const [
+      governmentCard,
       candidatures, proposals, futureLaws, canPropose, laws,
       historical, leaders, revocations, futureRevocations, revocationsEnactedCount,
       inhabitantsAll
-     ] = await Promise.all([
+    ] = await Promise.all([
+      parliamentModel.getGovernmentCard(),
       parliamentModel.listCandidatures('OPEN'),
       parliamentModel.listProposalsCurrent(),
       parliamentModel.listFutureLawsCurrent(),
@@ -1164,7 +1185,12 @@ router
     ]);
     const inhabitantsTotal = Array.isArray(inhabitantsAll) ? inhabitantsAll.length : 0;
     const leader = pickLeader(candidatures || []);
-    const leaderMeta = leader ? await parliamentModel.getActorMeta({ targetType: leader.targetType || leader.powerType || 'inhabitant', targetId: leader.targetId || leader.powerId }) : null;
+    const leaderMeta = leader
+      ? await parliamentModel.getActorMeta({
+          targetType: leader.targetType || leader.powerType || 'inhabitant',
+          targetId: leader.targetId || leader.powerId
+        })
+      : null;
     const powerMeta = (governmentCard && (governmentCard.powerType === 'tribe' || governmentCard.powerType === 'inhabitant'))
       ? await parliamentModel.getActorMeta({ targetType: governmentCard.powerType, targetId: governmentCard.powerId })
       : null;
@@ -1172,18 +1198,14 @@ router
     for (const g of (historical || []).slice(0, 12)) {
       if (g.powerType === 'tribe' || g.powerType === 'inhabitant') {
         const k = `${g.powerType}:${g.powerId}`;
-        if (!historicalMetas[k]) {
-          historicalMetas[k] = await parliamentModel.getActorMeta({ targetType: g.powerType, targetId: g.powerId });
-        }
+        if (!historicalMetas[k]) historicalMetas[k] = await parliamentModel.getActorMeta({ targetType: g.powerType, targetId: g.powerId });
       }
     }
     const leadersMetas = {};
     for (const r of (leaders || []).slice(0, 20)) {
       if (r.powerType === 'tribe' || r.powerType === 'inhabitant') {
         const k = `${r.powerType}:${r.powerId}`;
-        if (!leadersMetas[k]) {
-          leadersMetas[k] = await parliamentModel.getActorMeta({ targetType: r.powerType, targetId: r.powerId });
-        }
+        if (!leadersMetas[k]) leadersMetas[k] = await parliamentModel.getActorMeta({ targetType: r.powerType, targetId: r.powerId });
       }
     }
     const govWithPopulation = governmentCard ? { ...governmentCard, inhabitantsTotal } : { inhabitantsTotal };
@@ -1200,10 +1222,10 @@ router
       leaderMeta,
       powerMeta,
       historicalMetas,
-      leadersMetas,  
+      leadersMetas,
       revocations,
       futureRevocations,
-      revocationsEnactedCount 
+      revocationsEnactedCount
     });
   })
   .get('/courts', async (ctx) => {
@@ -3181,7 +3203,7 @@ router
     ctx.redirect('/parliament?filter=proposals');
   })
   .post('/parliament/resolve', koaBody(), async (ctx) => {
-    await parliamentModel.resolveElection().catch(e => ctx.throw(400, String((e && e.message) || e)));
+    await ensureTerm();
     ctx.redirect('/parliament?filter=government');
   })
   .post('/parliament/revocations/create', koaBody(), async (ctx) => {

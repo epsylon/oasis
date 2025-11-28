@@ -39,6 +39,107 @@ function pickActiveParliamentTerm(terms) {
   return terms.sort(cmp)[0];
 }
 
+function safeMsgId(x) {
+  if (typeof x === 'string') return x;
+  if (x && typeof x === 'object') return x.key || x.id || x.link || '';
+  return '';
+}
+
+function stripHtml(s) {
+  return String(s || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function excerptPostText(content, max = 220) {
+  const raw = stripHtml(content?.text || '');
+  if (!raw) return '';
+  return raw.length > max ? raw.slice(0, max - 1) + '…' : raw;
+}
+
+function getThreadIdFromPost(action) {
+  const c = action.value?.content || action.content || {};
+  const fork = safeMsgId(c.fork);
+  const root = safeMsgId(c.root);
+  return fork || root || action.id;
+}
+
+function getReplyToIdFromPost(action, byId) {
+  const c = action.value?.content || action.content || {};
+  const root = safeMsgId(c.root);
+  const branch = Array.isArray(c.branch) ? c.branch.filter(x => typeof x === 'string') : [];
+  let best = '';
+  let bestTs = -1;
+  for (const id of branch) {
+    const a = byId.get(id);
+    if (a && (a.ts || 0) > bestTs) { best = id; bestTs = a.ts || 0; }
+  }
+  return best || root || '';
+}
+
+function buildActivityItemsWithPostThreads(deduped, allActions) {
+  const byId = new Map();
+  for (const a of allActions) if (a?.id) byId.set(a.id, a);
+  for (const a of deduped) if (a?.id) byId.set(a.id, a);
+
+  const groups = new Map();
+  const out = [];
+
+  for (const a of deduped) {
+    if (a.type !== 'post') {
+      out.push(a);
+      continue;
+    }
+    const threadId = getThreadIdFromPost(a);
+    if (!groups.has(threadId)) groups.set(threadId, []);
+    groups.get(threadId).push(a);
+  }
+
+  for (const [threadId, posts] of groups.entries()) {
+    const sortedDesc = posts.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const hasReplies = sortedDesc.some(p => getThreadIdFromPost(p) !== p.id) || sortedDesc.length > 1;
+
+    if (!hasReplies || sortedDesc.length === 1) {
+      out.push(sortedDesc[0]);
+      continue;
+    }
+
+    const latest = sortedDesc[0];
+    const rootAction = byId.get(threadId);
+    const replies = sortedDesc
+      .filter(p => p.id !== threadId)
+      .slice()
+      .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+
+    out.push({
+      id: `thread:${threadId}`,
+      type: 'postThread',
+      author: latest.author,
+      ts: latest.ts,
+      content: {
+        threadId,
+        root: rootAction
+          ? {
+              id: rootAction.id,
+              author: rootAction.author,
+              text: excerptPostText(rootAction.value?.content || rootAction.content || {}, 240)
+            }
+          : null,
+        replies: replies.map(p => ({
+          id: p.id,
+          author: p.author,
+          ts: p.ts,
+          text: excerptPostText(p.value?.content || p.content || {}, 200)
+        }))
+      }
+    });
+  }
+
+  out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  return out;
+}
+
 function renderActionCards(actions, userId) {
   const validActions = actions
     .filter(action => {
@@ -70,15 +171,14 @@ function renderActionCards(actions, userId) {
   }
 
   const seenDocumentTitles = new Set();
-
-  const cards = deduped.map(action => {
+  const items = buildActivityItemsWithPostThreads(deduped, actions);
+  const cards = items.map(action => {
     const date = action.ts ? new Date(action.ts).toLocaleString() : "";
     const userLink = action.author
       ? a({ href: `/author/${encodeURIComponent(action.author)}` }, action.author)
       : 'unknown';
     const type = action.type || 'unknown';
     let skip = false;
-
     let headerText;
     if (type.startsWith('parliament')) {
       const sub = type.replace('parliament', '');
@@ -443,12 +543,76 @@ function renderActionCards(actions, userId) {
       } else {
         bodyNode = p({ class: 'post-text' }, ...renderUrl(rawText));
       }
+      const byId = new Map(actions.map(a => [a.id, a]));
+      const threadId = getThreadIdFromPost(action);
+      const replyToId = getReplyToIdFromPost(action, byId);
+      if (threadId && threadId !== action.id) {
+        const ctxHref = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(replyToId || threadId)}`;
+        const parent = byId.get(replyToId) || byId.get(threadId);
+        const parentAuthor = parent?.author;
+      }
       cardBody.push(
         div({ class: 'card-section post' },
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
           bodyNode
         )
       );
+    }
+
+    if (type === 'postThread') {
+        const c = action.content || {};
+        const threadId = c.threadId;
+        const href = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(threadId)}`;
+        const root = c.root;
+        const replies = Array.isArray(c.replies) ? c.replies : [];
+        const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        const limit = 5; // max posts when threading
+        const overflow = repliesAsc.length > limit;
+        const show = repliesAsc.slice(Math.max(0, repliesAsc.length - limit));
+        const lastId = repliesAsc.length ? repliesAsc[repliesAsc.length - 1].id : threadId;
+        const viewMoreHref = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(lastId)}`;
+        return div({ class: 'card card-rpg post-thread' },
+            div({ class: 'card-header' },
+                h2({ class: 'card-label' }, `[${String(i18n.typePost || 'POST').toUpperCase()} · THREAD]`),
+                form({ method: 'GET', action: href },
+                    button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
+                )
+            ),
+            div({ class: 'card-body' },
+                root && root.text
+                    ? div({ class: 'card-section' },
+                        p({ class: 'post-text' }, ...renderUrl(root.text))
+                    )
+                    : '',
+                div({ class: 'card-section' },
+		show.map(r => {
+		    const commentHref = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(r.id)}`;
+		    const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
+		    return div({ class: 'thread-reply-item' },
+			div({ class: 'thread-reply' },
+			    r.text ? p({ class: 'post-text' }, ...renderUrl(r.text)) : ''
+			),
+			div({ class: 'card-footer thread-reply-footer' },
+			    span({ class: 'date-link' }, rDate),
+			    a({ href: `/author/${encodeURIComponent(r.author)}`, class: 'user-link' }, `${r.author}`),
+			    form({ method: 'GET', action: commentHref, class: 'inline-form' },
+				button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
+			    )
+			)
+		    );
+		}),
+                overflow
+                    ? div({ style: 'display:flex; justify-content:center; margin-top:12px;' },
+                        a({ class: 'filter-btn', href: viewMoreHref }, i18n.continueReading)
+                    )
+                    : ''
+            )
+        ),
+        p({ class: 'card-footer' },
+            span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
+            a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
+        )
+        );
     }
 
     if (type === 'forum') {
@@ -512,7 +676,7 @@ function renderActionCards(actions, userId) {
       cardBody.push(
         div({ class: 'card-section contact' },
           p({ class: 'card-field' },
-            a({ href: `/author/${encodeURIComponent(contact)}`, class: 'activitySpreadInhabitant2' }, contact)
+            a({ href: `/author/${encodeURIComponent(contact)}`}, contact)
           )
         )
       );
@@ -524,7 +688,7 @@ function renderActionCards(actions, userId) {
       cardBody.push(
         div({ class: 'card-section pub' },
           p({ class: 'card-field' },
-            a({ href: `/author/${encodeURIComponent(key || '')}`, class: 'activitySpreadInhabitant2' }, key || '')
+            a({ href: `/author/${encodeURIComponent(key || '')}` }, key || '')
           )
         )
       );

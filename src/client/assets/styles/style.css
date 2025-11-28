@@ -721,6 +721,35 @@ footer .btn:hover {
   max-width: 100%;
 }
 
+.thread-reply-item {
+    margin-bottom: 18px;
+}
+
+.thread-reply-item:last-child {
+    margin-bottom: 0;
+}
+
+.thread-reply-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    padding: 0;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.thread-reply-footer .inline-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.thread-reply-footer .inline-form button {
+    margin: 0;
+}
+
 .publish-textarea {
   min-height: 10em;
   padding: 0.75em;
