@@ -269,8 +269,8 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         );
       case 'bookmark':
         return div({ class: 'search-bookmark' },
-          content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
-          content.url ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkUrlLabel + ':'), span({ class: 'card-value' }, a({ href: content.url, target: '_blank' }, content.url))) : null,
+          content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null, br(),
+          content.url ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkUrlLabel + ':'), span({ class: 'card-value' }, a({ href: content.url, target: '_blank' }, content.url))) : null,br(),
           content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkCategory + ':'), span({ class: 'card-value' }, content.category)) : null,
           content.lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, new Date(content.lastVisit).toLocaleString())) : null,
           content.tags && content.tags.length
@@ -508,3 +508,4 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
 };
 
 exports.searchView = searchView;
+

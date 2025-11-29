@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
+const opinionCategories = require('../backend/opinion_categories');
 
 const userId = config.keys.id;
 
@@ -151,15 +152,14 @@ const renderVideoList = (filteredVideos, filter) => {
             a({ href: `/author/${encodeURIComponent(video.author)}`, class: 'user-link' }, `${video.author}`)
           ),
           div({ class: "voting-buttons" },
-            ['interesting','necessary','funny','disgusting','sensible',
-             'propaganda','adultOnly','boring','confusing','inspiring','spam']
-              .map(category =>
-                form({ method: "POST", action: `/videos/opinions/${encodeURIComponent(video.key)}/${category}` },
-                  button({ class: "vote-btn" },
-                    `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${video.opinions?.[category] || 0}]`
-                  )
+            opinionCategories.map(category =>
+              form({ method: "POST", action: `/videos/opinions/${encodeURIComponent(video.key)}/${category}` },
+                button(
+                  { class: "vote-btn" },
+                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${video.opinions?.[category] || 0}]`
                 )
               )
+            )
           )
         );
       })
@@ -179,7 +179,7 @@ const renderVideoForm = (filter, videoId, videoToEdit) => {
       label(i18n.videoTitleLabel), br(),
       input({ type: "text", name: "title", placeholder: i18n.videoTitlePlaceholder, value: videoToEdit?.title || '' }), br(), br(),
       label(i18n.videoDescriptionLabel), br(),
-      textarea({name: "description", placeholder: i18n.videoDescriptionPlaceholder, rows:"4", value: videoToEdit?.description || '' }), br(), br(),
+      textarea({ name: "description", placeholder: i18n.videoDescriptionPlaceholder, rows: "4", value: videoToEdit?.description || '' }), br(), br(),
       button({ type: "submit" }, filter === 'edit' ? i18n.videoUpdateButton : i18n.videoCreateButton)
     )
   );
@@ -194,7 +194,6 @@ exports.videoView = async (videos, filter, videoId) => {
                 i18n.videoAllSectionTitle;
 
   const filteredVideos = getFilteredVideos(filter, videos, userId);
-
   const videoToEdit = videos.find(v => v.key === videoId);
 
   return template(
@@ -288,9 +287,12 @@ exports.singleVideoView = async (video, filter, comments = []) => {
         )
       ),
       div({ class: "voting-buttons" },
-        ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
+        opinionCategories.map(category =>
           form({ method: "POST", action: `/videos/opinions/${encodeURIComponent(video.key)}/${category}` },
-            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${video.opinions?.[category] || 0}]`)
+            button(
+              { class: "vote-btn" },
+              `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${video.opinions?.[category] || 0}]`
+            )
           )
         )
       ),

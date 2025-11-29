@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream')
 const moment = require('../server/node_modules/moment')
 const { getConfig } = require('../configs/config-manager.js');
+const categories = require('../backend/opinion_categories')
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
@@ -173,6 +174,7 @@ module.exports = ({ cooler }) => {
     },
 
     async createOpinion(bookmarkId, category) {
+      if (!categories.includes(category)) return Promise.reject(new Error('Invalid voting category'))
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       return new Promise((resolve, reject) => {

@@ -13,6 +13,20 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.0 - 2025-11-29
+
+### Changed
+
+ + Added more opinion categories (Opinions plugin).
+ 
+### Fixed
+
+ + Tag counters (Tags plugin).
+ + Duplicated content when searching (Search plugin).
+ + Inhabitant-linked styles for Contact and PUB (Activity plugin).
+ + Old posts retrieving at inhabitant profile (Core plugin).
+ + Fixed threading comments (Core plugin).
+
 ## v0.5.9 - 2025-11-28
 
 ### Added

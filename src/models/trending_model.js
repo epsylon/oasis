@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const opinionCategories = require('../backend/opinion_categories');
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -11,9 +12,7 @@ module.exports = ({ cooler }) => {
 
   const hasBlob = async (ssbClient, url) => {
     return new Promise(resolve => {
-      ssbClient.blobs.has(url, (err, has) => {
-        resolve(!err && has);
-      });
+      ssbClient.blobs.has(url, (err, has) => resolve(!err && has));
     });
   };
 
@@ -22,14 +21,12 @@ module.exports = ({ cooler }) => {
     'image', 'audio', 'video', 'document', 'transfer'
   ];
 
-  const categories = [
-    'interesting', 'necessary', 'funny', 'disgusting', 'sensible',
-    'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'
-  ];
+  const categories = opinionCategories;
 
   const listTrending = async (filter = 'ALL') => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
+
     const messages = await new Promise((res, rej) => {
       pull(
         ssbClient.createLogStream({ limit: logLimit }),
@@ -45,10 +42,12 @@ module.exports = ({ cooler }) => {
       const k = m.key;
       const c = m.value?.content;
       if (!c) continue;
+
       if (c.type === 'tombstone' && c.target) {
         tombstoned.add(c.target);
         continue;
       }
+
       if (c.opinions && !tombstoned.has(k) && !['task', 'event', 'report'].includes(c.type)) {
         if (c.replaces) replaces.set(c.replaces, k);
         itemsById.set(k, m);
@@ -73,26 +72,28 @@ module.exports = ({ cooler }) => {
       })
     );
     items = items.filter(Boolean);
+
     const signatureOf = (m) => {
-    const c = m.value?.content || {};
-    switch (c.type) {
-      case 'document':
-      case 'image':
-      case 'audio':
-      case 'video':
-        return `${c.type}::${(c.url || '').trim()}`;
-      case 'bookmark':
-        return `bookmark::${(c.url || '').trim().toLowerCase()}`;
-      case 'feed':
-        return `feed::${(c.text || '').replace(/\s+/g, ' ').trim()}`;
-      case 'votes':
-       return `votes::${(c.question || '').replace(/\s+/g, ' ').trim()}`;
-      case 'transfer':
-        return `transfer::${(c.concept || '')}|${c.amount || ''}|${c.from || ''}|${c.to || ''}|${c.deadline || ''}`;
-      default:
-        return `key::${m.key}`;
-    }
+      const c = m.value?.content || {};
+      switch (c.type) {
+        case 'document':
+        case 'image':
+        case 'audio':
+        case 'video':
+          return `${c.type}::${(c.url || '').trim()}`;
+        case 'bookmark':
+          return `bookmark::${(c.url || '').trim().toLowerCase()}`;
+        case 'feed':
+          return `feed::${(c.text || '').replace(/\s+/g, ' ').trim()}`;
+        case 'votes':
+          return `votes::${(c.question || '').replace(/\s+/g, ' ').trim()}`;
+        case 'transfer':
+          return `transfer::${(c.concept || '')}|${c.amount || ''}|${c.from || ''}|${c.to || ''}|${c.deadline || ''}`;
+        default:
+          return `key::${m.key}`;
+      }
     };
+
     const bySig = new Map();
     for (const m of items) {
       const sig = signatureOf(m);
@@ -136,7 +137,7 @@ module.exports = ({ cooler }) => {
     return { filtered: items };
   };
 
-  const getMessageById = async id => {
+  const getMessageById = async (id) => {
     const ssbClient = await openSsb();
     return new Promise((res, rej) => {
       ssbClient.get(id, (err, msg) => err ? rej(err) : res(msg));
@@ -146,28 +147,34 @@ module.exports = ({ cooler }) => {
   const createVote = async (contentId, category) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
+
     if (!categories.includes(category)) throw new Error('Invalid voting category');
+
     const msg = await getMessageById(contentId);
     if (!msg || !msg.content) throw new Error('Content not found');
+
     const type = msg.content.type;
     if (!types.includes(type) || ['task', 'event', 'report'].includes(type)) {
       throw new Error('Voting not allowed on this content type');
     }
-    if (msg.content.opinions_inhabitants?.includes(userId)) throw new Error('Already voted');
+
+    const inhabitants = Array.isArray(msg.content.opinions_inhabitants) ? msg.content.opinions_inhabitants : [];
+    if (inhabitants.includes(userId)) throw new Error('Already voted');
 
     const tombstone = {
       type: 'tombstone',
       target: contentId,
-      deletedAt: new Date().toISOString()
+      deletedAt: new Date().toISOString(),
+      author: userId
     };
 
     const updated = {
       ...msg.content,
       opinions: {
-        ...msg.content.opinions,
-        [category]: (msg.content.opinions?.[category] || 0) + 1
+        ...(msg.content.opinions || {}),
+        [category]: ((msg.content.opinions && msg.content.opinions[category]) || 0) + 1
       },
-      opinions_inhabitants: [...(msg.content.opinions_inhabitants || []), userId],
+      opinions_inhabitants: inhabitants.concat(userId),
       updatedAt: new Date().toISOString(),
       replaces: contentId
     };

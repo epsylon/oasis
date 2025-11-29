@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
+const categories = require('../backend/opinion_categories');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
@@ -8,7 +9,7 @@ module.exports = ({ cooler }) => {
     if (!ssb) ssb = await cooler.open();
     return ssb;
   };
-  
+
   const hasBlob = async (ssbClient, url) => {
     return new Promise(resolve => {
       ssbClient.blobs.has(url, (err, has) => {
@@ -16,11 +17,6 @@ module.exports = ({ cooler }) => {
       });
     });
   };
-
-  const categories = [
-    "interesting", "necessary", "funny", "disgusting", "sensible",
-    "propaganda", "adultOnly", "boring", "confusing", "inspiring", "spam"
-  ];
 
   const validTypes = [
     'bookmark', 'votes', 'transfer',
@@ -124,38 +120,39 @@ module.exports = ({ cooler }) => {
       })
     );
     filtered = filtered.filter(Boolean);
+
     const signatureOf = (m) => {
-    const c = m.value?.content || {};
-    switch (c.type) {
-      case 'document':
-      case 'image':
-      case 'audio':
-      case 'video':
-        return `${c.type}::${(c.url || '').trim()}`;
-      case 'bookmark': {
-        const u = (c.url || c.bookmark || '').trim().toLowerCase();
-        return `bookmark::${u}`;
+      const c = m.value?.content || {};
+      switch (c.type) {
+        case 'document':
+        case 'image':
+        case 'audio':
+        case 'video':
+          return `${c.type}::${(c.url || '').trim()}`;
+        case 'bookmark': {
+          const u = (c.url || c.bookmark || '').trim().toLowerCase();
+          return `bookmark::${u}`;
+        }
+        case 'feed': {
+          const t = (c.text || '').replace(/\s+/g, ' ').trim();
+          return `feed::${t}`;
+        }
+        case 'votes': {
+          const q = (c.question || '').replace(/\s+/g, ' ').trim();
+          return `votes::${q}`;
+        }
+        case 'transfer': {
+          const concept = (c.concept || '').trim();
+          const amount = c.amount || '';
+          const from = c.from || '';
+          const to = c.to || '';
+          const deadline = c.deadline || '';
+          return `transfer::${concept}|${amount}|${from}|${to}|${deadline}`;
+        }
+        default:
+          return `key::${m.key}`;
       }
-      case 'feed': {
-        const t = (c.text || '').replace(/\s+/g, ' ').trim();
-        return `feed::${t}`;
-      }
-      case 'votes': {
-        const q = (c.question || '').replace(/\s+/g, ' ').trim();
-        return `votes::${q}`;
-      }
-      case 'transfer': {
-        const concept = (c.concept || '').trim();
-        const amount = c.amount || '';
-        const from = c.from || '';
-        const to = c.to || '';
-        const deadline = c.deadline || '';
-        return `transfer::${concept}|${amount}|${from}|${to}|${deadline}`;
-      }
-      default:
-        return `key::${m.key}`;
-    }
-  };
+    };
 
     const bySig = new Map();
     for (const m of filtered) {

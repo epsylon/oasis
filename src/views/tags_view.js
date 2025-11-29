@@ -1,11 +1,10 @@
 const { form, button, div, h2, p, section, table, thead, tr, th, td, a, tbody } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
-const moment = require("../server/node_modules/moment");
 
 const getFilteredTags = (filter, tags) => {
-  let filteredTags = tags.filter(t => !t.tombstone);
+  let filteredTags = Array.isArray(tags) ? tags : [];
   if (filter === 'top') {
-    filteredTags = filteredTags.sort((a, b) => b.count - a.count); 
+    filteredTags = filteredTags.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   } else {
     filteredTags = filteredTags.sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -74,9 +73,9 @@ exports.tagsView = async (tags, filter) => {
       ),
       div({ class: 'filters' },
         form({ method: 'GET', action: '/tags' },
-          button({ type: 'submit', name: 'filter', value: 'all',    class: filter === 'all' ? 'filter-btn active' : 'filter-btn' }, i18n.tagsFilterAll),
-          button({ type: 'submit', name: 'filter', value: 'top',    class: filter === 'top' ? 'filter-btn active' : 'filter-btn' }, i18n.tagsFilterTop),
-          button({ type: 'submit', name: 'filter', value: 'cloud',  class: 'filter-btn' }, i18n.tagsFilterCloud)
+          button({ type: 'submit', name: 'filter', value: 'all', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' }, i18n.tagsFilterAll),
+          button({ type: 'submit', name: 'filter', value: 'top', class: filter === 'top' ? 'filter-btn active' : 'filter-btn' }, i18n.tagsFilterTop),
+          button({ type: 'submit', name: 'filter', value: 'cloud', class: filter === 'cloud' ? 'filter-btn active' : 'filter-btn' }, i18n.tagsFilterCloud)
         )
       ),
       div({ class: 'tags-list' },

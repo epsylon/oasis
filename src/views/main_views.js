@@ -858,7 +858,7 @@ const thread = (messages) => {
         lodash.get(currentMsg, "value.meta.thread.ancestorOfTarget", false)
       );
       const isBlocked = Boolean(nextMsg.value.meta.blocking);
-      const nextAuthor = lodash.get(nextMsg, "value.meta.author.name");
+      const nextAuthor = lodash.get(nextMsg, "value.meta.author.name") || (typeof nextMsg?.value?.author === "string" ? (nextMsg.value.author.startsWith("@") ? nextMsg.value.author.slice(1) : nextMsg.value.author) : "Anonymous");
       const nextSnippet = postSnippet(
         lodash.has(nextMsg, "value.content.contentWarning")
           ? lodash.get(nextMsg, "value.content.contentWarning")
@@ -970,7 +970,12 @@ const post = ({ msg, aside = false, preview = false }) => {
     const hasContentWarning = typeof msg.value?.content?.contentWarning === "string";
     const isThreadTarget = Boolean(lodash.get(msg, "value.meta.thread.target", false));
 
-    const { name } = msg.value?.meta?.author || { name: "Anonymous" };
+    const authorIdForName = msg.value?.author; 
+    const name =
+      msg.value?.meta?.author?.name ||
+      (typeof authorIdForName === "string"
+        ? (authorIdForName.startsWith("@") ? authorIdForName.slice(1) : authorIdForName)
+        : "Anonymous");
 
     const content = msg.value?.content || {};
     const contentType = String(content.type || "");
@@ -1420,6 +1425,8 @@ exports.authorView = ({
   karmaScore = 0,
   lastActivityBucket
 }) => {
+  const linkUrl = `/author/${encodeURIComponent(feedId)}`;
+
   const mention = `[@${name}](${feedId})`;
   const markdownMention = highlightJs.highlight(mention, { language: "markdown", ignoreIllegals: true }).value;
 
@@ -1560,7 +1567,7 @@ exports.authorView = ({
   }
 
   return template(i18n.profile, prefix, items);
-}
+};
 
 exports.previewCommentView = async ({
   previewData,
@@ -1593,37 +1600,68 @@ exports.commentView = async (
   text,
   contentWarning
 ) => {
-  let markdownMention;
-  const authorName = parentMessage?.value?.meta?.author?.name || "Anonymous";
-  const messageElements = await Promise.all(
-    messages.reverse().map(async (message) => {  
-    const isRootMessage = message.key === parentMessage.key;
-    const messageAuthorName = message.value?.meta?.author?.name || "Anonymous";
-    const authorFeedId = message.value?.author;
-    if (authorFeedId && authorFeedId !== myFeedId && isRootMessage) {
-      const x = `[@${messageAuthorName}](${authorFeedId})\n\n`;
-      markdownMention = x;
-    }
-      const timestamp = message?.value?.meta?.timestamp?.received;
-      const validTimestamp = moment(timestamp, moment.ISO_8601, true); 
-      const timeAgo = validTimestamp.isValid() 
-        ? validTimestamp.fromNow() 
-        : "Invalid time"; 
-      const messageId = message.key.endsWith('.sha256') ? message.key.slice(0, -7) : message.key;
-      const result = await post({ msg: { ...message, key: messageId } });
-      return result; 
-    })
-  );
+  if (!parentMessage || !parentMessage.value) {
+    throw new Error("Missing parentMessage or value");
+  }
 
-  const action = `/comment/preview/${encodeURIComponent(parentMessage.key)}`;
+  const parentKey = parentMessage.key;
+  const threadRoot = parentMessage.value?.content?.root || parentKey;
+
+  const messagesInput = Array.isArray(messages) ? messages : [];
+  const merged = [parentMessage, ...messagesInput];
+
+  const filtered = merged.filter((m) => {
+    if (!m || !m.value) return false;
+    return m.key === threadRoot || m.value?.content?.root === threadRoot;
+  });
+
+  const seen = new Set();
+  const threadMessages = [];
+  for (const m of filtered) {
+    if (m && m.key && !seen.has(m.key)) {
+      seen.add(m.key);
+      threadMessages.push(m);
+    }
+  }
+
+  const tsNum = (m) => {
+    const n1 = Number(m?.value?.timestamp);
+    if (Number.isFinite(n1) && n1 > 0) return n1;
+    const iso = m?.value?.meta?.timestamp?.received?.iso8601;
+    const raw = m?.value?.meta?.timestamp?.received;
+    const n2 = iso ? Date.parse(iso) : (raw ? Date.parse(raw) : NaN);
+    if (Number.isFinite(n2) && n2 > 0) return n2;
+    const createdAt = m?.value?.content?.createdAt;
+    const n3 = createdAt ? Date.parse(createdAt) : NaN;
+    if (Number.isFinite(n3) && n3 > 0) return n3;
+    return 0;
+  };
+
+  threadMessages.sort((a, b) => tsNum(a) - tsNum(b));
+
+  const authorName = parentMessage.value?.meta?.author?.name || parentMessage.value?.author || "Anonymous";
+
+  let markdownMention = "";
+  const parentAuthorFeedId = parentMessage.value?.author;
+  const parentAuthorName =
+    parentMessage.value?.meta?.author?.name ||
+    (typeof parentAuthorFeedId === "string"
+      ? (parentAuthorFeedId.startsWith("@") ? parentAuthorFeedId.slice(1) : parentAuthorFeedId)
+      : "Anonymous");
+
+  if (parentAuthorFeedId && parentAuthorFeedId !== myFeedId) {
+    markdownMention = `[@${parentAuthorName}](${parentAuthorFeedId})\n\n`;
+  }
+
+  const messageElements = threadMessages.map((m) => post({ msg: m }));
+
+  const action = `/comment/preview/${encodeURIComponent(parentKey)}`;
   const method = "post";
-  const isPrivate = parentMessage?.value?.meta?.private;
-  const publicOrPrivate = isPrivate ? i18n.commentPrivate : i18n.commentPublic;
-  const maybeSubtopicText = isPrivate ? [null] : i18n.commentWarning;
+  const isPrivate = Boolean(parentMessage.value?.meta?.private);
 
   return template(
     i18n.commentTitle({ authorName }),
-    div({ class: "thread-container" }, messageElements),
+    div({ class: "thread-container" }, ...messageElements),
     form(
       { action, method, enctype: "multipart/form-data" },
       i18n.blogSubject,
@@ -1635,23 +1673,23 @@ exports.commentView = async (
           type: "text",
           class: "contentWarning",
           value: contentWarning ? contentWarning : "",
-          placeholder: i18n.contentWarningPlaceholder,
+          placeholder: i18n.contentWarningPlaceholder
         })
       ),
       br,
       label({ for: "text" }, i18n.blogMessage),
       br,
-      textarea(
-        {
-          autofocus: true,
-          required: true,
-          name: "text",
-          rows: "6",
-          cols: "50",
-          placeholder: i18n.publishWarningPlaceholder,
-        },
-        text ? text : isPrivate ? null : markdownMention
-      ),
+	textarea(
+	  {
+	    autofocus: true,
+	    required: true,
+	    name: "text",
+	    rows: "6",
+	    cols: "50",
+	    placeholder: i18n.publishWarningPlaceholder
+	  },
+	  text ? text : null
+	),
       br,
       label(
         { for: "blob" },

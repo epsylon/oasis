@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream')
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const categories = require('../backend/opinion_categories')
 
 module.exports = ({ cooler }) => {
   let ssb
@@ -160,6 +161,7 @@ module.exports = ({ cooler }) => {
 
     async createOpinion(id, category) {
       const ssbClient = await openSsb()
+      if (!categories.includes(category)) return reject(new Error('Invalid voting category'))
       return new Promise((resolve, reject) => {
         ssbClient.get(id, (err, msg) => {
           if (err || !msg || msg.content?.type !== 'audio') return reject(new Error('Audio not found'))

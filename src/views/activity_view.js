@@ -676,7 +676,7 @@ function renderActionCards(actions, userId) {
       cardBody.push(
         div({ class: 'card-section contact' },
           p({ class: 'card-field' },
-            a({ href: `/author/${encodeURIComponent(contact)}`}, contact)
+            a({ href: `/author/${encodeURIComponent(contact)}`, class: "user-link"}, contact)
           )
         )
       );
@@ -688,7 +688,7 @@ function renderActionCards(actions, userId) {
       cardBody.push(
         div({ class: 'card-section pub' },
           p({ class: 'card-field' },
-            a({ href: `/author/${encodeURIComponent(key || '')}` }, key || '')
+            a({ href: `/author/${encodeURIComponent(key || '')}`, class: "user-link" }, key || '')
           )
         )
       );

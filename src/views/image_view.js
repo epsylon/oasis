@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
+const opinionCategories = require('../backend/opinion_categories');
 
 const userId = config.keys.id;
 
@@ -40,19 +41,19 @@ const renderImageList = (filteredImages, filter) => {
           renderImageActions(filter, imgObj),
           form({ method: "GET", action: `/images/${encodeURIComponent(imgObj.key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ), 
+          ),
           imgObj.title ? h2(imgObj.title) : null,
           a({ href: `#img-${encodeURIComponent(imgObj.key)}` },
             img({ src: `/blob/${encodeURIComponent(imgObj.url)}` })
           ),
           imgObj.description ? p(...renderUrl(imgObj.description)) : null,
           imgObj.tags?.length
-            ? div({ class: "card-tags" }, 
+            ? div({ class: "card-tags" },
                 imgObj.tags.map(tag =>
-                  a({
+                  a(
+                    {
                       href: `/search?query=%23${encodeURIComponent(tag)}`,
-                      class: "tag-link",
-                      style: "margin-right: 0.8em; margin-bottom: 0.5em;"
+                      class: "tag-link"
                     },
                     `#${tag}`
                   )
@@ -79,15 +80,14 @@ const renderImageList = (filteredImages, filter) => {
             )
           ),
           div({ class: "voting-buttons" },
-            ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam']
-              .map(category =>
-                form({ method: "POST", action: `/images/opinions/${encodeURIComponent(imgObj.key)}/${category}` },
-                  button(
-                    { class: "vote-btn" },
-                    `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${imgObj.opinions?.[category] || 0}]`
-                  )
+            opinionCategories.map(category =>
+              form({ method: "POST", action: `/images/opinions/${encodeURIComponent(imgObj.key)}/${category}` },
+                button(
+                  { class: "vote-btn" },
+                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${imgObj.opinions?.[category] || 0}]`
                 )
               )
+            )
           )
         );
       })
@@ -111,7 +111,7 @@ const renderImageForm = (filter, imageId, imageToEdit) => {
       label(i18n.imageTitleLabel), br(),
       input({ type: "text", name: "title", placeholder: i18n.imageTitlePlaceholder, value: imageToEdit?.title || '' }), br(), br(),
       label(i18n.imageDescriptionLabel), br(),
-      textarea({ name: "description", placeholder: i18n.imageDescriptionPlaceholder, rows:"4", value: imageToEdit?.description || '' }), br(), br(),
+      textarea({ name: "description", placeholder: i18n.imageDescriptionPlaceholder, rows: "4", value: imageToEdit?.description || '' }), br(), br(),
       label(i18n.imageMemeLabel),
       input({ type: "checkbox", name: "meme", ...(imageToEdit?.meme ? { checked: true } : {}) }), br(), br(),
       button({ type: "submit" }, filter === 'edit' ? i18n.imageUpdateButton : i18n.imageCreateButton)
@@ -220,7 +220,6 @@ exports.imageView = async (images, filter, imageId) => {
                 i18n.imageAllSectionTitle;
 
   const filteredImages = getFilteredImages(filter, images, userId);
-
   const imageToEdit = images.find(img => img.key === imageId);
 
   return template(
@@ -288,12 +287,12 @@ exports.singleImageView = async (image, filter, comments = []) => {
         image.url ? img({ src: `/blob/${encodeURIComponent(image.url)}` }) : null,
         p(...renderUrl(image.description)),
         image.tags?.length
-          ? div({ class: "card-tags" }, 
+          ? div({ class: "card-tags" },
               image.tags.map(tag =>
-                a({
+                a(
+                  {
                     href: `/search?query=%23${encodeURIComponent(tag)}`,
-                    class: "tag-link",
-                    style: "margin-right: 0.8em; margin-bottom: 0.5em;"
+                    class: "tag-link"
                   },
                   `#${tag}`
                 )
@@ -313,17 +312,17 @@ exports.singleImageView = async (image, filter, comments = []) => {
         )
       ),
       div({ class: "voting-buttons" },
-        ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam']
-          .map(category =>
-            form({ method: "POST", action: `/images/opinions/${encodeURIComponent(image.key)}/${category}` },
-              button(
-                { class: "vote-btn" },
-                `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${image.opinions?.[category] || 0}]`
-              )
+        opinionCategories.map(category =>
+          form({ method: "POST", action: `/images/opinions/${encodeURIComponent(image.key)}/${category}` },
+            button(
+              { class: "vote-btn" },
+              `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${image.opinions?.[category] || 0}]`
             )
           )
+        )
       ),
       renderImageCommentsSection(image.key, comments)
     )
   );
 };
+

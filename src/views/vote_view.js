@@ -2,6 +2,7 @@ const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th
 const { template, i18n } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
+const opinionCategories = require('../backend/opinion_categories');
 
 const userId = config.keys.id;
 
@@ -105,9 +106,9 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, userId, filter) => 
       a({ href: `/author/${encodeURIComponent(v.createdBy)}`, class: 'user-link' }, `${v.createdBy}`)
     ),
     div({ class: 'voting-buttons' },
-      ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
+      opinionCategories.map(category =>
         form({ method: 'POST', action: `/votes/opinions/${encodeURIComponent(v.id)}/${category}` },
-          button({ class: 'vote-btn' }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${v.opinions?.[category] || 0}]`)
+          button({ class: 'vote-btn' }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${v.opinions?.[category] || 0}]`)
         )
       )
     )

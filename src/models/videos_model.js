@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
+const categories = require('../backend/opinion_categories');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
@@ -58,8 +59,8 @@ module.exports = ({ cooler }) => {
             updatedAt: new Date().toISOString(),
             replaces: id
           };
-          ssbClient.publish(tombstone, err => {
-            if (err) return reject(err);
+          ssbClient.publish(tombstone, err1 => {
+            if (err1) return reject(err1);
             ssbClient.publish(updated, (err2, result) => err2 ? reject(err2) : resolve(result));
           });
         });
@@ -110,7 +111,7 @@ module.exports = ({ cooler }) => {
           key: k,
           url: c.url,
           createdAt: c.createdAt,
-         updatedAt: c.updatedAt || null,
+          updatedAt: c.updatedAt || null,
           tags: c.tags || [],
           author: c.author,
           title: c.title || '',
@@ -160,32 +161,24 @@ module.exports = ({ cooler }) => {
     },
 
     async createOpinion(id, category) {
+      if (!categories.includes(category)) return Promise.reject(new Error('Invalid voting category'));
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       return new Promise((resolve, reject) => {
         ssbClient.get(id, (err, msg) => {
           if (err || !msg || msg.content?.type !== 'video') return reject(new Error('Video not found'));
           if (msg.content.opinions_inhabitants?.includes(userId)) return reject(new Error('Already voted'));
-          const tombstone = {
-            type: 'tombstone',
-            target: id,
-            deletedAt: new Date().toISOString(),
-            author: userId
-          };
           const updated = {
             ...msg.content,
+            replaces: id,
             opinions: {
               ...msg.content.opinions,
               [category]: (msg.content.opinions?.[category] || 0) + 1
             },
             opinions_inhabitants: [...(msg.content.opinions_inhabitants || []), userId],
-            updatedAt: new Date().toISOString(),
-            replaces: id
+            updatedAt: new Date().toISOString()
           };
-          ssbClient.publish(tombstone, err => {
-            if (err) return reject(err);
-            ssbClient.publish(updated, (err2, result) => err2 ? reject(err2) : resolve(result));
-          });
+          ssbClient.publish(updated, (err2, result) => err2 ? reject(err2) : resolve(result));
         });
       });
     }

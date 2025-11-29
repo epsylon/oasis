@@ -1,8 +1,9 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span} = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
+const opinionCategories = require('../backend/opinion_categories');
 
 const userId = config.keys.id;
 
@@ -11,15 +12,23 @@ const generateFilterButtons = (filters, currentFilter, action) =>
     filters.map(mode =>
       form({ method: 'GET', action },
         input({ type: 'hidden', name: 'filter', value: mode }),
-        button({ type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+        button(
+          { type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' },
+          i18n[mode + 'Button'] || mode
+        )
       )
     )
   );
 
+const voteLabelFor = (cat) =>
+  i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat;
+
 const renderTrendingCard = (item, votes, categories, seenTitles) => {
   const c = item.value.content;
   const created = new Date(item.value.timestamp).toLocaleString();
+
   let contentHtml;
+
   if (c.type === 'bookmark') {
     const { url, description, lastVisit } = c;
     contentHtml = div({ class: 'trending-bookmark' },
@@ -29,7 +38,13 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
         ),
         br,
         url ? h2(p(a({ href: url, target: '_blank', class: "bookmark-url" }, url))) : "",
-        lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, new Date(lastVisit).toLocaleString())) : "",
+        lastVisit
+          ? div(
+              { class: 'card-field' },
+              span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'),
+              span({ class: 'card-value' }, new Date(lastVisit).toLocaleString())
+            )
+          : "",
         description ? [span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ":"), p(...renderUrl(description))] : null
       )
     );
@@ -83,6 +98,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
     const t = title?.trim();
     if (t && seenTitles.has(t)) return null;
     if (t) seenTitles.add(t);
+
     contentHtml = div({ class: 'trending-document' },
       div({ class: 'card-section document' },
         form({ method: "GET", action: `/documents/${encodeURIComponent(item.key)}` },
@@ -103,8 +119,10 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
       )
     );
   } else if (c.type === 'votes') {
-    const { question, deadline, votes, totalVotes } = c;
-    const votesList = votes && typeof votes === 'object' ? Object.entries(votes).map(([o, cnt]) => ({ option: o, count: cnt })) : [];
+    const { question, deadline, votes: vmap, totalVotes } = c;
+    const votesList = vmap && typeof vmap === 'object'
+      ? Object.entries(vmap).map(([o, cnt]) => ({ option: o, count: cnt }))
+      : [];
     contentHtml = div({ class: 'trending-votes' },
       div({ class: 'card-section votes' },
         form({ method: "GET", action: `/votes/${encodeURIComponent(item.key)}` },
@@ -120,7 +138,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
       )
     );
   } else if (c.type === 'transfer') {
-    const { from, to, concept, amount, deadline, status, confirmedBy } = c;
+    const { from, to, concept, amount, deadline, status, confirmedBy = [] } = c;
     contentHtml = div({ class: 'trending-transfer' },
       div({ class: 'card-section transfer' },
         form({ method: "GET", action: `/transfers/${encodeURIComponent(item.key)}` },
@@ -139,22 +157,42 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
   } else {
     contentHtml = div({ class: 'styled-text' },
       div({ class: 'card-section styled-text-content' },
-        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.textContentLabel + ':'), span({ class: 'card-value', innerHTML: renderTextWithStyles(c.text || c.description || c.title || '[no content]') }))
+        div(
+          { class: 'card-field' },
+          span({ class: 'card-label' }, i18n.textContentLabel + ':'),
+          span({ class: 'card-value', innerHTML: renderTextWithStyles(c.text || c.description || c.title || '[no content]') })
+        )
       )
     );
   }
 
-  return div({ class: 'trending-card', style: 'background-color:#2c2f33;border-radius:8px;padding:16px;border:1px solid #444;' },
+  return div(
+    { class: 'trending-card', style: 'background-color:#2c2f33;border-radius:8px;padding:16px;border:1px solid #444;' },
     contentHtml,
-    p({ class: 'card-footer' }, span({ class: 'date-link' }, `${created} ${i18n.performed} `), a({ href: `/author/${encodeURIComponent(item.value.author)}`, class: 'user-link' }, item.value.author)),
+    p(
+      { class: 'card-footer' },
+      span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+      a({ href: `/author/${encodeURIComponent(item.value.author)}`, class: 'user-link' }, item.value.author)
+    ),
     h2(`${i18n.trendingTotalOpinions || i18n.trendingTotalCount}: ${votes}`),
-    div({ class: 'voting-buttons' }, categories.map(cat => form({ method: 'POST', action: `/trending/${encodeURIComponent(item.key)}/${cat}` }, button({ class: 'vote-btn' }, `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)]} [${c.opinions?.[cat]||0}]`))))
+    div(
+      { class: 'voting-buttons' },
+      categories.map(cat =>
+        form({ method: 'POST', action: `/trending/${encodeURIComponent(item.key)}/${cat}` },
+          button(
+            { class: 'vote-btn' },
+            `${voteLabelFor(cat)} [${c.opinions?.[cat] || 0}]`
+          )
+        )
+      )
+    )
   );
 };
 
-exports.trendingView = (items, filter, categories) => {
+exports.trendingView = (items, filter, categories = opinionCategories) => {
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
+
   const baseFilters = ['RECENT', 'ALL', 'MINE', 'TOP'];
   const contentFilters = [
     ['votes', 'feed', 'transfer'],
@@ -187,7 +225,14 @@ exports.trendingView = (items, filter, categories) => {
 
   const header = div({ class: 'tags-header' }, h2(title), p(i18n.exploreTrending));
   const cards = filteredItems
-    .map(item => renderTrendingCard(item, Object.values(item.value.content.opinions || {}).reduce((s, n) => s + n, 0), categories, seenDocumentTitles))
+    .map(item =>
+      renderTrendingCard(
+        item,
+        Object.values(item.value.content.opinions || {}).reduce((s, n) => s + (n || 0), 0),
+        categories,
+        seenDocumentTitles
+      )
+    )
     .filter(Boolean);
 
   const hasDocument = filteredItems.some(item => item.value.content.type === 'document');
@@ -196,14 +241,18 @@ exports.trendingView = (items, filter, categories) => {
     title,
     section(
       header,
-      div({ class: 'mode-buttons', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;margin-bottom:24px;' },
+      div(
+        { class: 'mode-buttons', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;margin-bottom:24px;' },
         generateFilterButtons(baseFilters, filter, '/trending'),
         ...contentFilters.map(row =>
           div({ style: 'display:flex;flex-direction:column;gap:8px;' },
             row.map(mode =>
               form({ method: 'GET', action: '/trending' },
                 input({ type: 'hidden', name: 'filter', value: mode }),
-                button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+                button(
+                  { type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' },
+                  i18n[mode + 'Button'] || mode
+                )
               )
             )
           )

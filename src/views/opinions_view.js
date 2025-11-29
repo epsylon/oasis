@@ -3,6 +3,7 @@ const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { renderUrl } = require('../backend/renderUrl');
+const opinionCategories = require('../backend/opinion_categories');
 
 const seenDocumentTitles = new Set();
 
@@ -236,57 +237,53 @@ exports.opinionsView = (items, filter) => {
 
   const title = i18n.opinionsTitle;
   const baseFilters = ['RECENT', 'ALL', 'MINE', 'TOP'];
-  const categoryFilters = [
-    ['interesting', 'necessary', 'funny', 'disgusting'],
-    ['sensible', 'propaganda', 'adultOnly', 'boring'],
-    ['confusing', 'inspiring', 'spam']
-  ];
 
+  const cards = items
+    .map(item => {
+      const c = item.value.content;
+      const key = item.key;
+      const contentHtml = renderContentHtml(c, key);
+      if (!contentHtml) return null;
+      const voteEntries = Object.entries(c.opinions || {});
+      const total = voteEntries.reduce((sum, [, v]) => sum + v, 0);
+      const voted = c.opinions_inhabitants?.includes(config.keys.id);
+      const created = new Date(item.value.timestamp).toLocaleString();
+      const allCats = opinionCategories;
 
-const cards = items
-  .map(item => {
-    const c = item.value.content;
-    const key = item.key;
-    const contentHtml = renderContentHtml(c, key);
-    if (!contentHtml) return null;
-    const voteEntries = Object.entries(c.opinions || {});
-    const total = voteEntries.reduce((sum, [, v]) => sum + v, 0);
-    const voted = c.opinions_inhabitants?.includes(config.keys.id);
-    const created = new Date(item.value.timestamp).toLocaleString();
-    const allCats = categoryFilters.flat();
-    return div(
-      contentHtml,
-      p({ class: 'card-footer' },
-        span({ class: 'date-link' }, `${created} ${i18n.performed} `),
-        a({ href: `/author/${encodeURIComponent(item.value.author)}`, class: 'user-link' }, item.value.author)
-      ),
-      h2(`${i18n.totalOpinions || i18n.opinionsTotalCount}: ${total}`),
-      div({ class: 'voting-buttons' },
-        allCats.map(cat => {
-          const label = `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)]} [${c.opinions?.[cat] || 0}]`;
-          if (voted) {
-            return button({ class: 'vote-btn', type: 'button' }, label);
-          }
-          return form({ method: 'POST', action: `/opinions/${encodeURIComponent(key)}/${cat}` },
-            button({ class: 'vote-btn' }, label)
-          );
-        })
-      )
-    );
-  })
-  .filter(Boolean);
+      return div(
+        contentHtml,
+        p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+          a({ href: `/author/${encodeURIComponent(item.value.author)}`, class: 'user-link' }, item.value.author)
+        ),
+        h2(`${i18n.totalOpinions || i18n.opinionsTotalCount}: ${total}`),
+        div({ class: 'voting-buttons' },
+          allCats.map(cat => {
+            const label = `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${c.opinions?.[cat] || 0}]`;
+            if (voted) {
+              return button({ class: 'vote-btn', type: 'button' }, label);
+            }
+            return form({ method: 'POST', action: `/opinions/${encodeURIComponent(key)}/${cat}` },
+              button({ class: 'vote-btn' }, label)
+            );
+          })
+        )
+      );
+    })
+    .filter(Boolean);
 
   const hasDocuments = items.some(item => item.value.content?.type === 'document');
   const header = div({ class: 'tags-header' },
     h2(title),
     p(i18n.shareYourOpinions)
   );
+
   const html = template(
     title,
     section(
       header,
-      div({ class: 'mode-buttons', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;margin-bottom:24px;' },
-        div({ style: 'display:flex;flex-direction:column;gap:8px;' },
+      div({ class: 'mode-buttons' },
+        div({ class: 'column' },
           baseFilters.map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
@@ -294,13 +291,61 @@ const cards = items
             )
           )
         ),
-        ...categoryFilters.map(row =>
-          div({ style: 'display:flex;flex-direction:column;gap:8px;' },
-            row.map(mode =>
-              form({ method: 'GET', action: '/opinions' },
-                input({ type: 'hidden', name: 'filter', value: mode }),
-                button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
-              )
+        div({ class: 'column' },
+          opinionCategories.positive.slice(0, 5).map(mode =>
+            form({ method: 'GET', action: '/opinions' },
+              input({ type: 'hidden', name: 'filter', value: mode }),
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+            )
+          )
+        ),
+        div({ class: 'column' },
+          opinionCategories.positive.slice(5, 10).map(mode =>
+            form({ method: 'GET', action: '/opinions' },
+              input({ type: 'hidden', name: 'filter', value: mode }),
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+            )
+          )
+        ),
+        div({ class: 'column' },
+          opinionCategories.positive.slice(10, 15).map(mode =>
+            form({ method: 'GET', action: '/opinions' },
+              input({ type: 'hidden', name: 'filter', value: mode }),
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+            )
+          )
+        ),
+        div({ class: 'column' },
+          opinionCategories.constructive.slice(0, 5).map(mode =>
+            form({ method: 'GET', action: '/opinions' },
+              input({ type: 'hidden', name: 'filter', value: mode }),
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+            )
+          )
+        )
+      ),
+      div({ class: 'mode-buttons' },
+        div({ class: 'column' },
+          opinionCategories.constructive.slice(5, 11).map(mode =>
+            form({ method: 'GET', action: '/opinions' },
+              input({ type: 'hidden', name: 'filter', value: mode }),
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+            )
+          )
+        ),
+        div({ class: 'column' },
+          opinionCategories.moderation.slice(0, 5).map(mode =>
+            form({ method: 'GET', action: '/opinions' },
+              input({ type: 'hidden', name: 'filter', value: mode }),
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+            )
+          )
+        ),
+        div({ class: 'column' },
+          opinionCategories.moderation.slice(5, 10).map(mode =>
+            form({ method: 'GET', action: '/opinions' },
+              input({ type: 'hidden', name: 'filter', value: mode }),
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
             )
           )
         )

@@ -1,22 +1,26 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1 } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
-
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
+const opinionCategories = require('../backend/opinion_categories');
 
 const generateFilterButtons = (filters, currentFilter, action) => {
+  const cur = String(currentFilter || '').toUpperCase();
   return filters.map(mode =>
     form({ method: 'GET', action },
       input({ type: 'hidden', name: 'filter', value: mode }),
-      button({ type: 'submit', class: currentFilter === mode.toLowerCase() ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
+      button(
+        { type: 'submit', class: cur === mode ? 'filter-btn active' : 'filter-btn' },
+        i18n[mode + 'Button'] || mode
+      )
     )
   );
 };
 
 const renderFeedCard = (feed, alreadyRefeeded, alreadyVoted) => {
   const content = feed.value.content;
-  const totalVotes = Object.entries(content.opinions || {});
-  const totalCount = totalVotes.reduce((sum, [, count]) => sum + count, 0);
+  const voteEntries = Object.entries(content.opinions || {});
+  const totalCount = voteEntries.reduce((sum, [, count]) => sum + count, 0);
   const createdAt = feed.value.timestamp ? new Date(feed.value.timestamp).toLocaleString() : '';
 
   return div({ class: 'feed-card' },
@@ -33,24 +37,27 @@ const renderFeedCard = (feed, alreadyRefeeded, alreadyVoted) => {
         div({ class: 'feed-text', innerHTML: renderTextWithStyles(content.text) }),
         h2(`${i18n.totalOpinions}: ${totalCount}`),
         p({ class: 'card-footer' },
-        span({ class: 'date-link' }, `${createdAt} ${i18n.performed} `),
+          span({ class: 'date-link' }, `${createdAt} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(feed.value.author)}`, class: 'user-link' }, `${feed.value.author}`)
         )
       )
     ),
     div({ class: 'votes-wrapper' },
-      totalVotes.length > 0
+      voteEntries.length > 0
         ? div({ class: 'votes' },
-            totalVotes.map(([category, count]) =>
+            voteEntries.map(([category, count]) =>
               span({ class: 'vote-category' }, `${category}: ${count}`)
             )
           )
         : null,
       !alreadyVoted
         ? div({ class: 'voting-buttons' },
-            ['interesting','necessary','funny','disgusting','sensible','propaganda','adultOnly','boring','confusing','inspiring','spam'].map(cat =>
+            opinionCategories.map(cat =>
               form({ method: 'POST', action: `/feed/opinions/${encodeURIComponent(feed.key)}/${cat}` },
-                button({ class: 'vote-btn' }, `${i18n['vote'+cat.charAt(0).toUpperCase()+cat.slice(1)] || cat} [${content.opinions?.[cat]||0}]`)
+                button(
+                  { class: 'vote-btn' },
+                  `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${content.opinions?.[cat] || 0}]`
+                )
               )
             )
           )
@@ -60,7 +67,7 @@ const renderFeedCard = (feed, alreadyRefeeded, alreadyVoted) => {
 };
 
 exports.feedView = (feeds, filter) => {
-  const title = 
+  const title =
     filter === 'MINE'   ? i18n.MINEButton :
     filter === 'TODAY'  ? i18n.TODAYButton :
     filter === 'TOP'    ? i18n.TOPButton :
@@ -69,7 +76,7 @@ exports.feedView = (feeds, filter) => {
                           i18n.feedTitle;
 
   if (filter !== 'TOP') {
-    feeds = feeds.sort((a, b) => b.value.timestamp - a.value.timestamp);
+    feeds = feeds.sort((a, b) => (b.value.timestamp || 0) - (a.value.timestamp || 0));
   } else {
     feeds = feeds.sort((a, b) => {
       const aRefeeds = a.value.content.refeeds || 0;
@@ -88,12 +95,9 @@ exports.feedView = (feeds, filter) => {
     section(
       header,
       div({ class: 'mode-buttons-row' },
-        generateFilterButtons(['ALL', 'MINE', 'TODAY', 'TOP'], filter, '/feed'),
+        ...generateFilterButtons(['ALL', 'MINE', 'TODAY', 'TOP'], filter, '/feed'),
         form({ method: 'GET', action: '/feed/create' },
-          button({
-            type: 'submit',
-            class: 'create-button filter-btn'
-          }, i18n.createFeedTitle || "Create Feed")
+          button({ type: 'submit', class: 'create-button filter-btn' }, i18n.createFeedTitle || "Create Feed")
         )
       ),
       section(
@@ -107,7 +111,7 @@ exports.feedView = (feeds, filter) => {
                 cols: 50
               }),
               br(),
-              button({ type: 'submit' }, i18n.createFeedButton)
+              button({ type: 'submit', class: 'create-button' }, i18n.createFeedButton)
             )
           : feeds && feeds.length > 0
             ? div({ class: 'feed-container' },
@@ -132,8 +136,8 @@ exports.feedCreateView = () => {
         h2(i18n.createFeedTitle),
         p(i18n.FeedshareYourOpinions)
       ),
-      div({ class: 'mode-buttons', style: 'display:flex; gap:8px; margin-bottom:24px;' },
-        generateFilterButtons(['ALL', 'MINE', 'TODAY', 'TOP'], 'CREATE', '/feed')
+      div({ class: 'mode-buttons-row' },
+        ...generateFilterButtons(['ALL', 'MINE', 'TODAY', 'TOP'], 'CREATE', '/feed')
       ),
       form({ method: 'POST', action: '/feed/create' },
         textarea({

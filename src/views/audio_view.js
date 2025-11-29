@@ -3,6 +3,7 @@ const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
+const opinionCategories = require('../backend/opinion_categories');
 
 const userId = config.keys.id
 
@@ -89,10 +90,10 @@ const renderAudioCommentsSection = (audioId, comments = []) => {
   );
 };
 
-const renderCardField = (label, value) =>
-  div({ class: "card-field" }, 
-    span({ class: "card-label" }, label), 
-    span({ class: "card-value" }, value)
+const renderCardField = (labelText, valueText) =>
+  div({ class: "card-field" },
+    span({ class: "card-label" }, labelText),
+    span({ class: "card-value" }, valueText)
   );
 
 const renderAudioActions = (filter, audio) => {
@@ -130,7 +131,7 @@ const renderAudioList = (filteredAudios, filter) => {
             : p(i18n.audioNoFile),
           p(...renderUrl(audio.description)),
           audio.tags?.length
-            ? div({ class: "card-tags" }, 
+            ? div({ class: "card-tags" },
                 audio.tags.map(tag =>
                   a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
                 )
@@ -150,15 +151,13 @@ const renderAudioList = (filteredAudios, filter) => {
             a({ href: `/author/${encodeURIComponent(audio.author)}`, class: 'user-link' }, `${audio.author}`)
           ),
           div({ class: "voting-buttons" },
-            ['interesting','necessary','funny','disgusting','sensible',
-             'propaganda','adultOnly','boring','confusing','inspiring','spam']
-              .map(category =>
-                form({ method: "POST", action: `/audios/opinions/${encodeURIComponent(audio.key)}/${category}` },
-                  button({ class: "vote-btn" },
-                    `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${audio.opinions?.[category] || 0}]`
-                  )
+            opinionCategories.map(category =>
+              form({ method: "POST", action: `/audios/opinions/${encodeURIComponent(audio.key)}/${category}` },
+                button({ class: "vote-btn" },
+                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${audio.opinions?.[category] || 0}]`
                 )
               )
+            )
           )
         );
       })
@@ -178,7 +177,7 @@ const renderAudioForm = (filter, audioId, audioToEdit) => {
       label(i18n.audioTitleLabel), br(),
       input({ type: "text", name: "title", placeholder: i18n.audioTitlePlaceholder, value: audioToEdit?.title || '' }), br(), br(),
       label(i18n.audioDescriptionLabel), br(),
-      textarea({name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows:"4", value: audioToEdit?.description || '' }), br(), br(),
+      textarea({ name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows: "4" }, audioToEdit?.description || ''), br(), br(),
       button({ type: "submit" }, filter === 'edit' ? i18n.audioUpdateButton : i18n.audioCreateButton)
     )
   );
@@ -193,7 +192,6 @@ exports.audioView = async (audios, filter, audioId) => {
                 i18n.audioAllSectionTitle;
 
   const filteredAudios = getFilteredAudios(filter, audios, userId);
-
   const audioToEdit = audios.find(a => a.key === audioId);
 
   return template(
@@ -227,8 +225,8 @@ exports.audioView = async (audios, filter, audioId) => {
 };
 
 exports.singleAudioView = async (audio, filter, comments = []) => {
-  const isAuthor = audio.author === userId; 
-  const hasOpinions = Object.keys(audio.opinions || {}).length > 0; 
+  const isAuthor = audio.author === userId;
+  const hasOpinions = Object.keys(audio.opinions || {}).length > 0;
 
   return template(
     i18n.audioTitle,
@@ -282,9 +280,9 @@ exports.singleAudioView = async (audio, filter, comments = []) => {
         )
       ),
       div({ class: "voting-buttons" },
-        ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
+        opinionCategories.map(category =>
           form({ method: "POST", action: `/audios/opinions/${encodeURIComponent(audio.key)}/${category}` },
-            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${audio.opinions?.[category] || 0}]`)
+            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${audio.opinions?.[category] || 0}]`)
           )
         )
       ),
@@ -292,3 +290,4 @@ exports.singleAudioView = async (audio, filter, comments = []) => {
     )
   );
 };
+

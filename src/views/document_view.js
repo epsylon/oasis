@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
+const opinionCategories = require('../backend/opinion_categories');
 
 const userId = config.keys.id;
 
@@ -147,14 +148,13 @@ const renderDocumentList = (filteredDocs, filter) => {
             a({ href: `/author/${encodeURIComponent(doc.author)}`, class: 'user-link' }, doc.author)
           ),
           div({ class: "voting-buttons" },
-            ['interesting','necessary','funny','disgusting','sensible','propaganda','adultOnly','boring','confusing','inspiring','spam']
-              .map(category =>
-                form({ method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },
-                  button({ class: "vote-btn" },
-                    `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${doc.opinions?.[category] || 0}]`
-                  )
+            opinionCategories.map(category =>
+              form({ method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },
+                button({ class: "vote-btn" },
+                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${doc.opinions?.[category] || 0}]`
                 )
               )
+            )
           )
         );
       })
@@ -174,7 +174,7 @@ const renderDocumentForm = (filter, documentId, docToEdit) => {
       label(i18n.documentTitleLabel), br(),
       input({ type: "text", name: "title", placeholder: i18n.documentTitlePlaceholder, value: docToEdit?.title || '' }), br(), br(),
       label(i18n.documentDescriptionLabel), br(),
-      textarea({name: "description", placeholder: i18n.documentDescriptionPlaceholder, rows:"4", value: docToEdit?.description || '' }), br(), br(),
+      textarea({ name: "description", placeholder: i18n.documentDescriptionPlaceholder, rows: "4", value: docToEdit?.description || '' }), br(), br(),
       button({ type: "submit" }, filter === 'edit' ? i18n.documentUpdateButton : i18n.documentCreateButton)
     )
   );
@@ -189,7 +189,6 @@ exports.documentView = async (documents, filter, documentId) => {
                 i18n.documentAllSectionTitle;
 
   const filteredDocs = getFilteredDocuments(filter, documents, userId);
-
   const docToEdit = documents.find(d => d.key === documentId);
   const isDocView = ['mine', 'create', 'edit', 'all', 'recent', 'top'].includes(filter);
 
@@ -217,11 +216,10 @@ exports.documentView = async (documents, filter, documentId) => {
     )
   );
 
-  return `${tpl}
-    ${isDocView
-      ? `<script type="module" src="/js/pdf.min.mjs"></script>
-         <script src="/js/pdf-viewer.js"></script>`
-      : ''}`;
+  return `${tpl}${isDocView
+    ? `<script type="module" src="/js/pdf.min.mjs"></script>
+       <script src="/js/pdf-viewer.js"></script>`
+    : ''}`;
 };
 
 exports.singleDocumentView = async (doc, filter, comments = []) => {
@@ -270,9 +268,9 @@ exports.singleDocumentView = async (doc, filter, comments = []) => {
         )
       ),
       div({ class: "voting-buttons" },
-        ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
+        opinionCategories.map(category =>
           form({ method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },
-            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${doc.opinions?.[category] || 0}]`)
+            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${doc.opinions?.[category] || 0}]`)
           )
         )
       ),
@@ -280,9 +278,7 @@ exports.singleDocumentView = async (doc, filter, comments = []) => {
     )
   );
 
-  return `${tpl}
-    ${filter === 'mine' || filter === 'edit' || filter === 'top' || filter === 'recent' || filter === 'all'
-      ? `<script type="module" src="/js/pdf.min.mjs"></script>
-         <script src="/js/pdf-viewer.js"></script>`
-      : ''}`;
+  return `${tpl}<script type="module" src="/js/pdf.min.mjs"></script>
+<script src="/js/pdf-viewer.js"></script>`;
 };
+

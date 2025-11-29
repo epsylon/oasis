@@ -2,6 +2,7 @@ const { div, h2, p, section, button, form, a, input, img, textarea, br, span, la
 const { template, i18n } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
+const opinionCategories = require('../backend/opinion_categories');
 
 const userId = config.keys.id
 
@@ -52,7 +53,7 @@ const generateTransferCard = (transfer, userId) => {
       ),
       h2({ class: 'card-field' },
         span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
-        span({ class: 'card-value' }, `${transfer.confirmedBy.length}/2`)
+        span({ class: 'card-value' }, `${(transfer.confirmedBy || []).length}/2`)
       ),
       (transfer.status === 'UNCONFIRMED' && transfer.to === userId)
         ? form({ method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
@@ -62,19 +63,22 @@ const generateTransferCard = (transfer, userId) => {
       transfer.tags && transfer.tags.length
         ? div({ class: 'card-tags' },
             transfer.tags.map(tag =>
-              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right:0.8em;margin-bottom:0.5em;" }, `#${tag}`)
+              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
             )
           )
-        : null, 
+        : null,
       br,
       p({ class: 'card-footer' },
         span({ class: 'date-link' }, `${transfer.createdAt} ${i18n.performed} `),
         a({ href: `/author/${encodeURIComponent(transfer.from)}`, class: 'user-link' }, `${transfer.from}`)
-      ), 
+      ),
       div({ class: "voting-buttons" },
-        ["interesting", "necessary", "funny", "disgusting", "sensible", "propaganda", "adultOnly", "boring", "confusing", "inspiring", "spam"].map(category =>
+        opinionCategories.map(category =>
           form({ method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
-            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${transfer.opinions?.[category] || 0}]`)
+            button(
+              { class: "vote-btn" },
+              `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${transfer.opinions?.[category] || 0}]`
+            )
           )
         )
       )
@@ -166,57 +170,63 @@ exports.singleTransferView = async (transfer, filter) => {
           button({ type: 'submit', name: 'filter', value: 'create', class: "create-button" }, i18n.transfersCreateButton)
         )
       ),
-	div({ class: "transfer-item" },
-	  div({ class: 'card-section transfer' },
-            div({ class: 'card-field' },
-             span({ class: 'card-label' }, `${i18n.transfersConcept}:`),
-             span({ class: 'card-value' }, transfer.concept)
-            ),
-            div({ class: 'card-field' },
-	      span({ class: 'card-label' }, `${i18n.transfersDeadline}:`),
-	      span({ class: 'card-value' }, moment(transfer.deadline).format("YYYY-MM-DD HH:mm"))
-	    ),
-	    div({ class: 'card-field' },
-	      span({ class: 'card-label' }, `${i18n.transfersStatus}:`),
-	      span({ class: 'card-value' }, i18n[`transfersStatus${transfer.status.charAt(0) + transfer.status.slice(1).toLowerCase()}`])
-	    ),
-	    div({ class: 'card-field' },
-	      span({ class: 'card-label' }, `${i18n.transfersAmount}:`),
-	      span({ class: 'card-value' }, `${transfer.amount} ECO`)
-	    ),
-            div({ class: 'card-field' },
-              span({ class: 'card-label' }, `${i18n.transfersFrom}:`),
-              span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from))
-            ),
-            div({ class: 'card-field' },
-              span({ class: 'card-label' }, `${i18n.transfersTo}:`),
-              span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to))
-            ),
-	    h2({ class: 'card-field' },
-	      span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
-	      span({ class: 'card-value' }, `${transfer.confirmedBy.length}/2`)
-	    )
-	  )
-	),
-      transfer.status === 'UNCONFIRMED' && transfer.to === userId
-        ? form({ method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
-            button({ type: "submit" }, i18n.transfersConfirmButton), br(), br()
-          )
-        : null,
-      transfer.tags && transfer.tags.length
-          ? div({ class: 'card-tags' },
-            transfer.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link", style: "margin-right:0.8em;margin-bottom:0.5em;" }, `#${tag}`))
-          )
-        : null,
-       br,
-       p({ class: 'card-footer' },
-        span({ class: 'date-link' }, `${transfer.createdAt} ${i18n.performed} `),
-        a({ href: `/author/${encodeURIComponent(transfer.from)}`, class: 'user-link' }, `${transfer.from}`)
-      ),
-      div({ class: "voting-buttons" },
-        ["interesting", "necessary", "funny", "disgusting", "sensible", "propaganda", "adultOnly", "boring", "confusing", "inspiring", "spam"].map(category =>
-          form({ method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
-            button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${transfer.opinions?.[category] || 0}]`)
+      div({ class: "transfer-item" },
+        div({ class: 'card-section transfer' },
+          generateTransferActions(transfer, userId),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, `${i18n.transfersConcept}:`),
+            span({ class: 'card-value' }, transfer.concept)
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, `${i18n.transfersDeadline}:`),
+            span({ class: 'card-value' }, moment(transfer.deadline).format("YYYY-MM-DD HH:mm"))
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, `${i18n.transfersStatus}:`),
+            span({ class: 'card-value' }, i18n[`transfersStatus${transfer.status.charAt(0) + transfer.status.slice(1).toLowerCase()}`])
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, `${i18n.transfersAmount}:`),
+            span({ class: 'card-value' }, `${transfer.amount} ECO`)
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, `${i18n.transfersFrom}:`),
+            span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.from)}`, target: "_blank" }, transfer.from))
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, `${i18n.transfersTo}:`),
+            span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(transfer.to)}`, target: "_blank" }, transfer.to))
+          ),
+          h2({ class: 'card-field' },
+            span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
+            span({ class: 'card-value' }, `${(transfer.confirmedBy || []).length}/2`)
+          ),
+          (transfer.status === 'UNCONFIRMED' && transfer.to === userId)
+            ? form({ method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
+                button({ type: "submit" }, i18n.transfersConfirmButton), br(), br()
+              )
+            : null,
+          transfer.tags && transfer.tags.length
+            ? div({ class: 'card-tags' },
+                transfer.tags.map(tag =>
+                  a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
+                )
+              )
+            : null,
+          br,
+          p({ class: 'card-footer' },
+            span({ class: 'date-link' }, `${transfer.createdAt} ${i18n.performed} `),
+            a({ href: `/author/${encodeURIComponent(transfer.from)}`, class: 'user-link' }, `${transfer.from}`)
+          ),
+          div({ class: "voting-buttons" },
+            opinionCategories.map(category =>
+              form({ method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
+                button(
+                  { class: "vote-btn" },
+                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${transfer.opinions?.[category] || 0}]`
+                )
+              )
+            )
           )
         )
       )

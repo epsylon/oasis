@@ -1,10 +1,38 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
+const categories = require('../backend/opinion_categories');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
+
+  const getMsg = (ssbClient, id) =>
+    new Promise((resolve, reject) => {
+      ssbClient.get(id, (err, msg) => err ? reject(err) : resolve(msg));
+    });
+
+  const getAllMessages = (ssbClient) =>
+    new Promise((resolve, reject) => {
+      pull(
+        ssbClient.createLogStream({ limit: logLimit }),
+        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
+      );
+    });
+
+  const resolveCurrentId = async (id) => {
+    const ssbClient = await openSsb();
+    const messages = await getAllMessages(ssbClient);
+    const forward = new Map();
+    for (const m of messages) {
+      const c = m.value?.content;
+      if (!c) continue;
+      if (c.type === 'feed' && c.replaces) forward.set(c.replaces, m.key);
+    }
+    let cur = id;
+    while (forward.has(cur)) cur = forward.get(cur);
+    return cur;
+  };
 
   const createFeed = async (text) => {
     const ssbClient = await openSsb();
@@ -28,35 +56,36 @@ module.exports = ({ cooler }) => {
   const createRefeed = async (contentId) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
-    const msg = await new Promise((resolve, reject) => {
-      ssbClient.get(contentId, (err, value) => {
-        if (err) return reject(err);
-        resolve(value);
-      });
-    });
+    const tipId = await resolveCurrentId(contentId);
+    const msg = await getMsg(ssbClient, tipId);
     if (!msg || !msg.content || msg.content.type !== 'feed') throw new Error("Invalid feed");
     if (msg.content.refeeds_inhabitants?.includes(userId)) throw new Error("Already refeeded");
-    const tombstone = { type: 'tombstone', target: contentId, deletedAt: new Date().toISOString() };
+
+    const tombstone = { type: 'tombstone', target: tipId, deletedAt: new Date().toISOString(), author: userId };
     const updated = {
       ...msg.content,
       refeeds: (msg.content.refeeds || 0) + 1,
       refeeds_inhabitants: [...(msg.content.refeeds_inhabitants || []), userId],
       updatedAt: new Date().toISOString(),
-      replaces: contentId
+      replaces: tipId
     };
+
     await new Promise((res, rej) => ssbClient.publish(tombstone, err => err ? rej(err) : res()));
     return new Promise((resolve, reject) => {
-      ssbClient.publish(updated, (err2, msg) => err2 ? reject(err2) : resolve(msg));
+      ssbClient.publish(updated, (err2, out) => err2 ? reject(err2) : resolve(out));
     });
   };
 
   const addOpinion = async (contentId, category) => {
+    if (!categories.includes(category)) throw new Error('Invalid voting category');
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
-    const msg = await ssbClient.get(contentId);
+    const tipId = await resolveCurrentId(contentId);
+    const msg = await getMsg(ssbClient, tipId);
     if (!msg || !msg.content || msg.content.type !== 'feed') throw new Error("Invalid feed");
     if (msg.content.opinions_inhabitants?.includes(userId)) throw new Error("Already voted");
-    const tombstone = { type: 'tombstone', target: contentId, deletedAt: new Date().toISOString() };
+
+    const tombstone = { type: 'tombstone', target: tipId, deletedAt: new Date().toISOString(), author: userId };
     const updated = {
       ...msg.content,
       opinions: {
@@ -65,8 +94,9 @@ module.exports = ({ cooler }) => {
       },
       opinions_inhabitants: [...(msg.content.opinions_inhabitants || []), userId],
       updatedAt: new Date().toISOString(),
-      replaces: contentId
+      replaces: tipId
     };
+
     await new Promise((res, rej) => ssbClient.publish(tombstone, err => err ? rej(err) : res()));
     return new Promise((resolve, reject) => {
       ssbClient.publish(updated, (err2, result) => err2 ? reject(err2) : resolve(result));
@@ -77,12 +107,7 @@ module.exports = ({ cooler }) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
     const now = Date.now();
-    const messages = await new Promise((res, rej) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-      );
-    });
+    const messages = await getAllMessages(ssbClient);
 
     const tombstoned = new Set();
     const replaces = new Map();
@@ -103,25 +128,24 @@ module.exports = ({ cooler }) => {
       }
     }
 
-    for (const replaced of replaces.keys()) {
-      byId.delete(replaced);
-    }
+    for (const replaced of replaces.keys()) byId.delete(replaced);
 
     let feeds = Array.from(byId.values());
     const seenTexts = new Map();
-	for (const feed of feeds) {
-	  const text = feed.value.content.text;
-	  const existing = seenTexts.get(text);
-	  if (!existing || feed.value.timestamp > existing.value.timestamp) {
-	    seenTexts.set(text, feed);
-	  }
-	}
+    for (const feed of feeds) {
+      const text = feed.value?.content?.text;
+      if (typeof text !== 'string') continue;
+      const existing = seenTexts.get(text);
+      if (!existing || (feed.value.timestamp || 0) > (existing.value.timestamp || 0)) {
+        seenTexts.set(text, feed);
+      }
+    }
     feeds = Array.from(seenTexts.values());
 
     if (filter === 'MINE') {
-      feeds = feeds.filter(m => m.value.content.author === userId);
+      feeds = feeds.filter(m => m.value?.content?.author === userId);
     } else if (filter === 'TODAY') {
-      feeds = feeds.filter(m => now - m.value.timestamp < 86400000);
+      feeds = feeds.filter(m => now - (m.value.timestamp || 0) < 86400000);
     } else if (filter === 'TOP') {
       feeds = feeds.sort((a, b) => {
         const aVotes = Object.values(a.value.content.opinions || {}).reduce((sum, x) => sum + x, 0);
@@ -140,3 +164,4 @@ module.exports = ({ cooler }) => {
     listFeeds
   };
 };
+

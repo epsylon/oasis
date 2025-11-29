@@ -72,9 +72,154 @@ module.exports = ({ cooler }) => {
     }
   };
 
+  const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
+
+  const getDedupeKey = (msg) => {
+    const c = msg?.value?.content || {};
+    const t = c?.type || 'unknown';
+    const author = c.author || msg?.value?.author || '';
+
+    if (t === 'post') return `post:${msg.key}`;
+
+    if (t === 'about') return `about:${c.about || author || msg.key}`;
+    if (t === 'curriculum') return `curriculum:${c.author || msg?.value?.author || msg.key}`;
+    if (t === 'contact') return `contact:${c.contact || msg.key}`;
+    if (t === 'vote') return `vote:${c?.vote?.link || msg.key}`;
+    if (t === 'pub') return `pub:${c?.address?.key || c?.address?.host || msg.key}`;
+    if (t === 'bankWallet') return `bankWallet:${c?.address || msg.key}`;
+    if (t === 'bankClaim') return `bankClaim:${c?.txid || `${c?.epochId || ''}:${c?.allocationId || ''}:${c?.amount || ''}` || msg.key}`;
+
+    if (t === 'document') return `document:${c.key || c.url || `${author}|${norm(c.title)}` || msg.key}`;
+    if (t === 'image') return `image:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
+    if (t === 'audio') return `audio:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
+    if (t === 'video') return `video:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
+    if (t === 'bookmark') return `bookmark:${author}|${c.url || norm(c.description) || msg.key}`;
+
+    if (t === 'tribe') {
+      return [
+        'tribe',
+        author,
+        norm(c.title),
+        norm(c.location),
+        norm(c.image)
+      ].join('|');
+    }
+
+    if (t === 'event') {
+      return [
+        'event',
+        c.organizer || author,
+        norm(c.title),
+        norm(c.date),
+        norm(c.location)
+      ].join('|');
+    }
+
+    if (t === 'task') {
+      return [
+        'task',
+        c.author || author,
+        norm(c.title),
+        norm(c.startTime),
+        norm(c.endTime),
+        norm(c.location)
+      ].join('|');
+    }
+
+    if (t === 'report') {
+      return [
+        'report',
+        c.author || author,
+        norm(c.title),
+        norm(c.category),
+        norm(c.severity)
+      ].join('|');
+    }
+
+    if (t === 'votes') {
+      return [
+        'votes',
+        c.createdBy || author,
+        norm(c.question),
+        norm(c.deadline)
+      ].join('|');
+    }
+
+    if (t === 'market') {
+      return [
+        'market',
+        c.seller || author,
+        norm(c.title),
+        norm(c.deadline),
+        norm(c.item_type),
+        norm(c.image)
+      ].join('|');
+    }
+
+    if (t === 'transfer') {
+      const txid = c.txid || c.transactionId || c.id;
+      if (txid) return `transfer:${txid}`;
+      return [
+        'transfer',
+        norm(c.from),
+        norm(c.to),
+        norm(c.amount),
+        norm(c.concept),
+        norm(c.deadline)
+      ].join('|');
+    }
+
+    if (t === 'feed') {
+      return [
+        'feed',
+        c.author || author,
+        norm(c.text)
+      ].join('|');
+    }
+
+    if (t === 'project') {
+      return [
+        'project',
+        c.activityActor || author,
+        norm(c.title),
+        norm(c.deadline),
+        norm(c.goal)
+      ].join('|');
+    }
+
+    if (t === 'job') {
+      return [
+        'job',
+        author,
+        norm(c.title),
+        norm(c.location),
+        norm(c.salary),
+        norm(c.job_type)
+      ].join('|');
+    }
+
+    if (t === 'forum') {
+      return `forum:${c.key || c.root || `${author}|${norm(c.title)}` || msg.key}`;
+    }
+
+    return `${t}:${msg.key}`;
+  };
+
+  const dedupeKeepLatest = (msgs) => {
+    const map = new Map();
+    for (const msg of msgs) {
+      const k = getDedupeKey(msg);
+      const prev = map.get(k);
+      const ts = msg?.value?.timestamp || 0;
+      const pts = prev?.value?.timestamp || 0;
+      if (!prev || ts > pts) map.set(k, msg);
+    }
+    return Array.from(map.values());
+  };
+
   const search = async ({ query, types = [], resultsPerPage = "10" }) => {
     const ssbClient = await openSsb();
-    const queryLower = query.toLowerCase();
+    const queryLower = String(query || '').toLowerCase();
 
     const messages = await new Promise((res, rej) => {
       pull(
@@ -101,21 +246,24 @@ module.exports = ({ cooler }) => {
       latestByKey.delete(oldId);
     }
 
-    const filtered = Array.from(latestByKey.values()).filter(msg => {
+    let filtered = Array.from(latestByKey.values()).filter(msg => {
       const c = msg?.value?.content;
       const t = c?.type;
       if (!t || (types.length > 0 && !types.includes(t))) return false;
       if (t === 'market') {
         if (c.stock === 0 && c.status !== 'SOLD') return false;
       }
-      if (query.startsWith('@') && query.length > 1) return (t === 'about' && c?.about === query);
+      if (!queryLower) return true;
+      if (queryLower.startsWith('@') && queryLower.length > 1) return (t === 'about' && c?.about === query);
       const fields = getRelevantFields(t, c);
-      if (query.startsWith('#') && query.length > 1) {
-        const tag = query.substring(1).toLowerCase();
-        return (c?.tags || []).some(t => t.toLowerCase() === tag);
+      if (queryLower.startsWith('#') && queryLower.length > 1) {
+        const tag = queryLower.substring(1);
+        return (c?.tags || []).some(x => String(x).toLowerCase() === tag);
       }
       return fields.filter(Boolean).map(String).some(field => field.toLowerCase().includes(queryLower));
     });
+
+    filtered = dedupeKeepLatest(filtered);
 
     filtered.sort((a, b) => (b?.value?.timestamp || 0) - (a?.value?.timestamp || 0));
 
@@ -136,3 +284,4 @@ module.exports = ({ cooler }) => {
 
   return { search };
 };
+

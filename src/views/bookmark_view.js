@@ -3,6 +3,7 @@ const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
+const opinionCategories = require('../backend/opinion_categories');
 
 const userId = config.keys.id
 
@@ -103,8 +104,8 @@ const renderBookmarkList = (filteredBookmarks, filter) => {
           form({ method: "GET", action: `/bookmarks/${encodeURIComponent(bookmark.id)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
           ),
-          h2(bookmark.title),
-          renderCardField(i18n.bookmarkUrlLabel + ":"), 
+          h2(bookmark.category || bookmark.url || ''),
+          renderCardField(i18n.bookmarkUrlLabel + ":", ''), 
           br,
           div(bookmark.url
             ? a({ href: bookmark.url, target: "_blank", class: "bookmark-url" }, bookmark.url)
@@ -119,7 +120,7 @@ const renderBookmarkList = (filteredBookmarks, filter) => {
             : null,
           bookmark.description
             ? [
-                renderCardField(i18n.bookmarkDescriptionLabel + ":"),
+                renderCardField(i18n.bookmarkDescriptionLabel + ":", ''),
                 p(...renderUrl(bookmark.description))
               ]
             : null,
@@ -142,9 +143,11 @@ const renderBookmarkList = (filteredBookmarks, filter) => {
             a({ href: `/author/${encodeURIComponent(bookmark.author)}`, class: 'user-link' }, `${bookmark.author}`)
           ),
           div({ class: "voting-buttons" },
-            ['interesting','necessary','funny','disgusting','sensible','propaganda','adultOnly','boring','confusing','inspiring','spam'].map(category =>
+            opinionCategories.map(category =>
               form({ method: "POST", action: `/bookmarks/opinions/${encodeURIComponent(bookmark.id)}/${category}` },
-                button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${bookmark.opinions?.[category] || 0}]`)
+                button({ class: "vote-btn" },
+                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${bookmark.opinions?.[category] || 0}]`
+                )
               )
             )
           )
@@ -165,7 +168,7 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags) => {
       label(i18n.bookmarkUrlLabel), br,
       input({ type: "url", name: "url", id: "url", required: true, placeholder: i18n.bookmarkUrlPlaceholder, value: filter === 'edit' ? bookmarkToEdit.url : '' }), br, br,
       label(i18n.bookmarkDescriptionLabel), br,
-      textarea({ name: "description", id: "description", placeholder: i18n.bookmarkDescriptionPlaceholder, rows:"4" }, filter === 'edit' ? bookmarkToEdit.description : ''), br, br,
+      textarea({ name: "description", id: "description", placeholder: i18n.bookmarkDescriptionPlaceholder, rows: "4" }, filter === 'edit' ? bookmarkToEdit.description : ''), br, br,
       label(i18n.bookmarkTagsLabel), br,
       input({ type: "text", name: "tags", id: "tags", placeholder: i18n.bookmarkTagsPlaceholder, value: filter === 'edit' ? tags.join(', ') : '' }), br, br,
       label(i18n.bookmarkCategoryLabel), br,
@@ -270,8 +273,8 @@ exports.singleBookmarkView = async (bookmark, filter, comments = []) => {
             button({ class: "delete-btn", type: "submit" }, i18n.bookmarkDeleteButton)
           )
         ) : null,
-        h2(bookmark.title),
-        renderCardField(i18n.bookmarkUrlLabel + ":"), 
+        h2(bookmark.category || bookmark.url || ''),
+        renderCardField(i18n.bookmarkUrlLabel + ":", ''), 
         br,
         div(bookmark.url
           ? a({ href: bookmark.url, target: "_blank", class: "bookmark-url" }, bookmark.url)
@@ -282,7 +285,7 @@ exports.singleBookmarkView = async (bookmark, filter, comments = []) => {
           : i18n.noLastVisit
         ),
         renderCardField(i18n.bookmarkCategory + ":", bookmark.category || i18n.noCategory),
-        renderCardField(i18n.bookmarkDescriptionLabel + ":"), 
+        renderCardField(i18n.bookmarkDescriptionLabel + ":", ''), 
         p(...renderUrl(bookmark.description)),
         bookmark.tags && bookmark.tags.length
           ? div({ class: "card-tags" },
@@ -297,9 +300,9 @@ exports.singleBookmarkView = async (bookmark, filter, comments = []) => {
           a({ href: `/author/${encodeURIComponent(bookmark.author)}`, class: 'user-link' }, `${bookmark.author}`)
         ),
         div({ class: "voting-buttons" },
-          ['interesting', 'necessary', 'funny', 'disgusting', 'sensible', 'propaganda', 'adultOnly', 'boring', 'confusing', 'inspiring', 'spam'].map(category =>
+          opinionCategories.map(category =>
             form({ method: "POST", action: `/bookmarks/opinions/${encodeURIComponent(bookmark.id)}/${category}` },
-              button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`]} [${bookmark.opinions?.[category] || 0}]`)
+              button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${bookmark.opinions?.[category] || 0}]`)
             )
           )
         )
@@ -308,3 +311,4 @@ exports.singleBookmarkView = async (bookmark, filter, comments = []) => {
     )
   );
 };
+
