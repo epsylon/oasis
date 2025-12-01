@@ -314,7 +314,9 @@ exports.opinionsView = (items, filter) => {
               button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
             )
           )
-        ),
+        )
+      ),
+      div({ class: 'mode-buttons' },
         div({ class: 'column' },
           opinionCategories.constructive.slice(0, 5).map(mode =>
             form({ method: 'GET', action: '/opinions' },
@@ -322,9 +324,7 @@ exports.opinionsView = (items, filter) => {
               button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, i18n[mode + 'Button'] || mode)
             )
           )
-        )
-      ),
-      div({ class: 'mode-buttons' },
+        ),
         div({ class: 'column' },
           opinionCategories.constructive.slice(5, 11).map(mode =>
             form({ method: 'GET', action: '/opinions' },

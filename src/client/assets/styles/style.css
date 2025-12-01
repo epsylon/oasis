@@ -1083,6 +1083,27 @@ button.create-button:hover {
   border-radius: 6px;
 }
 
+.feed-search-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.feed-search-input {
+  flex: 1 1 260px;
+  min-width: 220px;
+  height: 40px;
+  box-sizing: border-box;
+}
+
+.feed-search-btn {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
 .type-label {
   font-weight: bold;
   margin-top: 0.5em;
@@ -1191,19 +1212,109 @@ display:flex; gap:8px; margin-top:16px;
   cursor: not-allowed;
 }
 
-.tribe-feed form {
+.tribe-feed .feed-row,
+.tribe-feed-full .feed-row {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.tribe-feed input[type="text"] {
-  flex: 1;
-  padding: 6px;
-  border-radius: 4px;
-  border: none;
-  background-color: #222;
+.tribe-feed .refeed-column,
+.tribe-feed-full .refeed-column {
+  flex: 0 0 68px;
+  min-width: 68px;
+  max-width: 68px;
+  padding: 10px 8px;
+}
+
+.tribe-feed .refeed-column h1,
+.tribe-feed-full .refeed-column h1 {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+}
+
+.tribe-feed .refeed-btn,
+.tribe-feed-full .refeed-btn {
+  padding: 6px 8px;
+  font-size: 12px;
+  width: 100%;
+}
+
+.tribe-feed .feed-main,
+.tribe-feed-full .feed-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .tribe-feed .feed-row,
+  .tribe-feed-full .feed-row {
+    flex-direction: column;
+  }
+
+  .tribe-feed .refeed-column,
+  .tribe-feed-full .refeed-column {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    align-items: flex-start;
+  }
+}
+
+.tribe-feed .feed-actions,
+.tribe-feed-full .feed-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.tribe-feed .feed-actions form,
+.tribe-feed-full .feed-actions form,
+.tribe-feed .refeed-column form,
+.tribe-feed-full .refeed-column form {
+  margin: 0;
+}
+
+.tribe-feed-compose {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  margin-top: 14px;
+  align-items: end;
+}
+
+.tribe-feed-compose textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #444;
+  background: #222;
   color: #eee;
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+
+.tribe-feed-compose .tribe-feed-send {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .tribe-feed-compose {
+    grid-template-columns: 1fr;
+  }
+
+  .tribe-feed-compose .tribe-feed-send {
+    width: 100%;
+  }
 }
 
 .tribes-container{ 

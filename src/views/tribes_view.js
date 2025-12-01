@@ -67,12 +67,15 @@ const renderFeedTribesView = (tribe, page, query, filter) => {
       : div({ class: 'feed-list' },
           paginatedFeed.map(m => div({ class: 'feed-item' },
             div({ class: 'feed-row' },
-              div({ class: 'refeed-column' },
-                h1(`${m.refeeds || 0}`),
-                !m.refeeds_inhabitants.includes(userId)
-                  ? form({ method: 'POST', action: `/tribes/${encodeURIComponent(tribe.id)}/refeed/${encodeURIComponent(m.id)}` }, button({ class: 'refeed-btn' }, i18n.tribeFeedRefeed))
-                  : p(i18n.alreadyRefeeded)
-              ),
+		div({ class: 'refeed-column' },
+		  h1(`${m.refeeds || 0}`),
+		  !(m.refeeds_inhabitants || []).includes(userId)
+		    ? form(
+			{ method: 'POST', action: `/tribes/${encodeURIComponent(tribe.id)}/refeed/${encodeURIComponent(m.id)}` },
+			button({ class: 'refeed-btn' }, i18n.tribeFeedRefeed)
+		      )
+		    : null
+		),
               div({ class: 'feed-main' },
                 p(`${new Date(m.date).toLocaleString()} — `, a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
                 br,
@@ -81,12 +84,13 @@ const renderFeedTribesView = (tribe, page, query, filter) => {
             )
           ))
         ),
-    tribe.members.includes(userId)
-      ? form({ method: 'POST', action: `/tribes/${encodeURIComponent(tribe.id)}/message` },
-          textarea({ name: 'message', rows: 4, cols: 50, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),
-          button({ type: 'submit' }, i18n.tribeFeedSend)
-        )
-      : null,
+	tribe.members.includes(userId)
+	  ? form(
+	      { class: 'tribe-feed-compose', method: 'POST', action: `/tribes/${encodeURIComponent(tribe.id)}/message` },
+	      textarea({ name: 'message', rows: 4, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),
+	      button({ type: 'submit', class: 'tribe-feed-send' }, i18n.tribeFeedSend)
+	    )
+	  : null,
     renderPaginationTribesView(page, totalPages, filter)
   );
 };
@@ -353,12 +357,15 @@ const renderFeedTribeView = async (tribe, query = {}, filter) => {
       : div({ class: 'feed-list' },
           filteredFeed.map(m => div({ class: 'feed-item' },
             div({ class: 'feed-row' },
-              div({ class: 'refeed-column' },
-                h1(`${m.refeeds || 0}`),
-                !m.refeeds_inhabitants.includes(userId)
-                  ? form({ method: 'POST', action: `/tribe/${encodeURIComponent(tribe.id)}/refeed/${encodeURIComponent(m.id)}` }, button({ class: 'refeed-btn' }, i18n.tribeFeedRefeed))
-                  : p(i18n.alreadyRefeeded)
-              ),
+		div({ class: 'refeed-column' },
+		  h1(`${m.refeeds || 0}`),
+		  !(m.refeeds_inhabitants || []).includes(userId)
+		    ? form(
+			{ method: 'POST', action: `/tribe/${encodeURIComponent(tribe.id)}/refeed/${encodeURIComponent(m.id)}` },
+			button({ class: 'refeed-btn' }, i18n.tribeFeedRefeed)
+		      )
+		    : null
+		),
               div({ class: 'feed-main' },
                 p(`${new Date(m.date).toLocaleString()} — `, a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
                 br,
@@ -411,13 +418,13 @@ exports.tribeView = async (tribe, userIdParam, query) => {
       ),
     ),
     div({ class: 'tribe-main' },
-      div({ class: 'tribe-feed-form' }, tribe.members.includes(config.keys.id)
-        ? form({ method: 'POST', action: `/tribe/${encodeURIComponent(tribe.id)}/message` },
-            textarea({ name: 'message', rows: 4, cols: 50, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),
-            br,
-            button({ type: 'submit' }, i18n.tribeFeedSend)
-          )
-        : null
+      div({ class: 'tribe-feed-form' }, 
+       tribe.members.includes(config.keys.id)
+       ? form( { class: 'tribe-feed-compose', method: 'POST', action: `/tribe/${encodeURIComponent(tribe.id)}/message` },
+         textarea({ name: 'message', rows: 4, maxlength: 280, placeholder: i18n.tribeFeedMessagePlaceholder }),
+         button({ type: 'submit', class: 'tribe-feed-send' }, i18n.tribeFeedSend)
+       )
+       : null
       ),
       await renderFeedTribeView(tribe, query, query.filter),
     )

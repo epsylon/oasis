@@ -148,6 +148,7 @@ function renderActionCards(actions, userId) {
       if (content.type === 'tombstone') return false;
       if (content.type === 'post' && content.private === true) return false;
       if (content.type === 'tribe' && content.isAnonymous === true) return false;
+      if (typeof content.type === 'string' && content.type.startsWith('tribe') && content.isAnonymous === true) return false;
       if (content.type === 'task' && content.isPublic === "PRIVATE") return false;
       if (content.type === 'event' && content.isPublic === "private") return false;
       if (content.type === 'market') {
@@ -193,6 +194,14 @@ function renderActionCards(actions, userId) {
       headerText = `[COURTS · ${finalSub.toUpperCase()}]`;
     } else if (type === 'taskAssignment') {
       headerText = `[${String(i18n.typeTask || 'TASK').toUpperCase()} · ASSIGNMENT]`;
+    } else if (type === 'tribeJoin') {
+      headerText = `[TRIBE · ${String(i18n.tribeActivityJoined || 'JOIN').toUpperCase()}]`;
+    } else if (type === 'tribeLeave') {
+      headerText = `[TRIBE · ${String(i18n.tribeActivityLeft || 'LEAVE').toUpperCase()}]`;
+    } else if (type === 'tribeFeedPost') {
+      headerText = `[TRIBE · FEED]`;
+    } else if (type === 'tribeFeedRefeed') {
+      headerText = `[TRIBE · REFEED]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -325,6 +334,40 @@ function renderActionCards(actions, userId) {
             ? div({ class: 'card-tags' }, validTags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
             : ""
+        )
+      );
+    }
+    if (type === 'tribeJoin' || type === 'tribeLeave') {
+      const { tribeId, tribeTitle } = content || {};
+      cardBody.push(
+        div({ class: 'card-section tribe' },
+          h2({ class: 'tribe-title' },
+            a({ href: `/tribe/${encodeURIComponent(tribeId || '')}`, class: 'user-link' }, tribeTitle || tribeId || '')
+          )
+        )
+      );
+    }
+
+    if (type === 'tribeFeedPost') {
+      const { tribeId, tribeTitle, text } = content || {};
+      cardBody.push(
+        div({ class: 'card-section tribe' },
+          h2({ class: 'tribe-title' },
+            a({ href: `/tribe/${encodeURIComponent(tribeId || '')}`, class: 'user-link' }, tribeTitle || tribeId || '')
+          ),
+          text ? p({ class: 'post-text' }, ...renderUrl(text)) : ''
+        )
+      );
+    }
+
+    if (type === 'tribeFeedRefeed') {
+      const { tribeId, tribeTitle, text } = content || {};
+      cardBody.push(
+        div({ class: 'card-section tribe' },
+          h2({ class: 'tribe-title' },
+            a({ href: `/tribe/${encodeURIComponent(tribeId || '')}`, class: 'user-link' }, tribeTitle || tribeId || '')
+          ),
+          text ? p({ class: 'post-text' }, ...renderUrl(text)) : ''
         )
       );
     }
@@ -1140,6 +1183,11 @@ function getViewDetailsAction(type, action) {
     case 'courtsSettlementAccepted':return `/courts?filter=actions`;
     case 'courtsNomination':        return `/courts?filter=judges`;
     case 'courtsNominationVote':    return `/courts?filter=judges`;
+    case 'tribeJoin':
+    case 'tribeLeave':
+    case 'tribeFeedPost':
+    case 'tribeFeedRefeed':
+    return `/tribe/${encodeURIComponent(action.content?.tribeId || '')}`;
     case 'votes':      return `/votes/${id}`;
     case 'transfer':   return `/transfers/${id}`;
     case 'pixelia':    return `/pixelia`;
@@ -1213,6 +1261,12 @@ exports.activityView = (actions, filter, userId) => {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
   } else if (filter === 'banking') {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim'));
+  } else if (filter === 'tribe') {
+    filteredActions = actions.filter(action =>
+      action.type !== 'tombstone' &&
+      String(action.type || '').startsWith('tribe') &&
+      action.type !== 'tribe'
+    );
   } else if (filter === 'parliament') {
     filteredActions = actions.filter(action => ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(action.type));
   } else if (filter === 'courts') {

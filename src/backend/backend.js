@@ -1639,13 +1639,17 @@ router
     const opinions = await opinionsModel.listOpinions(filter);
     ctx.body = await opinionsView(opinions, filter);
   })
-  .get('/feed', async ctx => {
-    const filter = ctx.query.filter || 'ALL';
-    const feeds = await feedModel.listFeeds(filter);
-    ctx.body = feedView(feeds, filter);
+  .get("/feed", async (ctx) => {
+    const filter = String(ctx.query.filter || "ALL").toUpperCase();
+    const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
+    const tag = typeof ctx.query.tag === "string" ? ctx.query.tag : "";
+    const feeds = await feedModel.listFeeds({ filter, q, tag });
+    ctx.body = feedView(feeds, { filter, q, tag });
   })
-  .get('/feed/create', async ctx => {
-    ctx.body = feedCreateView();
+  .get("/feed/create", async (ctx) => {
+    const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
+    const tag = typeof ctx.query.tag === "string" ? ctx.query.tag : "";
+    ctx.body = feedCreateView({ q, tag });
   })
   .get('/forum', async ctx => {
     const forumMod = ctx.cookies.get("forumMod") || 'on';
@@ -2569,19 +2573,19 @@ router
     await agendaModel.restoreItem(itemId);
     ctx.redirect('/agenda?filter=discarded');
   })
-  .post('/feed/create', koaBody(), async ctx => {
-    const { text } = ctx.request.body || {};
-    await feedModel.createFeed(text.trim());
-    ctx.redirect('/feed');
+  .post("/feed/create", koaBody(), async (ctx) => {
+    const text = ctx.request.body && ctx.request.body.text != null ? String(ctx.request.body.text) : "";
+    await feedModel.createFeed(text);
+    ctx.redirect(ctx.get("Referer") || "/feed");
   })
-  .post('/feed/opinions/:feedId/:category', async ctx => {
+  .post("/feed/opinions/:feedId/:category", async (ctx) => {
     const { feedId, category } = ctx.params;
-    await opinionsModel.createVote(feedId, category);
-    ctx.redirect('/feed');
+    await feedModel.addOpinion(feedId, category);
+    ctx.redirect(ctx.get("Referer") || "/feed");
   })
-  .post('/feed/refeed/:id', koaBody(), async ctx => {
+  .post("/feed/refeed/:id", koaBody(), async (ctx) => {
     await feedModel.createRefeed(ctx.params.id);
-    ctx.redirect('/feed');
+    ctx.redirect(ctx.get("Referer") || "/feed");
   })
   .post('/bookmarks/create', koaBody(), async (ctx) => {
     const { url, tags, description, category, lastVisit } = ctx.request.body;

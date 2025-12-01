@@ -13,6 +13,18 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.1 - 2025-12-01
+
+### Changed
+
+ + Added more notifications for tribes activity (Activity plugin).
+ + Reordered filters (Opinions plugin).
+ 
+### Fixed
+
+ + Feed minor changes (Feed plugin).
+ + Tribes feed styles container (Tribes plugin).
+
 ## v0.6.0 - 2025-11-29
 
 ### Changed

@@ -1669,7 +1669,7 @@ module.exports = {
     confusingButton: "CONFUSO",
     inspiringButton: "INSPIRADOR",
     spamButton: "SPAM",
-    usefulButton: "ÚTIL",
+    usefulButton: "UTIL",
     informativeButton: "INFORMATIVO",
     wellResearchedButton: "BIEN INVESTIGADO",
     accurateButton: "CONCISO",
