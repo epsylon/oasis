@@ -13,6 +13,34 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.2 - 2025-12-05
+
+### Added
+
+ + Added a footer (Core plugin).
+ + Added favorites to media related modules (Favorites plugin).
+ + Added advanced search engine integration into modules (Search plugin).
+ 
+### Changed
+
+ * Added Oasis version at GUI (Core plugin).
+ + Added templates for reporting standardization (Reports plugin).
+ + Added market new functionalities (Market plugin).
+ + Added bookmarks new functionalities (Bookmarks plugin).
+ + Added jobs new filters (Jobs plugin).
+ 
+### Fixed
+
+ + Security fixes (Core plugin).
+ + Reports filters (Reports plugin).
+ + Tasks minor changes (Tasks plugin).
+ + Events minor changes (Events plugin).
+ + Votations minor changes (Votations plugin).
+ + Market minor changes (Market plugin).
+ + Projects minor changes (Projects plugin).
+ + Jobs minor changes (Jobs plugin).
+ + Transfers minor changes (Transfers plugin).
+
 ## v0.6.1 - 2025-12-01
 
 ### Changed

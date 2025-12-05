@@ -159,6 +159,22 @@ async function buildLeaderMeta(leader) {
   }
 }
 
+//security fallback
+const safeArr = v => (Array.isArray(v) ? v : []);
+const safeText = v => String(v || "").trim();
+const safeReturnTo = (ctx, fallback, allowedPrefixes) => {
+  const rt = (ctx.request && ctx.request.body && ctx.request.body.returnTo) || (ctx.query && ctx.query.returnTo);
+  if (typeof rt === 'string' && Array.isArray(allowedPrefixes) && allowedPrefixes.some(p => rt.startsWith(p))) return rt;
+  return fallback;
+};
+const parseBool01 = (v) => {
+  if (Array.isArray(v)) v = v[v.length - 1];
+  return String(v || "") === "1";
+};
+
+//media favorites
+const mediaFavorites = require("./media-favorites.js");
+
 //custom styles
 const customStyleFile = path.join(
   envPaths("oasis", { suffix: "" }).config,
@@ -322,6 +338,7 @@ const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic
 const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
+const favoritesModel = require("../models/favorites_model")({services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const courtsModel = require('../models/courts_model')({ cooler, services: { votes: votesModel, inhabitants: inhabitantsModel, tribes: tribesModel, banking: bankingModel } });
 
@@ -599,6 +616,7 @@ const { renderBlockchainView, renderSingleBlockView } = require("../views/blockc
 const { jobsView, singleJobsView, renderJobForm } = require("../views/jobs_view");
 const { projectsView, singleProjectView } = require("../views/projects_view")
 const { renderBankingView, renderSingleAllocationView, renderEpochView } = require("../views/banking_views")
+const { favoritesView } = require("../views/favorites_view");
 const { parliamentView } = require("../views/parliament_view");
 const { courtsView, courtsCaseView } = require('../views/courts_view');
 
@@ -727,7 +745,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 
     'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers', 
-    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament', 'courts'
+    'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament', 'courts'
     ];
     const moduleStates = modules.reduce((acc, mod) => {
       acc[`${mod}Mod`] = configMods[`${mod}Mod`];
@@ -905,133 +923,239 @@ router
     }, {});
     ctx.body = await searchView({ results: groupedResults, query, types: [] });
    })
-  .get('/images', async (ctx) => {
-    const imagesMod = ctx.cookies.get("imagesMod") || 'on';
-    if (imagesMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
-    }
-    const filter = ctx.query.filter || 'all';
-    const images = await imagesModel.listAll(filter);
+
+  .get("/images", async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
+    const filter = ctx.query.filter || "all";
+    const q = ctx.query.q || "";
+    const sort = ctx.query.sort || "recent";
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+
+    const modelFilter = filter === "favorites" ? "all" : filter;
+    const images = await imagesModel.listAll({ filter: modelFilter, q, sort, viewerId });
+
+    const fav = await mediaFavorites.getFavoriteSet("images");
+    const withFavorites = images.map((im) => ({
+      ...im,
+      isFavorite: fav.has(String(im.rootId || im.key))
+    }));
+
+    const filtered = filter === "favorites" ? withFavorites.filter((im) => !!im.isFavorite) : withFavorites;
+
     const commentsCountByImageId = {};
     await Promise.all(
-      images.map(async img => {
-        const comments = await getVoteComments(img.key);
-        commentsCountByImageId[img.key] = comments.length;
+      filtered.map(async (im) => {
+        const comments = await getVoteComments(im.key);
+        commentsCountByImageId[im.key] = comments.length;
       })
     );
-    const enrichedImages = images.map(img => ({
-      ...img,
-      commentCount: commentsCountByImageId[img.key] || 0
-    }));
-    ctx.body = await imageView(enrichedImages, filter, null);
-   })
-  .get('/images/edit/:id', async ctx => {
-    const imageId = ctx.params.id;
-    const images = await imagesModel.listAll('all');
-    ctx.body = await imageView(images, 'edit', imageId);
-   })
-  .get('/images/:imageId', async ctx => {
+
+    const enriched = filtered.map((im) => ({ ...im, commentCount: commentsCountByImageId[im.key] || 0 }));
+    ctx.body = await imageView(enriched, filter, null, { q, sort });
+  })
+  .get("/images/edit/:id", async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+    const image = await imagesModel.getImageById(ctx.params.id, viewerId);
+    const fav = await mediaFavorites.getFavoriteSet("images");
+    const imageWithFav = { ...image, isFavorite: fav.has(String(image.rootId || image.key)) };
+    ctx.body = await imageView([imageWithFav], "edit", imageWithFav.key, { returnTo: ctx.query.returnTo || "" });
+  })
+  .get("/images/:imageId", async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
     const imageId = ctx.params.imageId;
-    const filter = ctx.query.filter || 'all'; 
-    const image = await imagesModel.getImageById(imageId);
-    const comments = await getVoteComments(imageId);
-    const imageWithCount = { ...image, commentCount: comments.length };
-    ctx.body = await singleImageView(imageWithCount, filter, comments);
-   })
-  .get('/audios', async (ctx) => {
-    const audiosMod = ctx.cookies.get("audiosMod") || 'on';
-    if (audiosMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
-    }
-    const filter = ctx.query.filter || 'all';
-    const audios = await audiosModel.listAll(filter);
+    const filter = ctx.query.filter || "all";
+    const q = ctx.query.q || "";
+    const sort = ctx.query.sort || "recent";
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+
+    const image = await imagesModel.getImageById(imageId, viewerId);
+    const fav = await mediaFavorites.getFavoriteSet("images");
+    const imageWithFav = { ...image, isFavorite: fav.has(String(image.rootId || image.key)) };
+
+    const comments = await getVoteComments(imageWithFav.key);
+    const imageWithCount = { ...imageWithFav, commentCount: comments.length };
+
+    ctx.body = await singleImageView(imageWithCount, filter, comments, {
+      q,
+      sort,
+      returnTo: safeReturnTo(ctx, `/images?filter=${encodeURIComponent(filter)}`, ["/images"])
+    });
+  })
+  .get("/audios", async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
+    const filter = ctx.query.filter || "all";
+    const q = ctx.query.q || "";
+    const sort = ctx.query.sort || "recent";
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+
+    const modelFilter = filter === "favorites" ? "all" : filter;
+    const audios = await audiosModel.listAll({ filter: modelFilter, q, sort, viewerId });
+
+    const fav = await mediaFavorites.getFavoriteSet("audios");
+    const withFavorites = audios.map((a) => ({
+      ...a,
+      isFavorite: fav.has(String(a.rootId || a.key))
+    }));
+
+    const filtered = filter === "favorites" ? withFavorites.filter((a) => !!a.isFavorite) : withFavorites;
+
     const commentsCountByAudioId = {};
     await Promise.all(
-      audios.map(async a => {
+      filtered.map(async (a) => {
         const comments = await getVoteComments(a.key);
         commentsCountByAudioId[a.key] = comments.length;
       })
     );
-    const enrichedAudios = audios.map(a => ({
-      ...a,
-      commentCount: commentsCountByAudioId[a.key] || 0
-    }));
-    ctx.body = await audioView(enrichedAudios, filter, null);
+    const enrichedAudios = filtered.map((a) => ({ ...a, commentCount: commentsCountByAudioId[a.key] || 0 }));
+    ctx.body = await audioView(enrichedAudios, filter, null, { q, sort });
   })
-  .get('/audios/edit/:id', async (ctx) => {
-      const audiosMod = ctx.cookies.get("audiosMod") || 'on';
-      if (audiosMod !== 'on') {
-        ctx.redirect('/modules');
-        return;
-    }
-    const audio = await audiosModel.getAudioById(ctx.params.id);
-    ctx.body = await audioView([audio], 'edit', ctx.params.id);
+  .get("/audios/edit/:id", async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+    const audio = await audiosModel.getAudioById(ctx.params.id, viewerId);
+    const fav = await mediaFavorites.getFavoriteSet("audios");
+    const audioWithFav = {
+      ...audio,
+      isFavorite: fav.has(String(audio.rootId || audio.key))
+    };
+    ctx.body = await audioView([audioWithFav], "edit", audioWithFav.key, { returnTo: ctx.query.returnTo || "" });
   })
-  .get('/audios/:audioId', async ctx => {
+  .get("/audios/:audioId", async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
     const audioId = ctx.params.audioId;
-    const filter = ctx.query.filter || 'all'; 
-    const audio = await audiosModel.getAudioById(audioId);
-    const comments = await getVoteComments(audioId);
-    const audioWithCount = { ...audio, commentCount: comments.length };
-    ctx.body = await singleAudioView(audioWithCount, filter, comments); 
+    const filter = ctx.query.filter || "all";
+    const q = ctx.query.q || "";
+    const sort = ctx.query.sort || "recent";
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+
+    const audio = await audiosModel.getAudioById(audioId, viewerId);
+    const fav = await mediaFavorites.getFavoriteSet("audios");
+    const audioWithFav = {
+      ...audio,
+      isFavorite: fav.has(String(audio.rootId || audio.key))
+    };
+
+    const comments = await getVoteComments(audioWithFav.key);
+    const audioWithCount = { ...audioWithFav, commentCount: comments.length };
+    const params = {
+      q,
+      sort,
+      returnTo: safeReturnTo(ctx, `/audios?filter=${encodeURIComponent(filter)}`, ["/audios"])
+    };
+    ctx.body = await singleAudioView(audioWithCount, filter, comments, params);
   })
-  .get('/videos', async (ctx) => {
-    const filter = ctx.query.filter || 'all';
-    const videos = await videosModel.listAll(filter);
+  .get("/videos", async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
+    const filter = ctx.query.filter || "all";
+    const q = ctx.query.q || "";
+    const sort = ctx.query.sort || "recent";
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+
+    const modelFilter = filter === "favorites" ? "all" : filter;
+    const videos = await videosModel.listAll({ filter: modelFilter, q, sort, viewerId });
+
+    const fav = await mediaFavorites.getFavoriteSet("videos");
+    const withFavorites = videos.map((v) => ({
+      ...v,
+      isFavorite: fav.has(String(v.rootId || v.key))
+    }));
+
+    const filtered = filter === "favorites" ? withFavorites.filter((v) => !!v.isFavorite) : withFavorites;
+
     const commentsCountByVideoId = {};
     await Promise.all(
-      videos.map(async v => {
+      filtered.map(async (v) => {
         const comments = await getVoteComments(v.key);
         commentsCountByVideoId[v.key] = comments.length;
       })
     );
-    const enrichedVideos = videos.map(v => ({
-      ...v,
-      commentCount: commentsCountByVideoId[v.key] || 0
-    }));
-    ctx.body = await videoView(enrichedVideos, filter, null);
+
+    const enrichedVideos = filtered.map((v) => ({ ...v, commentCount: commentsCountByVideoId[v.key] || 0 }));
+    ctx.body = await videoView(enrichedVideos, filter, null, { q, sort });
   })
-  .get('/videos/edit/:id', async (ctx) => {
-    const video = await videosModel.getVideoById(ctx.params.id);
-    ctx.body = await videoView([video], 'edit', ctx.params.id);
+  .get("/videos/edit/:id", async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+    const video = await videosModel.getVideoById(ctx.params.id, viewerId);
+    const fav = await mediaFavorites.getFavoriteSet("videos");
+    const videoWithFav = {
+      ...video,
+      isFavorite: fav.has(String(video.rootId || video.key))
+    };
+    ctx.body = await videoView([videoWithFav], "edit", videoWithFav.key, { returnTo: ctx.query.returnTo || "" });
   })
-  .get('/videos/:videoId', async ctx => {
+  .get("/videos/:videoId", async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
     const videoId = ctx.params.videoId;
-    const filter = ctx.query.filter || 'all'; 
-    const video = await videosModel.getVideoById(videoId);
-    const comments = await getVoteComments(videoId);
-    const videoWithCount = { ...video, commentCount: comments.length };
-    ctx.body = await singleVideoView(videoWithCount, filter, comments); 
+    const filter = ctx.query.filter || "all";
+    const q = ctx.query.q || "";
+    const sort = ctx.query.sort || "recent";
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+
+    const video = await videosModel.getVideoById(videoId, viewerId);
+    const fav = await mediaFavorites.getFavoriteSet("videos");
+    const videoWithFav = {
+      ...video,
+      isFavorite: fav.has(String(video.rootId || video.key))
+    };
+
+    const comments = await getVoteComments(videoWithFav.key);
+    const videoWithCount = { ...videoWithFav, commentCount: comments.length };
+
+    ctx.body = await singleVideoView(videoWithCount, filter, comments, {
+      q,
+      sort,
+      returnTo: safeReturnTo(ctx, `/videos?filter=${encodeURIComponent(filter)}`, ["/videos"])
+    });
   })
-  .get('/documents', async (ctx) => {
-    const filter = ctx.query.filter || 'all';
-    const documents = await documentsModel.listAll(filter);
+  .get("/documents", async (ctx) => {
+    const filter = ctx.query.filter || "all";
+    const q = ctx.query.q || "";
+    const sort = ctx.query.sort || "recent";
+    const documents = await documentsModel.listAll({ filter, q, sort });
     const commentsCountByDocumentId = {};
     await Promise.all(
-      documents.map(async d => {
-        const comments = await getVoteComments(d.key);
+      documents.map(async (d) => {
+        const root = d.rootId || d.key;
+        const comments = await getVoteComments(root);
         commentsCountByDocumentId[d.key] = comments.length;
       })
     );
-    const enrichedDocuments = documents.map(d => ({
-      ...d,
-      commentCount: commentsCountByDocumentId[d.key] || 0
-    }));
-    ctx.body = await documentView(enrichedDocuments, filter, null);
+    const enriched = documents.map((d) => ({ ...d, commentCount: commentsCountByDocumentId[d.key] || 0 }));
+    ctx.body = await documentView(enriched, filter, null, { q, sort });
   })
-  .get('/documents/edit/:id', async (ctx) => {
+  .get("/documents/edit/:id", async (ctx) => {
     const document = await documentsModel.getDocumentById(ctx.params.id);
-    ctx.body = await documentView([document], 'edit', ctx.params.id);
+    ctx.body = await documentView([document], "edit", document.key, { returnTo: ctx.query.returnTo || "" });
   })
-  .get('/documents/:documentId', async ctx => {
+  .get("/documents/:documentId", async (ctx) => {
     const documentId = ctx.params.documentId;
-    const filter = ctx.query.filter || 'all'; 
+    const filter = ctx.query.filter || "all";
+    const q = ctx.query.q || "";
+    const sort = ctx.query.sort || "recent";
     const document = await documentsModel.getDocumentById(documentId);
-    const comments = await getVoteComments(documentId);
+    const root = document.rootId || document.key;  
+    const comments = await getVoteComments(root);
     const documentWithCount = { ...document, commentCount: comments.length };
-    ctx.body = await singleDocumentView(documentWithCount, filter, comments);
+    ctx.body = await singleDocumentView(documentWithCount, filter, comments, {
+      q,
+      sort,
+      returnTo: safeReturnTo(
+        ctx,
+        `/documents/${encodeURIComponent(document.key)}?filter=${encodeURIComponent(filter)}${q ? `&q=${encodeURIComponent(q)}` : ""}${sort ? `&sort=${encodeURIComponent(sort)}` : ""}`,
+        ["/documents"]
+      )
+    });
   })
   .get('/cv', async ctx => {
     const cv = await cvModel.getCVByUserId()
@@ -1063,6 +1187,7 @@ router
   })
   .get('/reports', async ctx => {
     const filter = ctx.query.filter || 'all';
+    const category = ctx.query.category || '';
     const reports = await reportsModel.listAll();
     const commentsCountById = {};
     await Promise.all(
@@ -1075,7 +1200,7 @@ router
       ...r,
       commentCount: commentsCountById[r.id] || 0
     }));
-    ctx.body = await reportView(enrichedReports, filter, null);
+    ctx.body = await reportView(enrichedReports, filter, null, category);
   })
   .get('/reports/edit/:id', async ctx => {
     const report = await reportsModel.getReportById(ctx.params.id);
@@ -1083,7 +1208,7 @@ router
   })
   .get('/reports/:reportId', async ctx => {
     const reportId = ctx.params.reportId;
-    const filter = ctx.query.filter || 'all'; 
+    const filter = ctx.query.filter || 'all';
     const report = await reportsModel.getReportById(reportId);
     const comments = await getVoteComments(reportId);
     const reportWithCount = { ...report, commentCount: comments.length };
@@ -1690,50 +1815,82 @@ router
   }) 
   .get('/bookmarks', async (ctx) => {
     const bookmarksMod = ctx.cookies.get("bookmarksMod") || 'on';
-    if (bookmarksMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
-    }
+    if (bookmarksMod !== 'on') { ctx.redirect('/modules'); return; }
+
     const filter = ctx.query.filter || 'all';
-    const bookmarks = await bookmarksModel.listAll(null, filter);
+    const q = ctx.query.q || '';
+    const sort = ctx.query.sort || 'recent';
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+
+    const favs = await mediaFavorites.getFavoriteSet("bookmarks");
+
+    const effectiveFilter = filter === "favorites" ? "all" : filter;
+    const bookmarks = await bookmarksModel.listAll({ viewerId, filter: effectiveFilter, q, sort });
+
+    let withFav = bookmarks.map(b => {
+      const root = b.rootId || b.id;
+      return { ...b, isFavorite: favs.has(String(root)) };
+    });
+
+    if (filter === "favorites") {
+      withFav = withFav.filter(b => b.isFavorite);
+    }
+
     const commentsCountByBookmarkId = {};
     await Promise.all(
-      bookmarks.map(async b => {
-        const comments = await getVoteComments(b.id);
+      withFav.map(async b => {
+        const root = b.rootId || b.id;
+        const comments = await getVoteComments(root);
         commentsCountByBookmarkId[b.id] = comments.length;
       })
     );
-    const enrichedBookmarks = bookmarks.map(b => ({
+
+    const enrichedBookmarks = withFav.map(b => ({
       ...b,
       commentCount: commentsCountByBookmarkId[b.id] || 0
     }));
-    ctx.body = await bookmarkView(enrichedBookmarks, filter, null); 
+
+    ctx.body = await bookmarkView(enrichedBookmarks, filter, null, { q, sort });
   })
-  .get('/bookmarks/edit/:id', async (ctx) => {
+  .get("/bookmarks/edit/:id", async (ctx) => {
+    const bookmarksMod = ctx.cookies.get("bookmarksMod") || "on";
+    if (bookmarksMod !== "on") { ctx.redirect("/modules"); return; }
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
+    const bookmark = await bookmarksModel.getBookmarkById(ctx.params.id, viewerId);
+    const favs = await mediaFavorites.getFavoritesSet("bookmarks");
+    const withFav = { ...bookmark, isFav: favs.has(String(bookmark.rootId || bookmark.id)) };
+    ctx.body = await bookmarkView([withFav], "edit", withFav.id, { returnTo: ctx.query.returnTo || "" });
+  })
+  .get('/bookmarks/:bookmarkId', async (ctx) => {
     const bookmarksMod = ctx.cookies.get("bookmarksMod") || 'on';
-    if (bookmarksMod !== 'on') {
-      ctx.redirect('/modules');
-     return;
-    } 
-    const bookmarkId = ctx.params.id;
-    const bookmark = await bookmarksModel.getBookmarkById(bookmarkId);
-    if (bookmark.opinions_inhabitants && bookmark.opinions_inhabitants.length > 0) {
-        ctx.flash = { message: "This bookmark has received votes and cannot be updated." };
-        ctx.redirect(`/bookmarks?filter=mine`);
-    }
-    ctx.body = await bookmarkView([bookmark], 'edit', bookmarkId);
-  })
-  .get('/bookmarks/:bookmarkId', async ctx => {
+    if (bookmarksMod !== 'on') { ctx.redirect('/modules'); return; }
+
     const bookmarkId = ctx.params.bookmarkId;
-    const filter = ctx.query.filter || 'all'; 
+    const filter = ctx.query.filter || 'all';
+    const q = ctx.query.q || '';
+    const sort = ctx.query.sort || 'recent';
+
+    const favs = await mediaFavorites.getFavoriteSet("bookmarks");
+
     const bookmark = await bookmarksModel.getBookmarkById(bookmarkId);
-    const comments = await getVoteComments(bookmarkId);
-    const bookmarkWithCount = { ...bookmark, commentCount: comments.length };
-    ctx.body = await singleBookmarkView(bookmarkWithCount, filter, comments);
+    const root = bookmark.rootId || bookmark.id;
+
+    const comments = await getVoteComments(root);
+
+    const bookmarkWithCount = {
+      ...bookmark,
+      commentCount: comments.length,
+      isFavorite: favs.has(String(root))
+    };
+
+    ctx.body = await singleBookmarkView(bookmarkWithCount, filter, comments, {
+      q, sort,
+      returnTo: safeReturnTo(ctx, `/bookmarks?filter=${encodeURIComponent(filter)}`, ['/bookmarks'])
+    });
   })
   .get('/tasks', async ctx => {
     const filter = ctx.query.filter || 'all';
-    const tasks = await tasksModel.listAll(filter);
+    const tasks = await tasksModel.listAll();
     const commentsCountByTaskId = {};
     await Promise.all(
       tasks.map(async t => {
@@ -1745,16 +1902,16 @@ router
       ...t,
       commentCount: commentsCountByTaskId[t.id] || 0
     }));
-    ctx.body = await taskView(enrichedTasks, filter, null);
+    ctx.body = await taskView(enrichedTasks, filter, null, ctx.query.returnTo);
   })
-  .get('/tasks/edit/:id', async ctx=>{
+  .get('/tasks/edit/:id', async ctx => {
     const id = ctx.params.id;
     const task = await tasksModel.getTaskById(id);
-    ctx.body = await taskView(task,'edit',id);
+    ctx.body = await taskView(task, 'edit', id, ctx.query.returnTo);
   })
   .get('/tasks/:taskId', async ctx => {
     const taskId = ctx.params.taskId;
-    const filter = ctx.query.filter || 'all'; 
+    const filter = ctx.query.filter || 'all';
     const task = await tasksModel.getTaskById(taskId);
     const comments = await getVoteComments(taskId);
     const taskWithCount = { ...task, commentCount: comments.length };
@@ -1779,7 +1936,7 @@ router
       ...e,
       commentCount: commentsCountByEventId[e.id] || 0
     }));
-    ctx.body = await eventView(enrichedEvents, filter, null);
+    ctx.body = await eventView(enrichedEvents, filter, null, ctx.query.returnTo);
   })
   .get('/events/edit/:id', async (ctx) => {
     const eventsMod = ctx.cookies.get("eventsMod") || 'on';
@@ -1789,11 +1946,11 @@ router
     }
     const eventId = ctx.params.id;
     const event = await eventsModel.getEventById(eventId);
-    ctx.body = await eventView([event], 'edit', eventId);
-   })
- .get('/events/:eventId', async ctx => {
+    ctx.body = await eventView([event], 'edit', eventId, ctx.query.returnTo);
+  })
+  .get('/events/:eventId', async ctx => {
     const eventId = ctx.params.eventId;
-    const filter = ctx.query.filter || 'all'; 
+    const filter = ctx.query.filter || 'all';
     const event = await eventsModel.getEventById(eventId);
     const comments = await getVoteComments(eventId);
     const eventWithCount = { ...event, commentCount: comments.length };
@@ -1813,141 +1970,194 @@ router
       ...v,
       commentCount: commentsCountByVoteId[v.id] || 0
     }));
-    ctx.body = await voteView(enrichedVotes, filter, null, []);
+    ctx.body = await voteView(enrichedVotes, filter, null, [], filter);
   })
   .get('/votes/edit/:id', async ctx => {
     const id = ctx.params.id;
+    const activeFilter = (ctx.query.filter || 'mine');
     const voteData = await votesModel.getVoteById(id);
-    ctx.body = await voteView([voteData], 'edit', id, []);
+    ctx.body = await voteView([voteData], 'edit', id, [], activeFilter);
   })
   .get('/votes/:voteId', async ctx => {
     const voteId = ctx.params.voteId;
+    const activeFilter = (ctx.query.filter || 'all');
     const voteData = await votesModel.getVoteById(voteId);
     const comments = await getVoteComments(voteId);
     const voteWithCount = { ...voteData, commentCount: comments.length };
-    ctx.body = await voteView([voteWithCount], 'detail', voteId, comments);
+    ctx.body = await voteView([voteWithCount], 'detail', voteId, comments, activeFilter);
   })
-  .get('/market', async ctx => {
-    const marketMod = ctx.cookies.get("marketMod") || 'on';
-    if (marketMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
+  .get("/market", async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
     }
-    const filter = ctx.query.filter || 'all';
-    let marketItems = await marketModel.listAllItems(filter);
-    const commentsCountById = {};
+    const filter = ctx.query.filter || "all"
+    const q = ctx.query.q || ""
+    const minPrice = ctx.query.minPrice ?? ""
+    const maxPrice = ctx.query.maxPrice ?? ""
+    const sort = ctx.query.sort || "recent"
+    let marketItems = await marketModel.listAllItems("all")
+    await marketModel.checkAuctionItemsStatus(marketItems)
+    marketItems = await marketModel.listAllItems("all")
+    const commentsCountById = {}
     await Promise.all(
-      marketItems.map(async item => {
-        const comments = await getVoteComments(item.id);
-        commentsCountById[item.id] = comments.length;
+      marketItems.map(async (item) => {
+        const comments = await getVoteComments(item.id)
+        commentsCountById[item.id] = comments.length
       })
-    );
-    marketItems = marketItems.map(item => ({
-      ...item,
-      commentCount: commentsCountById[item.id] || 0
-    }));
-    ctx.body = await marketView(marketItems, filter, null);
+    )
+    marketItems = marketItems.map((item) => ({ ...item, commentCount: commentsCountById[item.id] || 0 }))
+    ctx.body = await marketView(marketItems, filter, null, { q, minPrice, maxPrice, sort })
   })
-  .get('/market/edit/:id', async ctx => {
-    const id = ctx.params.id;
-    const marketItem = await marketModel.getItemById(id);
-    ctx.body = await marketView([marketItem], 'edit', marketItem);
-   })
-  .get('/market/:itemId', async ctx => {
-    const itemId = ctx.params.itemId;
-    const filter = ctx.query.filter || 'all'; 
-    const item = await marketModel.getItemById(itemId); 
-    const comments = await getVoteComments(itemId);
-    const itemWithCount = { ...item, commentCount: comments.length };
-    ctx.body = await singleMarketView(itemWithCount, filter, comments);
+  .get("/market/edit/:id", async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
+    }
+    const id = ctx.params.id
+    let marketItem = await marketModel.getItemById(id)
+    if (!marketItem) ctx.throw(404, "Item not found")
+    await marketModel.checkAuctionItemsStatus([marketItem])
+    marketItem = await marketModel.getItemById(id)
+    if (!marketItem) ctx.throw(404, "Item not found")
+    ctx.body = await marketView([marketItem], "edit", marketItem, { q: "", minPrice: "", maxPrice: "", sort: "recent" })
+  })
+  .get("/market/:itemId", async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
+    }
+    const itemId = ctx.params.itemId
+    const filter = ctx.query.filter || "all"
+    const q = ctx.query.q || ""
+    const minPrice = ctx.query.minPrice ?? ""
+    const maxPrice = ctx.query.maxPrice ?? ""
+    const sort = ctx.query.sort || "recent"
+    let item = await marketModel.getItemById(itemId)
+    if (!item) ctx.throw(404, "Item not found")
+    await marketModel.checkAuctionItemsStatus([item])
+    item = await marketModel.getItemById(itemId)
+    if (!item) ctx.throw(404, "Item not found")
+    const comments = await getVoteComments(itemId)
+    const itemWithCount = { ...item, commentCount: comments.length }
+    const returnTo = (() => {
+    const params = []
+      if (filter) params.push(`filter=${encodeURIComponent(filter)}`)
+      if (q) params.push(`q=${encodeURIComponent(q)}`)
+      if (minPrice !== "" && minPrice != null) params.push(`minPrice=${encodeURIComponent(String(minPrice))}`)
+      if (maxPrice !== "" && maxPrice != null) params.push(`maxPrice=${encodeURIComponent(String(maxPrice))}`)
+      if (sort) params.push(`sort=${encodeURIComponent(sort)}`)
+      return `/market${params.length ? `?${params.join("&")}` : ""}`
+    })()
+    ctx.body = await singleMarketView(itemWithCount, filter, comments, { q, minPrice, maxPrice, sort, returnTo })
   })
   .get('/jobs', async (ctx) => {
-    const jobsMod = ctx.cookies.get("jobsMod") || 'on';
-    if (jobsMod !== 'on') {
-      ctx.redirect('/modules');
-      return;
-    }
-    const filter = ctx.query.filter || 'ALL';
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    let filter = String(ctx.query.filter || 'ALL').toUpperCase()
+    if (filter === 'FAVS' || filter === 'NEEDS') filter = 'ALL'
     const query = {
       search: ctx.query.search || '',
-    };
+      minSalary: ctx.query.minSalary ?? '',
+      maxSalary: ctx.query.maxSalary ?? '',
+      sort: ctx.query.sort || 'recent'
+    }
+    if (filter === 'CREATE') {
+      ctx.body = await jobsView([], 'CREATE', query)
+      return
+    }
     if (filter === 'CV') {
-      query.location = ctx.query.location || '';
-      query.language = ctx.query.language || '';
-      query.skills = ctx.query.skills || '';
+      query.location = ctx.query.location || ''
+      query.language = ctx.query.language || ''
+      query.skills = ctx.query.skills || ''
       const inhabitants = await inhabitantsModel.listInhabitants({
         filter: 'CVs',
         ...query
-      });
-      ctx.body = await jobsView(inhabitants, filter, query);
-      return;
+      })
+      ctx.body = await jobsView(inhabitants, filter, query)
+      return
     }
-    let jobs = await jobsModel.listJobs(filter, ctx.state.user?.id, query);
-    const commentsCountById = {};
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    let jobs = await jobsModel.listJobs(filter, viewerId, query)
+    const commentsCountById = {}
     await Promise.all(
       jobs.map(async job => {
-        const comments = await getVoteComments(job.id);
-        commentsCountById[job.id] = comments.length;
+        const comments = await getVoteComments(job.id)
+        commentsCountById[job.id] = comments.length
       })
-    );
+    )
     jobs = jobs.map(job => ({
       ...job,
       commentCount: commentsCountById[job.id] || 0
-    }));
-    ctx.body = await jobsView(jobs, filter, query);
+    }))
+    ctx.body = await jobsView(jobs, filter, query)
   })
   .get('/jobs/edit/:id', async (ctx) => {
-    const id = ctx.params.id;
-    const job = await jobsModel.getJobById(id);
-    ctx.body = await jobsView([job], 'EDIT');
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    const id = ctx.params.id
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    const job = await jobsModel.getJobById(id, viewerId)
+    ctx.body = await jobsView([job], 'EDIT', {})
   })
   .get('/jobs/:jobId', async (ctx) => {
-    const jobId = ctx.params.jobId;
-    const filter = ctx.query.filter || 'ALL';
-    const job = await jobsModel.getJobById(jobId);
-    const comments = await getVoteComments(jobId);
-    const jobWithCount = { ...job, commentCount: comments.length };
-    ctx.body = await singleJobsView(jobWithCount, filter, comments);
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    const jobId = ctx.params.jobId
+    let filter = String(ctx.query.filter || 'ALL').toUpperCase()
+    if (filter === 'FAVS' || filter === 'NEEDS') filter = 'ALL'
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    const params = {
+      search: ctx.query.search || '',
+      minSalary: ctx.query.minSalary ?? '',
+      maxSalary: ctx.query.maxSalary ?? '',
+      sort: ctx.query.sort || 'recent',
+      returnTo: safeReturnTo(ctx, `/jobs?filter=${encodeURIComponent(filter)}`, ['/jobs'])
+    }
+    const job = await jobsModel.getJobById(jobId, viewerId)
+    const comments = await getVoteComments(jobId)
+    const jobWithCount = { ...job, commentCount: comments.length }
+    ctx.body = await singleJobsView(jobWithCount, filter, comments, params)
   })
-  .get('/projects', async (ctx) => {
-    const projectsMod = ctx.cookies.get("projectsMod") || 'on';
-    if (projectsMod !== 'on') { ctx.redirect('/modules'); return; }
-    const filter = ctx.query.filter || 'ALL';
-    if (filter === 'CREATE') {
-      ctx.body = await projectsView([], 'CREATE');
-      return;
+  .get("/projects", async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+    const filter = String(ctx.query.filter || "ALL").toUpperCase()
+    if (filter === "CREATE") {
+      ctx.body = await projectsView([], "CREATE")
+      return
     }
-    const modelFilter = (filter === 'BACKERS') ? 'ALL' : filter;
-    let projects = await projectsModel.listProjects(modelFilter);
-    if (filter === 'MINE') {
-      const userId = SSBconfig.config.keys.id;
-      projects = projects.filter(project => project.author === userId);
-    }
-    const commentsCountById = {};
+    const modelFilter = filter === "BACKERS" ? "ALL" : filter
+    let projects = await projectsModel.listProjects(modelFilter)
+    const commentsCountById = {}
     await Promise.all(
-      projects.map(async pr => {
-        const comments = await getVoteComments(pr.id);
-        commentsCountById[pr.id] = comments.length;
+      projects.map(async (pr) => {
+        const comments = await getVoteComments(pr.id)
+        commentsCountById[pr.id] = comments.length
       })
-    );
-    projects = projects.map(pr => ({
-      ...pr,
-      commentCount: commentsCountById[pr.id] || 0
-    }));
-    ctx.body = await projectsView(projects, filter);
+    )
+    projects = projects.map((pr) => ({ ...pr, commentCount: commentsCountById[pr.id] || 0 }))
+    ctx.body = await projectsView(projects, filter)
   })
-  .get('/projects/edit/:id', async (ctx) => {
+  .get("/projects/edit/:id", async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
     const id = ctx.params.id
     const pr = await projectsModel.getProjectById(id)
-    ctx.body = await projectsView([pr], 'EDIT')
+    ctx.body = await projectsView([pr], "EDIT")
   })
-  .get('/projects/:projectId', async (ctx) => {
-    const projectId = ctx.params.projectId;
-    const filter = ctx.query.filter || 'ALL';
-    const project = await projectsModel.getProjectById(projectId);
-    const comments = await getVoteComments(projectId);
-    const projectWithCount = { ...project, commentCount: comments.length };
-    ctx.body = await singleProjectView(projectWithCount, filter, comments);
+  .get("/projects/:projectId", async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+    const projectId = ctx.params.projectId
+    const filter = String(ctx.query.filter || "ALL").toUpperCase()
+    const project = await projectsModel.getProjectById(projectId)
+    const comments = await getVoteComments(projectId)
+    const projectWithCount = { ...project, commentCount: comments.length }
+    ctx.body = await singleProjectView(projectWithCount, filter, comments)
   })
   .get("/banking", async (ctx) => {
     const bankingMod = ctx.cookies.get("bankingMod") || 'on';
@@ -1990,6 +2200,11 @@ router
     const epoch = await bankingModel.getEpochById(ctx.params.id);
     const allocations = await bankingModel.listEpochAllocations(ctx.params.id);
     ctx.body = renderEpochView(epoch, allocations);
+  })
+  .get("/favorites", async (ctx) => {
+    const filter = ctx.query.filter || "all";
+    const data = await favoritesModel.listAll({ filter });
+    ctx.body = await favoritesView(data.items, filter, data.counts);
   })
   .get('/cipher', async (ctx) => {
     const cipherMod = ctx.cookies.get("cipherMod") || 'on';
@@ -2112,19 +2327,42 @@ router
     }
   })
   .get('/transfers', async ctx => {
-    const filter = ctx.query.filter || 'all'
-    const list = await transfersModel.listAll(filter)
-    ctx.body = await transferView(list, filter, null)
+    const transfersMod = ctx.cookies.get("transfersMod") || 'on'
+    if (transfersMod !== 'on') { ctx.redirect('/modules'); return }
+    let filter = ctx.query.filter || 'all'
+    if (filter === 'favs') filter = 'all'
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    const list = await transfersModel.listAll(filter, viewerId)
+    ctx.body = await transferView(list, filter, null, {
+      q: ctx.query.q || '',
+      minAmount: ctx.query.minAmount ?? '',
+      maxAmount: ctx.query.maxAmount ?? '',
+      sort: ctx.query.sort || 'recent'
+    })
   })
   .get('/transfers/edit/:id', async ctx => {
-    const tr = await transfersModel.getTransferById(ctx.params.id)
-    ctx.body = await transferView([tr], 'edit', ctx.params.id)
+    const transfersMod = ctx.cookies.get("transfersMod") || 'on'
+    if (transfersMod !== 'on') { ctx.redirect('/modules'); return }
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    const tr = await transfersModel.getTransferById(ctx.params.id, viewerId)
+    ctx.body = await transferView([tr], 'edit', ctx.params.id, {})
   })
   .get('/transfers/:transferId', async ctx => {
-    const transferId = ctx.params.transferId;
-    const filter = ctx.query.filter || 'all'; 
-    const transfer = await transfersModel.getTransferById(transferId);
-    ctx.body = await singleTransferView(transfer, filter);
+    const transfersMod = ctx.cookies.get("transfersMod") || 'on'
+    if (transfersMod !== 'on') { ctx.redirect('/modules'); return }
+    const transferId = ctx.params.transferId
+    let filter = ctx.query.filter || 'all'
+    if (filter === 'favs') filter = 'all'
+    const viewerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    const transfer = await transfersModel.getTransferById(transferId, viewerId)
+    const params = {
+      q: ctx.query.q || '',
+      minAmount: ctx.query.minAmount ?? '',
+      maxAmount: ctx.query.maxAmount ?? '',
+      sort: ctx.query.sort || 'recent',
+      returnTo: safeReturnTo(ctx, `/transfers?filter=${encodeURIComponent(filter)}`, ['/transfers'])
+    }
+    ctx.body = await singleTransferView(transfer, filter, params)
   })
 
   //POST backend routes   
@@ -2587,241 +2825,278 @@ router
     await feedModel.createRefeed(ctx.params.id);
     ctx.redirect(ctx.get("Referer") || "/feed");
   })
-  .post('/bookmarks/create', koaBody(), async (ctx) => {
+  .post("/bookmarks/create", koaBody(), async (ctx) => {
+    const bookmarksMod = ctx.cookies.get("bookmarksMod") || "on";
+    if (bookmarksMod !== "on") { ctx.redirect("/modules"); return; }
     const { url, tags, description, category, lastVisit } = ctx.request.body;
-    const formattedLastVisit = lastVisit ? moment(lastVisit).isBefore(moment()) ? moment(lastVisit).toISOString() : moment().toISOString() : moment().toISOString();
-    await bookmarksModel.createBookmark(url, tags, description, category, formattedLastVisit);
-    ctx.redirect('/bookmarks');
+    await bookmarksModel.createBookmark(url, tags, description, category, lastVisit);
+    ctx.redirect(safeReturnTo(ctx, "/bookmarks?filter=all", ["/bookmarks"]));
   })
-  .post('/bookmarks/update/:id', koaBody(), async (ctx) => {
+  .post("/bookmarks/update/:id", koaBody(), async (ctx) => {
+    const bookmarksMod = ctx.cookies.get("bookmarksMod") || "on";
+    if (bookmarksMod !== "on") { ctx.redirect("/modules"); return; }
     const { url, tags, description, category, lastVisit } = ctx.request.body;
-    const bookmarkId = ctx.params.id;
-    const formattedLastVisit = lastVisit 
-     ? moment(lastVisit).isBefore(moment()) 
-        ? moment(lastVisit).toISOString() 
-        : moment().toISOString() 
-      : moment().toISOString();
-    const bookmark = await bookmarksModel.getBookmarkById(bookmarkId);
-    if (bookmark.opinions_inhabitants && bookmark.opinions_inhabitants.length > 0) {
-        ctx.flash = { message: "This bookmark has received votes and cannot be updated." };
-        ctx.redirect(`/bookmarks?filter=mine`);
-    }
-    await bookmarksModel.updateBookmarkById(bookmarkId, {
-      url,
-      tags,
-      description,
-      category,
-      lastVisit: formattedLastVisit,
-      createdAt: bookmark.createdAt,
-      author: bookmark.author,
-    });
-    ctx.redirect('/bookmarks?filter=mine');
+    await bookmarksModel.updateBookmarkById(ctx.params.id, { url, tags, description, category, lastVisit });
+    ctx.redirect(safeReturnTo(ctx, "/bookmarks?filter=mine", ["/bookmarks"]));
   })
-  .post('/bookmarks/delete/:id', koaBody(), async (ctx) => {
-    const bookmarkId = ctx.params.id;
-    await bookmarksModel.deleteBookmarkById(bookmarkId);
-    ctx.redirect('/bookmarks?filter=mine');
+  .post("/bookmarks/delete/:id", koaBody(), async (ctx) => {
+    const bookmarksMod = ctx.cookies.get("bookmarksMod") || "on";
+    if (bookmarksMod !== "on") { ctx.redirect("/modules"); return; }
+    await bookmarksModel.deleteBookmarkById(ctx.params.id);
+    ctx.redirect(safeReturnTo(ctx, "/bookmarks?filter=mine", ["/bookmarks"]));
   })
-  .post('/bookmarks/opinions/:bookmarkId/:category', async (ctx) => {
+  .post("/bookmarks/opinions/:bookmarkId/:category", koaBody(), async (ctx) => {
+    const bookmarksMod = ctx.cookies.get("bookmarksMod") || "on";
+    if (bookmarksMod !== "on") { ctx.redirect("/modules"); return; }
     const { bookmarkId, category } = ctx.params;
-    const voterId = SSBconfig?.keys?.id;
-    const bookmark = await bookmarksModel.getBookmarkById(bookmarkId);
-    if (bookmark.opinions_inhabitants && bookmark.opinions_inhabitants.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/bookmarks');
-      return;
-    }
-    await opinionsModel.createVote(bookmarkId, category, 'bookmark');
-    ctx.redirect('/bookmarks');
+    await bookmarksModel.createOpinion(bookmarkId, category);
+    ctx.redirect(safeReturnTo(ctx, "/bookmarks", ["/bookmarks"]));
   })
-  .post('/bookmarks/:bookmarkId/comments', koaBody(), async (ctx) => {
+  .post("/bookmarks/favorites/add/:id", koaBody(), async (ctx) => {
+    const bookmarksMod = ctx.cookies.get("bookmarksMod") || "on";
+    if (bookmarksMod !== "on") { ctx.redirect("/modules"); return; }
+    const rootId = await bookmarksModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.addFavorite("bookmarks", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/bookmarks", ["/bookmarks"]));
+  })
+  .post("/bookmarks/favorites/remove/:id", koaBody(), async (ctx) => {
+    const bookmarksMod = ctx.cookies.get("bookmarksMod") || "on";
+    if (bookmarksMod !== "on") { ctx.redirect("/modules"); return; }
+    const rootId = await bookmarksModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.removeFavorite("bookmarks", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/bookmarks", ["/bookmarks"]));
+  })
+  .post("/bookmarks/:bookmarkId/comments", koaBody(), async (ctx) => {
+    const bookmarksMod = ctx.cookies.get("bookmarksMod") || "on";
+    if (bookmarksMod !== "on") { ctx.redirect("/modules"); return; }
     const { bookmarkId } = ctx.params;
-    const { text } = ctx.request.body;
-    const trimmed = (text || '').trim();
-    if (!trimmed) {
-      ctx.redirect(`/bookmarks/${encodeURIComponent(bookmarkId)}`);
-      return;
-    }
-    await post.publish({
-      text: trimmed,
-      root: bookmarkId,
-      dest: bookmarkId
-    });
-    ctx.redirect(`/bookmarks/${encodeURIComponent(bookmarkId)}`);
+    const { text, rootId } = ctx.request.body;
+    const trimmed = (text || "").trim();
+    const rt = safeReturnTo(ctx, `/bookmarks/${encodeURIComponent(bookmarkId)}`, ["/bookmarks"]);
+    if (!trimmed) { ctx.redirect(rt); return; }
+    const root = String(rootId || "").trim() || bookmarkId;
+    await post.publish({ text: trimmed, root, dest: root });
+    ctx.redirect(rt);
   })
-  .post('/images/create', koaBody({ multipart: true }), async ctx => {
-    const blob = await handleBlobUpload(ctx, 'image');
+  .post("/images/create", koaBody({ multipart: true }), async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
+    const blob = await handleBlobUpload(ctx, "image");
     const { tags, title, description, meme } = ctx.request.body;
-    await imagesModel.createImage(blob, tags, title, description, meme);
-    ctx.redirect('/images');
+    const memeBool = parseBool01(meme);
+    await imagesModel.createImage(blob, tags, title, description, memeBool);
+    ctx.redirect(safeReturnTo(ctx, "/images?filter=all", ["/images"]));
   })
-  .post('/images/update/:id', koaBody({ multipart: true }), async ctx => {
+  .post("/images/update/:id", koaBody({ multipart: true }), async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
     const { tags, title, description, meme } = ctx.request.body;
-    const blob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
-    const match = blob?.match(/\(([^)]+)\)/);
-    const blobId = match ? match[1] : blob;
-    await imagesModel.updateImageById(ctx.params.id, blobId, tags, title, description, meme);
-    ctx.redirect('/images?filter=mine');
+    const memeBool = parseBool01(meme);
+    const blob = ctx.request.files?.image ? await handleBlobUpload(ctx, "image") : null;
+    await imagesModel.updateImageById(ctx.params.id, blob, tags, title, description, memeBool);
+    ctx.redirect(safeReturnTo(ctx, "/images?filter=mine", ["/images"]));
   })
-  .post('/images/delete/:id', koaBody(), async ctx => {
+  .post("/images/delete/:id", koaBody(), async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
     await imagesModel.deleteImageById(ctx.params.id);
-    ctx.redirect('/images?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, "/images?filter=mine", ["/images"]));
   })
-  .post('/images/opinions/:imageId/:category', async ctx => {
+  .post("/images/opinions/:imageId/:category", koaBody(), async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
     const { imageId, category } = ctx.params;
-    const voterId = SSBconfig?.keys?.id;
-    const image = await imagesModel.getImageById(imageId);
-    if (image.opinions_inhabitants && image.opinions_inhabitants.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/images');
-      return;
-    }
-    await imagesModel.createOpinion(imageId, category, 'image');
-    ctx.redirect('/images');
+    await imagesModel.createOpinion(imageId, category);
+    ctx.redirect(safeReturnTo(ctx, "/images", ["/images"]));
   })
-  .post('/images/:imageId/comments', koaBody(), async ctx => {
+  .post("/images/favorites/add/:id", koaBody(), async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
+    const rootId = await imagesModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.addFavorite("images", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/images", ["/images"]));
+  })
+  .post("/images/favorites/remove/:id", koaBody(), async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
+    const rootId = await imagesModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.removeFavorite("images", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/images", ["/images"]));
+  })
+  .post("/images/:imageId/comments", koaBody(), async (ctx) => {
+    const imagesMod = ctx.cookies.get("imagesMod") || "on";
+    if (imagesMod !== "on") { ctx.redirect("/modules"); return; }
     const { imageId } = ctx.params;
     const { text } = ctx.request.body;
-    const trimmed = (text || '').trim();
-    if (!trimmed) {
-      ctx.redirect(`/images/${encodeURIComponent(imageId)}`);
-      return;
-    }
+    const trimmed = (text || "").trim();
+    const rt = safeReturnTo(ctx, `/images/${encodeURIComponent(imageId)}`, ["/images"]);
+    if (!trimmed) { ctx.redirect(rt); return; }
     await post.publish({
       text: trimmed,
       root: imageId,
       dest: imageId
     });
-    ctx.redirect(`/images/${encodeURIComponent(imageId)}`);
+    ctx.redirect(rt);
   })
-  .post('/audios/create', koaBody({ multipart: true }), async (ctx) => {
-    const audioBlob = await handleBlobUpload(ctx, 'audio');
+  .post("/audios/create", koaBody({ multipart: true }), async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
+    const audioBlob = await handleBlobUpload(ctx, "audio");
     const { tags, title, description } = ctx.request.body;
     await audiosModel.createAudio(audioBlob, tags, title, description);
-    ctx.redirect('/audios');
+    ctx.redirect(safeReturnTo(ctx, "/audios?filter=all", ["/audios"]));
   })
-  .post('/audios/update/:id', koaBody({ multipart: true }), async (ctx) => {
+  .post("/audios/update/:id", koaBody({ multipart: true }), async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
     const { tags, title, description } = ctx.request.body;
-    const blob = ctx.request.files?.audio ? await handleBlobUpload(ctx, 'audio') : null;
+    const blob = ctx.request.files?.audio ? await handleBlobUpload(ctx, "audio") : null;
     await audiosModel.updateAudioById(ctx.params.id, blob, tags, title, description);
-    ctx.redirect('/audios?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, "/audios?filter=mine", ["/audios"]));
   })
-  .post('/audios/delete/:id', koaBody(), async (ctx) => {
+  .post("/audios/delete/:id", koaBody(), async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
     await audiosModel.deleteAudioById(ctx.params.id);
-    ctx.redirect('/audios?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, "/audios?filter=mine", ["/audios"]));
   })
-  .post('/audios/opinions/:audioId/:category', async (ctx) => {
+  .post("/audios/opinions/:audioId/:category", koaBody(), async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
     const { audioId, category } = ctx.params;
-    const voterId = SSBconfig?.keys?.id;
-    const audio = await audiosModel.getAudioById(audioId);
-    if (audio.opinions_inhabitants?.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/audios');
-      return;
-    }
     await audiosModel.createOpinion(audioId, category);
-    ctx.redirect('/audios');
+    ctx.redirect(safeReturnTo(ctx, "/audios", ["/audios"]));
   })
-  .post('/audios/:audioId/comments', koaBody(), async ctx => {
+  .post("/audios/favorites/add/:id", koaBody(), async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
+    const rootId = await audiosModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.addFavorite("audios", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/audios", ["/audios"]));
+  })
+  .post("/audios/favorites/remove/:id", koaBody(), async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
+    const rootId = await audiosModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.removeFavorite("audios", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/audios", ["/audios"]));
+  })
+  .post("/audios/:audioId/comments", koaBody(), async (ctx) => {
+    const audiosMod = ctx.cookies.get("audiosMod") || "on";
+    if (audiosMod !== "on") { ctx.redirect("/modules"); return; }
     const { audioId } = ctx.params;
     const { text } = ctx.request.body;
-    const trimmed = (text || '').trim();
-    if (!trimmed) {
-      ctx.redirect(`/audios/${encodeURIComponent(audioId)}`);
-      return;
-    }
+    const trimmed = (text || "").trim();
+    const rt = safeReturnTo(ctx, `/audios/${encodeURIComponent(audioId)}`, ["/audios"]);
+    if (!trimmed) { ctx.redirect(rt); return; }
     await post.publish({
       text: trimmed,
       root: audioId,
       dest: audioId
     });
-    ctx.redirect(`/audios/${encodeURIComponent(audioId)}`);
+    ctx.redirect(rt);
   })
-  .post('/videos/create', koaBody({ multipart: true }), async (ctx) => {
-    const videoBlob = await handleBlobUpload(ctx, 'video');
+  .post("/videos/create", koaBody({ multipart: true }), async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
+    const videoBlob = await handleBlobUpload(ctx, "video");
     const { tags, title, description } = ctx.request.body;
     await videosModel.createVideo(videoBlob, tags, title, description);
-    ctx.redirect('/videos');
+    ctx.redirect(safeReturnTo(ctx, "/videos?filter=all", ["/videos"]));
   })
-  .post('/videos/update/:id', koaBody({ multipart: true }), async (ctx) => {
+  .post("/videos/update/:id", koaBody({ multipart: true }), async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
     const { tags, title, description } = ctx.request.body;
-    const blob = ctx.request.files?.video ? await handleBlobUpload(ctx, 'video') : null;
+    const blob = ctx.request.files?.video ? await handleBlobUpload(ctx, "video") : null;
     await videosModel.updateVideoById(ctx.params.id, blob, tags, title, description);
-    ctx.redirect('/videos?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, "/videos?filter=mine", ["/videos"]));
   })
-  .post('/videos/delete/:id', koaBody(), async (ctx) => {
+  .post("/videos/delete/:id", koaBody(), async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
     await videosModel.deleteVideoById(ctx.params.id);
-    ctx.redirect('/videos?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, "/videos?filter=mine", ["/videos"]));
   })
-  .post('/videos/opinions/:videoId/:category', async (ctx) => {
+  .post("/videos/opinions/:videoId/:category", koaBody(), async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
     const { videoId, category } = ctx.params;
-    const voterId = SSBconfig?.keys?.id;
-    const video = await videosModel.getVideoById(videoId);
-    if (video.opinions_inhabitants?.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/videos');
-      return;
-    }
     await videosModel.createOpinion(videoId, category);
-    ctx.redirect('/videos');
+    ctx.redirect(safeReturnTo(ctx, "/videos", ["/videos"]));
   })
-  .post('/videos/:videoId/comments', koaBody(), async ctx => {
+  .post("/videos/favorites/add/:id", koaBody(), async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
+    const rootId = await videosModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.addFavorite("videos", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/videos", ["/videos"]));
+  })
+  .post("/videos/favorites/remove/:id", koaBody(), async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
+    const rootId = await videosModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.removeFavorite("videos", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/videos", ["/videos"]));
+  })
+  .post("/videos/:videoId/comments", koaBody(), async (ctx) => {
+    const videosMod = ctx.cookies.get("videosMod") || "on";
+    if (videosMod !== "on") { ctx.redirect("/modules"); return; }
     const { videoId } = ctx.params;
     const { text } = ctx.request.body;
-    const trimmed = (text || '').trim();
-    if (!trimmed) {
-      ctx.redirect(`/videos/${encodeURIComponent(videoId)}`);
-      return;
-    }
+    const trimmed = (text || "").trim();
+    const rt = safeReturnTo(ctx, `/videos/${encodeURIComponent(videoId)}`, ["/videos"]);
+    if (!trimmed) { ctx.redirect(rt); return; }
     await post.publish({
       text: trimmed,
       root: videoId,
       dest: videoId
     });
-    ctx.redirect(`/videos/${encodeURIComponent(videoId)}`);
+    ctx.redirect(rt);
   })
-  .post('/documents/create', koaBody({ multipart: true }), async (ctx) => {
-    const docBlob = await handleBlobUpload(ctx, 'document');
+  .post("/documents/create", koaBody({ multipart: true }), async (ctx) => {
+    const docBlob = await handleBlobUpload(ctx, "document");
     const { tags, title, description } = ctx.request.body;
     await documentsModel.createDocument(docBlob, tags, title, description);
-    ctx.redirect('/documents');
+    ctx.redirect(safeReturnTo(ctx, "/documents?filter=all", ["/documents"]));
   })
-  .post('/documents/update/:id', koaBody({ multipart: true }), async (ctx) => {
+  .post("/documents/update/:id", koaBody({ multipart: true }), async (ctx) => {
     const { tags, title, description } = ctx.request.body;
-    const blob = ctx.request.files?.document ? await handleBlobUpload(ctx, 'document') : null;
+    const blob = ctx.request.files?.document ? await handleBlobUpload(ctx, "document") : null;
     await documentsModel.updateDocumentById(ctx.params.id, blob, tags, title, description);
-    ctx.redirect('/documents?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, "/documents?filter=mine", ["/documents"]));
   })
-  .post('/documents/delete/:id', koaBody(), async (ctx) => {
+  .post("/documents/delete/:id", koaBody(), async (ctx) => {
     await documentsModel.deleteDocumentById(ctx.params.id);
-    ctx.redirect('/documents?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, "/documents?filter=mine", ["/documents"]));
   })
-  .post('/documents/opinions/:documentId/:category', async (ctx) => {
+  .post("/documents/opinions/:documentId/:category", koaBody(), async (ctx) => {
     const { documentId, category } = ctx.params;
-    const voterId = SSBconfig?.keys?.id;
-    const document = await documentsModel.getDocumentById(documentId);
-    if (document.opinions_inhabitants?.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/documents');
-      return;
-    }
     await documentsModel.createOpinion(documentId, category);
-     ctx.redirect('/documents');
+    ctx.redirect(safeReturnTo(ctx, "/documents", ["/documents"]));
   })
-  .post('/documents/:documentId/comments', koaBody(), async (ctx) => {
+  .post("/documents/favorites/add/:id", koaBody(), async (ctx) => {
+    const rootId = await documentsModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.addFavorite("documents", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/documents", ["/documents"]));
+  })
+  .post("/documents/favorites/remove/:id", koaBody(), async (ctx) => {
+    const rootId = await documentsModel.resolveRootId(ctx.params.id);
+    await mediaFavorites.removeFavorite("documents", rootId);
+    ctx.redirect(safeReturnTo(ctx, "/documents", ["/documents"])); 
+  })
+  .post("/documents/:documentId/comments", koaBody(), async (ctx) => {
     const { documentId } = ctx.params;
-    const { text } = ctx.request.body;
-    const trimmed = (text || '').trim();
+    const { text, rootId } = ctx.request.body;
+    const trimmed = (text || "").trim();
+    const rt = safeReturnTo(ctx, `/documents/${encodeURIComponent(documentId)}`, ["/documents"]);
     if (!trimmed) {
-      ctx.redirect(`/documents/${encodeURIComponent(documentId)}`);
+      ctx.redirect(rt);
       return;
     }
-    await post.publish({
-      text: trimmed,
-      root: documentId,
-      dest: documentId
-    });
-    ctx.redirect(`/documents/${encodeURIComponent(documentId)}`);
+    const root = safeText(rootId) || documentId;
+    await post.publish({ text: trimmed, root, dest: root });
+    ctx.redirect(rt);
   })
   .post('/cv/upload', koaBody({ multipart: true }), async ctx => {
     const photoUrl = await handleBlobUpload(ctx, 'image')
@@ -2975,12 +3250,12 @@ router
       };
     }
   })
-  .post('/tasks/create', koaBody(), async (ctx) => {
+  .post('/tasks/create', koaBody(), async ctx => {
     const { title, description, startTime, endTime, priority, location, tags, isPublic } = ctx.request.body;
     await tasksModel.createTask(title, description, startTime, endTime, priority, location, tags, isPublic);
-    ctx.redirect('/tasks?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, '/tasks?filter=mine', ['/tasks']));
   })
-  .post('/tasks/update/:id', koaBody(), async (ctx) => {
+  .post('/tasks/update/:id', koaBody(), async ctx => {
     const { title, description, startTime, endTime, priority, location, tags, isPublic } = ctx.request.body;
     const taskId = ctx.params.id;
     const parsedTags = Array.isArray(tags)
@@ -2996,30 +3271,31 @@ router
       tags: parsedTags,
       isPublic
     });
-    ctx.redirect('/tasks?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, '/tasks?filter=mine', ['/tasks']));
   })
-  .post('/tasks/assign/:id', koaBody(), async (ctx) => {
+  .post('/tasks/assign/:id', koaBody(), async ctx => {
     const taskId = ctx.params.id;
     await tasksModel.toggleAssignee(taskId);
-    ctx.redirect('/tasks');
-   })
-  .post('/tasks/delete/:id', koaBody(), async (ctx) => {
+    ctx.redirect(safeReturnTo(ctx, '/tasks', ['/tasks']));
+  })
+  .post('/tasks/delete/:id', koaBody(), async ctx => {
     const taskId = ctx.params.id;
     await tasksModel.deleteTaskById(taskId);
-    ctx.redirect('/tasks?filter=mine');
-   })
-  .post('/tasks/status/:id', koaBody(), async (ctx) => {
+    ctx.redirect(safeReturnTo(ctx, '/tasks?filter=mine', ['/tasks']));
+  })
+  .post('/tasks/status/:id', koaBody(), async ctx => {
     const taskId = ctx.params.id;
     const { status } = ctx.request.body;
     await tasksModel.updateTaskStatus(taskId, status);
-    ctx.redirect('/tasks?filter=mine');
-   })
-   .post('/tasks/:taskId/comments', koaBody(), async ctx => {
+    ctx.redirect(safeReturnTo(ctx, '/tasks?filter=mine', ['/tasks']));
+  })
+  .post('/tasks/:taskId/comments', koaBody(), async ctx => {
     const { taskId } = ctx.params;
     const { text } = ctx.request.body;
     const trimmed = (text || '').trim();
+    const fallback = `/tasks/${encodeURIComponent(taskId)}`;
     if (!trimmed) {
-      ctx.redirect(`/tasks/${encodeURIComponent(taskId)}`);
+      ctx.redirect(safeReturnTo(ctx, fallback, ['/tasks']));
       return;
     }
     await post.publish({
@@ -3027,31 +3303,55 @@ router
       root: taskId,
       dest: taskId
     });
-    ctx.redirect(`/tasks/${encodeURIComponent(taskId)}`);
+    ctx.redirect(safeReturnTo(ctx, fallback, ['/tasks']));
   })
   .post('/reports/create', koaBody({ multipart: true }), async ctx => {
-      const { title, description, category, tags, severity } = ctx.request.body;
-      const image = await handleBlobUpload(ctx, 'image');
-      await reportsModel.createReport(title, description, category, image, tags, severity);
-      ctx.redirect('/reports');
-   })
+    const {
+      title, description, category, tags, severity,
+      stepsToReproduce, expectedBehavior, actualBehavior, environment, reproduceRate,
+      problemStatement, userStory, acceptanceCriteria,
+      whatHappened, reportedUser, evidenceLinks,
+      contentLocation, whyInappropriate, requestedAction
+    } = ctx.request.body;
+    const image = await handleBlobUpload(ctx, 'image');
+    const template = {
+      stepsToReproduce, expectedBehavior, actualBehavior, environment, reproduceRate,
+      problemStatement, userStory, acceptanceCriteria,
+      whatHappened, reportedUser, evidenceLinks,
+      contentLocation, whyInappropriate, requestedAction
+    };
+    await reportsModel.createReport(title, description, category, image, tags, severity, template);
+    ctx.redirect('/reports');
+  })
   .post('/reports/update/:id', koaBody({ multipart: true }), async ctx => {
-      const { title, description, category, tags, severity } = ctx.request.body;
-      const image = await handleBlobUpload(ctx, 'image');
-      await reportsModel.updateReportById(ctx.params.id, {
-        title, description, category, image, tags, severity
-      });
-      ctx.redirect('/reports?filter=mine');
-   })
+    const {
+    title, description, category, tags, severity,
+    stepsToReproduce, expectedBehavior, actualBehavior, environment, reproduceRate,
+    problemStatement, userStory, acceptanceCriteria,
+    whatHappened, reportedUser, evidenceLinks,
+      contentLocation, whyInappropriate, requestedAction
+    } = ctx.request.body;
+    const image = await handleBlobUpload(ctx, 'image');
+    const template = {
+      stepsToReproduce, expectedBehavior, actualBehavior, environment, reproduceRate,
+      problemStatement, userStory, acceptanceCriteria,
+      whatHappened, reportedUser, evidenceLinks,
+      contentLocation, whyInappropriate, requestedAction
+    };
+    await reportsModel.updateReportById(ctx.params.id, {
+      title, description, category, image, tags, severity, template
+    });
+    ctx.redirect('/reports?filter=mine');
+  })
   .post('/reports/delete/:id', async ctx => {
-      await reportsModel.deleteReportById(ctx.params.id);
-      ctx.redirect('/reports?filter=mine');
-   })   
+    await reportsModel.deleteReportById(ctx.params.id);
+    ctx.redirect('/reports?filter=mine');
+  })
   .post('/reports/confirm/:id', async ctx => {
-      await reportsModel.confirmReportById(ctx.params.id);
-      ctx.redirect('/reports');
-   })
-  .post('/reports/status/:id', koaBody(), async (ctx) => {
+    await reportsModel.confirmReportById(ctx.params.id);
+    ctx.redirect('/reports');
+  })
+  .post('/reports/status/:id', koaBody(), async ctx => {
     const reportId = ctx.params.id;
     const { status } = ctx.request.body;
     await reportsModel.updateReportById(reportId, { status });
@@ -3074,13 +3374,13 @@ router
   })
   .post('/events/create', koaBody(), async (ctx) => {
     const { title, description, date, location, price, url, attendees, tags, isPublic } = ctx.request.body;
-    await eventsModel.createEvent(title, description, date, location, price, url, attendees, tags, isPublic);
-    ctx.redirect('/events?filter=mine');
+    await eventsModel.createEvent(title, description, date, location, price, url, attendees || [], tags, isPublic);
+    ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events'])); 
   })
   .post('/events/update/:id', koaBody(), async (ctx) => {
     const { title, description, date, location, price, url, attendees, tags, isPublic } = ctx.request.body;
     const eventId = ctx.params.id;
-    const event = await eventsModel.getEventById(eventId);
+    const existing = await eventsModel.getEventById(eventId);
     await eventsModel.updateEventById(eventId, {
       title,
       description,
@@ -3091,27 +3391,28 @@ router
       attendees,
       tags,
       isPublic,
-      createdAt: event.createdAt,
-      organizer: event.organizer,
+      createdAt: existing.createdAt,
+      organizer: existing.organizer
     });
-    ctx.redirect('/events?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events']));
   })
   .post('/events/attend/:id', koaBody(), async (ctx) => {
     const eventId = ctx.params.id;
     await eventsModel.toggleAttendee(eventId);
-    ctx.redirect('/events');
+    ctx.redirect(safeReturnTo(ctx, '/events', ['/events']));
   })
   .post('/events/delete/:id', koaBody(), async (ctx) => {
     const eventId = ctx.params.id;
     await eventsModel.deleteEventById(eventId);
-    ctx.redirect('/events?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events']));
   })
   .post('/events/:eventId/comments', koaBody(), async (ctx) => {
     const { eventId } = ctx.params;
     const { text } = ctx.request.body;
     const trimmed = (text || '').trim();
+    const fallback = `/events/${encodeURIComponent(eventId)}`;
     if (!trimmed) {
-      ctx.redirect(`/events/${encodeURIComponent(eventId)}`);
+      ctx.redirect(safeReturnTo(ctx, fallback, ['/events']));
       return;
     }
     await post.publish({
@@ -3119,57 +3420,60 @@ router
       root: eventId,
       dest: eventId
     });
-    ctx.redirect(`/events/${encodeURIComponent(eventId)}`);
+    ctx.redirect(safeReturnTo(ctx, fallback, ['/events']));
   })
   .post('/votes/create', koaBody(), async ctx => {
-    const { question, deadline, options, tags = '' } = ctx.request.body;
+    const { question, deadline, options, tags = '', returnTo } = ctx.request.body;
     const defaultOptions = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'];
     const parsedOptions = options
       ? options.split(',').map(o => o.trim()).filter(Boolean)
       : defaultOptions;
-    const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+    const parsedTags = String(tags || '').split(',').map(t => t.trim()).filter(Boolean);
     await votesModel.createVote(question, deadline, parsedOptions, parsedTags);
-    ctx.redirect('/votes');
+    ctx.redirect(safeReturnTo(ctx, '/votes?filter=mine', ['/votes']));
   })
   .post('/votes/update/:id', koaBody(), async ctx => {
     const id = ctx.params.id;
-    const { question, deadline, options, tags = '' } = ctx.request.body;
+    const { question, deadline, options, tags = '', returnTo } = ctx.request.body;
     const parsedOptions = options
       ? options.split(',').map(o => o.trim()).filter(Boolean)
       : undefined;
     const parsedTags = tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [];
     await votesModel.updateVoteById(id, { question, deadline, options: parsedOptions, tags: parsedTags });
-    ctx.redirect('/votes?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, '/votes?filter=mine', ['/votes']));
   })
   .post('/votes/delete/:id', koaBody(), async ctx => {
     const id = ctx.params.id;
     await votesModel.deleteVoteById(id);
-    ctx.redirect('/votes?filter=mine');
+    ctx.redirect(safeReturnTo(ctx, '/votes?filter=mine', ['/votes']));
   })
   .post('/votes/vote/:id', koaBody(), async ctx => {
     const id = ctx.params.id;
     const { choice } = ctx.request.body;
     await votesModel.voteOnVote(id, choice);
-    ctx.redirect('/votes?filter=open');
+    ctx.redirect(safeReturnTo(ctx, '/votes?filter=open', ['/votes']));
   })
-  .post('/votes/opinions/:voteId/:category', async ctx => {
+  .post('/votes/opinions/:voteId/:category', koaBody(), async ctx => {
     const { voteId, category } = ctx.params;
-    const voterId = SSBconfig?.keys?.id;
-    const voteData = await votesModel.getVoteById(voteId);
-    if (voteData.opinions_inhabitants && voteData.opinions_inhabitants.includes(voterId)) {
-      ctx.flash = { message: "You have already opined." };
-      ctx.redirect('/votes');
-      return;
+    try {
+      await votesModel.createOpinion(voteId, category);
+    } catch (e) {
+      const msg = String(e && e.message ? e.message : '');
+      if (/already/i.test(msg)) {
+        ctx.flash = { message: "You have already opined." };
+      } else {
+        throw e;
+      }
     }
-    await votesModel.createOpinion(voteId, category);
-    ctx.redirect('/votes');
+    ctx.redirect(safeReturnTo(ctx, '/votes', ['/votes']));
   })
   .post('/votes/:voteId/comments', koaBody(), async ctx => {
     const { voteId } = ctx.params;
     const { text } = ctx.request.body;
     const trimmed = (text || '').trim();
+    const fallback = `/votes/${encodeURIComponent(voteId)}`;
     if (!trimmed) {
-      ctx.redirect(`/votes/${encodeURIComponent(voteId)}`);
+      ctx.redirect(safeReturnTo(ctx, fallback, ['/votes']));
       return;
     }
     await post.publish({
@@ -3177,7 +3481,7 @@ router
       root: voteId,
       dest: voteId
     });
-    ctx.redirect(`/votes/${encodeURIComponent(voteId)}`);
+    ctx.redirect(safeReturnTo(ctx, fallback, ['/votes']));
   })
   .post('/parliament/candidatures/propose', koaBody(), async (ctx) => {
     const { candidateId = '', method = '' } = ctx.request.body || {};
@@ -3520,130 +3824,171 @@ router
     }
     ctx.redirect('/courts?filter=judges');
   })  
-  .post('/market/create', koaBody({ multipart: true }), async ctx => {
-    const { item_type, title, description, price, tags, item_status, deadline, includesShipping, stock } = ctx.request.body;
-    const image = await handleBlobUpload(ctx, 'image');
-    if (!stock || stock <= 0) {
-      ctx.throw(400, 'Stock must be a positive number.');
+  .post("/market/create", koaBody({ multipart: true }), async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
     }
-    await marketModel.createItem(item_type, title, description, image, price, tags, item_status, deadline, includesShipping, stock);
-   ctx.redirect('/market');
+    const { item_type, title, description, price, tags, item_status, deadline, includesShipping, stock } = ctx.request.body
+    const image = await handleBlobUpload(ctx, "image")
+    const parsedStock = parseInt(String(stock || "0"), 10)
+    if (!parsedStock || parsedStock <= 0) ctx.throw(400, "Stock must be a positive number.")
+    const pickLast = (v) => (Array.isArray(v) ? v[v.length - 1] : v)
+    const includesShippingVal = pickLast(includesShipping)
+    const includesShippingBool = includesShippingVal === "1" || includesShippingVal === "on" || includesShippingVal === true || includesShippingVal === "true"
+    await marketModel.createItem(item_type, title, description, image, price, tags, item_status, deadline, includesShippingBool, parsedStock)
+    ctx.redirect(safeReturnTo(ctx, "/market", ["/market"]))
   })
-  .post('/market/update/:id', koaBody({ multipart: true }), async ctx => {
-    const id = ctx.params.id;
-    const { item_type, title, description, price, tags = '', item_status, deadline, includesShipping, stock } = ctx.request.body;
-    const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
-    if (stock < 0) {
-      ctx.throw(400, 'Stock cannot be negative.');
+  .post("/market/update/:id", koaBody({ multipart: true }), async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
     }
+    const id = ctx.params.id
+    const { item_type, title, description, price, tags = "", item_status, deadline, includesShipping, stock } = ctx.request.body
+    const parsedStock = parseInt(String(stock || "0"), 10)
+    if (parsedStock < 0) ctx.throw(400, "Stock cannot be negative.")
+    const parsedTags = String(tags || "").split(",").map((t) => t.trim()).filter(Boolean)
+    const pickLast = (v) => (Array.isArray(v) ? v[v.length - 1] : v)
+    const includesShippingVal = pickLast(includesShipping)
+    const includesShippingBool = includesShippingVal === "1" || includesShippingVal === "on" || includesShippingVal === true || includesShippingVal === "true"
     const updatedData = {
-      item_type, 
-      title, 
-      description, 
-      price, 
-      item_status, 
-      deadline, 
-      includesShipping, 
-      tags: parsedTags, 
-      stock
-    };
-    const image = await handleBlobUpload(ctx, 'image');
-    updatedData.image = image;
-    await marketModel.updateItemById(id, updatedData);
-    ctx.redirect('/market?filter=mine'); 
-  })
-  .post('/market/delete/:id', koaBody(), async ctx => {
-    const id = ctx.params.id;
-    await marketModel.deleteItemById(id);
-    ctx.redirect('/market?filter=mine');
-  })
-  .post('/market/sold/:id', koaBody(), async ctx => {
-    const id = ctx.params.id;
-    const marketItem = await marketModel.getItemById(id);
-    if (marketItem.stock <= 0) {
-      ctx.throw(400, 'No stock left to mark as sold.');
+      item_type,
+      title,
+      description,
+      price,
+      item_status,
+      deadline,
+      includesShipping: includesShippingBool,
+      tags: parsedTags,
+      stock: parsedStock
     }
-    if (marketItem.status !== 'SOLD') {
-      await marketModel.setItemAsSold(id);
-      await marketModel.decrementStock(id);
-    }
-    ctx.redirect('/market?filter=mine');
+    const image = await handleBlobUpload(ctx, "image")
+    if (image) updatedData.image = image
+    await marketModel.updateItemById(id, updatedData)
+    ctx.redirect(safeReturnTo(ctx, "/market?filter=mine", ["/market"]))
   })
-  .post('/market/buy/:id', koaBody(), async ctx => {
-    const id = ctx.params.id;
-    const marketItem = await marketModel.getItemById(id);
-    if (marketItem.item_type === 'exchange') {
-      if (marketItem.status !== 'SOLD') {
-        const buyerId = SSBconfig.config.keys.id;
-        const { price, title, seller } = marketItem;
-        const subject = `MARKET_SOLD`;
-        const text = `item "${title}" has been sold -> /market/${id}  OASIS ID: ${buyerId}  for: $${price}`;
-        await pmModel.sendMessage([seller], subject, text);
-        await marketModel.setItemAsSold(id);
+  .post("/market/delete/:id", koaBody(), async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
+    }
+    const id = ctx.params.id
+    await marketModel.deleteItemById(id)
+    ctx.redirect(safeReturnTo(ctx, "/market?filter=mine", ["/market"]))
+  })
+  .post("/market/sold/:id", koaBody(), async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
+    }
+    const id = ctx.params.id
+    const marketItem = await marketModel.getItemById(id)
+    if (!marketItem) ctx.throw(404, "Item not found")
+    if (Number(marketItem.stock || 0) <= 0) ctx.throw(400, "No stock left to mark as sold.")
+    if (marketItem.status !== "SOLD") {
+      await marketModel.setItemAsSold(id)
+      await marketModel.decrementStock(id)
+    }
+    ctx.redirect(safeReturnTo(ctx, "/market?filter=mine", ["/market"]))
+  })
+  .post("/market/buy/:id", koaBody(), async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
+    }
+    const id = ctx.params.id
+    const marketItem = await marketModel.getItemById(id)
+    if (!marketItem) ctx.throw(404, "Item not found")
+    if (marketItem.item_type === "exchange") {
+      if (marketItem.status !== "SOLD") {
+        const buyerId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+        const { price, title, seller } = marketItem
+        const subject = "MARKET_SOLD"
+        const text = `item "${title}" has been sold -> /market/${id}  OASIS ID: ${buyerId}  for: ${price} ECO`
+        await pmModel.sendMessage([seller], subject, text)
+        await marketModel.setItemAsSold(id)
       }
+      ctx.redirect(safeReturnTo(ctx, "/inbox?filter=sent", ["/inbox", "/market"]))
+      return
     }
-    await marketModel.decrementStock(id);
-    ctx.redirect('/inbox?filter=sent');
+    await marketModel.decrementStock(id)
+    ctx.redirect(safeReturnTo(ctx, "/inbox?filter=sent", ["/inbox", "/market"]))
   })
-  .post('/market/bid/:id', koaBody(), async ctx => {
-    const id = ctx.params.id;
-    const userId = SSBconfig.config.keys.id;
-    const { bidAmount } = ctx.request.body;
-    const marketItem = await marketModel.getItemById(id);
-    await marketModel.addBidToAuction(id, userId, bidAmount);
-    if (marketItem.stock > 0 && marketItem.status === 'SOLD') {
-      await marketModel.decrementStock(id);
+  .post("/market/status/:id", koaBody(), async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
     }
-    ctx.redirect('/market?filter=auctions');
+    const id = ctx.params.id
+    const desired = String(ctx.request.body.status || "")
+      .toUpperCase()
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+    if (!["FOR SALE", "SOLD", "DISCARDED"].includes(desired)) ctx.throw(400, "Invalid status.")
+    const item = await marketModel.getItemById(id)
+    if (!item) ctx.throw(404, "Item not found")
+    const cur = String(item.status || "").toUpperCase().replace(/\s+/g, " ").trim()
+    if (cur === "SOLD" || cur === "DISCARDED") {
+      ctx.redirect(safeReturnTo(ctx, "/market?filter=mine", ["/market"]))
+      return
+    }
+    if (desired === cur || desired === "FOR SALE") {
+      ctx.redirect(safeReturnTo(ctx, "/market?filter=mine", ["/market"]))
+      return
+    }
+    if (desired === "SOLD") {
+      if (Number(item.stock || 0) <= 0) ctx.throw(400, "No stock left to mark as sold.")
+      await marketModel.setItemAsSold(id)
+      await marketModel.decrementStock(id)
+      ctx.redirect(safeReturnTo(ctx, "/market?filter=mine", ["/market"]))
+      return
+    }
+    if (desired === "DISCARDED") {
+      await marketModel.updateItemById(id, { status: "DISCARDED", stock: 0 })
+      ctx.redirect(safeReturnTo(ctx, "/market?filter=mine", ["/market"]))
+      return
+    }
+    ctx.redirect(safeReturnTo(ctx, "/market?filter=mine", ["/market"]))
   })
-  .post('/market/:itemId/comments', koaBody(), async ctx => {
-    const { itemId } = ctx.params;
-    const { text } = ctx.request.body;
-    const trimmed = (text || '').trim();
+  .post("/market/bid/:id", koaBody(), async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"  
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
+    }
+    const id = ctx.params.id
+    const userId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    const { bidAmount } = ctx.request.body
+    await marketModel.addBidToAuction(id, userId, bidAmount)
+    ctx.redirect(safeReturnTo(ctx, "/market?filter=auctions", ["/market"]))
+  })
+  .post("/market/:itemId/comments", koaBody(), async (ctx) => {
+    const marketMod = ctx.cookies.get("marketMod") || "on"
+    if (marketMod !== "on") {
+      ctx.redirect("/modules")
+      return
+    }
+    const { itemId } = ctx.params
+    const { text } = ctx.request.body
+    const trimmed = (text || "").trim()
     if (!trimmed) {
-      ctx.redirect(`/market/${encodeURIComponent(itemId)}`);
-      return;
+      ctx.redirect(safeReturnTo(ctx, `/market/${encodeURIComponent(itemId)}`, ["/market"]))
+      return
     }
-    await post.publish({
-      text: trimmed,
-      root: itemId,
-      dest: itemId
-    });
-    ctx.redirect(`/market/${encodeURIComponent(itemId)}`);
+    await post.publish({ text: trimmed, root: itemId, dest: itemId })
+    ctx.redirect(safeReturnTo(ctx, `/market/${encodeURIComponent(itemId)}`, ["/market"]))
   })
   .post('/jobs/create', koaBody({ multipart: true }), async (ctx) => {
-   const {
-      job_type,
-      title,
-      description,
-      requirements,
-      languages,
-      job_time,
-      tasks,
-      location,
-      vacants,
-      salary
-    } = ctx.request.body;
-    const imageBlob = ctx.request.files?.image
-      ? await handleBlobUpload(ctx, 'image')
-      : null;
-    await jobsModel.createJob({
-      job_type,
-      title,
-      description,
-      requirements,
-      languages,
-      job_time,
-      tasks,
-      location,
-      vacants: vacants ? parseInt(vacants, 10) : 1,
-      salary: salary != null ? parseFloat(salary) : 0,
-      image: imageBlob
-    });
-    ctx.redirect('/jobs?filter=MINE');
-  })
-  .post('/jobs/update/:id', koaBody({ multipart: true }), async (ctx) => {
-    const id = ctx.params.id;
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
     const {
       job_type,
       title,
@@ -3654,12 +3999,11 @@ router
       tasks,
       location,
       vacants,
-      salary
-    } = ctx.request.body;
-    const imageBlob = ctx.request.files?.image
-      ? await handleBlobUpload(ctx, 'image')
-      : undefined;
-    await jobsModel.updateJob(id, {
+      salary,
+      tags
+    } = ctx.request.body
+    const imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null
+    await jobsModel.createJob({
       job_type,
       title,
       description,
@@ -3668,286 +4012,423 @@ router
       job_time,
       tasks,
       location,
-      vacants: vacants ? parseInt(vacants, 10) : undefined,
-      salary: salary != null && salary !== '' ? parseFloat(salary) : undefined,
+      vacants: vacants ? parseInt(vacants, 10) : 1,
+      salary: salary != null && salary !== '' ? parseFloat(String(salary).replace(',', '.')) : 0,
+      tags,
       image: imageBlob
-    });
-    ctx.redirect('/jobs?filter=MINE');
+    })
+    ctx.redirect(safeReturnTo(ctx, '/jobs?filter=MINE', ['/jobs']))
+  })
+  .post('/jobs/update/:id', koaBody({ multipart: true }), async (ctx) => {
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    const id = ctx.params.id
+    const {
+      job_type,
+      title,
+      description,
+      requirements,
+      languages,
+      job_time,
+      tasks,
+      location,
+      vacants,
+      salary,
+      tags
+    } = ctx.request.body
+    const imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : undefined
+    const patch = {
+      job_type,
+      title,
+      description,
+      requirements,
+      languages,
+      job_time,
+      tasks,
+      location,
+      tags
+    }
+    if (vacants !== undefined && vacants !== '') patch.vacants = parseInt(vacants, 10)
+    if (salary !== undefined && salary !== '') patch.salary = parseFloat(String(salary).replace(',', '.'))
+    if (imageBlob !== undefined) patch.image = imageBlob
+    await jobsModel.updateJob(id, patch)
+    ctx.redirect(safeReturnTo(ctx, '/jobs?filter=MINE', ['/jobs']))
   })
   .post('/jobs/delete/:id', koaBody(), async (ctx) => {
-    const id = ctx.params.id;
-    await jobsModel.deleteJob(id);
-    ctx.redirect('/jobs?filter=MINE');
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    const id = ctx.params.id
+    await jobsModel.deleteJob(id)
+    ctx.redirect(safeReturnTo(ctx, '/jobs?filter=MINE', ['/jobs']))
   })
   .post('/jobs/status/:id', koaBody(), async (ctx) => {
-    const id = ctx.params.id;
-    const { status } = ctx.request.body;
-    await jobsModel.updateJobStatus(id, String(status).toUpperCase());
-    ctx.redirect('/jobs?filter=MINE');
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    const id = ctx.params.id
+    const { status } = ctx.request.body
+    await jobsModel.updateJobStatus(id, String(status).toUpperCase())
+    ctx.redirect(safeReturnTo(ctx, '/jobs?filter=MINE', ['/jobs']))
   })
   .post('/jobs/subscribe/:id', koaBody(), async (ctx) => {
-    const rawId = ctx.params.id;
-    const userId = SSBconfig.config.keys.id;
-    const latestId = await jobsModel.getJobTipId(rawId);
-    const job = await jobsModel.getJobById(latestId);
-    const subs = Array.isArray(job.subscribers) ? job.subscribers.slice() : [];
-    if (!subs.includes(userId)) subs.push(userId);
-    await jobsModel.updateJob(latestId, { subscribers: subs });
-    const subject = 'JOB_SUBSCRIBED';
-    const title = job.title || '';
-    const text = `has subscribed to your job offer "${title}" -> /jobs/${latestId}`;
-    await pmModel.sendMessage([job.author], subject, text);
-    ctx.redirect('/jobs');
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    const rawId = ctx.params.id
+    const userId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    const job = await jobsModel.getJobById(rawId, userId)
+    await jobsModel.subscribeToJob(rawId, userId)
+    const subject = 'JOB_SUBSCRIBED'
+    const title = job.title || ''
+    const text = `has subscribed to your job offer "${title}" -> /jobs/${encodeURIComponent(job.id)}`
+    await pmModel.sendMessage([job.author], subject, text)
+    ctx.redirect(safeReturnTo(ctx, '/jobs', ['/jobs']))
   })
   .post('/jobs/unsubscribe/:id', koaBody(), async (ctx) => {
-    const rawId = ctx.params.id;
-    const userId = SSBconfig.config.keys.id;
-    const latestId = await jobsModel.getJobTipId(rawId);
-    const job = await jobsModel.getJobById(latestId);
-    const subs = Array.isArray(job.subscribers) ? job.subscribers.slice() : [];
-    const next = subs.filter(uid => uid !== userId);
-    await jobsModel.updateJob(latestId, { subscribers: next });
-    const subject = 'JOB_UNSUBSCRIBED';
-    const title = job.title || '';
-    const text = `has unsubscribed from your job offer "${title}" -> /jobs/${latestId}`;
-    await pmModel.sendMessage([job.author], subject, text);
-    ctx.redirect('/jobs');
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    const rawId = ctx.params.id
+    const userId = SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id
+    const job = await jobsModel.getJobById(rawId, userId)
+    await jobsModel.unsubscribeFromJob(rawId, userId)
+    const subject = 'JOB_UNSUBSCRIBED'
+    const title = job.title || ''
+    const text = `has unsubscribed from your job offer "${title}" -> /jobs/${encodeURIComponent(job.id)}`
+    await pmModel.sendMessage([job.author], subject, text)
+    ctx.redirect(safeReturnTo(ctx, '/jobs', ['/jobs']))
   })
   .post('/jobs/:jobId/comments', koaBody(), async (ctx) => {
-    const { jobId } = ctx.params;
-    const { text } = ctx.request.body;
-    const trimmed = (text || '').trim();
+    const jobsMod = ctx.cookies.get("jobsMod") || 'on'
+    if (jobsMod !== 'on') { ctx.redirect('/modules'); return }
+    const { jobId } = ctx.params
+    const { text } = ctx.request.body
+    const trimmed = (text || '').trim()
     if (!trimmed) {
-      ctx.redirect(`/jobs/${encodeURIComponent(jobId)}`);
-      return;
+      ctx.redirect(safeReturnTo(ctx, `/jobs/${encodeURIComponent(jobId)}`, ['/jobs']))
+      return
     }
     await post.publish({
       text: trimmed,
       root: jobId,
       dest: jobId
-    });
-    ctx.redirect(`/jobs/${encodeURIComponent(jobId)}`);
+    })
+    ctx.redirect(safeReturnTo(ctx, `/jobs/${encodeURIComponent(jobId)}`, ['/jobs']))
   })
- .post('/projects/create', koaBody({ multipart: true }), async (ctx) => {
-    const b = ctx.request.body || {};
-    const imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
+  .post("/projects/create", koaBody({ multipart: true }), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const b = ctx.request.body || {}
+    const hasImage = !!(ctx.request.files && ctx.request.files.image)
+    const imageBlob = hasImage ? await handleBlobUpload(ctx, "image") : null
+
     const bounties =
-        b.bountiesInput
-            ? b.bountiesInput.split('\n').filter(Boolean).map(l => {
-                const [t, a, d] = l.split('|');
-                return { title: (t || '').trim(), amount: parseFloat(a || 0) || 0, description: (d || '').trim(), milestoneIndex: null };
-            })
-            : [];
+      b.bountiesInput
+        ? String(b.bountiesInput).split("\n").filter(Boolean).map((l) => {
+            const parts = String(l).split("|")
+            const t = parts[0]
+            const a = parts[1]
+            const d = parts[2]
+            return { title: String(t || "").trim(), amount: parseFloat(a || 0) || 0, description: String(d || "").trim(), milestoneIndex: null }
+          })
+        : []
+
     await projectsModel.createProject({
-        ...b,
-        title: b.title,
-        description: b.description,
-        goal: b.goal != null && b.goal !== '' ? parseFloat(b.goal) : 0,
-        deadline: b.deadline ? new Date(b.deadline).toISOString() : null,
-        progress: b.progress != null && b.progress !== '' ? parseInt(b.progress, 10) : 0,
-        bounties,
-        image: imageBlob
-    });
-    ctx.redirect('/projects?filter=MINE');
+      title: b.title,
+      description: b.description,
+      goal: b.goal != null && b.goal !== "" ? parseFloat(b.goal) : 0,
+      deadline: b.deadline ? new Date(b.deadline).toISOString() : null,
+      progress: b.progress != null && b.progress !== "" ? parseInt(b.progress, 10) : 0,
+      bounties,
+      image: imageBlob,
+      milestoneTitle: b.milestoneTitle,
+      milestoneDescription: b.milestoneDescription,
+      milestoneTargetPercent: b.milestoneTargetPercent,
+      milestoneDueDate: b.milestoneDueDate
+    })
+
+    ctx.redirect(safeReturnTo(ctx, "/projects?filter=MINE", ["/projects"]))
   })
-  .post('/projects/update/:id', koaBody({ multipart: true }), async (ctx) => {
-    const id = ctx.params.id;
-    const b = ctx.request.body || {};
-    const imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : undefined;
+  .post("/projects/update/:id", koaBody({ multipart: true }), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    const b = ctx.request.body || {}
+    const hasImage = !!(ctx.request.files && ctx.request.files.image)
+    const imageBlob = hasImage ? await handleBlobUpload(ctx, "image") : undefined
+
     await projectsModel.updateProject(id, {
-        title: b.title,
-        description: b.description,
-        goal: b.goal !== '' && b.goal != null ? parseFloat(b.goal) : undefined,
-        deadline: b.deadline ? new Date(b.deadline).toISOString() : undefined,
-        progress: b.progress !== '' && b.progress != null ? parseInt(b.progress, 10) : undefined,
-        bounties: b.bountiesInput !== undefined
-           ? b.bountiesInput.split('\n').filter(Boolean).map(l => {
-                const [t, a, d] = l.split('|');
-                return { title: (t || '').trim(), amount: parseFloat(a || 0) || 0, description: (d || '').trim(), milestoneIndex: null };
-           })
-            : undefined,
-        image: imageBlob
-    });
-    ctx.redirect('/projects?filter=MINE');
+      title: b.title,
+      description: b.description,
+      goal: b.goal !== "" && b.goal != null ? parseFloat(b.goal) : undefined,
+      deadline: b.deadline ? new Date(b.deadline).toISOString() : undefined,
+      progress: b.progress !== "" && b.progress != null ? parseInt(b.progress, 10) : undefined,
+      bounties: b.bountiesInput !== undefined
+        ? String(b.bountiesInput).split("\n").filter(Boolean).map((l) => {
+            const parts = String(l).split("|")
+            const t = parts[0]
+            const a = parts[1]
+            const d = parts[2]
+            return { title: String(t || "").trim(), amount: parseFloat(a || 0) || 0, description: String(d || "").trim(), milestoneIndex: null }
+          })
+        : undefined,
+      image: imageBlob
+    })
+
+    ctx.redirect(safeReturnTo(ctx, "/projects?filter=MINE", ["/projects"]))
   })
-  .post('/projects/delete/:id', koaBody(), async (ctx) => {
-    await projectsModel.deleteProject(ctx.params.id);
-    ctx.redirect('/projects?filter=MINE');
+  .post("/projects/delete/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    await projectsModel.deleteProject(id)
+    ctx.redirect(safeReturnTo(ctx, "/projects?filter=MINE", ["/projects"]))
   })
-  .post('/projects/status/:id', koaBody(), async (ctx) => {
-    await projectsModel.updateProjectStatus(ctx.params.id, String(ctx.request.body.status || '').toUpperCase());
-    ctx.redirect('/projects?filter=MINE');
+  .post("/projects/status/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    await projectsModel.updateProjectStatus(id, String((ctx.request.body && ctx.request.body.status) || "").toUpperCase())
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
   })
-  .post('/projects/progress/:id', koaBody(), async (ctx) => {
-    const { progress } = ctx.request.body;
-    await projectsModel.updateProjectProgress(ctx.params.id, progress);
-    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  .post("/projects/progress/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    const progressVal = ctx.request.body && ctx.request.body.progress
+    await projectsModel.updateProjectProgress(id, progressVal)
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
   })
-  .post('/projects/pledge/:id', koaBody(), async (ctx) => {
-    const rawId = ctx.params.id;
-    const latestId = await projectsModel.getProjectTipId(rawId); 
-    const { amount, milestoneOrBounty = '' } = ctx.request.body;
-    const pledgeAmount = parseFloat(amount);
-    if (isNaN(pledgeAmount) || pledgeAmount <= 0) ctx.throw(400, 'Invalid amount');
-    const userId = SSBconfig.config.keys.id;
-    const project = await projectsModel.getProjectById(latestId);
-    if (project.author === userId) ctx.throw(403, 'Authors cannot pledge to their own project');
-    let milestoneIndex = null;
-    let bountyIndex = null;
-    if (milestoneOrBounty.startsWith('milestone:')) {
-     milestoneIndex = parseInt(milestoneOrBounty.split(':')[1], 10);
-    } else if (milestoneOrBounty.startsWith('bounty:')) {
-      bountyIndex = parseInt(milestoneOrBounty.split(':')[1], 10);
+  .post("/projects/pledge/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const latestId = await projectsModel.getProjectTipId(rawId)
+    const body = ctx.request.body || {}
+    const amount = body.amount
+    const milestoneOrBounty = body.milestoneOrBounty || ""
+
+    const pledgeAmount = parseFloat(amount)
+    if (isNaN(pledgeAmount) || pledgeAmount <= 0) ctx.throw(400, "Invalid amount")
+
+    const uid = SSBconfig.config.keys.id
+    const project = await projectsModel.getProjectById(latestId)
+    const status = String(project.status || "ACTIVE").toUpperCase()
+    if (status !== "ACTIVE") ctx.throw(400, "Project is not active")
+    if (project.deadline && moment(project.deadline).isValid() && moment(project.deadline).isBefore(moment())) ctx.throw(400, "Project deadline passed")
+    if (project.author === uid) ctx.throw(403, "Authors cannot pledge to their own project")
+
+    let milestoneIndex = null
+    let bountyIndex = null
+    if (String(milestoneOrBounty).startsWith("milestone:")) milestoneIndex = parseInt(String(milestoneOrBounty).split(":")[1], 10)
+    else if (String(milestoneOrBounty).startsWith("bounty:")) bountyIndex = parseInt(String(milestoneOrBounty).split(":")[1], 10)
+
+    const deadlineISO = moment().add(14, "days").toISOString()
+    const tags = ["backer-pledge", `project:${latestId}`]
+    const transfer = await transfersModel.createTransfer(project.author, "Project Pledge", pledgeAmount, deadlineISO, tags)
+    const transferId = transfer.key || transfer.id
+
+    const backers = Array.isArray(project.backers) ? project.backers.slice() : []
+    backers.push({ userId: uid, amount: pledgeAmount, at: new Date().toISOString(), transferId, confirmed: false, milestoneIndex, bountyIndex })
+
+    const pledged = (parseFloat(project.pledged || 0) || 0) + pledgeAmount
+    const goalProgress = project.goal ? (pledged / parseFloat(project.goal)) * 100 : 0
+    await projectsModel.updateProject(latestId, { backers, pledged, progress: goalProgress })
+
+    const subject = "PROJECT_PLEDGE"
+    const title = project.title || ""
+    const text = `has pledged ${pledgeAmount} ECO to your project "${title}" -> /projects/${latestId}`
+    await pmModel.sendMessage([project.author], subject, text)
+
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(latestId)}`, ["/projects"]))
+  })
+  .post("/projects/confirm-transfer/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const transferId = ctx.params.id
+    const uid = SSBconfig.config.keys.id
+    const transfer = await transfersModel.getTransferById(transferId)
+    if (transfer.to !== uid) ctx.throw(403, "Unauthorized action")
+
+    const tags = Array.isArray(transfer.tags) ? transfer.tags : []
+    const tagProject = tags.find((t) => String(t).startsWith("project:"))
+    if (!tagProject) ctx.throw(400, "Missing project tag on transfer")
+
+    const projectId = String(tagProject).split(":")[1]
+    await transfersModel.confirmTransferById(transferId)
+
+    const project = await projectsModel.getProjectById(projectId)
+    const backers = Array.isArray(project.backers) ? project.backers.slice() : []
+    const idx = backers.findIndex((b) => b && b.transferId === transferId)
+    if (idx !== -1) backers[idx].confirmed = true
+
+    const goalProgress = project.goal ? (parseFloat(project.pledged || 0) / parseFloat(project.goal)) * 100 : 0
+    await projectsModel.updateProject(projectId, { backers, progress: goalProgress })
+
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(projectId)}`, ["/projects", "/transfers"]))
+  })
+  .post("/projects/follow/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const uid = SSBconfig.config.keys.id
+    const rawId = ctx.params.id
+    const latestId = await projectsModel.getProjectTipId(rawId)
+    const project = await projectsModel.getProjectById(latestId)
+
+    await projectsModel.followProject(rawId, uid)
+
+    const subject = "PROJECT_FOLLOWED"
+    const title = project.title || ""
+    const text = `has followed your project "${title}" -> /projects/${latestId}`
+    await pmModel.sendMessage([project.author], subject, text)
+
+    ctx.redirect(safeReturnTo(ctx, "/projects", ["/projects"]))
+  })
+  .post("/projects/unfollow/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const uid = SSBconfig.config.keys.id
+    const rawId = ctx.params.id
+    const latestId = await projectsModel.getProjectTipId(rawId)
+    const project = await projectsModel.getProjectById(latestId)
+
+    await projectsModel.unfollowProject(rawId, uid)
+
+    const subject = "PROJECT_UNFOLLOWED"
+    const title = project.title || ""
+    const text = `has unfollowed your project "${title}" -> /projects/${latestId}`
+    await pmModel.sendMessage([project.author], subject, text)
+
+    ctx.redirect(safeReturnTo(ctx, "/projects", ["/projects"]))
+  })
+  .post("/projects/milestones/add/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    const body = ctx.request.body || {}
+    const title = body.title
+    const description = body.description || ""
+    const targetPercent = body.targetPercent != null && body.targetPercent !== "" ? parseInt(body.targetPercent, 10) : 0
+    const dueDate = body.dueDate ? new Date(body.dueDate).toISOString() : null
+
+    await projectsModel.addMilestone(id, { title, description, targetPercent, dueDate })
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
+  })
+  .post("/projects/milestones/update/:id/:index", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    const idx = parseInt(ctx.params.index, 10)
+    const body = ctx.request.body || {}
+
+    const patch = {
+      title: body.title,
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.targetPercent !== undefined && body.targetPercent !== "" ? { targetPercent: parseInt(body.targetPercent, 10) } : {}),
+      ...(body.dueDate !== undefined ? { dueDate: body.dueDate ? new Date(body.dueDate).toISOString() : null } : {}),
+      ...(body.done !== undefined ? { done: !!body.done } : {})
     }
-    const deadlineISO = require('../server/node_modules/moment')().add(14, 'days').toISOString();
-    const tags = ['backer-pledge', `project:${latestId}`];
-    const transfer = await transfersModel.createTransfer(
-      project.author,
-      'Project Pledge',
-      pledgeAmount,
-      deadlineISO,
-      tags
-    );
-    const transferId = transfer.key || transfer.id;
-    const backers = Array.isArray(project.backers) ? project.backers.slice() : [];
-    backers.push({
-      userId,
-      amount: pledgeAmount,
-      at: new Date().toISOString(),
-      transferId,
-      confirmed: false,
-      milestoneIndex,
-      bountyIndex
-    });
-    const pledged = (parseFloat(project.pledged || 0) || 0) + pledgeAmount;
-    const goalProgress = project.goal ? (pledged / parseFloat(project.goal)) * 100 : 0;
-    await projectsModel.updateProject(latestId, { backers, pledged, progress: goalProgress });
-    const subject = 'PROJECT_PLEDGE';
-    const title = project.title || '';
-    const text = `has pledged ${pledgeAmount} ECO to your project "${title}" -> /projects/${latestId}`;
-    await pmModel.sendMessage([project.author], subject, text);
-    ctx.redirect(`/projects/${encodeURIComponent(latestId)}`);
+
+    await projectsModel.updateMilestone(id, idx, patch)
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
   })
-  .post('/projects/confirm-transfer/:id', koaBody(), async (ctx) => {
-    const transferId = ctx.params.id;
-    const userId = SSBconfig.config.keys.id;
-    const transfer = await transfersModel.getTransferById(transferId);
-    if (transfer.to !== userId) ctx.throw(403, 'Unauthorized action');
-    const tagProject = (transfer.tags || []).find(t => String(t).startsWith('project:'));
-    if (!tagProject) ctx.throw(400, 'Missing project tag on transfer');
-    const projectId = tagProject.split(':')[1];
-    await transfersModel.confirmTransferById(transferId);
-    const project = await projectsModel.getProjectById(projectId);
-    const backers = Array.isArray(project.backers) ? project.backers.slice() : [];
-    const idx = backers.findIndex(b => b.transferId === transferId);
-    if (idx !== -1) backers[idx].confirmed = true;
-    const goalProgress = project.goal ? (parseFloat(project.pledged || 0) / parseFloat(project.goal)) * 100 : 0;
-    await projectsModel.updateProject(projectId, { backers, progress: goalProgress });
-    ctx.redirect(`/projects/${encodeURIComponent(projectId)}`);
+  .post("/projects/milestones/complete/:id/:index", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const uid = SSBconfig.config.keys.id
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    await projectsModel.completeMilestone(id, parseInt(ctx.params.index, 10), uid)
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
   })
-  .post('/projects/follow/:id', koaBody(), async (ctx) => {
-    const userId = SSBconfig.config.keys.id;
-    const rawId = ctx.params.id;
-    const latestId = await projectsModel.getProjectTipId(rawId);
-    const project = await projectsModel.getProjectById(latestId);
-    await projectsModel.followProject(rawId, userId);
-    const subject = 'PROJECT_FOLLOWED';
-    const title = project.title || '';
-    const text = `has followed your project "${title}" -> /projects/${latestId}`;
-    await pmModel.sendMessage([project.author], subject, text);
-    ctx.redirect('/projects');
+  .post("/projects/bounties/add/:id", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    const body = ctx.request.body || {}
+    const milestoneIndex = body.milestoneIndex === "" || body.milestoneIndex === undefined ? null : parseInt(body.milestoneIndex, 10)
+
+    await projectsModel.addBounty(id, {
+      title: body.title,
+      amount: body.amount,
+      description: body.description,
+      milestoneIndex
+    })
+
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
   })
-  .post('/projects/unfollow/:id', koaBody(), async (ctx) => {
-    const userId = SSBconfig.config.keys.id;
-    const rawId = ctx.params.id;
-    const latestId = await projectsModel.getProjectTipId(rawId);
-    const project = await projectsModel.getProjectById(latestId);
-    await projectsModel.unfollowProject(rawId, userId);
-    const subject = 'PROJECT_UNFOLLOWED';
-    const title = project.title || '';
-    const text = `has unfollowed your project "${title}" -> /projects/${latestId}`;
-    await pmModel.sendMessage([project.author], subject, text);
-    ctx.redirect('/projects');
+  .post("/projects/bounties/update/:id/:index", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    const idx = parseInt(ctx.params.index, 10)
+    const body = ctx.request.body || {}
+
+    const patch = {
+      ...(body.title !== undefined ? { title: body.title } : {}),
+      ...(body.amount !== undefined && body.amount !== "" ? { amount: parseFloat(body.amount) } : {}),
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.milestoneIndex !== undefined ? { milestoneIndex: body.milestoneIndex === "" ? null : parseInt(body.milestoneIndex, 10) } : {}),
+      ...(body.done !== undefined ? { done: !!body.done } : {})
+    }
+
+    await projectsModel.updateBounty(id, idx, patch)
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
   })
-  .post('/projects/milestones/add/:id', koaBody(), async (ctx) => {
-    const { title, description, targetPercent, dueDate } = ctx.request.body;
-    await projectsModel.addMilestone(ctx.params.id, {
-        title,
-        description: description || '',
-        targetPercent: targetPercent != null && targetPercent !== '' ? parseInt(targetPercent, 10) : 0,
-        dueDate: dueDate ? new Date(dueDate).toISOString() : null
-    });
-    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  .post("/projects/bounties/claim/:id/:index", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const uid = SSBconfig.config.keys.id
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    await projectsModel.claimBounty(id, parseInt(ctx.params.index, 10), uid)
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
   })
-  .post('/projects/milestones/update/:id/:index', koaBody(), async (ctx) => {
-    const { title, description, targetPercent, dueDate, done } = ctx.request.body;
-    await projectsModel.updateMilestone(
-        ctx.params.id,
-        parseInt(ctx.params.index, 10),
-        {
-            title,
-            ...(description !== undefined ? { description } : {}),
-            targetPercent: targetPercent !== undefined && targetPercent !== '' ? parseInt(targetPercent, 10) : undefined,
-             dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate).toISOString() : null) : undefined,
-             done: done !== undefined ? !!done : undefined
-        }
-    );
-    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
+  .post("/projects/bounties/complete/:id/:index", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const uid = SSBconfig.config.keys.id
+    const rawId = ctx.params.id
+    const id = await projectsModel.getProjectTipId(rawId)
+    await projectsModel.completeBounty(id, parseInt(ctx.params.index, 10), uid)
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]))
   })
-  .post('/projects/milestones/complete/:id/:index', koaBody(), async (ctx) => {
-    const userId = SSBconfig.config.keys.id;
-    await projectsModel.completeMilestone(ctx.params.id, parseInt(ctx.params.index, 10), userId);
-    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
-  })
-  .post('/projects/bounties/add/:id', koaBody(), async (ctx) => {
-    const { title, amount, description, milestoneIndex } = ctx.request.body;
-    await projectsModel.addBounty(ctx.params.id, {
-        title,
-        amount,
-        description,
-        milestoneIndex: (milestoneIndex === '' || milestoneIndex === undefined) ? null : parseInt(milestoneIndex, 10)
-    });
-    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
-  })
-  .post('/projects/bounties/update/:id/:index', koaBody(), async (ctx) => {
-     const { title, amount, description, milestoneIndex, done } = ctx.request.body;
-     await projectsModel.updateBounty(
-       ctx.params.id,
-       parseInt(ctx.params.index, 10),
-       {
-         title: title !== undefined ? title : undefined,
-         amount: amount !== undefined && amount !== '' ? parseFloat(amount) : undefined,
-         description: description !== undefined ? description : undefined,
-         milestoneIndex: milestoneIndex !== undefined ? (milestoneIndex === '' ? null : parseInt(milestoneIndex, 10)) : undefined,
-         done: done !== undefined ? !!done : undefined
-       }
-     );
-     ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
-  })
-  .post('/projects/bounties/claim/:id/:index', koaBody(), async (ctx) => {
-    const userId = SSBconfig.config.keys.id;
-    await projectsModel.claimBounty(ctx.params.id, parseInt(ctx.params.index, 10), userId);
-    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`); 
-  })
-  .post('/projects/bounties/complete/:id/:index', koaBody(), async (ctx) => {
-    const userId = SSBconfig.config.keys.id;
-    await projectsModel.completeBounty(ctx.params.id, parseInt(ctx.params.index, 10), userId);
-    ctx.redirect(`/projects/${encodeURIComponent(ctx.params.id)}`);
-  })
-  .post('/projects/:projectId/comments', koaBody(), async (ctx) => {
-    const { projectId } = ctx.params;
-    const { text } = ctx.request.body;
-    const trimmed = (text || '').trim();
+  .post("/projects/:projectId/comments", koaBody(), async (ctx) => {
+    const projectsMod = ctx.cookies.get("projectsMod") || "on"
+    if (projectsMod !== "on") { ctx.redirect("/modules"); return }
+
+    const projectId = ctx.params.projectId
+    const text = (ctx.request.body && ctx.request.body.text) || ""
+    const trimmed = String(text).trim()
+
     if (!trimmed) {
-      ctx.redirect(`/projects/${encodeURIComponent(projectId)}`);
-      return;
+      ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(projectId)}`, ["/projects"]))
+      return
     }
-    await post.publish({
-      text: trimmed,
-      root: projectId,
-      dest: projectId
-    });
-    ctx.redirect(`/projects/${encodeURIComponent(projectId)}`);
+
+    await post.publish({ text: trimmed, root: projectId, dest: projectId })
+    ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(projectId)}`, ["/projects"]))
   })
   .post("/banking/claim/:id", koaBody(), async (ctx) => {
     const userId = SSBconfig.config.keys.id;
@@ -4001,6 +4482,11 @@ router
     const userId = (ctx.request.body?.userId || "").trim();
     const res = await bankingModel.removeAddress({ userId });
     ctx.redirect(`/banking?filter=addresses&msg=${encodeURIComponent(res.status)}`);
+  })
+  .post("/favorites/remove/:kind/:id", koaBody(), async (ctx) => {
+    await favoritesModel.removeFavorite(ctx.params.kind, ctx.params.id);
+    const fallback = `/favorites?filter=${encodeURIComponent(ctx.query.filter || "all")}`;
+    ctx.redirect(safeReturnTo(ctx, fallback, ["/favorites"]));
   })
   
   // UPDATE OASIS
@@ -4149,7 +4635,7 @@ router
     'popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet',
     'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending',
     'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers',
-    'feed', 'pixelia', 'agenda', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament', 'courts'
+    'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'jobs', 'projects', 'banking', 'parliament', 'courts'
     ];
     const currentConfig = getConfig();
     modules.forEach(mod => {
@@ -4188,41 +4674,38 @@ router
     fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2));
     ctx.redirect("/settings");
   })
-  .post('/transfers/create',
-    koaBody(),
-    async ctx => {
-      const { to, concept, amount, deadline, tags } = ctx.request.body
-      await transfersModel.createTransfer(to, concept, amount, deadline, tags)
-      ctx.redirect('/transfers')
+  .post('/transfers/create', koaBody(), async ctx => {
+    const transfersMod = ctx.cookies.get("transfersMod") || 'on'
+    if (transfersMod !== 'on') { ctx.redirect('/modules'); return }
+    const { to, concept, amount, deadline, tags } = ctx.request.body
+    await transfersModel.createTransfer(to, concept, amount, deadline, tags)
+    ctx.redirect(safeReturnTo(ctx, '/transfers?filter=all', ['/transfers']))
   })
-  .post('/transfers/update/:id',
-    koaBody(),
-    async ctx => {
-      const { to, concept, amount, deadline, tags } = ctx.request.body
-      await transfersModel.updateTransferById(
-        ctx.params.id, to, concept, amount, deadline, tags
-      )
-      ctx.redirect('/transfers?filter=mine')
+  .post('/transfers/update/:id', koaBody(), async ctx => {
+    const transfersMod = ctx.cookies.get("transfersMod") || 'on'
+    if (transfersMod !== 'on') { ctx.redirect('/modules'); return }
+    const { to, concept, amount, deadline, tags } = ctx.request.body
+    await transfersModel.updateTransferById(ctx.params.id, to, concept, amount, deadline, tags)
+    ctx.redirect(safeReturnTo(ctx, '/transfers?filter=mine', ['/transfers']))
   })
-  .post('/transfers/confirm/:id', async ctx => {
+  .post('/transfers/confirm/:id', koaBody(), async ctx => {
+    const transfersMod = ctx.cookies.get("transfersMod") || 'on'
+    if (transfersMod !== 'on') { ctx.redirect('/modules'); return }
     await transfersModel.confirmTransferById(ctx.params.id)
-    ctx.redirect('/transfers')
+    ctx.redirect(safeReturnTo(ctx, '/transfers', ['/transfers']))
   })
-  .post('/transfers/delete/:id', async ctx => {
+  .post('/transfers/delete/:id', koaBody(), async ctx => {
+    const transfersMod = ctx.cookies.get("transfersMod") || 'on'
+    if (transfersMod !== 'on') { ctx.redirect('/modules'); return }
     await transfersModel.deleteTransferById(ctx.params.id)
-    ctx.redirect('/transfers?filter=mine')
+    ctx.redirect(safeReturnTo(ctx, '/transfers?filter=mine', ['/transfers']))
   })
-  .post('/transfers/opinions/:transferId/:category', async ctx => {
+  .post('/transfers/opinions/:transferId/:category', koaBody(), async ctx => {
+    const transfersMod = ctx.cookies.get("transfersMod") || 'on'
+    if (transfersMod !== 'on') { ctx.redirect('/modules'); return }
     const { transferId, category } = ctx.params
-    const voterId = SSBconfig?.keys?.id;
-    const t = await transfersModel.getTransferById(transferId)
-    if (t.opinions_inhabitants.includes(voterId)) {
-      ctx.flash = { message: 'You have already opined.' }
-      ctx.redirect('/transfers')
-      return
-    }
-    await opinionsModel.createVote(transferId, category, 'transfer')
-    ctx.redirect('/transfers')
+    await transfersModel.createOpinion(transferId, category)
+    ctx.redirect(safeReturnTo(ctx, '/transfers', ['/transfers']))
   })
   .post("/settings/wallet", koaBody(), async (ctx) => {
     const url = String(ctx.request.body.wallet_url);

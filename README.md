@@ -66,7 +66,8 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
  + Courts: Module to resolve conflicts and emit veredicts.	
  + Documents: Module to discover and manage documents.	
- + Events: Module to discover and manage events.	
+ + Events: Module to discover and manage events.
+ + Favorites: Module to manage your favorite content.
  + Feed: Module to discover and share short-texts (feeds).
  + Forums: Module to discover and manage forums.	
  + Governance: Module to discover and manage votes.	

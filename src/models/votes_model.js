@@ -1,7 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
-const categories = require('../backend/opinion_categories')
+const categories = require('../backend/opinion_categories');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
@@ -33,17 +33,22 @@ module.exports = ({ cooler }) => {
       const v = m.value;
       const c = v && v.content;
       if (!c) continue;
+
       if (c.type === 'tombstone' && c.target) {
         tombstoned.add(c.target);
         continue;
       }
+
       if (c.type !== TYPE) continue;
+
       const node = {
         key,
         ts: v.timestamp || m.timestamp || 0,
         content: c
       };
+
       votes.set(key, node);
+
       if (c.replaces) {
         replaced.set(c.replaces, key);
         parent.set(key, c.replaces);
@@ -147,7 +152,7 @@ module.exports = ({ cooler }) => {
 
       const tags = Array.isArray(tagsRaw)
         ? tagsRaw.filter(Boolean)
-        : String(tagsRaw).split(',').map(t => t.trim()).filter(Boolean);
+        : String(tagsRaw || '').split(',').map(t => t.trim()).filter(Boolean);
 
       const content = {
         type: TYPE,
@@ -206,7 +211,7 @@ module.exports = ({ cooler }) => {
       const c = oldMsg.content;
       if (!c || c.type !== TYPE) throw new Error('Invalid type');
       if (c.createdBy !== userId) throw new Error('Not the author');
-      if (Object.keys(c.opinions || {}).length > 0) throw new Error('Cannot edit vote after it has received opinions.')
+      if (Object.keys(c.opinions || {}).length > 0) throw new Error('Cannot edit vote after it has received opinions.');
 
       let newDeadline = c.deadline;
       if (deadline != null && deadline !== '') {
@@ -364,7 +369,7 @@ module.exports = ({ cooler }) => {
     },
 
     async createOpinion(id, category) {
-      if (!categories.includes(category)) throw new Error('Invalid voting category')
+      if (!categories.includes(category)) throw new Error('Invalid voting category');
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const tipId = await resolveCurrentId(id);

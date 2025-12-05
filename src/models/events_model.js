@@ -10,34 +10,66 @@ module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
+  const uniq = (arr) => Array.from(new Set((Array.isArray(arr) ? arr : []).filter(x => typeof x === 'string' && x.trim().length)));
+
+  const normalizePrivacy = (v) => {
+    const s = String(v || 'public').toLowerCase();
+    return s === 'private' ? 'private' : 'public';
+  };
+
+  const normalizePrice = (price) => {
+    let p = typeof price === 'string' ? parseFloat(price.replace(',', '.')) : price;
+    if (isNaN(p) || p < 0) p = 0;
+    return Number(p).toFixed(6);
+  };
+
+  const normalizeDate = (date) => {
+    const m = moment(date);
+    if (!m.isValid()) throw new Error("Invalid date format");
+    return m.toISOString();
+  };
+
+  const deriveStatus = (c) => {
+    const dateM = moment(c.date);
+    let status = String(c.status || 'OPEN').toUpperCase();
+    if (dateM.isValid() && dateM.isBefore(moment())) status = 'CLOSED';
+    if (status !== 'OPEN' && status !== 'CLOSED') status = 'OPEN';
+    return status;
+  };
+
   return {
     type: 'event',
 
     async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic) {
       const ssbClient = await openSsb();
-      const formattedDate = date ? moment(date, moment.ISO_8601, true).toISOString() : moment().toISOString();
-      if (!moment(formattedDate, moment.ISO_8601, true).isValid()) throw new Error("Invalid date format");
-      if (moment(formattedDate).isBefore(moment(), 'minute')) throw new Error("Cannot create an event in the past");
-      if (!Array.isArray(attendees)) attendees = attendees.split(',').map(s => s.trim()).filter(Boolean);
-      attendees.push(userId);
-      const tags = Array.isArray(tagsRaw) ? tagsRaw.filter(Boolean) : tagsRaw.split(',').map(s => s.trim()).filter(Boolean);
-      let p = typeof price === 'string' ? parseFloat(price.replace(',', '.')) : price;
-      if (isNaN(p)) p = 0;
+
+      const formattedDate = normalizeDate(date);
+      if (moment(formattedDate).isBefore(moment().startOf('minute'))) throw new Error("Cannot create an event in the past");
+
+      let attendeeList = attendees;
+      if (!Array.isArray(attendeeList)) attendeeList = String(attendeeList || '').split(',').map(s => s.trim()).filter(Boolean);
+      attendeeList = uniq([...attendeeList, userId]);
+
+      const tags = Array.isArray(tagsRaw)
+        ? tagsRaw.filter(Boolean)
+        : String(tagsRaw || '').split(',').map(s => s.trim()).filter(Boolean);
+
       const content = {
         type: 'event',
         title,
         description,
         date: formattedDate,
         location,
-        price: p.toFixed(6),
-        url,
-        attendees,
+        price: normalizePrice(price),
+        url: url || '',
+        attendees: attendeeList,
         tags,
         createdAt: new Date().toISOString(),
         organizer: userId,
         status: 'OPEN',
-        isPublic
+        isPublic: normalizePrivacy(isPublic)
       };
+
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, res) => err ? reject(err) : resolve(res));
       });
@@ -45,184 +77,164 @@ module.exports = ({ cooler }) => {
 
     async toggleAttendee(eventId) {
       const ssbClient = await openSsb();
+      const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, ev) => err || !ev || !ev.content ? rej(new Error("Error retrieving event")) : res(ev)));
+      const c = ev.content;
+
+      const status = deriveStatus(c);
+      if (status === 'CLOSED') throw new Error("Cannot attend a closed event");
+
+      let attendees = uniq(c.attendees || []);
+      const idx = attendees.indexOf(userId);
+      if (idx !== -1) attendees.splice(idx, 1); else attendees.push(userId);
+      attendees = uniq(attendees);
+
+      const updated = {
+        ...c,
+        attendees,
+        updatedAt: new Date().toISOString(),
+        replaces: eventId
+      };
+
       return new Promise((resolve, reject) => {
-        ssbClient.get(eventId, async (err, ev) => {
-          if (err || !ev || !ev.content) return reject(new Error("Error retrieving event"));
-          let attendees = Array.isArray(ev.content.attendees) ? [...ev.content.attendees] : [];
-          const idx = attendees.indexOf(userId);
-          if (idx !== -1) attendees.splice(idx, 1); else attendees.push(userId);
-          const tombstone = {
-            type: 'tombstone',
-            target: eventId,
-            deletedAt: new Date().toISOString(),
-            author: userId
-          };
-          const updated = {
-            ...ev.content,
-            attendees,
-            updatedAt: new Date().toISOString(),
-            replaces: eventId
-          };
-          ssbClient.publish(tombstone, err => {
-            if (err) return reject(err);
-            ssbClient.publish(updated, (err2, res) => err2 ? reject(err2) : resolve(res));
-          });
-        });
+        ssbClient.publish(updated, (err2, res2) => err2 ? reject(err2) : resolve(res2));
       });
     },
 
     async deleteEventById(eventId) {
       const ssbClient = await openSsb();
+      const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, ev) => err || !ev || !ev.content ? rej(new Error("Error retrieving event")) : res(ev)));
+      if (ev.content.organizer !== userId) throw new Error("Only the organizer can delete this event");
+      const tombstone = { type: 'tombstone', target: eventId, deletedAt: new Date().toISOString(), author: userId };
       return new Promise((resolve, reject) => {
-        ssbClient.get(eventId, (err, ev) => {
-          if (err || !ev || !ev.content) return reject(new Error("Error retrieving event"));
-          if (ev.content.organizer !== userId) return reject(new Error("Only the organizer can delete this event"));
-          const tombstone = {
-            type: 'tombstone',
-            target: eventId,
-            deletedAt: new Date().toISOString(),
-            author: userId
-          };
-          ssbClient.publish(tombstone, (err, res) => err ? reject(err) : resolve(res));
-        });
+        ssbClient.publish(tombstone, (err, res) => err ? reject(err) : resolve(res));
       });
     },
 
     async getEventById(eventId) {
       const ssbClient = await openSsb();
-      return new Promise((resolve, reject) => {
-        ssbClient.get(eventId, async (err, msg) => {
-          if (err || !msg || !msg.content) return reject(new Error("Error retrieving event"));
-          const c = msg.content;
-          const dateM = moment(c.date);
-          let status = c.status || 'OPEN';
-          if (dateM.isValid() && dateM.isBefore(moment()) && status !== 'CLOSED') {
-            const tombstone = {
-              type: 'tombstone',
-              target: eventId,
-              deletedAt: new Date().toISOString(),
-              author: userId
-            };
-            const updated = {
-              ...c,
-              status: 'CLOSED',
-              updatedAt: new Date().toISOString(),
-              replaces: eventId
-            };
-            await ssbClient.publish(tombstone);
-            await ssbClient.publish(updated);
-            status = 'CLOSED';
-          }
-          resolve({
-            id: eventId,
-            title: c.title || '',
-            description: c.description || '',
-            date: c.date || '',
-            location: c.location || '',
-            price: c.price || 0,
-            url: c.url || '',
-            attendees: c.attendees || [],
-            tags: c.tags || [],
-            createdAt: c.createdAt || new Date().toISOString(),
-            updatedAt: c.updatedAt || new Date().toISOString(),
-            organizer: c.organizer || '',
-            status,
-            isPublic: c.isPublic || false
-          });
-        });
-      });
+      const msg = await new Promise((res, rej) => ssbClient.get(eventId, (err, msg) => err || !msg || !msg.content ? rej(new Error("Error retrieving event")) : res(msg)));
+      const c = msg.content;
+
+      const status = deriveStatus(c);
+
+      return {
+        id: eventId,
+        title: c.title || '',
+        description: c.description || '',
+        date: c.date || '',
+        location: c.location || '',
+        price: c.price || 0,
+        url: c.url || '',
+        attendees: Array.isArray(c.attendees) ? c.attendees : [],
+        tags: Array.isArray(c.tags) ? c.tags : [],
+        createdAt: c.createdAt || new Date().toISOString(),
+        updatedAt: c.updatedAt || new Date().toISOString(),
+        organizer: c.organizer || '',
+        status,
+        isPublic: normalizePrivacy(c.isPublic)
+      };
     },
-    
-    
+
     async updateEventById(eventId, updatedData) {
       const ssbClient = await openSsb();
+      const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, ev) => err || !ev || !ev.content ? rej(new Error("Error retrieving event")) : res(ev)));
+      if (ev.content.organizer !== userId) throw new Error("Only the organizer can update this event");
+
+      const c = ev.content;
+      const status = deriveStatus(c);
+      if (status === 'CLOSED') throw new Error("Cannot edit a closed event");
+
+      const tags = updatedData.tags !== undefined
+        ? (Array.isArray(updatedData.tags)
+            ? updatedData.tags.filter(Boolean)
+            : String(updatedData.tags || '').split(',').map(t => t.trim()).filter(Boolean))
+        : (Array.isArray(c.tags) ? c.tags : []);
+
+      const date = updatedData.date !== undefined && updatedData.date !== ''
+        ? normalizeDate(updatedData.date)
+        : c.date;
+
+      if (moment(date).isBefore(moment().startOf('minute'))) throw new Error("Cannot set an event in the past");
+
+      const updated = {
+        ...c,
+        title: updatedData.title ?? c.title,
+        description: updatedData.description ?? c.description,
+        date,
+        location: updatedData.location ?? c.location,
+        price: updatedData.price !== undefined ? normalizePrice(updatedData.price) : c.price,
+        url: updatedData.url ?? c.url,
+        tags,
+        isPublic: updatedData.isPublic !== undefined ? normalizePrivacy(updatedData.isPublic) : normalizePrivacy(c.isPublic),
+        attendees: uniq(Array.isArray(c.attendees) ? c.attendees : []),
+        updatedAt: new Date().toISOString(),
+        replaces: eventId
+      };
+
       return new Promise((resolve, reject) => {
-        ssbClient.get(eventId, (err, ev) => {
-          if (err || !ev || !ev.content) return reject(new Error("Error retrieving event"));
-          if (ev.content.organizer !== userId) return reject(new Error("Only the organizer can update this event"));
-          const tags = updatedData.tags ? updatedData.tags.split(',').map(t => t.trim()).filter(Boolean) : ev.content.tags;
-          const attendees = updatedData.attendees ? updatedData.attendees.split(',').map(t => t.trim()).filter(Boolean) : ev.content.attendees;
-          const tombstone = {
-            type: 'tombstone',
-            target: eventId,
-            deletedAt: new Date().toISOString(),
-            author: userId
-          };
-          const updated = {
-            ...ev.content,
-            ...updatedData,
-            attendees,
-            tags,
-            updatedAt: new Date().toISOString(),
-            replaces: eventId
-          };
-          ssbClient.publish(tombstone, err => {
-            if (err) return reject(err);
-            ssbClient.publish(updated, (err2, res) => err2 ? reject(err2) : resolve(res));
-          });
-        });
+        ssbClient.publish(updated, (err2, res2) => err2 ? reject(err2) : resolve(res2));
       });
     },
 
     async listAll(author = null, filter = 'all') {
       const ssbClient = await openSsb();
       return new Promise((resolve, reject) => {
-      pull(
-      ssbClient.createLogStream({ limit: logLimit }),
-      pull.collect((err, results) => {
-        if (err) return reject(new Error("Error listing events: " + err.message));
-        const tombstoned = new Set();
-        const replaces = new Map();
-        const byId = new Map();
+        pull(
+          ssbClient.createLogStream({ limit: logLimit }),
+          pull.collect((err, results) => {
+            if (err) return reject(new Error("Error listing events: " + err.message));
+            const tombstoned = new Set();
+            const replaces = new Map();
+            const byId = new Map();
 
-        for (const r of results) {
-          const k = r.key;
-          const c = r.value.content;
-          if (!c) continue;
+            for (const r of results) {
+              const k = r.key;
+              const c = r.value && r.value.content;
+              if (!c) continue;
 
-          if (c.type === 'tombstone' && c.target) {
-            tombstoned.add(c.target);
-            continue;
-          }
+              if (c.type === 'tombstone' && c.target) {
+                tombstoned.add(c.target);
+                continue;
+              }
 
-          if (c.type === 'event') {
-            if (c.replaces) replaces.set(c.replaces, k);
-            if (author && c.organizer !== author) continue;
+              if (c.type === 'event') {
+                if (c.replaces) replaces.set(c.replaces, k);
+                if (author && c.organizer !== author) continue;
 
-            let status = c.status || 'OPEN';
-            const dateM = moment(c.date);
-            if (dateM.isValid() && dateM.isBefore(moment())) status = 'CLOSED';
+                const status = deriveStatus(c);
 
-            byId.set(k, {
-              id: k,
-              title: c.title,
-              description: c.description,
-              date: c.date,
-              location: c.location,
-              price: c.price,
-              url: c.url,
-              attendees: c.attendees || [],
-              tags: c.tags || [],
-              createdAt: c.createdAt,
-              organizer: c.organizer,
-              status,
-              isPublic: c.isPublic
-            });
-          }
-        }
-        replaces.forEach((_, oldId) => byId.delete(oldId));
-        tombstoned.forEach((id) => byId.delete(id));
+                byId.set(k, {
+                  id: k,
+                  title: c.title || '',
+                  description: c.description || '',
+                  date: c.date || '',
+                  location: c.location || '',
+                  price: c.price || 0,
+                  url: c.url || '',
+                  attendees: Array.isArray(c.attendees) ? uniq(c.attendees) : [],
+                  tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
+                  createdAt: c.createdAt || new Date().toISOString(),
+                  organizer: c.organizer || '',
+                  status,
+                  isPublic: normalizePrivacy(c.isPublic)
+                });
+              }
+            }
 
-        let out = Array.from(byId.values());
-        if (filter === 'mine') out = out.filter(e => e.organizer === userId);
-        if (filter === 'open') out = out.filter(e => e.status === 'OPEN');
-        if (filter === 'closed') out = out.filter(e => e.status === 'CLOSED');
-        resolve(out);
-        })
-       );
-     });
+            replaces.forEach((_, oldId) => byId.delete(oldId));
+            tombstoned.forEach(id => byId.delete(id));
+
+            let out = Array.from(byId.values());
+
+            if (filter === 'mine') out = out.filter(e => e.organizer === userId);
+            if (filter === 'open') out = out.filter(e => String(e.status).toUpperCase() === 'OPEN');
+            if (filter === 'closed') out = out.filter(e => String(e.status).toUpperCase() === 'CLOSED');
+
+            resolve(out);
+          })
+        );
+      });
     }
-
   };
 };
 

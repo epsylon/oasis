@@ -56,6 +56,53 @@ const nbsp = "\xa0";
 const { getConfig } = require('../configs/config-manager.js');
 
 // menu INIT
+const readPkg = () => {
+  const file = path.resolve(__dirname, "..", "server", "package.json");
+  try {
+    const txt = fs.readFileSync(file, "utf8");
+    const parsed = JSON.parse(txt || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+};
+
+const renderFooter = () => {
+  const pkg = readPkg();
+  const year = moment().format("YYYY");
+  const pkgName = pkg?.name || "@krakenslab/oasis";
+  const pkgVersion = pkg?.version || "?";
+
+  return div(
+    { class: "oasis-footer" },
+    div(
+      { class: "oasis-footer-center" },
+      a(
+        { href: "/", class: "oasis-footer-logo-link" },
+        img({
+          class: "oasis-footer-logo",
+          src: "/assets/images/snh-oasis.jpg",
+          alt: "Oasis"
+        })
+      ),
+      a(
+        { href: "https://code.03c8.net/krakenslab/oasis", target: "_blank", rel: "noreferrer noopener", class: "oasis-footer-license-link" },
+      span(pkgName),
+      ),
+      span("["),
+         span({ class: "oasis-footer-version" }, pkgVersion),
+      span("]"),
+      span({ class: "oasis-footer-sep" }, " - "),
+      a(
+        { href: "https://www.gnu.org/licenses/gpl-3.0.html", target: "_blank", rel: "noreferrer noopener", class: "oasis-footer-license-link" },
+        i18n.footerLicense
+      ),
+      span({ class: "oasis-footer-sep" }, " - "),
+      span({ class: "oasis-footer-year" }, year)
+    )
+  );
+};
+
 const navLink = ({ href, emoji, text, current, class: extraClass }) =>
   li(
     a(
@@ -539,6 +586,20 @@ const renderAgendaLink = () => {
     : "";
 };
 
+const renderFavoritesLink = () => {
+  const favoritesMod = getConfig().modules.favoritesMod === "on";
+  return favoritesMod
+    ? [
+        navLink({
+          href: "/favorites",
+          emoji: "ꘝ",
+          text: i18n.favoritesTitle,
+          class: "favorites-link enabled"
+        })
+      ]
+    : "";
+};
+
 const renderAILink = () => {
   const aiMod = getConfig().modules.aiMod === "on";
   return aiMod
@@ -667,6 +728,7 @@ const template = (titlePrefix, ...elements) => {
                   text: i18n.cvTitle
                 }),
                 renderAgendaLink(),
+                renderFavoritesLink(),
                 renderWalletLink(),
                 navLink({
                   href: "/modules",
@@ -799,16 +861,17 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "▤",
                   title: i18n.menuMedia
                 },
-                renderBookmarksLink(),
-                renderImagesLink(),
-                renderVideosLink(),
                 renderAudiosLink(),
-                renderDocsLink()
+                renderBookmarksLink(),
+                renderDocsLink(),
+                renderImagesLink(),
+                renderVideosLink()
               )
             )
           )
         )
-      )
+      ),
+    renderFooter()
     )
   );
   return doctypeString + nodes.outerHTML;

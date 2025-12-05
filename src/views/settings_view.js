@@ -112,6 +112,7 @@ const settingsView = ({ version, aiPrompt }) => {
             option({ value: "mentions", selected: currentConfig.homePage === "mentions" ? true : undefined }, i18n.mentions),
             option({ value: "inbox", selected: currentConfig.homePage === "inbox" ? true : undefined }, i18n.inbox),
             option({ value: "agenda", selected: currentConfig.homePage === "agenda" ? true : undefined }, i18n.agendaTitle),
+            option({ value: "favorites", selected: currentConfig.homePage === "favorites" ? true : undefined }, i18n.favoritesTitle),
             option({ value: "stats", selected: currentConfig.homePage === "stats" ? true : undefined }, i18n.statsTitle),
             option({ value: "blockexplorer", selected: currentConfig.homePage === "blockexplorer" ? true : undefined }, i18n.blockchain)
           ),
