@@ -474,6 +474,44 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                   const parsedBids = polls.map(parseBidEntry).filter(Boolean).sort((a, b) => new Date(b.time) - new Date(a.time))
                   const myBid = item.item_type === "auction" ? parsedBids.some((b) => b.bidder === userId) : false
                   const maxStock = item.initialStock || item.stockMax || item.stock || 1
+                  const stockLeft = Number(item.stock || 0)
+                  const isOwner = String(item.seller) === String(userId)
+
+                  const actionNodesRaw = isOwner
+                    ? renderMarketOwnerActions(item, "/market?filter=mine")
+                    : [
+                        item.status !== "SOLD" && item.status !== "DISCARDED" && item.item_type === "auction"
+                          ? form(
+                              { method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
+                              input({ type: "hidden", name: "returnTo", value: returnTo }),
+                              input({ type: "number", name: "bidAmount", step: "0.000001", min: "0.000001", placeholder: i18n.marketYourBid, required: true }),
+                              br(),
+                              button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
+                            )
+                          : null,
+                        item.status === "FOR SALE" && item.item_type !== "auction" && !isOwner && stockLeft > 0
+                          ? form(
+                              { method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
+                              input({ type: "hidden", name: "returnTo", value: "/inbox?filter=sent" }),
+                              input({ type: "hidden", name: "buyerId", value: userId }),
+                              button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
+                            )
+                          : null
+                      ].filter(Boolean)
+
+                  const actionNodes = Array.isArray(actionNodesRaw) ? actionNodesRaw.filter(Boolean) : []
+                  const buttonsBlock =
+                    actionNodes.length > 0
+                      ? div(
+                          { class: "market-card buttons" },
+                          div({ style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center;" }, ...actionNodes)
+                        )
+                      : stockLeft <= 0
+                        ? div(
+                            { class: "market-card buttons" },
+                            div({ class: "card-field" }, span({ class: "card-value" }, i18n.marketOutOfStock))
+                          )
+                        : null
 
                   return div(
                     { class: "market-item" },
@@ -558,33 +596,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                           button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
                         )
                       ),
-                      div(
-                        { class: "market-card buttons" },
-                        div(
-                          { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center;" },
-                          String(item.seller) === String(userId)
-                            ? renderMarketOwnerActions(item, "/market?filter=mine")
-                            : [
-                                item.status !== "SOLD" && item.status !== "DISCARDED" && item.item_type === "auction"
-                                  ? form(
-                                      { method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
-                                      input({ type: "hidden", name: "returnTo", value: returnTo }),
-                                      input({ type: "number", name: "bidAmount", step: "0.000001", min: "0.000001", placeholder: i18n.marketYourBid, required: true }),
-                                      br(),
-                                      button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
-                                    )
-                                  : null,
-                                item.status === "FOR SALE" && item.item_type !== "auction" && String(item.seller) !== String(userId)
-                                  ? form(
-                                      { method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
-                                      input({ type: "hidden", name: "returnTo", value: "/inbox?filter=sent" }),
-                                      input({ type: "hidden", name: "buyerId", value: userId }),
-                                      button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
-                                    )
-                                  : null
-                              ].filter(Boolean)
-                        )
-                      )
+                      buttonsBlock
                     )
                   )
                 })
@@ -603,7 +615,8 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
   const sort = params.sort || "recent"
   const returnTo = params.returnTo || buildReturnTo(filter, q, minPrice, maxPrice, sort)
   const topbar = renderMarketTopbar(item, returnTo)
-  const showBuy = item.status === "FOR SALE" && item.item_type !== "auction" && String(item.seller) !== String(userId)
+  const stockLeft = Number(item.stock || 0)
+  const showBuy = item.status === "FOR SALE" && item.item_type !== "auction" && String(item.seller) !== String(userId) && stockLeft > 0
   const maxStock = item.initialStock || item.stockMax || item.stock || 1
 
   return template(

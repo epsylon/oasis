@@ -13,6 +13,14 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.3 - 2025-12-10
+
+### Fixed
+
+ + Fixed mentions (Core plugin).
+ + Fixed feeds (Feed plugin).
+ + Minor details at market view (Market plugin).
+
 ## v0.6.2 - 2025-12-05
 
 ### Added

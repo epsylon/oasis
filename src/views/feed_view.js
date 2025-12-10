@@ -4,6 +4,9 @@ const { config } = require("../server/SSB_server.js");
 const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
 const opinionCategories = require("../backend/opinion_categories");
 
+const FEED_TEXT_MIN = Number(config?.feed?.minLength ?? 1);
+const FEED_TEXT_MAX = Number(config?.feed?.maxLength ?? 280);
+
 const normalizeOptions = (opts) => {
   if (typeof opts === "string") return { filter: String(opts || "ALL").toUpperCase(), q: "", tag: "" };
   if (!opts || typeof opts !== "object") return { filter: "ALL", q: "", tag: "" };
@@ -62,6 +65,10 @@ const renderTagChips = (tags = []) => {
 
 const renderFeedCard = (feed) => {
   const content = feed.value.content || {};
+  const rawText = typeof content.text === "string" ? content.text : "";
+  const safeText = rawText.trim();
+  if (!safeText) return null;
+
   const voteEntries = Object.entries(content.opinions || {});
   const totalCount = voteEntries.reduce((sum, [, count]) => sum + (Number(count) || 0), 0);
   const createdAt = formatDate(feed);
@@ -70,7 +77,7 @@ const renderFeedCard = (feed) => {
   const alreadyRefeeded = Array.isArray(content.refeeds_inhabitants) && me ? content.refeeds_inhabitants.includes(me) : false;
   const alreadyVoted = Array.isArray(content.opinions_inhabitants) && me ? content.opinions_inhabitants.includes(me) : false;
 
-  const tags = Array.isArray(content.tags) && content.tags.length ? content.tags : extractTags(content.text);
+  const tags = Array.isArray(content.tags) && content.tags.length ? content.tags : extractTags(safeText);
 
   const authorId = content.author || feed.value.author || "";
 
@@ -89,7 +96,7 @@ const renderFeedCard = (feed) => {
       ),
       div(
         { class: "feed-main" },
-        div({ class: "feed-text", innerHTML: renderTextWithStyles(content.text || "") }),
+        div({ class: "feed-text", innerHTML: renderTextWithStyles(safeText) }),
         renderTagChips(tags),
         h2(`${i18n.totalOpinions}: ${totalCount}`),
         p(
@@ -151,26 +158,34 @@ exports.feedView = (feeds, opts = "ALL") => {
         ...generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"], filter, "/feed", extra),
         form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button filter-btn" }, i18n.createFeedTitle || "Create Feed"))
       ),
-	div(
-	  { class: "feed-tools-row" },
-	  form(
-	    { method: "GET", action: "/feed", class: "feed-search-form" },
-	    input({ type: "hidden", name: "filter", value: filter }),
-	    tag ? input({ type: "hidden", name: "tag", value: tag }) : null,
-	    input({ type: "text", name: "q", value: q, placeholder: i18n.searchPlaceholder || "Search", class: "feed-search-input" }),
-	    button({ type: "submit", class: "filter-btn feed-search-btn" }, i18n.searchButton || "Search")
-	  )
-	),
+      div(
+        { class: "feed-tools-row" },
+        form(
+          { method: "GET", action: "/feed", class: "feed-search-form" },
+          input({ type: "hidden", name: "filter", value: filter }),
+          tag ? input({ type: "hidden", name: "tag", value: tag }) : null,
+          input({ type: "text", name: "q", value: q, placeholder: i18n.searchPlaceholder || "Search", class: "feed-search-input" }),
+          button({ type: "submit", class: "filter-btn feed-search-btn" }, i18n.searchButton || "Search")
+        )
+      ),
       section(
         filter === "CREATE"
           ? form(
               { method: "POST", action: "/feed/create" },
-              textarea({ name: "text", placeholder: i18n.feedPlaceholder, maxlength: 280, rows: 4, cols: 50 }),
+              textarea({
+                name: "text",
+                placeholder: i18n.feedPlaceholder,
+                required: true,
+                minlength: String(FEED_TEXT_MIN),
+                maxlength: String(FEED_TEXT_MAX),
+                rows: 4,
+                cols: 50
+              }),
               br(),
               button({ type: "submit", class: "create-button" }, i18n.createFeedButton)
             )
           : feeds && feeds.length > 0
-            ? div({ class: "feed-container" }, feeds.map((feed) => renderFeedCard(feed)))
+            ? div({ class: "feed-container" }, feeds.map((feed) => renderFeedCard(feed)).filter(Boolean))
             : div({ class: "no-results" }, p(i18n.noFeedsFound))
       )
     )
@@ -187,7 +202,15 @@ exports.feedCreateView = (opts = {}) => {
       div({ class: "mode-buttons-row" }, ...generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"], "CREATE", "/feed", { q, tag })),
       form(
         { method: "POST", action: "/feed/create" },
-        textarea({ name: "text", maxlength: "280", rows: 5, cols: 50, placeholder: i18n.feedPlaceholder }),
+        textarea({
+          name: "text",
+          required: true,
+          minlength: String(FEED_TEXT_MIN),
+          maxlength: String(FEED_TEXT_MAX),
+          rows: 5,
+          cols: 50,
+          placeholder: i18n.feedPlaceholder
+        }),
         br(),
         button({ type: "submit", class: "create-button" }, i18n.createFeedButton || "Send Feed!")
       )

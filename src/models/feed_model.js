@@ -3,11 +3,21 @@ const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
+const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
+const FEED_TEXT_MAX = Number(getConfig().feed?.maxLength ?? 280);
+
 module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => {
     if (!ssb) ssb = await cooler.open();
     return ssb;
+  };
+
+  const cleanText = (t) => (typeof t === "string" ? t.trim() : "");
+
+  const isValidFeedText = (t) => {
+    const s = cleanText(t);
+    return s.length >= FEED_TEXT_MIN && s.length <= FEED_TEXT_MAX;
   };
 
   const getMsg = (ssbClient, id) =>
@@ -90,9 +100,13 @@ module.exports = ({ cooler }) => {
     const userId = ssbClient.id;
 
     if (typeof text !== "string") throw new Error("Invalid text");
-    const cleaned = text.trim();
-    if (!cleaned) throw new Error("Text required");
-    if (cleaned.length > 280) throw new Error("Text too long");
+    const cleaned = cleanText(text);
+
+    if (!isValidFeedText(cleaned)) {
+      if (cleaned.length < FEED_TEXT_MIN) throw new Error("Text too short");
+      if (cleaned.length > FEED_TEXT_MAX) throw new Error("Text too long");
+      throw new Error("Text required");
+    }
 
     const content = {
       type: "feed",
@@ -123,6 +137,7 @@ module.exports = ({ cooler }) => {
 
     const c = msg?.value?.content;
     if (!c || c.type !== "feed") throw new Error("Invalid feed");
+    if (!isValidFeedText(c.text)) throw new Error("Invalid feed");
 
     const existing = idx.actionsByRoot.get(tipId) || [];
     for (const a of existing) {
@@ -161,6 +176,7 @@ module.exports = ({ cooler }) => {
 
     const c = msg?.value?.content;
     if (!c || c.type !== "feed") throw new Error("Invalid feed");
+    if (!isValidFeedText(c.text)) throw new Error("Invalid feed");
 
     const existing = idx.actionsByRoot.get(tipId) || [];
     for (const a of existing) {
@@ -194,7 +210,17 @@ module.exports = ({ cooler }) => {
 
     const idx = await buildIndex(ssbClient);
 
-    let tips = Array.from(idx.feedsById.values()).filter((m) => !idx.replacedIds.has(m.key) && !idx.tombstoned.has(m.key));
+    const isValidFeedMsg = (m) => {
+      const c = m?.value?.content;
+      return !!c && c.type === "feed" && isValidFeedText(c.text);
+    };
+
+    let tips = Array.from(idx.feedsById.values()).filter(
+      (m) =>
+        !idx.replacedIds.has(m.key) &&
+        !idx.tombstoned.has(m.key) &&
+        isValidFeedMsg(m)
+    );
 
     const textEditedEver = (m) => {
       const seen = new Set();
@@ -267,10 +293,10 @@ module.exports = ({ cooler }) => {
     let feeds = tips.map(materialize);
 
     if (q) {
-      const terms = q.split(/\s+/).map(s => s.trim()).filter(Boolean);
+      const terms = q.split(/\s+/).map((s) => s.trim()).filter(Boolean);
       feeds = feeds.filter((m) => {
         const t = String(m.value?.content?.text || "").toLowerCase();
-        return terms.every(term => t.includes(term));
+        return terms.every((term) => t.includes(term));
       });
     }
     if (tag) feeds = feeds.filter((m) => Array.isArray(m.value?.content?.tags) && m.value.content.tags.includes(tag));
@@ -285,7 +311,12 @@ module.exports = ({ cooler }) => {
     }
 
     if (filter === "TOP") {
-      feeds.sort((a, b) => totalVotes(b) - totalVotes(a) || (b.value?.content?.refeeds || 0) - (a.value?.content?.refeeds || 0) || getTs(b) - getTs(a));
+      feeds.sort(
+        (a, b) =>
+          totalVotes(b) - totalVotes(a) ||
+          (b.value?.content?.refeeds || 0) - (a.value?.content?.refeeds || 0) ||
+          getTs(b) - getTs(a)
+      );
     } else {
       feeds.sort((a, b) => getTs(b) - getTs(a));
     }

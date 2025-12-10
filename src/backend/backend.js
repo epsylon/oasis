@@ -411,85 +411,187 @@ function writeAddrMap(map) {
 }
 
 const preparePreview = async function (ctx) {
-    let text = String(ctx.request.body.text || "");
-    const contentWarning = String(ctx.request.body.contentWarning || "");
-    const mentions = {};
-    const rex = /(^|\s)(?!\[)@([a-zA-Z0-9\-/.=+]{3,})\b/g;
-    let m;
+  let text = String(ctx.request.body.text || "")
+  const contentWarning = String(ctx.request.body.contentWarning || "")
 
-    while ((m = rex.exec(text)) !== null) {
-        const token = m[2];
-        const key = token;
-        let found = mentions[key] || [];
+  const ensureAt = (id) => {
+    const s = String(id || "")
+    if (!s) return ""
+    return s.startsWith("@") ? s : `@${s.replace(/^@+/, "")}`
+  }
 
-        if (/\.ed25519$/.test(token)) {
-            const name = await about.name(token);
-            const img = await about.image(token);
-            found.push({
-                feed: token,
-                name,
-                img,
-                rel: { followsMe: false, following: false, blocking: false, me: false }
-            });
-        } else {
-            const matches = about.named(token);
-            for (const match of matches) {
-                found.push(match);
-            }
+  const stripAt = (id) => String(id || "").replace(/^@+/, "")
+
+  const norm = (s) => String(s || "").trim().toLowerCase()
+
+  const ssbClient = await cooler.open()
+  const authorMeta = {
+    id: ssbClient.id,
+    name: await about.name(ssbClient.id),
+    image: await about.image(ssbClient.id),
+  }
+
+  const myId = String(authorMeta.id)
+
+  text = text.replace(
+    /\[@([^\]]+)\]\s*\(\s*@?([^) \t\r\n]+\.ed25519)\s*\)/g,
+    (_m, label, feed) => `[@${label}](@${stripAt(feed)})`
+  )
+
+  const mentions = {}
+
+  const normalizeMatch = (m) => {
+    const feed = ensureAt(m?.feed || m?.link || m?.id || "")
+    const name = String(m?.name || "")
+    const img = m?.img || m?.image || null
+    const rel = m?.rel || {}
+    return { ...m, feed, name, img, rel }
+  }
+
+  const pushUnique = (key, arr) => {
+    const prev = Array.isArray(mentions[key]) ? mentions[key] : []
+    const seen = new Set(prev.map((x) => String(x?.feed || "")))
+    const out = prev.slice()
+    for (const x of arr) {
+      const f = String(x?.feed || "")
+      if (!f) continue
+      if (seen.has(f)) continue
+      seen.add(f)
+      out.push(x)
+    }
+    if (out.length) mentions[key] = out
+  }
+
+  const chooseByPhrase = (matches, phrase) => {
+    const p = norm(phrase)
+    const exact = matches.filter((mm) => norm(mm.name) === p)
+    if (exact.length) return exact
+    const starts = matches.filter((mm) => norm(mm.name).startsWith(p))
+    if (starts.length) return starts
+    const incl = matches.filter((mm) => norm(mm.name).includes(p))
+    if (incl.length) return incl
+    return null
+  }
+
+  const rex = /(^|\s)(?!\[)@([a-zA-Z0-9\-/.=+]{3,})(?:\s+([a-zA-Z0-9][a-zA-Z0-9\-/.=+]{1,}))?(?:\s+([a-zA-Z0-9][a-zA-Z0-9\-/.=+]{1,}))?\b/g
+  let m
+
+  while ((m = rex.exec(text)) !== null) {
+    const w1 = m[2]
+    const w2 = m[3]
+    const w3 = m[4]
+
+    if (/\.ed25519$/.test(w1)) {
+      const feed = ensureAt(w1)
+      const name = await about.name(feed)
+      const img = await about.image(feed)
+      pushUnique(w1, [
+        {
+          feed,
+          name,
+          img,
+          rel: { followsMe: false, following: false, blocking: false, me: false }
         }
-
-        if (found.length > 0) {
-            mentions[key] = found;
-        }
+      ])
+      continue
     }
 
-    Object.keys(mentions).forEach((key) => {
-        const matches = mentions[key];
-        const meaningful = matches.filter(
-            (m) => (m.rel?.followsMe || m.rel?.following) && !m.rel?.blocking
-        );
-        mentions[key] = meaningful.length > 0 ? meaningful : matches;
-    });
+    const phrase1 = w1
+    const phrase2 = w2 ? `${w1} ${w2}` : null
+    const phrase3 = w3 ? `${w1} ${w2 ? w2 : ""} ${w3}`.replace(/\s+/g, " ").trim() : null
 
-    const replacer = (match, prefix, token) => {
-        const matches = mentions[token];
-        if (matches && matches.length === 1) {
-            return `${prefix}[@${matches[0].name}](${matches[0].feed})`;
+    const matchesRaw = about.named(w1) || []
+    const matchesAll = matchesRaw.map(normalizeMatch)
+    const matches = matchesAll.filter((mm) => String(mm.feed) !== myId && !mm?.rel?.me)
+
+    let chosenKey = phrase1
+    let chosenMatches = matches
+
+    if (phrase3) {
+      const best3 = chooseByPhrase(matches, phrase3)
+      if (best3 && best3.length) {
+        chosenKey = phrase3
+        chosenMatches = best3
+      } else if (phrase2) {
+        const best2 = chooseByPhrase(matches, phrase2)
+        if (best2 && best2.length) {
+          chosenKey = phrase2
+          chosenMatches = best2
         }
-        return match;
-    };
-
-    text = text.replace(rex, replacer);
-
-    const blobMarkdown = await handleBlobUpload(ctx, "blob");
-    if (blobMarkdown) {
-        text += blobMarkdown;
+      }
+    } else if (phrase2) {
+      const best2 = chooseByPhrase(matches, phrase2)
+      if (best2 && best2.length) {
+        chosenKey = phrase2
+        chosenMatches = best2
+      }
     }
 
-    const ssbClient = await cooler.open();
-    const authorMeta = {
-        id: ssbClient.id,
-        name: await about.name(ssbClient.id),
-        image: await about.image(ssbClient.id),
-    };
+    if (chosenMatches.length > 0) {
+      pushUnique(chosenKey, chosenMatches)
+    }
+  }
 
-    const renderedText = await renderBlobMarkdown(
-        text,
-        mentions,
-        authorMeta.id,
-        authorMeta.name
-    );
+  Object.keys(mentions).forEach((key) => {
+    const matches = Array.isArray(mentions[key]) ? mentions[key] : []
+    const meaningful = matches.filter((mm) => (mm?.rel?.followsMe || mm?.rel?.following) && !mm?.rel?.blocking && String(mm?.feed || "") !== myId && !mm?.rel?.me)
+    mentions[key] = meaningful.length > 0 ? meaningful : matches
+  })
 
-    const hasBrTags = /<br\s*\/?>/i.test(renderedText);
-    const hasBlockTags = /<(p|div|ul|ol|li|pre|blockquote|h[1-6]|table|tr|td|th|section|article)\b/i.test(renderedText);
+  const rexReplace = /(^|\s)(?!\[)@([a-zA-Z0-9\-/.=+]{3,})(?:\s+([a-zA-Z0-9][a-zA-Z0-9\-/.=+]{1,}))?(?:\s+([a-zA-Z0-9][a-zA-Z0-9\-/.=+]{1,}))?\b/g
 
-    let formattedText = renderedText;
-    if (!hasBrTags && !hasBlockTags && /[\r\n]/.test(renderedText)) {
-        formattedText = renderedText.replace(/\r\n|\r|\n/g, "<br>");
+  const replacer = (match, prefix, w1, w2, w3) => {
+    const phrase1 = w1
+    const phrase2 = w2 ? `${w1} ${w2}` : null
+    const phrase3 = w3 ? `${w1} ${w2 ? w2 : ""} ${w3}`.replace(/\s+/g, " ").trim() : null
+
+    const tryKey = (k) => {
+      const arr = mentions[k]
+      if (arr && arr.length === 1) {
+        return `${prefix}[@${arr[0].name}](${ensureAt(arr[0].feed)})`
+      }
+      return null
     }
 
-    return { authorMeta, text, formattedText, mentions, contentWarning };
-};
+    if (/\.ed25519$/.test(w1)) {
+      const arr = mentions[w1]
+      if (arr && arr.length === 1) return `${prefix}[@${arr[0].name}](${ensureAt(arr[0].feed)})`
+      return match
+    }
+
+    const r3 = phrase3 ? tryKey(phrase3) : null
+    if (r3) return r3
+    const r2 = phrase2 ? tryKey(phrase2) : null
+    if (r2) return r2
+    const r1 = tryKey(phrase1)
+    if (r1) return r1
+    return match
+  }
+
+  text = text.replace(rexReplace, replacer)
+
+  const blobMarkdown = await handleBlobUpload(ctx, "blob")
+  if (blobMarkdown) {
+    text += blobMarkdown
+  }
+
+  const renderedText = await renderBlobMarkdown(
+    text,
+    mentions,
+    authorMeta.id,
+    authorMeta.name
+  )
+
+  const hasBrTags = /<br\s*\/?>/i.test(renderedText)
+  const hasBlockTags = /<(p|div|ul|ol|li|pre|blockquote|h[1-6]|table|tr|td|th|section|article)\b/i.test(renderedText)
+
+  let formattedText = renderedText
+  if (!hasBrTags && !hasBlockTags && /[\r\n]/.test(renderedText)) {
+    formattedText = renderedText.replace(/\r\n|\r|\n/g, "<br>")
+  }
+
+  return { authorMeta, text, formattedText, mentions, contentWarning }
+}
 
 // set koaMiddleware maxSize: 50 MiB (voted by community at: 09/04/2025)
 const megabyte = Math.pow(2, 20);

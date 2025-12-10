@@ -2,6 +2,19 @@ const { div, h2, p, section, button, form, a, input, img, textarea, br, span, vi
 const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require('../backend/renderUrl');
+const { getConfig } = require("../configs/config-manager.js");
+
+const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
+const FEED_TEXT_MAX = Number(getConfig().feed?.maxLength ?? 280);
+
+function cleanFeedText(t) {
+  return typeof t === 'string' ? t.trim() : '';
+}
+
+function isValidFeedText(t) {
+  const s = cleanFeedText(t);
+  return s.length >= FEED_TEXT_MIN && s.length <= FEED_TEXT_MAX;
+}
 
 function capitalize(str) {
   return typeof str === 'string' && str.length ? str[0].toUpperCase() + str.slice(1) : '';
@@ -151,6 +164,7 @@ function renderActionCards(actions, userId) {
       if (typeof content.type === 'string' && content.type.startsWith('tribe') && content.isAnonymous === true) return false;
       if (content.type === 'task' && content.isPublic === "PRIVATE") return false;
       if (content.type === 'event' && content.isPublic === "private") return false;
+      if ((content.type === 'feed' || action.type === 'feed') && !isValidFeedText(content.text)) return false;
       if (content.type === 'market') {
         if (content.stock === 0 && content.status !== 'SOLD') {
           return false;
@@ -560,9 +574,11 @@ function renderActionCards(actions, userId) {
     if (type === 'feed') {
       const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
       const { text, refeeds } = content;
+      if (!isValidFeedText(text)) return null;
+      const safeText = cleanFeedText(text);
       cardBody.push(
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text', innerHTML: renderTextWithStyles(text) }),
+          div({ class: 'feed-text', innerHTML: renderTextWithStyles(safeText) }),
           h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-label' }, refeeds))
         )
       );
@@ -609,7 +625,7 @@ function renderActionCards(actions, userId) {
         const root = c.root;
         const replies = Array.isArray(c.replies) ? c.replies : [];
         const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
-        const limit = 5; // max posts when threading
+        const limit = 5;
         const overflow = repliesAsc.length > limit;
         const show = repliesAsc.slice(Math.max(0, repliesAsc.length - limit));
         const lastId = repliesAsc.length ? repliesAsc[repliesAsc.length - 1].id : threadId;

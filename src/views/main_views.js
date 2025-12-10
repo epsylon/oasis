@@ -2251,42 +2251,150 @@ exports.publishView = (preview, text, contentWarning) => {
   );
 };
 
+//generate preview
+const ensureAt = (id) => {
+  const s = String(id || "").trim()
+  if (!s) return ""
+  return s.startsWith("@") ? s : `@${s.replace(/^@+/, "")}`
+}
+
+const stripAt = (id) => String(id || "").trim().replace(/^@+/, "")
+
+const authorHref = (feed) => `/author/${encodeURIComponent(ensureAt(feed))}`
+
+const escapeRegex = (s) => String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+const escapeHtml = (s) => {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+const normalizeMentionLinks = (text) => {
+  let t = String(text || "")
+  t = t.replace(
+    /\[@([^\]]+)\]\s*\(\s*@?([^) \t\r\n]+\.ed25519)\s*\)/g,
+    (_m, label, feed) => `[@${String(label || "").replace(/^@+/, "")}](@${String(feed || "").replace(/^@+/, "")})`
+  )
+  return t
+}
+
+const injectResolvedMentions = (text, mentions) => {
+  let out = String(text || "")
+  const obj = mentions && typeof mentions === "object" ? mentions : {}
+
+  const entries = Object.entries(obj)
+    .map(([k, v]) => [String(k || "").trim().replace(/\s+/g, " "), Array.isArray(v) ? v : []])
+    .filter(([k, v]) => k && v.length === 1)
+
+  entries.sort((a, b) => b[0].length - a[0].length)
+
+  for (const [token, list] of entries) {
+    const m = list[0] || {}
+    const feed = ensureAt(m.feed || m.link || m.id || "")
+    if (!feed) continue
+
+    const label = String(m.name || token).replace(/^@+/, "")
+    const parts = token.split(/\s+/).filter(Boolean).map(escapeRegex)
+    if (!parts.length) continue
+
+    const tokenPattern = parts.join("\\s+")
+    const re = new RegExp(`(^|\\s)(?!\\[)@${tokenPattern}(?=\\b|$)`, "g")
+    out = out.replace(re, (match, prefix) => `${prefix}[@${label}](${feed})`)
+  }
+
+  return out
+}
+
+const markdownMentionsToHtml = (markdownText) => {
+  const escaped = escapeHtml(String(markdownText || ""))
+  const withBr = escaped.replace(/\r\n|\r|\n/g, "<br>")
+
+  const withImages = withBr.replace(
+    /!\[([^\]]*)\]\(\s*(&[^)\s]+\.sha256)\s*\)/g,
+    (_m, alt, blob) => `<img src="/blob/${encodeURIComponent(blob)}" alt="${escapeHtml(alt)}">`
+  )
+
+  const withMentions = withImages.replace(
+    /\[@([^\]]+)\]\(\s*@?([^) \t\r\n]+\.ed25519)\s*\)/g,
+    (_m, label, feed) => {
+      const href = authorHref(feed)
+      const shown = `@${String(label || "").replace(/^@+/, "")}`
+      return `<a class="mention" href="${href}">${escapeHtml(shown)}</a>`
+    }
+  )
+
+  const withLinks = withMentions.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`
+  )
+
+  return withLinks
+}
+
 const generatePreview = ({ previewData, contentWarning, action }) => {
-  const { authorMeta, formattedText, mentions } = previewData;
-  const renderedText = formattedText;
-  const msg = {
-    key: "%non-existent.preview",
-    value: {
-      author: authorMeta.id,
-      content: {
-        type: "post",
-        text: renderedText,
-        mentions: mentions,
-      },
-      timestamp: Date.now(),
-      meta: {
-        isPrivate: false,
-        votes: [],
-        author: {
-          name: authorMeta.name,
-          avatar: {
-            url: `http://localhost:3000/blob/${encodeURIComponent(authorMeta.image)}`,
-          },
-        },
-      },
-    },
-  };
-  if (contentWarning) {
-    msg.value.content.contentWarning = contentWarning;
-  }
-  if (msg.value.meta.author.avatar.url === 'http://localhost:3000/blob/%260000000000000000000000000000000000000000000%3D.sha256') {
-    msg.value.meta.author.avatar.url = '/assets/images/default-avatar.png';
-  }
-  const ts = new Date(msg.value.timestamp);
-  lodash.set(msg, "value.meta.timestamp.received.iso8601", ts.toISOString());
-  const ago = Date.now() - Number(ts);
-  const prettyAgo = prettyMs(ago, { compact: true });
-  lodash.set(msg, "value.meta.timestamp.received.since", prettyAgo);
+  const mentions =
+    previewData && previewData.mentions && typeof previewData.mentions === "object"
+      ? previewData.mentions
+      : {}
+
+  const rawText = String((previewData && previewData.text) || "")
+  const normalized = normalizeMentionLinks(rawText)
+  const injected = injectResolvedMentions(normalized, mentions)
+  const publishText = normalizeMentionLinks(injected)
+
+  const previewHtml = markdownMentionsToHtml(publishText)
+
+  const mentionCards = Object.entries(mentions)
+    .map(([_token, matches]) => {
+      const list = Array.isArray(matches) ? matches : []
+      const first = list.find((x) => x && (x.feed || x.link || x.id)) || null
+      if (!first) return null
+
+      const feed = ensureAt(first.feed || first.link || first.id || "")
+      if (!feed) return null
+
+      const nameRaw = String(first.name || stripAt(feed) || "")
+      const nameText = nameRaw.startsWith("@") ? nameRaw : `@${nameRaw}`
+
+      const rel = first.rel || {}
+      const relText = rel.followsMe ? i18n.relationshipMutuals : i18n.relationshipNotMutuals
+      const emoji = rel.followsMe ? "☍" : "⚼"
+
+      const avatar = first.img || first.image || ""
+      const avatarUrl =
+        typeof avatar === "string" && avatar.startsWith("&")
+          ? `/blob/${encodeURIComponent(avatar)}`
+          : (typeof avatar === "string" && avatar ? avatar : "/assets/images/default-avatar.png")
+
+      return div(
+        { class: "mention-card" },
+        a({ href: authorHref(feed) }, img({ src: avatarUrl, class: "avatar-profile" })),
+        br,
+        div(
+          { class: "mention-name" },
+          span({ class: "label" }, `${i18n.mentionsName}: `),
+          a({ href: authorHref(feed) }, nameText)
+        ),
+        div(
+          { class: "mention-relationship" },
+          span({ class: "label" }, `${i18n.mentionsRelationship}:`),
+          span({ class: "relationship" }, relText),
+          div(
+            { class: "mention-relationship-details" },
+            span({ class: "emoji" }, emoji),
+            span(
+              { class: "mentions-listing" },
+              a({ class: "user-link", href: authorHref(feed) }, `@${stripAt(feed)}`)
+            )
+          )
+        )
+      )
+    })
+    .filter(Boolean)
 
   return div(
     section(
@@ -2294,80 +2402,48 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
       div(
         { class: "preview-content" },
         h2(i18n.messagePreview),
-        post({ msg, preview: true })
-      ),
+        contentWarning ? div({ class: "content-warning-preview" }, escapeHtml(contentWarning)) : null,
+        div({ class: "preview-rendered", innerHTML: previewHtml })
+      )
     ),
     section(
       { class: "mention-suggestions" },
-      Object.keys(mentions).map((name) => {
-        const matches = mentions[name];
-        return div(
-          h2(i18n.mentionsMatching),
-          { class: "mention-card" },
-          a(
-            {
-              href: `/author/@${encodeURIComponent(matches[0].feed)}`,
-            },
-            img({ src: msg.value.meta.author.avatar.url, class: "avatar-profile" })
-          ),
-          br,
-          div(
-            { class: "mention-name" },
-            span({ class: "label" }, `${i18n.mentionsName}: `),
-            a(
-              {
-                href: `/author/@${encodeURIComponent(matches[0].feed)}`,
-              },
-              `@${authorMeta.name}`
-            )
-          ),
-          div(
-            { class: "mention-relationship" },
-            span({ class: "label" }, `${i18n.mentionsRelationship}:`),
-            span({ class: "relationship" }, matches[0].rel.followsMe ? i18n.relationshipMutuals : i18n.relationshipNotMutuals),
-            { class: "mention-relationship-details" },
-            span({ class: "emoji" }, matches[0].rel.followsMe ? "☍" : "⚼"),
-            span({ class: "mentions-listing" },
-              a({ class: 'user-link', href: `/author/@${encodeURIComponent(matches[0].feed)}` }, `@${matches[0].feed}`)
-            )
-          )
-        );
-      })
+      mentionCards.length ? h2(i18n.mentionsMatching) : null,
+      ...mentionCards
     ),
     section(
       form(
         { action, method: "post" },
-        [
-          input({ type: "hidden", name: "text", value: renderedText }),
-          input({ type: "hidden", name: "contentWarning", value: contentWarning || "" }),
-          input({ type: "hidden", name: "mentions", value: JSON.stringify(mentions) }),
-          button({ type: "submit" }, i18n.publish)
-        ]
+        input({ type: "hidden", name: "text", value: publishText }),
+        input({ type: "hidden", name: "contentWarning", value: contentWarning || "" }),
+        input({ type: "hidden", name: "mentions", value: JSON.stringify(mentions) }),
+        button({ type: "submit" }, i18n.publish)
       )
     )
-  );
-};
+  )
+}
 
 exports.previewView = ({ previewData, contentWarning }) => {
-    const publishAction = "/publish";
-    const preview = generatePreview({
-        previewData,
-        contentWarning,
-        action: publishAction,
-    });
-    return exports.publishView(preview, previewData.text || "", contentWarning);
-};
+  const publishAction = "/publish"
+  const preview = generatePreview({
+    previewData,
+    contentWarning,
+    action: publishAction,
+  })
+  return exports.publishView(preview, (previewData && previewData.text) || "", contentWarning)
+}
 
 const viewInfoBox = ({ viewTitle = null, viewDescription = null }) => {
   if (!viewTitle && !viewDescription) {
-    return null;
+    return null
   }
   return section(
     { class: "viewInfo" },
     viewTitle ? h1(viewTitle) : null,
     viewDescription ? em(viewDescription) : null
-  );
-};
+  )
+}
+//generate preview
 
 exports.likesView = async ({ messages, feed, name }) => {
   const authorLink = a(
