@@ -31,7 +31,7 @@
     "feedMod": "on",
     "pixeliaMod": "on",
     "agendaMod": "on",
-    "aiMod": "off",
+    "aiMod": "on",
     "forumMod": "on",
     "jobsMod": "on",
     "projectsMod": "on",
