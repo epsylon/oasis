@@ -71,6 +71,30 @@ function excerptPostText(content, max = 220) {
   return raw.length > max ? raw.slice(0, max - 1) + '…' : raw;
 }
 
+const decodeMaybe = (s) => {
+    try { return decodeURIComponent(String(s || '')); } catch { return String(s || ''); }
+};
+
+const rewriteHashtagLinks = (html) => {
+    const s = String(html || '');
+    return s.replace(/href=(["'])(?:https?:\/\/[^"']+)?\/hashtag\/([^"'?#]+)([^"']*)\1/g, (m, q, tag, rest) => {
+        const t = decodeMaybe(tag).replace(/^#/, '').trim().toLowerCase();
+        const href = `/search?query=%23${encodeURIComponent(t)}`;
+        return `href=${q}${href}${q}`;
+    });
+};
+
+function renderUrlPreserveNewlines(text) {
+  const s = String(text || '');
+  const lines = s.split(/\r\n|\r|\n/);
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (i) out.push(br());
+    out.push(...renderUrl(lines[i]));
+  }
+  return out;
+}
+
 function getThreadIdFromPost(action) {
   const c = action.value?.content || action.content || {};
   const fork = safeMsgId(c.fork);
@@ -153,7 +177,8 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
   return out;
 }
 
-function renderActionCards(actions, userId) {
+function renderActionCards(actions, userId, allActions) {
+  const all = Array.isArray(allActions) ? allActions : actions;
   const validActions = actions
     .filter(action => {
       const content = action.value?.content || action.content;
@@ -186,7 +211,26 @@ function renderActionCards(actions, userId) {
   }
 
   const seenDocumentTitles = new Set();
-  const items = buildActivityItemsWithPostThreads(deduped, actions);
+  const items = buildActivityItemsWithPostThreads(deduped, all);
+  const spreadOrdinalById = new Map();
+  const spreadsByLink = new Map();
+
+  for (const a of all) {
+    if (!a || a.type !== 'spread') continue;
+    const c = a.value?.content || a.content || {};
+    const link = c.spreadTargetId || c.vote?.link || '';
+    if (!link || !a.id) continue;
+    if (!spreadsByLink.has(link)) spreadsByLink.set(link, []);
+    spreadsByLink.get(link).push(a);
+  }
+
+  for (const list of spreadsByLink.values()) {
+    list.sort((a, b) => (a.ts || 0) - (b.ts || 0) || String(a.id || '').localeCompare(String(b.id || '')));
+    for (let i = 0; i < list.length; i++) {
+      spreadOrdinalById.set(list[i].id, i + 1);
+    }
+  }
+
   const cards = items.map(action => {
     const date = action.ts ? new Date(action.ts).toLocaleString() : "";
     const userLink = action.author
@@ -576,10 +620,17 @@ function renderActionCards(actions, userId) {
       const { text, refeeds } = content;
       if (!isValidFeedText(text)) return null;
       const safeText = cleanFeedText(text);
+      const htmlText = safeText ? rewriteHashtagLinks(renderTextWithStyles(safeText)) : '';
+      const refeedsNum = Number(refeeds || 0) || 0;
       cardBody.push(
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text', innerHTML: renderTextWithStyles(safeText) }),
-          h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-label' }, refeeds))
+          div({ class: 'feed-text', innerHTML: htmlText }),
+          refeedsNum > 0
+            ? h2({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '),
+                span({ class: 'card-label' }, String(refeedsNum))
+              )
+            : null
         )
       );
     }
@@ -678,7 +729,7 @@ function renderActionCards(actions, userId) {
       const { root, category, title, text, key, rootTitle, rootKey } = content;
       if (!root) {
         const linkKey = key || action.id;
-        const linkText = (title && String(title).trim()) ? title : '(sin título)';
+        const linkText = (title && String(title).trim()) ? title : '';
         cardBody.push(
           div({ class: 'card-section forum' },
             div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
@@ -690,7 +741,7 @@ function renderActionCards(actions, userId) {
       } else {
         const rootId = typeof root === 'string' ? root : (root?.key || root?.id || '');
         const parentForum = actions.find(a => a.type === 'forum' && !a.content?.root && (a.id === rootId || a.content?.key === rootId));
-        const parentTitle = (parentForum?.content?.title && String(parentForum.content.title).trim()) ? parentForum.content.title : ((rootTitle && String(rootTitle).trim()) ? rootTitle : '(sin título)');
+        const parentTitle = (parentForum?.content?.title && String(parentForum.content.title).trim()) ? parentForum.content.title : ((rootTitle && String(rootTitle).trim()) ? rootTitle : '');
         const hrefKey = rootKey || rootId;
         cardBody.push(
           div({ class: 'card-section forum' },
@@ -705,6 +756,43 @@ function renderActionCards(actions, userId) {
           )
         );
       }
+    }
+
+    if (type === 'spread') {
+        const { spreadOriginalAuthor, spreadTitle, spreadContentWarning, spreadText, spreadTotalSpreads } = content || {};
+        const spreadsLabel = (i18n.totalspreads || 'Total spreads') + ':';
+        const total = Number(spreadTotalSpreads || 0);
+        cardBody.push(
+            div({ class: 'card-section vote' },
+                spreadTitle
+                    ? h2(
+                        { class: 'post-title', style: 'margin:.25rem 0 .55rem 0; font-size:1.08em;' },
+                        spreadTitle
+                    )
+                    : '',
+                spreadContentWarning ? h2({ class: 'content-warning' }, spreadContentWarning) : '',
+                spreadText
+                    ? div(
+                        {
+                            class: 'post-text',
+                            style: 'white-space:pre-wrap; line-height:1.45; font-size:1.02em; word-break:break-word; overflow-wrap:anywhere;'
+                        },
+                        ...renderUrlPreserveNewlines(spreadText)
+                    )
+                    : '',
+                spreadOriginalAuthor
+                    ? div(
+                        { class: 'card-field' },
+                        span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(spreadOriginalAuthor)}`, class: 'user-link' }, spreadOriginalAuthor))
+                    )
+                    : '',
+                div(
+                    { class: 'card-field' },
+                    span({ class: 'card-label' }, spreadsLabel),
+                    span({ class: 'card-value' }, String(total))
+                )
+            )
+        );
     }
 
     if (type === 'vote') {
@@ -1204,6 +1292,10 @@ function getViewDetailsAction(type, action) {
     case 'tribeFeedPost':
     case 'tribeFeedRefeed':
     return `/tribe/${encodeURIComponent(action.content?.tribeId || '')}`;
+    case 'spread': {
+      const link = action.content?.spreadTargetId || action.content?.vote?.link || '';
+      return link ? `/thread/${encodeURIComponent(link)}#${encodeURIComponent(link)}` : `/activity`;
+    }
     case 'votes':      return `/votes/${id}`;
     case 'transfer':   return `/transfers/${id}`;
     case 'pixelia':    return `/pixelia`;
@@ -1260,6 +1352,7 @@ exports.activityView = (actions, filter, userId) => {
     { type: 'feed',      label: i18n.typeFeed },
     { type: 'aiExchange',label: i18n.typeAiExchange },
     { type: 'post',      label: i18n.typePost },
+    { type: 'spread',    label: i18n.typeSpread || 'SPREAD' },
     { type: 'pixelia',   label: i18n.typePixelia },
     { type: 'forum',     label: i18n.typeForum },
     { type: 'bookmark',  label: i18n.typeBookmark },
@@ -1292,6 +1385,8 @@ exports.activityView = (actions, filter, userId) => {
     });
   } else if (filter === 'task') {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment'));
+  } else if (filter === 'spread') {
+    filteredActions = actions.filter(action => action.type === 'spread');
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all') && action.type !== 'tombstone');
   }
@@ -1338,7 +1433,7 @@ exports.activityView = (actions, filter, userId) => {
             )
           ),
           div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(17, 21).map(({ type, label }) =>
+            activityTypes.slice(17, 22).map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
                 input({ type: 'hidden', name: 'filter', value: type }),
                 button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
@@ -1346,7 +1441,7 @@ exports.activityView = (actions, filter, userId) => {
             )
           ),
           div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(21, 26).map(({ type, label }) =>
+            activityTypes.slice(22, 27).map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
                 input({ type: 'hidden', name: 'filter', value: type }),
                 button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
@@ -1355,7 +1450,7 @@ exports.activityView = (actions, filter, userId) => {
           )
         )
       ),
-      section({ class: 'feed-container' }, renderActionCards(filteredActions, userId))
+    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, actions))
     )
   );
 

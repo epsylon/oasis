@@ -158,6 +158,7 @@ module.exports = {
     // spreads view
     viewLikes: "View spreads",
     spreadedDescription: "List of posts spread by the inhabitant.",
+    totalspreads: "Total spreads",
     // composer
     attachFiles: "Attach files",
     preview: "Preview",
@@ -1433,6 +1434,7 @@ module.exports = {
     typeBankClaim:        "BANKING/UBI",
     typeKarmaScore:       "KARMA",
     typeParliament:       "PARLIAMENT",
+    typeSpread:           "SPREADS",
     typeParliamentCandidature: "Parliament · Candidature",
     typeParliamentTerm:   "Parliament · Term",
     typeParliamentProposal:"Parliament · Proposal",

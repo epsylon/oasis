@@ -13,6 +13,22 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.4 - 2026-01-05
+
+### Added
+
+ + More information shared when spreading content at inhabitants activity (Activity plugin).
+ + New PUB: pub.andromeda.oasis
+
+### Changed
+
+ + Strong backend refactoring (4962L -> 2666L) (Core plugin).
+
+### Fixed
+
+ + Fixed parliament cycles (Parliament plugin).
+ + Refeeding with hashtags (Feed plugin).
+
 ## v0.6.3 - 2025-12-10
 
 ### Fixed

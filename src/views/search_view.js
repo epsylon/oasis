@@ -4,6 +4,19 @@ const moment = require("../server/node_modules/moment");
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { renderUrl } = require('../backend/renderUrl');
 
+const decodeMaybe = (s) => {
+  try { return decodeURIComponent(String(s || '')); } catch { return String(s || ''); }
+};
+
+const rewriteHashtagLinks = (html) => {
+  const s = String(html || '');
+  return s.replace(/href=(["'])(?:https?:\/\/[^"']+)?\/hashtag\/([^"'?#]+)([^"']*)\1/g, (m, q, tag, rest) => {
+    const t = decodeMaybe(tag).replace(/^#/, '').trim().toLowerCase();
+    const href = `/search?query=%23${encodeURIComponent(t)}`;
+    return `href=${q}${href}${q}`;
+  });
+};
+
 const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, resultCount = "10" }) => {
   const searchInput = input({
     name: "query",
@@ -91,11 +104,20 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.description + ':'), span({ class: 'card-value' }, content.description)) : null,
           content.image ? img({ src: `/image/64/${encodeURIComponent(content.image)}` }) : null
         );
-      case 'feed':
+      case 'feed': {
+        const rawText = typeof content.text === 'string' ? content.text.trim() : '';
+        const htmlText = rawText ? rewriteHashtagLinks(renderTextWithStyles(rawText)) : '';
+        const refeedsNum = Number(content.refeeds || 0) || 0;
         return div({ class: 'search-feed' },
-          content.text ? h2({ class: 'card-field' }, span({ class: 'card-value' }, content.text)) : null,
-          h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ':'), span({ class: 'card-value' }, content.refeeds))
+          rawText ? div({ class: 'card-field' }, span({ class: 'card-value', innerHTML: htmlText })) : null,
+          refeedsNum > 0
+            ? h2({ class: 'card-field' },
+                span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ':'),
+                span({ class: 'card-value' }, String(refeedsNum))
+              )
+            : null
         );
+      }
       case 'event':
         return div({ class: 'search-event' },
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,

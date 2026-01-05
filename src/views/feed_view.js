@@ -27,6 +27,20 @@ const extractTags = (text) => {
   return Array.from(new Set(list));
 };
 
+const rewriteHashtagLinks = (html) => {
+    return String(html || '').replace(
+        /href=(["'])\/hashtag\/([^"'?#\s<]+)\1/gi,
+        (m, q, rawTag) => {
+            let t = String(rawTag || '');
+            try { t = decodeURIComponent(t); } catch {}
+            t = t.replace(/[^A-Za-z0-9_]/g, '');
+            const tag = t.toLowerCase();
+            const query = encodeURIComponent(`#${tag}`);
+            return `href=${q}/search?query=${query}${q}`;
+        }
+    );
+};
+
 const generateFilterButtons = (filters, currentFilter, action, extra = {}) => {
   const cur = String(currentFilter || "").toUpperCase();
   const hiddenInputs = (obj) =>
@@ -54,77 +68,67 @@ const renderVotesSummary = (opinions = {}) => {
   );
 };
 
-const renderTagChips = (tags = []) => {
-  const list = Array.isArray(tags) ? tags : [];
-  if (!list.length) return null;
-  return div(
-    { class: "tag-chips" },
-    list.map((t) => a({ class: "tag-chip", href: `/feed?tag=${encodeURIComponent(t)}` }, `#${t}`))
-  );
-};
-
 const renderFeedCard = (feed) => {
-  const content = feed.value.content || {};
-  const rawText = typeof content.text === "string" ? content.text : "";
-  const safeText = rawText.trim();
-  if (!safeText) return null;
+    const content = feed.value.content || {};
+    const rawText = typeof content.text === "string" ? content.text : "";
+    const safeText = rawText.trim();
+    if (!safeText) return null;
 
-  const voteEntries = Object.entries(content.opinions || {});
-  const totalCount = voteEntries.reduce((sum, [, count]) => sum + (Number(count) || 0), 0);
-  const createdAt = formatDate(feed);
-  const me = config?.keys?.id;
+    const voteEntries = Object.entries(content.opinions || {});
+    const totalCount = voteEntries.reduce((sum, [, count]) => sum + (Number(count) || 0), 0);
+    const createdAt = formatDate(feed);
+    const me = config?.keys?.id;
 
-  const alreadyRefeeded = Array.isArray(content.refeeds_inhabitants) && me ? content.refeeds_inhabitants.includes(me) : false;
-  const alreadyVoted = Array.isArray(content.opinions_inhabitants) && me ? content.opinions_inhabitants.includes(me) : false;
+    const alreadyRefeeded = Array.isArray(content.refeeds_inhabitants) && me ? content.refeeds_inhabitants.includes(me) : false;
+    const alreadyVoted = Array.isArray(content.opinions_inhabitants) && me ? content.opinions_inhabitants.includes(me) : false;
 
-  const tags = Array.isArray(content.tags) && content.tags.length ? content.tags : extractTags(safeText);
+    const authorId = content.author || feed.value.author || "";
+    const refeedsNum = Number(content.refeeds || 0) || 0;
+    const styledHtml = rewriteHashtagLinks(renderTextWithStyles(safeText));
 
-  const authorId = content.author || feed.value.author || "";
-
-  return div(
-    { class: "feed-card" },
-    div(
-      { class: "feed-row" },
-      div(
-        { class: "refeed-column" },
-        h1(`${content.refeeds || 0}`),
-        form(
-          { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
-          button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", disabled: !!alreadyRefeeded }, i18n.refeedButton)
-        ),
-        alreadyRefeeded ? p({ class: "muted" }, i18n.alreadyRefeeded) : null
-      ),
-      div(
-        { class: "feed-main" },
-        div({ class: "feed-text", innerHTML: renderTextWithStyles(safeText) }),
-        renderTagChips(tags),
-        h2(`${i18n.totalOpinions}: ${totalCount}`),
-        p(
-          { class: "card-footer" },
-          span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(authorId)}`, class: "user-link" }, `${authorId}`),
-          content._textEdited ? span({ class: "edited-badge" }, ` · ${i18n.edited || "edited"}`) : null
-        )
-      )
-    ),
-    div(
-      { class: "votes-wrapper" },
-      renderVotesSummary(content.opinions || {}),
-      div(
-        { class: "voting-buttons" },
-        opinionCategories.map((cat) =>
-          form(
-            { method: "POST", action: `/feed/opinions/${encodeURIComponent(feed.key)}/${cat}` },
-            button(
-              { class: alreadyVoted ? "vote-btn disabled" : "vote-btn", type: "submit", disabled: !!alreadyVoted },
-              `${i18n["vote" + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${content.opinions?.[cat] || 0}]`
+    return div(
+        { class: "feed-card" },
+        div(
+            { class: "feed-row" },
+            div(
+                { class: "refeed-column" },
+                h1(String(refeedsNum)),
+                form(
+                    { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
+                    button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", disabled: !!alreadyRefeeded }, i18n.refeedButton)
+                ),
+                alreadyRefeeded ? p({ class: "muted" }, i18n.alreadyRefeeded) : null
+            ),
+            div(
+                { class: "feed-main" },
+                div({ class: "feed-text", innerHTML: styledHtml }),
+                h2(`${i18n.totalOpinions}: ${totalCount}`),
+                p(
+                    { class: "card-footer" },
+                    span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),
+                    a({ href: `/author/${encodeURIComponent(authorId)}`, class: "user-link" }, `${authorId}`),
+                    content._textEdited ? span({ class: "edited-badge" }, ` · ${i18n.edited || "edited"}`) : null
+                )
             )
-          )
+        ),
+        div(
+            { class: "votes-wrapper" },
+            renderVotesSummary(content.opinions || {}),
+            div(
+                { class: "voting-buttons" },
+                opinionCategories.map((cat) =>
+                    form(
+                        { method: "POST", action: `/feed/opinions/${encodeURIComponent(feed.key)}/${cat}` },
+                        button(
+                            { class: alreadyVoted ? "vote-btn disabled" : "vote-btn", type: "submit", disabled: !!alreadyVoted },
+                            `${i18n["vote" + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${content.opinions?.[cat] || 0}]`
+                        )
+                    )
+                )
+            ),
+            alreadyVoted ? p({ class: "muted" }, i18n.alreadyVoted) : null
         )
-      ),
-      alreadyVoted ? p({ class: "muted" }, i18n.alreadyVoted) : null
-    )
-  );
+    );
 };
 
 exports.feedView = (feeds, opts = "ALL") => {

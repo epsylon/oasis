@@ -13,6 +13,13 @@ module.exports = ({ cooler, services = {} }) => {
   let ssb;
   let userId;
 
+  const CACHE_MS = 250;
+  let logCache = { at: 0, arr: null };
+  let myCache = new Map();
+
+  let electionInFlight = null;
+  let sweepInFlight = null;
+
   const openSsb = async () => {
     if (!ssb) {
       ssb = await cooler.open();
@@ -25,31 +32,78 @@ module.exports = ({ cooler, services = {} }) => {
   const parseISO = (s) => moment(s, moment.ISO_8601, true);
   const ensureArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
   const stripId = (obj) => {
-  if (!obj || typeof obj !== 'object') return obj;
+    if (!obj || typeof obj !== 'object') return obj;
     const { id, ...rest } = obj;
-  return rest;
+    return rest;
   };
   const normMs = (t) => (t && t < 1e12 ? t * 1000 : t || 0);
 
-  async function readLog() {
+  const isExpiredTerm = (t) => {
+    const end = t && t.endAt ? parseISO(t.endAt) : null;
+    if (!end || !end.isValid()) return false;
+    return moment().isSameOrAfter(end);
+  };
+
+  async function publishMsg(content) {
     const ssbClient = await openSsb();
-    return new Promise((res, rej) => {
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, arr) => (err ? rej(err) : res(arr))));
-    });
+    const res = await new Promise((resolve, reject) =>
+      ssbClient.publish(content, (e, r) => (e ? reject(e) : resolve(r)))
+    );
+    logCache = { at: 0, arr: null };
+    myCache.clear();
+    return res;
   }
 
-  async function listByType(type) {
-    const msgs = await readLog();
+  async function readLog() {
+    const now = Date.now();
+    if (logCache.arr && now - logCache.at < CACHE_MS) return logCache.arr;
+    const ssbClient = await openSsb();
+    const arr = await new Promise((res, rej) => {
+      pull(
+        ssbClient.createLogStream({ limit: logLimit }),
+        pull.collect((err, out) => (err ? rej(err) : res(out || [])))
+      );
+    });
+    logCache = { at: now, arr };
+    return arr;
+  }
+
+  async function readMyByTypes(types = [], limit = logLimit) {
+    const ssbClient = await openSsb();
+    const key = `${String(userId)}|${String(limit)}|${types.slice().sort().join(',')}`;
+    const now = Date.now();
+    const hit = myCache.get(key);
+    if (hit && hit.arr && now - hit.at < CACHE_MS) return hit.arr;
+    const set = new Set(types);
+    const arr = await new Promise((res, rej) => {
+      pull(
+        ssbClient.createUserStream({ id: userId, reverse: true }),
+        pull.filter(m => {
+          const c = m && m.value && m.value.content;
+          return c && set.has(c.type);
+        }),
+        pull.take(Number(limit) || logLimit),
+        pull.collect((err, out) => (err ? rej(err) : res(out || [])))
+      );
+    });
+    myCache.set(key, { at: now, arr });
+    return arr;
+  }
+
+  function listByTypeFromMsgs(msgs, type) {
     const tomb = new Set();
     const rep = new Map();
     const children = new Map();
     const map = new Map();
-    for (const m of msgs) {
+
+    for (const m of msgs || []) {
       const k = m.key;
       const v = m.value || {};
       const c = v.content;
       if (!c) continue;
+
       if (c.type === 'tombstone' && c.target) tomb.add(c.target);
+
       if (c.type === type) {
         if (c.replaces) {
           const oldId = c.replaces;
@@ -62,6 +116,7 @@ module.exports = ({ cooler, services = {} }) => {
         map.set(k, { ...c, id: k });
       }
     }
+
     for (const oldId of rep.keys()) map.delete(oldId);
     for (const [oldId, kids] of children.entries()) {
       const winner = rep.get(oldId)?.id || null;
@@ -70,7 +125,13 @@ module.exports = ({ cooler, services = {} }) => {
       }
     }
     for (const tId of tomb) map.delete(tId);
-    return [...map.values()]; 
+    return [...map.values()];
+  }
+
+  async function listByType(type) {
+    const isParl = String(type || '').startsWith('parliament') || type === 'tombstone';
+    const msgs = isParl ? await readMyByTypes([type, 'tombstone'], logLimit) : await readLog();
+    return listByTypeFromMsgs(msgs, type);
   }
 
   async function listTribesAny() {
@@ -257,15 +318,23 @@ module.exports = ({ cooler, services = {} }) => {
   async function listTermsBase(filter = 'all') {
     const all = await listByType('parliamentTerm');
     const collapsed = collapseOverlappingTerms(all);
-    let arr = collapsed.map(t => ({ ...t, status: moment().isAfter(parseISO(t.endAt)) ? 'EXPIRED' : 'ACTIVE' }));
+    let arr = collapsed.map(t => ({ ...t, status: isExpiredTerm(t) ? 'EXPIRED' : 'ACTIVE' }));
     if (filter === 'active') arr = arr.filter(t => t.status === 'ACTIVE');
     if (filter === 'expired') arr = arr.filter(t => t.status === 'EXPIRED');
     return arr.sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
   }
 
+  async function getLatestTermAny() {
+    const msgs = await readMyByTypes(['parliamentTerm', 'tombstone'], Math.max(50, Math.min(500, logLimit)));
+    const terms = listByTypeFromMsgs(msgs, 'parliamentTerm');
+    const collapsed = collapseOverlappingTerms(terms);
+    return collapsed[0] || null;
+  }
+
   async function getCurrentTermBase() {
-    const active = await listTermsBase('active');
-    return active[0] || null;
+    const t = await getLatestTermAny();
+    if (!t) return null;
+    return isExpiredTerm(t) ? null : t;
   }
 
   function currentCycleStart(term) {
@@ -273,11 +342,10 @@ module.exports = ({ cooler, services = {} }) => {
   }
 
   async function archiveAllCandidatures() {
-    const ssbClient = await openSsb();
     const all = await listCandidaturesOpenRaw();
     for (const c of all) {
       const tomb = { type: 'tombstone', target: c.id, deletedAt: nowISO(), author: userId };
-      await new Promise((resolve) => ssbClient.publish(tomb, () => resolve()));
+      await publishMsg(tomb);
     }
   }
 
@@ -409,16 +477,6 @@ module.exports = ({ cooler, services = {} }) => {
     return nProp + nLaw;
   }
 
-  async function getGroupMembers(term) {
-    if (!term) return [];
-    if (term.powerType === 'inhabitant') return [term.powerId];
-    if (term.powerType === 'tribe') {
-      const tribe = services.tribes ? await services.tribes.getTribeById(term.powerId) : null;
-      return ensureArray(tribe?.members || []);
-    }
-    return [];
-  }
-
   async function closeExpiredKarmatocracy(term) {
     const termId = term.id || term.startAt;
     const all = await listByType('parliamentProposal');
@@ -441,12 +499,11 @@ module.exports = ({ cooler, services = {} }) => {
     });
     const winner = withKarma[0];
     const losers = withKarma.slice(1);
-    const ssbClient = await openSsb();
     const approve = { ...stripId(winner), replaces: winner.id, status: 'APPROVED', updatedAt: nowISO() };
-    await new Promise((resolve, reject) => ssbClient.publish(approve, (e, r) => (e ? reject(e) : resolve(r))));
+    await publishMsg(approve);
     for (const lo of losers) {
       const rej = { ...stripId(lo), replaces: lo.id, status: 'REJECTED', updatedAt: nowISO() };
-      await new Promise((resolve) => ssbClient.publish(rej, () => resolve()));
+      await publishMsg(rej);
     }
   }
 
@@ -460,10 +517,9 @@ module.exports = ({ cooler, services = {} }) => {
       p.deadline && moment().isAfter(parseISO(p.deadline))
     );
     if (!pending.length) return;
-    const ssbClient = await openSsb();
     for (const p of pending) {
       const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
-      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
+      await publishMsg(updated);
     }
   }
 
@@ -477,10 +533,9 @@ module.exports = ({ cooler, services = {} }) => {
       p.deadline && moment().isAfter(parseISO(p.deadline))
     );
     if (!pending.length) return;
-    const ssbClient = await openSsb();
     for (const p of pending) {
       const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
-      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
+      await publishMsg(updated);
     }
   }
 
@@ -494,17 +549,16 @@ module.exports = ({ cooler, services = {} }) => {
       p.deadline && moment().isAfter(parseISO(p.deadline))
     );
     if (!pending.length) return;
-    const ssbClient = await openSsb();
     for (const p of pending) {
       const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
-      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
+      await publishMsg(updated);
     }
   }
 
   async function createRevocation({ lawId, title, reasons }) {
     const term = await getCurrentTermBase();
     if (!term) throw new Error('No active government');
-    const allowed = await this.canPropose();
+    const allowed = await canPropose();
     if (!allowed) throw new Error('You are not in the goverment, yet.');
     const lawIdStr = String(lawId || '').trim();
     if (!lawIdStr) throw new Error('Law required');
@@ -512,7 +566,6 @@ module.exports = ({ cooler, services = {} }) => {
     const law = laws.find(l => l.id === lawIdStr);
     if (!law) throw new Error('Law not found');
     const method = String(term.method || 'DEMOCRACY').toUpperCase();
-    const ssbClient = await openSsb();
     const deadline = moment().add(REVOCATION_DAYS, 'days').toISOString();
     if (method === 'DICTATORSHIP' || method === 'KARMATOCRACY') {
       const rev = {
@@ -527,9 +580,7 @@ module.exports = ({ cooler, services = {} }) => {
         deadline,
         createdAt: nowISO()
       };
-      return await new Promise((resolve, reject) =>
-        ssbClient.publish(rev, (e, r) => (e ? reject(e) : resolve(r)))
-      );
+      return await publishMsg(rev);
     }
     const voteMsg = await services.votes.createVote(
       `Revoke: ${title || law.question || ''}`,
@@ -549,9 +600,7 @@ module.exports = ({ cooler, services = {} }) => {
       status: 'OPEN',
       createdAt: nowISO()
     };
-    return await new Promise((resolve, reject) =>
-      ssbClient.publish(rev, (e, r) => (e ? reject(e) : resolve(r)))
-    );
+    return await publishMsg(rev);
   }
 
   async function closeRevocation(revId) {
@@ -567,7 +616,8 @@ module.exports = ({ cooler, services = {} }) => {
     if (method === 'DICTATORSHIP') {
       if (currentStatus === 'APPROVED') return p;
       const updated = { ...p, replaces: revId, status: 'APPROVED', updatedAt: nowISO() };
-      return await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
+      await publishMsg(updated);
+      return updated;
     }
     if (method === 'KARMATOCRACY') return p;
     const v = await services.votes.getVoteById(p.voteId);
@@ -582,7 +632,8 @@ module.exports = ({ cooler, services = {} }) => {
     const desiredStatus = ok ? 'APPROVED' : 'REJECTED';
     if (currentStatus === desiredStatus) return p;
     const updated = { ...p, replaces: revId, status: desiredStatus, updatedAt: nowISO() };
-    return await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
+    await publishMsg(updated);
+    return updated;
   }
 
   async function proposeCandidature({ candidateId, method }) {
@@ -610,8 +661,7 @@ module.exports = ({ cooler, services = {} }) => {
       status: 'OPEN',
       createdAt: nowISO()
     };
-    const ssbClient = await openSsb();
-    return new Promise((resolve, reject) => ssbClient.publish(content, (e, r) => (e ? reject(e) : resolve(r))));
+    return await publishMsg(content);
   }
 
   async function voteCandidature(candidatureMsgId) {
@@ -619,46 +669,38 @@ module.exports = ({ cooler, services = {} }) => {
     const open = await listCandidaturesOpenRaw();
     const already = open.some(c => ensureArray(c.voters).includes(userId));
     if (already) throw new Error('Already voted this cycle');
-    return new Promise((resolve, reject) => {
-      ssbClient.get(candidatureMsgId, (err, msg) => {
-        if (err || !msg || msg.content?.type !== 'parliamentCandidature') return reject(new Error('Candidate not found'));
-        const c = msg.content;
-        if ((c.status || 'OPEN') !== 'OPEN') return reject(new Error('Closed'));
-        const updated = { ...c, replaces: candidatureMsgId, votes: Number(c.votes || 0) + 1, voters: [...ensureArray(c.voters), userId], updatedAt: nowISO() };
-        ssbClient.publish(updated, (e2, r2) => (e2 ? reject(e2) : resolve(r2)));
-      });
-    });
+    const msg = await new Promise((resolve, reject) =>
+      ssbClient.get(candidatureMsgId, (e, m) => (e || !m) ? reject(new Error('Candidate not found')) : resolve(m))
+    );
+    if (msg.content?.type !== 'parliamentCandidature') throw new Error('Candidate not found');
+    const c = msg.content;
+    if ((c.status || 'OPEN') !== 'OPEN') throw new Error('Closed');
+    const updated = { ...c, replaces: candidatureMsgId, votes: Number(c.votes || 0) + 1, voters: [...ensureArray(c.voters), userId], updatedAt: nowISO() };
+    return await publishMsg(updated);
   }
 
   async function createProposal({ title, description }) {
     let term = await getCurrentTermBase();
     if (!term) {
-      await this.resolveElection();
+      await resolveElection();
       term = await getCurrentTermBase();
     }
     if (!term) throw new Error('No active government');
-    const allowed = await this.canPropose();
+    const allowed = await canPropose();
     if (!allowed) throw new Error('You are not in the goverment, yet.');
     if (!title || !title.trim()) throw new Error('Title required');
     if (String(description || '').length > 1000) throw new Error('Description too long');
     const used = await countMyProposalsThisTerm(term);
     if (used >= 3) throw new Error('Proposal limit reached');
     const method = String(term.method || 'DEMOCRACY').toUpperCase();
-    const ssbClient = await openSsb();
-    if (method === 'DICTATORSHIP') {
-      const deadline = moment().add(PROPOSAL_DAYS, 'days').toISOString();
-      const proposal = { type: 'parliamentProposal', title, description: description || '', method, termId: term.id || term.startAt, proposer: userId, status: 'OPEN', deadline, createdAt: nowISO() };
-      return await new Promise((resolve, reject) => ssbClient.publish(proposal, (e, r) => (e ? reject(e) : resolve(r))));
-    }
-    if (method === 'KARMATOCRACY') {
-      const deadline = moment().add(PROPOSAL_DAYS, 'days').toISOString();
-      const proposal = { type: 'parliamentProposal', title, description: description || '', method, termId: term.id || term.startAt, proposer: userId, status: 'OPEN', deadline, createdAt: nowISO() };
-      return await new Promise((resolve, reject) => ssbClient.publish(proposal, (e, r) => (e ? reject(e) : resolve(r))));
-    }
     const deadline = moment().add(PROPOSAL_DAYS, 'days').toISOString();
+    if (method === 'DICTATORSHIP' || method === 'KARMATOCRACY') {
+      const proposal = { type: 'parliamentProposal', title, description: description || '', method, termId: term.id || term.startAt, proposer: userId, status: 'OPEN', deadline, createdAt: nowISO() };
+      return await publishMsg(proposal);
+    }
     const voteMsg = await services.votes.createVote(title, deadline, ['YES', 'NO', 'ABSTENTION'], [`gov:${term.id || term.startAt}`, `govMethod:${method}`, 'proposal']);
     const proposal = { type: 'parliamentProposal', title, description: description || '', method, voteId: voteMsg.key || voteMsg.id, termId: term.id || term.startAt, proposer: userId, status: 'OPEN', createdAt: nowISO() };
-    return await new Promise((resolve, reject) => ssbClient.publish(proposal, (e, r) => (e ? reject(e) : resolve(r))));
+    return await publishMsg(proposal);
   }
 
   async function closeProposal(proposalId) {
@@ -674,7 +716,8 @@ module.exports = ({ cooler, services = {} }) => {
     if (method === 'DICTATORSHIP') {
       if (currentStatus === 'APPROVED') return p;
       const updated = { ...p, replaces: proposalId, status: 'APPROVED', updatedAt: nowISO() };
-      return await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
+      await publishMsg(updated);
+      return updated;
     }
     if (method === 'KARMATOCRACY') return p;
     const v = await services.votes.getVoteById(p.voteId);
@@ -689,57 +732,69 @@ module.exports = ({ cooler, services = {} }) => {
     const desiredStatus = ok ? 'APPROVED' : 'REJECTED';
     if (currentStatus === desiredStatus) return p;
     const updated = { ...p, replaces: proposalId, status: desiredStatus, updatedAt: nowISO() };
-    return await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
+    await publishMsg(updated);
+    return updated;
   }
 
   async function sweepProposals() {
-    const term = await getCurrentTermBase();
-    if (!term) return;
-    await closeExpiredKarmatocracy(term);
-    await closeExpiredDictatorship(term);
-    const ssbClient = await openSsb();
-    const allProps = await listByType('parliamentProposal');
-    const voteProps = allProps.filter(p => {
-      const m = String(p.method || '').toUpperCase();
-      return (m === 'DEMOCRACY' || m === 'ANARCHY' || m === 'MAJORITY' || m === 'MINORITY') && p.voteId;
-    });
-    for (const p of voteProps) {
-      try {
-        const v = await services.votes.getVoteById(p.voteId);
-        const votesMap = v.votes || {};
-        const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-        const total = Number(v.totalVotes ?? v.total ?? sum);
-        const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-        const closed = v.status === 'CLOSED' || (v.deadline && moment(v.deadline).isBefore(moment()));
-        if (closed) { try { await this.closeProposal(p.id); } catch {} ; continue; }
-        if ((p.status || 'OPEN') === 'OPEN' && passesThreshold(p.method, total, yes)) {
-          const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
-          await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
-        }
-      } catch {}
-    }
-    await closeExpiredRevocationKarmatocracy(term);
-    await closeExpiredRevocationDictatorship(term);
-    const revs = await listByType('parliamentRevocation');
-    const voteRevs = revs.filter(p => {
-      const m = String(p.method || '').toUpperCase();
-      return (m === 'DEMOCRACY' || m === 'ANARCHY' || m === 'MAJORITY' || m === 'MINORITY') && p.voteId;
-    });
-    for (const p of voteRevs) {
-      try {
-        const v = await services.votes.getVoteById(p.voteId);
-        const votesMap = v.votes || {};
-        const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-        const total = Number(v.totalVotes ?? v.total ?? sum);
-        const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-        const closed = v.status === 'CLOSED' || (v.deadline && moment(v.deadline).isBefore(moment()));
-        if (closed) { try { await closeRevocation(p.id); } catch {} ; continue; }
-        if ((p.status || 'OPEN') === 'OPEN' && passesThreshold(p.method, total, yes)) {
-          const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
-          await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
-        }
-      } catch {}
-    }
+    if (sweepInFlight) return sweepInFlight;
+    sweepInFlight = (async () => {
+      const term = await getCurrentTermBase();
+      if (!term) return;
+      await closeExpiredKarmatocracy(term);
+      await closeExpiredDictatorship(term);
+
+      const allProps = await listByType('parliamentProposal');
+      const voteProps = allProps.filter(p => {
+        const m = String(p.method || '').toUpperCase();
+        return (m === 'DEMOCRACY' || m === 'ANARCHY' || m === 'MAJORITY' || m === 'MINORITY') && p.voteId;
+      });
+
+      for (const p of voteProps) {
+        try {
+          const v = await services.votes.getVoteById(p.voteId);
+          const votesMap = v.votes || {};
+          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
+          const total = Number(v.totalVotes ?? v.total ?? sum);
+          const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
+          const deadline = v.deadline || v.endAt || v.expiresAt || null;
+          const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
+          if (closed) { try { await closeProposal(p.id); } catch {} ; continue; }
+          if ((p.status || 'OPEN') === 'OPEN' && passesThreshold(p.method, total, yes)) {
+            const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
+            await publishMsg(updated);
+          }
+        } catch {}
+      }
+
+      await closeExpiredRevocationKarmatocracy(term);
+      await closeExpiredRevocationDictatorship(term);
+
+      const revs = await listByType('parliamentRevocation');
+      const voteRevs = revs.filter(p => {
+        const m = String(p.method || '').toUpperCase();
+        return (m === 'DEMOCRACY' || m === 'ANARCHY' || m === 'MAJORITY' || m === 'MINORITY') && p.voteId;
+      });
+
+      for (const p of voteRevs) {
+        try {
+          const v = await services.votes.getVoteById(p.voteId);
+          const votesMap = v.votes || {};
+          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
+          const total = Number(v.totalVotes ?? v.total ?? sum);
+          const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
+          const deadline = v.deadline || v.endAt || v.expiresAt || null;
+          const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
+          if (closed) { try { await closeRevocation(p.id); } catch {} ; continue; }
+          if ((p.status || 'OPEN') === 'OPEN' && passesThreshold(p.method, total, yes)) {
+            const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
+            await publishMsg(updated);
+          }
+        } catch {}
+      }
+    })().finally(() => { sweepInFlight = null; });
+
+    return sweepInFlight;
   }
 
   async function getActorMeta({ targetType, targetId }) {
@@ -817,7 +872,7 @@ module.exports = ({ cooler, services = {} }) => {
           if (closed) derivedStatus = reached ? 'APPROVED' : 'REJECTED';
           else derivedStatus = 'OPEN';
         } catch {
-           derivedStatus = baseStatus;
+          derivedStatus = baseStatus;
         }
       } else {
         if (baseStatus === 'OPEN' && p.deadline && moment(p.deadline).isBefore(moment())) derivedStatus = 'DISCARDED';
@@ -846,21 +901,21 @@ module.exports = ({ cooler, services = {} }) => {
       let deadline = p.deadline || null;
       let voteClosed = true;
       if (p.voteId && services.votes?.getVoteById) {
-      try {
-        const v = await services.votes.getVoteById(p.voteId);
-        const votesMap = v.votes || {};
-        const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-        total = Number(v.totalVotes ?? v.total ?? sum);
-        yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-        deadline = deadline || v.deadline || v.endAt || v.expiresAt || null;
-        voteClosed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-        if (!voteClosed) continue;
-      } catch {}
+        try {
+          const v = await services.votes.getVoteById(p.voteId);
+          const votesMap = v.votes || {};
+          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
+          total = Number(v.totalVotes ?? v.total ?? sum);
+          yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
+          deadline = deadline || v.deadline || v.endAt || v.expiresAt || null;
+          voteClosed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
+          if (!voteClosed) continue;
+        } catch {}
+      }
+      const needed = requiredVotes(p.method, total);
+      out.push({ ...p, deadline, yes, total, needed });
     }
-    const needed = requiredVotes(p.method, total);
-    out.push({ ...p, deadline, yes, total, needed });
-  }
-  return out;
+    return out;
   }
 
   async function listRevocationsCurrent() {
@@ -874,31 +929,31 @@ module.exports = ({ cooler, services = {} }) => {
       const baseStatus = String(p.status || 'OPEN').toUpperCase();
       let derivedStatus = baseStatus;
       if (p.voteId && services.votes?.getVoteById) {
-      try {
-        const v = await services.votes.getVoteById(p.voteId);
-        const votesMap = v.votes || {};
-        const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-        total = Number(v.totalVotes ?? v.total ?? sum);
-        yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-        deadline = deadline || v.deadline || v.endAt || v.expiresAt || null;
-        const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-        const reached = passesThreshold(p.method, total, yes);
+        try {
+          const v = await services.votes.getVoteById(p.voteId);
+          const votesMap = v.votes || {};
+          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
+          total = Number(v.totalVotes ?? v.total ?? sum);
+          yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
+          deadline = deadline || v.deadline || v.endAt || v.expiresAt || null;
+          const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
+          const reached = passesThreshold(p.method, total, yes);
           if (closed) derivedStatus = reached ? 'APPROVED' : 'REJECTED';
           else derivedStatus = 'OPEN';
         } catch {
           derivedStatus = baseStatus;
         }
       } else {
-      if (baseStatus === 'OPEN' && p.deadline && moment(p.deadline).isBefore(moment())) derivedStatus = 'DISCARDED';
+        if (baseStatus === 'OPEN' && p.deadline && moment(p.deadline).isBefore(moment())) derivedStatus = 'DISCARDED';
+      }
+      if (derivedStatus === 'ENACTED' || derivedStatus === 'REJECTED' || derivedStatus === 'DISCARDED') continue;
+      const needed = requiredVotes(p.method, total);
+      const onTrack = passesThreshold(p.method, total, yes);
+      out.push({ ...p, deadline, yes, total, needed, onTrack, derivedStatus });
     }
-    if (derivedStatus === 'ENACTED' || derivedStatus === 'REJECTED' || derivedStatus === 'DISCARDED') continue;
-    const needed = requiredVotes(p.method, total);
-    const onTrack = passesThreshold(p.method, total, yes);
-    out.push({ ...p, deadline, yes, total, needed, onTrack, derivedStatus });
-    }
-  return out;
+    return out;
   }
-  
+
   async function listFutureRevocationsCurrent() {
     const term = await getCurrentTermBase();
     if (!term) return [];
@@ -937,14 +992,39 @@ module.exports = ({ cooler, services = {} }) => {
     return all.filter(r => r.status === 'ENACTED').length;
   }
 
+  async function voteSnapshot(voteId) {
+    if (!voteId || !services.votes?.getVoteById) return null;
+    try {
+      const v = await services.votes.getVoteById(voteId);
+      const vm = v?.votes || {};
+      const sum = Object.values(vm).reduce((s, n) => s + Number(n || 0), 0);
+      const total = Number(v.totalVotes ?? v.total ?? sum);
+      return {
+        YES: Number(vm.YES ?? vm.Yes ?? vm.yes ?? 0),
+        NO: Number(vm.NO ?? vm.No ?? vm.no ?? 0),
+        ABSTENTION: Number(vm.ABSTENTION ?? vm.Abstention ?? vm.abstention ?? 0),
+        total
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async function enactApprovedChanges(expiringTerm) {
     if (!expiringTerm) return;
     const termId = expiringTerm.id || expiringTerm.startAt;
-    const ssbClient = await openSsb();
+
     const proposals = await listByType('parliamentProposal');
     const revocations = await listByType('parliamentRevocation');
+
     const approvedProps = proposals.filter(p => p.termId === termId && p.status === 'APPROVED');
     for (const p of approvedProps) {
+      const snap = await voteSnapshot(p.voteId);
+      const votesFinal =
+        (p.votes && Object.keys(p.votes).length ? p.votes : null) ||
+        snap ||
+        { YES: 1, NO: 0, ABSTENTION: 0, total: 1 };
+
       const law = {
         type: 'parliamentLaw',
         question: p.title,
@@ -952,43 +1032,59 @@ module.exports = ({ cooler, services = {} }) => {
         method: p.method,
         proposer: p.proposer,
         termId: p.termId,
-        votes: p.votes || (p.voteId ? {} : { YES: 1, NO: 0, ABSTENTION: 0, total: 1 }),
+        voteId: p.voteId || null,
+        votes: votesFinal,
         proposedAt: p.createdAt,
         proposalId: p.id,
         enactedAt: nowISO()
       };
-      await new Promise((resolve, reject) => ssbClient.publish(law, (e, r) => (e ? reject(e) : resolve(r))));
+
+      await publishMsg(law);
       const updated = { ...stripId(p), replaces: p.id, status: 'ENACTED', updatedAt: nowISO() };
-      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => (e ? reject(e) : resolve(r))));
+      await publishMsg(updated);
     }
+
     const approvedRevs = revocations.filter(r => r.termId === termId && r.status === 'APPROVED');
     for (const r of approvedRevs) {
       const tomb = { type: 'tombstone', target: r.lawId, deletedAt: nowISO(), author: userId };
-      await new Promise((resolve) => ssbClient.publish(tomb, () => resolve()));
-      const updated = { ...stripId(r), replaces: r.id, status: 'ENACTED', updatedAt: nowISO() };
-      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, rs) => (e ? reject(e) : resolve(rs))));
+      await publishMsg(tomb);
+
+      const snap = await voteSnapshot(r.voteId);
+      const updated = {
+        ...stripId(r),
+        replaces: r.id,
+        status: 'ENACTED',
+        votes: (r.votes && Object.keys(r.votes).length ? r.votes : null) || snap || undefined,
+        updatedAt: nowISO()
+      };
+      await publishMsg(updated);
     }
   }
 
-  async function resolveElection() {
+  async function resolveElectionImpl() {
     const now = moment();
-    const current = await getCurrentTermBase();
-    if (current && now.isBefore(parseISO(current.endAt))) return current;
-    if (current) {
-      try { await enactApprovedChanges(current); } catch {}
+    const latestAny = await getLatestTermAny();
+    if (latestAny && !isExpiredTerm(latestAny)) return latestAny;
+
+    if (latestAny && isExpiredTerm(latestAny)) {
+      try { await enactApprovedChanges(latestAny); } catch {}
     }
+
     const open = await listCandidaturesOpen();
     let chosen = null;
     let totalVotes = 0;
     let winnerVotes = 0;
+
     if (open.length) {
       const pick = await chooseWinnerFromCandidaturesAsync(open);
       chosen = pick && pick.chosen;
       totalVotes = (pick && pick.totalVotes) || 0;
       winnerVotes = (pick && pick.winnerVotes) || 0;
     }
+
     const startAt = now.toISOString();
     const endAt = moment(startAt).add(TERM_DAYS, 'days').toISOString();
+
     if (!chosen) {
       const termAnarchy = {
         type: 'parliamentTerm',
@@ -1005,22 +1101,23 @@ module.exports = ({ cooler, services = {} }) => {
         createdBy: userId,
         createdAt: nowISO()
       };
-      const ssbClient = await openSsb();
-      const resAnarchy = await new Promise((resolve, reject) =>
-        ssbClient.publish(termAnarchy, (e, r) => (e ? reject(e) : resolve(r)))
-      );
+
+      const resAnarchy = await publishMsg(termAnarchy);
       try {
         await sleep(250);
         const canonical = await getCurrentTermBase();
-        if (canonical && canonical.id !== (resAnarchy.key || resAnarchy.id)) {
-          const tomb = { type: 'tombstone', target: resAnarchy.key || resAnarchy.id, deletedAt: nowISO(), author: userId };
-          await new Promise((resolve) => ssbClient.publish(tomb, () => resolve()));
+        const myId = resAnarchy.key || resAnarchy.id;
+        if (canonical && canonical.id && myId && canonical.id !== myId) {
+          const tomb = { type: 'tombstone', target: myId, deletedAt: nowISO(), author: userId };
+          await publishMsg(tomb);
+          await archiveAllCandidatures();
           return canonical;
         }
       } catch {}
       await archiveAllCandidatures();
       return resAnarchy;
     }
+
     const term = {
       type: 'parliamentTerm',
       method: chosen.method,
@@ -1036,16 +1133,16 @@ module.exports = ({ cooler, services = {} }) => {
       createdBy: userId,
       createdAt: nowISO()
     };
-    const ssbClient = await openSsb();
-    const res = await new Promise((resolve, reject) =>
-      ssbClient.publish(term, (e, r) => (e ? reject(e) : resolve(r)))
-    );
+
+    const res = await publishMsg(term);
     try {
       await sleep(250);
       const canonical = await getCurrentTermBase();
-      if (canonical && canonical.id !== (res.key || res.id)) {
-        const tomb = { type: 'tombstone', target: res.key || res.id, deletedAt: nowISO(), author: userId };
-        await new Promise((resolve) => ssbClient.publish(tomb, () => resolve()));
+      const myId = res.key || res.id;
+      if (canonical && canonical.id && myId && canonical.id !== myId) {
+        const tomb = { type: 'tombstone', target: myId, deletedAt: nowISO(), author: userId };
+        await publishMsg(tomb);
+        await archiveAllCandidatures();
         return canonical;
       }
     } catch {}
@@ -1053,8 +1150,14 @@ module.exports = ({ cooler, services = {} }) => {
     return res;
   }
 
+  async function resolveElection() {
+    if (electionInFlight) return electionInFlight;
+    electionInFlight = resolveElectionImpl().finally(() => { electionInFlight = null; });
+    return electionInFlight;
+  }
+
   async function getGovernmentCard() {
-    let term = await getCurrentTermBase();
+    const term = await getCurrentTermBase();
     if (!term) return null;
     return await computeGovernmentCard({ ...term, id: term.id || term.startAt });
   }
@@ -1114,6 +1217,7 @@ module.exports = ({ cooler, services = {} }) => {
 };
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 function collapseOverlappingTerms(terms = []) {
   if (!terms.length) return [];
   const sorted = [...terms].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));

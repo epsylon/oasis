@@ -153,8 +153,9 @@ module.exports = {
     relationshipConflict: "Conflicto",
     relationshipBlockingPost: "Post bloqueado",
     // spreads view
-    viewLikes: "Ver soportes",
-    spreadedDescription: "Lista de posts soportados por habitante.",
+    viewLikes: "Ver replicas",
+    spreadedDescription: "Lista de posts replicados por habitante.",
+    totalspreads: "Replicas totales",
     // composer
     attachFiles: "Adjuntar ficheros",
     preview: "Previsualizar",
@@ -1428,6 +1429,7 @@ module.exports = {
     typeBankClaim:        "BANCA/UBI",
     typeKarmaScore:       "KARMA",
     typeParliament:       "PARLAMENTO",
+    typeSpread:           "RÉPLICAS",
     typeParliamentCandidature: "Parlamento · Candidatura",
     typeParliamentTerm:   "Parlamento · Mandato",
     typeParliamentProposal:"Parlamento · Propuesta",

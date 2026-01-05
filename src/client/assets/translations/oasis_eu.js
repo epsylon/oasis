@@ -155,6 +155,7 @@ module.exports = {
     // spreads view
     viewLikes: "Ikusi zabalpenak",
     spreadedDescription: "Bizilagunak zabaldutako bidalketen zerrenda.",
+    totalspreads: "Hedapenak guztira",
     // composer
     attachFiles: "Erantsi fitxategiak",
     preview: "Aurrebista",
@@ -1429,6 +1430,7 @@ module.exports = {
     typeBankClaim:        "BANKUA/UBI",
     typeKarmaScore:       "KARMA",
     typeParliament:       "PARLAMENTUA",
+    typeSpread:	          "ERREPLIKAK",
     typeParliamentCandidature: "Parlamentua · Hautagaitza",
     typeParliamentTerm:   "Parlamentua · Agintaldia",
     typeParliamentProposal:"Parlamentua · Proposamena",

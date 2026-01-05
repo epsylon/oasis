@@ -155,6 +155,7 @@ module.exports = {
     // spreads view
     viewLikes: "Voir les soutiens",
     spreadedDescription: "Liste des posts soutenus par habitant.",
+    totalspreads: "Soutiens totales",
     // composer
     attachFiles: "Joindre des fichiers",
     preview: "Prévisualiser",
@@ -1428,6 +1429,7 @@ module.exports = {
     typeBankClaim:        "BANQUE/UBI",
     typeKarmaScore:       "KARMA",
     typeParliament:       "PARLEMENT",
+    typeSpread:           "SOUTINES",
     typeParliamentCandidature: "Parlement · Candidature",
     typeParliamentTerm:   "Parlement · Mandat",
     typeParliamentProposal:"Parlement · Proposition",

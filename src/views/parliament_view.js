@@ -2,6 +2,8 @@ const { form, button, div, h2, p, section, input, label, br, a, span, table, the
 const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 
+const TERM_DAYS = 60;
+
 const fmt = (d) => moment(d).format('YYYY-MM-DD HH:mm:ss');
 const timeLeft = (end) => {
   const diff = moment(end).diff(moment());
@@ -28,27 +30,27 @@ const applyEl = (fn, attrs, kids) => fn.apply(null, [attrs || {}].concat(kids ||
 const methodImageSrc = (method) => `assets/images/${String(method || '').toUpperCase().toLowerCase()}.png`;
 const MethodBadge = (method) => {
   const m = String(method || '').toUpperCase();
-  const label = String(i18n[`parliamentMethod${m}`] || m).toUpperCase();
+  const labelTxt = String(i18n[`parliamentMethod${m}`] || m).toUpperCase();
   return span(
     { class: 'method-badge' },
-    label,
+    labelTxt,
     br(),br(),
-    img({ src: methodImageSrc(m), alt: label, class: 'method-badge__icon' })
+    img({ src: methodImageSrc(m), alt: labelTxt, class: 'method-badge__icon' })
   );
 };
 const MethodHero = (method) => {
   const m = String(method || '').toUpperCase();
-  const label = String(i18n[`parliamentMethod${m}`] || m).toUpperCase();
+  const labelTxt = String(i18n[`parliamentMethod${m}`] || m).toUpperCase();
   return span(
     { class: 'method-hero' },
-    label,
+    labelTxt,
     br(),br(),
-    img({ src: methodImageSrc(m), alt: label, class: 'method-hero__icon' })
+    img({ src: methodImageSrc(m), alt: labelTxt, class: 'method-hero__icon' })
   );
 };
-const KPI = (label, value) =>
+const KPI = (labelTxt, value) =>
   div({ class: 'kpi' },
-    span({ class: 'kpi__label' }, label),
+    span({ class: 'kpi__label' }, labelTxt),
     span({ class: 'kpi__value' }, value)
   );
 const CycleInfo = (start, end, labels = {
@@ -71,9 +73,10 @@ const Tabs = (active) =>
       )
     )
   );
+
 const GovHeader = (g) => {
   const termStart = g && g.since ? g.since : moment().toISOString();
-  const termEnd = g && g.end ? g.end : moment(termStart).add(1, 'minutes').toISOString();
+  const termEnd = g && g.end ? g.end : moment(termStart).add(TERM_DAYS, 'days').toISOString();
   const methodKeyRaw = g && g.method ? String(g.method) : 'ANARCHY';
   const methodKey = methodKeyRaw.toUpperCase();
   const i18nMeth = i18n[`parliamentMethod${methodKey}`];
@@ -113,17 +116,18 @@ const GovHeader = (g) => {
       : null
   );
 };
+
 const GovernmentCard = (g, meta) => {
   const termStart = g && g.since ? g.since : moment().toISOString();
-  const termEnd   = g && g.end   ? g.end   : moment(termStart).add(1, 'minutes').toISOString();
+  const termEnd = g && g.end ? g.end : moment(termStart).add(TERM_DAYS, 'days').toISOString();
   const actorLabel =
     g.powerType === 'tribe'
       ? (i18n.parliamentActorInPowerTribe || i18n.parliamentActorInPower || 'TRIBE RULING')
       : (i18n.parliamentActorInPowerInhabitant || i18n.parliamentActorInPower || 'INHABITANT RULING');
   const methodKeyRaw = g && g.method ? String(g.method) : 'ANARCHY';
-  const methodKey    = methodKeyRaw.toUpperCase();
-  const i18nMeth     = i18n[`parliamentMethod${methodKey}`];
-  const methodLabel  = (i18nMeth && String(i18nMeth).trim() ? String(i18nMeth) : methodKey).toUpperCase();
+  const methodKey = methodKeyRaw.toUpperCase();
+  const i18nMeth = i18n[`parliamentMethod${methodKey}`];
+  const methodLabel = (i18nMeth && String(i18nMeth).trim() ? String(i18nMeth) : methodKey).toUpperCase();
   const actorLink =
     g.powerType === 'tribe'
       ? a({ class: 'user-link', href: `/tribe/${encodeURIComponent(g.powerId)}` }, g.powerTitle || g.powerId)
@@ -192,11 +196,13 @@ const GovernmentCard = (g, meta) => {
       : null
   );
 };
+
 const NoGovernment = () => div({ class: 'empty' }, p(i18n.parliamentNoStableGov));
 const NoProposals = () => div({ class: 'empty' }, p(i18n.parliamentNoProposals));
 const NoLaws = () => div({ class: 'empty' }, p(i18n.parliamentNoLaws));
 const NoGovernments = () => div({ class: 'empty' }, p(i18n.parliamentNoGovernments));
 const NoRevocations = () => null;
+
 const CandidatureForm = () =>
   div(
     { class: 'div-center' },
@@ -212,7 +218,7 @@ const CandidatureForm = () =>
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentCandidatureProposeBtn)
     )
   );
-  
+
 const pickLeader = (arr) => {
   if (!arr || !arr.length) return null;
   const sorted = [...arr].sort((a, b) => {
@@ -231,11 +237,11 @@ const pickLeader = (arr) => {
 
 const CandidatureStats = (cands, govCard, leaderMeta) => {
   if (!cands || !cands.length) return null;
-  const leader      = pickLeader(cands || []);
-  const methodKey   = String(leader.method || '').toUpperCase();
+  const leader = pickLeader(cands || []);
+  const methodKey = String(leader.method || '').toUpperCase();
   const methodLabel = String(i18n[`parliamentMethod${methodKey}`] || methodKey).toUpperCase();
-  const votes       = String(leader.votes || 0);
-  const avatarSrc   = (leaderMeta && leaderMeta.avatarUrl) ? leaderMeta.avatarUrl : '/assets/images/default-avatar.png';
+  const votes = String(leader.votes || 0);
+  const avatarSrc = (leaderMeta && leaderMeta.avatarUrl) ? leaderMeta.avatarUrl : '/assets/images/default-avatar.png';
   const winLbl = (i18n.parliamentWinningCandidature || i18n.parliamentCurrentLeader || 'WINNING CANDIDATURE').toUpperCase();
   const idLink = leader
     ? (leader.targetType === 'inhabitant'
@@ -449,7 +455,7 @@ const RevocationForm = (laws = []) =>
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentRevocationPublish || 'Publish Revocation')
     )
   );
-  
+
 const RevocationsList = (revocations) => {
   if (!revocations || !revocations.length) return null;
   const cards = revocations.map(pItem => {
@@ -827,10 +833,8 @@ const RulesContent = () =>
       li(i18n.parliamentRulesLeaders)
     )
   );
-  
+
 const CandidaturesSection = (governmentCard, candidatures, leaderMeta) => {
-  const termStart = governmentCard && governmentCard.since ? governmentCard.since : moment().toISOString();
-  const termEnd   = governmentCard && governmentCard.end   ? governmentCard.end   : moment(termStart).add(1, 'minutes').toISOString();
   return div(
     h2(i18n.parliamentGovernmentCard),
     GovHeader(governmentCard || {}),
@@ -856,7 +860,15 @@ const RevocationsSection = (governmentCard, laws, revocations, futureRevocations
     RevocationsList(revocations || []) || '',
     FutureRevocationsList(futureRevocations || []) || ''
   );
-  
+
+const normalizeGovCard = (governmentCard, inhabitantsTotal) => {
+  const pop = Number(inhabitantsTotal ?? governmentCard?.inhabitantsTotal ?? 0) || 0;
+  if (governmentCard && (governmentCard.method || governmentCard.since || governmentCard.end || governmentCard.powerType)) {
+    return { ...governmentCard, inhabitantsTotal: pop };
+  }
+  return null;
+};
+
 const parliamentView = async (state) => {
   const {
     filter,
@@ -874,14 +886,11 @@ const parliamentView = async (state) => {
     futureRevocations,
     revocationsEnactedCount,
     historicalMetas = {},
-    leadersMetas = {}
+    leadersMetas = {},
+    inhabitantsTotal
   } = state;
-  const LawsSectionWrap = () =>
-    div(
-      LawsStats(laws || [], revocationsEnactedCount || 0),
-      LawsList(laws || [])
-    );
-  const fallbackAnarchy = {
+
+  const fallbackGov = {
     method: 'ANARCHY',
     votesReceived: 0,
     totalVotes: 0,
@@ -890,22 +899,38 @@ const parliamentView = async (state) => {
     declined: 0,
     discarded: 0,
     revocated: 0,
-    efficiency: 0
+    efficiency: 0,
+    powerType: 'none',
+    powerId: null,
+    powerTitle: 'ANARCHY',
+    since: moment().toISOString(),
+    end: moment().add(TERM_DAYS, 'days').toISOString(),
+    inhabitantsTotal: Number(inhabitantsTotal ?? 0) || 0
   };
+
+  const gov = normalizeGovCard(governmentCard, inhabitantsTotal) || fallbackGov;
+
+  const LawsSectionWrap = () =>
+    div(
+      LawsStats(laws || [], revocationsEnactedCount || 0),
+      LawsList(laws || [])
+    );
+
   return template(
     i18n.parliamentTitle,
     section(div({ class: 'tags-header' }, h2(i18n.parliamentTitle), p(i18n.parliamentDescription)), Tabs(filter)),
     section(
-      filter === 'government' ? GovernmentCard(governmentCard || fallbackAnarchy, powerMeta) : null,
-      filter === 'candidatures' ? CandidaturesSection(governmentCard || fallbackAnarchy, candidatures, leaderMeta) : null,
-      filter === 'proposals' ? ProposalsSection(governmentCard || fallbackAnarchy, proposals, futureLaws, canPropose) : null,
+      filter === 'government' ? GovernmentCard(gov, powerMeta) : null,
+      filter === 'candidatures' ? CandidaturesSection(gov, candidatures, leaderMeta) : null,
+      filter === 'proposals' ? ProposalsSection(gov, proposals, futureLaws, canPropose) : null,
       filter === 'laws' ? LawsSectionWrap() : null,
-      filter === 'revocations' ? RevocationsSection(governmentCard || fallbackAnarchy, laws, revocations, futureRevocations) : null,
+      filter === 'revocations' ? RevocationsSection(gov, laws, revocations, futureRevocations) : null,
       filter === 'historical' ? div(HistoricalGovsSummary(historical || []), HistoricalList(historical || [], historicalMetas)) : null,
       filter === 'leaders' ? div(LeadersSummary(leaders || [], candidatures || []), LeadersList(leaders || [], leadersMetas, candidatures || [])) : null,
       filter === 'rules' ? RulesContent() : null
     )
   );
 };
+
 module.exports = { parliamentView, pickLeader };
 
