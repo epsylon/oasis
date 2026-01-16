@@ -14,20 +14,96 @@ module.exports = ({ cooler }) => {
   const hasBlob = async (ssbClient, url) =>
     new Promise(resolve => ssbClient.blobs.has(url, (err, has) => resolve(!err && has)));
 
-  const isClosedSold = s => String(s || '').toUpperCase() === 'SOLD' || String(s || '').toUpperCase() === 'CLOSED';
+  const isClosedSold = s =>
+    String(s || '').toUpperCase() === 'SOLD' || String(s || '').toUpperCase() === 'CLOSED';
 
   const projectRank = (status) => {
     const S = String(status || '').toUpperCase();
     if (S === 'COMPLETED') return 3;
-    if (S === 'ACTIVE')    return 2;
-    if (S === 'PAUSED')    return 1;
+    if (S === 'ACTIVE') return 2;
+    if (S === 'PAUSED') return 1;
     if (S === 'CANCELLED') return 0;
     return -1;
   };
 
+  const safeDecode = (s) => {
+    try { return decodeURIComponent(String(s || '')); } catch { return String(s || ''); }
+  };
+
+  const parseTs = (s) => {
+    const raw = String(s || '').trim();
+    if (!raw) return null;
+    const ts = new Date(raw).getTime();
+    return Number.isFinite(ts) ? ts : null;
+  };
+
+  const matchBlockId = (blockId, q) => {
+    const a = String(blockId || '');
+    const b = String(q || '');
+    if (!a || !b) return true;
+    const al = a.toLowerCase();
+    const bl = b.toLowerCase();
+    if (al.includes(bl)) return true;
+    const ad = safeDecode(a).toLowerCase();
+    const bd = safeDecode(b).toLowerCase();
+    return ad.includes(bd) || ad.includes(bl) || al.includes(bd);
+  };
+
+  const matchAuthorOrName = (authorId, authorName, query) => {
+    const q0 = String(query || '').trim().toLowerCase();
+    if (!q0) return true;
+
+    const qNoAt = q0.replace(/^@/, '');
+    const aid = String(authorId || '').toLowerCase();
+    if (aid.includes(q0)) return true;
+    if (qNoAt && aid.includes('@' + qNoAt)) return true;
+
+    const nm0 = String(authorName || '').trim().toLowerCase();
+    const nmNoAt = nm0.replace(/^@/, '');
+    if (!nmNoAt) return false;
+
+    if (nm0.includes(q0)) return true;
+    if (qNoAt && nmNoAt.includes(qNoAt)) return true;
+
+    return false;
+  };
+
+  const buildNameIndexFromAbout = async (ssbClient, minLimit = 5000) => {
+    const nameByFeedId = new Map();
+    if (!ssbClient?.query?.read) return nameByFeedId;
+
+    const limit = Math.max(minLimit, logLimit);
+
+    const source = await ssbClient.query.read({
+      query: [{ $filter: { value: { content: { type: 'about' } } } }],
+      reverse: true,
+      limit
+    });
+
+    const aboutMsgs = await new Promise((resolve, reject) => {
+      pull(
+        source,
+        pull.take(limit),
+        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs || [])))
+      );
+    });
+
+    for (const msg of aboutMsgs) {
+      const c = msg?.value?.content;
+      if (!c || c.type !== 'about') continue;
+      const aboutId = String(c.about || msg?.value?.author || '').trim();
+      const nm = typeof c.name === 'string' ? c.name.trim() : '';
+      if (!aboutId || !nm) continue;
+      if (!nameByFeedId.has(aboutId)) nameByFeedId.set(aboutId, nm);
+    }
+
+    return nameByFeedId;
+  };
+
   return {
-    async listBlockchain(filter = 'all') {
+    async listBlockchain(filter = 'all', userId, search = {}) {
       const ssbClient = await openSsb();
+
       const results = await new Promise((resolve, reject) =>
         pull(
           ssbClient.createLogStream({ reverse: true, limit: logLimit }),
@@ -39,11 +115,20 @@ module.exports = ({ cooler }) => {
       const idToBlock = new Map();
       const referencedAsReplaces = new Set();
 
+      const nameByFeedId = new Map();
+
       for (const msg of results) {
         const k = msg.key;
         const c = msg.value?.content;
         const author = msg.value?.author;
         if (!c?.type) continue;
+
+        if (c.type === 'about') {
+          const aboutId = String(c.about || author || '').trim();
+          const nm = typeof c.name === 'string' ? c.name.trim() : '';
+          if (aboutId && nm && !nameByFeedId.has(aboutId)) nameByFeedId.set(aboutId, nm);
+        }
+
         if (c.type === 'tombstone' && c.target) {
           tombstoned.add(c.target);
           idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
@@ -104,21 +189,54 @@ module.exports = ({ cooler }) => {
       });
 
       let filtered = blockData;
+
       if (filter === 'RECENT' || filter === 'recent') {
         const now = Date.now();
-        filtered = blockData.filter(b => b && now - b.ts <= 24 * 60 * 60 * 1000);
+        filtered = filtered.filter(b => b && now - b.ts <= 24 * 60 * 60 * 1000);
       }
       if (filter === 'MINE' || filter === 'mine') {
-        filtered = blockData.filter(b => b && b.author === config.keys.id);
+        const me = userId || config.keys.id;
+        filtered = filtered.filter(b => b && b.author === me);
       }
       if (filter === 'PARLIAMENT' || filter === 'parliament') {
         const pset = new Set(['parliamentTerm','parliamentProposal','parliamentLaw','parliamentCandidature','parliamentRevocation']);
-        filtered = blockData.filter(b => b && pset.has(b.type));
+        filtered = filtered.filter(b => b && pset.has(b.type));
       }
       if (filter === 'COURTS' || filter === 'courts') {
         const cset = new Set(['courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote']);
-        filtered = blockData.filter(b => b && cset.has(b.type));
+        filtered = filtered.filter(b => b && cset.has(b.type));
       }
+
+      const s = search || {};
+      const authorQ = String(s.author || '').trim();
+      const idQ = String(s.id || '').trim();
+      const fromTs = parseTs(s.from);
+      const toTs = parseTs(s.to);
+
+      let aboutIndex = null;
+      const needsNameSearch = !!authorQ && !authorQ.toLowerCase().includes('.ed25519');
+
+      if (needsNameSearch) {
+        aboutIndex = await buildNameIndexFromAbout(ssbClient, 10000);
+        for (const [fid, nm] of aboutIndex.entries()) {
+          if (!nameByFeedId.has(fid)) nameByFeedId.set(fid, nm);
+        }
+      }
+
+      filtered = filtered.filter(b => {
+        if (!b) return false;
+        if (fromTs != null && b.ts < fromTs) return false;
+        if (toTs != null && b.ts > toTs) return false;
+
+        if (authorQ) {
+          const nm = nameByFeedId.get(b.author) || '';
+          if (!matchAuthorOrName(b.author, nm, authorQ)) return false;
+        }
+
+        if (idQ && !matchBlockId(b.id, idQ)) return false;
+
+        return true;
+      });
 
       return filtered.filter(Boolean);
     },
@@ -190,6 +308,7 @@ module.exports = ({ cooler }) => {
 
       const block = idToBlock.get(id);
       if (!block) return null;
+
       if (block.type === 'document') {
         const valid = await hasBlob(ssbClient, block.content.url);
         if (!valid) return null;
@@ -202,11 +321,7 @@ module.exports = ({ cooler }) => {
         ? (!liveTipIds.has(block.id) || tombstoned.has(block.id))
         : referencedAsReplaces.has(block.id) || tombstoned.has(block.id) || rootDeleted;
 
-      return {
-        ...block,
-        isTombstoned,
-        isReplaced
-      };
+      return { ...block, isTombstoned, isReplaced };
     }
   };
 };

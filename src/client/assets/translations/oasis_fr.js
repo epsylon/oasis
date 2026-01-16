@@ -1871,6 +1871,7 @@ module.exports = {
     pmCreateButton: "Écrire un MP",
     noPrivateMessages: "Aucun message privé.",
     pmReply: "Répondre",
+    inReplyTo: "EN RÉPONSE À",
     pmPreview: "Aperçu",
     pmPreviewTitle: "Aperçu",
     performed: "→",

@@ -57,6 +57,7 @@ module.exports = {
     privateDelete: "Delete",
     pmCreateButton: "Write a PM",
     pmReply: "Reply",
+    inReplyTo: "IN REPLY TO",
     pmPreview: "Preview",
     pmPreviewTitle: "Message preview",
     noPrivateMessages: "You haven't received any private message, yet.",

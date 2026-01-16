@@ -13,6 +13,17 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.5 - 2026-01-16
+
+### Added
+
+ + Blockexplorer search engine (Blockexplorer plugin).
+
+### Fixed
+
+ + Spreading threads + comments (Activity plugin).
+ + Minor fixes (Activity plugin).
+
 ## v0.6.4 - 2026-01-05
 
 ### Added

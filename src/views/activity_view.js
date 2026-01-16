@@ -58,6 +58,11 @@ function safeMsgId(x) {
   return '';
 }
 
+function normalizeSpreadLink(x) {
+  const s = safeMsgId(x);
+  return typeof s === 'string' && s.startsWith('thread:') ? s.slice(7) : s;
+}
+
 function stripHtml(s) {
   return String(s || '')
     .replace(/<[^>]*>/g, ' ')
@@ -66,7 +71,7 @@ function stripHtml(s) {
 }
 
 function excerptPostText(content, max = 220) {
-  const raw = stripHtml(content?.text || '');
+  const raw = stripHtml(content?.text || content?.description || content?.title || '');
   if (!raw) return '';
   return raw.length > max ? raw.slice(0, max - 1) + '…' : raw;
 }
@@ -99,7 +104,7 @@ function getThreadIdFromPost(action) {
   const c = action.value?.content || action.content || {};
   const fork = safeMsgId(c.fork);
   const root = safeMsgId(c.root);
-  return fork || root || action.id;
+  return fork || root || safeMsgId(action);
 }
 
 function getReplyToIdFromPost(action, byId) {
@@ -117,8 +122,14 @@ function getReplyToIdFromPost(action, byId) {
 
 function buildActivityItemsWithPostThreads(deduped, allActions) {
   const byId = new Map();
-  for (const a of allActions) if (a?.id) byId.set(a.id, a);
-  for (const a of deduped) if (a?.id) byId.set(a.id, a);
+  for (const a of allActions) {
+    const id = safeMsgId(a);
+    if (id) byId.set(id, a);
+  }
+  for (const a of deduped) {
+    const id = safeMsgId(a);
+    if (id) byId.set(id, a);
+  }
 
   const groups = new Map();
   const out = [];
@@ -135,7 +146,7 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
 
   for (const [threadId, posts] of groups.entries()) {
     const sortedDesc = posts.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    const hasReplies = sortedDesc.some(p => getThreadIdFromPost(p) !== p.id) || sortedDesc.length > 1;
+    const hasReplies = sortedDesc.some(p => getThreadIdFromPost(p) !== safeMsgId(p)) || sortedDesc.length > 1;
 
     if (!hasReplies || sortedDesc.length === 1) {
       out.push(sortedDesc[0]);
@@ -143,9 +154,19 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
     }
 
     const latest = sortedDesc[0];
-    const rootAction = byId.get(threadId);
+    let rootAction = byId.get(threadId);
+    let rootId = threadId;
+
+    if (!rootAction) {
+      const asc = posts.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
+      rootAction = asc[0] || null;
+      rootId = safeMsgId(rootAction) || threadId;
+    } else {
+      rootId = safeMsgId(rootAction) || threadId;
+    }
+
     const replies = sortedDesc
-      .filter(p => p.id !== threadId)
+      .filter(p => safeMsgId(p) !== rootId)
       .slice()
       .sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
@@ -158,13 +179,13 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
         threadId,
         root: rootAction
           ? {
-              id: rootAction.id,
+              id: safeMsgId(rootAction),
               author: rootAction.author,
               text: excerptPostText(rootAction.value?.content || rootAction.content || {}, 240)
             }
           : null,
         replies: replies.map(p => ({
-          id: p.id,
+          id: safeMsgId(p),
           author: p.author,
           ts: p.ts,
           text: excerptPostText(p.value?.content || p.content || {}, 200)
@@ -179,6 +200,34 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
 
 function renderActionCards(actions, userId, allActions) {
   const all = Array.isArray(allActions) ? allActions : actions;
+  const byIdAll = new Map();
+  for (const a0 of all) {
+    const id0 = safeMsgId(a0);
+    if (id0) byIdAll.set(id0, a0);
+  }
+  const profileById = new Map();
+  for (const a0 of all) {
+    if (!a0 || a0.type !== 'about') continue;
+    const c0 = a0.value?.content || a0.content || {};
+    const id0 = c0.about || a0.author || '';
+    if (!id0) continue;
+    const name0 = (typeof c0.name === 'string' && c0.name.trim()) ? c0.name.trim() : id0;
+    const image0 = (typeof c0.image === 'string' && c0.image.trim()) ? c0.image.trim() : '';
+    const ts0 = a0.ts || 0;
+    const prev = profileById.get(id0);
+    if (!prev) {
+      profileById.set(id0, { id: id0, name: name0, image: image0, ts: ts0 });
+      continue;
+    }
+    const prevHasImg = !!prev.image;
+    const newHasImg = !!image0;
+    if (!prevHasImg && newHasImg) profileById.set(id0, { id: id0, name: name0, image: image0, ts: ts0 });
+    else if (prevHasImg === newHasImg && ts0 > (prev.ts || 0)) profileById.set(id0, { id: id0, name: name0, image: image0, ts: ts0 });
+  }
+  const getProfile = (id) => {
+    const p0 = profileById.get(id);
+    return p0 ? { id: p0.id, name: p0.name, image: p0.image } : { id, name: id, image: '' };
+  };
   const validActions = actions
     .filter(action => {
       const content = action.value?.content || action.content;
@@ -212,23 +261,25 @@ function renderActionCards(actions, userId, allActions) {
 
   const seenDocumentTitles = new Set();
   const items = buildActivityItemsWithPostThreads(deduped, all);
+
   const spreadOrdinalById = new Map();
   const spreadsByLink = new Map();
 
   for (const a of all) {
     if (!a || a.type !== 'spread') continue;
     const c = a.value?.content || a.content || {};
-    const link = c.spreadTargetId || c.vote?.link || '';
-    if (!link || !a.id) continue;
+    const link = normalizeSpreadLink(c.spreadTargetId || c.vote?.link || '');
+    const aId = safeMsgId(a);
+    if (!link || !aId) continue;
     if (!spreadsByLink.has(link)) spreadsByLink.set(link, []);
     spreadsByLink.get(link).push(a);
   }
 
   for (const list of spreadsByLink.values()) {
-    list.sort((a, b) => (a.ts || 0) - (b.ts || 0) || String(a.id || '').localeCompare(String(b.id || '')));
+    list.sort((a, b) => (a.ts || 0) - (b.ts || 0) || String(safeMsgId(a) || '').localeCompare(String(safeMsgId(b) || '')));
     for (let i = 0; i < list.length; i++) {
-      spreadOrdinalById.set(list[i].id, i + 1);
-    }
+      spreadOrdinalById.set(safeMsgId(list[i]), i + 1);
+    } 
   }
 
   const cards = items.map(action => {
@@ -487,7 +538,7 @@ function renderActionCards(actions, userId, allActions) {
       const { url } = content;
       cardBody.push(
         div({ class: 'card-section image' },
-          img({ src: `/blob/${encodeURIComponent(url)}`, class: 'feed-image img-content' })
+          img({ src: `/blob/${encodeURIComponent(url)}`, class: 'activity-image-thumb' })
         )
       );
     }
@@ -635,7 +686,7 @@ function renderActionCards(actions, userId, allActions) {
       );
     }
 
-    if (type === 'post') {
+  if (type === 'post') {
       const { contentWarning, text } = content || {};
       const rawText = text || '';
       const isHtml = typeof rawText === 'string' && /<\/?[a-z][\s\S]*>/i.test(rawText);
@@ -649,20 +700,28 @@ function renderActionCards(actions, userId, allActions) {
               (url) =>
                 `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
             );
-        bodyNode = div({ class: 'post-text', innerHTML: linkified });
+       bodyNode = div({ class: 'post-text', innerHTML: linkified });
       } else {
-        bodyNode = p({ class: 'post-text' }, ...renderUrl(rawText));
+        bodyNode = p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(rawText));
       }
-      const byId = new Map(actions.map(a => [a.id, a]));
       const threadId = getThreadIdFromPost(action);
-      const replyToId = getReplyToIdFromPost(action, byId);
-      if (threadId && threadId !== action.id) {
-        const ctxHref = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(replyToId || threadId)}`;
-        const parent = byId.get(replyToId) || byId.get(threadId);
-        const parentAuthor = parent?.author;
-      }
+      const replyToId = getReplyToIdFromPost(action, byIdAll);
+      const isReply = !!(threadId && threadId !== action.id);
+      const ctxHref = isReply ? `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(replyToId || threadId)}` : '';
+      const parent = isReply ? (byIdAll.get(replyToId) || byIdAll.get(threadId)) : null;
+      const parentContent = parent ? (parent.value?.content || parent.content || {}) : {};
+      const parentAuthor = parent?.author || '';
+      const parentText = parent ? excerptPostText(parentContent, 220) : '';
       cardBody.push(
         div({ class: 'card-section post' },
+          isReply
+            ? div(
+                { class: 'reply-context' },
+                a({ href: ctxHref, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
+                parentAuthor ? span({ class: 'reply-context-author' }, a({ href: `/author/${encodeURIComponent(parentAuthor)}`, class: 'user-link' }, parentAuthor)) : '',
+                parentText ? p({ class: 'post-text reply-context-text post-text-pre' }, ...renderUrlPreserveNewlines(parentText)) : ''
+              )
+            : '',
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
           bodyNode
         )
@@ -689,18 +748,18 @@ function renderActionCards(actions, userId, allActions) {
                 )
             ),
             div({ class: 'card-body' },
-                root && root.text
-                    ? div({ class: 'card-section' },
-                        p({ class: 'post-text' }, ...renderUrl(root.text))
-                    )
-                    : '',
-                div({ class: 'card-section' },
+		root && root.text
+		    ? div({ class: 'card-section' },
+			p({ class: 'post-text', style: 'white-space:pre-wrap;' }, ...renderUrlPreserveNewlines(root.text))
+		    )
+		    : '',
+		div({ class: 'card-section' },
 		show.map(r => {
 		    const commentHref = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(r.id)}`;
 		    const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
 		    return div({ class: 'thread-reply-item' },
 			div({ class: 'thread-reply' },
-			    r.text ? p({ class: 'post-text' }, ...renderUrl(r.text)) : ''
+			    r.text ? p({ class: 'post-text', style: 'white-space:pre-wrap;' }, ...renderUrlPreserveNewlines(r.text)) : ''
 			),
 			div({ class: 'card-footer thread-reply-footer' },
 			    span({ class: 'date-link' }, rDate),
@@ -711,11 +770,6 @@ function renderActionCards(actions, userId, allActions) {
 			)
 		    );
 		}),
-                overflow
-                    ? div({ style: 'display:flex; justify-content:center; margin-top:12px;' },
-                        a({ class: 'filter-btn', href: viewMoreHref }, i18n.continueReading)
-                    )
-                    : ''
             )
         ),
         p({ class: 'card-footer' },
@@ -758,42 +812,55 @@ function renderActionCards(actions, userId, allActions) {
       }
     }
 
-    if (type === 'spread') {
-        const { spreadOriginalAuthor, spreadTitle, spreadContentWarning, spreadText, spreadTotalSpreads } = content || {};
-        const spreadsLabel = (i18n.totalspreads || 'Total spreads') + ':';
-        const total = Number(spreadTotalSpreads || 0);
-        cardBody.push(
-            div({ class: 'card-section vote' },
-                spreadTitle
-                    ? h2(
-                        { class: 'post-title', style: 'margin:.25rem 0 .55rem 0; font-size:1.08em;' },
-                        spreadTitle
-                    )
-                    : '',
-                spreadContentWarning ? h2({ class: 'content-warning' }, spreadContentWarning) : '',
-                spreadText
-                    ? div(
-                        {
-                            class: 'post-text',
-                            style: 'white-space:pre-wrap; line-height:1.45; font-size:1.02em; word-break:break-word; overflow-wrap:anywhere;'
-                        },
-                        ...renderUrlPreserveNewlines(spreadText)
-                    )
-                    : '',
-                spreadOriginalAuthor
-                    ? div(
-                        { class: 'card-field' },
-                        span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(spreadOriginalAuthor)}`, class: 'user-link' }, spreadOriginalAuthor))
-                    )
-                    : '',
-                div(
-                    { class: 'card-field' },
-                    span({ class: 'card-label' }, spreadsLabel),
-                    span({ class: 'card-value' }, String(total))
-                )
-            )
-        );
-    }
+ if (type === 'spread') {
+  const link = normalizeSpreadLink(content?.spreadTargetId || content?.vote?.link || '');
+  const target = link ? (byIdAll.get(link) || byIdAll.get(decodeMaybe(link)) || byIdAll.get(encodeURIComponent(link))) : null;
+  const tContent = target ? (target.value?.content || target.content || {}) : {};
+  const spreadTitle =
+    (typeof content?.spreadTitle === 'string' && content.spreadTitle.trim())
+      ? content.spreadTitle.trim()
+      : (typeof tContent?.title === 'string' && tContent.title.trim())
+        ? tContent.title.trim()
+        : (typeof tContent?.name === 'string' && tContent.name.trim())
+          ? tContent.name.trim()
+          : '';
+  const spreadContentWarning =
+    (typeof content?.spreadContentWarning === 'string' && content.spreadContentWarning.trim())
+      ? content.spreadContentWarning.trim()
+      : (typeof tContent?.contentWarning === 'string' && tContent.contentWarning.trim())
+        ? tContent.contentWarning.trim()
+        : '';
+  const spreadText =
+    (typeof content?.spreadText === 'string' && content.spreadText.trim())
+      ? content.spreadText.trim()
+      : excerptPostText(tContent, 700);
+  const spreadOriginalAuthor =
+    (typeof content?.spreadOriginalAuthor === 'string' && content.spreadOriginalAuthor.trim())
+      ? content.spreadOriginalAuthor.trim()
+      : (target?.author || '');
+  const ord = spreadOrdinalById.get(safeMsgId(action)) || 0;
+  const totalChron = link && spreadsByLink.has(link) ? spreadsByLink.get(link).length : 0;
+  const label = (i18n.spreadChron || 'Spread') + ':';
+  const value = ord && totalChron ? `${ord}/${totalChron}` : (ord ? String(ord) : '');
+  cardBody.push(
+    div({ class: 'card-section vote' },
+      spreadTitle ? h2({ class: 'post-title activity-spread-title' }, spreadTitle) : '',
+      spreadContentWarning ? h2({ class: 'content-warning' }, spreadContentWarning) : '',
+      spreadText ? div({ class: 'post-text activity-spread-text post-text-pre' }, ...renderUrlPreserveNewlines(spreadText)) : '',
+      spreadOriginalAuthor
+        ? div({ class: 'card-field' },
+            span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(spreadOriginalAuthor)}`, class: 'user-link' }, spreadOriginalAuthor))
+          )
+        : '',
+      value
+        ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, label),
+            span({ class: 'card-value' }, value)
+          )
+        : ''
+    )
+  );
+}
 
     if (type === 'vote') {
       const { vote } = content;
@@ -812,33 +879,48 @@ function renderActionCards(actions, userId, allActions) {
         div({ class: 'card-section about' },
           h2(a({ href: `/author/${encodeURIComponent(about)}`, class: "user-link" }, `@`, name)),
           image
-            ? img({ src: `/blob/${encodeURIComponent(image)}` })
-            : img({ src: '/assets/images/default-avatar.png', alt: name })
+            ? img({ src: `/blob/${encodeURIComponent(image)}`, alt: name, class: 'activity-avatar' })
+            : img({ src: '/assets/images/default-avatar.png', alt: name, class: 'activity-avatar' })
         )
       );
     }
 
     if (type === 'contact') {
-      const { contact } = content;
+      const { contact } = content || {};
+      const aId = action.author || '';
+      const bId = contact || '';
+      const pa = getProfile(aId);
+      const pb = getProfile(bId);
+      const srcA = pa.image ? `/blob/${encodeURIComponent(pa.image)}` : '/assets/images/default-avatar.png';
+      const srcB = pb.image ? `/blob/${encodeURIComponent(pb.image)}` : '/assets/images/default-avatar.png';
       cardBody.push(
         div({ class: 'card-section contact' },
-          p({ class: 'card-field' },
-            a({ href: `/author/${encodeURIComponent(contact)}`, class: "user-link"}, contact)
+          div({ class: 'activity-contact' },
+            a({ href: `/author/${encodeURIComponent(aId)}`, class: 'activity-contact-avatar-link' },
+              img({ src: srcA, alt: pa.name || pa.id, class: 'activity-contact-avatar' })
+            ),
+            span({ class: 'activity-contact-arrow' }, ''),
+            a({ href: `/author/${encodeURIComponent(bId)}`, class: 'activity-contact-avatar-link' },
+              img({ src: srcB, alt: pb.name || pb.id, class: 'activity-contact-avatar' })
+            )
           )
         )
       );
     }
 
     if (type === 'pub') {
-      const { address } = content;
-      const { host, key } = address || {};
+      const { address } = content || {};
+      const { key } = address || {};
+      const pr = getProfile(key || '');
+      const src = pr.image ? `/blob/${encodeURIComponent(pr.image)}` : '/assets/images/default-avatar.png';
       cardBody.push(
-        div({ class: 'card-section pub' },
-          p({ class: 'card-field' },
-            a({ href: `/author/${encodeURIComponent(key || '')}`, class: "user-link" }, key || '')
-          )
+        div({ class: 'card-section pub activity-pub' },
+          br(),
+          a({ href: `/author/${encodeURIComponent(pr.id)}`, class: 'user-link' }, pr.name || pr.id),
+          br(),
+          img({ src, alt: pr.name || pr.id, class: 'activity-avatar' })
         )
-      );
+     );
     }
 
     if (type === 'market') {
@@ -1271,7 +1353,7 @@ function renderActionCards(actions, userId, allActions) {
 }
 
 function getViewDetailsAction(type, action) {
-  const id = encodeURIComponent(action.tipId || action.id);
+  const id = encodeURIComponent(safeMsgId(action.tipId || action.id || action.key || action));
   switch (type) {
     case 'parliamentCandidature':   return `/parliament?filter=candidatures`;
     case 'parliamentTerm':          return `/parliament?filter=government`;
@@ -1293,9 +1375,11 @@ function getViewDetailsAction(type, action) {
     case 'tribeFeedRefeed':
     return `/tribe/${encodeURIComponent(action.content?.tribeId || '')}`;
     case 'spread': {
-      const link = action.content?.spreadTargetId || action.content?.vote?.link || '';
+      const link = normalizeSpreadLink(action.content?.spreadTargetId || action.content?.vote?.link || '');
       return link ? `/thread/${encodeURIComponent(link)}#${encodeURIComponent(link)}` : `/activity`;
     }
+    case 'post':       return `/thread/${id}#${id}`;
+    case 'vote':       return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
     case 'votes':      return `/votes/${id}`;
     case 'transfer':   return `/transfers/${id}`;
     case 'pixelia':    return `/pixelia`;
@@ -1312,8 +1396,6 @@ function getViewDetailsAction(type, action) {
     case 'task':       return `/tasks/${id}`;
     case 'taskAssignment': return `/tasks/${encodeURIComponent(action.content?.taskId || action.tipId || action.id)}`;
     case 'about':      return `/author/${encodeURIComponent(action.author)}`;
-    case 'post':       return `/thread/${id}#${id}`;
-    case 'vote':       return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
     case 'contact':    return `/inhabitants`;
     case 'pub':        return `/invites`;
     case 'market':     return `/market/${id}`;
@@ -1326,7 +1408,7 @@ function getViewDetailsAction(type, action) {
   }
 }
 
-exports.activityView = (actions, filter, userId) => {
+exports.activityView = (actions, filter, userId, q = '') => {
   const title = filter === 'mine' ? i18n.yourActivity : i18n.globalActivity;
   const desc = i18n.activityDesc;
 
@@ -1389,6 +1471,26 @@ exports.activityView = (actions, filter, userId) => {
     filteredActions = actions.filter(action => action.type === 'spread');
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all') && action.type !== 'tombstone');
+  }
+
+  const qs = String(q || '').trim();
+  if (qs) {
+    const qn = qs.toLowerCase();
+    filteredActions = filteredActions.filter(a0 => {
+      const t = String(a0.type || '').toLowerCase();
+      const author = String(a0.author || '').toLowerCase();
+      const id0 = String(a0.id || '').toLowerCase();
+      const c0 = a0.value?.content || a0.content || {};
+      const blob = [
+        t, author, id0,
+        c0.text, c0.title, c0.name, c0.description, c0.contentWarning,
+        c0.about, c0.contact,
+        c0.spreadTitle, c0.spreadText, c0.spreadOriginalAuthor,
+        c0.vote?.link,
+        c0.address?.host, c0.address?.key
+      ].filter(Boolean).join(' ').toLowerCase();
+      return blob.includes(qn);
+    });
   }
 
   let html = template(

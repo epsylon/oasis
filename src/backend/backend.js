@@ -670,18 +670,37 @@ router
     if (!checkMod(ctx, 'pixeliaMod')) { ctx.redirect('/modules'); return; }
     const pixelArt = await pixeliaModel.listPixels();
     ctx.body = pixeliaView(pixelArt);
-  })
+  })  
   .get('/blockexplorer', async (ctx) => {
-    const userId = getViewerId(); 
-    const query = ctx.query;
-    const filter = query.filter || 'recent';
-    const blockchainData = await blockchainModel.listBlockchain(filter, userId);
-    ctx.body = renderBlockchainView(blockchainData, filter, userId);
+    const userId = getViewerId();
+    const query = ctx.query || {};
+    const search = {
+      id: query.id || '',
+      author: query.author || '',
+      from: query.from || '',
+      to: query.to || ''
+    };
+    const searchActive = Object.values(search).some(v => String(v || '').trim().length > 0);
+    let filter = query.filter || 'recent';
+    if (searchActive && String(filter).toLowerCase() === 'recent') filter = 'all';
+    const blockchainData = await blockchainModel.listBlockchain(filter, userId, search);
+    ctx.body = renderBlockchainView(blockchainData, filter, userId, search);
   })
   .get('/blockexplorer/block/:id', async (ctx) => {
+    const userId = getViewerId();
+    const query = ctx.query || {};
+    const search = {
+      id: query.id || '',
+      author: query.author || '',
+      from: query.from || '',
+      to: query.to || ''
+    };
+    const searchActive = Object.values(search).some(v => String(v || '').trim().length > 0);
+    let filter = query.filter || 'recent';
+    if (searchActive && String(filter).toLowerCase() === 'recent') filter = 'all';
     const blockId = ctx.params.id;
     const block = await blockchainModel.getBlockById(blockId);
-    ctx.body = renderSingleBlockView(block);
+    ctx.body = renderSingleBlockView(block, filter, userId, search);
   })
   .get("/public/latest", async (ctx) => {
     if (!checkMod(ctx, 'latestMod')) { ctx.redirect('/modules'); return; }
@@ -1015,9 +1034,11 @@ router
   })
   .get('/activity', async ctx => {
     const filter = qf(ctx, 'recent'), userId = getViewerId();
+    const q = String((ctx.query && ctx.query.q) || '');
     try { await bankingModel.ensureSelfAddressPublished(); } catch (_) {}
     try { await bankingModel.getUserEngagementScore(userId); } catch (_) {}
-    ctx.body = activityView(await activityModel.listFeed(filter), filter, userId);
+    const allActions = await activityModel.listFeed('all');
+    ctx.body = activityView(allActions, filter, userId, q);
   })
   .get("/profile", async (ctx) => {
     const myFeedId = await meta.myFeedId(), gt = Number(ctx.request.query.gt || -1), lt = Number(ctx.request.query.lt || -1);

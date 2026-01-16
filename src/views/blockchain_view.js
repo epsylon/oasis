@@ -20,6 +20,33 @@ const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', '
 const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia'];
 const CAT_BLOCK4  = ['forum', 'bookmark', 'image', 'video', 'audio', 'document'];
 
+const SEARCH_FIELDS = ['author','id','from','to'];
+
+const hiddenSearchInputs = (search) =>
+  SEARCH_FIELDS.map(k => {
+    const v = String(search?.[k] ?? '').trim();
+    return v ? input({ type: 'hidden', name: k, value: v }) : null;
+  }).filter(Boolean);
+
+const toDatetimeLocal = (s) => {
+  const raw = String(s || '').trim();
+  if (!raw) return '';
+  const ts = new Date(raw).getTime();
+  if (!Number.isFinite(ts)) return '';
+  return moment(ts).format('YYYY-MM-DDTHH:mm');
+};
+
+const toQueryString = (filter, search = {}) => {
+  const parts = [];
+  const f = String(filter || '').trim();
+  if (f) parts.push(`filter=${encodeURIComponent(f)}`);
+  for (const k of SEARCH_FIELDS) {
+    const v = String(search?.[k] ?? '').trim();
+    if (v) parts.push(`${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+  }
+  return parts.length ? `?${parts.join('&')}` : '';
+};
+
 const filterBlocks = (blocks, filter, userId) => {
   if (filter === 'recent') return blocks.filter(b => Date.now() - b.ts < 24*60*60*1000);
   if (filter === 'mine') return blocks.filter(b => b.author === userId);
@@ -36,11 +63,12 @@ const filterBlocks = (blocks, filter, userId) => {
   return blocks.filter(b => b.type === filter);
 };
 
-const generateFilterButtons = (filters, currentFilter, action) =>
+const generateFilterButtons = (filters, currentFilter, action, search = {}) =>
   div({ class: 'mode-buttons-cols' },
     filters.map(mode =>
       form({ method: 'GET', action },
         input({ type: 'hidden', name: 'filter', value: mode }),
+        ...hiddenSearchInputs(search),
         button({
           type: 'submit',
           class: currentFilter === mode ? 'filter-btn active' : 'filter-btn'
@@ -93,8 +121,21 @@ const getViewDetailsAction = (type, block) => {
   }
 };
 
-const renderSingleBlockView = (block, filter) =>
-  template(
+const renderSingleBlockView = (block, filter = 'recent', userId, search = {}) => {
+  if (!block) {
+    return template(
+      i18n.blockchain,
+      section(
+        div({ class: 'tags-header' },
+          h2(i18n.blockchain),
+          p(i18n.blockchainDescription)
+        ),
+        p(i18n.blockchainNoBlocks || 'No blocks')
+      )
+    );
+  }
+
+  return template(
     i18n.blockchain,
     section(
       div({ class: 'tags-header' },
@@ -103,15 +144,15 @@ const renderSingleBlockView = (block, filter) =>
       ),
       div({ class: 'mode-buttons-row' },
         div({ style: 'display:flex;flex-direction:column;gap:8px;' },
-          generateFilterButtons(BASE_FILTERS, filter, '/blockexplorer')
+          generateFilterButtons(BASE_FILTERS, filter, '/blockexplorer', search)
         ),
         div({ style: 'display:flex;flex-direction:column;gap:8px;' },
-          generateFilterButtons(CAT_BLOCK1, filter, '/blockexplorer'),
-          generateFilterButtons(CAT_BLOCK2, filter, '/blockexplorer')
+          generateFilterButtons(CAT_BLOCK1, filter, '/blockexplorer', search),
+          generateFilterButtons(CAT_BLOCK2, filter, '/blockexplorer', search)
         ),
         div({ style: 'display:flex;flex-direction:column;gap:8px;' },
-          generateFilterButtons(CAT_BLOCK3, filter, '/blockexplorer'),
-          generateFilterButtons(CAT_BLOCK4, filter, '/blockexplorer')
+          generateFilterButtons(CAT_BLOCK3, filter, '/blockexplorer', search),
+          generateFilterButtons(CAT_BLOCK4, filter, '/blockexplorer', search)
         )
       ),
       div({ class: 'block-single' },
@@ -136,6 +177,8 @@ const renderSingleBlockView = (block, filter) =>
       ),
       div({ class:'block-row block-row--back' },
         form({ method:'GET', action:'/blockexplorer' },
+          input({ type: 'hidden', name: 'filter', value: filter }),
+          ...hiddenSearchInputs(search),
           button({ type:'submit', class:'filter-btn' }, `← ${i18n.blockchainBack}`)
         ),
         !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
@@ -150,9 +193,19 @@ const renderSingleBlockView = (block, filter) =>
       )
     )
   );
+};
 
-const renderBlockchainView = (blocks, filter, userId) =>
-  template(
+const renderBlockchainView = (blocks, filter, userId, search = {}) => {
+  const s = search || {};
+  const authorVal = String(s.author || '');
+  const idVal = String(s.id || '');
+  const fromVal = toDatetimeLocal(s.from);
+  const toVal = toDatetimeLocal(s.to);
+
+  const shown = filterBlocks(blocks, filter, userId);
+  const qs = toQueryString(filter, s);
+
+  return template(
     i18n.blockchain,
     section(
       div({ class:'tags-header' },
@@ -161,20 +214,38 @@ const renderBlockchainView = (blocks, filter, userId) =>
       ),
       div({ class:'mode-buttons-row' },
         div({ style:'display:flex;flex-direction:column;gap:8px;' },
-          generateFilterButtons(BASE_FILTERS,filter,'/blockexplorer')
+          generateFilterButtons(BASE_FILTERS, filter, '/blockexplorer', s)
         ),
         div({ style:'display:flex;flex-direction:column;gap:8px;' },
-          generateFilterButtons(CAT_BLOCK1,filter,'/blockexplorer'),
-          generateFilterButtons(CAT_BLOCK2,filter,'/blockexplorer')
+          generateFilterButtons(CAT_BLOCK1, filter, '/blockexplorer', s),
+          generateFilterButtons(CAT_BLOCK2, filter, '/blockexplorer', s)
         ),
         div({ style:'display:flex;flex-direction:column;gap:8px;' },
-          generateFilterButtons(CAT_BLOCK3,filter,'/blockexplorer'),
-          generateFilterButtons(CAT_BLOCK4,filter,'/blockexplorer')
+          generateFilterButtons(CAT_BLOCK3, filter, '/blockexplorer', s),
+          generateFilterButtons(CAT_BLOCK4, filter, '/blockexplorer', s)
         )
       ),
-      filterBlocks(blocks,filter,userId).length===0
+	div({ class: 'blockexplorer-search' },
+	  form({ method: 'GET', action: '/blockexplorer', class: 'blockexplorer-search-form' },
+	    input({ type: 'hidden', name: 'filter', value: filter }),
+	    div({ class: 'blockexplorer-search-row' },
+	      div({ class: 'blockexplorer-search-pair' },
+		input({ type: 'text', name: 'id', value: idVal, placeholder: i18n.blockchainBlockID, class: 'blockexplorer-search-input' }),
+		input({ type: 'text', name: 'author', value: authorVal, placeholder: i18n.courtsJudgeIdPh, class: 'blockexplorer-search-input' })
+	      ),
+	      div({ class: 'blockexplorer-search-dates' },
+		input({ type: 'datetime-local', name: 'from', value: fromVal, class: 'blockexplorer-search-input' }),
+		input({ type: 'datetime-local', name: 'to', value: toVal, class: 'blockexplorer-search-input' })
+	      ),
+	      div({ class: 'blockexplorer-search-actions' },
+		button({ type: 'submit', class: 'filter-box__button' }, i18n.searchSubmit)
+	      )
+	    )
+	  )
+	),
+      shown.length === 0
         ? div(p(i18n.blockchainNoBlocks))
-        : filterBlocks(blocks,filter,userId)
+        : shown
             .sort((a,b)=>{
               const ta = a.type==='market'&&a.content.updatedAt
                 ? new Date(a.content.updatedAt).getTime()
@@ -187,7 +258,7 @@ const renderBlockchainView = (blocks, filter, userId) =>
             .map(block=>
               div({ class:'block' },
                 div({ class:'block-buttons' },
-                  a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}`, class:'btn-singleview', title:i18n.blockchainDetails },'⦿'),
+                  a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}`, class:'btn-singleview', title:i18n.blockchainDetails },'⦿'),
                   !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
                     form({ method:'GET', action:getViewDetailsAction(block.type, block) },
                       button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
@@ -210,6 +281,7 @@ const renderBlockchainView = (blocks, filter, userId) =>
             )
     )
   );
+};
 
 module.exports = { renderBlockchainView, renderSingleBlockView };
 

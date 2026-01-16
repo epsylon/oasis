@@ -1825,6 +1825,7 @@ module.exports = {
     pmCreateButton: "MP idatzi",
     noPrivateMessages: "Ez dago mezu pribaturik.",
     pmReply: "Erantzun",
+    inReplyTo: "HONI ERANTZUNEZ",
     pmPreview: "Aurrebista",
     pmPreviewTitle: "Mezuaren aurrebista",
     performed: "→",
