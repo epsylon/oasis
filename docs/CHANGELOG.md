@@ -13,6 +13,61 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.6 - 2026-02-23
+
+### Added
+
+ + SNH-Mobile Theme (Core plugin).
+ + Added sub-tribes (Core plugin).
+ + Max size control when uploading any file (Core plugin).
+ + File uploading into every single commenting point (Core plugin).
+ + Add an IP/Port for creating direct peering (Peers plugin).
+ + Oasis new updates available notice banner (Core plugin).
+ + Carbon footprint indicator in Statistics based on blobs/blockchain weight (Statistics plugin).
+ + Canvas block visualization in Block Explorer showing last 50 blocks as colored bars (Blockexplorer plugin).
+ + Inbox notification badge showing unread message count in topbar (Inbox plugin).
+ + Feed published success confirmation message banner (Feed plugin).
+ + Default SNH invite code loaded from snh-invite-code.json (Invites plugin).
+ + Peer deduplication by host in Invites (Invites plugin).
+ + Peer deduplication by key and table layout for peer listing (Peers plugin).
+ + "Device source" field showing KIT/DESKTOP/MOBILE based on theme (Inhabitants/Profile plugin).
+ + Module preset buttons for grouped configurations: Basic, Social, Economy, Full (Modules plugin).
+ + Dominant opinion highlight next to Total Opinions (Trending/Opinions plugin).
+ + German (de) translation (i18n).
+ + Italian (it) translation (i18n).
+ + Portuguese (pt) translation (i18n).
+ + Shared state module for cross-module communication (Core plugin).
+
+### Fixed
+
+ + MIME type error when uploading .mp4 (Videos plugin).
+ + URL generation problems when containing "special characters" (Forum plugin).
+ + Language selection between executing instances (Core plugin).
+ + LAN broadcasting features (Core plugin).
+ + Currently online peers discovering (Peers plugin).
+ + Activity level shadowing (Inhabitants plugin).
+ + Strip dangerous HTML tags from markdown output (Core plugin).
+ + Plaintext injection vulnerability: comprehensive stripDangerousTags sanitization across all user text inputs in backend (Core Security).
+ + Activity feed post truncation at 500 chars with "View details" link for long posts (Activity plugin).
+ + Spread content now shows excerpt (300 chars) instead of just hashtag name (Activity plugin).
+ + IN REPLY TO improved display with border-left styling, author name bold, and context preview (Activity plugin).
+ + Activity level dot was empty, now displays colored dot (●) matching inhabitants view (Profile plugin).
+ + Task description layout in Search: description now appears on new line below label (Search plugin).
+ + Projects description label formatting with flex-direction column and word-break (Projects plugin).
+ + Banking addresses from OASIS source now have delete action (Banking plugin).
+ + Direct Connect form moved below networking action buttons for better UX (Peers plugin).
+ + Peer validation and table layout for clearer peer listing (Peers plugin).
+ 
+### Changed
+
+ + Tribes for adding a "fractal" of mods inside (Tribes plugin).
+ + Removing metadata and added strong controls before uploading: PDF, video, audio, image... (Core plugin).
+ + Packages.json (Core plugin).
+ + i18n languages array expanded: ['en', 'es', 'fr', 'eu', 'de', 'it', 'pt'] (Core plugin).
+ + Activity view now truncates long posts instead of expanding full content (Activity plugin).
+ + Peers view uses table layout instead of nested lists (Peers plugin).
+ + Block Explorer shows visual block canvas above the block list (Blockexplorer plugin).
+
 ## v0.6.5 - 2026-01-16
 
 ### Added

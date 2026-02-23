@@ -3,7 +3,7 @@
     "level": "notice"
   },
   "caps": {
-    "shs": "iKOzhqNVTcKEZvUhW3A7TuKZ1d6qIbtsGIJ6+SBOaEQ="
+    "shs": "1BIWr6Hu+MgtNkkClvg2GAi+0HiAikGOOTd/pIUcH54="
   },
   "pub": false,
   "local": true,
@@ -28,12 +28,12 @@
   },
   "connections": {
     "seeds": [
-      "net:solarnethub.com:8008~shs:HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519"
+      "net:solarnethub.com:8008~shs:zGfPCNPFas4gHUfib08/oQ4rsWo/tnEfQ5iTkoTiBaI=.ed25519"
     ],
     "incoming": {
       "net": [
         {
-          "scope": "device",
+          "scope": ["device", "local"],
           "transform": "shs",
           "port": 8008
         }

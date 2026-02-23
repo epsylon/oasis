@@ -119,7 +119,7 @@ module.exports = ({ cooler }) => {
 
     const messages = await new Promise((res, rej) => {
       pull(
-        ssbClient.createLogStream({ limit: logLimit }),
+        ssbClient.createLogStream({ limit: logLimit, reverse: true }),
         pull.collect((err, msgs) => err ? rej(err) : res(msgs))
       );
     });

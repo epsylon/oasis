@@ -1,8 +1,22 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require("../backend/renderUrl");
+
+const renderMediaBlob = (value) => {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` });
+  const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
+  if (mVideo) return video({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` });
+  const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
+  if (mAudio) return audio({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` });
+  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' });
+  return null;
+};
 
 const userId = config.keys.id;
 
@@ -44,7 +58,6 @@ const renderStackedTextField = (lbl, val) =>
     ? div(
         { class: "card-field card-field-stacked" },
         span({ class: "card-label" }, lbl),
-        br(),
         span({ class: "card-value" }, ...renderUrl(String(val)))
       )
     : null;
@@ -187,16 +200,17 @@ const renderReportCommentsSection = (reportId, comments = []) => {
         {
           method: "POST",
           action: `/reports/${encodeURIComponent(reportId)}/comments`,
-          class: "comment-form"
+          class: "comment-form",
+          enctype: "multipart/form-data"
         },
         textarea({
           id: "comment-text",
           name: "text",
-          required: true,
           rows: 4,
           class: "comment-textarea",
           placeholder: i18n.voteNewCommentPlaceholder
         }),
+        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
         br(),
         button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
       )
@@ -358,7 +372,7 @@ const renderReportCard = (report, userId, currentFilter = "all") => {
     renderCardField(i18n.reportsSeverity + ":", severity),
     renderCardField(i18n.reportsCategory + ":", report.category),
     report.image ? br() : null,
-    report.image ? div({ class: "card-field" }, img({ src: `/blob/${encodeURIComponent(report.image)}`, class: "report-image" })) : null,
+    report.image ? div({ class: "card-field" }, renderMediaBlob(report.image)) : null,
     report.image && details ? br() : null,
     details ? details : null,
     br(),
@@ -624,7 +638,7 @@ exports.singleReportView = async (report, filter, comments = []) => {
         renderCardField(i18n.reportsSeverity + ":", severity),
         renderCardField(i18n.reportsCategory + ":", report.category),
         report.image ? br() : null,
-        report.image ? div({ class: "card-field" }, img({ src: `/blob/${encodeURIComponent(report.image)}`, class: "report-image" })) : null,
+        report.image ? div({ class: "card-field" }, renderMediaBlob(report.image)) : null,
         report.image && details ? br() : null,
         details ? details : null,
         br(),

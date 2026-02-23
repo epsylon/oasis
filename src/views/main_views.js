@@ -12,6 +12,7 @@ const { renderUrl } = require('../backend/renderUrl');
 const ssbClientGUI = require("../client/gui");
 const config = require("../server/ssb_config");
 const cooler = ssbClientGUI({ offline: config.offline });
+const sharedState = require('../configs/shared-state');
 
 let ssb, userId;
 
@@ -21,12 +22,12 @@ const getUserId = async () => {
   return userId;
 };
 
-const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
+const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, table, td, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
 
 const lodash = require("../server/node_modules/lodash");
 const markdown = require("./markdown");
+const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
-// set language
 const i18nBase = require("../client/assets/translations/i18n");
 let selectedLanguage = "en";
 let i18n = {};
@@ -38,7 +39,7 @@ exports.setLanguage = (language) => {
   Object.assign(i18n, newLang);
 };
 exports.i18n = i18n;
-exports.selectedLanguage = selectedLanguage;
+Object.defineProperty(exports, 'selectedLanguage', { get: () => selectedLanguage });
 
 // markdown
 const markdownUrl = "https://commonmark.org/help/";
@@ -73,6 +74,16 @@ const renderFooter = () => {
   const pkgName = pkg?.name || "@krakenslab/oasis";
   const pkgVersion = pkg?.version || "?";
 
+  let blockchainCycle = {};
+  try {
+    blockchainCycle = JSON.parse(fs.readFileSync(path.join(__dirname, "../configs/blockchain-cycle.json"), "utf8"));
+  } catch (_) {}
+  const cycleVal = blockchainCycle.cycle || "?";
+  const cycleUrl = blockchainCycle.url || "https://laplaza.solarnethub.com";
+
+  const hcT = sharedState.getCarbonHcT();
+  const hcH = sharedState.getCarbonHcH();
+
   return div(
     { class: "oasis-footer" },
     div(
@@ -85,8 +96,9 @@ const renderFooter = () => {
           alt: "Oasis"
         })
       ),
+      br(),
       a(
-        { href: "https://code.03c8.net/krakenslab/oasis", target: "_blank", rel: "noreferrer noopener", class: "oasis-footer-license-link" },
+        { href: "https://code.03c8.net/krakenslab/oasis", target: "_blank", rel: "noreferrer noopener" },
       span(pkgName),
       ),
       span("["),
@@ -94,11 +106,21 @@ const renderFooter = () => {
       span("]"),
       span({ class: "oasis-footer-sep" }, " - "),
       a(
-        { href: "https://www.gnu.org/licenses/gpl-3.0.html", target: "_blank", rel: "noreferrer noopener", class: "oasis-footer-license-link" },
+        { href: "https://www.gnu.org/licenses/gpl-3.0.html", target: "_blank", rel: "noreferrer noopener" },
         i18n.footerLicense
       ),
       span({ class: "oasis-footer-sep" }, " - "),
-      span({ class: "oasis-footer-year" }, year)
+      span({ class: "oasis-footer-year" }, year),
+      br(),
+      span("BLOCKCHAIN CYCLE: "),
+      a({ href: cycleUrl, target: "_blank", rel: "noreferrer noopener" }, String(cycleVal)),
+      br(),
+      span({ class: "oasis-footer-carbon" },
+        span("HcT: "),
+        a({ href: "/stats?filter=ALL" }, hcT != null ? String(hcT) : '–'),
+        span(" | HcH: "),
+        a({ href: "/stats?filter=MINE" }, hcH != null ? String(hcH) : '–')
+      )
     )
   );
 };
@@ -132,8 +154,10 @@ const customCSS = (filename) => {
   }
 };
 
-const navGroup = ({ id, emoji, title, defaultOpen = false }, ...items) =>
-  li(
+const navGroup = ({ id, emoji, title, defaultOpen = false }, ...items) => {
+  const active = items.filter(Boolean);
+  if (!active.length) return null;
+  return li(
     { class: "oasis-nav-group" },
     input({
       type: "checkbox",
@@ -148,8 +172,9 @@ const navGroup = ({ id, emoji, title, defaultOpen = false }, ...items) =>
       title,
       span({ class: "oasis-nav-arrow" }, "▾")
     ),
-    ul({ class: "oasis-nav-list" }, ...items)
+    ul({ class: "oasis-nav-list" }, ...active)
   );
+};
 
 const renderPopularLink = () => {
   const popularMod = getConfig().modules.popularMod === "on";
@@ -655,6 +680,7 @@ const template = (titlePrefix, ...elements) => {
       title(titlePrefix, " | Oasis"),
       link({ rel: "stylesheet", href: "/assets/styles/style.css" }),
       themeLink,
+      link({ rel: "stylesheet", href: "/assets/styles/mobile.css", media: "(max-width: 768px)" }),
       link({ rel: "icon", href: "/assets/images/favicon.svg" }),
       meta({ charset: "utf-8" }),
       meta({ name: "description", content: i18n.oasisDescription }),
@@ -681,11 +707,15 @@ const template = (titlePrefix, ...elements) => {
           ),
           nav(
             ul(
-              navLink({
-                href: "/inbox",
-                emoji: "☂",
-                text: i18n.inbox
-              }),
+              (() => {
+                const inboxCount = sharedState.getInboxCount();
+                const badge = inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : '';
+                return li(
+                  a({ href: "/inbox" },
+                    span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, badge
+                  )
+                );
+              })(),
               navLink({
                 href: "/pm",
                 emoji: "ꕕ",
@@ -705,6 +735,18 @@ const template = (titlePrefix, ...elements) => {
           )
         )
       ),
+      (() => {
+        const updateFlagPath = path.join(__dirname, '../server/.update_required');
+        if (fs.existsSync(updateFlagPath)) {
+          return div(
+            { class: "update-banner" },
+            span({ class: "update-banner-icon" }, "⟳"),
+            span({ class: "update-banner-text" }, i18n.updateBannerText),
+            a({ href: "/settings", class: "update-banner-link" }, i18n.updateBannerAction)
+          );
+        }
+        return null;
+      })(),
       div(
         { class: "main-content" },
         div(
@@ -1282,7 +1324,7 @@ const post = ({ msg, aside = false, preview = false }) => {
                 (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`
             );
         }
-        articleElement = article({ class: "content", innerHTML: html });
+        articleElement = article({ class: "content", innerHTML: sanitizeHtml(html) });
     } else {
         articleElement = article(
             { class: "content" },
@@ -1444,17 +1486,17 @@ exports.editProfileView = ({ name, description }) =>
         },
         label(
           i18n.profileImage,
-          br,
+          br(),
           input({ type: "file", name: "image", accept: "image/*" })
         ),
-        br,br,
-        label(i18n.profileName, 
-        br,
+        br(),br(),
+        label(i18n.profileName,
+        br(),
         input({ name: "name", value: name })),
-        br,br,
+        br(),br(),
         label(
           i18n.profileDescription,
-          br,
+          br(),
           textarea(
             {
               autofocus: true,
@@ -1464,7 +1506,7 @@ exports.editProfileView = ({ name, description }) =>
             description
           )
         ),
-        br,
+        br(),
         button(
           {
             type: "submit",
@@ -1520,7 +1562,8 @@ exports.authorView = ({
   })();
 
   const bucket = lastActivityBucket || 'red';
-  const dotClass = bucket === "green" ? "green" : bucket === "orange" ? "orange" : "red";
+
+  const { lastActivityBadge } = require('./inhabitants_view');
 
   const prefix = section(
     { class: "message" },
@@ -1530,20 +1573,18 @@ exports.authorView = ({
         img({ class: "inhabitant-photo-details", src: avatarUrl }),
         h1({ class: "name" }, name),
       ),
-      pre({ class: "md-mention", innerHTML: markdownMention }),
+      pre({ class: "md-mention", innerHTML: sanitizeHtml(markdownMention) }),
       p(a({ class: "user-link", href: `/author/${encodeURIComponent(feedId)}` }, feedId)),
       div({ class: "profile-metrics" },
         p(`${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)),
-        div({ class: "inhabitant-last-activity" },
-          span({ class: "label" }, `${i18n.inhabitantActivityLevel}:`),
-          span({ class: `activity-dot ${dotClass}` }, "")
-        ),
-        ecoAddress
-          ? div({ class: "eco-wallet" }, p(`${i18n.bankWalletConnected}: `, strong(ecoAddress)))
-          : div({ class: "eco-wallet" }, p(i18n.ecoWalletNotConfigured || "ECOin Wallet not configured"))
+        ...lastActivityBadge({ lastActivityBucket: bucket }, true),
+        div({ class: "eco-wallet" },
+          p(`${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `,
+            a({ href: '/wallet' }, ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!'))
+        )
       )
     ),
-    description !== "" ? article({ innerHTML: markdown(description) }) : null,
+    description !== "" ? article({ innerHTML: sanitizeHtml(markdown(description)) }) : null,
     footer(
       div(
         { class: "profile" },
@@ -1728,7 +1769,7 @@ exports.commentView = async (
     form(
       { action, method, enctype: "multipart/form-data" },
       i18n.blogSubject,
-      br,
+      br(),
       label(
         i18n.contentWarningLabel,
         input({
@@ -1739,9 +1780,9 @@ exports.commentView = async (
           placeholder: i18n.contentWarningPlaceholder
         })
       ),
-      br,
+      br(),
       label({ for: "text" }, i18n.blogMessage),
-      br,
+      br(),
 	textarea(
 	  {
 	    autofocus: true,
@@ -1753,14 +1794,14 @@ exports.commentView = async (
 	  },
 	  text ? text : null
 	),
-      br,
+      br(),
       label(
         { for: "blob" },
-        i18n.blogImage || "Upload Image (jpeg, jpg, png, gif) (max-size: 500px x 400px)"
+        i18n.blogImage || "Upload media (max-size: 50MB)"
       ),
       input({ type: "file", id: "blob", name: "blob" }),
-      br,
-      br,
+      br(),
+      br(),
       button({ type: "submit" }, i18n.blogPublish)
     ),
     preview ? div({ class: "comment-preview" }, preview) : ""
@@ -1769,15 +1810,53 @@ exports.commentView = async (
 
 const renderMessage = (msg) => {
   const content = lodash.get(msg, "value.content", {});
-  const author = msg.value.author || "Anonymous";
+  const authorId = msg.value.author || "Anonymous";
+  const authorName = lodash.get(msg, "value.meta.author.name") || authorId.slice(0, 10) + '...';
   const createdAt = new Date(msg.value.timestamp).toLocaleString();
   const mentionsText = content.text || '';
+  const isTribe = content.type === 'tribe-content';
+  const visitUrl = isTribe
+    ? `/tribe/${encodeURIComponent(content.tribeId)}`
+    : content.root
+      ? `/thread/${encodeURIComponent(content.root)}#${encodeURIComponent(msg.key)}`
+      : msg.key
+        ? `/thread/${encodeURIComponent(msg.key)}#${encodeURIComponent(msg.key)}`
+        : null;
+  const badge = isTribe && content.tribeName
+    ? span({ class: 'tribe-badge' }, content.tribeName)
+    : null;
 
-  return div({ class: "mention-item" }, [
-    div({ class: "mention-content", innerHTML: mentionsText || '[No content]' }),
-    p(a({ class: 'user-link', href: `/author/${encodeURIComponent(author)}` }, author)),
-    p(`${i18n.createdAtLabel || i18n.mentionsCreatedAt}: ${createdAt}`)
-  ]);
+  return div({ class: "mention-item" },
+    div({ class: "mention-content" },
+      badge,
+      ...renderUrl(mentionsText || '[No content]')
+    ),
+    p(a({ class: 'user-link', href: `/author/${encodeURIComponent(authorId)}` }, authorName)),
+    p(`${i18n.createdAtLabel || 'Created at'}: ${createdAt}`),
+    visitUrl
+      ? form({ method: 'GET', action: visitUrl },
+          button({ type: 'submit', class: 'filter-btn' }, i18n.visitContent || 'Visit')
+        )
+      : null
+  );
+};
+
+const hasMention = (msg, feedId) => {
+  const content = lodash.get(msg, "value.content", {});
+  const mentions = content.mentions;
+  if (mentions) {
+    if (Array.isArray(mentions)) {
+      if (mentions.some(m => m.link === feedId || m.feed === feedId)) return true;
+    } else if (typeof mentions === 'object') {
+      for (const arr of Object.values(mentions)) {
+        if (Array.isArray(arr) && arr.some(m => m.link === feedId || m.feed === feedId)) return true;
+        if (arr && (arr.link === feedId || arr.feed === feedId)) return true;
+      }
+    }
+  }
+  const text = content.text || '';
+  if (text.includes(feedId) || text.includes(feedId.slice(1))) return true;
+  return false;
 };
 
 exports.mentionsView = ({ messages, myFeedId }) => {
@@ -1799,10 +1878,9 @@ exports.mentionsView = ({ messages, myFeedId }) => {
       )
     );
   }
-  const filteredMessages = messages.filter(msg => {
-    const mentions = lodash.get(msg, "value.content.mentions", {});
-    return Object.keys(mentions).some(key => mentions[key].link === myFeedId);
-  });
+  const filteredMessages = messages
+    .filter(msg => hasMention(msg, myFeedId))
+    .sort((a, b) => (b.value.timestamp || 0) - (a.value.timestamp || 0));
   if (filteredMessages.length === 0) {
     return template(
       title,
@@ -1864,11 +1942,24 @@ exports.privateView = async (messagesInput, filter) => {
 
   const chip = (txt) => span({ class: 'chip' }, txt)
 
-  function headerLine({ sentAt, from, toLinks, textLen }) {
-    return div({ class: 'pm-header' },
-      span({ class: 'date-link' }, `${moment(sentAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
-      span({ class: 'pm-from' }, ' ', i18n.pmFromLabel, ' ', linkAuthor(from)),
-      span({ class: 'pm-to' }, ' ', '→', ' ', i18n.pmToLabel, ' ', toLinks)
+  function headerLine({ sentAt, from, toLinks, subject }) {
+    return table({ class: 'pm-info-table' },
+      tr(
+        td({ class: 'card-label' }, i18n.pmFromLabel || 'From:'),
+        td({ class: 'card-value' }, linkAuthor(from))
+      ),
+      tr(
+        td({ class: 'card-label' }, i18n.privateDate || 'Date'),
+        td({ class: 'card-value' }, moment(sentAt).format('YYYY/MM/DD HH:mm:ss'))
+      ),
+      tr(
+        td({ class: 'card-label' }, i18n.pmToLabel || 'To:'),
+        td({ class: 'card-value' }, ...toLinks.reduce((acc, lnk, i) => i > 0 ? [...acc, br(), lnk] : [lnk], []))
+      ),
+      tr(
+        td({ class: 'card-label' }, i18n.pmSubjectLabel || 'Subject:'),
+        td({ class: 'card-value' }, subject || i18n.pmNoSubject || '(no subject)')
+      )
     )
   }
 
@@ -1929,7 +2020,25 @@ exports.privateView = async (messagesInput, filter) => {
   }
 
   function clickableLinks(str) {
-    return str
+    const lines = str.split('\n')
+    const parts = []
+    let quoteBuffer = []
+    const flushQuote = () => {
+      if (quoteBuffer.length) {
+        parts.push(`<div class="pm-quote">${quoteBuffer.join('<br>')}</div>`)
+        quoteBuffer = []
+      }
+    }
+    for (const line of lines) {
+      if (/^>\s?/.test(line)) {
+        quoteBuffer.push(line.replace(/^>\s?/, ''))
+      } else {
+        flushQuote()
+        parts.push(line)
+      }
+    }
+    flushQuote()
+    return parts.join('<br>')
       .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g, (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${match}</a>`)
       .replace(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="job-link" href="${hrefFor.job(id)}">${match}</a>`)
       .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`)
@@ -1976,7 +2085,7 @@ exports.privateView = async (messagesInput, filter) => {
     const href = jobId ? hrefFor.job(jobId) : null
     return div(
       clickableCardProps(href, `job-notification thread-level-0`),
-      headerLine({ sentAt, from, toLinks, textLen: text.length }),
+      headerLine({ sentAt, from, toLinks, subject: type }),
       h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotJobs} · ${titleH}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -2000,7 +2109,7 @@ exports.privateView = async (messagesInput, filter) => {
     const href = projectId ? hrefFor.project(projectId) : null
     return div(
       clickableCardProps(href, `project-${isFollow ? 'follow' : 'unfollow'}-notification thread-level-0`),
-      headerLine({ sentAt, from, toLinks, textLen: text.length }),
+      headerLine({ sentAt, from, toLinks, subject: type }),
       h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotProjects} · ${titleH}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -2022,7 +2131,7 @@ exports.privateView = async (messagesInput, filter) => {
     const href = marketId ? hrefFor.market(marketId) : null
     return div(
       clickableCardProps(href, 'market-sold-notification thread-level-0'),
-      headerLine({ sentAt, from, toLinks, textLen: text.length }),
+      headerLine({ sentAt, from, toLinks, subject }),
       h2({ class: 'pm-title' }, `💰 ${i18n.pmBotMarket} · ${i18n.inboxMarketItemSoldTitle}`),
       p(
         i18n.pmYourItem, ' ',
@@ -2043,7 +2152,7 @@ exports.privateView = async (messagesInput, filter) => {
     const href = projectId ? hrefFor.project(projectId) : null
     return div(
       clickableCardProps(href, 'project-pledge-notification thread-level-0'),
-      headerLine({ sentAt, from, toLinks, textLen: text.length }),
+      headerLine({ sentAt, from, toLinks, subject: 'PROJECT_PLEDGE' }),
       h2({ class: 'pm-title' }, `💚 ${i18n.pmBotProjects} · ${i18n.inboxProjectPledgedTitle}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -2089,40 +2198,77 @@ exports.privateView = async (messagesInput, filter) => {
         ])
       ),
       div({ class: 'message-list' },
-        sorted.length
-          ? sorted.map(msg => {
-              const content = msg.value.content
-              const author = msg.value.author
-              const subjectRaw = content.subject || ''
-              const subjectU = subjectRaw.toUpperCase()
-              const text = content.text || ''
-              const sentAt = new Date(content.sentAt || msg.timestamp)
-              const fromResolved = content.from || author
-              const toLinks = Array.isArray(content.to) ? content.to.map(addr => linkAuthor(addr)) : []
-              const level = threadLevel(subjectRaw)
+        (() => {
+          function renderMsg(msg) {
+            const content = msg.value.content
+            const author = msg.value.author
+            const subjectRaw = content.subject || ''
+            const subjectU = subjectRaw.toUpperCase()
+            const text = content.text || ''
+            const sentAt = new Date(content.sentAt || msg.timestamp)
+            const fromResolved = content.from || author
+            const toLinks = Array.isArray(content.to) ? content.to.map(addr => linkAuthor(addr)) : []
+            const level = threadLevel(subjectRaw)
 
-              if (subjectU === 'JOB_SUBSCRIBED' || subjectU === 'JOB_UNSUBSCRIBED') {
-                return JobCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key })
-              }
-              if (subjectU === 'PROJECT_FOLLOWED' || subjectU === 'PROJECT_UNFOLLOWED') {
-                return ProjectFollowCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key })
-              }
-              if (subjectU === 'MARKET_SOLD') {
-                return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key })
-              }
-              if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
-                return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key })
-              }
+            if (subjectU === 'JOB_SUBSCRIBED' || subjectU === 'JOB_UNSUBSCRIBED') {
+              return JobCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key })
+            }
+            if (subjectU === 'PROJECT_FOLLOWED' || subjectU === 'PROJECT_UNFOLLOWED') {
+              return ProjectFollowCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key })
+            }
+            if (subjectU === 'MARKET_SOLD') {
+              return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key })
+            }
+            if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
+              return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key })
+            }
 
-              return div(
-                { class: `pm-card normal-pm thread-level-${level}` },
-                headerLine({ sentAt, from: fromResolved, toLinks, textLen: text.length }),
-                h2(subjectRaw || i18n.pmNoSubject),
-                p({ class: 'message-text' }, ...renderUrl(clickableLinks(text))),
-                actions({ key: msg.key, replyId: fromResolved, subjectRaw, text })
+            return div(
+              { class: 'pm-card normal-pm' },
+              headerLine({ sentAt, from: fromResolved, toLinks, subject: subjectRaw }),
+              div({ class: 'message-text', innerHTML: clickableLinks(text) }),
+              actions({ key: msg.key, replyId: fromResolved, subjectRaw, text })
+            )
+          }
+
+          const threadGroups = {}
+          const threadOrder = []
+          for (const msg of sorted) {
+            const tid = threadId(msg)
+            if (!threadGroups[tid]) {
+              threadGroups[tid] = []
+              threadOrder.push(tid)
+            }
+            threadGroups[tid].push(msg)
+          }
+
+          if (!threadOrder.length) return p({ class: 'empty' }, i18n.noPrivateMessages)
+
+          return threadOrder.map(tid => {
+            const msgs = threadGroups[tid]
+            const original = msgs[0]
+            const replies = msgs.slice(1)
+
+            if (!replies.length) {
+              return renderMsg(original)
+            }
+
+            const replyLabel = `${replies.length} ${replies.length === 1 ? (i18n.pmReply || 'reply') : (i18n.pmReplies || 'replies')}`
+
+            return div({ class: 'pm-thread' },
+              renderMsg(original),
+              details({ class: 'pm-thread-details' },
+                summary({ class: 'pm-thread-toggle' },
+                  span({ class: 'pm-thread-icon' }, '▶'),
+                  span(replyLabel)
+                ),
+                div({ class: 'pm-thread-replies' },
+                  ...replies.map(renderMsg)
+                )
               )
-            })
-          : p({ class: 'empty' }, i18n.noPrivateMessages)
+            )
+          })
+        })()
       )
     )
   )
@@ -2154,8 +2300,8 @@ exports.publishCustomView = async () => {
           '  "hello": "world"\n',
           "}"
         ),
-        br,
-        br,
+        br(),
+        br(),
         button({ type: "submit" }, i18n.submit)
       )
     ),
@@ -2233,7 +2379,7 @@ exports.publishView = (preview, text, contentWarning) => {
               text || ""
             ),
             br(),
-            label({ for: "blob" }, i18n.blogImage || "Upload Image (jpeg, jpg, png, gif) (max-size: 500px x 400px)"),
+            label({ for: "blob" }, i18n.blogImage || "Upload media (max-size: 50MB)"),
             br(),
             input({ type: "file", id: "blob", name: "blob" }),
             br(), br(),
@@ -2313,12 +2459,29 @@ const markdownMentionsToHtml = (markdownText) => {
   const escaped = escapeHtml(String(markdownText || ""))
   const withBr = escaped.replace(/\r\n|\r|\n/g, "<br>")
 
+  const unescapeBlob = (b) => b.replace(/&amp;/g, '&')
+
   const withImages = withBr.replace(
-    /!\[([^\]]*)\]\(\s*(&[^)\s]+\.sha256)\s*\)/g,
-    (_m, alt, blob) => `<img src="/blob/${encodeURIComponent(blob)}" alt="${escapeHtml(alt)}">`
+    /!\[([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
+    (_m, alt, blob) => `<img src="/blob/${encodeURIComponent(unescapeBlob(blob))}" alt="${alt}" class="post-image">`
   )
 
-  const withMentions = withImages.replace(
+  const withVideos = withImages.replace(
+    /\[video:([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
+    (_m, _name, blob) => `<video controls class="post-video" src="/blob/${encodeURIComponent(unescapeBlob(blob))}"></video>`
+  )
+
+  const withAudios = withVideos.replace(
+    /\[audio:([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
+    (_m, _name, blob) => `<audio controls class="post-audio" src="/blob/${encodeURIComponent(unescapeBlob(blob))}"></audio>`
+  )
+
+  const withPdfs = withAudios.replace(
+    /\[pdf:([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
+    (_m, name, blob) => `<a class="post-pdf" href="/blob/${encodeURIComponent(unescapeBlob(blob))}" target="_blank">${name || i18n.pdfFallbackLabel || 'PDF'}</a>`
+  )
+
+  const withMentions = withPdfs.replace(
     /\[@([^\]]+)\]\(\s*@?([^) \t\r\n]+\.ed25519)\s*\)/g,
     (_m, label, feed) => {
       const href = authorHref(feed)
@@ -2361,8 +2524,18 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
       const nameText = nameRaw.startsWith("@") ? nameRaw : `@${nameRaw}`
 
       const rel = first.rel || {}
-      const relText = rel.followsMe ? i18n.relationshipMutuals : i18n.relationshipNotMutuals
-      const emoji = rel.followsMe ? "☍" : "⚼"
+
+      const relationshipBadge = rel.me
+        ? span({ class: "status you" }, i18n.relationshipYou)
+        : rel.blocking
+          ? span({ class: "status blocked" }, i18n.relationshipBlocking)
+          : rel.following && rel.followsMe
+            ? span({ class: "status mutual" }, i18n.relationshipMutuals)
+            : rel.following
+              ? span({ class: "status supporting" }, i18n.relationshipFollowing)
+              : rel.followsMe
+                ? span({ class: "status supported-by" }, i18n.relationshipTheyFollow)
+                : span({ class: "status" }, i18n.relationshipNone)
 
       const avatar = first.img || first.image || ""
       const avatarUrl =
@@ -2373,7 +2546,7 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
       return div(
         { class: "mention-card" },
         a({ href: authorHref(feed) }, img({ src: avatarUrl, class: "avatar-profile" })),
-        br,
+        br(),
         div(
           { class: "mention-name" },
           span({ class: "label" }, `${i18n.mentionsName}: `),
@@ -2381,11 +2554,10 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
         ),
         div(
           { class: "mention-relationship" },
-          span({ class: "label" }, `${i18n.mentionsRelationship}:`),
-          span({ class: "relationship" }, relText),
+          span({ class: "label" }, `${i18n.mentionsRelationship}: `),
+          relationshipBadge,
           div(
             { class: "mention-relationship-details" },
-            span({ class: "emoji" }, emoji),
             span(
               { class: "mentions-listing" },
               a({ class: "user-link", href: authorHref(feed) }, `@${stripAt(feed)}`)
@@ -2623,7 +2795,7 @@ exports.subtopicView = async (
     form(
       { action: subtopicForm, method: "post", enctype: "multipart/form-data" },
       i18n.blogSubject,
-      br, 
+      br(),
       label(
         i18n.contentWarningLabel,
         input({
@@ -2634,9 +2806,9 @@ exports.subtopicView = async (
           placeholder: i18n.contentWarningPlaceholder,
         })
       ),
-      br,
+      br(),
       label({ for: "text" }, i18n.blogMessage),
-      br,
+      br(),
       textarea(
         {
           autofocus: true,
@@ -2648,14 +2820,14 @@ exports.subtopicView = async (
         },
         text ? text : markdownMention
       ),
-      br,
+      br(),
       label(
         { for: "blob" },
-        i18n.blogImage || "Upload Image (jpeg, jpg, png, gif) (max-size: 500px x 400px)"
+        i18n.blogImage || "Upload media (max-size: 50MB)"
       ),
       input({ type: "file", id: "blob", name: "blob" }),
-      br,
-      br,
+      br(),
+      br(),
       button({ type: "submit" }, i18n.blogPublish)
     ),
     preview ? div({ class: "comment-preview" }, preview) : ""

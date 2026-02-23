@@ -206,7 +206,7 @@ exports.cvView = async (cv) => {
           ]) : null,
           hasOasis ? div({ class: "cv-box oasis" }, ...[
             h2(i18n.cvOasisContributorView),
-            p(...renderUrl(`${cv.oasisExperiences}`)),
+            cv.oasisExperiences ? p(...renderUrl(`${cv.oasisExperiences}`)) : null,
             (cv.oasisSkills && cv.oasisSkills.length)
               ? div(
                   cv.oasisSkills.map(tag =>

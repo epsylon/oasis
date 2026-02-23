@@ -4,6 +4,7 @@ const { config } = require('../server/SSB_server.js');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { renderUrl } = require('../backend/renderUrl');
 const opinionCategories = require('../backend/opinion_categories');
+const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const seenDocumentTitles = new Set();
 
@@ -15,7 +16,7 @@ const renderContentHtml = (content, key) => {
           form({ method: "GET", action: `/bookmarks/${encodeURIComponent(key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
           ),
-          br,
+          br(),
           h2(content.url ? div({ class: 'card-field' },
             span({ class: 'card-label' }, p(a({ href: content.url, target: '_blank', class: "bookmark-url" }, content.url)))
           ) : ""),
@@ -37,7 +38,7 @@ const renderContentHtml = (content, key) => {
           form({ method: "GET", action: `/images/${encodeURIComponent(key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
           ),
-          br,
+          br(),
           content.title ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.imageTitleLabel + ':'),
             span({ class: 'card-value' }, content.title)
@@ -52,7 +53,7 @@ const renderContentHtml = (content, key) => {
             span({ class: 'card-label' }, i18n.trendingCategory + ':'),
             span({ class: 'card-value' }, i18n.meme)
           ) : "",
-          br,
+          br(),
           div({ class: 'card-field' },
             img({ src: `/blob/${encodeURIComponent(content.url)}`, class: 'feed-image' })
           )
@@ -64,7 +65,7 @@ const renderContentHtml = (content, key) => {
           form({ method: "GET", action: `/videos/${encodeURIComponent(key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
           ),
-          br,
+          br(),
           content.title ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.videoTitleLabel + ':'),
             span({ class: 'card-value' }, content.title)
@@ -92,7 +93,7 @@ const renderContentHtml = (content, key) => {
           form({ method: "GET", action: `/audios/${encodeURIComponent(key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
           ),
-          br,
+          br(),
           content.title ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.audioTitleLabel + ':'),
             span({ class: 'card-value' }, content.title)
@@ -122,7 +123,7 @@ const renderContentHtml = (content, key) => {
           form({ method: "GET", action: `/documents/${encodeURIComponent(key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
           ),
-          br,
+          br(),
           t ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.documentTitleLabel + ':'),
             span({ class: 'card-value' }, t)
@@ -142,7 +143,7 @@ const renderContentHtml = (content, key) => {
     case 'feed':
       return div({ class: 'opinion-feed' },
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text', innerHTML: renderTextWithStyles(content.text) }),
+          div({ class: 'feed-text', innerHTML: sanitizeHtml(renderTextWithStyles(content.text)) }),
           h2({ class: 'card-field' },
             span({ class: 'card-label' }, `${i18n.tribeFeedRefeeds}: `),
             span({ class: 'card-value' }, content.refeeds)
@@ -183,7 +184,7 @@ const renderContentHtml = (content, key) => {
           form({ method: "GET", action: `/transfers/${encodeURIComponent(key)}` },
             button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
           ),
-          br,
+          br(),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.concept + ':'),
             span({ class: 'card-value' }, content.concept)
@@ -219,7 +220,7 @@ const renderContentHtml = (content, key) => {
         div({ class: 'card-section styled-text-content' },
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.textContentLabel + ':'),
-            span({ class: 'card-value', innerHTML: content.text || content.description || content.title || '[no content]' })
+            span({ class: 'card-value', innerHTML: sanitizeHtml(content.text || content.description || content.title || '[no content]') })
           )
         )
       );
@@ -233,7 +234,14 @@ exports.opinionsView = (items, filter) => {
       const c = item.value?.content || item.content;
       return c && typeof c === 'object' && c.type !== 'tombstone';
     })
-    .sort((a, b) => (filter !== 'TOP' ? b.value.timestamp - a.value.timestamp : 0));
+    .sort((a, b) => {
+      if (filter === 'TOP') {
+        const aVotes = (a.value.content.opinions_inhabitants || []).length;
+        const bVotes = (b.value.content.opinions_inhabitants || []).length;
+        return bVotes !== aVotes ? bVotes - aVotes : b.value.timestamp - a.value.timestamp;
+      }
+      return b.value.timestamp - a.value.timestamp;
+    });
 
   const title = i18n.opinionsTitle;
   const baseFilters = ['RECENT', 'ALL', 'MINE', 'TOP'];
@@ -256,7 +264,23 @@ exports.opinionsView = (items, filter) => {
           span({ class: 'date-link' }, `${created} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(item.value.author)}`, class: 'user-link' }, item.value.author)
         ),
-        h2(`${i18n.totalOpinions || i18n.opinionsTotalCount}: ${total}`),
+        (() => {
+          const entries = voteEntries.filter(([, v]) => v > 0);
+          const dominantPart = (() => {
+            if (!entries.length) return null;
+            const maxVal = Math.max(...entries.map(([, v]) => v));
+            const dominant = entries.filter(([, v]) => v === maxVal).map(([k]) => i18n['vote' + k.charAt(0).toUpperCase() + k.slice(1)] || k);
+            return [
+              span({ style: 'margin:0 8px;opacity:0.5;' }, '|'),
+              span({ style: 'font-weight:700;' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
+            ];
+          })();
+          return h2(
+            `${i18n.totalOpinions || i18n.opinionsTotalCount}: `,
+            span({ style: 'font-weight:700;' }, String(total)),
+            ...(dominantPart || [])
+          );
+        })(),
         div({ class: 'voting-buttons' },
           allCats.map(cat => {
             const label = `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${c.opinions?.[cat] || 0}]`;

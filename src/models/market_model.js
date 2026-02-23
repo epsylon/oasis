@@ -103,8 +103,7 @@ module.exports = ({ cooler }) => {
 
       let blobId = null
       if (image) {
-        const match = String(image).match(/\(([^)]+)\)/)
-        blobId = match ? match[1] : image
+        blobId = String(image).trim() || null
       }
 
       const tags = Array.isArray(tagsRaw) ? tagsRaw.filter(Boolean) : String(tagsRaw).split(",").map((t) => t.trim()).filter(Boolean)

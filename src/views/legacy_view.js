@@ -40,12 +40,12 @@ const legacyView = async () => {
           p({ class: "file-info" }, i18n.fileInfo),
           button({ type: "submit" }, i18n.legacyExportButton)
         ),
-        br,
+        br(),
         p(i18n.importDescription),
         form(
           { action: "/legacy/import", method: "POST", enctype: "multipart/form-data" },
           input({ type: "file", name: "uploadedFile", required: true }),
-          br,
+          br(),
           p(i18n.passwordImport),
           input({
             type: "password",
@@ -54,7 +54,7 @@ const legacyView = async () => {
             placeholder: i18n.importPasswordPlaceholder,
             minlength: 32
           }),
-          br,
+          br(),
           button({ type: "submit" }, i18n.legacyImportButton)
         )
       )

@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, a, input, span, pre, table, tr, td } = require("../server/node_modules/hyperaxe");
+const { div, h2, h3, p, section, button, form, a, input, span, pre, table, tr, td, strong } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
@@ -121,7 +121,85 @@ const getViewDetailsAction = (type, block) => {
   }
 };
 
-const renderSingleBlockView = (block, filter = 'recent', userId, search = {}) => {
+const TYPE_COLORS = {
+  post:'#3498db', vote:'#9b59b6', votes:'#9b59b6', about:'#1abc9c', contact:'#16a085',
+  pub:'#2ecc71', tribe:'#e67e22', event:'#e74c3c', task:'#f39c12', report:'#c0392b',
+  image:'#2980b9', audio:'#8e44ad', video:'#d35400', document:'#27ae60', bookmark:'#f1c40f',
+  forum:'#1abc9c', feed:'#95a5a6', transfer:'#e74c3c', market:'#e67e22', job:'#3498db',
+  project:'#2ecc71', banking:'#f39c12', bankWallet:'#f39c12', bankClaim:'#f39c12',
+  pixelia:'#9b59b6', curriculum:'#1abc9c', aiExchange:'#3498db', tombstone:'#7f8c8d',
+  parliamentTerm:'#8e44ad', parliamentProposal:'#8e44ad', parliamentLaw:'#8e44ad',
+  parliamentCandidature:'#8e44ad', parliamentRevocation:'#8e44ad',
+  courtsCase:'#c0392b', courtsEvidence:'#c0392b', courtsAnswer:'#c0392b',
+  courtsVerdict:'#c0392b', courtsSettlement:'#c0392b', courtsNomination:'#c0392b'
+};
+
+const renderBlockDiagram = (blocks, qs) => {
+  const last2 = blocks.slice(0, 2);
+  if (!last2.length) return null;
+
+  return div({ class: 'block-diagram-section' },
+    h3({ class: 'block-diagram-title' }, i18n.blockchainLatestDatagram || 'Latest Datagram'),
+    ...last2.map(block => {
+      const ts = moment(block.ts).format('YYYY-MM-DD HH:mm:ss');
+      const typeLabel = (FILTER_LABELS[block.type] || block.type).toUpperCase();
+      const color = TYPE_COLORS[block.type] || '#95a5a6';
+      const shortId = block.id.length > 20 ? block.id.slice(0, 10) + '…' + block.id.slice(-8) : block.id;
+      const shortAuthor = block.author.length > 20 ? block.author.slice(0, 10) + '…' + block.author.slice(-8) : block.author;
+      const contentKeys = Object.keys(block.content || {}).filter(k => k !== 'type').join(', ');
+      const flags = [
+        block.isTombstoned ? 'TOMBSTONED' : null,
+        block.isReplaced ? 'REPLACED' : null,
+        block.content?.replaces ? 'EDIT' : null
+      ].filter(Boolean).join(' | ') || '—';
+
+      const datagramQs = qs ? `${qs}&view=datagram` : '?view=datagram';
+      return a({ href: `/blockexplorer/block/${encodeURIComponent(block.id)}${datagramQs}`, class: 'block-diagram-link' },
+        div({ class: 'block-diagram', style: `border-color:${color};` },
+          div({ class: 'block-diagram-ruler', style: `border-bottom-color:${color};` },
+            span('0'), span('4'), span('8'), span('16'), span('24'), span('31')
+          ),
+          div({ class: 'block-diagram-grid' },
+            div({ class: 'block-diagram-cell bd-seq' },
+              span({ class: 'bd-label' }, 'SEQ:'),
+              span({ class: 'bd-value' }, String(block.content?.sequence || '—'))
+            ),
+            div({ class: 'block-diagram-cell bd-type' },
+              span({ class: 'bd-label' }, 'TYPE:'),
+              span({ class: 'bd-value' }, typeLabel)
+            ),
+            div({ class: 'block-diagram-cell bd-ts' },
+              span({ class: 'bd-label' }, 'TIMESTAMP:'),
+              span({ class: 'bd-value' }, ts)
+            ),
+            div({ class: 'block-diagram-cell bd-id' },
+              span({ class: 'bd-label' }, 'BLOCK ID:'),
+              span({ class: 'bd-value' }, shortId)
+            ),
+            div({ class: 'block-diagram-cell bd-author' },
+              span({ class: 'bd-label' }, 'AUTHOR:'),
+              span({ class: 'bd-value' }, shortAuthor)
+            ),
+            div({ class: 'block-diagram-cell bd-flags' },
+              span({ class: 'bd-label' }, 'FLAGS:'),
+              span({ class: 'bd-value' }, flags)
+            ),
+            div({ class: 'block-diagram-cell bd-ctype' },
+              span({ class: 'bd-label' }, 'CONTENT.TYPE:'),
+              span({ class: 'bd-value' }, block.content?.type || '—')
+            ),
+            div({ class: 'block-diagram-cell bd-data' },
+              span({ class: 'bd-label' }, 'CONTENT:'),
+              span({ class: 'bd-value' }, contentKeys || '—')
+            )
+          )
+        )
+      );
+    })
+  );
+};
+
+const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, viewMode = 'block') => {
   if (!block) {
     return template(
       i18n.blockchain,
@@ -135,6 +213,34 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}) =>
     );
   }
 
+  const qs = toQueryString(filter, search);
+  const isDatagram = viewMode === 'datagram';
+
+  const blockContent = isDatagram
+    ? renderBlockDiagram([block], qs)
+    : div(
+        div({ class: 'block-single' },
+          div({ class: 'block-row block-row--meta' },
+            span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockID}:`),
+            span({ class: 'blockchain-card-value' }, block.id)
+          ),
+          div({ class: 'block-row block-row--meta' },
+            span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockTimestamp}:`),
+            span({ class: 'blockchain-card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ')),
+            span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
+            span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
+          ),
+          div({ class: 'block-row block-row--meta block-row--meta-spaced' },
+            a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author)
+          )
+        ),
+        div({ class:'block-row block-row--content' },
+          div({ class:'block-content-preview' },
+            pre({ class:'json-content' }, JSON.stringify(block.content,null,2))
+          )
+        )
+      );
+
   return template(
     i18n.blockchain,
     section(
@@ -143,38 +249,19 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}) =>
         p(i18n.blockchainDescription)
       ),
       div({ class: 'mode-buttons-row' },
-        div({ style: 'display:flex;flex-direction:column;gap:8px;' },
+        div({ class: 'filter-column' },
           generateFilterButtons(BASE_FILTERS, filter, '/blockexplorer', search)
         ),
-        div({ style: 'display:flex;flex-direction:column;gap:8px;' },
+        div({ class: 'filter-column' },
           generateFilterButtons(CAT_BLOCK1, filter, '/blockexplorer', search),
           generateFilterButtons(CAT_BLOCK2, filter, '/blockexplorer', search)
         ),
-        div({ style: 'display:flex;flex-direction:column;gap:8px;' },
+        div({ class: 'filter-column' },
           generateFilterButtons(CAT_BLOCK3, filter, '/blockexplorer', search),
           generateFilterButtons(CAT_BLOCK4, filter, '/blockexplorer', search)
         )
       ),
-      div({ class: 'block-single' },
-        div({ class: 'block-row block-row--meta' },
-          span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockID}:`),
-          span({ class: 'blockchain-card-value' }, block.id)
-        ),
-        div({ class: 'block-row block-row--meta' },
-          span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockTimestamp}:`),
-          span({ class: 'blockchain-card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ')),
-          span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
-          span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
-        ),
-        div({ class: 'block-row block-row--meta', style:'margin-top:8px;' },
-          a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author)
-        )
-      ),
-      div({ class:'block-row block-row--content' },
-        div({ class:'block-content-preview' },
-          pre({ class:'json-content' }, JSON.stringify(block.content,null,2))
-        )
-      ),
+      blockContent,
       div({ class:'block-row block-row--back' },
         form({ method:'GET', action:'/blockexplorer' },
           input({ type: 'hidden', name: 'filter', value: filter }),
@@ -186,7 +273,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}) =>
             button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
           )
         : (block.isTombstoned || block.isReplaced) ?
-          div({ class: 'deleted-label', style: 'color:#b00;font-weight:bold;margin-top:8px;' },
+          div({ class: 'deleted-label' },
             i18n.blockchainContentDeleted || "This content has been deleted."
           )
         : null
@@ -213,14 +300,14 @@ const renderBlockchainView = (blocks, filter, userId, search = {}) => {
         p(i18n.blockchainDescription)
       ),
       div({ class:'mode-buttons-row' },
-        div({ style:'display:flex;flex-direction:column;gap:8px;' },
+        div({ class: 'filter-column' },
           generateFilterButtons(BASE_FILTERS, filter, '/blockexplorer', s)
         ),
-        div({ style:'display:flex;flex-direction:column;gap:8px;' },
+        div({ class: 'filter-column' },
           generateFilterButtons(CAT_BLOCK1, filter, '/blockexplorer', s),
           generateFilterButtons(CAT_BLOCK2, filter, '/blockexplorer', s)
         ),
-        div({ style:'display:flex;flex-direction:column;gap:8px;' },
+        div({ class: 'filter-column' },
           generateFilterButtons(CAT_BLOCK3, filter, '/blockexplorer', s),
           generateFilterButtons(CAT_BLOCK4, filter, '/blockexplorer', s)
         )
@@ -243,6 +330,8 @@ const renderBlockchainView = (blocks, filter, userId, search = {}) => {
 	    )
 	  )
 	),
+      renderBlockDiagram(shown, qs),
+      h2({ class: 'block-diagram-title' }, 'Blockchain Blocks'),
       shown.length === 0
         ? div(p(i18n.blockchainNoBlocks))
         : shown
@@ -258,13 +347,14 @@ const renderBlockchainView = (blocks, filter, userId, search = {}) => {
             .map(block=>
               div({ class:'block' },
                 div({ class:'block-buttons' },
-                  a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}`, class:'btn-singleview', title:i18n.blockchainDetails },'⦿'),
+                  a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}`, class:'btn-singleview', title:i18n.blockchainDetails }, '⦿'),
+                  a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}&view=datagram`, class:'btn-singleview btn-datagram', title:i18n.blockchainDatagram || 'Datagram' }, '⊞'),
                   !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
                     form({ method:'GET', action:getViewDetailsAction(block.type, block) },
                       button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
                     )
                   : (block.isTombstoned || block.isReplaced) ?
-                    div({ class: 'deleted-label', style: 'color:#b00;font-weight:bold;margin-top:8px;' },
+                    div({ class: 'deleted-label' },
                       i18n.blockchainContentDeleted || "This content has been deleted."
                     )
                   : null

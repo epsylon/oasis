@@ -21,6 +21,8 @@ You should also know:
 
 - Information that others can read can be saved, without your permission.
 - Encryption techniques that are unbreakable today may become compromised in the future; maybe in dozens or hundreds of years.
+- Don't trust your smartphone. 
+- Oasis is designed to run in a safe environment (SNH kit).
 
 ## Supported Versions
 

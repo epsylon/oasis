@@ -23,9 +23,9 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
       placeholder: i18n.cipherTextPlaceholder,
       rows: 4
     }),
-    br,
+    br(),
     label(i18n.cipherPasswordLabel),
-    br,
+    br(),
     input({
       type: "password",
       name: "password",
@@ -34,7 +34,7 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
       placeholder: i18n.cipherPasswordPlaceholder,
       minlength: 32
     }),
-    br,
+    br(),
     button({ type: "submit" }, i18n.cipherEncryptButton)
   );
 
@@ -48,9 +48,9 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
       rows: 4,
       value: encryptedText
     }),
-    br,
+    br(),
     label(i18n.cipherPasswordLabel),
-    br,
+    br(),
     input({
       type: "password",
       name: "password",
@@ -59,17 +59,17 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
       placeholder: i18n.cipherPasswordPlaceholder,
       minlength: 32
     }),
-    br,
+    br(),
     button({ type: "submit" }, i18n.cipherDecryptButton)
   );
 
   const encryptResult = encryptedText 
     ? div({ class: "cipher-result visible encrypted-result" }, 
         label(i18n.cipherEncryptedMessageLabel),
-        br,br,
+        br(),br(),
         div({ class: "cipher-text" }, encryptedText),
         label(i18n.cipherPasswordUsedLabel),
-        br,br,
+        br(),br(),
         div({ class: "cipher-text" }, password) 
       )
     : null;
@@ -77,7 +77,7 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
   const decryptResult = decryptedText 
     ? div({ class: "cipher-result visible decrypted-result" }, 
         label(i18n.cipherDecryptedMessageLabel),
-        br,br,
+        br(),br(),
         div({ class: "cipher-text" }, decryptedText) 
       )
     : null;
@@ -91,11 +91,11 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
       ),
       div({ class: "div-center" },
         encryptForm,
-        br,
-        encryptResult, 
+        br(),
+        encryptResult,
         decryptForm,
-        br,
-        decryptResult 
+        br(),
+        decryptResult
       )
     )
   );

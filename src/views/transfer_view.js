@@ -61,9 +61,10 @@ const renderConfirmationsBar = (confirmedCount, required) => {
   const cc = Math.max(0, Number(confirmedCount || 0))
   return div(
     { class: "confirmations-block" },
-      { class: "card-field" },
+    div({ class: "card-field" },
       span({ class: "card-label" }, `${i18n.transfersConfirmations}: `),
-      span({ class: "card-value" }, `${cc}/${req}`),
+      span({ class: "card-value" }, `${cc}/${req}`)
+    ),
     progress({ class: "confirmations-progress", value: cc, max: req })
   )
 }

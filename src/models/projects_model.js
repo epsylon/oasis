@@ -28,9 +28,7 @@ module.exports = ({ cooler }) => {
   }
 
   function extractBlobId(possibleMarkdownImage) {
-    let blobId = possibleMarkdownImage
-    if (blobId && /\(([^)]+)\)/.test(blobId)) blobId = blobId.match(/\(([^)]+)\)/)[1]
-    return blobId
+    return possibleMarkdownImage || null
   }
 
   function normalizeMilestonesFrom(data) {

@@ -33,7 +33,8 @@ const settingsView = ({ version, aiPrompt }) => {
     option({ value: "Dark-SNH", selected: theme === "Dark-SNH" ? true : undefined }, "Dark-SNH"),
     option({ value: "Clear-SNH", selected: theme === "Clear-SNH" ? true : undefined }, "Clear-SNH"),
     option({ value: "Purple-SNH", selected: theme === "Purple-SNH" ? true : undefined }, "Purple-SNH"),
-    option({ value: "Matrix-SNH", selected: theme === "Matrix-SNH" ? true : undefined }, "Matrix-SNH")
+    option({ value: "Matrix-SNH", selected: theme === "Matrix-SNH" ? true : undefined }, "Matrix-SNH"),
+    option({ value: "OasisMobile", selected: theme === "OasisMobile" ? true : undefined }, "Oasis-Mobile")
   ];
 
   const languageOption = (longName, shortName) => {
@@ -88,7 +89,10 @@ const settingsView = ({ version, aiPrompt }) => {
             languageOption("English", "en"),
             languageOption("Español", "es"),
             languageOption("Français", "fr"),
-            languageOption("Euskara", "eu")
+            languageOption("Euskara", "eu"),
+            languageOption("Deutsch", "de"),
+            languageOption("Italiano", "it"),
+            languageOption("Português", "pt")
           ]),
           br(),
           br(),

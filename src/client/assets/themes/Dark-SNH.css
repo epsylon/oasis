@@ -288,3 +288,72 @@ a.user-link:focus {
   display: inline-block;
   border: 2px solid transparent;
 }
+
+.update-banner {
+  background-color: #1a1400;
+  border-bottom-color: #3a2e00;
+  color: #FFD700;
+}
+
+.update-banner-link {
+  color: #FFD700;
+}
+
+.oasis-footer-center a {
+  color: #FFA500;
+}
+
+.oasis-footer-center a:hover {
+  color: #FFD700;
+}
+
+.snh-invite-code {
+  color: #FFA500 !important;
+}
+
+/* Blockexplorer */
+.blockchain-view { background-color: #191b20 !important; color: #FFD700 !important; }
+.block { background: #23242a !important; }
+.block:hover { box-shadow: 0 8px 32px rgba(35,40,50,0.18) !important; }
+.blockchain-card-label, .block-info-table .card-label, .pm-info-table .card-label, .block-content-label { color: #ffa300 !important; }
+.blockchain-card-value, .block-info-table .card-value, .pm-info-table .card-value, .block-timestamp, .json-content { color: #FFD700 !important; }
+.block-content-preview, .block-content { background: #222326 !important; color: #FFD700 !important; }
+.block-author { color: #FFD700 !important; background: rgba(255,163,0,0.08) !important; }
+.block-author:hover { color: #FFDD44 !important; }
+.block-url { color: #FFD700 !important; }
+.block-row--details .block-url { background: #1f2023 !important; }
+.block-row--details .block-url:hover { background: #292b36 !important; color: #ffa300 !important; }
+.btn-singleview { background: #1e1f23 !important; color: #ffa300 !important; }
+.btn-singleview:hover { background: #2d2e34 !important; color: #FFD700 !important; }
+.btn-back { background: #21232b !important; color: #ffa300 !important; }
+.btn-back:hover { background: #292b36 !important; color: #FFD700 !important; }
+.block-info-table td, .pm-info-table td { border-color: #444 !important; }
+.block-diagram { border-color: #555 !important; background: #191b20 !important; }
+.block-diagram-ruler { color: #ffa300 !important; background: #111 !important; border-bottom-color: #555 !important; }
+.block-diagram-ruler span { color: #ffa300 !important; }
+.block-diagram-cell { border-color: #555 !important; background: #1e1f23 !important; }
+.bd-label { color: #ffa300 !important; }
+.bd-value { color: #FFD700 !important; }
+
+/* Tribes */
+.tribe-card { background: #23242a !important; border-color: #444 !important; }
+.tribe-card:hover { border-color: #ffa300 !important; }
+.tribe-card-description { color: #cfd3e1 !important; }
+.tribe-info-table td { border-color: #444 !important; }
+.tribe-info-label { color: #ffa300 !important; background: #1e1f23 !important; }
+.tribe-info-value { color: #FFD700 !important; background: #1e1f23 !important; }
+.tribe-info-empty { color: #9aa3b2 !important; }
+.tribe-card-subtribes { border-color: #444 !important; background: #1e1f23 !important; }
+.tribe-card-members { border-color: #444 !important; background: #1e1f23 !important; }
+.tribe-members-count { color: #ffa300 !important; }
+.tribe-card-actions { border-color: #444 !important; background: #1e1f23 !important; }
+.tribe-action-btn { border-color: #ffa300 !important; color: #ffa300 !important; }
+.tribe-action-btn:hover { background: #ffa300 !important; color: #000 !important; }
+.tribe-subtribe-link { background: #191b20 !important; border-color: #444 !important; color: #ffa300 !important; }
+.tribe-thumb-link { border-color: #444 !important; }
+.tribe-thumb-link:hover { border-color: #ffa300 !important; }
+.tribe-subtribe-link:hover { background: #333 !important; }
+.tribe-parent-image { border-color: #ffa300 !important; }
+.tribe-parent-box { background: #1e1f23 !important; }
+.tribe-card-parent { background: #1e1f23 !important; border-color: #444 !important; }
+.tribe-parent-card-link { color: #ffa300 !important; }

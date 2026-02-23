@@ -272,6 +272,7 @@ module.exports = ({ services } = {}) => {
 
   async function getUserAddress(userId) {
     const v = readAddrMap()[userId];
+    if (v === "__removed__") return null;
     const local = typeof v === "string" ? v : (v && v.address) || null;
     if (local) return local;
     const ssbAddr = await getWalletFromSSB(userId);
@@ -299,8 +300,14 @@ module.exports = ({ services } = {}) => {
   async function removeAddress({ userId }) {
     if (!userId) return { status: "invalid" };
     const m = readAddrMap();
-    if (!m[userId]) return { status: "not_found" };
-    delete m[userId];
+    if (m[userId]) {
+      delete m[userId];
+      writeAddrMap(m);
+      return { status: "deleted" };
+    }
+    const ssbAll = await scanAllWalletsSSB();
+    if (!ssbAll[userId]) return { status: "not_found" };
+    m[userId] = "__removed__";
     writeAddrMap(m);
     return { status: "deleted" };
   }
@@ -311,6 +318,7 @@ module.exports = ({ services } = {}) => {
     const keys = new Set([...Object.keys(local), ...Object.keys(ssbAll)]);
     const out = [];
     for (const id of keys) {
+      if (local[id] === "__removed__") continue;
       if (local[id]) out.push({ id, address: typeof local[id] === "string" ? local[id] : local[id].address, source: "local" });
       else if (ssbAll[id]) out.push({ id, address: ssbAll[id], source: "ssb" });
     }

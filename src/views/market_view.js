@@ -1,8 +1,22 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress } = require("../server/node_modules/hyperaxe")
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { template, i18n } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
+
+const renderMediaBlob = (value, fallbackSrc = null) => {
+  if (!value) return fallbackSrc ? img({ src: fallbackSrc }) : null
+  const s = String(value).trim()
+  if (!s) return fallbackSrc ? img({ src: fallbackSrc }) : null
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` })
+  const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mVideo) return video({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
+  const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mAudio) return audio({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
+  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' })
+  return fallbackSrc ? img({ src: fallbackSrc }) : null
+}
 
 const userId = config.keys.id
 
@@ -115,9 +129,10 @@ const renderMarketCommentsSection = (itemId, returnTo, comments = []) => {
       { class: "comment-form-wrapper" },
       h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
       form(
-        { method: "POST", action: `/market/${encodeURIComponent(itemId)}/comments`, class: "comment-form" },
+        { method: "POST", action: `/market/${encodeURIComponent(itemId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
         input({ type: "hidden", name: "returnTo", value: returnTo }),
-        textarea({ id: "comment-text", name: "text", required: true, rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
+        textarea({ id: "comment-text", name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
+        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
         br(),
         button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
       )
@@ -410,7 +425,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               br(),
               label(i18n.marketCreateFormImageLabel),
               br(),
-              input({ type: "file", name: "image", id: "image", accept: "image/*" }),
+              input({ type: "file", name: "image", id: "image" }),
               br(),
               br(),
               label(i18n.marketItemStatus),
@@ -541,7 +556,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       br(),
                       div(
                         { class: "market-card image" },
-                        item.image ? img({ src: `/blob/${encodeURIComponent(item.image)}` }) : img({ src: "/assets/images/default-market.png", alt: item.title })
+                        renderMediaBlob(item.image, "/assets/images/default-market.png")
                       ),
                       p(...renderUrl(item.description)),
                       item.tags && item.tags.filter(Boolean).length
@@ -656,7 +671,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         br(),
         div(
           { class: "market-item image" },
-          item.image ? img({ src: `/blob/${encodeURIComponent(item.image)}` }) : img({ src: "/assets/images/default-market.png", alt: item.title })
+          renderMediaBlob(item.image, "/assets/images/default-market.png")
         ),
         renderCardField(`${i18n.marketItemDescription}:`, ""),
         p(...renderUrl(item.description)),

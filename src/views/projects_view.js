@@ -1,8 +1,22 @@
-const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress } = require("../server/node_modules/hyperaxe")
+const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { template, i18n } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
+
+const renderMediaBlob = (value) => {
+  if (!value) return null
+  const s = String(value).trim()
+  if (!s) return null
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` })
+  const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mVideo) return video({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
+  const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mAudio) return audio({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
+  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' })
+  return null
+}
 
 const userId = config.keys.id
 
@@ -480,7 +494,7 @@ const renderProjectList = (projects, filter) => {
           { class: `project-card ${statusClass}` },
           topbar ? topbar : null,
           h2(pr.title),
-          pr.image ? div({ class: "activity-image-preview" }, img({ src: `/blob/${encodeURIComponent(pr.image)}` })) : null,
+          pr.image ? div({ class: "activity-image-preview" }, renderMediaBlob(pr.image)) : null,
           safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
           renderCardField(i18n.projectStatus + ":", i18n["projectStatus" + statusUpper] || statusUpper),
           renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
@@ -612,9 +626,9 @@ const renderProjectForm = (project, mode) => {
       br(),
       label(i18n.projectImage),
       br(),
-      input({ type: "file", name: "image", accept: "image/*" }),
+      input({ type: "file", name: "image" }),
       br(),
-      pr.image ? img({ src: `/blob/${encodeURIComponent(pr.image)}`, class: "existing-image" }) : null,
+      pr.image ? renderMediaBlob(pr.image) : null,
       br(),
       label(i18n.projectGoal),
       br(),
@@ -716,7 +730,7 @@ exports.singleProjectView = async (project, filter, comments) => {
         topbar ? topbar : null,
         !isAuthor && safeArr(pr.followers).includes(userId) ? p({ class: "hint" }, i18n.projectYouFollowHint) : null,
         h2(pr.title),
-        pr.image ? div({ class: "activity-image-preview" }, img({ src: `/blob/${encodeURIComponent(pr.image)}` })) : null,
+        pr.image ? div({ class: "activity-image-preview" }, renderMediaBlob(pr.image)) : null,
         safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
         renderCardField(i18n.projectStatus + ":", i18n["projectStatus" + statusUpper] || statusUpper),
         renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
@@ -739,7 +753,35 @@ exports.singleProjectView = async (project, filter, comments) => {
           span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
           a({ href: `/author/${encodeURIComponent(pr.author)}`, class: "user-link" }, pr.author)
         )
-      )
+      ),
+      div(
+        { class: "comment-form-wrapper" },
+        h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
+        form(
+          { method: "POST", action: `/projects/${encodeURIComponent(pr.id || pr.key)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
+          textarea({ id: "comment-text", name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
+          div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
+          br(),
+          button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
+        )
+      ),
+      comments && comments.length
+        ? div(
+            { class: "comments-list" },
+            comments.map((c) => {
+              const author = c?.value?.author || ""
+              const ts = c?.value?.timestamp || c?.timestamp
+              const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : ""
+              const relDate = ts ? moment(ts).fromNow() : ""
+              return div(
+                { class: "comment-card" },
+                div({ class: "comment-header" }, a({ href: `/author/${encodeURIComponent(author)}`, class: "user-link" }, author)),
+                div({ class: "comment-date" }, span({ title: absDate }, relDate)),
+                div({ class: "comment-body" }, ...renderUrl(c?.value?.content?.text || ""))
+              )
+            })
+          )
+        : null
     )
   )
 }

@@ -191,7 +191,8 @@ const renderAgendaItem = (item, userId, filter) => {
 };
 
 exports.agendaView = async (data, filter) => {
-  const { items, counts } = data;
+  const { items = [], counts: _c = {} } = data || {};
+  const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, discarded: 0, ..._c };
   return template(
     i18n.agendaTitle,
     section(

@@ -54,8 +54,7 @@ module.exports = ({ cooler }) => {
 
       let blobId = null;
       if (image) {
-        const match = String(image).match(/\(([^)]+)\)/);
-        blobId = match ? match[1] : image;
+        blobId = String(image).trim() || null;
       }
 
       const tags = Array.isArray(tagsRaw)
@@ -97,8 +96,7 @@ module.exports = ({ cooler }) => {
 
       let blobId = report.content.image || null;
       if (updatedContent.image) {
-        const match = String(updatedContent.image).match(/\(([^)]+)\)/);
-        blobId = match ? match[1] : updatedContent.image;
+        blobId = String(updatedContent.image).trim() || null;
       }
 
       const nextStatus = Object.prototype.hasOwnProperty.call(updatedContent, 'status')

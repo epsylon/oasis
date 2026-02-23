@@ -12,6 +12,7 @@ const {
   span,
   textarea,
   select,
+  label,
   option
 } = require("../server/node_modules/hyperaxe");
 
@@ -112,16 +113,16 @@ const renderAudioCommentsSection = (audioId, comments = [], returnTo = null) => 
       { class: "comment-form-wrapper" },
       h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
       form(
-        { method: "POST", action: `/audios/${encodeURIComponent(audioId)}/comments`, class: "comment-form" },
+        { method: "POST", action: `/audios/${encodeURIComponent(audioId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
         returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
         textarea({
           id: "comment-text",
           name: "text",
-          required: true,
           rows: 4,
           class: "comment-textarea",
           placeholder: i18n.voteNewCommentPlaceholder
         }),
+        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
         br(),
         button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
       )

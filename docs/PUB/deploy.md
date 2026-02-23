@@ -30,7 +30,7 @@ Paste this:
     "level": "info"
   },
   "caps": {
-    "shs": "iKOzhqNVTcKEZvUhW3A7TuKZ1d6qIbtsGIJ6+SBOaEQ="
+    "shs": "1BIWr6Hu+MgtNkkClvg2GAi+0HiAikGOOTd/pIUcH54="
   },
   "pub": true,
   "local": false,
@@ -85,7 +85,7 @@ Paste this:
   "autofollow": {
     "enabled": true,
     "suggestions": [
-      "@HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519"
+      "@zGfPCNPFas4gHUfib08/oQ4rsWo/tnEfQ5iTkoTiBaI=.ed25519"
     ]
   }
 }
@@ -161,7 +161,7 @@ To do this, first get the PUB's ID, with:
    ssb-server whoami
    
    {
-     "id": "@HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519"
+     "id": "@zGfPCNPFas4gHUfib08/oQ4rsWo/tnEfQ5iTkoTiBaI=.ed25519"
    }
 
 Then, publish a name with the following command:
@@ -193,7 +193,7 @@ To announce your PUB, publish this message:
    
 For example, to announce `solarnethub.com` PUB: "La Plaza":
 
-   ssb-server publish --type pub --address.key @HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519 --address.host solarnethub.com --address.port 8008
+   ssb-server publish --type pub --address.key @zGfPCNPFas4gHUfib08/oQ4rsWo/tnEfQ5iTkoTiBaI=.ed25519 --address.host solarnethub.com --address.port 8008
     
 ## 9) Following another PUB
 
@@ -205,7 +205,7 @@ To follow another PUB's feed, publish this other message:
 For example, to follow `solarnethub.com` PUB: "La Plaza":
 
    cd ~/oasis-pub 
-   ssb-server publish --type contact --contact "@HzmUrdZb1vRWCwn3giLx3p/EWKuDiO44gXAaeulz3d4=.ed25519" --following
+   ssb-server publish --type contact --contact "@zGfPCNPFas4gHUfib08/oQ4rsWo/tnEfQ5iTkoTiBaI=.ed25519" --following
 
 ## 10) Join the Oasis PUB Network
 

@@ -190,8 +190,8 @@ const renderForumList = (forums, currentFilter) =>
               span({ class: 'forum-participants' },
                 `${i18n.forumParticipants.toUpperCase()}: ${f.participants?.length || 1}`),
               span({ class: 'forum-messages' },
-                `${i18n.forumMessages.toUpperCase()}: ${f.messagesCount - 1}`),
-              form({ method: 'GET', action: `/forum/${encodeURIComponent(f.key)}`, style: 'visit-forum-form' },
+                `${i18n.forumMessages.toUpperCase()}: ${(f.messagesCount || 1) - 1}`),
+              form({ method: 'GET', action: `/forum/${encodeURIComponent(f.key)}`, class: 'visit-forum-form' },
                 button({ type: 'submit', class: 'filter-btn' }, i18n.forumVisitButton)
               )
             ),
@@ -208,7 +208,7 @@ const renderForumList = (forums, currentFilter) =>
               ? div({ class: 'forum-owner-actions' },
                 form({
                   method: 'POST',
-                  action: `/forum/delete/${f.key}`,
+                  action: `/forum/delete/${encodeURIComponent(f.key)}`,
                   class: 'forum-delete-form'
                 },
                   button({ type: 'submit', class: 'delete-btn' },
@@ -248,7 +248,7 @@ exports.forumView = async (forums, currentFilter) => {
       currentFilter === 'create'
         ? renderForumForm()
         : renderForumList(
-          getFilteredForums(currentFilter || 'hot', forums),
+          getFilteredForums(currentFilter || 'all', forums),
           currentFilter
         )
     )

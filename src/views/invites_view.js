@@ -1,4 +1,4 @@
-const { form, button, div, h2, p, section, ul, li, a, br, hr, input, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, ul, li, a, br, hr, input, span, table, tr, td } = require("../server/node_modules/hyperaxe");
 const path = require("path");
 const fs = require('fs');
 const { template, i18n } = require('./main_views');
@@ -11,6 +11,23 @@ const encodePubLink = (key) => {
   let core = String(key).replace(/^@/, '').replace(/\.ed25519$/, '').replace(/-/g, '+').replace(/_/g, '/');
   if (!core.endsWith('=')) core += '=';
   return `/author/${encodeURIComponent('@' + core)}.ed25519`;
+};
+
+const snhInvitePath = path.join(__dirname, '..', 'configs', 'snh-invite-code.json');
+
+let snhInvite = null;
+try {
+  snhInvite = JSON.parse(fs.readFileSync(snhInvitePath, 'utf8'));
+} catch {}
+
+const deduplicateByHost = (list) => {
+  const seen = new Set();
+  return list.filter(p => {
+    const host = (p.host || '').replace(/:\d+$/, '');
+    if (!host || seen.has(host)) return false;
+    seen.add(host);
+    return true;
+  });
 };
 
 const invitesView = ({ invitesEnabled }) => {
@@ -39,63 +56,33 @@ const invitesView = ({ invitesEnabled }) => {
   }
 
   const filteredPubs = pubsValue === "true"
-    ? pubs.filter(pubItem => !unfollowed.find(u => u.key === pubItem.key))
+    ? deduplicateByHost(pubs.filter(pubItem => !unfollowed.find(u => u.key === pubItem.key)))
     : [];
 
   const hasError = (pubItem) => pubItem && (pubItem.error || (typeof pubItem.failure === 'number' && pubItem.failure > 0));
 
   const unreachableLabel = i18n.currentlyUnreachable || i18n.currentlyUnrecheable || 'ERROR!';
 
-  const pubItems = filteredPubs.filter(pubItem => !hasError(pubItem)).map(pubItem =>
-    li(
-      div(
-        { class: 'pub-item' },
-        h2('PUB: ', pubItem.host),
-        h2(`${i18n.inhabitants}: ${pubItem.announcers || 0}`),
-        a({ href: encodePubLink(pubItem.key), class: 'user-link' }, pubItem.key),
-        form(
-          { action: '/settings/invite/unfollow', method: 'post' },
-          input({ type: 'hidden', name: 'key', value: pubItem.key }),
-          button({ type: 'submit' }, i18n.invitesUnfollow)
-        ),
-      )
-    )
+  const pubTableHeader = () => tr(
+    td({ class: 'card-label' }, 'PUB'),
+    td({ class: 'card-label' }, i18n.invitesPort || 'Port'),
+    td({ class: 'card-label' }, i18n.inhabitants),
+    td({ class: 'card-label' }, 'Key'),
+    td({ class: 'card-label' }, '')
   );
 
-  const unfollowedItems = unfollowed.length
-    ? unfollowed.map(pubItem =>
-        li(
-          div(
-            { class: 'pub-item' },
-            h2('PUB: ', pubItem.host),
-            h2(`${i18n.inhabitants}: ${pubItem.announcers || 0}`),
-            a({ href: encodePubLink(pubItem.key), class: 'user-link' }, pubItem.key),
-            form(
-              { action: '/settings/invite/follow', method: 'post' },
-              input({ type: 'hidden', name: 'key', value: pubItem.key }),
-              input({ type: 'hidden', name: 'host', value: pubItem.host || '' }),
-              input({ type: 'hidden', name: 'port', value: String(pubItem.port || 8008) }),
-              button({ type: 'submit', disabled: hasError(pubItem) }, i18n.invitesFollow)
-            ),
-          )
-        )
-      )
-    : [];
+  const activePubs = filteredPubs.filter(pubItem => !hasError(pubItem));
+  const unreachablePubs = pubs.filter(hasError);
 
-  const unreachableItems = pubs.filter(hasError).map(pubItem =>
-    li(
-      div(
-        { class: 'pub-item' },
-        h2('PUB: ', pubItem.host),
-        h2(`${i18n.inhabitants}: ${pubItem.announcers || 0}`),
-        a({ href: encodePubLink(pubItem.key), class: 'user-link' }, pubItem.key),
-        div(
-          { class: 'error-box' },
-          p({ class: 'error-title' }, i18n.errorDetails),
-          p({ class: 'error-pre' }, String(pubItem.error || i18n.genericError))
-        ),
-      )
-    )
+  const renderPubTable = (items, actionFn) => table({ class: 'block-info-table' },
+    pubTableHeader(),
+    items.map(pubItem => tr(
+      td(pubItem.host || '—'),
+      td(String(pubItem.port || 8008)),
+      td(String(pubItem.announcers || 0)),
+      td(a({ href: encodePubLink(pubItem.key), class: 'user-link' }, pubItem.key)),
+      td(actionFn(pubItem))
+    ))
   );
 
   const title = i18n.invites;
@@ -129,16 +116,43 @@ const invitesView = ({ invitesEnabled }) => {
           br(),
           button({ type: 'submit' }, i18n.invitesAcceptInvite)
         ),
-        br,
+        br(),
+        snhInvite ? div({ class: 'snh-invite-box' },
+          h3({ class: 'snh-invite-name' }, snhInvite.name),
+          span({ class: 'snh-invite-code' }, snhInvite.code)
+        ) : null,
         hr(),
-        h2(`${i18n.invitesAcceptedInvites} (${pubItems.length})`),
-        pubItems.length ? ul(pubItems) : p(i18n.invitesNoFederatedPubs),
+        h2(`${i18n.invitesAcceptedInvites} (${activePubs.length})`),
+        activePubs.length
+          ? renderPubTable(activePubs, pubItem =>
+              form({ action: '/settings/invite/unfollow', method: 'post' },
+                input({ type: 'hidden', name: 'key', value: pubItem.key }),
+                button({ type: 'submit' }, i18n.invitesUnfollow)
+              )
+            )
+          : p(i18n.invitesNoFederatedPubs),
         hr(),
-        h2(`${i18n.invitesUnfollowedInvites} (${unfollowedItems.length})`),
-        unfollowedItems.length ? ul(unfollowedItems) : p(i18n.invitesNoUnfollowed),
+        h2(`${i18n.invitesUnfollowedInvites} (${unfollowed.length})`),
+        unfollowed.length
+          ? renderPubTable(unfollowed, pubItem =>
+              form({ action: '/settings/invite/follow', method: 'post' },
+                input({ type: 'hidden', name: 'key', value: pubItem.key }),
+                input({ type: 'hidden', name: 'host', value: pubItem.host || '' }),
+                input({ type: 'hidden', name: 'port', value: String(pubItem.port || 8008) }),
+                button({ type: 'submit', disabled: hasError(pubItem) }, i18n.invitesFollow)
+              )
+            )
+          : p(i18n.invitesNoUnfollowed),
         hr(),
-        h2(`${i18n.invitesUnreachablePubs} (${unreachableItems.length})`),
-        unreachableItems.length ? ul(unreachableItems) : p(i18n.invitesNoUnreachablePubs)
+        h2(`${i18n.invitesUnreachablePubs} (${unreachablePubs.length})`),
+        unreachablePubs.length
+          ? renderPubTable(unreachablePubs, pubItem =>
+              div({ class: 'error-box' },
+                p({ class: 'error-title' }, i18n.errorDetails),
+                p({ class: 'error-pre' }, String(pubItem.error || i18n.genericError))
+              )
+            )
+          : p(i18n.invitesNoUnreachablePubs)
       )
     )
   );

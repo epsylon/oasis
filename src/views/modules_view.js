@@ -71,10 +71,33 @@ const modulesView = () => {
     )
   );
 
+  const PRESETS = {
+    minimal: ['feed', 'forum', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
+    social: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
+    economy: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs'],
+    full: modules.map(m => m.name)
+  };
+
+  const presetButtons = div({ class: 'preset-group', style: 'display:flex;gap:8px;flex-wrap:nowrap;margin-bottom:16px;' },
+    Object.entries(PRESETS).map(([key, mods]) => {
+      const presetLabel = (i18n[`modulesPreset_${key}`] || key).toUpperCase();
+      const isActive = modules.every(m => mods.includes(m.name) === (moduleStates[`${m.name}Mod`] === 'on'));
+      return form({ action: "/modules/preset", method: "post", style: "display:inline;margin:0;" },
+        input({ type: "hidden", name: "preset", value: key }),
+        button({
+          type: 'submit',
+          class: isActive ? 'filter-btn active' : 'filter-btn',
+        }, presetLabel)
+      );
+    })
+  );
+
   return template(
     i18n.modules,
     section(header),
     section(
+      h2(i18n.modulesPresetTitle || "Common Configurations"),
+      presetButtons,
       form(
         { action: "/save-modules", method: "post" },
         table(

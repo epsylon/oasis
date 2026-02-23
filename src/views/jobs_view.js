@@ -1,8 +1,22 @@
-const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress } = require("../server/node_modules/hyperaxe")
+const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { template, i18n } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
+
+const renderMediaBlob = (value) => {
+  if (!value) return null
+  const s = String(value).trim()
+  if (!s) return null
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` })
+  const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mVideo) return video({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
+  const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mAudio) return audio({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
+  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' })
+  return null
+}
 
 const userId = config.keys.id
 
@@ -220,7 +234,7 @@ const renderJobList = (jobs, filter, params = {}) => {
           { class: "job-card" },
           topbar ? topbar : null,
           safeText(job.title) ? h2(job.title) : null,
-          job.image ? div({ class: "activity-image-preview" }, img({ src: `/blob/${encodeURIComponent(job.image)}` })) : null,
+          job.image ? div({ class: "activity-image-preview" }, renderMediaBlob(job.image)) : null,
           tagsNode ? tagsNode : null,
           br(),
           safeText(job.description) ? renderCardFieldRich(`${i18n.jobDescription}:`, renderUrl(job.description)) : null,
@@ -292,9 +306,9 @@ const renderJobForm = (job = {}, mode = "create") => {
       br(),
       label(i18n.jobImage),
       br(),
-      input({ type: "file", name: "image", accept: "image/*" }),
+      input({ type: "file", name: "image" }),
       br(),
-      job.image ? img({ src: `/blob/${encodeURIComponent(job.image)}`, class: "existing-image" }) : null,
+      job.image ? renderMediaBlob(job.image) : null,
       br(),
       label(i18n.jobDescription),
       br(),
@@ -362,10 +376,15 @@ const renderCVList = (inhabitants) =>
           const isMe = String(user.id) === String(userId)
           return div(
             { class: "inhabitant-card" },
-            img({ class: "inhabitant-photo", src: resolvePhoto(user.photo) }),
+            div(
+              { class: "inhabitant-left" },
+              a({ href: `/author/${encodeURIComponent(user.id)}` },
+                img({ class: "inhabitant-photo", src: resolvePhoto(user.photo) })
+              ),
+              h2(user.name)
+            ),
             div(
               { class: "inhabitant-details" },
-              h2(user.name),
               user.description ? p(...renderUrl(user.description)) : null,
               p(a({ class: "user-link", href: `/author/${encodeURIComponent(user.id)}` }, user.id)),
               div(
@@ -416,7 +435,9 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
               input({ type: "text", name: "location", placeholder: i18n.filterLocation, value: params.location || "" }),
               input({ type: "text", name: "language", placeholder: i18n.filterLanguage, value: params.language || "" }),
               input({ type: "text", name: "skills", placeholder: i18n.filterSkills, value: params.skills || "" }),
-              button({ type: "submit", class: "filter-btn" }, i18n.applyFilters)
+              div({ class: "cv-filter-submit" },
+                button({ type: "submit", class: "filter-btn" }, i18n.applyFilters)
+              )
             ),
             br(),
             renderCVList(jobsOrCVs)
@@ -472,9 +493,10 @@ const renderJobCommentsSection = (jobId, returnTo, comments = []) => {
       { class: "comment-form-wrapper" },
       h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
       form(
-        { method: "POST", action: `/jobs/${encodeURIComponent(jobId)}/comments`, class: "comment-form" },
+        { method: "POST", action: `/jobs/${encodeURIComponent(jobId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
         input({ type: "hidden", name: "returnTo", value: returnTo }),
-        textarea({ id: "comment-text", name: "text", required: true, rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
+        textarea({ id: "comment-text", name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
+        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
         br(),
         button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
       )
@@ -538,7 +560,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
         { class: "job-card" },
         topbar ? topbar : null,
         safeText(job.title) ? h2(job.title) : null,
-        job.image ? div({ class: "activity-image-preview" }, img({ src: `/blob/${encodeURIComponent(job.image)}` })) : null,
+        job.image ? div({ class: "activity-image-preview" }, renderMediaBlob(job.image)) : null,
         tagsNode ? tagsNode : null,
         br(),
         safeText(job.description) ? renderCardFieldRich(`${i18n.jobDescription}:`, renderUrl(job.description)) : null,

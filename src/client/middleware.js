@@ -60,25 +60,25 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     //console.log("Requesting:", ctx.path); // uncomment to check for HTTP requests
     
     const csp = [
-      "default-src 'self' blob:", 
-      "img-src 'self'",
-      "form-action 'self'",
-      "media-src 'self'",
+      "default-src 'self'",
+      "script-src 'self' http://localhost:3000/js",
       "style-src 'self'",
-      "script-src 'self' http://localhost:3000/js",  // pdfviewer
+      "img-src 'self'",
+      "media-src 'self' blob:",
+      "worker-src 'self' blob:",
+      "form-action 'self'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "frame-ancestors 'none'"
     ].join("; ");
 
     ctx.set("Content-Security-Policy", csp);
     ctx.set("X-Frame-Options", "SAMEORIGIN");
 
-    const isBlobPath = ctx.path.startsWith("/blob/");
-
-    if (isBlobPath === false) {
-      ctx.set("X-Content-Type-Options", "nosniff");
-    }
+    ctx.set("X-Content-Type-Options", "nosniff");
 
     ctx.set("Referrer-Policy", "same-origin");
-    ctx.set("Feature-Policy", "speaker 'self'");
+    ctx.set("Permissions-Policy", "speaker=(self)");
 
     const validHostsString = validHosts.join(" or ");
 

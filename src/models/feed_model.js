@@ -95,7 +95,7 @@ module.exports = ({ cooler }) => {
     return idx.resolve(id);
   };
 
-  const createFeed = async (text) => {
+  const createFeed = async (text, mentions) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
 
@@ -113,7 +113,8 @@ module.exports = ({ cooler }) => {
       text: cleaned,
       author: userId,
       createdAt: new Date().toISOString(),
-      tags: extractTags(cleaned)
+      tags: extractTags(cleaned),
+      mentions: Array.isArray(mentions) && mentions.length > 0 ? mentions : undefined
     };
 
     return new Promise((resolve, reject) => {

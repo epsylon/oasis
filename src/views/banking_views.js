@@ -252,14 +252,13 @@ const renderAddresses = (data, userId) => {
                     td(r.address),
                     td(r.source === "local" ? i18n.bankLocal : i18n.bankFromOasis),
 			td(
-			  r.source === "local"
-			    ? div({ class: "row-actions" },
+			  div({ class: "row-actions" },
 				form({ method: "POST", action: "/banking/addresses/delete", class: "addr-del" },
 				  input({ type: "hidden", name: "userId", value: r.id }),
+				  input({ type: "hidden", name: "source", value: r.source || "local" }),
 				  button({ type: "submit", class: "delete-btn", onclick: `return confirm(${JSON.stringify(i18n.bankAddressDeleteConfirm)})` }, i18n.bankAddressDelete)
 				)
-			      )
-			    : null
+			  )
 			)
                   )
                 )

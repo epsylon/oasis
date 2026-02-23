@@ -40,13 +40,13 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
     ),
     section(
       div({ class: "pixelia-form-wrap" },
-        form({ method: "POST", action: "/pixelia/paint"}, [
+        form({ method: "POST", action: "/pixelia/paint"},
           label({ for: "x" }, "X (1-50):"),
           input({ type: "number", id: "x", name: "x", min: 1, max: gridWidth, required: true }),
-          br,br,
+          br(),br(),
           label({ for: "y" }, "Y (1-200):"),
           input({ type: "number", id: "y", name: "y", min: 1, max: gridHeight, required: true }),
-          br,br,
+          br(),br(),
           label({ for: "color" }, i18n.colorLabel),
           select({ id: "color", name: "color", required: true },
             option({ value: "#000000", style: "background-color:#000000;" }, "Black"),
@@ -66,9 +66,9 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
             option({ value: "#d3d3d3", style: "background-color:#d3d3d3;" }, "Light Grey"),
             option({ value: "#ff6347", style: "background-color:#ff6347;" }, "Tomato")
           ),
-          br,br,
+          br(),br(),
           button({ type: "submit" }, i18n.paintButton)
-        ])
+        )
       ),
       errorMessage ? div({ class: "error-message" }, errorMessage) : null,
       div({ class: "total-pixels" },

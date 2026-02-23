@@ -117,11 +117,16 @@ const canonicalizePubId = (s) => {
 };
 
 const parseRemote = (remote) => {
-  const m = /^net:([^:]+):\d+~shs:([^=]+)=/.exec(remote);
-  if (!m) return { host: null, pubId: null };
-  const host = m[1];
-  const pubId = canonicalizePubId(m[2]);
-  return { host, pubId };
+  // net: format (TCP)
+  let m = /^net:([^:]+):\d+~shs:([^=]+)=/.exec(remote);
+  if (m) return { host: m[1], pubId: canonicalizePubId(m[2]) };
+  // ws/wss format (WebSocket)
+  m = /^wss?:\/\/([^:/]+)(?::\d+)?.*~shs:([^=]+)=/.exec(remote);
+  if (m) return { host: m[1], pubId: canonicalizePubId(m[2]) };
+  // Generic: extract ~shs: part from any format
+  m = /~shs:([^=]+)=/.exec(remote);
+  if (m) return { host: null, pubId: canonicalizePubId(m[1]) };
+  return { host: null, pubId: null };
 };
 
 async function ensureJSONFile(p, initial = []) {
@@ -263,8 +268,9 @@ module.exports = ({ cooler, isPublic }) => {
   return Promise.all(
     entries.map(async ([remote, data]) => {
       const { host, pubId } = parseRemote(remote);
-      const name = host || (pubId ? await models.about.name(pubId).catch(() => pubId) : remote);
-      const users = pubId && ebtMap.has(pubId) ? ebtMap.get(pubId) : [];
+      const effectiveKey = pubId || (data && data.key ? canonicalizePubId(data.key) : null);
+      const name = host || (effectiveKey ? await models.about.name(effectiveKey).catch(() => (effectiveKey || '').slice(0, 10)) : remote);
+      const users = effectiveKey && ebtMap.has(effectiveKey) ? ebtMap.get(effectiveKey) : [];
       const usersWithNames = await Promise.all(
         users.map(async (user) => {
           const userName = await models.about.name(user.id).catch(() => user.id);
@@ -275,7 +281,7 @@ module.exports = ({ cooler, isPublic }) => {
         remote,
         {
           ...data,
-          key: pubId || remote,
+          key: effectiveKey || remote,
           name,
           users: usersWithNames
         }
@@ -611,13 +617,40 @@ models.meta = {
     discovered: async () => {
       const ssb = await cooler.open();
       const snapshot = await ssb.conn.dbPeers();
-      const discoveredPeers = await enrichEntries(snapshot);
-      const discoveredIds = new Set(discoveredPeers.map(([, d]) => d.key));
+      // Read gossip.json to merge announcers data
+      const gossipPath = path.join(os.homedir(), '.ssb', 'gossip.json');
+      let gossipMap = new Map();
+      try {
+        const gossipData = JSON.parse(await fs.readFile(gossipPath, 'utf8'));
+        if (Array.isArray(gossipData)) {
+          for (const g of gossipData) {
+            if (g.key) gossipMap.set(canonicalizePubId(g.key), g);
+          }
+        }
+      } catch {}
+      const allDbPeers = await enrichEntries(snapshot);
+      // Merge announcers from gossip.json into enriched peers
+      for (const [, peerData] of allDbPeers) {
+        if ((!peerData.announcers || peerData.announcers === 0) && gossipMap.has(peerData.key)) {
+          const gossipEntry = gossipMap.get(peerData.key);
+          if (gossipEntry.announcers) peerData.announcers = gossipEntry.announcers;
+        }
+      }
+      const connectedEntries = await models.meta.connectedPeers();
+      const onlineKeys = new Set(connectedEntries.map(([remote]) => {
+        const m = /~shs:([^=]+)=/.exec(remote);
+        if (!m) return null;
+        let core = m[1].replace(/-/g, '+').replace(/_/g, '/');
+        if (!core.endsWith('=')) core += '=';
+        return `@${core}.ed25519`;
+      }).filter(Boolean));
+      const discoveredPeers = allDbPeers.filter(([, d]) => !onlineKeys.has(d.key));
+      const discoveredIds = new Set(allDbPeers.map(([, d]) => d.key));
       const ebtList = await loadPeersFromEbt();
       const ebtMap = new Map(ebtList.map(e => [e.pub, e.users]));
       const unknownPeers = [];
       for (const { pub } of ebtList) {
-        if (!discoveredIds.has(pub)) {
+        if (!discoveredIds.has(pub) && !onlineKeys.has(pub)) {
           const name = await models.about.name(pub).catch(() => pub);
           unknownPeers.push([pub, { key: pub, name, users: ebtMap.get(pub) || [] }]);
         }
@@ -1044,12 +1077,11 @@ const post = {
           }
         }
         const mentionsText = lodash.get(content, "text", "");
-        const mentionRegex = /<a class="mention" href="\/author\/([^"]+)">(@[^<]+)<\/a>/g;
+        if (mentionsText.includes(myFeedId) || mentionsText.includes(myFeedId.slice(1))) return true;
+        const mdMentionRegex = /\[@[^\]]*\]\(@?([A-Za-z0-9+/=.\-]+\.ed25519)\)/g;
         let match;
-        while ((match = mentionRegex.exec(mentionsText))) {
-          if (match[1] === myFeedId || match[2] === myUsername || match[2] === '@' + myUsername) {
-            return true; 
-          }
+        while ((match = mdMentionRegex.exec(mentionsText))) {
+          if ('@' + match[1] === myFeedId || match[1] === myFeedId.slice(1)) return true;
         }
         return false; 
       },

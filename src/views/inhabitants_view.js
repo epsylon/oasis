@@ -1,6 +1,7 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, br, span, strong } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { renderUrl } = require('../backend/renderUrl');
+const { getConfig } = require('../configs/config-manager');
 
 const DEFAULT_HASH_ENC = "%260000000000000000000000000000000000000000000%3D.sha256";
 const DEFAULT_HASH_PATH_RE = /\/image\/\d+\/%260000000000000000000000000000000000000000000%3D\.sha256$/;
@@ -54,15 +55,26 @@ const generateFilterButtons = (filters, currentFilter) =>
     )
   );
 
-function lastActivityBadge(user) {
-  const label = i18n.inhabitantActivityLevel;
-  const bucket = user.lastActivityBucket || 'red';
-  const dotClass = bucket === 'green' ? 'green' : bucket === 'orange' ? 'orange' : 'red';
-  return div(
-    { class: 'inhabitant-last-activity' },
-    span({ class: 'label' }, `${label}: `),
-    span({ class: `activity-dot ${dotClass}` }, '')
-  );
+function lastActivityBadge(user, isMe) {
+  const bucket = user && user.lastActivityBucket;
+  const dotClass =
+    bucket === 'green' ? 'green' : bucket === 'orange' ? 'orange' : bucket === 'red' ? 'red' : null;
+  if (!dotClass) return [];
+  const items = [
+    span({ class: 'inhabitant-last-activity' },
+      `${i18n.inhabitantActivityLevel}: `,
+      span({ class: `activity-dot ${dotClass}` }, '●'))
+  ];
+  const currentTheme = getConfig().themes.current;
+  const src = isMe ? (currentTheme === 'OasisKIT' ? 'KIT' : currentTheme === 'OasisMobile' ? 'MOBILE' : 'DESKTOP') : (user && user.deviceSource) || null;
+  if (src) {
+    const upper = String(src).toUpperCase();
+    const deviceClass = upper === 'KIT' ? 'device-kit' : upper === 'MOBILE' ? 'device-mobile' : 'device-desktop';
+    items.push(span({ class: 'inhabitant-last-activity' },
+      `${i18n.deviceLabel || 'Device'}: `,
+      span({ class: deviceClass }, src)));
+  }
+  return [div({ class: 'inhabitant-activity-group' }, ...items)];
 }
 
 const lightboxId = (id) => 'inhabitant_' + String(id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -78,7 +90,7 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
       br(),
       span(`${i18n.bankingUserEngagementScore}: `),
       h2(strong(typeof user.karmaScore === 'number' ? user.karmaScore : 0)),
-      lastActivityBadge(user)
+      ...lastActivityBadge(user, isMe)
     ),
     div({ class: 'inhabitant-details' },
       h2(user.name || 'Anonymous'),
@@ -282,11 +294,7 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
           h2(name || 'Anonymous'),
           span(`${i18n.bankingUserEngagementScore}: `),
           h2(strong(karmaScore)),
-          div(
-            { class: 'inhabitant-last-activity' },
-            span({ class: 'label' }, `${i18n.inhabitantActivityLevel}:`),
-            span({ class: `activity-dot ${dotClass}` }, '')
-          ),
+          ...lastActivityBadge({ lastActivityBucket: dotClass, deviceSource: safe.deviceSource }, isMe),
           (!isMe && (id || viewedId))
             ? form(
                 { method: 'GET', action: '/pm' },
@@ -321,3 +329,4 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
   );
 };
 
+exports.lastActivityBadge = lastActivityBadge;

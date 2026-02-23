@@ -57,5 +57,6 @@
   "ssbLogStream": {
     "limit": 2000
   },
-  "homePage": "activity"
+  "homePage": "activity",
+  "language": "en"
 }

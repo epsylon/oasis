@@ -3,6 +3,21 @@ const { template, i18n } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require('../backend/renderUrl');
 const { getConfig } = require("../configs/config-manager.js");
+const { sanitizeHtml } = require('../backend/sanitizeHtml');
+
+const renderMediaBlob = (value, fallbackSrc = null) => {
+  if (!value) return fallbackSrc ? img({ src: fallbackSrc }) : null
+  const s = String(value).trim()
+  if (!s) return fallbackSrc ? img({ src: fallbackSrc }) : null
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` })
+  const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mVideo) return videoHyperaxe({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
+  const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mAudio) return audioHyperaxe({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
+  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' })
+  return fallbackSrc ? img({ src: fallbackSrc }) : null
+}
 
 const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
 const FEED_TEXT_MAX = Number(getConfig().feed?.maxLength ?? 280);
@@ -436,7 +451,7 @@ function renderActionCards(actions, userId, allActions) {
          ), 
           Array.isArray(members) ? h2(`${i18n.tribeMembersCount}: ${members.length}`) : "",
           image  
-            ? img({ src: `/blob/${encodeURIComponent(image)}`, class: 'feed-image tribe-image' })
+            ? renderMediaBlob(image, '/assets/images/default-tribe.png')
             : img({ src: '/assets/images/default-tribe.png', class: 'feed-image tribe-image' }),
           p({ class: 'tribe-description' }, ...renderUrl(description || '')),
           validTags.length
@@ -675,7 +690,7 @@ function renderActionCards(actions, userId, allActions) {
       const refeedsNum = Number(refeeds || 0) || 0;
       cardBody.push(
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text', innerHTML: htmlText }),
+          div({ class: 'feed-text', innerHTML: sanitizeHtml(htmlText) }),
           refeedsNum > 0
             ? h2({ class: 'card-field' },
                 span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '),
@@ -689,20 +704,23 @@ function renderActionCards(actions, userId, allActions) {
   if (type === 'post') {
       const { contentWarning, text } = content || {};
       const rawText = text || '';
-      const isHtml = typeof rawText === 'string' && /<\/?[a-z][\s\S]*>/i.test(rawText);
+      const POST_TRUNCATE_LEN = 300;
+      const isTruncated = rawText.length > POST_TRUNCATE_LEN;
+      const displayText = isTruncated ? rawText.slice(0, POST_TRUNCATE_LEN) + '…' : rawText;
+      const isHtml = typeof displayText === 'string' && /<\/?[a-z][\s\S]*>/i.test(displayText);
       let bodyNode;
       if (isHtml) {
-        const hasAnchor = /<a\b[^>]*>/i.test(rawText);
+        const hasAnchor = /<a\b[^>]*>/i.test(displayText);
         const linkified = hasAnchor
-          ? rawText
-          : rawText.replace(
+          ? displayText
+          : displayText.replace(
               /(https?:\/\/[^\s<]+)/g,
               (url) =>
                 `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
             );
-       bodyNode = div({ class: 'post-text', innerHTML: linkified });
+       bodyNode = div({ class: 'post-text', style: 'max-height:180px;overflow:hidden;', innerHTML: sanitizeHtml(linkified) });
       } else {
-        bodyNode = p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(rawText));
+        bodyNode = p({ class: 'post-text post-text-pre', style: 'max-height:180px;overflow:hidden;' }, ...renderUrlPreserveNewlines(displayText));
       }
       const threadId = getThreadIdFromPost(action);
       const replyToId = getReplyToIdFromPost(action, byIdAll);
@@ -711,19 +729,27 @@ function renderActionCards(actions, userId, allActions) {
       const parent = isReply ? (byIdAll.get(replyToId) || byIdAll.get(threadId)) : null;
       const parentContent = parent ? (parent.value?.content || parent.content || {}) : {};
       const parentAuthor = parent?.author || '';
+      const parentName = parent?.authorName || parentAuthor;
       const parentText = parent ? excerptPostText(parentContent, 220) : '';
       cardBody.push(
         div({ class: 'card-section post' },
           isReply
             ? div(
-                { class: 'reply-context' },
-                a({ href: ctxHref, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
-                parentAuthor ? span({ class: 'reply-context-author' }, a({ href: `/author/${encodeURIComponent(parentAuthor)}`, class: 'user-link' }, parentAuthor)) : '',
-                parentText ? p({ class: 'post-text reply-context-text post-text-pre' }, ...renderUrlPreserveNewlines(parentText)) : ''
+                { class: 'reply-context', style: 'border-left:3px solid #666;padding-left:10px;margin-bottom:8px;opacity:0.85;' },
+                span({ style: 'font-size:0.85em;' },
+                  a({ href: ctxHref, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
+                  parentAuthor ? span(' ', a({ href: `/author/${encodeURIComponent(parentAuthor)}`, class: 'user-link', style: 'font-weight:bold;' }, parentName)) : ''
+                ),
+                parentText ? p({ class: 'post-text reply-context-text post-text-pre', style: 'font-size:0.85em;max-height:80px;overflow:hidden;margin-top:4px;' }, ...renderUrlPreserveNewlines(parentText)) : ''
               )
             : '',
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
-          bodyNode
+          bodyNode,
+          isTruncated && threadId
+            ? div({ style: 'margin-top:6px;' },
+                a({ href: `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(action.id || threadId)}`, class: 'filter-btn' }, i18n.keepReading || 'Keep reading...')
+              )
+            : ''
         )
       );
     }
@@ -794,16 +820,22 @@ function renderActionCards(actions, userId, allActions) {
         );
       } else {
         const rootId = typeof root === 'string' ? root : (root?.key || root?.id || '');
-        const parentForum = actions.find(a => a.type === 'forum' && !a.content?.root && (a.id === rootId || a.content?.key === rootId));
-        const parentTitle = (parentForum?.content?.title && String(parentForum.content.title).trim()) ? parentForum.content.title : ((rootTitle && String(rootTitle).trim()) ? rootTitle : '');
+        const parentForum = byIdAll.get(rootId) || actions.find(a => a.type === 'forum' && !a.content?.root && (a.id === rootId || a.content?.key === rootId));
+        const parentContent = parentForum ? (parentForum.value?.content || parentForum.content || {}) : {};
+        const parentTitle = (parentContent?.title && String(parentContent.title).trim()) ? parentContent.title : ((rootTitle && String(rootTitle).trim()) ? rootTitle : '');
+        const parentAuthor = parentForum?.author || '';
+        const parentName = parentForum?.authorName || parentAuthor;
         const hrefKey = rootKey || rootId;
         cardBody.push(
           div({ class: 'card-section forum' },
-            div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
-              span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
-              a({ href: `/forum/${encodeURIComponent(hrefKey)}`, style: "font-weight:800;color:#4fc3f7;" }, parentTitle)
+            div(
+              { class: 'reply-context', style: 'border-left:3px solid #666;padding-left:10px;margin-bottom:8px;opacity:0.85;' },
+              span({ style: 'font-size:0.85em;' },
+                a({ href: `/forum/${encodeURIComponent(hrefKey)}`, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
+                parentAuthor ? span(' ', a({ href: `/author/${encodeURIComponent(parentAuthor)}`, class: 'user-link', style: 'font-weight:bold;' }, parentName)) : ''
+              ),
+              parentTitle ? p({ class: 'post-text reply-context-text', style: 'font-size:0.85em;max-height:60px;overflow:hidden;margin-top:4px;font-weight:bold;color:#4fc3f7;' }, parentTitle) : ''
             ),
-            br(),
             div({ class: 'card-field', style: 'margin-bottom:12px;' },
               p({ style: "margin:0 0 8px 0; word-break:break-all;" }, ...renderUrl(text))
             )
@@ -842,13 +874,17 @@ function renderActionCards(actions, userId, allActions) {
   const totalChron = link && spreadsByLink.has(link) ? spreadsByLink.get(link).length : 0;
   const label = (i18n.spreadChron || 'Spread') + ':';
   const value = ord && totalChron ? `${ord}/${totalChron}` : (ord ? String(ord) : '');
+  const spreadExcerpt = spreadText || excerptPostText(content, 300);
   cardBody.push(
     div({ class: 'card-section vote' },
       spreadTitle ? h2({ class: 'post-title activity-spread-title' }, spreadTitle) : '',
       spreadContentWarning ? h2({ class: 'content-warning' }, spreadContentWarning) : '',
-      spreadText ? div({ class: 'post-text activity-spread-text post-text-pre' }, ...renderUrlPreserveNewlines(spreadText)) : '',
+      spreadExcerpt
+        ? div({ class: 'post-text activity-spread-text post-text-pre', style: 'max-height:200px;overflow:hidden;' }, ...renderUrlPreserveNewlines(spreadExcerpt))
+        : div({ class: 'post-text activity-spread-text', style: 'opacity:0.6;font-style:italic;' }, i18n.spreadContentUnavailable || 'Content not yet available (pending replication)'),
       spreadOriginalAuthor
         ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.spreadBy || 'By') + ': '),
             span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(spreadOriginalAuthor)}`, class: 'user-link' }, spreadOriginalAuthor))
           )
         : '',
@@ -856,6 +892,11 @@ function renderActionCards(actions, userId, allActions) {
         ? div({ class: 'card-field' },
             span({ class: 'card-label' }, label),
             span({ class: 'card-value' }, value)
+          )
+        : '',
+      link
+        ? div({ style: 'margin-top:6px;' },
+            a({ href: `/thread/${encodeURIComponent(link)}#${encodeURIComponent(link)}`, class: 'filter-btn' }, i18n.viewDetails || 'View details')
           )
         : ''
     )
@@ -935,7 +976,7 @@ function renderActionCards(actions, userId, allActions) {
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
           br(),
           image
-            ? img({ src: `/blob/${encodeURIComponent(image)}` })
+            ? renderMediaBlob(image, '/assets/images/default-market.png')
             : img({ src: '/assets/images/default-market.png', alt: title }),
           br(),
           div({ class: "market-card price" },
@@ -1034,7 +1075,7 @@ function renderActionCards(actions, userId, allActions) {
             )
           ),
           div(
-            p({ innerHTML: msgHtml })
+            p({ innerHTML: sanitizeHtml(msgHtml) })
           ),
           p({ class: 'card-footer' },
             span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),

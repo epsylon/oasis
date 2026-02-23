@@ -116,17 +116,25 @@ module.exports = ({ cooler }) => {
 
   return {
     async listInhabitants(options = {}) {
-      const { filter = 'all', search = '', location = '', language = '', skills = '' } = options;
+      const { filter = 'all', search = '', location = '', language = '', skills = '', includeInactive = false } = options;
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
+      const filterInactive = (users) => {
+        if (includeInactive) return users;
+        return users.filter(u => u.lastActivityBucket !== 'red');
+      };
+
       if (filter === 'GALLERY') {
         const users = await listAllBase(ssbClient);
-        return users;
+        return filterInactive(users);
       }
 
       if (filter === 'all' || filter === 'TOP KARMA' || filter === 'TOP ACTIVITY') {
         let users = await listAllBase(ssbClient);
+        if (filter !== 'TOP ACTIVITY') {
+          users = filterInactive(users);
+        }
         if (search) {
           const q = search.toLowerCase();
           users = users.filter(u =>
@@ -155,7 +163,7 @@ module.exports = ({ cooler }) => {
       }
 
       if (filter === 'blocked') {
-        const all = await this.listInhabitants({ filter: 'all' });
+        const all = await this.listInhabitants({ filter: 'all', includeInactive: true });
         const result = [];
         for (const user of all) {
           const rel = await friend.getRelationship(user.id).catch(() => ({}));
@@ -167,8 +175,9 @@ module.exports = ({ cooler }) => {
 
       if (filter === 'SUGGESTED') {
         const base = await listAllBase(ssbClient);
+        const active = filterInactive(base);
         const rels = await Promise.all(
-          base.map(async u => {
+          active.map(async u => {
             if (u.id === userId) return null;
             const rel = await friend.getRelationship(u.id).catch(() => ({}));
             const n = normalizeRel(rel);
@@ -209,6 +218,7 @@ module.exports = ({ cooler }) => {
             const base = this._normalizeCurriculum(c, photo);
             return { ...base, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
           }));
+          out = filterInactive(out);
           if (search) {
             const q = search.toLowerCase();
             out = out.filter(u =>
@@ -227,13 +237,14 @@ module.exports = ({ cooler }) => {
         }
 
         if (filter === 'MATCHSKILLS') {
-          const base = await Promise.all(cvs.map(async c => {
+          let base = await Promise.all(cvs.map(async c => {
             const photo = await fetchUserImageUrl(c.author, 256);
             const lastActivityTs = await getLastActivityTimestamp(c.author);
             const { bucket, range } = bucketLastActivity(lastActivityTs);
             const norm = this._normalizeCurriculum(c, photo);
             return { ...norm, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
           }));
+          base = filterInactive(base);
           const mecv = await this.getCVByUserId();
           const userSkills = mecv
             ? [

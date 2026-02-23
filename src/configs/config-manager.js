@@ -63,7 +63,8 @@ if (!fs.existsSync(configFilePath)) {
     "ssbLogStream": {
       "limit": 2000
     },
-    "homePage": "activity"
+    "homePage": "activity",
+    "language": "en"
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
 }

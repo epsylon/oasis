@@ -5,6 +5,59 @@ const ssb = require("../client/gui");
 const config = require("../server/SSB_server").config;
 const cooler = ssb({ offline: config.offline });
 
+let sharp;
+try {
+  sharp = require("sharp");
+} catch (e) {
+}
+
+const stripImageMetadata = async (buffer) => {
+  if (typeof sharp !== "function") return buffer;
+  try {
+    return await sharp(buffer).rotate().toBuffer();
+  } catch {
+    return buffer;
+  }
+};
+
+const PDF_METADATA_KEYS = [
+  '/Title', '/Author', '/Subject', '/Keywords',
+  '/Creator', '/Producer', '/CreationDate', '/ModDate'
+];
+
+const stripPdfMetadata = (buffer) => {
+  try {
+    let str = buffer.toString('binary');
+    for (const key of PDF_METADATA_KEYS) {
+      const keyBytes = key;
+      const regex = new RegExp(
+        keyBytes.replace(/\//g, '\\/') + '\\s*\\([^)]*\\)',
+        'g'
+      );
+      str = str.replace(regex, keyBytes + ' ()');
+      const hexRegex = new RegExp(
+        keyBytes.replace(/\//g, '\\/') + '\\s*<[^>]*>',
+        'g'
+      );
+      str = str.replace(hexRegex, keyBytes + ' <>');
+    }
+    return Buffer.from(str, 'binary');
+  } catch {
+    return buffer;
+  }
+};
+
+const MAX_BLOB_SIZE = 50 * 1024 * 1024;
+
+class FileTooLargeError extends Error {
+  constructor(fileName, fileSize) {
+    super(`File too large: ${fileName} (${(fileSize / 1024 / 1024).toFixed(1)} MB)`);
+    this.name = 'FileTooLargeError';
+    this.fileName = fileName;
+    this.fileSize = fileSize;
+  }
+}
+
 const handleBlobUpload = async function (ctx, fileFieldName) {
   if (!ctx.request.files || !ctx.request.files[fileFieldName]) {
     return null;
@@ -13,25 +66,55 @@ const handleBlobUpload = async function (ctx, fileFieldName) {
   const blobUpload = ctx.request.files[fileFieldName];
   if (!blobUpload) return null;
 
-  const data = await promisesFs.readFile(blobUpload.filepath);
+  let data = await promisesFs.readFile(blobUpload.filepath);
   if (data.length === 0) return null;
+
+  if (data.length > MAX_BLOB_SIZE) {
+    throw new FileTooLargeError(blobUpload.originalFilename || blobUpload.name || fileFieldName, data.length);
+  }
+
+  const EXTENSION_MIME_MAP = {
+    '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
+    '.ogv': 'video/ogg', '.avi': 'video/x-msvideo', '.mov': 'video/quicktime',
+    '.mkv': 'video/x-matroska', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+    '.flac': 'audio/flac', '.aac': 'audio/aac', '.opus': 'audio/opus',
+    '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+    '.svg': 'image/svg+xml', '.bmp': 'image/bmp'
+  };
+
+  const blob = { name: blobUpload.originalFilename || blobUpload.name || 'file' };
+
+  try {
+    const fileType = await FileType.fromBuffer(data);
+    blob.mime = (fileType && fileType.mime) ? fileType.mime : null;
+  } catch {
+    blob.mime = null;
+  }
+
+  if (!blob.mime && blob.name) {
+    const ext = (blob.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+    blob.mime = EXTENSION_MIME_MAP[ext] || 'application/octet-stream';
+  }
+
+  if (!blob.mime) {
+    blob.mime = 'application/octet-stream';
+  }
+
+  if (blob.mime.startsWith('image/')) {
+    data = await stripImageMetadata(data);
+  } else if (blob.mime === 'application/pdf') {
+    data = stripPdfMetadata(data);
+  }
 
   const ssbClient = await cooler.open();
 
-  const blob = { name: blobUpload.name };
   blob.id = await new Promise((resolve, reject) => {
     pull(
       pull.values([data]),
       ssbClient.blobs.add((err, ref) => (err ? reject(err) : resolve(ref)))
     );
   });
-
-  try {
-    const fileType = await FileType.fromBuffer(data);
-    blob.mime = fileType.mime;
-  } catch {
-    blob.mime = "application/octet-stream";
-  }
 
   if (blob.mime.startsWith("image/")) return `\n![image:${blob.name}](${blob.id})`;
   if (blob.mime.startsWith("audio/")) return `\n[audio:${blob.name}](${blob.id})`;
@@ -171,5 +254,5 @@ const serveBlob = async function (ctx) {
   }
 };
 
-module.exports = { handleBlobUpload, serveBlob };
+module.exports = { handleBlobUpload, serveBlob, FileTooLargeError };
 

@@ -37,7 +37,7 @@ But it has others features that are also really interesting, for example:
  
    ![SNH](https://solarnethub.com/git/snh-oasis-modules.png "SolarNET.HuB")
     
- +  Support for multiple themes.
+ +  Support for multiple themes (including Mobile Theme).
  
    ![SNH](https://solarnethub.com/git/snh-clear-theme.png "SolarNET.HuB")
    ![SNH](https://solarnethub.com/git/snh-purple-theme.png "SolarNET.HuB")
@@ -46,8 +46,6 @@ But it has others features that are also really interesting, for example:
  +  Even a complex Reddit-styled forum system.
  
    ![SNH](https://solarnethub.com/git/snh-forum.png "SolarNET.HuB")
-   ![SNH](https://solarnethub.com/git/snh-forum-reply.png "SolarNET.HuB")
-   ![SNH](https://solarnethub.com/git/snh-activity-forum.png "SolarNET.HuB")
  
 And much more, that we invite you to discover by yourself ;-)
 
@@ -140,6 +138,22 @@ You can also receive a -Universal Basic Income- if you contribute to the Tribes 
 Oasis contains its own UBI (Universal Basic Income), distributed weekly using ECOin, and calculated by our AI through positive and efficient participation and trust.
 
   ![SNH](https://solarnethub.com/git/oasis-banking.png "SolarNET.HuB")
+  
+----------
+
+## Carbon Footprinting (ecology)
+
+Oasis contains its own carbon footprint meter.
+
+  ![SNH](https://solarnethub.com/git/snh-oasis-carbon-foorprinting.png "SolarNET.HuB")
+
+All transmissions, stored files, and interactions are measured to understand the environmental impact of the network.
+
+  ![SNH](https://solarnethub.com/git/snh-oasis-carbon-foorprinting2.png "SolarNET.HuB")
+
+And also of each inhabitant.
+
+  ![SNH](https://solarnethub.com/git/snh-oasis-carbon-foorprinting3.png "SolarNET.HuB")
 
 ----------
 
@@ -218,18 +232,6 @@ Follow ['INSTALL.md'](docs/install/install.md) to build and install it on your d
 ## Setup & Deploy:
 
 Visit ['Settings'](https://wiki.solarnethub.com/socialnet/snh#settings_minimal) to learn how to choose your language, set a theme & configure your avatar.
-
-----------
-
-## Multiverse:
-
-Join ['PUB: "La Plaza"'](https://wiki.solarnethub.com/socialnet/snh-pub) to start to be connected with other interesting projects in the Multiverse.
-
-  ![SNH](https://solarnethub.com/git/snh-oasis_federation-2.png "SolarNET.HuB")
-  
-This allows you to communicate and access content from outside the [project network](https://wiki.solarnethub.com/socialnet/overview). 
-
-  ![SNH](https://solarnethub.com/git/snh-multiverse.png "SolarNET.HuB")
 
 ----------
 

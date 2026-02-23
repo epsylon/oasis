@@ -488,10 +488,13 @@ module.exports = ({ cooler }) => {
 
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
 
+      const tribeInternalTypes = new Set(['tribeLeave', 'tribeFeedPost', 'tribeFeedRefeed', 'tribe-content']);
+      const isAllowedTribeActivity = (a) => !tribeInternalTypes.has(a.type);
+
       let out;
-      if (filter === 'mine') out = deduped.filter(a => a.author === userId);
-      else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff) }
-      else if (filter === 'all') out = deduped;
+      if (filter === 'mine') out = deduped.filter(a => a.author === userId && isAllowedTribeActivity(a));
+      else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff && isAllowedTribeActivity(a)) }
+      else if (filter === 'all') out = deduped.filter(isAllowedTribeActivity);
       else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
       else if (filter === 'karma') out = deduped.filter(a => a.type === 'karmaScore');
       else if (filter === 'tribe') out = deduped.filter(a => a.type === 'tribe' || String(a.type || '').startsWith('tribe'));

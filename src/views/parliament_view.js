@@ -238,6 +238,7 @@ const pickLeader = (arr) => {
 const CandidatureStats = (cands, govCard, leaderMeta) => {
   if (!cands || !cands.length) return null;
   const leader = pickLeader(cands || []);
+  if (!leader) return null;
   const methodKey = String(leader.method || '').toUpperCase();
   const methodLabel = String(i18n[`parliamentMethod${methodKey}`] || methodKey).toUpperCase();
   const votes = String(leader.votes || 0);

@@ -371,3 +371,74 @@ a.user-link:focus {
   border: 2px solid transparent;
 }
 
+
+.update-banner {
+  background-color: #FFF3E0 !important;
+  border-bottom-color: #FFE0B2 !important;
+  color: #E65100 !important;
+}
+
+.update-banner-link {
+  color: #FF6F00 !important;
+}
+
+.snh-invite-code {
+  color: #007BFF !important;
+}
+
+.carbon-bar-track {
+  background: #e0e0e0 !important;
+}
+
+.carbon-bar-max {
+  background: #ccc !important;
+}
+
+/* Blockexplorer */
+.blockchain-view { background-color: #F4F4F4 !important; color: #2C2C2C !important; }
+.block { background: #FFFFFF !important; box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important; }
+.block:hover { box-shadow: 0 8px 32px rgba(0,0,0,0.10) !important; }
+.blockchain-card-label, .block-info-table .card-label, .pm-info-table .card-label, .block-content-label { color: #2D2D2D !important; }
+.blockchain-card-value, .block-info-table .card-value, .pm-info-table .card-value, .block-timestamp, .json-content { color: #007BFF !important; }
+.block-content-preview, .block-content { background: #F8F8F8 !important; color: #2C2C2C !important; }
+.block-author { color: #FF6F00 !important; background: rgba(255,111,0,0.08) !important; }
+.block-author:hover { color: #FF8F00 !important; }
+.block-url { color: #007BFF !important; }
+.block-row--details .block-url { background: #F0F0F0 !important; }
+.block-row--details .block-url:hover { background: #E0E0E0 !important; color: #FF6F00 !important; }
+.btn-singleview { background: #F0F0F0 !important; color: #FF6F00 !important; }
+.btn-singleview:hover { background: #E0E0E0 !important; color: #FF8F00 !important; }
+.btn-back { background: #FF6F00 !important; color: #FFFFFF !important; }
+.btn-back:hover { background: #FF8F00 !important; color: #FFFFFF !important; }
+.block-info-table td, .pm-info-table td { border-color: #E0E0E0 !important; }
+.block-diagram { border-color: #E0E0E0 !important; background: #FFFFFF !important; }
+.block-diagram-ruler { color: #2D2D2D !important; background: #F8F8F8 !important; border-bottom-color: #E0E0E0 !important; }
+.block-diagram-ruler span { color: #2D2D2D !important; }
+.block-diagram-cell { border-color: #E0E0E0 !important; background: #FFFFFF !important; }
+.bd-label { color: #2D2D2D !important; }
+.bd-value { color: #007BFF !important; }
+.deleted-label { color: #D32F2F !important; }
+
+/* Tribes */
+.tribe-card { background: #FFFFFF !important; border-color: #E0E0E0 !important; }
+.tribe-card:hover { border-color: #007BFF !important; }
+.tribe-card-title { color: #2D2D2D !important; }
+.tribe-card-description { color: #555 !important; }
+.tribe-info-table td { border-color: #E0E0E0 !important; }
+.tribe-info-label { color: #2D2D2D !important; background: #FFFFFF !important; }
+.tribe-info-value { color: #007BFF !important; background: #FFFFFF !important; }
+.tribe-info-empty { color: #999 !important; }
+.tribe-card-subtribes { border-color: #E0E0E0 !important; background: #F8F8F8 !important; }
+.tribe-card-members { border-color: #E0E0E0 !important; background: #F8F8F8 !important; }
+.tribe-members-count { color: #FF6F00 !important; }
+.tribe-card-actions { border-color: #E0E0E0 !important; background: #F8F8F8 !important; }
+.tribe-action-btn { border-color: #FF6F00 !important; color: #FF6F00 !important; }
+.tribe-action-btn:hover { background: #FF6F00 !important; color: #fff !important; }
+.tribe-subtribe-link { background: #F0F0F0 !important; border-color: #E0E0E0 !important; color: #FF6F00 !important; }
+.tribe-thumb-link { border-color: #E0E0E0 !important; }
+.tribe-thumb-link:hover { border-color: #FF6F00 !important; }
+.tribe-subtribe-link:hover { background: #E0E0E0 !important; }
+.tribe-parent-image { border-color: #E0E0E0 !important; }
+.tribe-parent-box { background: #FFFFFF !important; }
+.tribe-card-parent { background: #F8F8F8 !important; border-color: #E0E0E0 !important; }
+.tribe-parent-card-link { color: #FF6F00 !important; }

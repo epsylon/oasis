@@ -3,17 +3,19 @@ const { template, i18n } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
 const opinionCategories = require("../backend/opinion_categories");
+const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const FEED_TEXT_MIN = Number(config?.feed?.minLength ?? 1);
 const FEED_TEXT_MAX = Number(config?.feed?.maxLength ?? 280);
 
 const normalizeOptions = (opts) => {
-  if (typeof opts === "string") return { filter: String(opts || "ALL").toUpperCase(), q: "", tag: "" };
-  if (!opts || typeof opts !== "object") return { filter: "ALL", q: "", tag: "" };
+  if (typeof opts === "string") return { filter: String(opts || "ALL").toUpperCase(), q: "", tag: "", msg: "" };
+  if (!opts || typeof opts !== "object") return { filter: "ALL", q: "", tag: "", msg: "" };
   return {
     filter: String(opts.filter || "ALL").toUpperCase(),
     q: typeof opts.q === "string" ? opts.q : "",
-    tag: typeof opts.tag === "string" ? opts.tag : ""
+    tag: typeof opts.tag === "string" ? opts.tag : "",
+    msg: typeof opts.msg === "string" ? opts.msg : ""
   };
 };
 
@@ -101,8 +103,20 @@ const renderFeedCard = (feed) => {
             ),
             div(
                 { class: "feed-main" },
-                div({ class: "feed-text", innerHTML: styledHtml }),
-                h2(`${i18n.totalOpinions}: ${totalCount}`),
+                div({ class: "feed-text", innerHTML: sanitizeHtml(styledHtml) }),
+                h2(
+                    `${i18n.totalOpinions}: ${totalCount}`,
+                    ...(() => {
+                        const entries = voteEntries.filter(([, v]) => Number(v) > 0);
+                        if (!entries.length) return [];
+                        const maxVal = Math.max(...entries.map(([, v]) => Number(v)));
+                        const dominant = entries.filter(([, v]) => Number(v) === maxVal).map(([k]) => i18n['vote' + k.charAt(0).toUpperCase() + k.slice(1)] || k);
+                        return [
+                            span({ style: 'margin:0 8px;opacity:0.5;' }, '|'),
+                            span({ style: 'font-weight:700;' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
+                        ];
+                    })()
+                ),
                 p(
                     { class: "card-footer" },
                     span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),
@@ -132,7 +146,7 @@ const renderFeedCard = (feed) => {
 };
 
 exports.feedView = (feeds, opts = "ALL") => {
-  const { filter, q, tag } = normalizeOptions(opts);
+  const { filter, q, tag, msg } = normalizeOptions(opts);
 
   const title =
     filter === "MINE"
@@ -150,6 +164,9 @@ exports.feedView = (feeds, opts = "ALL") => {
                 : i18n.feedTitle;
 
   const header = div({ class: "tags-header" }, h2(title), p(i18n.FeedshareYourOpinions));
+  const successBanner = msg === 'feedPublished'
+    ? div({ class: 'feed-success-msg' }, p('✓ ' + (i18n.feedPublishedSuccess || 'Feed published successfully!')))
+    : null;
 
   const extra = { q, tag };
 
@@ -157,6 +174,7 @@ exports.feedView = (feeds, opts = "ALL") => {
     title,
     section(
       header,
+      successBanner,
       div(
         { class: "mode-buttons-row" },
         ...generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"], filter, "/feed", extra),

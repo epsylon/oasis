@@ -160,9 +160,9 @@ const EvidenceForm = (caseId) =>
       }),
       br(),
       br(),
-      label('Evidence image'),
+      label(i18n.uploadMedia || 'Upload media (max-size: 50MB)'),
       br(),
-      input({ type: 'file', name: 'image', accept: 'image/*' }),
+      input({ type: 'file', name: 'image' }),
       br(),
       br(),
       button({ type: 'submit', class: 'create-button' }, i18n.courtsEvidenceSubmit)
@@ -1239,7 +1239,7 @@ const CaseDetailsBlock = (c) => {
             }
             if (e.imageUrl && String(e.imageUrl).trim()) {
               bodyChildren.push(
-                br,br,
+                br(),br(),
                 img({
                   class: 'evidence-image',
                   src: `/blob/${encodeURIComponent(e.imageUrl)}`,
