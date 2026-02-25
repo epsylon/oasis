@@ -1308,11 +1308,13 @@ router
   })
   .post("/profile/edit", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     const imageFile = ctx.request.files?.image;
-    const imageData = imageFile && imageFile.filepath ? await promisesFs.readFile(imageFile.filepath) : undefined;
-    ctx.body = await post.publishProfileEdit({
-      name: stripDangerousTags(String(ctx.request.body.name)),
-      description: stripDangerousTags(String(ctx.request.body.description)),
-      ...(imageData ? { image: imageData } : {})
+    const mime = imageFile?.mimetype || imageFile?.type || '';
+    const isImage = mime.startsWith('image/');
+    const imageData = isImage && imageFile?.filepath ? await promisesFs.readFile(imageFile.filepath).catch(() => undefined) : undefined;
+    await post.publishProfileEdit({
+      name: stripDangerousTags(String(ctx.request.body?.name || '')),
+      description: stripDangerousTags(String(ctx.request.body?.description || '')),
+      image: imageData
     });
     ctx.redirect("/profile");
   })

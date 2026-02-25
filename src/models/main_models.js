@@ -1714,7 +1714,7 @@ const post = {
     },
     publishProfileEdit: async ({ name, description, image }) => {
       const ssb = await cooler.open();
-      if (image.length > 0) {
+      if (image && image.length > 0) {
         const megabyte = Math.pow(2, 20);
         const maxSize = 50 * megabyte;
         if (image.length > maxSize) {

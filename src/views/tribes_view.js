@@ -55,6 +55,14 @@ const toBlobUrl = (raw) => {
   return m ? `/blob/${encodeURIComponent(m[1])}` : null
 }
 
+const toImageUrl = (raw, fallback) => {
+  if (!raw) return fallback
+  const s = String(raw).trim()
+  if (/^\[video:|^\[audio:/.test(s)) return fallback
+  const url = toBlobUrl(raw)
+  return url || fallback
+}
+
 const filterAndSortFeed = (feed, feedFilter) => {
   const parseDate = (d) => typeof d === 'string' ? Date.parse(d) : d;
   if (feedFilter === 'MINE') return feed.filter(m => m.author === userId);
@@ -72,7 +80,7 @@ const renderGallery = (sortedTribes) => {
     sortedTribes.length
       ? sortedTribes.map(t =>
           a({ href: `#tribe-${encodeURIComponent(t.id)}`, class: "gallery-item" },
-           renderMediaBlob(t.image, '/assets/images/default-tribe.png', { alt: t.title || "", class: "gallery-image" })
+           img({ src: toImageUrl(t.image, '/assets/images/default-tribe.png'), alt: t.title || "", class: "gallery-image" })
           )
         )
       : p(i18n.noTribes)
@@ -84,7 +92,7 @@ const renderLightbox = (sortedTribes) => {
     div(
       { id: `tribe-${encodeURIComponent(t.id)}`, class: "lightbox" },
       a({ href: "#", class: "lightbox-close" }, "×"),
-      renderMediaBlob(t.image, '/assets/images/default-tribe.png', { class: "lightbox-image", alt: t.title || "" })
+      img({ src: toImageUrl(t.image, '/assets/images/default-tribe.png'), class: "lightbox-image", alt: t.title || "" })
     )
   );
 };
@@ -1217,7 +1225,7 @@ const renderSubTribesSection = (tribe, items, query) => {
       : div({ class: 'tribe-thumb-grid' },
           subTribes.map(st => {
             return a({ href: `/tribe/${encodeURIComponent(st.id)}`, class: 'tribe-thumb-link', title: st.title },
-              renderMediaBlob(st.image, '/assets/images/default-tribe.png', { class: 'tribe-thumb-img', alt: st.title })
+              img({ src: toImageUrl(st.image, '/assets/images/default-tribe.png'), class: 'tribe-thumb-img', alt: st.title })
             );
           })
         )
