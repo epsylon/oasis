@@ -270,9 +270,11 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
           ) : null,
           tr(
             td({ class: 'tribe-info-label' }, i18n.tribeIsAnonymousLabel || 'STATUS'),
-            td({ class: 'tribe-info-value' }, t.isAnonymous ? i18n.tribePrivate : i18n.tribePublic),
+            td({ class: 'tribe-info-value', colspan: '3' }, t.isAnonymous ? i18n.tribePrivate : i18n.tribePublic)
+          ),
+          tr(
             td({ class: 'tribe-info-label' }, i18n.tribeModeLabel || 'MODE'),
-            td({ class: 'tribe-info-value' }, String(inviteModeI18n()[t.inviteMode] || t.inviteMode).toUpperCase())
+            td({ class: 'tribe-info-value', colspan: '3' }, String(inviteModeI18n()[t.inviteMode] || t.inviteMode).toUpperCase())
           ),
           tr(
             td({ class: 'tribe-info-label' }, i18n.tribeLARPLabel || 'L.A.R.P.'),
@@ -1303,9 +1305,11 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
         ) : null,
         tr(
           td({ class: 'tribe-info-label' }, i18n.tribeStatusLabel || 'STATUS'),
-          td({ class: 'tribe-info-value' }, String(statusI18n()[tribe.status] || i18n.tribeStatusOpen).toUpperCase()),
+          td({ class: 'tribe-info-value', colspan: '3' }, String(statusI18n()[tribe.status] || i18n.tribeStatusOpen).toUpperCase())
+        ),
+        tr(
           td({ class: 'tribe-info-label' }, i18n.tribeModeLabel || 'MODE'),
-          td({ class: 'tribe-info-value' }, String(inviteModeI18n()[tribe.inviteMode] || tribe.inviteMode).toUpperCase())
+          td({ class: 'tribe-info-value', colspan: '3' }, String(inviteModeI18n()[tribe.inviteMode] || tribe.inviteMode).toUpperCase())
         ),
         tr(
           td({ class: 'tribe-info-label' }, i18n.tribeLARPLabel || 'L.A.R.P.'),

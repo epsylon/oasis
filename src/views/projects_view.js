@@ -129,9 +129,6 @@ const renderBudget = (project) => {
   const pct = S.goal > 0 ? clamp(Math.round((S.assigned / S.goal) * 100), 0, 100) : 0
   return div(
     { class: `budget-summary${S.exceeded ? " over" : ""}` },
-    renderCardField(i18n.projectBudgetGoal + ":", `${S.goal} ECO`),
-    renderCardField(i18n.projectBudgetAssigned + ":", `${S.assigned} ECO`),
-    renderCardField(i18n.projectBudgetRemaining + ":", `${S.remaining} ECO`),
     S.goal > 0 ? renderProgressBlock(i18n.projectBudgetAssigned + ":", `${S.assigned}/${S.goal}`, pct, 100) : null,
     S.exceeded ? p({ class: "warning" }, i18n.projectBudgetOver) : null
   )
@@ -494,16 +491,12 @@ const renderProjectList = (projects, filter) => {
           { class: `project-card ${statusClass}` },
           topbar ? topbar : null,
           h2(pr.title),
-          pr.image ? div({ class: "activity-image-preview" }, renderMediaBlob(pr.image)) : null,
           safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
-          renderCardField(i18n.projectStatus + ":", i18n["projectStatus" + statusUpper] || statusUpper),
+          pr.image ? div({ class: "activity-image-preview" }, renderMediaBlob(pr.image)) : null,
+          div({ class: "project-goal-highlight" }, renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`)),
+          div({ class: "project-goal-highlight" }, renderCardField(i18n.projectFollowers + ":", String(followersCount(pr)))),
           renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
-          renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`),
-          renderCardField(i18n.projectPledged + ":", `${pr.pledged || 0} ECO`),
           renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100),
-          renderCardField(i18n.projectMilestones + ":", `${mileDone}/${mileTotal}`),
-          renderCardField(i18n.projectFollowers + ":", String(followersCount(pr))),
-          renderCardField(i18n.projectBackers + ":", `${backersCount(pr)} · ${backersTotal(pr)} ECO`),
           isMineAuthor
             ? div(
                 { class: "project-admin-block" },
@@ -578,7 +571,6 @@ const renderProjectList = (projects, filter) => {
                 )
               )
             : null,
-            br(),
           div(
             { class: "card-comments-summary" },
             span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
@@ -618,11 +610,9 @@ const renderProjectForm = (project, mode) => {
       br(),
       input({ type: "text", name: "title", required: true, placeholder: i18n.projectTitlePlaceholder, value: pr.title || "" }),
       br(),
-      br(),
       label(i18n.projectDescription),
       br(),
       textarea({ name: "description", rows: "6", required: true, placeholder: i18n.projectDescriptionPlaceholder }, pr.description || ""),
-      br(),
       br(),
       label(i18n.projectImage),
       br(),
@@ -645,11 +635,9 @@ const renderProjectForm = (project, mode) => {
       br(),
       input({ type: "text", name: "milestoneTitle", required: true, placeholder: i18n.projectMilestoneTitlePlaceholder }),
       br(),
-      br(),
       label(i18n.projectMilestoneDescription),
       br(),
       textarea({ name: "milestoneDescription", rows: "3", placeholder: i18n.projectMilestoneDescriptionPlaceholder }),
-      br(),
       br(),
       label(i18n.projectMilestoneTargetPercent),
       br(),
@@ -730,23 +718,16 @@ exports.singleProjectView = async (project, filter, comments) => {
         topbar ? topbar : null,
         !isAuthor && safeArr(pr.followers).includes(userId) ? p({ class: "hint" }, i18n.projectYouFollowHint) : null,
         h2(pr.title),
-        pr.image ? div({ class: "activity-image-preview" }, renderMediaBlob(pr.image)) : null,
         safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
+        pr.image ? renderMediaBlob(pr.image) : null,
+        div({ class: "project-goal-highlight" }, renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`)),
+        renderBackers(pr, f),
         renderCardField(i18n.projectStatus + ":", i18n["projectStatus" + statusUpper] || statusUpper),
         renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
-        renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`),
-        renderCardField(i18n.projectPledged + ":", `${pr.pledged || 0} ECO`),
         renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100),
-        div(
-          { class: "social-stats" },
-          renderCardField(i18n.projectFollowers + ":", String(followersCount(pr))),
-          renderCardField(i18n.projectBackers + ":", `${backersCount(pr)} · ${backersTotal(pr)} ECO`)
-        ),
         renderBudget(pr),
         renderMilestonesAndBounties(pr, f, isAuthor),
         renderFollowers(pr),
-        br(),
-        renderBackers(pr, f),
         renderPledgeBox(pr, f, isAuthor),
         div(
           { class: "card-footer" },
@@ -760,7 +741,8 @@ exports.singleProjectView = async (project, filter, comments) => {
         form(
           { method: "POST", action: `/projects/${encodeURIComponent(pr.id || pr.key)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
           textarea({ id: "comment-text", name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
-          div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
+          div({ class: "comment-file-upload" }, label(i18n.uploadMedia), br(),
+          input({ type: "file", name: "blob" })),
           br(),
           button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
         )
@@ -781,7 +763,7 @@ exports.singleProjectView = async (project, filter, comments) => {
               )
             })
           )
-        : null
+       : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
     )
   )
 }

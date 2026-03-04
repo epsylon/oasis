@@ -83,7 +83,6 @@ const CaseForm = () =>
         placeholder: 'Subject or short description'
       }),
       br(),
-      br(),
       label('Case type'),
       br(),
       select(
@@ -98,9 +97,10 @@ const CaseForm = () =>
         type: 'text',
         name: 'respondentId',
         placeholder: i18n.courtsCaseRespondentPh,
-        required: true
+        required: true,
+        pattern: '^@[A-Za-z0-9+/]+=*\\.ed25519$',
+        title: i18n.courtsRespondentInvalid || 'Must be a valid SSB ID (@...ed25519)'
       }),
-      br(),
       br(),
       label(i18n.courtsCaseMethod),
       br(),

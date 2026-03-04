@@ -49,7 +49,7 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
       value: encryptedText
     }),
     br(),
-    label(i18n.cipherPasswordLabel),
+    label(i18n.cipherPasswordDecryptLabel),
     br(),
     input({
       type: "password",
@@ -102,4 +102,3 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
 };
 
 exports.cipherView = cipherView;
-

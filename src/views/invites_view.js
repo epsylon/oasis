@@ -1,6 +1,7 @@
 const { form, button, div, h2, h3, p, section, ul, li, a, br, hr, input, span, table, tr, td } = require("../server/node_modules/hyperaxe");
 const path = require("path");
 const fs = require('fs');
+const { renderUrl } = require("../backend/renderUrl");
 const { template, i18n } = require('./main_views');
 
 const homedir = require('os').homedir();
@@ -119,7 +120,13 @@ const invitesView = ({ invitesEnabled }) => {
         br(),
         snhInvite ? div({ class: 'snh-invite-box' },
           h3({ class: 'snh-invite-name' }, snhInvite.name),
-          span({ class: 'snh-invite-code' }, snhInvite.code)
+          p({ class: 'snh-invite-name' }, snhInvite.description),
+          p({ class: 'snh-invite-name' }, renderUrl(snhInvite.url)),
+          snhInvite.createdAt ? p({ class: 'snh-invite-date' }, `${i18n.statsCreatedAt || 'Created'}: ${new Date(snhInvite.createdAt).toLocaleDateString()}`) : null,
+          form({ action: '/settings/invite/accept', method: 'post' },
+            input({ type: 'hidden', name: 'invite', value: snhInvite.code }),
+            button({ type: 'submit', class: 'filter-btn' }, snhInvite.code)
+          )
         ) : null,
         hr(),
         h2(`${i18n.invitesAcceptedInvites} (${activePubs.length})`),

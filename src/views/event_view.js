@@ -75,6 +75,7 @@ const renderEventOwnerActions = (e, returnTo) => {
 const renderEventAttendAction = (e, isAttending, returnTo) => {
   const st = normalizeEventStatus(e.status);
   if (st !== "OPEN") return null;
+  if (e.organizer === userId) return null;
   return form(
     { method: "POST", action: `/events/attend/${encodeURIComponent(e.id)}` },
     input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -214,27 +215,8 @@ const renderEventItem = (e, filter) => {
     renderCardField(i18n.eventStatus + ":", eventStatusLabel(e.status)),
     urlHref ? renderCardField(i18n.eventUrlLabel + ":", a({ href: urlHref, target: "_blank", rel: "noopener noreferrer" }, urlHref)) : null,
     renderCardField(i18n.eventPriceLabel + ":", parseFloat(e.price || 0).toFixed(6) + " ECO"),
-    br(),
-    div(
-      { class: "card-field" },
-      span({ class: "card-label" }, i18n.eventAttendees + ":"),
-      span(
-        { class: "card-value" },
-        attendees.length
-          ? attendees
-              .filter(Boolean)
-              .map((id, i) => [i > 0 ? ", " : "", a({ class: "user-link", href: `/author/${encodeURIComponent(id)}` }, id)])
-              .flat()
-          : i18n.noAttendees
-      )
-    ),
-    br(),
-    e.tags && e.tags.filter(Boolean).length
-      ? div(
-          { class: "card-tags" },
-          e.tags.filter(Boolean).map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
-        )
-      : null,
+    renderCardField(i18n.eventAttendees + ":", String(attendees.length)),
+    br,
     div(
       { class: "card-comments-summary" },
       span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
@@ -330,7 +312,8 @@ exports.eventView = async (events, filter, eventId, returnTo) => {
             form(
               {
                 action: currentFilter === "edit" ? `/events/update/${encodeURIComponent(eventId)}` : "/events/create",
-                method: "POST"
+                method: "POST",
+                enctype: "multipart/form-data"
               },
               input({ type: "hidden", name: "returnTo", value: ret }),
               label(i18n.eventTitleLabel),
@@ -343,13 +326,16 @@ exports.eventView = async (events, filter, eventId, returnTo) => {
                 value: currentFilter === "edit" ? eventToEdit.title || "" : ""
               }),
               br(),
-              br(),
               label(i18n.eventDescriptionLabel),
               br(),
               textarea(
                 { name: "description", id: "description", placeholder: i18n.eventDescriptionPlaceholder, rows: "4" },
                 currentFilter === "edit" ? eventToEdit.description || "" : ""
               ),
+              br(),
+              label(i18n.uploadMedia),
+              br(),
+              input({ type: "file", name: "image", accept: "image/*" }),
               br(),
               br(),
               label(i18n.eventDateLabel),
@@ -382,7 +368,6 @@ exports.eventView = async (events, filter, eventId, returnTo) => {
                 required: true,
                 value: currentFilter === "edit" ? eventToEdit.location || "" : ""
               }),
-              br(),
               br(),
               label(i18n.eventUrlLabel),
               br(),
@@ -451,6 +436,12 @@ exports.singleEventView = async (event, filter, comments = []) => {
         renderCardField(i18n.eventStatus + ":", eventStatusLabel(event.status)),
         urlHref ? renderCardField(i18n.eventUrlLabel + ":", a({ href: urlHref, target: "_blank", rel: "noopener noreferrer" }, urlHref)) : null,
         renderCardField(i18n.eventPriceLabel + ":", parseFloat(event.price || 0).toFixed(6) + " ECO"),
+        event.tags && event.tags.filter(Boolean).length
+          ? div(
+              { class: "card-tags" },
+              event.tags.filter(Boolean).map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
+            )
+          : null,
         br(),
         div(
           { class: "card-field" },
@@ -464,18 +455,6 @@ exports.singleEventView = async (event, filter, comments = []) => {
                   .flat()
               : i18n.noAttendees
           )
-        ),
-        br(),
-        event.tags && event.tags.filter(Boolean).length
-          ? div(
-              { class: "card-tags" },
-              event.tags.filter(Boolean).map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
-            )
-          : null,
-        div(
-          { class: "card-comments-summary" },
-          span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-          span({ class: "card-value" }, String(commentCount))
         ),
         br(),
         p(

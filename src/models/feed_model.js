@@ -255,6 +255,8 @@ module.exports = ({ cooler }) => {
 
       const opinionsInhabitants = new Set(Array.isArray(content.opinions_inhabitants) ? content.opinions_inhabitants : []);
 
+      let commentCount = 0;
+
       const actions = idx.actionsByRoot.get(root) || [];
       for (const a of actions) {
         const ac = a?.value?.content || {};
@@ -277,12 +279,18 @@ module.exports = ({ cooler }) => {
           }
           continue;
         }
+
+        if (ac.action === "comment") {
+          commentCount++;
+          continue;
+        }
       }
 
       content.refeeds = refeeds;
       content.refeeds_inhabitants = Array.from(refeedsInhabitants);
       content.opinions = opinionsCounts;
       content.opinions_inhabitants = Array.from(opinionsInhabitants);
+      content.commentCount = commentCount;
 
       if (!Array.isArray(content.tags)) content.tags = extractTags(content.text);
 
@@ -325,6 +333,57 @@ module.exports = ({ cooler }) => {
     return feeds;
   };
 
-  return { createFeed, createRefeed, addOpinion, listFeeds, resolveCurrentId };
+  const getFeedById = async (feedId) => {
+    const ssbClient = await openSsb();
+    const idx = await buildIndex(ssbClient);
+    const currentId = idx.resolve(feedId);
+    if (idx.tombstoned.has(currentId)) return null;
+    const msg = idx.feedsById.get(currentId);
+    if (!msg) return null;
+    const actions = idx.actionsByRoot.get(currentId) || [];
+    const content = msg.value?.content || {};
+    const opinions = {};
+    const opinionsInhabitants = [];
+    const refeedsInhabitants = [];
+    let refeeds = 0;
+    let commentCount = 0;
+    for (const a of actions) {
+      const ac = a?.value?.content || {};
+      if (ac.type === "feed-action" && ac.action === "opinion" && ac.category) {
+        opinions[ac.category] = (opinions[ac.category] || 0) + 1;
+        if (ac.author || a?.value?.author) opinionsInhabitants.push(ac.author || a.value.author);
+      }
+      if (ac.type === "feed-action" && ac.action === "refeed") {
+        refeeds++;
+        if (ac.author || a?.value?.author) refeedsInhabitants.push(ac.author || a.value.author);
+      }
+      if (ac.type === "feed-action" && ac.action === "comment") {
+        commentCount++;
+      }
+    }
+    const merged = { ...content, opinions, opinions_inhabitants: opinionsInhabitants, refeeds_inhabitants: refeedsInhabitants, refeeds, commentCount };
+    return { key: currentId, value: { ...msg.value, content: merged } };
+  };
+
+  const getComments = async (feedId) => {
+    const ssbClient = await openSsb();
+    const idx = await buildIndex(ssbClient);
+    const currentId = idx.resolve(feedId);
+    const actions = idx.actionsByRoot.get(currentId) || [];
+    return actions
+      .filter(a => a?.value?.content?.type === "feed-action" && a?.value?.content?.action === "comment")
+      .sort((a, b) => (a?.value?.timestamp || 0) - (b?.value?.timestamp || 0));
+  };
+
+  const addComment = async (feedId, text) => {
+    const ssbClient = await openSsb();
+    const idx = await buildIndex(ssbClient);
+    const currentId = idx.resolve(feedId);
+    await new Promise((resolve, reject) => {
+      ssbClient.publish({ type: "feed-action", action: "comment", root: currentId, text: cleanText(text) }, (err) => (err ? reject(err) : resolve()));
+    });
+  };
+
+  return { createFeed, createRefeed, addOpinion, listFeeds, resolveCurrentId, getFeedById, getComments, addComment };
 };
 

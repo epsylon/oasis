@@ -99,7 +99,7 @@ exports.statsView = (stats, filter) => {
             )
           )
         ),
-        div({ style: headerStyle }, h3(`${i18n.bankingUserEngagementScore}: ${C(stats, 'karmaScore')}`)),
+        div({ class: "stats-karma-block" }, h3(`${i18n.bankingUserEngagementScore}: ${C(stats, 'karmaScore')}`)),
         div({ style: headerStyle },
           h3(i18n.statsCarbonFootprintTitle || 'Carbon Footprint'),
           (() => {

@@ -2120,7 +2120,8 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 /* Market */
 .market-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
   justify-content: center;
 }
 
@@ -3107,7 +3108,8 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .pub-item{border:1;border-radius:10px;background:none}
 .snh-invite-box{border:1px solid currentColor;border-radius:8px;padding:16px;margin:12px 0;font-family:monospace}
 .snh-invite-name{margin:0 0 8px 0}
-.snh-invite-code{display:block;word-break:break-all;font-size:14px;margin:0;text-decoration:none;cursor:default}
+.snh-invite-date{font-size:13px;opacity:0.7;margin:0 0 10px 0}
+.snh-invite-btn{display:block;word-break:break-all;font-size:14px;margin:0;cursor:pointer;background:none;border:1px solid #FFA500;color:#FFA500;padding:10px;border-radius:5px;width:auto;text-align:left;font-family:monospace}
 .error-box{background:#222326;border:none;color:#f5c242;padding:12px;border-radius:8px;margin-top:8px}
 .error-title{margin:0 0 6px 0;font-weight:600}
 .error-pre{margin:0;white-space:pre-wrap;font-family:monospace}
@@ -3623,7 +3625,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 
 .tribe-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
@@ -3663,8 +3665,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 
 .tribe-section-nav .filter-btn {
-  font-size: 12px;
-  padding: 5px 10px;
+  padding: 8px 12px;
   text-transform: uppercase;
 }
 
@@ -4023,4 +4024,143 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 
 .tribe-parent-card-link:hover {
   text-decoration: underline;
+}
+
+.comment-submit-btn {
+  width: auto;
+  max-width: 200px;
+}
+
+.market-owner-actions-inline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.project-goal-highlight {
+  font-size: 1.4em;
+  font-weight: 700;
+}
+
+.project-control-form--progress {
+  max-width: 300px;
+}
+
+.project-progress-input {
+  max-width: 80px;
+}
+
+.applicants-under {
+  color: #4caf50;
+}
+
+.applicants-at {
+  color: #ffeb3b;
+}
+
+.applicants-over {
+  color: #f44336;
+}
+
+.transfer-amount-highlight {
+  font-size: 1.3em;
+  font-weight: 700;
+}
+
+.pixelia-paint-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.pixelia-paint-form label,
+.pixelia-paint-form input,
+.pixelia-paint-form select,
+.pixelia-paint-form button {
+  width: auto;
+  margin: 0;
+}
+
+.pixelia-paint-form input[type="number"] {
+  max-width: 80px;
+}
+
+.method-image-centered {
+  text-align: center;
+  margin: 12px 0;
+}
+
+.method-image-centered img {
+  max-width: 120px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.tag-cloud-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 90%;
+  gap: 14px;
+  justify-content: center;
+  align-items: center;
+  min-height: 220px;
+  padding: 36px;
+  border-radius: 16px;
+}
+
+.tag-cloud-item {
+  position: relative;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  letter-spacing: 0.3px;
+  text-decoration: none;
+  transition: all 0.25s ease;
+}
+
+.tag-cloud-item:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.2);
+  transform: translateY(-3px);
+  color: #ffffff;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+}
+
+.tag-cloud-item[data-weight="1"] {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.tag-cloud-item[data-weight="2"] {
+  font-size: 0.95rem;
+  opacity: 0.8;
+}
+
+.tag-cloud-item[data-weight="3"] {
+  font-size: 1.05rem;
+  opacity: 0.9;
+}
+
+.tag-cloud-item[data-weight="4"] {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.stats-karma-block {
+  background-color: #222;
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px solid #444;
+  margin-bottom: 24px;
+}
+
+.feed-detail-card {
+  background-color: #222;
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
 }

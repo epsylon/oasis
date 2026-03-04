@@ -153,6 +153,7 @@ const GovernmentCard = (g, meta) => {
     { class: 'card' },
     h2(i18n.parliamentGovernmentCard),
     GovHeader(g),
+    div({ class: 'method-image-centered' }, img({ src: methodImageSrc(methodKey), alt: methodLabel })),
     div(
       { class: 'table-wrap' },
       applyEl(table, { class: 'table table--centered gov-overview' }, [
@@ -166,7 +167,7 @@ const GovernmentCard = (g, meta) => {
           th(i18n.parliamentEfficiency || '% EFFICIENCY')
         )),
         tbody(tr(
-          td(div({ class: 'method-cell' }, img({ src: methodImageSrc(methodKey), alt: methodLabel }))),
+          td(methodLabel),
           td(String(g.proposed || 0)),
           td(String(g.approved || 0)),
           td(String(g.declined || 0)),

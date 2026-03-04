@@ -13,6 +13,28 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.7 - 2026-03-04
+
+### Added
+
+ + Writing comments within feeds (Feed plugin).
+ + PUB metadata and invitations (Invites plugin).
+ + Chinese simplified (zh) translation (i18n).
+ + Arab (ar) translation (i18n).
+ + Hindi (hi) translation (i18n).
+ + Russian (ru) translation (i18n).
+
+### Fixed
+
+ + SNH-Mobile Theme (Core plugin).
+ 
+### Changed
+
+ + Multiple alignment of views between modules (Multiple plugins).
+ + Cloud tags (Tags plugin).
+ + Auto-join button for PUB: SNH "La Plaza" (Invites plugin).
+ + i18n languages array expanded: ['en', 'es', 'fr', 'eu', 'de', 'it', 'pt', 'zh', 'ar', 'hi', 'ru'] (Core plugin).
+
 ## v0.6.6 - 2026-02-23
 
 ### Added

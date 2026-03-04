@@ -1,6 +1,6 @@
 const path = require('path');
 let i18n = {};
-const languages = ['en', 'es', 'fr', 'eu', 'de', 'it', 'pt'];
+const languages = ['en', 'es', 'fr', 'eu', 'de', 'it', 'pt', 'zh', 'ar', 'hi', 'ru'];
 
 languages.forEach(language => {
   try {

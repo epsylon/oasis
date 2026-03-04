@@ -113,6 +113,133 @@ module.exports = ({ cooler }) => {
     return Array.from(pick.values());
   };
 
+  const inferType = (c = {}) => {
+    if (c.vote) return 'vote';
+    if (c.votes) return 'votes';
+    if (c.address && c.coin === 'ECO' && c.type === 'wallet') return 'bankWallet';
+    if (typeof c.amount !== 'undefined' && c.epochId && c.allocationId) return 'bankClaim';
+    if (typeof c.item_type !== 'undefined' && typeof c.status !== 'undefined') return 'market';
+    if (typeof c.goal !== 'undefined' && typeof c.progress !== 'undefined') return 'project';
+    if (typeof c.members !== 'undefined' && typeof c.isAnonymous !== 'undefined') return 'tribe';
+    if (typeof c.date !== 'undefined' && typeof c.location !== 'undefined') return 'event';
+    if (typeof c.priority !== 'undefined' && typeof c.status !== 'undefined' && c.title) return 'task';
+    if (typeof c.confirmations !== 'undefined' && typeof c.severity !== 'undefined') return 'report';
+    if (typeof c.job_type !== 'undefined' && typeof c.status !== 'undefined') return 'job';
+    if (typeof c.url !== 'undefined' && typeof c.mimeType !== 'undefined' && c.type === 'audio') return 'audio';
+    if (typeof c.url !== 'undefined' && typeof c.mimeType !== 'undefined' && c.type === 'video') return 'video';
+    if (typeof c.url !== 'undefined' && c.title && c.key) return 'document';
+    if (typeof c.text !== 'undefined' && typeof c.refeeds !== 'undefined') return 'feed';
+    if (typeof c.text !== 'undefined' && typeof c.contentWarning !== 'undefined') return 'post';
+    if (typeof c.contact !== 'undefined') return 'contact';
+    if (typeof c.about !== 'undefined') return 'about';
+    if (typeof c.concept !== 'undefined' && typeof c.amount !== 'undefined' && c.status) return 'transfer';
+    return '';
+  };
+
+  const normalizeActionType = (a) => {
+    const t = a.type || a.content?.type || inferType(a.content) || '';
+    return String(t).toLowerCase();
+  };
+
+  const priorityBump = (p) => {
+    const s = String(p || '').toUpperCase();
+    if (s === 'HIGH') return 3;
+    if (s === 'MEDIUM') return 1;
+    return 0;
+  };
+
+  const severityBump = (s) => {
+    const x = String(s || '').toUpperCase();
+    if (x === 'CRITICAL') return 6;
+    if (x === 'HIGH') return 4;
+    if (x === 'MEDIUM') return 2;
+    return 0;
+  };
+
+  const calculateOpinionScore = (content) => {
+    const cats = content?.opinions || {};
+    let s = 0;
+    for (const k in cats) {
+      if (!Object.prototype.hasOwnProperty.call(cats, k)) continue;
+      if (k === 'interesting' || k === 'inspiring') s += 5;
+      else if (k === 'boring' || k === 'spam' || k === 'propaganda') s -= 3;
+      else s += 1;
+    }
+    return s;
+  };
+
+  const scoreMarketItem = (c) => {
+    const st = String(c.status || '').toUpperCase();
+    let s = 5;
+    if (st === 'SOLD') s += 8;
+    else if (st === 'ACTIVE') s += 3;
+    const bids = Array.isArray(c.auctions_poll) ? c.auctions_poll.length : 0;
+    s += Math.min(10, bids);
+    return s;
+  };
+
+  const scoreProjectItem = (c) => {
+    const st = String(c.status || 'ACTIVE').toUpperCase();
+    const prog = Number(c.progress || 0);
+    let s = 8 + Math.min(10, prog / 10);
+    if (st === 'FUNDED') s += 10;
+    return s;
+  };
+
+  const computeKarmaFromMsgs = (msgs) => {
+    let score = 0;
+    for (const m of msgs) {
+      const c = m.value?.content || {};
+      const t = normalizeActionType({ type: c.type, content: c });
+      const rawType = String(c.type || '').toLowerCase();
+      if (t === 'post') score += 10;
+      else if (t === 'comment') score += 5;
+      else if (t === 'like') score += 2;
+      else if (t === 'image') score += 8;
+      else if (t === 'video') score += 12;
+      else if (t === 'audio') score += 8;
+      else if (t === 'document') score += 6;
+      else if (t === 'bookmark') score += 2;
+      else if (t === 'feed') score += 6;
+      else if (t === 'forum') score += c.root ? 5 : 10;
+      else if (t === 'vote') score += 3 + calculateOpinionScore(c);
+      else if (t === 'votes') score += Math.min(10, Number(c.totalVotes || 0));
+      else if (t === 'market') score += scoreMarketItem(c);
+      else if (t === 'project') score += scoreProjectItem(c);
+      else if (t === 'tribe') score += 6 + Math.min(10, Array.isArray(c.members) ? c.members.length * 0.5 : 0);
+      else if (t === 'event') score += 4 + Math.min(10, Array.isArray(c.attendees) ? c.attendees.length : 0);
+      else if (t === 'task') score += 3 + priorityBump(c.priority);
+      else if (t === 'report') score += 4 + (Array.isArray(c.confirmations) ? c.confirmations.length : 0) + severityBump(c.severity);
+      else if (t === 'curriculum') score += 5;
+      else if (t === 'aiexchange') score += Array.isArray(c.ctx) ? Math.min(10, c.ctx.length) : 0;
+      else if (t === 'job') score += 4 + (Array.isArray(c.subscribers) ? c.subscribers.length : 0);
+      else if (t === 'bankclaim') score += Math.min(20, Math.log(1 + Math.max(0, Number(c.amount) || 0)) * 5);
+      else if (t === 'bankwallet') score += 2;
+      else if (t === 'transfer') score += 1;
+      else if (t === 'about') score += 1;
+      else if (t === 'contact') score += 1;
+      else if (t === 'pub') score += 1;
+      else if (t === 'parliamentcandidature' || rawType === 'parliamentcandidature') score += 12;
+      else if (t === 'parliamentterm' || rawType === 'parliamentterm') score += 25;
+      else if (t === 'parliamentproposal' || rawType === 'parliamentproposal') score += 8;
+      else if (t === 'parliamentlaw' || rawType === 'parliamentlaw') score += 16;
+      else if (t === 'parliamentrevocation' || rawType === 'parliamentrevocation') score += 10;
+      else if (t === 'courts_case' || t === 'courtscase' || rawType === 'courts_case') score += 4;
+      else if (t === 'courts_evidence' || t === 'courtsevidence' || rawType === 'courts_evidence') score += 3;
+      else if (t === 'courts_answer' || t === 'courtsanswer' || rawType === 'courts_answer') score += 4;
+      else if (t === 'courts_verdict' || t === 'courtsverdict' || rawType === 'courts_verdict') score += 10;
+      else if (t === 'courts_settlement' || t === 'courtssettlement' || rawType === 'courts_settlement') score += 8;
+      else if (t === 'courts_nomination' || t === 'courtsnomination' || rawType === 'courts_nomination') score += 6;
+      else if (t === 'courts_nom_vote' || t === 'courtsnomvote' || rawType === 'courts_nom_vote') score += 3;
+      else if (t === 'courts_public_pref' || t === 'courtspublicpref' || rawType === 'courts_public_pref') score += 1;
+      else if (t === 'courts_mediators' || t === 'courtsmediators' || rawType === 'courts_mediators') score += 6;
+      else if (t === 'courts_open_support' || t === 'courtsopensupport' || rawType === 'courts_open_support') score += 2;
+      else if (t === 'courts_verdict_vote' || t === 'courtsverdictvote' || rawType === 'courts_verdict_vote') score += 3;
+      else if (t === 'courts_judge_assign' || t === 'courtsjudgeassign' || rawType === 'courts_judge_assign') score += 5;
+    }
+    return Math.max(0, Math.round(score));
+  };
+
   const getStats = async (filter = 'ALL') => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
@@ -211,21 +338,20 @@ module.exports = ({ cooler }) => {
       opinions[t] = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length || 0;
     }
 
-    const karmaMsgsAll = allMsgs.filter(m => m.value?.content?.type === 'karmaScore' && Number.isFinite(Number(m.value.content.karmaScore)));
     if (filter === 'MINE') {
-      const mine = karmaMsgsAll.filter(m => m.value.author === userId).sort((a, b) => (b.value.timestamp || 0) - (a.value.timestamp || 0));
-      const myKarma = mine.length ? Number(mine[0].value.content.karmaScore) || 0 : 0;
-      content['karmaScore'] = myKarma;
+      const myMsgs = allMsgs.filter(m => m.value.author === userId);
+      content['karmaScore'] = computeKarmaFromMsgs(myMsgs);
     } else {
-      const latestByAuthor = new Map();
-      for (const m of karmaMsgsAll) {
+      const msgsByAuthor = new Map();
+      for (const m of allMsgs) {
         const a = m.value.author;
-        const ts = m.value.timestamp || 0;
-        const k = Number(m.value.content.karmaScore) || 0;
-        const prev = latestByAuthor.get(a);
-        if (!prev || ts > prev.ts) latestByAuthor.set(a, { ts, k });
+        if (!msgsByAuthor.has(a)) msgsByAuthor.set(a, []);
+        msgsByAuthor.get(a).push(m);
       }
-      const sumKarma = Array.from(latestByAuthor.values()).reduce((s, x) => s + x.k, 0);
+      let sumKarma = 0;
+      for (const authorMsgs of msgsByAuthor.values()) {
+        sumKarma += computeKarmaFromMsgs(authorMsgs);
+      }
       content['karmaScore'] = sumKarma;
     }
 

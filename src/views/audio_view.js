@@ -195,8 +195,6 @@ const renderAudioList = (audios, filter, params = {}) => {
           ),
           title ? h2(title) : null,
           renderAudioPlayer(audioObj),
-          safeText(audioObj.description) ? p(...renderUrl(audioObj.description)) : null,
-          renderTags(audioObj.tags),
           div(
             { class: "card-comments-summary" },
             span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
@@ -229,22 +227,7 @@ const renderAudioList = (audios, filter, params = {}) => {
                   )
                 : null
             );
-          })(),
-          div(
-            { class: "voting-buttons" },
-            opinionCategories.map((category) =>
-              form(
-                { method: "POST", action: `/audios/opinions/${encodeURIComponent(audioObj.key)}/${category}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                button(
-                  { class: "vote-btn" },
-                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
-                    audioObj.opinions?.[category] || 0
-                  }]`
-                )
-              )
-            )
-          )
+          })()
         );
       })
     : p(params.q ? i18n.audioNoMatch : i18n.noAudios);
@@ -266,6 +249,14 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       input({ type: "file", name: "audio", required: filter !== "edit" }),
       br(),
       br(),
+      span(i18n.audioTitleLabel),
+      br(),
+      input({ type: "text", name: "title", placeholder: i18n.audioTitlePlaceholder, value: audioToEdit?.title || "" }),
+      br(),
+      span(i18n.audioDescriptionLabel),
+      br(),
+      textarea({ name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows: "4" }, audioToEdit?.description || ""),
+      br(),
       span(i18n.audioTagsLabel),
       br(),
       input({
@@ -274,16 +265,6 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
         placeholder: i18n.audioTagsPlaceholder,
         value: safeArr(audioToEdit?.tags).join(", ")
       }),
-      br(),
-      br(),
-      span(i18n.audioTitleLabel),
-      br(),
-      input({ type: "text", name: "title", placeholder: i18n.audioTitlePlaceholder, value: audioToEdit?.title || "" }),
-      br(),
-      br(),
-      span(i18n.audioDescriptionLabel),
-      br(),
-      textarea({ name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows: "4" }, audioToEdit?.description || ""),
       br(),
       br(),
       button({ type: "submit" }, filter === "edit" ? i18n.audioUpdateButton : i18n.audioCreateButton)

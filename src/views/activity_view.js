@@ -553,7 +553,7 @@ function renderActionCards(actions, userId, allActions) {
       const { url } = content;
       cardBody.push(
         div({ class: 'card-section image' },
-          img({ src: `/blob/${encodeURIComponent(url)}`, class: 'activity-image-thumb' })
+          img({ src: `/blob/${encodeURIComponent(url)}`, class: 'post-image' })
         )
       );
     }

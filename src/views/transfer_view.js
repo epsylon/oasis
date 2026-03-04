@@ -105,7 +105,6 @@ const renderTransferTopbar = (transfer, filter, params = {}) => {
 
   const chips = []
   if (isExpired) chips.push(span({ class: "chip chip-warn" }, i18n.transfersExpiredBadge))
-  if (isExpiringSoon) chips.push(span({ class: "chip chip-warn" }, i18n.transfersExpiringSoonBadge))
 
   const leftActions = []
 
@@ -163,7 +162,6 @@ const generateTransferCard = (transfer, filter, params = {}) => {
   const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired
 
   const topbar = renderTransferTopbar(transfer, filter, params)
-  const tagsNode = renderTags(transfer.tags)
 
   return div(
     { class: "transfer-item" },
@@ -173,12 +171,9 @@ const generateTransferCard = (transfer, filter, params = {}) => {
       renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
       renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
       renderCardField(`${i18n.transfersStatus}:`, i18n[statusKey(transfer.status)] || String(transfer.status || "")),
-      renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`),
-      renderCardField(`${i18n.transfersFrom}:`, a({ class: "user-link", href: `/author/${encodeURIComponent(transfer.from)}` }, transfer.from)),
-      renderCardField(`${i18n.transfersTo}:`, a({ class: "user-link", href: `/author/${encodeURIComponent(transfer.to)}` }, transfer.to)),
-      br(),
+      br,
+      div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`)),
       renderConfirmationsBar(confirmedCount, required),
-      br(),
       showConfirm
         ? form(
             { method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
@@ -188,26 +183,11 @@ const generateTransferCard = (transfer, filter, params = {}) => {
             br()
           )
         : null,
-      tagsNode ? tagsNode : null,
-      tagsNode ? br() : null,
       p(
         { class: "card-footer" },
         span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
         a({ href: `/author/${encodeURIComponent(transfer.from)}`, class: "user-link" }, `${transfer.from}`),
         renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
-      ),
-      div(
-        { class: "voting-buttons transfer-voting-buttons" },
-        opinionCategories.map(category =>
-          form(
-            { method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button(
-              { class: "vote-btn" },
-              `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${transfer.opinions?.[category] || 0}]`
-            )
-          )
-        )
       )
     )
   )
@@ -307,11 +287,9 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
               br(),
               input({ type: "text", name: "to", required: true, pattern: "^@[A-Za-z0-9+/]+={0,2}\\.ed25519$", title: i18n.transfersToUserValidation, value: transferToEdit.to || "" }),
               br(),
-              br(),
               label(i18n.transfersConcept),
               br(),
               input({ type: "text", name: "concept", required: true, value: transferToEdit.concept || "" }),
-              br(),
               br(),
               label(i18n.transfersAmount),
               br(),
@@ -411,15 +389,15 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
         div(
           { class: "card-section transfer" },
           topbar ? topbar : null,
+          renderCardField(`${i18n.transfersFrom}:`, a({ class: "user-link", href: `/author/${encodeURIComponent(transfer.from)}` }, transfer.from)),
+          renderCardField(`${i18n.transfersTo}:`, a({ class: "user-link", href: `/author/${encodeURIComponent(transfer.to)}` }, transfer.to)),
+          br,
+          div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`)),
           renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
           renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
           renderCardField(`${i18n.transfersStatus}:`, i18n[statusKey(transfer.status)] || String(transfer.status || "")),
-          renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`),
-          renderCardField(`${i18n.transfersFrom}:`, a({ class: "user-link", href: `/author/${encodeURIComponent(transfer.from)}` }, transfer.from)),
-          renderCardField(`${i18n.transfersTo}:`, a({ class: "user-link", href: `/author/${encodeURIComponent(transfer.to)}` }, transfer.to)),
-          br(),
+          br,
           renderConfirmationsBar(confirmedCount, required),
-          br(),
           showConfirm
             ? form(
                 { method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },

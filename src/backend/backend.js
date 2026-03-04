@@ -630,7 +630,7 @@ const { reportView, singleReportView } = require("../views/report_view");
 const { taskView, singleTaskView } = require("../views/task_view");
 const { voteView } = require("../views/vote_view");
 const { bookmarkView, singleBookmarkView } = require("../views/bookmark_view");
-const { feedView, feedCreateView } = require("../views/feed_view");
+const { feedView, feedCreateView, singleFeedView } = require("../views/feed_view");
 const { legacyView } = require("../views/legacy_view");
 const { opinionsView } = require("../views/opinions_view");
 const { peersView } = require("../views/peers_view");
@@ -1456,6 +1456,12 @@ router
     const tag = typeof ctx.query.tag === "string" ? ctx.query.tag : "";
     ctx.body = feedCreateView({ q, tag });
   })
+  .get("/feed/:feedId", async (ctx) => {
+    const feed = await feedModel.getFeedById(ctx.params.feedId);
+    if (!feed) { ctx.redirect('/feed'); return; }
+    const comments = await feedModel.getComments(ctx.params.feedId).catch(() => []);
+    ctx.body = singleFeedView(feed, comments);
+  })
   .get('/forum', async ctx => {
     if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
     const filter = qf(ctx, 'recent'), forums = await forumModel.listAll(filter);
@@ -2190,6 +2196,13 @@ router
     await feedModel.createRefeed(ctx.params.id);
     ctx.redirect(ctx.get("Referer") || "/feed");
   })
+  .post("/feed/:feedId/comments", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    const text = ctx.request.body?.text != null ? stripDangerousTags(String(ctx.request.body.text)) : "";
+    const imageMarkdown = ctx.request.files?.blob ? await handleBlobUpload(ctx, 'blob') : null;
+    const fullText = imageMarkdown ? (text ? text + '\n' : '') + imageMarkdown : text;
+    await feedModel.addComment(ctx.params.feedId, fullText);
+    ctx.redirect(`/feed/${encodeURIComponent(ctx.params.feedId)}`);
+  })
   .post("/bookmarks/create", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'bookmarksMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
@@ -2506,14 +2519,20 @@ router
       ctx.res.on('finish', () => fs.unlinkSync(outputPath));
     } catch (error) { ctx.body = { error: 'Error exporting your blockchain: ' + error.message }; }
   })
-  .post('/tasks/create', koaBody(), async ctx => {
+  .post('/tasks/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
     const b = ctx.request.body;
-    await tasksModel.createTask(stripDangerousTags(b.title), stripDangerousTags(b.description), b.startTime, b.endTime, b.priority, stripDangerousTags(b.location), b.tags, b.isPublic);
+    const imageMarkdown = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
+    let desc = stripDangerousTags(b.description);
+    if (imageMarkdown) desc = (desc ? desc + '\n' : '') + imageMarkdown;
+    await tasksModel.createTask(stripDangerousTags(b.title), desc, b.startTime, b.endTime, b.priority, stripDangerousTags(b.location), b.tags, b.isPublic);
     ctx.redirect(safeReturnTo(ctx, '/tasks?filter=mine', ['/tasks']));
   })
-  .post('/tasks/update/:id', koaBody(), async ctx => {
+  .post('/tasks/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
     const b = ctx.request.body, tags = Array.isArray(b.tags) ? b.tags.filter(Boolean) : (typeof b.tags === 'string' ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : []);
-    await tasksModel.updateTaskById(ctx.params.id, { title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), startTime: b.startTime, endTime: b.endTime, priority: b.priority, location: stripDangerousTags(b.location), tags, isPublic: b.isPublic });
+    const imageMarkdown = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
+    let desc = stripDangerousTags(b.description);
+    if (imageMarkdown) desc = (desc ? desc + '\n' : '') + imageMarkdown;
+    await tasksModel.updateTaskById(ctx.params.id, { title: stripDangerousTags(b.title), description: desc, startTime: b.startTime, endTime: b.endTime, priority: b.priority, location: stripDangerousTags(b.location), tags, isPublic: b.isPublic });
     ctx.redirect(safeReturnTo(ctx, '/tasks?filter=mine', ['/tasks']));
   })
   .post('/tasks/assign/:id', koaBody(), async ctx => {
@@ -2565,14 +2584,20 @@ router
     ctx.redirect('/reports?filter=mine');
   })
   .post('/reports/:reportId/comments', koaBodyMiddleware, async ctx => commentAction(ctx, 'reports', 'reportId'))
-  .post('/events/create', koaBody(), async (ctx) => {
+  .post('/events/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     const b = ctx.request.body;
-    await eventsModel.createEvent(stripDangerousTags(b.title), stripDangerousTags(b.description), b.date, stripDangerousTags(b.location), b.price, b.url, b.attendees || [], b.tags, b.isPublic);
-    ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events'])); 
+    const imageMarkdown = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
+    let desc = stripDangerousTags(b.description);
+    if (imageMarkdown) desc = (desc ? desc + '\n' : '') + imageMarkdown;
+    await eventsModel.createEvent(stripDangerousTags(b.title), desc, b.date, stripDangerousTags(b.location), b.price, b.url, b.attendees || [], b.tags, b.isPublic);
+    ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events']));
   })
-  .post('/events/update/:id', koaBody(), async (ctx) => {
+  .post('/events/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     const b = ctx.request.body, existing = await eventsModel.getEventById(ctx.params.id);
-    await eventsModel.updateEventById(ctx.params.id, { title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), date: b.date, location: stripDangerousTags(b.location), price: b.price, url: b.url, attendees: b.attendees, tags: b.tags, isPublic: b.isPublic, createdAt: existing.createdAt, organizer: existing.organizer });
+    const imageMarkdown = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
+    let desc = stripDangerousTags(b.description);
+    if (imageMarkdown) desc = (desc ? desc + '\n' : '') + imageMarkdown;
+    await eventsModel.updateEventById(ctx.params.id, { title: stripDangerousTags(b.title), description: desc, date: b.date, location: stripDangerousTags(b.location), price: b.price, url: b.url, attendees: b.attendees, tags: b.tags, isPublic: b.isPublic, createdAt: existing.createdAt, organizer: existing.organizer });
     ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events']));
   })
   .post('/events/attend/:id', koaBody(), async ctx => {
@@ -2647,6 +2672,7 @@ router
     const respondent = String(b.respondentId || '').trim(), method = String(b.method || '').trim().toUpperCase();
     if (!titleSuffix && !titlePreset) { ctx.flash = { message: 'Title is required.' }; return ctx.redirect('/courts?filter=cases'); }
     if (!respondent) { ctx.flash = { message: 'Accused / Respondent is required.' }; return ctx.redirect('/courts?filter=cases'); }
+    if (!/^@[A-Za-z0-9+/]+=*\.ed25519$/.test(respondent)) { ctx.flash = { message: 'Invalid respondent ID. Must be a valid SSB ID (@...ed25519).' }; return ctx.redirect('/courts?filter=cases'); }
     if (!new Set(['JUDGE','DICTATOR','POPULAR','MEDIATION','KARMATOCRACY']).has(method)) { ctx.flash = { message: 'Invalid resolution method.' }; return ctx.redirect('/courts?filter=cases'); }
     try { await courtsModel.openCase({ titleBase: [titlePreset, titleSuffix].filter(Boolean).join(' - '), respondentInput: respondent, method }); }
     catch (e) { ctx.flash = { message: String(e?.message || e) }; }

@@ -92,7 +92,11 @@ const settingsView = ({ version, aiPrompt }) => {
             languageOption("Euskara", "eu"),
             languageOption("Deutsch", "de"),
             languageOption("Italiano", "it"),
-            languageOption("Português", "pt")
+            languageOption("Português", "pt"),
+            languageOption("中文", "zh"),
+            languageOption("العربية", "ar"),
+            languageOption("हिन्दी", "hi"),
+            languageOption("Русский", "ru")
           ]),
           br(),
           br(),

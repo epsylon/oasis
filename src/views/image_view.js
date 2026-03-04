@@ -134,8 +134,6 @@ const renderImageList = (images, filter, params = {}) => {
           ),
           title ? h2(title) : null,
           renderImageMedia(imgObj, filter, params),
-          safeText(imgObj.description) ? p(...renderUrl(imgObj.description)) : null,
-          renderTags(imgObj.tags),
           div(
             { class: "card-comments-summary" },
             span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
@@ -168,22 +166,7 @@ const renderImageList = (images, filter, params = {}) => {
                   )
                 : null
             );
-          })(),
-          div(
-            { class: "voting-buttons" },
-            opinionCategories.map((category) =>
-              form(
-                { method: "POST", action: `/images/opinions/${encodeURIComponent(imgObj.key)}/${category}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                button(
-                  { class: "vote-btn" },
-                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
-                    imgObj.opinions?.[category] || 0
-                  }]`
-                )
-              )
-            )
-          )
+          })()
         );
       })
     : p(params.q ? i18n.imageNoMatch : i18n.noImages);
@@ -211,25 +194,20 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
       imageToEdit?.url
         ? img({ src: `/blob/${encodeURIComponent(imageToEdit.url)}`, class: "media-preview", alt: imageToEdit?.title || "" })
         : null,
-      br(),
-      label(i18n.imageTagsLabel),
-      br(),
-      input({ type: "text", name: "tags", placeholder: i18n.imageTagsPlaceholder, value: tagsValue }),
-      br(),
-      br(),
       label(i18n.imageTitleLabel),
       br(),
       input({ type: "text", name: "title", placeholder: i18n.imageTitlePlaceholder, value: imageToEdit?.title || "" }),
-      br(),
       br(),
       label(i18n.imageDescriptionLabel),
       br(),
       textarea({ name: "description", placeholder: i18n.imageDescriptionPlaceholder, rows: "4" }, imageToEdit?.description || ""),
       br(),
-      br(),
       input({ type: "hidden", name: "meme", value: "0" }),
-      label(i18n.imageMemeLabel),
+      label(i18n.imageTagsLabel),
       br(),
+      input({ type: "text", name: "tags", placeholder: i18n.imageTagsPlaceholder, value: tagsValue }),
+      br(),
+      label(i18n.imageMemeLabel),
       input({
         id: "meme-checkbox",
         type: "checkbox",

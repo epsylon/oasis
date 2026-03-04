@@ -179,8 +179,6 @@ const renderDocumentList = (documents, filter, params = {}) => {
           doc?.url
             ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
             : p(i18n.documentNoFile),
-          safeText(doc.description) ? p(...renderUrl(doc.description)) : null,
-          renderTags(doc.tags),
           div(
             { class: "card-comments-summary" },
             span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
@@ -213,20 +211,7 @@ const renderDocumentList = (documents, filter, params = {}) => {
                   )
                 : null
             );
-          })(),
-          div(
-            { class: "voting-buttons" },
-            opinionCategories.map((category) =>
-              form(
-                { method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                button(
-                  { class: "vote-btn" },
-                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${doc.opinions?.[category] || 0}]`
-                )
-              )
-            )
-          )
+          })()
         );
       })
     : p(params.q ? i18n.documentNoMatch : i18n.noDocuments);
@@ -251,19 +236,17 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       input({ type: "file", name: "document", accept: "application/pdf", required: filter !== "edit" }),
       br(),
       br(),
-      label(i18n.documentTagsLabel),
-      br(),
-      input({ type: "text", name: "tags", placeholder: i18n.documentTagsPlaceholder, value: tagsValue }),
-      br(),
-      br(),
       label(i18n.documentTitleLabel),
       br(),
       input({ type: "text", name: "title", placeholder: i18n.documentTitlePlaceholder, value: docToEdit?.title || "" }),
       br(),
-      br(),
       label(i18n.documentDescriptionLabel),
       br(),
       textarea({ name: "description", placeholder: i18n.documentDescriptionPlaceholder, rows: "4" }, docToEdit?.description || ""),
+      br(),
+      label(i18n.documentTagsLabel),
+      br(),
+      input({ type: "text", name: "tags", placeholder: i18n.documentTagsPlaceholder, value: tagsValue }),
       br(),
       br(),
       button({ type: "submit" }, filter === "edit" ? i18n.documentUpdateButton : i18n.documentCreateButton)

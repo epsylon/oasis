@@ -515,25 +515,12 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       ].filter(Boolean)
 
                   const actionNodes = Array.isArray(actionNodesRaw) ? actionNodesRaw.filter(Boolean) : []
-                  const buttonsBlock =
-                    actionNodes.length > 0
-                      ? div(
-                          { class: "market-card buttons" },
-                          div({ style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center;" }, ...actionNodes)
-                        )
-                      : stockLeft <= 0
-                        ? div(
-                            { class: "market-card buttons" },
-                            div({ class: "card-field" }, span({ class: "card-value" }, i18n.marketOutOfStock))
-                          )
-                        : null
-
                   return div(
                     { class: "market-item" },
                     div(
                       { class: "market-card left-col" },
                       div(
-                        { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center;" },
+                        { class: "market-owner-actions-inline" },
                         form(
                           { method: "GET", action: `/market/${encodeURIComponent(item.id)}` },
                           input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -558,15 +545,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                         { class: "market-card image" },
                         renderMediaBlob(item.image, "/assets/images/default-market.png")
                       ),
-                      p(...renderUrl(item.description)),
-                      item.tags && item.tags.filter(Boolean).length
-                        ? div(
-                            { class: "card-tags" },
-                            item.tags
-                              .filter(Boolean)
-                              .map((tag) => a({ class: "tag-link", href: `/search?query=%23${encodeURIComponent(tag)}` }, `#${tag}`))
-                          )
-                        : null
+                      p(...renderUrl(item.description))
                     ),
                     div(
                       { class: "market-card right-col" },
@@ -611,7 +590,6 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                           button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
                         )
                       ),
-                      buttonsBlock
                     )
                   )
                 })

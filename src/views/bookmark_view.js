@@ -196,8 +196,7 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
           renderCardField(i18n.bookmarkUrlLabel + ":", urlLink),
           renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
           renderCardField(i18n.bookmarkCategoryLabel + ":", safeText(bookmark.category) || i18n.noCategory),
-          safeText(bookmark.description) ? p(...renderUrl(bookmark.description)) : null,
-          renderTags(bookmark.tags),
+          br,
           div(
             { class: "card-comments-summary" },
             span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
@@ -213,7 +212,6 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
               button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
             )
           ),
-          br(),
           (() => {
             const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
             const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
@@ -230,20 +228,7 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
                   )
                 : null
             );
-          })(),
-          div(
-            { class: "voting-buttons" },
-            opinionCategories.map((category) =>
-              form(
-                { method: "POST", action: `/bookmarks/opinions/${encodeURIComponent(bookmark.id)}/${category}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                button(
-                  { class: "vote-btn" },
-                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${bookmark.opinions?.[category] || 0}]`
-                )
-              )
-            )
-          )
+          })()
         );
       })
     : p(params.q ? i18n.bookmarkNoMatch : i18n.noBookmarks);
@@ -284,15 +269,13 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
         filter === "edit" ? bookmarkToEdit.description || "" : ""
       ),
       br(),
-      br(),
-      label(i18n.bookmarkTagsLabel),
+      label(i18n.bookmarkLastVisitLabel),
       br(),
       input({
-        type: "text",
-        name: "tags",
-        id: "tags",
-        placeholder: i18n.bookmarkTagsPlaceholder,
-        value: filter === "edit" ? safeArr(tags).join(", ") : ""
+        type: "datetime-local",
+        name: "lastVisit",
+        max: lastVisitMax,
+        value: filter === "edit" ? lastVisitValue : ""
       }),
       br(),
       br(),
@@ -306,14 +289,14 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
         value: filter === "edit" ? bookmarkToEdit.category || "" : ""
       }),
       br(),
-      br(),
-      label(i18n.bookmarkLastVisitLabel),
+      label(i18n.bookmarkTagsLabel),
       br(),
       input({
-        type: "datetime-local",
-        name: "lastVisit",
-        max: lastVisitMax,
-        value: filter === "edit" ? lastVisitValue : ""
+        type: "text",
+        name: "tags",
+        id: "tags",
+        placeholder: i18n.bookmarkTagsPlaceholder,
+        value: filter === "edit" ? safeArr(tags).join(", ") : ""
       }),
       br(),
       br(),
@@ -467,7 +450,6 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
           const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
           const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
           const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
           return p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),

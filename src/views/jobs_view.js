@@ -104,12 +104,13 @@ const renderTags = (tags = []) => {
 const renderApplicantsProgress = (subsCount, vacants) => {
   const s = Math.max(0, Number(subsCount || 0))
   const v = Math.max(1, Number(vacants || 1))
+  const colorClass = s < v ? "applicants-under" : s === v ? "applicants-at" : "applicants-over"
   return div(
     { class: "confirmations-block" },
     div(
       { class: "card-field" },
       span({ class: "card-label" }, `${i18n.jobsApplicants}: `),
-      span({ class: "card-value" }, `${s}/${v}`)
+      span({ class: `card-value ${colorClass}` }, `${s}/${v}`)
     ),
     progress({ class: "confirmations-progress", value: s, max: v })
   )
@@ -235,20 +236,14 @@ const renderJobList = (jobs, filter, params = {}) => {
           topbar ? topbar : null,
           safeText(job.title) ? h2(job.title) : null,
           job.image ? div({ class: "activity-image-preview" }, renderMediaBlob(job.image)) : null,
-          tagsNode ? tagsNode : null,
           br(),
           safeText(job.description) ? renderCardFieldRich(`${i18n.jobDescription}:`, renderUrl(job.description)) : null,
           br(),
           renderApplicantsProgress(subs.length, job.vacants),
-          renderSubscribers(subs),
-          renderCardField(`${i18n.jobStatus}:`, i18n["jobStatus" + String(job.status || "").toUpperCase()] || String(job.status || "").toUpperCase()),
           renderCardField(`${i18n.jobLanguages}:`, String(job.languages || "").toUpperCase()),
           renderCardField(`${i18n.jobType}:`, i18n["jobType" + String(job.job_type || "").toUpperCase()] || String(job.job_type || "").toUpperCase()),
           renderCardField(`${i18n.jobLocation}:`, String(job.location || "").toUpperCase()),
           renderCardField(`${i18n.jobTime}:`, i18n["jobTime" + String(job.job_time || "").toUpperCase()] || String(job.job_time || "").toUpperCase()),
-          renderCardField(`${i18n.jobVacants}:`, job.vacants),
-          safeText(job.requirements) ? renderCardFieldRich(`${i18n.jobRequirements}:`, renderUrl(job.requirements)) : null,
-          safeText(job.tasks) ? renderCardFieldRich(`${i18n.jobTasks}:`, renderUrl(job.tasks)) : null,
           renderCardFieldRich(`${i18n.jobSalary}:`, [span({ class: "card-salary" }, salaryText)]),
           br(),
           div(
@@ -561,21 +556,20 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
         topbar ? topbar : null,
         safeText(job.title) ? h2(job.title) : null,
         job.image ? div({ class: "activity-image-preview" }, renderMediaBlob(job.image)) : null,
-        tagsNode ? tagsNode : null,
-        br(),
         safeText(job.description) ? renderCardFieldRich(`${i18n.jobDescription}:`, renderUrl(job.description)) : null,
-        br(),
-        renderApplicantsProgress(subs.length, job.vacants),
-        renderSubscribers(subs),
         renderCardField(`${i18n.jobStatus}:`, i18n["jobStatus" + String(job.status || "").toUpperCase()] || String(job.status || "").toUpperCase()),
+        renderCardFieldRich(`${i18n.jobSalary}:`, [span({ class: "card-salary" }, salaryText)]),
+        renderCardField(`${i18n.jobVacants}:`, job.vacants),
         renderCardField(`${i18n.jobLanguages}:`, String(job.languages || "").toUpperCase()),
         renderCardField(`${i18n.jobType}:`, i18n["jobType" + String(job.job_type || "").toUpperCase()] || String(job.job_type || "").toUpperCase()),
         renderCardField(`${i18n.jobLocation}:`, String(job.location || "").toUpperCase()),
         renderCardField(`${i18n.jobTime}:`, i18n["jobTime" + String(job.job_time || "").toUpperCase()] || String(job.job_time || "").toUpperCase()),
-        renderCardField(`${i18n.jobVacants}:`, job.vacants),
         safeText(job.requirements) ? renderCardFieldRich(`${i18n.jobRequirements}:`, renderUrl(job.requirements)) : null,
         safeText(job.tasks) ? renderCardFieldRich(`${i18n.jobTasks}:`, renderUrl(job.tasks)) : null,
-        renderCardFieldRich(`${i18n.jobSalary}:`, [span({ class: "card-salary" }, salaryText)]),
+        renderApplicantsProgress(subs.length, job.vacants),
+        renderSubscribers(subs),
+        br(),
+        tagsNode ? tagsNode : null,
         br(),
         p(
           { class: "card-footer" },
