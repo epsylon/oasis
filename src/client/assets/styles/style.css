@@ -2370,6 +2370,103 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   margin: 0.15em 0 0.2em 0;
   font-size: 1em;
   color: #ffd740;
+  line-height: 1.6;
+}
+.forum-body {
+  margin: 0.15em 0 0.2em 0;
+  font-size: 1em;
+  color: #ffd740;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.forum-body h1 {
+  font-size: 1.6em;
+  margin: 10px 0 6px 0;
+  color: #ff9d00;
+}
+
+.forum-body h2 {
+  font-size: 1.4em;
+  margin: 8px 0 5px 0;
+  color: #ff9d00;
+}
+
+.forum-body h3 {
+  font-size: 1.25em;
+  margin: 6px 0 4px 0;
+  color: #ff9d00;
+}
+
+.forum-body ul,
+.forum-body ol {
+  padding-left: 22px;
+  margin: 6px 0;
+}
+
+.forum-body li {
+  margin: 3px 0;
+}
+
+.forum-body blockquote {
+  border-left: 3px solid #ff7300;
+  padding-left: 10px;
+  margin: 8px 0;
+  color: #ffb347;
+}
+
+.forum-body code {
+  background: #1a1a1a;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.forum-body pre {
+  background: #111;
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.forum-body hr {
+  border: none;
+  border-top: 1px solid #333;
+  margin: 10px 0;
+}
+
+.forum-body img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+
+.forum-body video,
+.forum-body audio {
+  max-width: 100%;
+  margin: 8px 0;
+}
+
+.forum-score-box {
+  position: sticky;
+  top: 80px;
+}
+
+.forum-body.truncate {
+  max-height: 220px;
+  overflow: hidden;
+  position: relative;
+}
+
+.forum-body.truncate::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 60px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0), #0f0f0f);
 }
 .forum-meta {
   font-size: 1em;
@@ -4093,7 +4190,6 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 
 .method-image-centered img {
-  max-width: 120px;
   height: auto;
   margin: 0 auto;
 }

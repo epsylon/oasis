@@ -13,6 +13,15 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.8 - 2026-03-12
+
+### Fixed
+
+ + Government method image (Parliament plugin).
+ + Trending text formatting + tombstoned content (Trending plugin).
+ + Opinions text formatting + tombstoned content (Opinions plugin).
+ + Forums text formatting (Forums plugin).
+
 ## v0.6.7 - 2026-03-04
 
 ### Added

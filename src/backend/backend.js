@@ -1464,7 +1464,7 @@ router
   })
   .get('/forum', async ctx => {
     if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
-    const filter = qf(ctx, 'recent'), forums = await forumModel.listAll(filter);
+    const filter = qf(ctx, 'hot'), forums = await forumModel.listAll(filter);
     ctx.body = await forumView(forums, filter);
   })
   .get('/forum/:forumId', async ctx => {

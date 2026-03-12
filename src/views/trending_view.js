@@ -42,7 +42,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
         lastVisit
           ? div(
               { class: 'card-field' },
-              span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'),
+              span({ class: 'card-label' }, i18n.bookmarkLastVisitLabel + ':'),
               span({ class: 'card-value' }, new Date(lastVisit).toLocaleString())
             )
           : "",
@@ -115,8 +115,14 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
     const { text, refeeds } = c;
     contentHtml = div({ class: 'trending-feed' },
       div({ class: 'card-section feed' },
+        form({ method: "GET", action: `/feed/${encodeURIComponent(item.key)}` },
+          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+        ),
+        br,
         div({ class: 'feed-text', innerHTML: sanitizeHtml(renderTextWithStyles(text)) }),
-        h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-value' }, refeeds))
+        refeeds
+            ? h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-value' }, refeeds))
+            : ""
       )
     );
   } else if (c.type === 'votes') {
@@ -160,7 +166,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
       div({ class: 'card-section styled-text-content' },
         div(
           { class: 'card-field' },
-          span({ class: 'card-label' }, i18n.textContentLabel + ':'),
           span({ class: 'card-value', innerHTML: sanitizeHtml(renderTextWithStyles(c.text || c.description || c.title || '[no content]')) })
         )
       )

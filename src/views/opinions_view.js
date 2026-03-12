@@ -21,7 +21,7 @@ const renderContentHtml = (content, key) => {
             span({ class: 'card-label' }, p(a({ href: content.url, target: '_blank', class: "bookmark-url" }, content.url)))
           ) : ""),
           content.lastVisit ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'),
+            span({ class: 'card-label' }, i18n.bookmarkLastVisitLabel + ':'),
             span({ class: 'card-value' }, new Date(content.lastVisit).toLocaleString())
           ) : "",
           content.description
@@ -143,11 +143,14 @@ const renderContentHtml = (content, key) => {
     case 'feed':
       return div({ class: 'opinion-feed' },
         div({ class: 'card-section feed' },
+          form({ method: "GET", action: `/feed/${encodeURIComponent(key)}` },
+            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+          ),
+          br,
           div({ class: 'feed-text', innerHTML: sanitizeHtml(renderTextWithStyles(content.text)) }),
-          h2({ class: 'card-field' },
-            span({ class: 'card-label' }, `${i18n.tribeFeedRefeeds}: `),
-            span({ class: 'card-value' }, content.refeeds)
-          )
+          content.refeeds
+            ? h2({ class: 'card-field' }, span({ class: 'card-label' }, `${i18n.tribeFeedRefeeds}: `), span({ class: 'card-value' }, content.refeeds))
+            : ""
         )
       );
     case 'votes': {
@@ -219,7 +222,6 @@ const renderContentHtml = (content, key) => {
       return div({ class: 'styled-text' },
         div({ class: 'card-section styled-text-content' },
           div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.textContentLabel + ':'),
             span({ class: 'card-value', innerHTML: sanitizeHtml(content.text || content.description || content.title || '[no content]') })
           )
         )

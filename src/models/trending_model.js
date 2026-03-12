@@ -45,10 +45,16 @@ module.exports = ({ cooler }) => {
 
       if (c.type === 'tombstone' && c.target) {
         tombstoned.add(c.target);
+        itemsById.delete(c.target);
         continue;
       }
 
       if (c.opinions && !tombstoned.has(k) && !['task', 'event', 'report'].includes(c.type)) {
+        if (c.replaces) replaces.set(c.replaces, k);
+        itemsById.set(k, m);
+      }
+
+      if (c.type === 'feed' && !tombstoned.has(k) && !itemsById.has(k)) {
         if (c.replaces) replaces.set(c.replaces, k);
         itemsById.set(k, m);
       }
@@ -58,7 +64,7 @@ module.exports = ({ cooler }) => {
       itemsById.delete(replacedId);
     }
 
-    let rawItems = Array.from(itemsById.values());
+    let rawItems = Array.from(itemsById.values()).filter(m => types.includes(m.value?.content?.type));
     const blobTypes = ['document', 'image', 'audio', 'video'];
 
     let items = await Promise.all(

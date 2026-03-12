@@ -83,6 +83,7 @@ module.exports = ({ cooler }) => {
       if (!c) continue;
       if (c.type === 'tombstone' && c.target) {
         tombstoned.add(c.target);
+        byId.delete(c.target);
         continue;
       }
       if (c.opinions && !tombstoned.has(key) && !['task', 'event', 'report'].includes(c.type)) {
@@ -96,13 +97,17 @@ module.exports = ({ cooler }) => {
           }
         });
       }
+      if (c.type === 'feed' && !tombstoned.has(key) && !byId.has(key)) {
+        if (c.replaces) replaces.set(c.replaces, key);
+        byId.set(key, { key, value: { ...msg.value, content: c, preview: getPreview(c) } });
+      }
     }
 
     for (const replacedId of replaces.keys()) {
       byId.delete(replacedId);
     }
 
-    let filtered = Array.from(byId.values());
+    let filtered = Array.from(byId.values()).filter(m => validTypes.includes(m.value?.content?.type));
     const blobTypes = ['document', 'image', 'audio', 'video'];
     const blobCheckCache = new Map();
 

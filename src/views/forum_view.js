@@ -6,6 +6,7 @@ const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
+const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 
 const userId = config.keys.id;
 const BASE_FILTERS = ['hot','all','mine','recent','top'];
@@ -181,7 +182,10 @@ const renderForumList = (forums, currentFilter) =>
                 href: `/forum/${encodeURIComponent(f.key)}`
               }, f.title)
             ),
-            div({ class: 'forum-body' }, ...renderUrl(f.text || '')),
+	    div({
+	      class: 'forum-body',
+	      innerHTML: renderTextWithStyles(f.text || '')
+	    }),
             div({ class: 'forum-meta' },
               span({ class: 'forum-positive-votes' },
                 `▲: ${f.positiveVotes || 0}`),
@@ -263,7 +267,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
         h2(i18n.forumTitle),
         p(i18n.forumDescription)
       ),
-      div({ class: 'mode-buttons' },
+       div({ class: 'mode-buttons-cols' },
         generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
           hot: i18n.forumFilterHot,
           all: i18n.forumFilterAll,
@@ -313,12 +317,10 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
               style: 'margin-left:12px;'
             }, forum.author)
           ),
-          div(
-            ...(forum.text || '').split('\n')
-              .map(l => l.trim())
-              .filter(l => l)
-              .map(l => p(...renderUrl(l)))
-          ),
+	  div({
+	    class: 'forum-body',
+	    innerHTML: renderTextWithStyles(forum.text || '')
+	  }),
           div({ class: 'forum-meta' },
             span({ class: 'votes-count' },
               `▲: ${messagesData.positiveVotes}`),
