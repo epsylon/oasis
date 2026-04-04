@@ -94,7 +94,7 @@ module.exports = ({ cooler }) => {
   return {
     type: "market",
 
-    async createItem(item_type, title, description, image, price, tagsRaw = [], item_status, deadline, includesShipping = false, stock = 0) {
+    async createItem(item_type, title, description, image, price, tagsRaw = [], item_status, deadline, includesShipping = false, stock = 0, mapUrl = "", shopOpts = {}) {
       const ssbClient = await openSsb()
 
       const formattedDeadline = deadline ? moment(deadline, moment.ISO_8601, true) : null
@@ -130,7 +130,11 @@ module.exports = ({ cooler }) => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         seller: ssbClient.id,
-        auctions_poll: []
+        auctions_poll: [],
+        mapUrl: String(mapUrl || "").trim(),
+        shopProductId: shopOpts.shopProductId || "",
+        shopId: shopOpts.shopId || "",
+        shopTitle: shopOpts.shopTitle || ""
       }
 
       return new Promise((resolve, reject) => {
@@ -322,7 +326,11 @@ module.exports = ({ cooler }) => {
           includesShipping: !!c.includesShipping,
           stock: Number(c.stock) || 0,
           deadline: c.deadline || null,
-          auctions_poll: Array.isArray(c.auctions_poll) ? c.auctions_poll : []
+          auctions_poll: Array.isArray(c.auctions_poll) ? c.auctions_poll : [],
+          mapUrl: c.mapUrl || "",
+          shopProductId: c.shopProductId || "",
+          shopId: c.shopId || "",
+          shopTitle: c.shopTitle || ""
         })
       }
 
@@ -456,7 +464,11 @@ module.exports = ({ cooler }) => {
         includesShipping: !!c.includesShipping,
         stock: Number(c.stock) || 0,
         deadline: c.deadline,
-        auctions_poll: Array.isArray(c.auctions_poll) ? c.auctions_poll : []
+        auctions_poll: Array.isArray(c.auctions_poll) ? c.auctions_poll : [],
+        mapUrl: c.mapUrl || "",
+        shopProductId: c.shopProductId || "",
+        shopId: c.shopId || "",
+        shopTitle: c.shopTitle || ""
       }
     },
 
@@ -489,6 +501,12 @@ module.exports = ({ cooler }) => {
           await this.updateItemById(item.id, { status })
         } catch (_) {}
       }
+    },
+
+    async getItemByShopProductId(shopProductId) {
+      if (!shopProductId) return null
+      const items = await this.listAllItems("all")
+      return items.find((i) => i.shopProductId === shopProductId) || null
     },
 
     async setItemAsSold(itemId) {

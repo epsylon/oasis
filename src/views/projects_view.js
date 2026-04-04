@@ -3,6 +3,7 @@ const { template, i18n } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
+const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
 
 const renderMediaBlob = (value) => {
   if (!value) return null
@@ -493,10 +494,15 @@ const renderProjectList = (projects, filter) => {
           h2(pr.title),
           safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
           pr.image ? div({ class: "activity-image-preview" }, renderMediaBlob(pr.image)) : null,
+          br(),
           div({ class: "project-goal-highlight" }, renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`)),
           div({ class: "project-goal-highlight" }, renderCardField(i18n.projectFollowers + ":", String(followersCount(pr)))),
           renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
           renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100),
+            pr.mapUrl ? div({ class: "project-maploc" },
+            span({ class: "card-label" }, (i18n.mapLocationTitle || "Map Location") + ":"),
+            br(), br(),
+            a({ href: pr.mapUrl, class: "map-location-link" }, pr.mapUrl)) : null,
           isMineAuthor
             ? div(
                 { class: "project-admin-block" },
@@ -625,6 +631,11 @@ const renderProjectForm = (project, mode) => {
       input({ type: "number", step: "0.01", min: "0.01", name: "goal", required: true, placeholder: i18n.projectGoalPlaceholder, value: pr.goal || "" }),
       br(),
       br(),
+      label(i18n.mapLocationTitle || "Map Location"),
+      br(),
+      input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: pr.mapUrl || "" }),
+      br(),
+      br(),
       label(i18n.projectDeadline),
       br(),
       input({ type: "datetime-local", name: "deadline", id: "deadline", required: true, min: nowLocal, value: deadlineValue }),
@@ -684,7 +695,7 @@ exports.projectsView = async (projectsOrForm, filter) => {
   )
 }
 
-exports.singleProjectView = async (project, filter, comments) => {
+exports.singleProjectView = async (project, filter, comments, params = {}) => {
   const pr = project || {}
   const f = String(filter || "ALL").toUpperCase()
   const isAuthor = pr.author === userId
@@ -720,9 +731,11 @@ exports.singleProjectView = async (project, filter, comments) => {
         h2(pr.title),
         safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
         pr.image ? renderMediaBlob(pr.image) : null,
+        renderMapEmbedWithZoom(params.mapData, pr.mapUrl, `/projects/${encodeURIComponent(pr.id || pr.key)}`, params.zoom),
         div({ class: "project-goal-highlight" }, renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`)),
         renderBackers(pr, f),
         renderCardField(i18n.projectStatus + ":", i18n["projectStatus" + statusUpper] || statusUpper),
+        br(),
         renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
         renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100),
         renderBudget(pr),

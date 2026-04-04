@@ -107,6 +107,7 @@ module.exports = ({ cooler }) => {
       author: c.author,
       title: c.title || "",
       description: c.description || "",
+      mapUrl: c.mapUrl || "",
       opinions: c.opinions || {},
       opinions_inhabitants: voters,
       hasVoted: viewerId ? voters.includes(viewerId) : false
@@ -141,7 +142,7 @@ module.exports = ({ cooler }) => {
       return root;
     },
 
-    async createVideo(blobMarkdown, tagsRaw, title, description) {
+    async createVideo(blobMarkdown, tagsRaw, title, description, mapUrl) {
       const ssbClient = await openSsb();
       const blobId = parseBlobId(blobMarkdown);
       const tags = normalizeTags(tagsRaw) || [];
@@ -156,6 +157,7 @@ module.exports = ({ cooler }) => {
         tags,
         title: title || "",
         description: description || "",
+        mapUrl: mapUrl || "",
         opinions: {},
         opinions_inhabitants: []
       };
@@ -165,7 +167,7 @@ module.exports = ({ cooler }) => {
       });
     },
 
-    async updateVideoById(id, blobMarkdown, tagsRaw, title, description) {
+    async updateVideoById(id, blobMarkdown, tagsRaw, title, description, mapUrl) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const tipId = await this.resolveCurrentId(id);
@@ -186,6 +188,7 @@ module.exports = ({ cooler }) => {
         tags,
         title: title !== undefined ? title || "" : oldMsg.content.title || "",
         description: description !== undefined ? description || "" : oldMsg.content.description || "",
+        mapUrl: mapUrl !== undefined ? mapUrl || "" : oldMsg.content.mapUrl || "",
         createdAt: oldMsg.content.createdAt,
         updatedAt: now
       };

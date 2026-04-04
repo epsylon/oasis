@@ -14,7 +14,7 @@ module.exports = ({ cooler }) => {
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
     'image', 'audio', 'video', 'market', 'bankWallet', 'bankClaim',
-    'project', 'job', 'forum', 'vote', 'contact', 'pub'
+    'project', 'job', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct'
   ];
 
   const getRelevantFields = (type, content) => {
@@ -67,6 +67,12 @@ module.exports = ({ cooler }) => {
         return [content?.contact];
       case 'pub':
         return [content?.address?.host, content?.address?.key];
+      case 'map':
+        return [content?.title, content?.description, content?.mapType, ...(content?.tags || []), content?.lat, content?.lng];
+      case 'shop':
+        return [content?.title, content?.shortDescription, content?.description, content?.location, ...(content?.tags || []), content?.visibility, content?.url];
+      case 'shopProduct':
+        return [content?.title, content?.description, content?.price, ...(content?.tags || []), content?.shopId];
       default:
         return [];
     }
@@ -200,6 +206,18 @@ module.exports = ({ cooler }) => {
 
     if (t === 'forum') {
       return `forum:${c.key || c.root || `${author}|${norm(c.title)}` || msg.key}`;
+    }
+
+    if (t === 'map') {
+      return ['map', author, norm(c.title), norm(c.description), norm(c.lat), norm(c.lng)].join('|');
+    }
+
+    if (t === 'shop') {
+      return ['shop', author, norm(c.title), norm(c.location)].join('|');
+    }
+
+    if (t === 'shopProduct') {
+      return ['shopProduct', author, norm(c.title), norm(c.shopId)].join('|');
     }
 
     return `${t}:${msg.key}`;

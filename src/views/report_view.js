@@ -509,7 +509,8 @@ exports.reportView = async (reports, filter, reportId, createCategory) => {
                       opt("CONTENT", selectedCategory === "CONTENT", i18n.reportsCategoryContent)
                     ),
                     br(),
-                    button({ type: "submit", class: "filter-btn" }, applyLabel)
+                    br(),
+                    button({ type: "submit", class: "create-button" }, applyLabel)
                   ),
                   br(),
                   h2({ class: "report-category-fixed" }, selectedCategory),
@@ -541,7 +542,7 @@ exports.reportView = async (reports, filter, reportId, createCategory) => {
                     input({ type: "text", name: "tags", value: "" }),
                     br(),
                     br(),
-                    button({ type: "submit" }, i18n.reportsCreateButton)
+                    button({ type: "submit", class: "create-button" }, i18n.reportsCreateButton)
                   )
                 )
               : div(

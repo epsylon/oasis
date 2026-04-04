@@ -3,6 +3,7 @@ const { template, i18n } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
+const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
 
 const renderMediaBlob = (value, fallbackSrc = null) => {
   if (!value) return fallbackSrc ? img({ src: fallbackSrc }) : null
@@ -443,6 +444,11 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               input({ type: "number", name: "stock", id: "stock", value: (itemEdit && itemEdit.stock) || 1, required: true, min: "1", step: "1" }),
               br(),
               br(),
+              label(i18n.mapLocationTitle || "Map Location"),
+              br(),
+              input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: itemEdit?.mapUrl || "" }),
+              br(),
+              br(),
               label(i18n.marketItemPrice),
               br(),
               input({ type: "number", name: "price", id: "price", value: (itemEdit && itemEdit.price) || "", required: true, step: "0.000001", min: "0.000001" }),
@@ -476,8 +482,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                 class: "meme-checkbox",
                 ...(itemEdit && itemEdit.includesShipping ? { checked: true } : {})
               }),
-              br(),
-              br(),
+              br(),br(),
               button({ type: "submit" }, filter === "edit" ? i18n.marketUpdateButton : i18n.marketCreateButton)
             )
           )
@@ -536,6 +541,9 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       ),
                       h2({ class: "market-card type" }, `${i18n.marketItemType}: ${String(item.item_type || "").toUpperCase()}`),
                       h2(item.title),
+                      item.shopId && item.shopTitle
+                        ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.marketShopLabel || "Shop"}:`), span({ class: "card-value" }, a({ href: `/shops/${encodeURIComponent(item.shopId)}`, class: "user-link" }, item.shopTitle)))
+                        : null,
                       renderCardField(`${i18n.marketItemStatus}:`, item.status),
                       renderCountdownField(item),
                       item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, moment(item.deadline).format("YYYY/MM/DD HH:mm:ss")) : null,
@@ -552,6 +560,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       div({ class: "market-card price" }, renderCardField(`${i18n.marketItemPrice}:`, `${item.price} ECO`)),
                       renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
                       renderCardField(`${i18n.marketItemIncludesShipping}:`, item.includesShipping ? i18n.YESLabel : i18n.NOLabel),
+                      renderMapLocationVisitLabel(item.mapUrl),
                       br(),
                       renderStockBar(item.stock, maxStock),
                       item.item_type === "auction" && parsedBids.length > 0
@@ -643,6 +652,9 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         topbar ? topbar : null,
         h2(item.title),
         renderCardField(`${i18n.marketItemType}:`, `${String(item.item_type || "").toUpperCase()}`),
+        item.shopId && item.shopTitle
+          ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.marketShopLabel || "Shop"}:`), span({ class: "card-value" }, a({ href: `/shops/${encodeURIComponent(item.shopId)}`, class: "user-link" }, item.shopTitle)))
+          : null,
         renderCardField(`${i18n.marketItemStatus}:`, item.status),
         renderCountdownField(item),
         renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
@@ -664,6 +676,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         renderStockBar(item.stock, maxStock),
         br(),
         renderCardField(`${i18n.marketItemIncludesShipping}:`, `${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
+        renderMapEmbedWithZoom(params.mapData, item.mapUrl, `/market/${encodeURIComponent(item.id)}`, params.zoom),
         item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, `${moment(item.deadline).format("YYYY/MM/DD HH:mm:ss")}`) : null,
         renderCardFieldRich(`${i18n.marketItemSeller}:`, [a({ class: "user-link", href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)])
       ),

@@ -43,9 +43,15 @@ But it has others features that are also really interesting, for example:
    ![SNH](https://solarnethub.com/git/snh-purple-theme.png "SolarNET.HuB")
    ![SNH](https://solarnethub.com/git/snh-matrix-theme.png "SolarNET.HuB")
    
- +  Even a complex Reddit-styled forum system.
+And some other nice modules, like for example:
+   
+ +  A complex Reddit-styled forum system.
  
    ![SNH](https://solarnethub.com/git/snh-forum.png "SolarNET.HuB")
+   
+ +  Or a collaborative -offline- maps system.
+ 
+   ![SNH](https://solarnethub.com/git/snh-maps.jpeg "SolarNET.HuB")
  
 And much more, that we invite you to discover by yourself ;-)
 
@@ -69,19 +75,21 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Feed: Module to discover and share short-texts (feeds).
  + Forums: Module to discover and manage forums.	
  + Governance: Module to discover and manage votes.	
- + Images: Module to discover and manage images.	
- + Invites: Module to manage and apply invite codes.	
+ + Images: Module to discover and manage images.
+ + Invites: Module to manage and apply invite codes.
  + Jobs: Module to discover and manage jobs.	
  + Legacy: Module to manage your secret (private key) quickly and securely.	
  + Latest: Module to receive the most recent posts and discussions.
+ + Maps: Module to manage and share offline maps.
  + Market: Module to exchange goods or services.
- + Multiverse: Module to receive content from other federated peers.	
+ + Multiverse: Module to receive content from other federated peers.
  + Opinions: Module to discover and vote on opinions.	
  + Parliament: Module to elect governments and vote on laws.	
  + Pixelia: Module to draw on a collaborative grid.	
  + Projects: Module to explore, crowd-funding and manage projects.
- + Popular: Module to receive posts that are trending, most viewed, or most commented on.	
+ + Popular: Module to receive posts that are trending, most viewed, or most commented on.
  + Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.	
+ + Shops: Module to manage and discover shops.	
  + Summaries: Module to receive summaries of long discussions or posts.	
  + Tags: Module to discover and explore taxonomy patterns (tags).	
  + Tasks: Module to discover and manage tasks.	

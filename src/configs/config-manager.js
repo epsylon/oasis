@@ -29,8 +29,8 @@ if (!fs.existsSync(configFilePath)) {
       "eventsMod": "on",
       "tasksMod": "on",
       "marketMod": "on",
-      "tribesMod": "on",
       "votesMod": "on",
+      "tribesMod": "on",
       "reportsMod": "on",
       "opinionsMod": "on",
       "transfersMod": "on",
@@ -40,11 +40,13 @@ if (!fs.existsSync(configFilePath)) {
       "aiMod": "on",
       "forumMod": "on",
       "jobsMod": "on",
+      "shopsMod": "on",
       "projectsMod": "on",
       "bankingMod": "on",
       "parliamentMod": "on",
       "courtsMod": "on",
-      "favoritesMod": "on"
+      "favoritesMod": "on",
+      "mapsMod": "on"
     },
     "wallet": {
       "url": "http://localhost:7474",

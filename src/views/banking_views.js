@@ -86,6 +86,19 @@ const renderOverviewSummaryTable = (s, rules) => {
   );
 };
 
+const renderClaimUBIBlock = (pendingAllocation) => {
+  if (!pendingAllocation) return div({ class: "bank-claim-ubi" }, p(i18n.bankNoPendingUBI));
+  return div({ class: "bank-claim-ubi" },
+    div({ class: "bank-claim-card" },
+      p(`${i18n.bankingFutureUBI}: `, span({ class: "accent" }, `${Number(pendingAllocation.amount || 0).toFixed(6)} ECO`)),
+      p(`${i18n.bankEpoch}: `, span(pendingAllocation.concept || "")),
+      form({ method: "POST", action: `/banking/claim/${encodeURIComponent(pendingAllocation.id)}` },
+        button({ type: "submit", class: "create-button bank-claim-btn" }, i18n.bankClaimUBI)
+      )
+    )
+  );
+};
+
 function calculateFutureUBI(userEngagementScore, poolAmount) {
   const maxScore = 100;
   const scorePercentage = userEngagementScore / maxScore;
@@ -278,6 +291,7 @@ const renderBankingView = (data, filter, userId) =>
       filter === "overview"
         ? div(
             renderOverviewSummaryTable(data.summary || {}, data.rules),
+            renderClaimUBIBlock(data.pendingUBI || null),
             allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
           )
         : filter === "exchange"
@@ -295,5 +309,57 @@ const renderBankingView = (data, filter, userId) =>
     )
   )
   
-module.exports = { renderBankingView };
+const renderSingleAllocationView = (alloc, userId) => {
+  if (!alloc) return template(i18n.banking, section(div(p(i18n.bankNoAllocations))));
+  return template(
+    i18n.banking,
+    section(
+      div({ class: "tags-header" }, h2(i18n.banking)),
+      div({ class: "bank-summary" },
+        table({ class: "bank-info-table" },
+          tbody(
+            kvRow("ID", alloc.id || "-"),
+            kvRow(i18n.bankAllocConcept, alloc.concept || "-"),
+            kvRow(i18n.bankAllocFrom, alloc.from || "-"),
+            kvRow(i18n.bankAllocTo, alloc.to || "-"),
+            kvRow(i18n.bankAllocAmount, `${Number(alloc.amount || 0).toFixed(6)} ECO`),
+            kvRow(i18n.bankAllocStatus, alloc.status || "-"),
+            kvRow(i18n.bankAllocDate, alloc.createdAt ? fmtDate(alloc.createdAt) : "-"),
+            alloc.txid ? kvRow("TxID", a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${encodeURIComponent(alloc.txid)}`, target: "_blank" }, alloc.txid)) : null
+          )
+        )
+      ),
+      alloc.status === "UNCONFIRMED" && alloc.to === userId
+        ? form({ method: "POST", action: `/banking/claim/${encodeURIComponent(alloc.id)}` },
+            button({ type: "submit", class: "filter-btn" }, i18n.bankClaimNow)
+          )
+        : null,
+      div(a({ href: "/banking", class: "filter-btn" }, i18n.bankOverview))
+    )
+  );
+};
+
+const renderEpochView = (epoch, allocations) => {
+  if (!epoch) return template(i18n.banking, section(div(p(i18n.bankNoEpochs))));
+  return template(
+    i18n.banking,
+    section(
+      div({ class: "tags-header" }, h2(`${i18n.bankEpoch}: ${epoch.id}`)),
+      div({ class: "bank-summary" },
+        table({ class: "bank-info-table" },
+          tbody(
+            kvRow(i18n.bankEpochId, epoch.id || "-"),
+            kvRow(i18n.bankPool, `${Number(epoch.pool || 0).toFixed(6)} ECO`),
+            kvRow(i18n.bankWeightsSum, String(Number(epoch.weightsSum || 0).toFixed(6))),
+            kvRow(i18n.bankRuleHash, epoch.hash || "-")
+          )
+        )
+      ),
+      h2(i18n.bankEpochAllocations),
+      allocationsTable(allocations || [], "")
+    )
+  );
+};
+
+module.exports = { renderBankingView, renderSingleAllocationView, renderEpochView };
 

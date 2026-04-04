@@ -294,7 +294,18 @@ function renderActionCards(actions, userId, allActions) {
     list.sort((a, b) => (a.ts || 0) - (b.ts || 0) || String(safeMsgId(a) || '').localeCompare(String(safeMsgId(b) || '')));
     for (let i = 0; i < list.length; i++) {
       spreadOrdinalById.set(safeMsgId(list[i]), i + 1);
-    } 
+    }
+  }
+
+  const shopTitleById = new Map();
+  for (const a of all) {
+    if (!a || a.type !== 'shop') continue;
+    const c = a.value?.content || a.content || {};
+    const id = a.id || a.key || '';
+    if (id && c.title) {
+      shopTitleById.set(id, c.title);
+      if (a.rootId) shopTitleById.set(a.rootId, c.title);
+    }
   }
 
   const cards = items.map(action => {
@@ -326,6 +337,8 @@ function renderActionCards(actions, userId, allActions) {
       headerText = `[TRIBE · FEED]`;
     } else if (type === 'tribeFeedRefeed') {
       headerText = `[TRIBE · REFEED]`;
+    } else if (type === 'shopProduct') {
+      headerText = `[SHOP · PRODUCT]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -554,6 +567,30 @@ function renderActionCards(actions, userId, allActions) {
       cardBody.push(
         div({ class: 'card-section image' },
           img({ src: `/blob/${encodeURIComponent(url)}`, class: 'post-image' })
+        )
+      );
+    }
+
+    if (type === 'map') {
+      const { lat, lng, mapType } = content;
+      cardBody.push(
+        div({ class: 'card-section map' },
+          div({ class: 'map-card-info' },
+            span({ class: 'map-type-badge' }, mapType || 'SINGLE'),
+            span({ class: 'map-coords' }, `${(parseFloat(lat) || 0).toFixed(4)}, ${(parseFloat(lng) || 0).toFixed(4)}`)
+          ),
+          content.description ? p({ class: 'map-description' }, content.description) : ""
+        )
+      );
+    }
+
+    if (type === 'mapMarker') {
+      const { lat, lng, label, mapId } = content;
+      cardBody.push(
+        div({ class: 'card-section map' },
+          span({ class: 'map-marker-dot' }, "●"),
+          span(label || i18n.mapMarkerDefault || 'Marker'),
+          span({ class: 'map-marker-coords' }, ` (${(parseFloat(lat) || 0).toFixed(2)}, ${(parseFloat(lng) || 0).toFixed(2)})`)
         )
       );
     }
@@ -1016,6 +1053,36 @@ function renderActionCards(actions, userId, allActions) {
       );
     }
 
+    if (type === 'shop') {
+      const { title, shortDescription, description, visibility, location } = content;
+      const shopKey = action.id || action.key || '';
+      const displayDesc = shortDescription || (description ? (description.length > 140 ? description.slice(0, 140) + "\u2026" : description) : "");
+      cardBody.push(
+        div({ class: 'card-section shop' },
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopTitle || 'Shop') + ':'), span({ class: 'card-value' }, shopKey ? a({ href: `/shops/${encodeURIComponent(shopKey)}`, class: 'user-link' }, title || shopKey) : (title || ''))),
+          displayDesc ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.description || 'Description') + ':'), span({ class: 'card-value' }, displayDesc)) : "",
+          visibility ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopVisibility || 'Visibility') + ':'), span({ class: 'card-value' }, visibility)) : "",
+          location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopLocation || 'Location') + ':'), span({ class: 'card-value' }, location)) : ""
+        )
+      );
+    }
+
+    if (type === 'shopProduct') {
+      const { title, price, stock, shopId, image: prodImage } = content;
+      const resolvedShopTitle = shopId ? (shopTitleById.get(shopId) || null) : null;
+      const shopLabel = resolvedShopTitle || (shopId ? shopId.slice(0, 10) + '...' : '');
+      const prodImageNode = renderMediaBlob(prodImage);
+      cardBody.push(
+        div({ class: 'card-section shop' },
+          shopId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopTitle || 'Shop') + ':'), span({ class: 'card-value' }, a({ href: `/shops/${encodeURIComponent(shopId)}`, class: 'user-link' }, shopLabel))) : '',
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopProductTitle || 'Product') + ':'), span({ class: 'card-value' }, title || '')),
+          prodImageNode ? div({ class: 'card-field' }, prodImageNode) : '',
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopProductPrice || 'Price') + ':'), span({ class: 'card-value' }, `${Number(price || 0).toFixed(6)} ECO`)),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopProductStock || 'Stock') + ':'), span({ class: 'card-value' }, String(stock || 0)))
+        )
+      );
+    }
+
     if (type === 'report') {
       const { title, confirmations, severity, status } = content;
       cardBody.push(
@@ -1427,6 +1494,8 @@ function getViewDetailsAction(type, action) {
     case 'tribe':      return `/tribe/${id}`;
     case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
     case 'karmaScore': return `/author/${encodeURIComponent(action.author)}`;
+    case 'map':        return `/maps/${id}`;
+    case 'mapMarker':  return `/maps/${encodeURIComponent(action.content?.mapId || id)}`;
     case 'image':      return `/images/${id}`;
     case 'audio':      return `/audios/${id}`;
     case 'video':      return `/videos/${id}`;
@@ -1440,6 +1509,8 @@ function getViewDetailsAction(type, action) {
     case 'contact':    return `/inhabitants`;
     case 'pub':        return `/invites`;
     case 'market':     return `/market/${id}`;
+    case 'shop':       return `/shops/${id}`;
+    case 'shopProduct': return `/shops/product/${id}`;
     case 'job':        return `/jobs/${id}`;
     case 'project':    return `/projects/${id}`;
     case 'report':     return `/reports/${id}`;
@@ -1461,28 +1532,30 @@ exports.activityView = (actions, filter, userId, q = '') => {
     { type: 'market',    label: i18n.typeMarket },
     { type: 'project',   label: i18n.typeProject },
     { type: 'job',       label: i18n.typeJob },
+    { type: 'curriculum',label: i18n.typeCurriculum },
+    { type: 'shop',      label: i18n.typeShop },
     { type: 'transfer',  label: i18n.typeTransfer },
+    { type: 'about',     label: i18n.typeAbout },
+    { type: 'tribe',     label: i18n.typeTribe },
     { type: 'parliament',label: i18n.typeParliament },
     { type: 'courts',    label: i18n.typeCourts },
+    { type: 'karmaScore',label: i18n.typeKarmaScore },
     { type: 'votes',     label: i18n.typeVotes },
     { type: 'event',     label: i18n.typeEvent },
     { type: 'task',      label: i18n.typeTask },
     { type: 'report',    label: i18n.typeReport },
-    { type: 'tribe',     label: i18n.typeTribe },
-    { type: 'about',     label: i18n.typeAbout },
-    { type: 'curriculum',label: i18n.typeCurriculum },
-    { type: 'karmaScore',label: i18n.typeKarmaScore },
     { type: 'feed',      label: i18n.typeFeed },
     { type: 'aiExchange',label: i18n.typeAiExchange },
     { type: 'post',      label: i18n.typePost },
     { type: 'spread',    label: i18n.typeSpread || 'SPREAD' },
     { type: 'pixelia',   label: i18n.typePixelia },
     { type: 'forum',     label: i18n.typeForum },
-    { type: 'bookmark',  label: i18n.typeBookmark },
-    { type: 'image',     label: i18n.typeImage },
-    { type: 'video',     label: i18n.typeVideo },
+    { type: 'map',       label: i18n.typeMap },
     { type: 'audio',     label: i18n.typeAudio },
-    { type: 'document',  label: i18n.typeDocument }
+    { type: 'bookmark',  label: i18n.typeBookmark },
+    { type: 'document',  label: i18n.typeDocument },
+    { type: 'image',     label: i18n.typeImage },
+    { type: 'video',     label: i18n.typeVideo }
   ];
 
   let filteredActions;
@@ -1511,7 +1584,7 @@ exports.activityView = (actions, filter, userId, q = '') => {
   } else if (filter === 'spread') {
     filteredActions = actions.filter(action => action.type === 'spread');
   } else {
-    filteredActions = actions.filter(action => (action.type === filter || filter === 'all') && action.type !== 'tombstone');
+    filteredActions = actions.filter(action => (action.type === filter || filter === 'all' || (filter === 'shop' && action.type === 'shopProduct')) && action.type !== 'tombstone');
   }
 
   const qs = String(q || '').trim();
@@ -1552,7 +1625,7 @@ exports.activityView = (actions, filter, userId, q = '') => {
             )
           ),
           div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(3, 8).map(({ type, label }) =>
+            activityTypes.slice(3, 10).map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
                 input({ type: 'hidden', name: 'filter', value: type }),
                 button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
@@ -1560,7 +1633,7 @@ exports.activityView = (actions, filter, userId, q = '') => {
             )
           ),
           div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(8, 12).map(({ type, label }) =>
+            activityTypes.slice(10, 15).map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
                 input({ type: 'hidden', name: 'filter', value: type }),
                 button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
@@ -1568,7 +1641,7 @@ exports.activityView = (actions, filter, userId, q = '') => {
             )
           ),
           div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(12, 17).map(({ type, label }) =>
+            activityTypes.slice(15, 19).map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
                 input({ type: 'hidden', name: 'filter', value: type }),
                 button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
@@ -1576,7 +1649,7 @@ exports.activityView = (actions, filter, userId, q = '') => {
             )
           ),
           div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(17, 22).map(({ type, label }) =>
+            activityTypes.slice(19, 26).map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
                 input({ type: 'hidden', name: 'filter', value: type }),
                 button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
@@ -1584,7 +1657,7 @@ exports.activityView = (actions, filter, userId, q = '') => {
             )
           ),
           div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(22, 27).map(({ type, label }) =>
+            activityTypes.slice(26).map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
                 input({ type: 'hidden', name: 'filter', value: type }),
                 button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)

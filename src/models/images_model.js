@@ -107,6 +107,7 @@ module.exports = ({ cooler }) => {
       author: c.author,
       title: c.title || "",
       description: c.description || "",
+      mapUrl: c.mapUrl || "",
       meme: !!c.meme,
       opinions: c.opinions || {},
       opinions_inhabitants: voters,
@@ -142,7 +143,7 @@ module.exports = ({ cooler }) => {
       return root;
     },
 
-    async createImage(blobMarkdown, tagsRaw, title, description, memeBool) {
+    async createImage(blobMarkdown, tagsRaw, title, description, memeBool, mapUrl) {
       const ssbClient = await openSsb();
       const blobId = parseBlobId(blobMarkdown);
       const tags = normalizeTags(tagsRaw) || [];
@@ -157,6 +158,7 @@ module.exports = ({ cooler }) => {
         tags,
         title: title || "",
         description: description || "",
+        mapUrl: mapUrl || "",
         meme: !!memeBool,
         opinions: {},
         opinions_inhabitants: []
@@ -167,7 +169,7 @@ module.exports = ({ cooler }) => {
       });
     },
 
-    async updateImageById(id, blobMarkdown, tagsRaw, title, description, memeBool) {
+    async updateImageById(id, blobMarkdown, tagsRaw, title, description, memeBool, mapUrl) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const tipId = await this.resolveCurrentId(id);
@@ -188,6 +190,7 @@ module.exports = ({ cooler }) => {
         tags,
         title: title !== undefined ? title || "" : oldMsg.content.title || "",
         description: description !== undefined ? description || "" : oldMsg.content.description || "",
+        mapUrl: mapUrl !== undefined ? mapUrl || "" : oldMsg.content.mapUrl || "",
         meme: typeof memeBool === "boolean" ? memeBool : !!oldMsg.content.meme,
         createdAt: oldMsg.content.createdAt,
         updatedAt: now

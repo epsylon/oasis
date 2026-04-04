@@ -13,292 +13,314 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.6.9 - 2026-04-04
+
+### Added
+
+- Maps module: create, manage and share offline maps with coordinates, markers and collaborative features (Maps plugin).
+- Shops module: create, manage and discover shops with products, favorites, opinions and purchases (Shops plugin).
+
+### Fixed
+
+- Searching blobs and items rendering (Search plugin).
+- UBI claim system: auto-execute epoch on Banking overview, prominent "Claim UBI!" button (Banking plugin).
+- UBI displayed in inhabitant profiles (Inhabitants plugin).
+- UBI filter added to transfers (Transfers plugin).
+- Favorites enrichment in Documents edit and single views (Documents plugin).
+- Bookmarks edit view favorite toggle (isFav → isFavorite) (Bookmarks plugin).
+- Favorites add/remove error handling for all media modules (Core plugin).
+- PUB wallet settings configuration (Settings plugin).
+
+### Changed
+
+- Tribes/Sub-Tribes content encryption (AES-256-GCM) (Tribes plugin).
+
 ## v0.6.8 - 2026-03-12
 
 ### Fixed
 
- + Government method image (Parliament plugin).
- + Trending text formatting + tombstoned content (Trending plugin).
- + Opinions text formatting + tombstoned content (Opinions plugin).
- + Forums text formatting (Forums plugin).
+- Government method image (Parliament plugin).
+- Trending text formatting- tombstoned content (Trending plugin).
+- Opinions text formatting- tombstoned content (Opinions plugin).
+- Forums text formatting (Forums plugin).
 
 ## v0.6.7 - 2026-03-04
 
 ### Added
 
- + Writing comments within feeds (Feed plugin).
- + PUB metadata and invitations (Invites plugin).
- + Chinese simplified (zh) translation (i18n).
- + Arab (ar) translation (i18n).
- + Hindi (hi) translation (i18n).
- + Russian (ru) translation (i18n).
+- Writing comments within feeds (Feed plugin).
+- PUB metadata and invitations (Invites plugin).
+- Chinese simplified (zh) translation (i18n).
+- Arab (ar) translation (i18n).
+- Hindi (hi) translation (i18n).
+- Russian (ru) translation (i18n).
 
 ### Fixed
 
- + SNH-Mobile Theme (Core plugin).
+- SNH-Mobile Theme (Core plugin).
  
 ### Changed
 
- + Multiple alignment of views between modules (Multiple plugins).
- + Cloud tags (Tags plugin).
- + Auto-join button for PUB: SNH "La Plaza" (Invites plugin).
- + i18n languages array expanded: ['en', 'es', 'fr', 'eu', 'de', 'it', 'pt', 'zh', 'ar', 'hi', 'ru'] (Core plugin).
+- Multiple alignment of views between modules (Multiple plugins).
+- Cloud tags (Tags plugin).
+- Auto-join button for PUB: SNH "La Plaza" (Invites plugin).
+- i18n languages array expanded: ['en', 'es', 'fr', 'eu', 'de', 'it', 'pt', 'zh', 'ar', 'hi', 'ru'] (Core plugin).
 
 ## v0.6.6 - 2026-02-23
 
 ### Added
 
- + SNH-Mobile Theme (Core plugin).
- + Added sub-tribes (Core plugin).
- + Max size control when uploading any file (Core plugin).
- + File uploading into every single commenting point (Core plugin).
- + Add an IP/Port for creating direct peering (Peers plugin).
- + Oasis new updates available notice banner (Core plugin).
- + Carbon footprint indicator in Statistics based on blobs/blockchain weight (Statistics plugin).
- + Canvas block visualization in Block Explorer showing last 50 blocks as colored bars (Blockexplorer plugin).
- + Inbox notification badge showing unread message count in topbar (Inbox plugin).
- + Feed published success confirmation message banner (Feed plugin).
- + Default SNH invite code loaded from snh-invite-code.json (Invites plugin).
- + Peer deduplication by host in Invites (Invites plugin).
- + Peer deduplication by key and table layout for peer listing (Peers plugin).
- + "Device source" field showing KIT/DESKTOP/MOBILE based on theme (Inhabitants/Profile plugin).
- + Module preset buttons for grouped configurations: Basic, Social, Economy, Full (Modules plugin).
- + Dominant opinion highlight next to Total Opinions (Trending/Opinions plugin).
- + German (de) translation (i18n).
- + Italian (it) translation (i18n).
- + Portuguese (pt) translation (i18n).
- + Shared state module for cross-module communication (Core plugin).
+- SNH-Mobile Theme (Core plugin).
+- Added sub-tribes (Core plugin).
+- Max size control when uploading any file (Core plugin).
+- File uploading into every single commenting point (Core plugin).
+- Add an IP/Port for creating direct peering (Peers plugin).
+- Oasis new updates available notice banner (Core plugin).
+- Carbon footprint indicator in Statistics based on blobs/blockchain weight (Statistics plugin).
+- Canvas block visualization in Block Explorer showing last 50 blocks as colored bars (Blockexplorer plugin).
+- Inbox notification badge showing unread message count in topbar (Inbox plugin).
+- Feed published success confirmation message banner (Feed plugin).
+- Default SNH invite code loaded from snh-invite-code.json (Invites plugin).
+- Peer deduplication by host in Invites (Invites plugin).
+- Peer deduplication by key and table layout for peer listing (Peers plugin).
+- "Device source" field showing KIT/DESKTOP/MOBILE based on theme (Inhabitants/Profile plugin).
+- Module preset buttons for grouped configurations: Basic, Social, Economy, Full (Modules plugin).
+- Dominant opinion highlight next to Total Opinions (Trending/Opinions plugin).
+- German (de) translation (i18n).
+- Italian (it) translation (i18n).
+- Portuguese (pt) translation (i18n).
+- Shared state module for cross-module communication (Core plugin).
 
 ### Fixed
 
- + MIME type error when uploading .mp4 (Videos plugin).
- + URL generation problems when containing "special characters" (Forum plugin).
- + Language selection between executing instances (Core plugin).
- + LAN broadcasting features (Core plugin).
- + Currently online peers discovering (Peers plugin).
- + Activity level shadowing (Inhabitants plugin).
- + Strip dangerous HTML tags from markdown output (Core plugin).
- + Plaintext injection vulnerability: comprehensive stripDangerousTags sanitization across all user text inputs in backend (Core Security).
- + Activity feed post truncation at 500 chars with "View details" link for long posts (Activity plugin).
- + Spread content now shows excerpt (300 chars) instead of just hashtag name (Activity plugin).
- + IN REPLY TO improved display with border-left styling, author name bold, and context preview (Activity plugin).
- + Activity level dot was empty, now displays colored dot (●) matching inhabitants view (Profile plugin).
- + Task description layout in Search: description now appears on new line below label (Search plugin).
- + Projects description label formatting with flex-direction column and word-break (Projects plugin).
- + Banking addresses from OASIS source now have delete action (Banking plugin).
- + Direct Connect form moved below networking action buttons for better UX (Peers plugin).
- + Peer validation and table layout for clearer peer listing (Peers plugin).
+- MIME type error when uploading .mp4 (Videos plugin).
+- URL generation problems when containing "special characters" (Forum plugin).
+- Language selection between executing instances (Core plugin).
+- LAN broadcasting features (Core plugin).
+- Currently online peers discovering (Peers plugin).
+- Activity level shadowing (Inhabitants plugin).
+- Strip dangerous HTML tags from markdown output (Core plugin).
+- Plaintext injection vulnerability: comprehensive stripDangerousTags sanitization across all user text inputs in backend (Core Security).
+- Activity feed post truncation at 500 chars with "View details" link for long posts (Activity plugin).
+- Spread content now shows excerpt (300 chars) instead of just hashtag name (Activity plugin).
+- IN REPLY TO improved display with border-left styling, author name bold, and context preview (Activity plugin).
+- Activity level dot was empty, now displays colored dot (●) matching inhabitants view (Profile plugin).
+- Task description layout in Search: description now appears on new line below label (Search plugin).
+- Projects description label formatting with flex-direction column and word-break (Projects plugin).
+- Banking addresses from OASIS source now have delete action (Banking plugin).
+- Direct Connect form moved below networking action buttons for better UX (Peers plugin).
+- Peer validation and table layout for clearer peer listing (Peers plugin).
  
 ### Changed
 
- + Tribes for adding a "fractal" of mods inside (Tribes plugin).
- + Removing metadata and added strong controls before uploading: PDF, video, audio, image... (Core plugin).
- + Packages.json (Core plugin).
- + i18n languages array expanded: ['en', 'es', 'fr', 'eu', 'de', 'it', 'pt'] (Core plugin).
- + Activity view now truncates long posts instead of expanding full content (Activity plugin).
- + Peers view uses table layout instead of nested lists (Peers plugin).
- + Block Explorer shows visual block canvas above the block list (Blockexplorer plugin).
+- Tribes for adding a "fractal" of mods inside (Tribes plugin).
+- Removing metadata and added strong controls before uploading: PDF, video, audio, image... (Core plugin).
+- Packages.json (Core plugin).
+- i18n languages array expanded: ['en', 'es', 'fr', 'eu', 'de', 'it', 'pt'] (Core plugin).
+- Activity view now truncates long posts instead of expanding full content (Activity plugin).
+- Peers view uses table layout instead of nested lists (Peers plugin).
+- Block Explorer shows visual block canvas above the block list (Blockexplorer plugin).
 
 ## v0.6.5 - 2026-01-16
 
 ### Added
 
- + Blockexplorer search engine (Blockexplorer plugin).
+- Blockexplorer search engine (Blockexplorer plugin).
 
 ### Fixed
 
- + Spreading threads + comments (Activity plugin).
- + Minor fixes (Activity plugin).
+- Spreading threads- comments (Activity plugin).
+- Minor fixes (Activity plugin).
 
 ## v0.6.4 - 2026-01-05
 
 ### Added
 
- + More information shared when spreading content at inhabitants activity (Activity plugin).
- + New PUB: pub.andromeda.oasis
+- More information shared when spreading content at inhabitants activity (Activity plugin).
+- New PUB: pub.andromeda.oasis
 
 ### Changed
 
- + Strong backend refactoring (4962L -> 2666L) (Core plugin).
+- Strong backend refactoring (4962L -> 2666L) (Core plugin).
 
 ### Fixed
 
- + Fixed parliament cycles (Parliament plugin).
- + Refeeding with hashtags (Feed plugin).
+- Fixed parliament cycles (Parliament plugin).
+- Refeeding with hashtags (Feed plugin).
 
 ## v0.6.3 - 2025-12-10
 
 ### Fixed
 
- + Fixed mentions (Core plugin).
- + Fixed feeds (Feed plugin).
- + Minor details at market view (Market plugin).
+- Fixed mentions (Core plugin).
+- Fixed feeds (Feed plugin).
+- Minor details at market view (Market plugin).
 
 ## v0.6.2 - 2025-12-05
 
 ### Added
 
- + Added a footer (Core plugin).
- + Added favorites to media related modules (Favorites plugin).
- + Added advanced search engine integration into modules (Search plugin).
+- Added a footer (Core plugin).
+- Added favorites to media related modules (Favorites plugin).
+- Added advanced search engine integration into modules (Search plugin).
  
 ### Changed
 
- * Added Oasis version at GUI (Core plugin).
- + Added templates for reporting standardization (Reports plugin).
- + Added market new functionalities (Market plugin).
- + Added bookmarks new functionalities (Bookmarks plugin).
- + Added jobs new filters (Jobs plugin).
+- Added Oasis version at GUI (Core plugin).
+- Added templates for reporting standardization (Reports plugin).
+- Added market new functionalities (Market plugin).
+- Added bookmarks new functionalities (Bookmarks plugin).
+- Added jobs new filters (Jobs plugin).
  
 ### Fixed
 
- + Security fixes (Core plugin).
- + Reports filters (Reports plugin).
- + Tasks minor changes (Tasks plugin).
- + Events minor changes (Events plugin).
- + Votations minor changes (Votations plugin).
- + Market minor changes (Market plugin).
- + Projects minor changes (Projects plugin).
- + Jobs minor changes (Jobs plugin).
- + Transfers minor changes (Transfers plugin).
+- Security fixes (Core plugin).
+- Reports filters (Reports plugin).
+- Tasks minor changes (Tasks plugin).
+- Events minor changes (Events plugin).
+- Votations minor changes (Votations plugin).
+- Market minor changes (Market plugin).
+- Projects minor changes (Projects plugin).
+- Jobs minor changes (Jobs plugin).
+- Transfers minor changes (Transfers plugin).
 
 ## v0.6.1 - 2025-12-01
 
 ### Changed
 
- + Added more notifications for tribes activity (Activity plugin).
- + Reordered filters (Opinions plugin).
+- Added more notifications for tribes activity (Activity plugin).
+- Reordered filters (Opinions plugin).
  
 ### Fixed
 
- + Feed minor changes (Feed plugin).
- + Tribes feed styles container (Tribes plugin).
+- Feed minor changes (Feed plugin).
+- Tribes feed styles container (Tribes plugin).
 
 ## v0.6.0 - 2025-11-29
 
 ### Changed
 
- + Added more opinion categories (Opinions plugin).
+- Added more opinion categories (Opinions plugin).
  
 ### Fixed
 
- + Tag counters (Tags plugin).
- + Duplicated content when searching (Search plugin).
- + Inhabitant-linked styles for Contact and PUB (Activity plugin).
- + Old posts retrieving at inhabitant profile (Core plugin).
- + Fixed threading comments (Core plugin).
+- Tag counters (Tags plugin).
+- Duplicated content when searching (Search plugin).
+- Inhabitant-linked styles for Contact and PUB (Activity plugin).
+- Old posts retrieving at inhabitant profile (Core plugin).
+- Fixed threading comments (Core plugin).
 
 ## v0.5.9 - 2025-11-28
 
 ### Added
 
- + Added fixed (also linked) threads into activity feed (Activity plugin).
+- Added fixed (also linked) threads into activity feed (Activity plugin).
  
 ### Fixed
 
- + Fixed laws stats (Parliament plugin).
+- Fixed laws stats (Parliament plugin).
 
 ## v0.5.8 - 2025-11-25
 
 ### Fixed
 
- + Fixed post preview from a pre-cached context (Core plugin).
- + Fixed tasks assignement to others different to the author (Core plugin).
- + Fixed comments context adding different to blog/post (Core plugin).
+- Fixed post preview from a pre-cached context (Core plugin).
+- Fixed tasks assignement to others different to the author (Core plugin).
+- Fixed comments context adding different to blog/post (Core plugin).
 
 ## v0.5.7 - 2025-11-24
 
 ### Added
 
- + Collapsible menu entries (Core plugin).
+- Collapsible menu entries (Core plugin).
 
 ### Fixed
 
- + Remote videos fail to load at Firefox/LibreWolf (Core plugin).
- + Fixed the comment query to return all posts whose root is the topic ID (Core plugin).
- + Fixed render-format for latest posts (Core plugin).
- + Fixed inhabitants listing for short-time activities (Activity plugin).
+- Remote videos fail to load at Firefox/LibreWolf (Core plugin).
+- Fixed the comment query to return all posts whose root is the topic ID (Core plugin).
+- Fixed render-format for latest posts (Core plugin).
+- Fixed inhabitants listing for short-time activities (Activity plugin).
 
 ## v0.5.6 - 2025-11-21
 
 ### Added
 
- + Extended post-commenting into various modules (bookmarks, images, audios, videos, documents, votations, events, tasks, reports, market, projects, jobs).
+- Extended post-commenting into various modules (bookmarks, images, audios, videos, documents, votations, events, tasks, reports, market, projects, jobs).
  
 ### Changed
 
- + Added details about current proposals at Courts (Courts plugin).
- + Parliament proposal listing when voting process has started (Parliament plugin).
+- Added details about current proposals at Courts (Courts plugin).
+- Parliament proposal listing when voting process has started (Parliament plugin).
  
 ### Fixed
 
- + Votations deduplication applied when directly voting from Parliament (Votes plugin).
+- Votations deduplication applied when directly voting from Parliament (Votes plugin).
  
 ## v0.5.5 - 2025-11-15
 
 ### Added
 
- + Conflicts resolution system (Courts plugin).
+- Conflicts resolution system (Courts plugin).
  
 ## v0.5.4 - 2025-10-30
 
 ### Fixed
 
- + Content stats (Stats plugin).
- + Non-avatar inhabitants listing (Inhabitants plugin).
- + Inhabitants suggestions (Inhabitants plugin).
- + Activity level (Inhabitants plugin).
- + Parliament duplication (Parliament plugin).
- + Added Parliament to blockexplorer (Blockexplorer plugin).
+- Content stats (Stats plugin).
+- Non-avatar inhabitants listing (Inhabitants plugin).
+- Inhabitants suggestions (Inhabitants plugin).
+- Activity level (Inhabitants plugin).
+- Parliament duplication (Parliament plugin).
+- Added Parliament to blockexplorer (Blockexplorer plugin).
 
 ## v0.5.3 - 2025-10-27
 
 ### Fixed
 
- + Tribes duplication (Tribes plugin + Activity plugin + Stats plugin).
+- Tribes duplication (Tribes plugin- Activity plugin- Stats plugin).
 
 ## v0.5.2 - 2025-10-22
 
 ### Added
 
- + Government system (Parliament plugin).
+- Government system (Parliament plugin).
  
 ### Fixed
 
- + Forum category translations (Forum plugin).
+- Forum category translations (Forum plugin).
 
 ## v0.5.1 - 2025-09-26
 
 ### Added
 
- + Activity level measurement (Inhabitants plugin).
- + Home page settings (Settings plugin).
+- Activity level measurement (Inhabitants plugin).
+- Home page settings (Settings plugin).
 
 ### Fixed
 
- + ECOIn wallet addresses (Banking plugin).
- + Tribes view (Tribes plugin).
- + Inhabitants view (Inhabitants plugin).
- + Avatar view (Main module).
- + Forum posts (Forums plugin).
- + Tribes info display (Search plugin).
+- ECOIn wallet addresses (Banking plugin).
+- Tribes view (Tribes plugin).
+- Inhabitants view (Inhabitants plugin).
+- Avatar view (Main module).
+- Forum posts (Forums plugin).
+- Tribes info display (Search plugin).
 
 ## v0.5.0 - 2025-09-20
 
 ### Added
 
- + Custom answer training (AI plugin).
+- Custom answer training (AI plugin).
 
 ### Fixed
 
- + Clean-SNH theme.
- + AI learning (AI plugin).
+- Clean-SNH theme.
+- AI learning (AI plugin).
 
 ## v0.4.9 - 2025-09-01
 
 ### Added
 
- + French translation.
+- French translation.
  
 ### Changed
 
@@ -308,8 +330,8 @@ All notable changes to this project will be documented in this file.
  
 ### Fixed
 
- + Fixed legacy codes (invites plugin).
- + Fixed SHS generator (script).
+- Fixed legacy codes (invites plugin).
+- Fixed SHS generator (script).
  
 ### Changed
 
@@ -323,13 +345,13 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
- + Online, discovered, unknown listing (peers plugin).
- + Federated, unfederated, unreachable networks (invites plugin).
+- Online, discovered, unknown listing (peers plugin).
+- Federated, unfederated, unreachable networks (invites plugin).
  
 ### Fixed
 
- + Fixed mentioning (mentions plugin).
- + Forum feed (activity plugin).
+- Fixed mentioning (mentions plugin).
+- Forum feed (activity plugin).
  
 ### Changed
 
@@ -343,8 +365,8 @@ All notable changes to this project will be documented in this file.
  
 ### Fixed
 
- + Follow/Unfollow and Pledges (projects plugin).
- + Karma SCORE (inhabitants plugin).
+- Follow/Unfollow and Pledges (projects plugin).
+- Karma SCORE (inhabitants plugin).
  
 ### Changed
 
@@ -356,14 +378,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
- + Exchange (ECOin current value) for all inhabitants (banking plugin).
- + Karma SCORE.
- + Upload a set of images/collections (images plugin).
+- Exchange (ECOin current value) for all inhabitants (banking plugin).
+- Karma SCORE.
+- Upload a set of images/collections (images plugin).
  
 ### Fixed
 
- + Add a new bounty (projects plugin).
- + Activity duplications.
+- Add a new bounty (projects plugin).
+- Activity duplications.
  
 ### Changed
 
@@ -376,8 +398,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
- + Projects: Module to explore, crowd-funding and manage projects.
- + Banking: Module to distribute a fair Universal Basic Income (UBI) using commons-treasury.
+- Projects: Module to explore, crowd-funding and manage projects.
+- Banking: Module to distribute a fair Universal Basic Income (UBI) using commons-treasury.
  
 ### Changed
 
@@ -393,14 +415,14 @@ All notable changes to this project will be documented in this file.
 
 - Limiter to blockchain logstream retrieval.
 
-  + Jobs: Module to discover and manage jobs.
-  + BlockExplorer: Module to navigate the blockchain.
+ - Jobs: Module to discover and manage jobs.
+ - BlockExplorer: Module to navigate the blockchain.
 
 ## v0.4.0 - 2025-07-29
 
 ### Added
 
-  + Forums: Module to discover and manage forums.
+ - Forums: Module to discover and manage forums.
 
 ## v0.3.8 - 2025-07-21
 
@@ -412,40 +434,40 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Hardcore "hacking" and refactoring for: models + backend + middleware + views.
+- Hardcore "hacking" and refactoring for: models- backend- middleware- views.
 
 ### Added
 
 - Some "core" modules:
 
-  + Agenda: Module to manage all your assigned items.
-  + Audios: Module to discover and manage audios.
-  + Bookmarks: Module to discover and manage bookmarks.
-  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).
-  + Documents: Module to discover and manage documents.
-  + Events: Module to discover and manage events.
-  + Feed: Module to discover and share short-texts (feeds).
-  + Governance: Module to discover and manage votes.
-  + Images: Module to discover and manage images.
-  + Invites: Module to manage and apply invite codes.
-  + Legacy: Module to manage your secret (private key) quickly and securely.
-  + Latest: Module to receive the most recent posts and discussions.
-  + Market: Module to exchange goods or services.
-  + Multiverse: Module to receive content from other federated peers.
-  + Opinions: Module to discover and vote on opinions.
-  + Pixelia: Module to draw on a collaborative grid.
-  + Popular: Module to receive posts that are trending, most viewed, or most commented on.
-  + Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.
-  + Summaries: Module to receive summaries of long discussions or posts.
-  + Tags: Module to discover and explore taxonomy patterns (tags).
-  + Tasks: Module to discover and manage tasks.
-  + Threads: Module to receive conversations grouped by topic or question.
-  + Transfers: Module to discover and manage smart-contracts (transfers).
-  + Trending: Module to explore the most popular content.
-  + Tribes: Module to explore or create tribes (groups).
-  + Videos: Module to discover and manage videos.
-  + Wallet: Module to manage your digital assets (ECOin).
-  + Topics: Module to receive discussion categories based on shared interests.
+ - Agenda: Module to manage all your assigned items.
+ - Audios: Module to discover and manage audios.
+ - Bookmarks: Module to discover and manage bookmarks.
+ - Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).
+ - Documents: Module to discover and manage documents.
+ - Events: Module to discover and manage events.
+ - Feed: Module to discover and share short-texts (feeds).
+ - Governance: Module to discover and manage votes.
+ - Images: Module to discover and manage images.
+ - Invites: Module to manage and apply invite codes.
+ - Legacy: Module to manage your secret (private key) quickly and securely.
+ - Latest: Module to receive the most recent posts and discussions.
+ - Market: Module to exchange goods or services.
+ - Multiverse: Module to receive content from other federated peers.
+ - Opinions: Module to discover and vote on opinions.
+ - Pixelia: Module to draw on a collaborative grid.
+ - Popular: Module to receive posts that are trending, most viewed, or most commented on.
+ - Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.
+ - Summaries: Module to receive summaries of long discussions or posts.
+ - Tags: Module to discover and explore taxonomy patterns (tags).
+ - Tasks: Module to discover and manage tasks.
+ - Threads: Module to receive conversations grouped by topic or question.
+ - Transfers: Module to discover and manage smart-contracts (transfers).
+ - Trending: Module to explore the most popular content.
+ - Tribes: Module to explore or create tribes (groups).
+ - Videos: Module to discover and manage videos.
+ - Wallet: Module to manage your digital assets (ECOin).
+ - Topics: Module to receive discussion categories based on shared interests.
 
 - New languages: Spanish, Euskara and French.
 

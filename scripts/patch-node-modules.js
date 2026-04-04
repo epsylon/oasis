@@ -7,8 +7,6 @@ const log = (msg) => console.log(`[OASIS] [PATCH] ${msg}`);
 const ssbRefPath = path.resolve(__dirname, '../src/server/node_modules/ssb-ref/index.js');
 if (fs.existsSync(ssbRefPath)) {
   const data = fs.readFileSync(ssbRefPath, 'utf8');
-
-  // Check if already in desired state (no deprecate wrapper on parseAddress)
   const alreadyClean = /exports\.parseAddress\s*=\s*parseAddress/.test(data);
   if (!alreadyClean) {
     const patched = data.replace(
@@ -34,7 +32,7 @@ if (fs.existsSync(ssbBlobsPath)) {
   const marker = 'want: function (id, cb)';
   const startIndex = data.indexOf(marker);
   if (startIndex !== -1) {
-    const endIndex = data.indexOf('},', startIndex); // end of function block
+    const endIndex = data.indexOf('},', startIndex);
     if (endIndex !== -1) {
       const before = data.slice(0, startIndex);
       const after = data.slice(endIndex + 2);

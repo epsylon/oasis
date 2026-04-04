@@ -180,7 +180,8 @@ module.exports = ({ cooler }) => {
         backers: [],
         author: ssbClient.id,
         createdAt: new Date().toISOString(),
-        updatedAt: null
+        updatedAt: null,
+        mapUrl: String(data.mapUrl || "").trim()
       }
 
       return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))

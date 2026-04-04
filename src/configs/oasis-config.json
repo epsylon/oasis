@@ -34,11 +34,13 @@
     "aiMod": "on",
     "forumMod": "on",
     "jobsMod": "on",
+    "shopsMod": "on",
     "projectsMod": "on",
     "bankingMod": "on",
     "parliamentMod": "on",
     "courtsMod": "on",
-    "favoritesMod": "on"
+    "favoritesMod": "on",
+    "mapsMod": "on"
   },
   "wallet": {
     "url": "http://localhost:7474",

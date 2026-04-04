@@ -326,6 +326,21 @@ const renderImagesLink = () => {
   return "";
 };
 
+const renderMapsLink = () => {
+  const mapsMod = getConfig().modules.mapsMod === "on";
+  if (mapsMod) {
+    return [
+      navLink({
+        href: "/maps",
+        emoji: "ꔌ",
+        text: i18n.mapsLabel,
+        class: "maps-link enabled"
+      })
+    ];
+  }
+  return "";
+};
+
 const renderVideosLink = () => {
   const videosMod = getConfig().modules.videosMod === "on";
   if (videosMod) {
@@ -418,6 +433,19 @@ const renderJobsLink = () => {
           href: "/jobs",
           emoji: "ꗒ",
           text: i18n.jobsTitle
+        })
+      ]
+    : "";
+};
+
+const renderShopsLink = () => {
+  const shopsMod = getConfig().modules.shopsMod === "on";
+  return shopsMod
+    ? [
+        navLink({
+          href: "/shops",
+          emoji: "ꔜ",
+          text: i18n.shopsTitle
         })
       ]
     : "";
@@ -869,6 +897,7 @@ const template = (titlePrefix, ...elements) => {
                 renderTrendingLink(),
                 renderOpinionsLink(),
                 renderForumLink(),
+                renderMapsLink(),
                 renderInvitesLink(),
                 navLink({
                   href: "/peers",
@@ -895,6 +924,7 @@ const template = (titlePrefix, ...elements) => {
                 renderMarketLink(),
                 renderProjectsLink(),
                 renderJobsLink(),
+                renderShopsLink(),
                 renderTransfersLink()
               ),
               navGroup(
@@ -1144,9 +1174,9 @@ const post = ({ msg, aside = false, preview = false }) => {
         const nodes = [];
         nodes.push(
             div(
-                { class: 'card-field', style: 'margin-bottom:10px;' },
-                span({ class: 'card-label', style: 'font-weight:800;' }, header),
-                span({ class: 'card-value', style: 'margin-left:10px; font-weight:800;' }, titleText)
+                { class: 'card-field card-field-mb' },
+                span({ class: 'card-label card-label-bold' }, header),
+                span({ class: 'card-value card-value-bold' }, titleText)
             )
         );
 
@@ -1166,7 +1196,7 @@ const post = ({ msg, aside = false, preview = false }) => {
             if (tags.length) {
                 nodes.push(
                     div(
-                        { class: 'card-tags', style: 'margin-top:10px;' },
+                        { class: 'card-tags card-tags-mt' },
                         ...tags.map(tag =>
                             a(
                                 { href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' },
@@ -1221,7 +1251,7 @@ const post = ({ msg, aside = false, preview = false }) => {
             const u = safeStr(c.url);
             if (u && isMsgId(u)) {
                 nodes.push(
-                    div({ class: 'card-field', style: 'margin-top:10px;' },
+                    div({ class: 'card-field card-field-mt' },
                         img({ src: `/blob/${encodeURIComponent(u)}`, class: 'feed-image img-content' })
                     )
                 );
@@ -1230,7 +1260,7 @@ const post = ({ msg, aside = false, preview = false }) => {
             const u = safeStr(c.url);
             if (u && isMsgId(u)) {
                 nodes.push(
-                    div({ class: 'card-field', style: 'margin-top:10px;' },
+                    div({ class: 'card-field card-field-mt' },
                         audioHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(u)}` })
                     )
                 );
@@ -1239,7 +1269,7 @@ const post = ({ msg, aside = false, preview = false }) => {
             const u = safeStr(c.url);
             if (u && isMsgId(u)) {
                 nodes.push(
-                    div({ class: 'card-field', style: 'margin-top:10px;' },
+                    div({ class: 'card-field card-field-mt' },
                         videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(u)}` })
                     )
                 );
@@ -1249,7 +1279,7 @@ const post = ({ msg, aside = false, preview = false }) => {
 	  if (u && isMsgId(u)) {
 	    const safeId = String(msg.key || u).replace(/[^a-zA-Z0-9_-]/g, '');
 	    nodes.push(
-	      div({ class: 'card-field', style: 'margin-top:10px;' },
+	      div({ class: 'card-field card-field-mt' },
 		div({
 		  id: `pdf-container-${safeId}`,
 		  class: 'pdf-viewer-container',
@@ -1302,7 +1332,7 @@ const post = ({ msg, aside = false, preview = false }) => {
         articleElement = article(
             { class: "content" },
             div(
-                { class: "card-field", style: "margin-bottom:10px;" },
+                { class: "card-field card-field-mb" },
                 span({ class: "card-label" }, (i18n.invalidPost || 'Invalid content') + ':'),
                 span({ class: "card-value" }, (i18n.invalidPostHint || 'This message has invalid/empty text.'))
             ),
@@ -1528,6 +1558,7 @@ exports.authorView = ({
   relationship,
   ecoAddress,
   karmaScore = 0,
+  estimatedUBI = 0,
   lastActivityBucket
 }) => {
   const linkUrl = `/author/${encodeURIComponent(feedId)}`;
@@ -1576,8 +1607,11 @@ exports.authorView = ({
       pre({ class: "md-mention", innerHTML: sanitizeHtml(markdownMention) }),
       p(a({ class: "user-link", href: `/author/${encodeURIComponent(feedId)}` }, feedId)),
       div({ class: "profile-metrics" },
-        p(`${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)),
         ...lastActivityBadge({ lastActivityBucket: bucket }, true),
+        div({ class: "inhabitant-karma-ubi" },
+          span({ class: "karma-line" }, `${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)),
+          span({ class: "ubi-line" }, `${i18n.bankingFutureUBI}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`))
+        ),
         div({ class: "eco-wallet" },
           p(`${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `,
             a({ href: '/wallet' }, ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!'))
@@ -1588,7 +1622,7 @@ exports.authorView = ({
     footer(
       div(
         { class: "profile" },
-        ...contactForms.map(form => span({ style: "font-weight: bold;" }, form)),
+        ...contactForms.map(form => span({ class: "contact-bold" }, form)),
         relationship.me
           ? span({ class: "status you" }, i18n.relationshipYou)
           : div({ class: "relationship-status" },
@@ -2293,7 +2327,7 @@ exports.publishCustomView = async () => {
             required: true,
             name: "text",
             rows: 10,
-            style: "width: 100%;"
+            class: "textarea-full"
           },
           "{\n",
           '  "type": "feed",\n',

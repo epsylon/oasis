@@ -141,7 +141,8 @@ module.exports = ({ cooler }) => {
       updatedAt: c.updatedAt || null,
       status: c.status || "OPEN",
       tags: Array.isArray(c.tags) ? c.tags : normalizeTags(c.tags),
-      subscribers: Array.isArray(subscribers) ? subscribers : []
+      subscribers: Array.isArray(subscribers) ? subscribers : [],
+      mapUrl: c.mapUrl || ""
     }
   }
 
@@ -191,7 +192,8 @@ module.exports = ({ cooler }) => {
         author: ssbClient.id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        status: "OPEN"
+        status: "OPEN",
+        mapUrl: String(jobData.mapUrl || "").trim()
       }
 
       return new Promise((res, rej) => ssbClient.publish(content, (e, m) => e ? rej(e) : res(m)))

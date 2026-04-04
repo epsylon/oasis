@@ -63,7 +63,7 @@ const publicOnlyFilter = pull.filter(isNotPrivate);
 const configure = (...customOptions) =>
   Object.assign({}, defaultOptions, ...customOptions);
  
-// peers 
+// PEERS 
 const ebtDir = path.join(os.homedir(), '.ssb', 'ebt');
 const unfollowedPath = path.join(os.homedir(), '.ssb', 'gossip_unfollowed.json');
 
@@ -117,13 +117,10 @@ const canonicalizePubId = (s) => {
 };
 
 const parseRemote = (remote) => {
-  // net: format (TCP)
   let m = /^net:([^:]+):\d+~shs:([^=]+)=/.exec(remote);
   if (m) return { host: m[1], pubId: canonicalizePubId(m[2]) };
-  // ws/wss format (WebSocket)
   m = /^wss?:\/\/([^:/]+)(?::\d+)?.*~shs:([^=]+)=/.exec(remote);
   if (m) return { host: m[1], pubId: canonicalizePubId(m[2]) };
-  // Generic: extract ~shs: part from any format
   m = /~shs:([^=]+)=/.exec(remote);
   if (m) return { host: null, pubId: canonicalizePubId(m[1]) };
   return { host: null, pubId: null };
@@ -161,7 +158,7 @@ function toLegacyInvite(s) {
   return `${m[1]}:${m[2]}:@${key}~${m[4]}`;
 }
 
-// core modules
+// CORE MODEL
 module.exports = ({ cooler, isPublic }) => {
   const models = {};
   const getAbout = async ({ key, feedId }) => {
@@ -290,7 +287,7 @@ module.exports = ({ cooler, isPublic }) => {
   );
 };
   
-//ABOUT MODEL
+// ABOUT MODEL
 models.about = {
   publicWebHosting: async (feedId) => {
     const result = await getAbout({
@@ -476,7 +473,7 @@ models.blob = {
   }
 };
 
-//FRIENDS MODEL
+// FRIENDS MODEL
 models.friend = {
   setRelationship: async ({ feedId, following, blocking }) => {
     if (following && blocking) {
@@ -566,7 +563,7 @@ models.friend = {
     },
   };
   
-//META MODEL
+// META MODEL
 models.meta = {
     myFeedId: async () => {
       const ssb = await cooler.open();
@@ -617,7 +614,6 @@ models.meta = {
     discovered: async () => {
       const ssb = await cooler.open();
       const snapshot = await ssb.conn.dbPeers();
-      // Read gossip.json to merge announcers data
       const gossipPath = path.join(os.homedir(), '.ssb', 'gossip.json');
       let gossipMap = new Map();
       try {
@@ -629,7 +625,6 @@ models.meta = {
         }
       } catch {}
       const allDbPeers = await enrichEntries(snapshot);
-      // Merge announcers from gossip.json into enriched peers
       for (const [, peerData] of allDbPeers) {
         if ((!peerData.announcers || peerData.announcers === 0) && gossipMap.has(peerData.key)) {
           const gossipEntry = gossipMap.get(peerData.key);
@@ -1942,7 +1937,5 @@ models.vote = {
       });
   },
 };
-
-//return models
 return models;
 };

@@ -132,6 +132,10 @@ exports.favoritesView = async (items, filter = "all", counts = {}) => {
             `${i18n.favoritesFilterImages} (${c.images || 0})`
           ),
           button(
+            { type: "submit", name: "filter", value: "maps", class: filter === "maps" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterMaps} (${c.maps || 0})`
+          ),
+          button(
             { type: "submit", name: "filter", value: "videos", class: filter === "videos" ? "filter-btn active" : "filter-btn" },
             `${i18n.favoritesFilterVideos} (${c.videos || 0})`
           )

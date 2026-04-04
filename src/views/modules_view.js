@@ -22,6 +22,7 @@ const modulesView = () => {
     { name: 'jobs', label: i18n.modulesJobsLabel, description: i18n.modulesJobsDescription },
     { name: 'legacy', label: i18n.modulesLegacyLabel, description: i18n.modulesLegacyDescription },
     { name: 'latest', label: i18n.modulesLatestLabel, description: i18n.modulesLatestDescription },
+    { name: 'maps', label: i18n.modulesMapLabel, description: i18n.modulesMapDescription },
     { name: 'market', label: i18n.modulesMarketLabel, description: i18n.modulesMarketDescription },
     { name: 'multiverse', label: i18n.modulesMultiverseLabel, description: i18n.modulesMultiverseDescription },
     { name: 'opinions', label: i18n.modulesOpinionsLabel, description: i18n.modulesOpinionsDescription },
@@ -30,6 +31,7 @@ const modulesView = () => {
     { name: 'projects', label: i18n.modulesProjectsLabel, description: i18n.modulesProjectsDescription },
     { name: 'popular', label: i18n.modulesPopularLabel, description: i18n.modulesPopularDescription },
     { name: 'reports', label: i18n.modulesReportsLabel, description: i18n.modulesReportsDescription },
+    { name: 'shops', label: i18n.modulesShopsLabel, description: i18n.modulesShopsDescription },
     { name: 'summaries', label: i18n.modulesSummariesLabel, description: i18n.modulesSummariesDescription },
     { name: 'tags', label: i18n.modulesTagsLabel, description: i18n.modulesTagsDescription },
     { name: 'tasks', label: i18n.modulesTasksLabel, description: i18n.modulesTasksDescription },
@@ -73,8 +75,8 @@ const modulesView = () => {
 
   const PRESETS = {
     minimal: ['feed', 'forum', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
-    social: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-    economy: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs'],
+    social: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'maps', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
+    economy: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'maps', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
     full: modules.map(m => m.name)
   };
 

@@ -1,3 +1,5 @@
 node_modules/
 *.gguf
 .update_required
+packages/
+cache/

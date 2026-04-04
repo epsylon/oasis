@@ -19,7 +19,8 @@ const {
 const moment = require("../server/node_modules/moment");
 const { template, i18n } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderUrl } = require("../backend/renderUrl")
+const { renderMapLocationVisitLabel } = require("./maps_view");
 const opinionCategories = require("../backend/opinion_categories");
 
 const userId = config.keys.id;
@@ -220,6 +221,7 @@ const renderVideoList = (videos, filter, params = {}) => {
               button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
             )
           ),
+          renderMapLocationVisitLabel(videoObj.mapUrl),
           br(),
           (() => {
             const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
@@ -267,6 +269,10 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
       span(i18n.videoDescriptionLabel),
       br(),
       textarea({ name: "description", placeholder: i18n.videoDescriptionPlaceholder, rows: "4" }, videoToEdit?.description || ""),
+      br(),
+      span(i18n.mapLocationTitle || "Map Location"),
+      br(),
+      input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: videoToEdit?.mapUrl || "" }),
       br(),
       span(i18n.videoTagsLabel),
       br(),
@@ -406,6 +412,8 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
         renderVideoPlayer(videoObj),
         safeText(videoObj.description) ? p(...renderUrl(videoObj.description)) : null,
         renderTags(videoObj.tags),
+        br(),
+        renderMapLocationVisitLabel(videoObj.mapUrl),
         br(),
         (() => {
           const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;

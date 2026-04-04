@@ -11,14 +11,15 @@ const FILTER_LABELS = {
   forum: i18n.typeForum, about: i18n.typeAbout, contact: i18n.typeContact, pub: i18n.typePub,
   transfer: i18n.typeTransfer, market: i18n.typeMarket, job: i18n.typeJob, tribe: i18n.typeTribe,
   project: i18n.typeProject, banking: i18n.typeBanking, bankWallet: i18n.typeBankWallet, bankClaim: i18n.typeBankClaim,
-  aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts
+  aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts,
+  map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product'
 };
 
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
-const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia'];
-const CAT_BLOCK4  = ['forum', 'bookmark', 'image', 'video', 'audio', 'document'];
+const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia', 'shop'];
+const CAT_BLOCK4  = ['forum', 'bookmark', 'image', 'video', 'audio', 'document', 'map'];
 
 const SEARCH_FIELDS = ['author','id','from','to'];
 
@@ -60,6 +61,7 @@ const filterBlocks = (blocks, filter, userId) => {
     const cset = new Set(['courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote']);
     return blocks.filter(b => cset.has(b.type));
   }
+  if (filter === 'shop') return blocks.filter(b => b.type === 'shop' || b.type === 'shopProduct');
   return blocks.filter(b => b.type === filter);
 };
 
@@ -117,6 +119,10 @@ const getViewDetailsAction = (type, block) => {
     case 'courtsSettlementAccepted': return `/courts`;
     case 'courtsNomination': return `/courts`;
     case 'courtsNominationVote': return `/courts`;
+    case 'map': return `/maps/${encodeURIComponent(block.id)}`;
+    case 'mapMarker': return block.content?.mapId ? `/maps/${encodeURIComponent(block.content.mapId)}` : `/maps`;
+    case 'shop': return `/shops/${encodeURIComponent(block.id)}`;
+    case 'shopProduct': return `/shops/product/${encodeURIComponent(block.id)}`;
     default: return null;
   }
 };
@@ -131,7 +137,9 @@ const TYPE_COLORS = {
   parliamentTerm:'#8e44ad', parliamentProposal:'#8e44ad', parliamentLaw:'#8e44ad',
   parliamentCandidature:'#8e44ad', parliamentRevocation:'#8e44ad',
   courtsCase:'#c0392b', courtsEvidence:'#c0392b', courtsAnswer:'#c0392b',
-  courtsVerdict:'#c0392b', courtsSettlement:'#c0392b', courtsNomination:'#c0392b'
+  courtsVerdict:'#c0392b', courtsSettlement:'#c0392b', courtsNomination:'#c0392b',
+  map:'#27ae60', mapMarker:'#27ae60',
+  shop:'#e67e22', shopProduct:'#e67e22'
 };
 
 const renderBlockDiagram = (blocks, qs) => {

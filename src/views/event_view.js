@@ -3,6 +3,7 @@ const { template, i18n } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
+const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view");
 
 const userId = config.keys.id;
 
@@ -210,9 +211,10 @@ const renderEventItem = (e, filter) => {
     renderCardField(i18n.eventDescriptionLabel + ":", ""),
     p(...renderUrl(e.description)),
     renderCardField(i18n.eventDateLabel + ":", e.date ? moment(e.date).format("YYYY/MM/DD HH:mm:ss") : ""),
-    e.location && String(e.location).trim() ? renderCardField(i18n.eventLocationLabel + ":", e.location) : null,
-    renderCardField(i18n.eventPrivacyLabel + ":", privacyLabel(e.isPublic)),
     renderCardField(i18n.eventStatus + ":", eventStatusLabel(e.status)),
+    renderCardField(i18n.eventPrivacyLabel + ":", privacyLabel(e.isPublic)),
+    e.location && String(e.location).trim() ? renderCardField(i18n.eventLocationLabel + ":", e.location) : null,
+    renderMapLocationVisitLabel(e.mapUrl),
     urlHref ? renderCardField(i18n.eventUrlLabel + ":", a({ href: urlHref, target: "_blank", rel: "noopener noreferrer" }, urlHref)) : null,
     renderCardField(i18n.eventPriceLabel + ":", parseFloat(e.price || 0).toFixed(6) + " ECO"),
     renderCardField(i18n.eventAttendees + ":", String(attendees.length)),
@@ -369,6 +371,11 @@ exports.eventView = async (events, filter, eventId, returnTo) => {
                 value: currentFilter === "edit" ? eventToEdit.location || "" : ""
               }),
               br(),
+              label(i18n.mapLocationTitle || "Map Location"),
+              br(),
+              input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: eventToEdit?.mapUrl || "" }),
+              br(),
+              br(),
               label(i18n.eventUrlLabel),
               br(),
               input({ type: "url", name: "url", id: "url", value: currentFilter === "edit" ? eventToEdit.url || "" : "" }),
@@ -399,7 +406,7 @@ exports.eventView = async (events, filter, eventId, returnTo) => {
   );
 };
 
-exports.singleEventView = async (event, filter, comments = []) => {
+exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   const currentFilter = filter || "all";
   const commentCount = typeof event.commentCount === "number" ? event.commentCount : 0;
   const attendees = safeArray(event.attendees);
@@ -431,9 +438,10 @@ exports.singleEventView = async (event, filter, comments = []) => {
         renderCardField(i18n.eventDescriptionLabel + ":", ""),
         p(...renderUrl(event.description)),
         renderCardField(i18n.eventDateLabel + ":", event.date ? moment(event.date).format("YYYY/MM/DD HH:mm:ss") : ""),
-        event.location && String(event.location).trim() ? renderCardField(i18n.eventLocationLabel + ":", event.location) : null,
-        renderCardField(i18n.eventPrivacyLabel + ":", privacyLabel(event.isPublic)),
         renderCardField(i18n.eventStatus + ":", eventStatusLabel(event.status)),
+        renderCardField(i18n.eventPrivacyLabel + ":", privacyLabel(event.isPublic)),
+        event.location && String(event.location).trim() ? renderCardField(i18n.eventLocationLabel + ":", event.location) : null,
+        renderMapEmbed(params.mapData, event.mapUrl),
         urlHref ? renderCardField(i18n.eventUrlLabel + ":", a({ href: urlHref, target: "_blank", rel: "noopener noreferrer" }, urlHref)) : null,
         renderCardField(i18n.eventPriceLabel + ":", parseFloat(event.price || 0).toFixed(6) + " ECO"),
         event.tags && event.tags.filter(Boolean).length

@@ -36,7 +36,7 @@ module.exports = ({ cooler }) => {
   const types = [
     'bookmark','event','task','votes','report','feed','project',
     'image','audio','video','document','transfer','post','tribe',
-    'market','forum','job','aiExchange',
+    'market','forum','job','aiExchange','map','shop','shopProduct',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
@@ -133,6 +133,9 @@ module.exports = ({ cooler }) => {
     if (typeof c.contact !== 'undefined') return 'contact';
     if (typeof c.about !== 'undefined') return 'about';
     if (typeof c.concept !== 'undefined' && typeof c.amount !== 'undefined' && c.status) return 'transfer';
+    if (c.type === 'map') return 'map';
+    if (c.type === 'shop') return 'shop';
+    if (c.type === 'shopProduct') return 'shopProduct';
     return '';
   };
 
@@ -199,6 +202,7 @@ module.exports = ({ cooler }) => {
       else if (t === 'video') score += 12;
       else if (t === 'audio') score += 8;
       else if (t === 'document') score += 6;
+      else if (t === 'map') score += 6;
       else if (t === 'bookmark') score += 2;
       else if (t === 'feed') score += 6;
       else if (t === 'forum') score += c.root ? 5 : 10;

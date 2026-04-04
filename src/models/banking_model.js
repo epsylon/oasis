@@ -625,11 +625,19 @@ async function getLastPublishedTimestamp(userId) {
   async function computeEpoch({ epochId, userId, rules = DEFAULT_RULES }) {
     const pubBal = await safeGetBalance("pub");
     const pv = computePoolVars(pubBal, rules);
-    const engagementScore = await getUserEngagementScore(userId);
-    const userWeight = 1 + engagementScore / 100;
-    const weights = [{ user: userId, w: userWeight }];
-    const W = weights.reduce((acc, x) => acc + x.w, 0) || 1;
+    const addresses = await listAddressesMerged();
+    const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address));
     const capUser = (rules.caps && rules.caps.cap_user_epoch) || DEFAULT_RULES.caps.cap_user_epoch;
+    const weights = [];
+    for (const entry of eligible) {
+      const score = await getUserEngagementScore(entry.id);
+      weights.push({ user: entry.id, w: 1 + score / 100 });
+    }
+    if (!weights.length && userId) {
+      const score = await getUserEngagementScore(userId);
+      weights.push({ user: userId, w: 1 + score / 100 });
+    }
+    const W = weights.reduce((acc, x) => acc + x.w, 0) || 1;
     const allocations = weights.map(({ user, w }) => {
       const amount = Math.min(pv.pool * w / W, capUser);
       return {
@@ -645,8 +653,11 @@ async function getLastPublishedTimestamp(userId) {
     return { epoch: { id: epochId, pool: Number(pv.pool.toFixed(6)), weightsSum: Number(W.toFixed(6)), rules, hash }, allocations };
   }
 
-  async function executeEpoch({ epochId, rules = DEFAULT_RULES }) {
-    const { epoch, allocations } = await computeEpoch({ epochId, userId: config.keys.id, rules });
+  async function executeEpoch({ epochId, rules = DEFAULT_RULES } = {}) {
+    const eid = epochId || epochIdNow();
+    const existing = await epochsRepo.get(eid);
+    if (existing) return { epoch: existing, allocations: await transfersRepo.listByTag(`epoch:${eid}`) };
+    const { epoch, allocations } = await computeEpoch({ epochId: eid, userId: config.keys.id, rules });
     await epochsRepo.save(epoch);
     for (const a of allocations) {
       if (a.amount <= 0) continue;
@@ -658,7 +669,7 @@ async function getLastPublishedTimestamp(userId) {
         concept: `UBI ${epochId}`,
         status: "UNCONFIRMED",
         createdAt: new Date().toISOString(),
-        deadline: new Date(Date.now() + DEFAULT_RULES.graceDays * 86400000).toISOString(),
+        deadline: new Date(Date.now() + (rules.graceDays || DEFAULT_RULES.graceDays) * 86400000).toISOString(),
         tags: ["UBI", `epoch:${epochId}`],
         opinions: {}
       });
@@ -672,21 +683,30 @@ async function getLastPublishedTimestamp(userId) {
     return new Promise((resolve, reject) => ssbClient.publish(content, (err, res) => err ? reject(err) : resolve(res)));
   }
 
-  async function claimAllocation({ transferId, claimerId, pubWalletUrl, pubWalletUser, pubWalletPass }) {
+  async function claimAllocation({ transferId, claimerId }) {
     const allocation = await transfersRepo.findById(transferId);
     if (!allocation || allocation.status !== "UNCONFIRMED") throw new Error("Invalid allocation or already confirmed.");
     if (allocation.to !== claimerId) throw new Error("This allocation is not for you.");
-    const txid = await rpcCall("sendtoaddress", [pubWalletUrl, allocation.amount, "UBI claim", pubWalletUser, pubWalletPass]);
+    const claimerAddress = await getUserAddress(claimerId);
+    if (!claimerAddress || !isValidEcoinAddress(claimerAddress)) throw new Error("No valid ECOin address registered.");
+    const txid = await rpcCall("sendtoaddress", [claimerAddress, allocation.amount, `UBI ${allocation.concept || "claim"}`], "pub");
+    if (!txid) throw new Error("RPC sendtoaddress failed. Check PUB wallet configuration.");
+    await transfersRepo.markClosed(transferId, txid);
     return { txid };
   }
 
   async function updateAllocationStatus(allocationId, status, txid) {
-    const all = await transfersRepo.listAll();
+    if (status === "CLOSED") {
+      await transfersRepo.markClosed(allocationId, txid);
+      return;
+    }
+    ensureStoreFiles();
+    const all = readJson(TRANSFERS_PATH, []);
     const idx = all.findIndex(t => t.id === allocationId);
     if (idx >= 0) {
       all[idx].status = status;
-      all[idx].txid = txid;
-      await transfersRepo.create(all[idx]);
+      if (txid) all[idx].txid = txid;
+      writeJson(TRANSFERS_PATH, all);
     }
   }
 
@@ -812,9 +832,22 @@ async function getLastPublishedTimestamp(userId) {
   async function getBankingData(userId) {
     const ecoValue = await calculateEcoinValue();
     const karmaScore = await getUserEngagementScore(userId);
+    let estimatedUBI = 0;
+    try {
+      const pubBal = await safeGetBalance("pub");
+      const pv = computePoolVars(pubBal, DEFAULT_RULES);
+      const pool = pv.pool || 0;
+      const addresses = await listAddressesMerged();
+      const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address));
+      const totalW = eligible.length > 0 ? eligible.length + eligible.length * (karmaScore / 100) : 1;
+      const userW = 1 + karmaScore / 100;
+      const cap = DEFAULT_RULES.caps?.cap_user_epoch ?? 50;
+      estimatedUBI = Math.min(pool * (userW / Math.max(1, totalW)), cap);
+    } catch (_) {}
     return {
       ecoValue,
       karmaScore,
+      estimatedUBI,
     };
   }
 

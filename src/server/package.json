@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "description": "Oasis Social Networking Project Utopia",
   "repository": {
     "type": "git",
@@ -138,9 +138,9 @@
     "sharp": "^0.33.5"
   },
   "bugs": {
-    "url": "https://code.03c8.net/KrakensLab/snh-oasis/issues"
+    "url": "https://github.com/epsylon/oasis/issues"
   },
-  "homepage": "https://code.03c8.net/KrakensLab/snh-oasis",
+  "homepage": "https://github.com/epsylon/oasis",
   "directories": {
     "doc": "docs"
   },

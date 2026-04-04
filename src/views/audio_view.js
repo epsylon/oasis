@@ -19,7 +19,8 @@ const {
 const { template, i18n } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderUrl } = require("../backend/renderUrl")
+const { renderMapLocationVisitLabel } = require("./maps_view");
 const opinionCategories = require("../backend/opinion_categories");
 
 const userId = config.keys.id;
@@ -210,6 +211,7 @@ const renderAudioList = (audios, filter, params = {}) => {
               button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
             )
           ),
+          renderMapLocationVisitLabel(audioObj.mapUrl),
           br(),
           (() => {
             const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;
@@ -256,6 +258,10 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       span(i18n.audioDescriptionLabel),
       br(),
       textarea({ name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows: "4" }, audioToEdit?.description || ""),
+      br(),
+      span(i18n.mapLocationTitle || "Map Location"),
+      br(),
+      input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: audioToEdit?.mapUrl || "" }),
       br(),
       span(i18n.audioTagsLabel),
       br(),
@@ -399,6 +405,8 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
         renderAudioPlayer(audioObj),
         safeText(audioObj.description) ? p(...renderUrl(audioObj.description)) : null,
         renderTags(audioObj.tags),
+        br(),
+        renderMapLocationVisitLabel(audioObj.mapUrl),
         br(),
         (() => {
           const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;

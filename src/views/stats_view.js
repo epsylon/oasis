@@ -28,7 +28,7 @@ exports.statsView = (stats, filter) => {
   const types = [
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project',
     'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
-    'market', 'forum', 'job', 'aiExchange',
+    'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
@@ -51,6 +51,9 @@ exports.statsView = (stats, filter) => {
     forum: i18n.statsForum,
     job: i18n.statsJob,
     aiExchange: i18n.statsAiExchange,
+    map: i18n.statsMap,
+    shop: i18n.statsShop,
+    shopProduct: i18n.statsShopProduct,
     parliamentCandidature: i18n.statsParliamentCandidature,
     parliamentTerm: i18n.statsParliamentTerm,
     parliamentProposal: i18n.statsParliamentProposal,
@@ -263,8 +266,12 @@ exports.statsView = (stats, filter) => {
               div({ style: blockStyle },
                 h2(`${i18n.statsNetworkContent}: ${totalContent}`),
                 ul(
-                  types.filter(t => t !== 'karmaScore').map(t => {
+                  types.filter(t => t !== 'karmaScore' && t !== 'shopProduct').map(t => {
                     if (C(stats, t) <= 0) return null;
+                    if (t === 'shop') return li(
+                      span(`${labels[t]}: ${C(stats, t)}`),
+                      ul([li(`${labels.shopProduct}: ${C(stats, 'shopProduct')}`)])
+                    );
                     if (t !== 'tribe') return li(`${labels[t]}: ${C(stats, t)}`);
                     return li(
                       span(`${labels[t]}: ${C(stats, t)}`),
@@ -339,8 +346,12 @@ exports.statsView = (stats, filter) => {
                 div({ style: blockStyle },
                   h2(`${i18n.statsYourContent}: ${totalContent}`),
                   ul(
-                    types.filter(t => t !== 'karmaScore').map(t => {
+                    types.filter(t => t !== 'karmaScore' && t !== 'shopProduct').map(t => {
                       if (C(stats, t) <= 0) return null;
+                      if (t === 'shop') return li(
+                        span(`${labels[t]}: ${C(stats, t)}`),
+                        ul([li(`${labels.shopProduct}: ${C(stats, 'shopProduct')}`)])
+                      );
                       if (t !== 'tribe') return li(`${labels[t]}: ${C(stats, t)}`);
                       return li(
                         span(`${labels[t]}: ${C(stats, t)}`),

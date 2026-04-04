@@ -2,6 +2,7 @@ const { div, h2, p, section, button, form, a, input, img, label, select, option,
 const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
+const { renderMapLocationUrl, renderMapLocationGrid, renderMapLocationVisitLabel } = require("./maps_view");
 const opinion_categories = require('../backend/opinion_categories.js');
 
 const userId = config.keys.id;
@@ -202,6 +203,10 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     br,
     input({ type: 'text', name: 'location', id: 'location', placeholder: i18n.tribeLocationPlaceholder, value: tribeToEdit.location || '' }),
     br,
+    label(i18n.mapLocationTitle || 'Map Location'),
+    br,
+    input({ type: 'text', name: 'mapUrl', placeholder: i18n.mapUrlPlaceholder || '/maps/MAP_ID', value: tribeToEdit.mapUrl || '' }),
+    br,
     label({ for: 'image' }, i18n.tribeImageLabel),
     br,
     input({ type: 'file', name: 'image', id: 'image' }),
@@ -261,8 +266,9 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
           : null
       ),
       div({ class: 'tribe-card-body' },
-        h2({ class: 'tribe-card-title' }, a({ href: `/tribe/${encodeURIComponent(t.id)}` }, t.title)),
+        h2({ class: 'tribe-card-title' }, a({ href: `/tribe/${encodeURIComponent(t.id)}` }, t.isAnonymous ? "\uD83D\uDD12 " : "", t.title)),
         t.description ? p({ class: 'tribe-card-description' }, ...renderUrl(t.description)) : null,
+        renderMapLocationVisitLabel(t.mapUrl),
         table({ class: 'tribe-info-table' },
           t.location ? tr(
             td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
@@ -381,7 +387,7 @@ const renderSectionNav = (tribe, section) => {
     { items: firstGroup },
     { items: [{ key: 'votations', label: i18n.tribeSectionVotations }, { key: 'events', label: i18n.tribeSectionEvents }, { key: 'tasks', label: i18n.tribeSectionTasks }] },
     { items: [{ key: 'feed', label: i18n.tribeSectionFeed }, { key: 'forum', label: i18n.tribeSectionForum }] },
-    { items: [{ key: 'images', label: i18n.tribeSectionImages || 'IMAGES' }, { key: 'audios', label: i18n.tribeSectionAudios || 'AUDIOS' }, { key: 'videos', label: i18n.tribeSectionVideos || 'VIDEOS' }, { key: 'documents', label: i18n.tribeSectionDocuments || 'DOCUMENTS' }, { key: 'bookmarks', label: i18n.tribeSectionBookmarks || 'BOOKMARKS' }] },
+    { items: [{ key: 'images', label: i18n.tribeSectionImages || 'IMAGES' }, { key: 'audios', label: i18n.tribeSectionAudios || 'AUDIOS' }, { key: 'videos', label: i18n.tribeSectionVideos || 'VIDEOS' }, { key: 'documents', label: i18n.tribeSectionDocuments || 'DOCUMENTS' }, { key: 'bookmarks', label: i18n.tribeSectionBookmarks || 'BOOKMARKS' }, { key: 'maps', label: i18n.tribeSectionMaps || 'MAPS' }] },
     { items: [{ key: 'search', label: i18n.tribeSectionSearch }] },
   ];
   return div({ class: 'tribe-section-nav', style: 'border: none;' },
@@ -485,6 +491,7 @@ const renderTribeActivitySection = (tribe, sectionData) => {
   const tribeUrl = `/tribe/${encodeURIComponent(tribe.id)}`;
   return div({ class: 'tribe-content-list', style: 'gap: 16px; display: flex; flex-direction: column;' },
     activities.slice(0, 50).map(item => {
+      if (item.encrypted) return div({ class: 'card card-rpg' }, div({ class: 'tribe-card-body' }, p({ class: 'tribe-meta-label' }, i18n.tribeContentEncrypted || 'Encrypted content')));
       const date = item.timestamp ? new Date(item.timestamp).toLocaleString() : '';
       const typeLabel = item.contentType === 'media' && item.mediaType
         ? activityMediaTypeName(item.mediaType)
@@ -541,7 +548,9 @@ const renderTribeTrendingSection = (tribe, sectionData, query) => {
     div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionTrending)),
     div({ class: 'tribe-filter-bar' }, periodBtn('day', i18n.tribeTrendingPeriodDay), periodBtn('week', i18n.tribeTrendingPeriodWeek), periodBtn('all', i18n.tribeTrendingPeriodAll)),
     items.length === 0 ? p(i18n.tribeTrendingEmpty) :
-      items.slice(0, 30).map((item, idx) => div({ class: 'tribe-content-card' },
+      items.slice(0, 30).map((item, idx) => {
+        if (item.encrypted) return div({ class: 'tribe-content-card' }, div({ class: 'tribe-content-meta' }, span(`#${idx + 1}`)), p({ class: 'tribe-meta-label' }, i18n.tribeContentEncrypted || 'Encrypted content'));
+        return div({ class: 'tribe-content-card' },
         div({ class: 'tribe-content-meta' },
           span(`#${idx + 1}`),
           span({ class: 'tribe-badge' }, contentTypeName(item.contentType)),
@@ -554,7 +563,7 @@ const renderTribeTrendingSection = (tribe, sectionData, query) => {
           Array.isArray(item.attendees) && item.attendees.length ? span(`${i18n.tribeEventAttendees}: ${item.attendees.length}`) : null
         ),
         p({ class: 'tribe-meta-label' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(item.author)}` }, item.author))
-      ))
+      ); })
   );
 };
 
@@ -1199,6 +1208,7 @@ const renderSubTribesSection = (tribe, items, query) => {
       { name: 'title', label: i18n.tribeTitleLabel, required: true, placeholder: 'Name of the sub-tribe' },
       { name: 'description', type: 'textarea', label: i18n.tribeDescriptionLabel, required: true, placeholder: 'Description of the sub-tribe' },
       { name: 'location', label: i18n.tribeLocationLabel, placeholder: 'Where is this sub-tribe located?' },
+      { name: 'mapUrl', label: i18n.mapLocationTitle || 'Map Location', placeholder: i18n.mapUrlPlaceholder || '/maps/MAP_ID', spaceBefore: true },
       { name: 'image', type: 'file', label: i18n.tribeImageLabel },
       { name: 'tags', label: i18n.tribeTagsLabel, placeholder: i18n.tribeTagsPlaceholder, spaceBefore: true },
       { name: 'inviteMode', type: 'select', label: i18n.tribeModeLabel, options: [
@@ -1231,6 +1241,39 @@ const renderSubTribesSection = (tribe, items, query) => {
             );
           })
         )
+  );
+};
+
+const renderTribeMapsSection = (tribe, maps) => {
+  const items = Array.isArray(maps) ? maps : [];
+  const createBtn = form({ method: 'GET', action: '/maps' },
+    input({ type: 'hidden', name: 'filter', value: 'create' }),
+    input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
+    button({ type: 'submit', class: 'create-button' }, i18n.mapUploadButton || 'Create Map'));
+  if (items.length === 0) return div({ class: 'tribe-content-list' }, createBtn, p(i18n.noMaps || 'No maps yet'));
+  return div({ class: 'tribe-content-list' },
+    div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionMaps || 'MAPS'), createBtn),
+    items.map(m =>
+      div({ class: 'card card-rpg', style: 'padding: 12px 16px;' },
+        div({ class: 'card-header' },
+          h2({ class: 'card-label' }, `[${(i18n.typeMap || 'MAP').toUpperCase()}]`),
+          form({ method: 'GET', action: `/maps/${encodeURIComponent(m.key)}` },
+            button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails || 'View Details'))
+        ),
+        div({ class: 'tribe-card-body' },
+          m.title ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.title || 'Title') + ':'),
+            span({ class: 'card-value' }, a({ href: `/maps/${encodeURIComponent(m.key)}` }, m.title))
+          ) : null,
+          m.description ? p(m.description.substring(0, 200)) : null,
+          m.lat && m.lng ? span({ class: 'map-coords' }, `📍 ${m.lat.toFixed(4)}, ${m.lng.toFixed(4)}`) : null
+        ),
+        p({ class: 'card-footer' },
+          span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
+          a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)
+        )
+      )
+    )
   );
 };
 
@@ -1273,6 +1316,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
     case 'videos': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'video'); break;
     case 'documents': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'document'); break;
     case 'bookmarks': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'bookmark'); break;
+    case 'maps': sectionContent = renderTribeMapsSection(tribe, sectionData); break;
     case 'activity':
     default: sectionContent = renderTribeActivitySection(tribe, sectionData); break;
   }
@@ -1289,7 +1333,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
             )
           )
         : null,
-      h2(tribe.title),
+      h2(tribe.isAnonymous ? "\uD83D\uDD12 " : "", tribe.title),
       renderMediaBlob(imageSrc, '/assets/images/default-tribe.png', { alt: tribe.title, class: 'tribe-detail-image' }),
       table({ class: 'tribe-info-table' },
         tr(
@@ -1329,13 +1373,14 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           ? div({ class: 'tribe-subtribes-list' },
               subTribes.map(st =>
                 form({ method: 'GET', action: `/tribe/${encodeURIComponent(st.id)}` },
-                  button({ type: 'submit', class: 'tribe-subtribe-link' }, st.title)
+                  button({ type: 'submit', class: 'tribe-subtribe-link' }, st.isAnonymous ? "\uD83D\uDD12 " : "", st.title)
                 )
               )
             )
           : null
       ) : null,
       tribe.description ? p({ class: 'tribe-side-description' }, ...renderUrl(tribe.description)) : null,
+      renderMapLocationVisitLabel(tribe.mapUrl),
       div({ class: 'tribe-side-actions' },
         form({ method: 'POST', action: '/tribes/generate-invite' },
           input({ type: 'hidden', name: 'tribeId', value: tribe.id }),

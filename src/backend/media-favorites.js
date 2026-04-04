@@ -8,6 +8,8 @@ const DEFAULT = {
   bookmarks: [],
   documents: [],
   images: [],
+  maps: [],
+  shops: [],
   videos: []
 };
 

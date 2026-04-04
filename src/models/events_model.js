@@ -40,7 +40,7 @@ module.exports = ({ cooler }) => {
   return {
     type: 'event',
 
-    async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic) {
+    async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic, mapUrl = "") {
       const ssbClient = await openSsb();
 
       const formattedDate = normalizeDate(date);
@@ -67,7 +67,8 @@ module.exports = ({ cooler }) => {
         createdAt: new Date().toISOString(),
         organizer: userId,
         status: 'OPEN',
-        isPublic: normalizePrivacy(isPublic)
+        isPublic: normalizePrivacy(isPublic),
+        mapUrl: String(mapUrl || "").trim()
       };
 
       return new Promise((resolve, reject) => {
@@ -131,7 +132,8 @@ module.exports = ({ cooler }) => {
         updatedAt: c.updatedAt || new Date().toISOString(),
         organizer: c.organizer || '',
         status,
-        isPublic: normalizePrivacy(c.isPublic)
+        isPublic: normalizePrivacy(c.isPublic),
+        mapUrl: c.mapUrl || ""
       };
     },
 
@@ -216,7 +218,8 @@ module.exports = ({ cooler }) => {
                   createdAt: c.createdAt || new Date().toISOString(),
                   organizer: c.organizer || '',
                   status,
-                  isPublic: normalizePrivacy(c.isPublic)
+                  isPublic: normalizePrivacy(c.isPublic),
+                  mapUrl: c.mapUrl || ""
                 });
               }
             }

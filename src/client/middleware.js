@@ -50,8 +50,16 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   });
 
   app.use(mount("/assets", assets));
-  
-  // pdf viewer
+
+  const maptiles = new Koa();
+  maptiles.use(koaStatic(join(__dirname, "..", "maps", "tiles")));
+  app.use(mount("/maptiles", maptiles));
+
+  const mapcache = new Koa();
+  mapcache.use(koaStatic(join(__dirname, "..", "maps", "cache")));
+  app.use(mount("/mapcache", mapcache));
+
+
   app.use(mount("/js", koaStatic(path.join(__dirname, 'public/js'))));
   app.use(koaStatic(path.join(__dirname, 'public')));
 
@@ -66,6 +74,7 @@ module.exports = ({ host, port, middleware, allowHost }) => {
       "img-src 'self'",
       "media-src 'self' blob:",
       "worker-src 'self' blob:",
+      "frame-src 'self'",
       "form-action 'self'",
       "object-src 'none'",
       "base-uri 'none'",

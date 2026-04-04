@@ -198,6 +198,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
 
   const title =
     normalizedFilter === "mine"        ? i18n.transfersMineSectionTitle :
+    normalizedFilter === "ubi"         ? i18n.transfersUBISectionTitle :
     normalizedFilter === "pending"     ? i18n.transfersPendingSectionTitle :
     normalizedFilter === "top"         ? i18n.transfersTopSectionTitle :
     normalizedFilter === "unconfirmed" ? i18n.transfersUnconfirmedSectionTitle :
@@ -218,6 +219,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
 
   let filtered =
     normalizedFilter === "mine"        ? list.filter(t => t.from === userId || t.to === userId) :
+    normalizedFilter === "ubi"         ? list.filter(t => safeArr(t.tags).some(tag => String(tag).toUpperCase() === "UBI")) :
     normalizedFilter === "pending"     ? list.filter(t => String(t.status || "").toUpperCase() === "UNCONFIRMED" && t.to === userId && !safeArr(t.confirmedBy).includes(userId)) :
     normalizedFilter === "top"         ? list.filter(t => String(t.status || "").toUpperCase() === "CLOSED") :
     normalizedFilter === "unconfirmed" ? list.filter(t => String(t.status || "").toUpperCase() === "UNCONFIRMED") :
@@ -266,6 +268,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterAll),
           button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterMine),
+          button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterUBI),
           button({ type: "submit", name: "filter", value: "market", class: normalizedFilter === "market" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterMarket),
           button({ type: "submit", name: "filter", value: "pending", class: normalizedFilter === "pending" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterPending),
           button({ type: "submit", name: "filter", value: "unconfirmed", class: normalizedFilter === "unconfirmed" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterUnconfirmed),
@@ -375,6 +378,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterAll),
           button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterMine),
+          button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterUBI),
           button({ type: "submit", name: "filter", value: "market", class: normalizedFilter === "market" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterMarket),
           button({ type: "submit", name: "filter", value: "pending", class: normalizedFilter === "pending" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterPending),
           button({ type: "submit", name: "filter", value: "unconfirmed", class: normalizedFilter === "unconfirmed" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterUnconfirmed),

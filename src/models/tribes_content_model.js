@@ -7,11 +7,29 @@ const categories = require('../backend/opinion_categories');
 const VALID_STATUSES = ['OPEN', 'CLOSED', 'IN-PROGRESS'];
 const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
   const TYPE = 'tribe-content';
+
+  const resolveKeyChain = async (tribeId) => {
+    if (!tribeCrypto || !tribesModel) return null;
+    const ancestryIds = await tribesModel.getAncestryChain(tribeId);
+    const chain = [];
+    for (const rootId of ancestryIds) {
+      const key = tribeCrypto.getKey(rootId);
+      if (!key) return null;
+      chain.push(key);
+    }
+    return chain;
+  };
+
+  const resolveKeyChainSets = async (tribeId) => {
+    if (!tribeCrypto || !tribesModel) return null;
+    const ancestryIds = await tribesModel.getAncestryChain(tribeId);
+    return tribeCrypto.buildKeyChainSets(ancestryIds);
+  };
 
   const publish = async (content) => {
     const ssbClient = await openSsb();
@@ -30,7 +48,7 @@ module.exports = ({ cooler }) => {
     );
   };
 
-  const buildIndex = (msgs, tribeId, contentType) => {
+  const buildIndex = async (msgs, tribeId, contentType) => {
     const tombstoned = new Set();
     const replaced = new Map();
     const items = new Map();
@@ -49,7 +67,22 @@ module.exports = ({ cooler }) => {
     for (const id of tombstoned) items.delete(id);
     for (const oldId of replaced.keys()) items.delete(oldId);
 
-    return [...items.values()].sort((a, b) => {
+    const result = [...items.values()];
+    if (tribeCrypto && tribesModel) {
+      const keyChainCache = new Map();
+      for (let i = 0; i < result.length; i++) {
+        if (!result[i].encryptedPayload) continue;
+        const tid = result[i].tribeId;
+        if (!keyChainCache.has(tid)) {
+          keyChainCache.set(tid, tribeCrypto.buildKeyChainSets(
+            await tribesModel.getAncestryChain(tid)
+          ));
+        }
+        result[i] = tribeCrypto.decryptContent(result[i], keyChainCache.get(tid));
+      }
+    }
+
+    return result.sort((a, b) => {
       const ta = Date.parse(a.updatedAt || a.createdAt) || a._ts || 0;
       const tb = Date.parse(b.updatedAt || b.createdAt) || b._ts || 0;
       return tb - ta;
@@ -102,6 +135,10 @@ module.exports = ({ cooler }) => {
         createdAt: now,
         updatedAt: now,
       };
+      const keyChain = await resolveKeyChain(tribeId);
+      if (keyChain && keyChain.length > 0) {
+        return publish(tribeCrypto.encryptContent(content, keyChain));
+      }
       return publish(content);
     },
 
@@ -149,6 +186,10 @@ module.exports = ({ cooler }) => {
         createdAt: existing.createdAt,
         updatedAt: now,
       };
+      const keyChain = await resolveKeyChain(existing.tribeId);
+      if (keyChain && keyChain.length > 0) {
+        return publish(tribeCrypto.encryptContent(updated, keyChain));
+      }
       return publish(updated);
     },
 
@@ -180,12 +221,17 @@ module.exports = ({ cooler }) => {
       let latestId = contentId;
       while (replaced.has(latestId)) latestId = replaced.get(latestId);
       if (tombstoned.has(latestId)) return null;
-      return items.get(latestId) || null;
+      const item = items.get(latestId) || null;
+      if (!item || !item.encryptedPayload || !tribeCrypto || !tribesModel) return item;
+      const keyChainSets = tribeCrypto.buildKeyChainSets(
+        await tribesModel.getAncestryChain(item.tribeId)
+      );
+      return tribeCrypto.decryptContent(item, keyChainSets);
     },
 
     async listByTribe(tribeId, contentType, filter) {
       const msgs = await readLog();
-      let items = buildIndex(msgs, tribeId, contentType);
+      let items = await buildIndex(msgs, tribeId, contentType);
 
       if (filter === 'open') items = items.filter(i => i.status === 'OPEN');
       if (filter === 'closed') items = items.filter(i => i.status === 'CLOSED');

@@ -3,6 +3,7 @@ const { template, i18n } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
+const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 
 const renderMediaBlob = (value) => {
   if (!value) return null
@@ -243,6 +244,7 @@ const renderJobList = (jobs, filter, params = {}) => {
           renderCardField(`${i18n.jobLanguages}:`, String(job.languages || "").toUpperCase()),
           renderCardField(`${i18n.jobType}:`, i18n["jobType" + String(job.job_type || "").toUpperCase()] || String(job.job_type || "").toUpperCase()),
           renderCardField(`${i18n.jobLocation}:`, String(job.location || "").toUpperCase()),
+          renderMapLocationVisitLabel(job.mapUrl),
           renderCardField(`${i18n.jobTime}:`, i18n["jobTime" + String(job.job_time || "").toUpperCase()] || String(job.job_time || "").toUpperCase()),
           renderCardFieldRich(`${i18n.jobSalary}:`, [span({ class: "card-salary" }, salaryText)]),
           br(),
@@ -346,6 +348,11 @@ const renderJobForm = (job = {}, mode = "create") => {
         option({ value: "remote", selected: job.location === "remote" }, i18n.jobLocationRemote),
         option({ value: "presencial", selected: job.location === "presencial" }, i18n.jobLocationPresencial)
       ),
+      br(),
+      br(),
+      label(i18n.mapLocationTitle || "Map Location"),
+      br(),
+      input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: job.mapUrl || "" }),
       br(),
       br(),
       label(i18n.jobVacants),
@@ -563,6 +570,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
         renderCardField(`${i18n.jobLanguages}:`, String(job.languages || "").toUpperCase()),
         renderCardField(`${i18n.jobType}:`, i18n["jobType" + String(job.job_type || "").toUpperCase()] || String(job.job_type || "").toUpperCase()),
         renderCardField(`${i18n.jobLocation}:`, String(job.location || "").toUpperCase()),
+        renderMapEmbed(params.mapData, job.mapUrl),
         renderCardField(`${i18n.jobTime}:`, i18n["jobTime" + String(job.job_time || "").toUpperCase()] || String(job.job_time || "").toUpperCase()),
         safeText(job.requirements) ? renderCardFieldRich(`${i18n.jobRequirements}:`, renderUrl(job.requirements)) : null,
         safeText(job.tasks) ? renderCardFieldRich(`${i18n.jobTasks}:`, renderUrl(job.tasks)) : null,

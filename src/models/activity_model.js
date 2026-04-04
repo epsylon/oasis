@@ -21,6 +21,8 @@ function inferType(c = {}) {
   if (c.type === 'courts_nom_vote') return 'courtsNominationVote';
   if (c.type === 'courts_public_pref') return 'courtsPublicPref';
   if (c.type === 'courts_mediators') return 'courtsMediators';
+  if (c.type === 'map') return 'map';
+  if (c.type === 'mapMarker') return 'mapMarker';
   if (c.type === 'vote' && c.vote && typeof c.vote.link === 'string') {
     const br = Array.isArray(c.branch) ? c.branch : [];
     if (br.includes(c.vote.link) && Number(c.vote.value) === 1) return 'spread';
@@ -429,12 +431,13 @@ module.exports = ({ cooler }) => {
           a.content.rootTitle = rootAction?.content?.title || a.content.rootTitle || '';
           a.content.rootKey = rootId || a.content.rootKey || '';
         }
-        latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id });
+        const actionRoot = rootOf(a.id);
+        latest.push({ ...a, tipId: idToTipId.get(a.id) || a.id, rootId: actionRoot !== a.id ? actionRoot : null });
       }
 
       let deduped = latest.filter(a => !a.tipId || a.tipId === a.id || (a.type === 'tribe' && !parentOf.has(a.id)));
 
-      const mediaTypes = new Set(['image','video','audio','document','bookmark']);
+      const mediaTypes = new Set(['image','video','audio','document','bookmark','map']);
       const perAuthorUnique = new Set(['karmaScore']);
       const byKey = new Map();
       const norm = s => String(s || '').trim().toLowerCase();

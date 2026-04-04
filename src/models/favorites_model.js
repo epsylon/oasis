@@ -15,7 +15,7 @@ const toTs = (d) => {
   return Number.isFinite(t) ? t : 0;
 };
 
-module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel }) => {
+module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel }) => {
   const kindConfig = {
     audios: {
       base: "/audios/",
@@ -33,13 +33,17 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
       base: "/images/",
       getById: getFn(imagesModel, ["getImageById", "getById"])
     },
+    maps: {
+      base: "/maps/",
+      getById: getFn(mapsModel, ["getMapById", "getById"])
+    },
     videos: {
       base: "/videos/",
       getById: getFn(videosModel, ["getVideoById", "getById"])
     }
   };
 
-  const kindOrder = ["audios", "bookmarks", "documents", "images", "videos"];
+  const kindOrder = ["audios", "bookmarks", "documents", "images", "maps", "videos"];
 
   const hydrateKind = async (kind, ids) => {
     const cfg = kindConfig[kind];
@@ -95,6 +99,7 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
       bookmarks: byKind.bookmarks.length,
       documents: byKind.documents.length,
       images: byKind.images.length,
+      maps: byKind.maps.length,
       videos: byKind.videos.length,
       all: flat.length
     };

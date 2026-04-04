@@ -66,7 +66,7 @@ function lastActivityBadge(user, isMe) {
       span({ class: `activity-dot ${dotClass}` }, '●'))
   ];
   const currentTheme = getConfig().themes.current;
-  const src = isMe ? (currentTheme === 'OasisKIT' ? 'KIT' : currentTheme === 'OasisMobile' ? 'MOBILE' : 'DESKTOP') : (user && user.deviceSource) || null;
+  const src = isMe ? (currentTheme === 'OasisKIT' ? 'KIT' : (currentTheme === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP') : (user && user.deviceSource) || null;
   if (src) {
     const upper = String(src).toUpperCase();
     const deviceClass = upper === 'KIT' ? 'device-kit' : upper === 'MOBILE' ? 'device-mobile' : 'device-desktop';
@@ -88,9 +88,11 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
          img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo, 256), alt: user.name || 'Anonymous' })
       ),
       br(),
-      span(`${i18n.bankingUserEngagementScore}: `),
-      h2(strong(typeof user.karmaScore === 'number' ? user.karmaScore : 0)),
-      ...lastActivityBadge(user, isMe)
+      ...lastActivityBadge(user, isMe),
+      div({ class: 'inhabitant-karma-ubi' },
+        span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0))),
+        span({ class: 'ubi-line' }, `${i18n.bankingFutureUBI}: `, strong(`${Number(user.estimatedUBI || 0).toFixed(6)} ECO`))
+      )
     ),
     div({ class: 'inhabitant-details' },
       h2(user.name || 'Anonymous'),
@@ -264,6 +266,7 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
   const isMe = id && id === currentUserId;
   const title = i18n.inhabitantProfileTitle || i18n.inhabitantviewDetails;
   const karmaScore = typeof safe.karmaScore === 'number' ? safe.karmaScore : 0;
+  const estimatedUBI = Number(safe.estimatedUBI || 0);
 
   const providedBucket = typeof safe.lastActivityBucket === 'string' ? safe.lastActivityBucket : null;
   const dotClass = providedBucket === 'green' ? 'green' : providedBucket === 'orange' ? 'orange' : 'red';
@@ -292,9 +295,11 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
         div({ class: 'inhabitant-left' },
           img({ class: 'inhabitant-photo-details', src: image, alt: name || 'Anonymous' }),
           h2(name || 'Anonymous'),
-          span(`${i18n.bankingUserEngagementScore}: `),
-          h2(strong(karmaScore)),
           ...lastActivityBadge({ lastActivityBucket: dotClass, deviceSource: safe.deviceSource }, isMe),
+          div({ class: 'inhabitant-karma-ubi' },
+            span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore))),
+            span({ class: 'ubi-line' }, `${i18n.bankingFutureUBI}: `, strong(`${estimatedUBI.toFixed(6)} ECO`))
+          ),
           (!isMe && (id || viewedId))
             ? form(
                 { method: 'GET', action: '/pm' },

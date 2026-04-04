@@ -6,7 +6,7 @@ const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const INVITE_CODE_BYTES = 16;
 const VALID_INVITE_MODES = ['strict', 'open'];
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribeCrypto }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb };
 
@@ -56,7 +56,7 @@ module.exports = ({ cooler }) => {
   return {
     type: 'tribe',
 
-    async createTribe(title, description, image, location, tagsRaw = [], isLARP = false, isAnonymous = true, inviteMode = 'strict', parentTribeId = null, status = 'OPEN') {
+    async createTribe(title, description, image, location, tagsRaw = [], isLARP = false, isAnonymous = true, inviteMode = 'strict', parentTribeId = null, status = 'OPEN', mapUrl = '') {
       if (!VALID_INVITE_MODES.includes(inviteMode)) {
         throw new Error('Invalid invite mode. Must be "strict" or "open"');
       }
@@ -83,11 +83,16 @@ module.exports = ({ cooler }) => {
         inviteMode,
         status: status || 'OPEN',
         parentTribeId: parentTribeId || null,
+        mapUrl: String(mapUrl || '').trim(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         author: userId,
       };
       const result = await new Promise((res, rej) => ssb.publish(content, (e, r) => e ? rej(e) : res(r)));
+      if (tribeCrypto) {
+        const tribeKey = tribeCrypto.generateTribeKey();
+        tribeCrypto.setKey(result.key, tribeKey, 1);
+      }
       tribeIndex = null;
       return result;
     },
@@ -103,7 +108,16 @@ module.exports = ({ cooler }) => {
         throw new Error('Only tribe members can generate invites in open mode');
       }
       const code = crypto.randomBytes(INVITE_CODE_BYTES).toString('hex');
-      const invites = Array.isArray(tribe.invites) ? [...tribe.invites, code] : [code];
+      let invite = code;
+      if (tribeCrypto) {
+        const rootId = await this.getRootId(tribeId);
+        const tribeKey = tribeCrypto.getKey(rootId);
+        if (tribeKey) {
+          const ek = tribeCrypto.encryptForInvite(tribeKey, code);
+          invite = { code, ek, gen: tribeCrypto.getGen(rootId) };
+        }
+      }
+      const invites = Array.isArray(tribe.invites) ? [...tribe.invites, invite] : [invite];
       await this.updateTribeInvites(tribeId, invites);
       return code;
     },
@@ -124,22 +138,44 @@ module.exports = ({ cooler }) => {
       const idx = members.indexOf(userId);
       if (idx === -1) throw new Error('User is not a member of this tribe');
       members.splice(idx, 1);
-      return this.updateTribeById(tribeId, { members });
+      await this.updateTribeById(tribeId, { members });
+      await this.rotateTribeKey(tribeId, members);
     },
 
     async joinByInvite(code) {
       const ssb = await openSsb();
       const userId = ssb.id;
       const tribes = await this.listAll();
-      const tribe = tribes.find(t => t.invites && t.invites.includes(code));
-      if (!tribe) throw new Error('Invalid or expired invite code');
-      if (tribe.members.includes(userId)) {
+      let matchedTribe = null;
+      let matchedInvite = null;
+      for (const t of tribes) {
+        if (!t.invites) continue;
+        for (const inv of t.invites) {
+          if (typeof inv === 'string' && inv === code) {
+            matchedTribe = t; matchedInvite = inv; break;
+          }
+          if (typeof inv === 'object' && inv.code === code) {
+            matchedTribe = t; matchedInvite = inv; break;
+          }
+        }
+        if (matchedTribe) break;
+      }
+      if (!matchedTribe) throw new Error('Invalid or expired invite code');
+      if (matchedTribe.members.includes(userId)) {
         throw new Error('Already a member of this tribe');
       }
-      const members = [...tribe.members, userId];
-      const invites = tribe.invites.filter(c => c !== code);
-      await this.updateTribeById(tribe.id, { members, invites });
-      return tribe.id;
+      if (tribeCrypto && typeof matchedInvite === 'object' && matchedInvite.ek) {
+        const tribeKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code);
+        const rootId = await this.getRootId(matchedTribe.id);
+        tribeCrypto.setKey(rootId, tribeKey, matchedInvite.gen || 1);
+      }
+      const members = [...matchedTribe.members, userId];
+      const invites = matchedTribe.invites.filter(inv => {
+        if (typeof inv === 'string') return inv !== code;
+        return inv.code !== code;
+      });
+      await this.updateTribeById(matchedTribe.id, { members, invites });
+      return matchedTribe.id;
     },
 
     async deleteTribeById(tribeId) {
@@ -147,7 +183,13 @@ module.exports = ({ cooler }) => {
     },
 
     async updateTribeMembers(tribeId, members) {
-      return this.updateTribeById(tribeId, { members });
+      const tribe = await this.getTribeById(tribeId);
+      const oldMembers = tribe.members || [];
+      await this.updateTribeById(tribeId, { members });
+      const removed = oldMembers.filter(m => !members.includes(m));
+      if (removed.length > 0) {
+        await this.rotateTribeKey(tribeId, members);
+      }
     },
 
     async publishUpdatedTribe(tribeId, updatedTribe) {
@@ -167,6 +209,7 @@ module.exports = ({ cooler }) => {
         inviteMode: updatedTribe.inviteMode,
         status: updatedTribe.status || 'OPEN',
         parentTribeId: updatedTribe.parentTribeId || null,
+        mapUrl: updatedTribe.mapUrl || "",
         createdAt: updatedTribe.createdAt,
         updatedAt: new Date().toISOString(),
         author: updatedTribe.author,
@@ -199,6 +242,7 @@ module.exports = ({ cooler }) => {
         inviteMode: tribe.content.inviteMode || 'strict',
         status: tribe.content.status || 'OPEN',
         parentTribeId: tribe.content.parentTribeId || null,
+        mapUrl: tribe.content.mapUrl || "",
         createdAt: tribe.content.createdAt,
         updatedAt: tribe.content.updatedAt,
         author: tribe.content.author,
@@ -227,6 +271,7 @@ module.exports = ({ cooler }) => {
           inviteMode: c.inviteMode || 'strict',
           status: c.status || 'OPEN',
           parentTribeId: c.parentTribeId || null,
+          mapUrl: c.mapUrl || "",
           createdAt: c.createdAt,
           updatedAt: c.updatedAt,
           author: c.author,
@@ -244,6 +289,89 @@ module.exports = ({ cooler }) => {
       let cur = root;
       while (child.has(cur)) { cur = child.get(cur); ids.push(cur); }
       return ids;
+    },
+
+    async getRootId(tribeId) {
+      const { parent } = await buildTribeIndex();
+      let root = tribeId;
+      while (parent.has(root)) root = parent.get(root);
+      return root;
+    },
+
+    async getAncestryChain(tribeId) {
+      const rootId = await this.getRootId(tribeId);
+      const tribe = await this.getTribeById(tribeId);
+      const chain = [rootId];
+      let currentTribe = tribe;
+      while (currentTribe.parentTribeId) {
+        const parentRootId = await this.getRootId(currentTribe.parentTribeId);
+        chain.push(parentRootId);
+        try {
+          currentTribe = await this.getTribeById(currentTribe.parentTribeId);
+        } catch (e) {
+          break;
+        }
+      }
+      return chain;
+    },
+
+    async rotateTribeKey(tribeId, remainingMembers) {
+      if (!tribeCrypto) return;
+      const ssb = await openSsb();
+      const ssbKeys = require('../server/node_modules/ssb-keys');
+      const rootId = await this.getRootId(tribeId);
+      const oldKey = tribeCrypto.getKey(rootId);
+      if (!oldKey) return;
+      const newKey = tribeCrypto.generateTribeKey();
+      const newGen = tribeCrypto.addNewKey(rootId, newKey);
+      const memberKeys = {};
+      for (const memberId of remainingMembers) {
+        memberKeys[memberId] = tribeCrypto.boxKeyForMember(newKey, memberId, ssbKeys);
+      }
+      const entries = Object.entries(memberKeys);
+      const BATCH_SIZE = 20;
+      for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+        const batch = Object.fromEntries(entries.slice(i, i + BATCH_SIZE));
+        await new Promise((resolve, reject) => {
+          ssb.publish({ type: 'tribe-keys', tribeId: rootId, generation: newGen, memberKeys: batch },
+            (err, res) => err ? reject(err) : resolve(res));
+        });
+      }
+      const tribe = await this.getTribeById(tribeId);
+      if (Array.isArray(tribe.invites) && tribe.invites.length > 0) {
+        const updatedInvites = tribe.invites.map(inv => {
+          if (typeof inv === 'object' && inv.code) {
+            return { code: inv.code, ek: tribeCrypto.encryptForInvite(newKey, inv.code), gen: newGen };
+          }
+          return inv;
+        });
+        await this.updateTribeInvites(tribeId, updatedInvites);
+      }
+    },
+
+    async processIncomingKeys() {
+      if (!tribeCrypto) return;
+      const ssb = await openSsb();
+      const ssbKeys = require('../server/node_modules/ssb-keys');
+      const config = require('../server/ssb_config');
+      const msgs = await new Promise((resolve, reject) => {
+        pull(
+          ssb.createLogStream({ limit: logLimit }),
+          pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
+        );
+      });
+      for (const m of msgs) {
+        const c = m.value?.content;
+        if (!c || c.type !== 'tribe-keys') continue;
+        const myEntry = c.memberKeys && c.memberKeys[ssb.id];
+        if (!myEntry) continue;
+        const currentGen = tribeCrypto.getGen(c.tribeId);
+        if (c.generation <= currentGen) continue;
+        const newKey = tribeCrypto.unboxKeyFromMember(myEntry, config.keys, ssbKeys);
+        if (newKey) {
+          tribeCrypto.addNewKey(c.tribeId, newKey);
+        }
+      }
     },
     
     async updateTribeById(tribeId, updatedContent) {
