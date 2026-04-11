@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cocoman</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#ui { display: flex; gap: 24px; padding: 8px; font-size: 15px; color: #FFA500; }
+canvas { display: block; flex: 1; align-self: stretch; min-height: 0; width: 100%; background: #000; border: 1px solid #333; }
+#msg { font-size: 16px; color: #FFA500; margin: 4px; text-align: center; min-height: 22px; }
+#dpad { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 6px; }
+#dpad-row { display: flex; gap: 4px; }
+#dpad button { width: 44px; height: 44px; background: #222; border: 1px solid #555; color: #FFA500; font-size: 18px; cursor: pointer; }
+#dpad button:active { background: #444; }
+#controls { color: #888; font-size: 13px; text-align: center; margin-bottom: 4px; }
+#scoreSubmit { text-align: center; margin: 6px; }
+#scoreSubmit button { background: #1a3a1a; border: 1px solid #FFA500; color: #FFA500; padding: 6px 16px; cursor: pointer; font-family: monospace; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">COCOMAN</span>
+</div>
+<div id="ui">
+  <span>SCORE: <b id="scoreEl">0</b></span>
+  <span>LIVES: <b id="livesEl">3</b></span>
+  <span>BEST: <b id="bestEl">-</b></span>
+</div>
+<canvas id="c"></canvas>
+<div id="msg">Press SPACE or tap arrow to start</div>
+<div id="dpad">
+  <div id="dpad-row"><button id="btn-up">&#8593;</button></div>
+  <div id="dpad-row"><button id="btn-left">&#8592;</button><button id="btn-down">&#8595;</button><button id="btn-right">&#8594;</button></div>
+</div>
+<div id="controls">Arrow keys / WASD &nbsp;|&nbsp; SPACE — new game</div>
+<div id="scoreSubmit" style="display:none">
+  <form method="POST" action="/games/submit-score" target="_top">
+    <input type="hidden" name="game" value="cocoman">
+    <input type="hidden" id="scoreInput" name="score" value="0">
+    <button type="submit">Submit Score to Hall of Fame</button>
+  </form>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const CELL = 20;
+
+const MAP = [
+  '############################',
+  '#............##............#',
+  '#.####.#####.##.#####.####.#',
+  '#o#  #.#   #.##.#   #.#  #o#',
+  '#.####.#####.##.#####.####.#',
+  '#..........................#',
+  '#.####.##.########.##.####.#',
+  '#.####.##.########.##.####.#',
+  '#......##....##....##......#',
+  '######.##### ## #####.######',
+  '     #.##### ## #####.#     ',
+  '     #.##    G    ##.#      ',
+  '     #.## ###=### ##.#      ',
+  '######.## #     # ##.######',
+  '      .   # GGG #   .      ',
+  '######.## #     # ##.######',
+  '     #.## ####### ##.#     ',
+  '     #.##         ##.#     ',
+  '     #.## ######## ##.#    ',
+  '######.## ######## ##.######',
+  '#............##............#',
+  '#.####.#####.##.#####.####.#',
+  '#.####.#####.##.#####.####.#',
+  '#o..##.......  .......##..o#',
+  '###.##.##.########.##.##.###',
+  '###.##.##.########.##.##.###',
+  '#......##....##....##......#',
+  '#.##########.##.##########.#',
+  '#.##########.##.##########.#',
+  '#..........................#',
+  '############################'
+];
+
+const COLS = MAP[0].length, ROWS = MAP.length;
+canvas.width = COLS * CELL;
+canvas.height = ROWS * CELL;
+
+const GHOST_COLORS = ['#f00', '#f9a', '#0ff', '#fa0'];
+
+let score = 0, lives = 3, gameState = 'idle', comboGhost = 0;
+let best = parseInt(localStorage.getItem('cocoman_best') || '-1');
+let dots = [], powers = [], player, ghosts, nextDir = [1, 0], frightTimer = 0;
+let tickInterval = null;
+
+function initLevel() {
+  dots = []; powers = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (MAP[r][c] === '.') dots.push([c, r]);
+      if (MAP[r][c] === 'o') powers.push([c, r]);
+    }
+  }
+  player = { x: 14, y: 23, dir: [1, 0] };
+  nextDir = [1, 0];
+  ghosts = [
+    { x: 13, y: 14, dir: [0, -1], color: GHOST_COLORS[0] },
+    { x: 14, y: 14, dir: [0, 1],  color: GHOST_COLORS[1] },
+    { x: 13, y: 15, dir: [1, 0],  color: GHOST_COLORS[2] },
+    { x: 14, y: 15, dir: [-1, 0], color: GHOST_COLORS[3] }
+  ];
+  frightTimer = 0; comboGhost = 0;
+}
+
+function wrapX(x) {
+  if (x < 0) return COLS - 1;
+  if (x >= COLS) return 0;
+  return x;
+}
+
+function cellAt(x, y) {
+  if (y < 0 || y >= ROWS) return '#';
+  const row = MAP[Math.floor(y)];
+  const ch = row[Math.floor(x)];
+  return ch === undefined ? ' ' : ch;
+}
+
+function canMovePlayer(x, y, dx, dy) {
+  const nx = wrapX(x + dx), ny = y + dy;
+  const ch = cellAt(nx, ny);
+  return ch !== '#' && ch !== '=';
+}
+
+function canGhostMove(x, y, dx, dy) {
+  const nx = wrapX(x + dx), ny = y + dy;
+  return cellAt(nx, ny) !== '#';
+}
+
+function moveGhost(g) {
+  const dirs = [[0,-1],[0,1],[-1,0],[1,0]].filter(([dx,dy]) => {
+    if (!canGhostMove(g.x, g.y, dx, dy)) return false;
+    if (dx === -g.dir[0] && dy === -g.dir[1]) return false;
+    return true;
+  });
+  if (!dirs.length) return;
+  if (frightTimer > 0) {
+    g.dir = dirs[Math.floor(Math.random() * dirs.length)];
+  } else {
+    dirs.sort((a, b) =>
+      Math.hypot(g.x+a[0]-player.x, g.y+a[1]-player.y) -
+      Math.hypot(g.x+b[0]-player.x, g.y+b[1]-player.y)
+    );
+    g.dir = dirs[0];
+  }
+  g.x = wrapX(g.x + g.dir[0]);
+  g.y += g.dir[1];
+}
+
+function tick() {
+  if (gameState !== 'play') return;
+
+  if (canMovePlayer(player.x, player.y, ...nextDir)) player.dir = [...nextDir];
+  if (canMovePlayer(player.x, player.y, ...player.dir)) {
+    player.x = wrapX(player.x + player.dir[0]);
+    player.y += player.dir[1];
+  }
+
+  const di = dots.findIndex(d => d[0] === player.x && d[1] === player.y);
+  if (di >= 0) { dots.splice(di, 1); score += 10; document.getElementById('scoreEl').textContent = score; }
+  const pi = powers.findIndex(p => p[0] === player.x && p[1] === player.y);
+  if (pi >= 0) { powers.splice(pi, 1); score += 50; frightTimer = 22; comboGhost = 0; document.getElementById('scoreEl').textContent = score; }
+
+  if (frightTimer > 0) frightTimer--;
+
+  ghosts.forEach(moveGhost);
+
+  for (const g of ghosts) {
+    if (g.x === player.x && g.y === player.y) {
+      if (frightTimer > 0) {
+        comboGhost++;
+        score += 200 * Math.pow(2, comboGhost - 1);
+        document.getElementById('scoreEl').textContent = score;
+        g.x = 13; g.y = 14; g.dir = [0, -1];
+      } else {
+        loseLife();
+        return;
+      }
+    }
+  }
+
+  if (!dots.length && !powers.length) winGame();
+}
+
+function loseLife() {
+  lives--;
+  document.getElementById('livesEl').textContent = lives;
+  if (lives <= 0) {
+    endGame();
+  } else {
+    player = { x: 14, y: 23, dir: [1, 0] };
+    nextDir = [1, 0]; frightTimer = 0;
+    document.getElementById('msg').textContent = 'Caught! Keep going...';
+  }
+}
+
+function winGame() {
+  clearInterval(tickInterval); tickInterval = null;
+  gameState = 'over';
+  score += lives * 100;
+  document.getElementById('scoreEl').textContent = score;
+  document.getElementById('msg').textContent = `You won! Score: ${score}. SPACE = new game`;
+  saveAndShow();
+}
+
+function endGame() {
+  clearInterval(tickInterval); tickInterval = null;
+  gameState = 'over';
+  document.getElementById('msg').textContent = `GAME OVER! Score: ${score}. SPACE = new game`;
+  saveAndShow();
+}
+
+function saveAndShow() {
+  if (best < 0 || score > best) {
+    best = score;
+    localStorage.setItem('cocoman_best', best);
+    document.getElementById('bestEl').textContent = best;
+  }
+  document.getElementById('scoreInput').value = score;
+  document.getElementById('scoreSubmit').style.display = 'block';
+}
+
+function startGame() {
+  score = 0; lives = 3; gameState = 'play';
+  document.getElementById('scoreEl').textContent = '0';
+  document.getElementById('livesEl').textContent = '3';
+  document.getElementById('msg').textContent = '';
+  document.getElementById('scoreSubmit').style.display = 'none';
+  initLevel();
+  if (tickInterval) clearInterval(tickInterval);
+  tickInterval = setInterval(tick, 155);
+}
+
+document.addEventListener('keydown', e => {
+  const map = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0], KeyW: [0,-1], KeyS: [0,1], KeyA: [-1,0], KeyD: [1,0] };
+  if (e.code === 'Space') { e.preventDefault(); startGame(); return; }
+  if (map[e.code]) { e.preventDefault(); if (gameState === 'idle') startGame(); nextDir = map[e.code]; }
+});
+
+function dpadInput(dx, dy) { if (gameState === 'idle') startGame(); nextDir = [dx, dy]; }
+document.getElementById('btn-up').addEventListener('click', () => dpadInput(0, -1));
+document.getElementById('btn-down').addEventListener('click', () => dpadInput(0, 1));
+document.getElementById('btn-left').addEventListener('click', () => dpadInput(-1, 0));
+document.getElementById('btn-right').addEventListener('click', () => dpadInput(1, 0));
+
+if (best >= 0) document.getElementById('bestEl').textContent = best;
+initLevel();
+
+let animFrame = 0;
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (MAP[r][c] === '#') {
+        ctx.fillStyle = '#00c';
+        ctx.fillRect(c * CELL, r * CELL, CELL, CELL);
+        ctx.strokeStyle = '#44f';
+        ctx.strokeRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2);
+      }
+    }
+  }
+
+  ctx.fillStyle = '#fff';
+  for (const [dc, dr] of dots) {
+    ctx.beginPath(); ctx.arc(dc * CELL + CELL/2, dr * CELL + CELL/2, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+  if (Math.floor(animFrame / 15) % 2) {
+    ctx.fillStyle = '#FFA500';
+    for (const [dc, dr] of powers) {
+      ctx.beginPath(); ctx.arc(dc * CELL + CELL/2, dr * CELL + CELL/2, 5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  for (const g of ghosts) {
+    ctx.fillStyle = frightTimer > 0 ? '#006' : g.color;
+    const gx = g.x * CELL + CELL/2, gy = g.y * CELL + CELL/2;
+    ctx.beginPath();
+    ctx.arc(gx, gy - 2, CELL/2 - 2, Math.PI, 0);
+    ctx.lineTo(gx + CELL/2 - 2, gy + CELL/2 - 2);
+    for (let w = 0; w < 4; w++) {
+      ctx.lineTo(gx + CELL/2 - 2 - w * (CELL - 4) / 4, gy + CELL/2 - 2 - (w % 2 ? 3 : 0));
+    }
+    ctx.lineTo(gx - CELL/2 + 2, gy + CELL/2 - 2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(gx - 3, gy - 3, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(gx + 3, gy - 3, 3, 0, Math.PI * 2); ctx.fill();
+    if (frightTimer <= 0) {
+      ctx.fillStyle = '#00c';
+      ctx.beginPath(); ctx.arc(gx - 3, gy - 3, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(gx + 3, gy - 3, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  const mouth = Math.abs(Math.sin(animFrame * 0.15)) * 0.4;
+  const pa = player.dir[0] !== 0 ? Math.atan2(player.dir[1], player.dir[0]) : -Math.PI / 2 * Math.sign(player.dir[1] || 1);
+  ctx.fillStyle = '#ff0';
+  ctx.beginPath();
+  ctx.moveTo(player.x * CELL + CELL/2, player.y * CELL + CELL/2);
+  ctx.arc(player.x * CELL + CELL/2, player.y * CELL + CELL/2, CELL/2 - 1, pa + mouth, pa + Math.PI * 2 - mouth);
+  ctx.closePath(); ctx.fill();
+
+  animFrame++;
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>

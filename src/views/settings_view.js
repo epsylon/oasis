@@ -28,6 +28,7 @@ const settingsView = ({ version, aiPrompt }) => {
   const pubWalletUrl = currentConfig.walletPub.url || '';
   const pubWalletUser = currentConfig.walletPub.user || '';
   const pubWalletPass = currentConfig.walletPub.pass || '';
+  const pubId = currentConfig.pubId || '';
 
   const themeElements = [
     option({ value: "Dark-SNH", selected: theme === "Dark-SNH" ? true : undefined }, "Dark-SNH"),
@@ -170,33 +171,18 @@ const settingsView = ({ version, aiPrompt }) => {
     ),
     section(
       div({ class: "tags-header" },
-        h2(i18n.pubWallet),
-        p(i18n.pubWalletDescription),
+        h2(i18n.pubIdTitle || "PUB Wallet"),
+        p(i18n.pubIdDescription || "Set the PUB wallet URL. This will be used for PUB transactions (including the UBI)."),
         form(
-          { action: "/settings/pub-wallet", method: "POST" },
-          label({ for: "pub_wallet_url" }, i18n.walletAddress), br(),
+          { action: "/settings/pub-id", method: "POST" },
           input({
             type: "text",
-            id: "pub_wallet_url",
-            name: "wallet_url",
-            placeholder: pubWalletUrl,
-            value: pubWalletUrl
+            id: "pub_id",
+            name: "pub_id",
+            value: pubId,
+            placeholder: i18n.pubIdPlaceholder || "@example.ed25519"
           }), br(),
-          label({ for: "pub_wallet_user" }, i18n.walletUser), br(),
-          input({
-            type: "text",
-            id: "pub_wallet_user",
-            name: "wallet_user",
-            placeholder: pubWalletUser,
-            value: pubWalletUser
-          }), br(),
-          label({ for: "pub_wallet_pass" }, i18n.walletPass), br(),
-          input({
-            type: "password",
-            id: "pub_wallet_pass",
-            name: "wallet_pass"
-          }), br(),
-          button({ type: "submit" }, i18n.pubWalletConfiguration)
+          button({ type: "submit" }, i18n.pubIdSave || "Save configuration")
         )
       )
     ),

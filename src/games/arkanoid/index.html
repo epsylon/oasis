@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arkanoid</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#topbar a:hover { text-decoration: underline; }
+#ui { display: flex; gap: 24px; padding: 8px; font-size: 15px; color: #FFA500; }
+canvas { display: block; flex: 1; align-self: stretch; min-height: 0; width: 100%; background: #000; border: 1px solid #333; cursor: none; }
+#msg { font-size: 18px; color: #FFA500; margin: 6px; text-align: center; min-height: 28px; }
+#controls { color: #888; font-size: 13px; text-align: center; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">ARKANOID</span>
+</div>
+<div id="ui">
+  <span>SCORE: <b id="score">0</b></span>
+  <span>LIVES: <b id="lives">3</b></span>
+  <span>LEVEL: <b id="level">1</b></span>
+</div>
+<canvas id="c" width="560" height="420"></canvas>
+<div id="msg">Press SPACE or CLICK to start</div>
+<div id="controls">&#8592;&#8594; or MOUSE — Move paddle &nbsp;|&nbsp; SPACE / CLICK — Launch ball</div>
+<div id="scoreSubmit" style="display:none;text-align:center;margin:6px">
+  <form method="POST" action="/games/submit-score" target="_top">
+    <input type="hidden" name="game" value="arkanoid">
+    <input type="hidden" id="scoreInput" name="score" value="0">
+    <button type="submit" style="background:#1a3a1a;border:1px solid #FFA500;color:#FFA500;padding:6px 16px;cursor:pointer;font-family:monospace;font-size:14px">Submit Score to Hall of Fame</button>
+  </form>
+</div>
+<script>
+document.addEventListener("keydown", e => { if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space"].includes(e.code)) e.preventDefault(); });
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const PADDLE_W = 80, PADDLE_H = 12, PADDLE_Y = H - 30;
+const BALL_R = 8;
+const BRICK_COLS = 10, BRICK_ROWS = 5;
+const BRICK_W = 48, BRICK_H = 16, BRICK_GAP = 4;
+const BRICK_OFF_X = (W - (BRICK_COLS * (BRICK_W + BRICK_GAP) - BRICK_GAP)) / 2;
+const BRICK_OFF_Y = 40;
+const BRICK_COLORS = ['#e74c3c', '#e67e22', '#FFA500', '#2ecc71', '#3498db'];
+
+let state = 'idle';
+let score = 0, lives = 3, level = 1;
+let paddle, ball, bricks, attached;
+
+function initGame() {
+  paddle = { x: W / 2 - PADDLE_W / 2, y: PADDLE_Y, w: PADDLE_W, h: PADDLE_H };
+  resetBall();
+  initBricks();
+}
+
+function resetBall() {
+  ball = { x: paddle.x + paddle.w / 2, y: PADDLE_Y - BALL_R - 1, vx: 3 + level * 0.3, vy: -(4 + level * 0.3) };
+  attached = true;
+}
+
+function initBricks() {
+  bricks = [];
+  for (let r = 0; r < BRICK_ROWS; r++) {
+    for (let c = 0; c < BRICK_COLS; c++) {
+      bricks.push({
+        x: BRICK_OFF_X + c * (BRICK_W + BRICK_GAP),
+        y: BRICK_OFF_Y + r * (BRICK_H + BRICK_GAP),
+        w: BRICK_W, h: BRICK_H,
+        alive: true,
+        color: BRICK_COLORS[r % BRICK_COLORS.length],
+        points: (BRICK_ROWS - r) * 10
+      });
+    }
+  }
+}
+
+function launch() {
+  if (state === 'idle' || state === 'over' || state === 'win') {
+    if (state === 'over') { score = 0; lives = 3; level = 1; document.getElementById('score').textContent = '0'; document.getElementById('lives').textContent = '3'; document.getElementById('level').textContent = '1'; }
+    if (state === 'win') { level++; document.getElementById('level').textContent = level; }
+    initGame();
+    state = 'play';
+    attached = false;
+    document.getElementById('msg').textContent = '';
+    return;
+  }
+  if (attached) {
+    attached = false;
+  }
+}
+
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); launch(); }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+canvas.addEventListener('click', launch);
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * canvas.width / rect.width;
+  paddle.x = Math.max(0, Math.min(W - paddle.w, mx - paddle.w / 2));
+  if (attached) ball.x = paddle.x + paddle.w / 2;
+});
+
+function reflect(ball, bx, by, bw, bh) {
+  const overlapLeft = ball.x + BALL_R - bx;
+  const overlapRight = bx + bw - (ball.x - BALL_R);
+  const overlapTop = ball.y + BALL_R - by;
+  const overlapBottom = by + bh - (ball.y - BALL_R);
+  const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+  if (minOverlap === overlapTop || minOverlap === overlapBottom) ball.vy *= -1;
+  else ball.vx *= -1;
+}
+
+function loop() {
+  ctx.clearRect(0, 0, W, H);
+
+  if (state === 'play') {
+    if (keys['ArrowLeft']) paddle.x = Math.max(0, paddle.x - 6);
+    if (keys['ArrowRight']) paddle.x = Math.min(W - paddle.w, paddle.x + 6);
+
+    if (attached) {
+      ball.x = paddle.x + paddle.w / 2;
+    } else {
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      if (ball.x - BALL_R < 0) { ball.x = BALL_R; ball.vx = Math.abs(ball.vx); }
+      if (ball.x + BALL_R > W) { ball.x = W - BALL_R; ball.vx = -Math.abs(ball.vx); }
+      if (ball.y - BALL_R < 0) { ball.y = BALL_R; ball.vy = Math.abs(ball.vy); }
+
+      if (ball.y + BALL_R >= paddle.y && ball.y + BALL_R <= paddle.y + paddle.h + Math.abs(ball.vy) &&
+          ball.x >= paddle.x - BALL_R && ball.x <= paddle.x + paddle.w + BALL_R) {
+        const rel = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
+        const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+        ball.vx = rel * speed * 1.1;
+        ball.vy = -Math.abs(ball.vy);
+        ball.y = paddle.y - BALL_R - 1;
+      }
+
+      if (ball.y - BALL_R > H) {
+        lives--;
+        document.getElementById('lives').textContent = lives;
+        if (lives <= 0) { state = 'over'; document.getElementById('msg').textContent = 'GAME OVER — Press SPACE'; document.getElementById('scoreInput').value = score; document.getElementById('scoreSubmit').style.display = 'block'; }
+        else { resetBall(); attached = true; }
+      }
+
+      for (const b of bricks) {
+        if (!b.alive) continue;
+        if (ball.x + BALL_R > b.x && ball.x - BALL_R < b.x + b.w && ball.y + BALL_R > b.y && ball.y - BALL_R < b.y + b.h) {
+          b.alive = false;
+          score += b.points;
+          document.getElementById('score').textContent = score;
+          reflect(ball, b.x, b.y, b.w, b.h);
+          break;
+        }
+      }
+
+      if (bricks.every(b => !b.alive)) {
+        state = 'win';
+        document.getElementById('msg').textContent = 'LEVEL CLEAR! — Press SPACE for next level';
+      }
+    }
+  }
+
+  bricks.forEach(b => {
+    if (!b.alive) return;
+    ctx.fillStyle = b.color;
+    ctx.beginPath();
+    ctx.roundRect(b.x, b.y, b.w, b.h, 3);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  ctx.fillStyle = '#FFA500';
+  ctx.beginPath();
+  ctx.roundRect(paddle.x, paddle.y, paddle.w, paddle.h, 4);
+  ctx.fill();
+  ctx.fillStyle = '#FFD700';
+  ctx.fillRect(paddle.x + 8, paddle.y + 3, paddle.w - 16, 3);
+
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.arc(ball.x - 3, ball.y - 3, BALL_R * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  requestAnimationFrame(loop);
+}
+
+initGame();
+loop();
+</script>
+</body>
+</html>

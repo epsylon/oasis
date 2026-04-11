@@ -339,6 +339,10 @@ function renderActionCards(actions, userId, allActions) {
       headerText = `[TRIBE · REFEED]`;
     } else if (type === 'shopProduct') {
       headerText = `[SHOP · PRODUCT]`;
+    } else if (type === 'chat') {
+      headerText = `[CHAT \u00b7 NEW]`;
+    } else if (type === 'pad') {
+      headerText = `[PAD · ${String(i18n.padNew || 'NEW').toUpperCase()}]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -431,6 +435,32 @@ function renderActionCards(actions, userId, allActions) {
           ) : "",
           txid ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankTx + ':' ),
+            a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${txid}`, target: '_blank' }, txid)
+          ) : ""
+        )
+      );
+    }
+
+    if (type === 'ubiclaimresult') {
+      const { txid, userId: inhabitantId, amount, epochId } = content;
+      const pubAuthor = action.author || action.value?.author || '';
+      const amt = Number(amount || 0);
+      cardBody.push(
+        div({ class: 'card-section banking-ubi' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankUbiPub + ':'),
+            span({ class: 'card-value' }, pubAuthor)
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankUbiInhabitant + ':'),
+            span({ class: 'card-value' }, inhabitantId || '')
+          ),
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankUbiClaimedAmount + ':'),
+            span({ class: 'card-value' }, `${amt.toFixed(6)} ECO`)
+          ),
+          txid ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankTx + ':'),
             a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${txid}`, target: '_blank' }, txid)
           ) : ""
         )
@@ -1083,6 +1113,43 @@ function renderActionCards(actions, userId, allActions) {
       );
     }
 
+    if (type === 'chat') {
+      const { title, description, image, category, status } = content;
+      const chatKey = action.id || action.key || '';
+      const displayDesc = description ? (description.length > 140 ? description.slice(0, 140) + "\u2026" : description) : "";
+      const chatImageNode = renderMediaBlob(image);
+      cardBody.push(
+        div({ class: 'card-section chat' },
+          div({ class: 'card-field' }, span({ class: 'card-label' }, 'Chat:'), span({ class: 'card-value' }, chatKey ? a({ href: `/chats/${encodeURIComponent(chatKey)}`, class: 'user-link' }, title || chatKey) : (title || ''))),
+          displayDesc ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatDescription || 'Description') + ':'), span({ class: 'card-value' }, displayDesc)) : '',
+          category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, category)) : '',
+          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatStatus || 'Status') + ':'), span({ class: 'card-value' }, status)) : ''
+        )
+      );
+    }
+
+    if (type === 'pad') {
+      const padKey = action.id || action.key || '';
+      const padTitle = content.title || action.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padTitle || 'Pad') + ':'), span({ class: 'card-value' }, padKey ? a({ href: `/pads/${encodeURIComponent(padKey)}`, class: 'user-link' }, padTitle || padKey) : '')),
+          content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padDeadlineLabel || 'Deadline') + ':'), span({ class: 'card-value' }, content.deadline)) : ''
+        )
+      );
+    }
+
+    if (type === 'calendar') {
+      const calKey = action.id || action.key || '';
+      const calTitle = content.title || action.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.calendarTitle || 'Calendar') + ':'), span({ class: 'card-value' }, calKey ? a({ href: `/calendars/${encodeURIComponent(calKey)}`, class: 'user-link' }, calTitle || calKey) : '')),
+          content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.calendarStatusLabel || 'Status') + ':'), span({ class: 'card-value' }, content.status)) : ''
+        )
+      );
+    }
+
     if (type === 'report') {
       const { title, confirmations, severity, status } = content;
       cardBody.push(
@@ -1219,6 +1286,22 @@ function renderActionCards(actions, userId, allActions) {
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankingUserEngagementScore + ':'),
             span({ class: 'card-value' }, karmaScore)
+          )
+        )
+      );
+    }
+
+    if (type === 'gameScore') {
+      const { game, score } = content;
+      cardBody.push(
+        div({ class: 'card-section ai-exchange' },
+          game ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.gamesTitle || 'Game') + ':'),
+            span({ class: 'card-value' }, String(game).toUpperCase())
+          ) : null,
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.gamesHallScore || 'Score') + ':'),
+            span({ class: 'card-value' }, String(score || 0))
           )
         )
       );
@@ -1511,6 +1594,9 @@ function getViewDetailsAction(type, action) {
     case 'market':     return `/market/${id}`;
     case 'shop':       return `/shops/${id}`;
     case 'shopProduct': return `/shops/product/${id}`;
+    case 'chat':       return `/chats/${id}`;
+    case 'pad':        return `/pads/${id}`;
+    case 'calendar':   return `/calendars/${id}`;
     case 'job':        return `/jobs/${id}`;
     case 'project':    return `/projects/${id}`;
     case 'report':     return `/reports/${id}`;
@@ -1528,33 +1614,37 @@ exports.activityView = (actions, filter, userId, q = '') => {
     { type: 'recent',    label: i18n.typeRecent },
     { type: 'all',       label: i18n.allButton },
     { type: 'mine',      label: i18n.mineButton },
-    { type: 'banking',   label: i18n.typeBanking },
-    { type: 'market',    label: i18n.typeMarket },
-    { type: 'project',   label: i18n.typeProject },
-    { type: 'job',       label: i18n.typeJob },
-    { type: 'curriculum',label: i18n.typeCurriculum },
-    { type: 'shop',      label: i18n.typeShop },
-    { type: 'transfer',  label: i18n.typeTransfer },
+    { type: 'report',    label: i18n.typeReport },
+    { type: 'karmaScore',label: i18n.typeKarmaScore },
     { type: 'about',     label: i18n.typeAbout },
     { type: 'tribe',     label: i18n.typeTribe },
     { type: 'parliament',label: i18n.typeParliament },
     { type: 'courts',    label: i18n.typeCourts },
-    { type: 'karmaScore',label: i18n.typeKarmaScore },
     { type: 'votes',     label: i18n.typeVotes },
+    { type: 'calendar',  label: i18n.typeCalendar || 'Calendar' },
     { type: 'event',     label: i18n.typeEvent },
     { type: 'task',      label: i18n.typeTask },
-    { type: 'report',    label: i18n.typeReport },
     { type: 'feed',      label: i18n.typeFeed },
-    { type: 'aiExchange',label: i18n.typeAiExchange },
     { type: 'post',      label: i18n.typePost },
-    { type: 'spread',    label: i18n.typeSpread || 'SPREAD' },
-    { type: 'pixelia',   label: i18n.typePixelia },
+    { type: 'spread',    label: i18n.typeSpread },
+    { type: 'chat',      label: i18n.typeChat },
+    { type: 'pad',       label: i18n.typePad },
     { type: 'forum',     label: i18n.typeForum },
     { type: 'map',       label: i18n.typeMap },
+    { type: 'banking',   label: i18n.typeBanking },
+    { type: 'market',    label: i18n.typeMarket },
+    { type: 'shop',      label: i18n.typeShop },
+    { type: 'project',   label: i18n.typeProject },
+    { type: 'job',       label: i18n.typeJob },
+    { type: 'curriculum',label: i18n.typeCurriculum },
+    { type: 'transfer',  label: i18n.typeTransfer },
+    { type: 'aiExchange',label: i18n.typeAiExchange },
+    { type: 'gameScore', label: i18n.typeGameScore },
+    { type: 'pixelia',   label: i18n.typePixelia },
     { type: 'audio',     label: i18n.typeAudio },
     { type: 'bookmark',  label: i18n.typeBookmark },
-    { type: 'document',  label: i18n.typeDocument },
     { type: 'image',     label: i18n.typeImage },
+    { type: 'document',  label: i18n.typeDocument },
     { type: 'video',     label: i18n.typeVideo }
   ];
 
@@ -1565,7 +1655,7 @@ exports.activityView = (actions, filter, userId, q = '') => {
     const now = Date.now();
     filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
   } else if (filter === 'banking') {
-    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim'));
+    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim' || action.type === 'ubiclaimresult'));
   } else if (filter === 'tribe') {
     filteredActions = actions.filter(action =>
       action.type !== 'tombstone' &&
@@ -1583,6 +1673,8 @@ exports.activityView = (actions, filter, userId, q = '') => {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment'));
   } else if (filter === 'spread') {
     filteredActions = actions.filter(action => action.type === 'spread');
+  } else if (filter === 'gameScore') {
+    filteredActions = actions.filter(action => action.type === 'gameScore');
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all' || (filter === 'shop' && action.type === 'shopProduct')) && action.type !== 'tombstone');
   }
@@ -1614,50 +1706,17 @@ exports.activityView = (actions, filter, userId, q = '') => {
         h2(i18n.activityList),
         p(desc)
       ),
-      form({ method: 'GET', action: '/activity' },
-        div({ class: 'mode-buttons', style: 'display:grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px;' },
-          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(0, 3).map(({ type, label }) =>
-              form({ method: 'GET', action: '/activity' },
-                input({ type: 'hidden', name: 'filter', value: type }),
-                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-              )
-            )
-          ),
-          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(3, 10).map(({ type, label }) =>
-              form({ method: 'GET', action: '/activity' },
-                input({ type: 'hidden', name: 'filter', value: type }),
-                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-              )
-            )
-          ),
-          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(10, 15).map(({ type, label }) =>
-              form({ method: 'GET', action: '/activity' },
-                input({ type: 'hidden', name: 'filter', value: type }),
-                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-              )
-            )
-          ),
-          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(15, 19).map(({ type, label }) =>
-              form({ method: 'GET', action: '/activity' },
-                input({ type: 'hidden', name: 'filter', value: type }),
-                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-              )
-            )
-          ),
-          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(19, 26).map(({ type, label }) =>
-              form({ method: 'GET', action: '/activity' },
-                input({ type: 'hidden', name: 'filter', value: type }),
-                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-              )
-            )
-          ),
-          div({ style: 'display: flex; flex-direction: column; gap: 8px;' },
-            activityTypes.slice(26).map(({ type, label }) =>
+      div({ class: 'activity-filter-grid' },
+        ...[
+          activityTypes.slice(0, 4),
+          activityTypes.slice(4, 12),
+          activityTypes.slice(12, 19),
+          activityTypes.slice(19, 26),
+          activityTypes.slice(26, 29),
+          activityTypes.slice(29)
+        ].map(col =>
+          div({ class: 'activity-filter-col' },
+            col.map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
                 input({ type: 'hidden', name: 'filter', value: type }),
                 button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)

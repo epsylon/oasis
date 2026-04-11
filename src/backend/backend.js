@@ -256,7 +256,9 @@ const ssbConfig = require('../server/ssb_config');
 const tribeCrypto = require('../models/tribe_crypto')(ssbConfig.path);
 const reportsModel = require('../models/reports_model')({ cooler, isPublic: config.public });
 const transfersModel = require('../models/transfers_model')({ cooler, isPublic: config.public });
-const tagsModel = require('../models/tags_model')({ cooler, isPublic: config.public });
+const padsModel = require('../models/pads_model')({ cooler, cipherModel });
+const calendarsModel = require('../models/calendars_model')({ cooler, pmModel });
+const tagsModel = require('../models/tags_model')({ cooler, isPublic: config.public, padsModel });
 const cvModel = require('../models/cv_model')({ cooler, isPublic: config.public });
 const inhabitantsModel = require('../models/inhabitants_model')({ cooler, isPublic: config.public });
 const feedModel = require('../models/feed_model')({ cooler, isPublic: config.public });
@@ -269,7 +271,7 @@ const trendingModel = require('../models/trending_model')({ cooler, isPublic: co
 const statsModel = require('../models/stats_model')({ cooler, isPublic: config.public });
 const tribesModel = require('../models/tribes_model')({ cooler, isPublic: config.public, tribeCrypto });
 const tribesContentModel = require('../models/tribes_content_model')({ cooler, isPublic: config.public, tribeCrypto, tribesModel });
-const searchModel = require('../models/search_model')({ cooler, isPublic: config.public });
+const searchModel = require('../models/search_model')({ cooler, isPublic: config.public, padsModel });
 const activityModel = require('../models/activity_model')({ cooler, isPublic: config.public });
 const pixeliaModel = require('../models/pixelia_model')({ cooler, isPublic: config.public });
 const marketModel = require('../models/market_model')({ cooler, isPublic: config.public });
@@ -277,10 +279,12 @@ const forumModel = require('../models/forum_model')({ cooler, isPublic: config.p
 const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic: config.public });
 const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public });
 const shopsModel = require('../models/shops_model')({ cooler, isPublic: config.public });
+const chatsModel = require('../models/chats_model')({ cooler, tribeCrypto });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
 const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public });
+const gamesModel = require('../models/games_model')({ cooler });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
-const favoritesModel = require("../models/favorites_model")({services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel });
+const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const courtsModel = require('../models/courts_model')({ cooler, services: { votes: votesModel, inhabitants: inhabitantsModel, tribes: tribesModel, banking: bankingModel } });
 tribesModel.processIncomingKeys().catch(err => {
@@ -311,9 +315,12 @@ const mediaResolvers = {
   documents: id => documentsModel.resolveRootId(id),
   bookmarks: id => bookmarksModel.resolveRootId(id),
   shops: id => shopsModel.resolveRootId(id),
-  maps: id => mapsModel.resolveRootId(id)
+  chats: id => chatsModel.resolveRootId(id),
+  maps: id => mapsModel.resolveRootId(id),
+  pads: id => padsModel.resolveRootId(id),
+  calendars: id => calendarsModel.resolveRootId(id)
 };
-const mediaModCheck = { images: 'imagesMod', audios: 'audiosMod', videos: 'videosMod', documents: 'documentsMod', bookmarks: 'bookmarksMod', market: 'marketMod', jobs: 'jobsMod', projects: 'projectsMod', shops: 'shopsMod', maps: 'mapsMod' };
+const mediaModCheck = { images: 'imagesMod', audios: 'audiosMod', videos: 'videosMod', documents: 'documentsMod', bookmarks: 'bookmarksMod', market: 'marketMod', jobs: 'jobsMod', projects: 'projectsMod', shops: 'shopsMod', chats: 'chatsMod', maps: 'mapsMod', pads: 'padsMod', calendars: 'calendarsMod' };
 const favAction = async (ctx, kind, action) => {
   if (!checkMod(ctx, mediaModCheck[kind])) { ctx.redirect('/modules'); return; }
   try {
@@ -643,6 +650,7 @@ const { activityView } = require("../views/activity_view");
 const { cvView, createCVView } = require("../views/cv_view");
 const { indexingView } = require("../views/indexing_view");
 const { pixeliaView } = require("../views/pixelia_view");
+const { gamesView } = require("../views/games_view");
 const { statsView } = require("../views/stats_view");
 const { tribesView, tribeView, renderInvitePage } = require("../views/tribes_view");
 const { agendaView } = require("../views/agenda_view");
@@ -677,6 +685,9 @@ const { forumView, singleForumView } = require("../views/forum_view");
 const { renderBlockchainView, renderSingleBlockView } = require("../views/blockchain_view");
 const { jobsView, singleJobsView, renderJobForm } = require("../views/jobs_view");
 const { shopsView, singleShopView, singleProductView, editProductView } = require("../views/shops_view");
+const { chatsView, singleChatView } = require("../views/chats_view");
+const { padsView, singlePadView } = require("../views/pads_view");
+const { calendarsView, singleCalendarView } = require("../views/calendars_view");
 const { projectsView, singleProjectView } = require("../views/projects_view")
 const { renderBankingView, renderSingleAllocationView, renderEpochView } = require("../views/banking_views")
 const { favoritesView } = require("../views/favorites_view");
@@ -764,7 +775,7 @@ router
     ctx.body = await popularView({ messages, prefix: nav(div({ class: "filters" }, ul(['day','week','month','year'].map(p => li(form({ method: "GET", action: `/public/popular/${p}` }, button({ type: "submit", class: "filter-btn" }, t[p]))))))) });
   }) 
   .get("/modules", async (ctx) => {
-    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
+    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
     const cfg = getConfig().modules;
     ctx.body = modulesView(modules.reduce((acc, m) => { acc[`${m}Mod`] = cfg[`${m}Mod`]; return acc; }, {}));
   })
@@ -775,6 +786,23 @@ router
     require('../views/main_views').setLanguage(lang);
     let chatHistory = []; try { chatHistory = JSON.parse(fs.readFileSync(historyPath, 'utf-8')); } catch {}
     ctx.body = aiView(chatHistory, getConfig().ai?.prompt?.trim() || '');
+  })
+  .get('/games', async (ctx) => {
+    if (!checkMod(ctx, 'gamesMod')) { ctx.redirect('/modules'); return; }
+    const filter = qf(ctx, 'all');
+    const hall = await gamesModel.getHallOfFame();
+    ctx.body = gamesView(filter, hall);
+  })
+  .get('/games/:name', async (ctx) => {
+    if (!checkMod(ctx, 'gamesMod')) { ctx.redirect('/modules'); return; }
+    const { gameShellView } = require('../views/games_view');
+    ctx.body = gameShellView(ctx.params.name);
+  })
+  .post('/games/submit-score', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'gamesMod')) { ctx.redirect('/modules'); return; }
+    const { game, score } = ctx.request.body;
+    try { await gamesModel.submitScore(game, score); } catch (_) {}
+    ctx.redirect('/games?filter=scoring');
   })
   .get('/pixelia', async (ctx) => {
     if (!checkMod(ctx, 'pixeliaMod')) { ctx.redirect('/modules'); return; }
@@ -855,7 +883,7 @@ router
     const pull = require('../server/node_modules/pull-stream'), ssb = await require('../client/gui')({ offline: require('../server/ssb_config').offline }).open();
     const latestFromStream = await new Promise(res => pull(ssb.createUserStream({ id: feedId, reverse: true }), pull.filter(m => m?.value?.content?.type !== 'tombstone'), pull.take(1), pull.collect((err, arr) => res(!err && arr?.[0] ? normTs(arr[0].value?.timestamp || arr[0].timestamp) : 0))));
     const days = latestFromStream ? (Date.now() - latestFromStream) / 86400000 : Infinity;
-    ctx.body = await authorView({ feedId, messages: sanitizedMsgs, firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastActivityBucket: days < 14 ? 'green' : days < 182.5 ? 'orange' : 'red' });
+    ctx.body = await authorView({ feedId, messages: sanitizedMsgs, firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, lastActivityBucket: days < 14 ? 'green' : days < 182.5 ? 'orange' : 'red' });
   })
   .get("/search", async (ctx) => {
     const query = ctx.query.query || '';
@@ -1065,9 +1093,9 @@ router
         inhabitants.map(async (u) => {
         try {
           const bank = await bankingModel.getBankingData(u.id);
-          return { id: u.id, karmaScore: bank?.karmaScore || 0, estimatedUBI: bank?.estimatedUBI || 0 };
+          return { id: u.id, karmaScore: bank?.karmaScore || 0, estimatedUBI: bank?.estimatedUBI || 0, lastClaimedDate: bank?.lastClaimedDate || null, totalClaimed: bank?.totalClaimed || 0 };
         } catch {
-          return { id: u.id, karmaScore: 0, estimatedUBI: 0 };
+          return { id: u.id, karmaScore: 0, estimatedUBI: 0, lastClaimedDate: null, totalClaimed: 0 };
         }
         })
       )
@@ -1084,7 +1112,7 @@ router
       })
     );
     const addrMap = new Map(addresses.map(x => [x.id, x.address]));
-    const karmaMap = new Map(karmaList.map(x => [x.id, { karmaScore: x.karmaScore, estimatedUBI: x.estimatedUBI }]));
+    const karmaMap = new Map(karmaList.map(x => [x.id, { karmaScore: x.karmaScore, estimatedUBI: x.estimatedUBI, lastClaimedDate: x.lastClaimedDate, totalClaimed: x.totalClaimed }]));
     const activityMap = new Map(activityList.map(x => [x.id, x.lastActivityBucket]));
     let enriched = inhabitants.map(u => {
       const kd = karmaMap.get(u.id) || {};
@@ -1093,6 +1121,8 @@ router
         ecoAddress: addrMap.get(u.id) || null,
         karmaScore: kd.karmaScore ?? (typeof u.karmaScore === 'number' ? u.karmaScore : 0),
         estimatedUBI: kd.estimatedUBI || 0,
+        lastClaimedDate: kd.lastClaimedDate || null,
+        totalClaimed: kd.totalClaimed || 0,
         lastActivityBucket: activityMap.get(u.id)
       };
     });
@@ -1121,7 +1151,9 @@ router
     const currentUserId = getViewerId();
     const karmaScore = bank && typeof bank.karmaScore === 'number' ? bank.karmaScore : 0;
     const estimatedUBI = bank?.estimatedUBI || 0;
-    ctx.body = await inhabitantsProfileView({ about, cv, feed, photo, karmaScore, estimatedUBI, lastActivityBucket: bucketInfo.bucket, viewedId: id }, currentUserId);
+    const lastClaimedDate = bank?.lastClaimedDate || null;
+    const totalClaimed = bank?.totalClaimed || 0;
+    ctx.body = await inhabitantsProfileView({ about, cv, feed, photo, karmaScore, estimatedUBI, lastClaimedDate, totalClaimed, lastActivityBucket: bucketInfo.bucket, viewedId: id }, currentUserId);
   })
   .get('/parliament', async (ctx) => {
     if (!checkMod(ctx, 'parliamentMod')) return ctx.redirect('/modules');
@@ -1268,7 +1300,20 @@ router
         const stItems = await listByTribeAllChain(st.id, null).catch(() => []);
         subContent.push(...stItems.map(item => ({ ...item, tribeName: st.title })));
       }
-      const combined = [...allContent, ...subContent];
+      const [allPadsRaw, allChatsRaw, allCalsRaw, allMapsRaw] = await Promise.all([
+        padsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        chatsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        calendarsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => [])
+      ]);
+      const toStandalone = (type, url) => (item) => ({ contentType: type, id: item.rootId || item.key, title: item.title || '', author: item.author, createdAt: item.createdAt, directUrl: url(item) });
+      const standaloneItems = [
+        ...allPadsRaw.filter(p => p.tribeId === tribe.id).map(toStandalone('pad', p => `/pads/${encodeURIComponent(p.rootId)}`)),
+        ...allChatsRaw.filter(c => c.tribeId === tribe.id).map(toStandalone('chat', c => `/chats/${encodeURIComponent(c.rootId || c.key)}`)),
+        ...allCalsRaw.filter(c => c.tribeId === tribe.id).map(toStandalone('calendar', c => `/calendars/${encodeURIComponent(c.rootId)}`)),
+        ...allMapsRaw.filter(m => m.tribeId === tribe.id).map(toStandalone('map', m => `/maps/${encodeURIComponent(m.key || m.id)}`))
+      ];
+      const combined = [...allContent, ...subContent, ...standaloneItems];
       const allInhabitants = await inhabitantsModel.listInhabitants({ filter: 'all', includeInactive: true });
       const allMembers = [...new Set([...tribe.members, ...subTribes.flatMap(st => st.members || [])])];
       const memberMap = new Map(allInhabitants.filter(u => allMembers.includes(u.id)).map(u => [u.id, u]));
@@ -1303,6 +1348,15 @@ router
     } else if (section === 'maps') {
       const allMaps = await mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => []);
       sectionData = allMaps.filter(m => m.tribeId === tribe.id);
+    } else if (section === 'pads') {
+      const allPads = await padsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []);
+      sectionData = allPads.filter(p => p.tribeId === tribe.id);
+    } else if (section === 'chats') {
+      const allChats = await chatsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []);
+      sectionData = allChats.filter(c => c.tribeId === tribe.id);
+    } else if (section === 'calendars') {
+      const allCals = await calendarsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []);
+      sectionData = allCals.filter(c => c.tribeId === tribe.id);
     } else if (section === 'search') {
       const sq = (ctx.query.q || '').trim().toLowerCase();
       let results = [];
@@ -1359,6 +1413,17 @@ router
     try { await bankingModel.ensureSelfAddressPublished(); } catch (_) {}
     try { await bankingModel.getUserEngagementScore(userId); } catch (_) {}
     const allActions = await activityModel.listFeed('all');
+    for (const action of allActions) {
+      if (action.type === 'pad') {
+        const c = action.value?.content || action.content || {};
+        const rootId = action.id || action.key || '';
+        const decrypted = padsModel.decryptContent(c, rootId);
+        if (decrypted.title) {
+          if (action.value?.content) { action.value.content.title = decrypted.title; action.value.content.deadline = decrypted.deadline; }
+          else if (action.content) { action.content.title = decrypted.title; action.content.deadline = decrypted.deadline; }
+        }
+      }
+    }
     ctx.body = activityView(allActions, filter, userId, q);
   })
   .get("/profile", async (ctx) => {
@@ -1376,7 +1441,7 @@ router
       lastActivityTs = await new Promise(res => pull(ssb.createUserStream({ id: myFeedId, reverse: true }), pull.filter(m => m?.value?.content?.type !== "tombstone"), pull.take(1), pull.collect((err, arr) => res(!err && arr?.[0] ? normTs(arr[0].value?.timestamp || arr[0].timestamp) : 0))));
     }
     const days = lastActivityTs ? (Date.now() - lastActivityTs) / 86400000 : Infinity;
-    ctx.body = await authorView({ feedId: myFeedId, messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastActivityBucket: days < 14 ? "green" : days < 182.5 ? "orange" : "red" });
+    ctx.body = await authorView({ feedId: myFeedId, messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, lastActivityBucket: days < 14 ? "green" : days < 182.5 ? "orange" : "red" });
   })
   .get("/profile/edit", async (ctx) => {
     const myFeedId = await meta.myFeedId();
@@ -1764,6 +1829,104 @@ router
     const [products, comments, mapData] = await Promise.all([shopsModel.listProducts(shop.rootId || shop.key), getVoteComments(shop.key), resolveMapUrl(shop.mapUrl)]);
     ctx.body = await singleShopView({ ...shop, isFavorite: fav.has(String(shop.rootId || shop.key)), commentCount: comments.length }, filter, products, comments, { q, sort, returnTo: safeReturnTo(ctx, `/shops?filter=${encodeURIComponent(filter)}`, ['/shops']), mapData });
   })
+  .get("/chats", async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const { filter = 'all', q = '', tribeId = '' } = ctx.query;
+    const viewerId = getViewerId();
+    if (filter === 'create') {
+      ctx.body = await chatsView([], 'create', null, { q, ...(tribeId ? { tribeId } : {}) });
+      return;
+    }
+    const modelFilter = filter === "favorites" ? "all" : filter;
+    const items = await chatsModel.listAll({ filter: modelFilter, q, viewerId });
+    const fav = await mediaFavorites.getFavoriteSet('chats');
+    const enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
+    const finalList = filter === "favorites" ? enriched.filter(x => x.isFavorite) : enriched;
+    ctx.body = await chatsView(finalList, filter, null, { q });
+  })
+  .get("/chats/edit/:id", async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const chat = await chatsModel.getChatById(ctx.params.id);
+    if (!chat) { ctx.redirect('/chats'); return; }
+    ctx.body = await chatsView([], 'edit', chat, { returnTo: ctx.query.returnTo || '' });
+  })
+  .get("/chats/:chatId", async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const { filter = 'all', q = '' } = ctx.query;
+    const chat = await chatsModel.getChatById(ctx.params.chatId);
+    if (!chat) { ctx.redirect('/chats'); return; }
+    const fav = await mediaFavorites.getFavoriteSet('chats');
+    const messages = await chatsModel.listMessages(chat.rootId || chat.key);
+    ctx.body = await singleChatView({ ...chat, isFavorite: fav.has(String(chat.rootId || chat.key)) }, filter, messages, { q, returnTo: safeReturnTo(ctx, `/chats?filter=${encodeURIComponent(filter)}`, ['/chats']) });
+  })
+  .get("/pads", async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    const filter = String(ctx.query.filter || "all").toLowerCase();
+    const uid = getViewerId();
+    if (filter === "edit") {
+      const id = ctx.query.id;
+      if (!id) { ctx.redirect('/pads'); return; }
+      const pad = await padsModel.getPadById(id);
+      if (!pad || pad.author !== uid) { ctx.redirect('/pads'); return; }
+      ctx.body = await padsView([], "edit", pad, {});
+      return;
+    }
+    const q = String(ctx.query.q || "").trim();
+    const tribeId = ctx.query.tribeId || "";
+    const pads = await padsModel.listAll({ filter, viewerId: uid });
+    const fav = await mediaFavorites.getFavoriteSet('pads');
+    const enriched = pads.map(p => ({ ...p, isFavorite: fav.has(String(p.rootId)) }));
+    ctx.body = await padsView(enriched, filter, null, { q, ...(tribeId ? { tribeId } : {}) });
+  })
+  .get("/pads/:padId", async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    const pad = await padsModel.getPadById(ctx.params.padId);
+    if (!pad) { ctx.redirect('/pads'); return; }
+    const fav = await mediaFavorites.getFavoriteSet('pads');
+    const entries = await padsModel.getEntries(pad.rootId);
+    const inviteCode = ctx.query.inviteCode || null;
+    const versionKey = ctx.query.version || null;
+    const selectedVersion = versionKey
+      ? (entries.find(e => e.key === versionKey) || entries[parseInt(versionKey)] || null)
+      : null;
+    const baseUrl = `${ctx.protocol}://${ctx.host}`;
+    ctx.body = await singlePadView({ ...pad, isFavorite: fav.has(String(pad.rootId)) }, entries, { baseUrl, inviteCode, selectedVersion });
+  })
+  .get("/calendars", async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const filter = String(ctx.query.filter || "all").toLowerCase();
+    const uid = getViewerId();
+    if (filter === "edit") {
+      const id = ctx.query.id;
+      if (!id) { ctx.redirect('/calendars'); return; }
+      const cal = await calendarsModel.getCalendarById(id);
+      if (!cal || cal.author !== uid) { ctx.redirect('/calendars'); return; }
+      ctx.body = await calendarsView([], "edit", cal, {});
+      return;
+    }
+    const q = String(ctx.query.q || "").trim();
+    const tribeId = ctx.query.tribeId || "";
+    const modelFilter = filter === "favorites" ? "all" : filter;
+    const calendars = await calendarsModel.listAll({ filter: modelFilter, viewerId: uid });
+    const fav = await mediaFavorites.getFavoriteSet('calendars');
+    const enriched = calendars.map(c => ({ ...c, isFavorite: fav.has(String(c.rootId)) }));
+    const finalList = filter === "favorites" ? enriched.filter(c => c.isFavorite) : enriched;
+    ctx.body = await calendarsView(finalList, filter, null, { q, ...(tribeId ? { tribeId } : {}) });
+  })
+  .get("/calendars/:calId", async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const cal = await calendarsModel.getCalendarById(ctx.params.calId);
+    if (!cal) { ctx.redirect('/calendars'); return; }
+    const dates = await calendarsModel.getDatesForCalendar(cal.rootId);
+    const notesByDate = {};
+    for (const d of dates) {
+      notesByDate[d.key] = await calendarsModel.getNotesForDate(cal.rootId, d.key);
+    }
+    const fav = await mediaFavorites.getFavoriteSet('calendars');
+    const month = String(ctx.query.month || "").trim() || null;
+    const day = String(ctx.query.day || "").trim() || null;
+    ctx.body = await singleCalendarView({ ...cal, isFavorite: fav.has(String(cal.rootId)) }, dates, notesByDate, { month, day });
+  })
   .get("/projects", async (ctx) => {
     if (!checkMod(ctx, 'projectsMod')) { ctx.redirect('/modules'); return; }
     const filter = String(ctx.query.filter || "ALL").toUpperCase()
@@ -1799,12 +1962,16 @@ router
     const q = (query.q || '').trim();
     const msg = (query.msg || '').trim();
     await bankingModel.ensureSelfAddressPublished();
-    if (filter === 'overview') {
+    if (filter === 'overview' && bankingModel.isPubNode()) {
       try { await bankingModel.executeEpoch({}); } catch (_) {}
+      try { await bankingModel.publishPubBalance(); } catch (_) {}
+      try { await bankingModel.processPendingClaims(); } catch (_) {}
     }
     const data = await bankingModel.listBanking(filter, userId);
+    data.isPub = bankingModel.isPubNode();
+    data.alreadyClaimed = data.summary?.alreadyClaimed || false;
     if (filter === 'overview') {
-      const pending = (data.allocations || []).find(a => a.to === userId && a.status === "UNCONFIRMED");
+      const pending = (data.allocations || []).find(a => a.to === userId && (a.status === "UNCLAIMED" || a.status === "UNCONFIRMED"));
       data.pendingUBI = pending || null;
     }
     if (filter === 'addresses' && q) {
@@ -1824,7 +1991,7 @@ router
       totalSupply: 25500000,
       isSynced: isSynced
     };
-    ctx.body = renderBankingView(data, filter, userId);
+    ctx.body = renderBankingView(data, filter, userId, data.isPub);
   })
   .get("/banking/allocation/:id", async (ctx) => {
     const userId = getViewerId();
@@ -3118,6 +3285,236 @@ router
     ctx.redirect(safeReturnTo(ctx, `/shops/product/${encodeURIComponent(ctx.params.productId)}`, ['/shops']));
   })
   .post("/shops/:shopId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'shops', 'shopId'))
+  .post("/chats/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    const tribeId = b.tribeId || null;
+    const imageBlob = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : null;
+    await chatsModel.createChat(stripDangerousTags(b.title), stripDangerousTags(b.description), imageBlob, b.category, b.status, b.tags, tribeId);
+    ctx.redirect(tribeId ? `/tribe/${encodeURIComponent(tribeId)}?section=chats` : safeReturnTo(ctx, '/chats?filter=mine', ['/chats']));
+  })
+  .post("/chats/update/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    const imageBlob = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : undefined;
+    const patch = { title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), category: b.category, status: b.status, tags: b.tags };
+    if (imageBlob !== undefined) patch.image = imageBlob;
+    await chatsModel.updateChatById(ctx.params.id, patch);
+    ctx.redirect(safeReturnTo(ctx, '/chats?filter=mine', ['/chats']));
+  })
+  .post("/chats/delete/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    await chatsModel.deleteChatById(ctx.params.id);
+    ctx.redirect(safeReturnTo(ctx, '/chats?filter=mine', ['/chats']));
+  })
+  .post("/chats/close/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    await chatsModel.closeChatById(ctx.params.id);
+    ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(ctx.params.id)}`, ['/chats']));
+  })
+  .post("/chats/generate-invite", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const chatId = ctx.request.body.chatId;
+    const code = await chatsModel.generateInvite(chatId);
+    ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(chatId)}?inviteCode=${encodeURIComponent(code)}`, ['/chats']));
+  })
+  .post("/chats/join-code", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const code = String(ctx.request.body.code || '').trim();
+    try {
+      const chatKey = await chatsModel.joinByInvite(code);
+      ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(chatKey)}`, ['/chats']));
+    } catch (_) {
+      ctx.redirect(safeReturnTo(ctx, '/chats', ['/chats']));
+    }
+  })
+  .post("/chats/join/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    try {
+      await chatsModel.joinChat(ctx.params.id);
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(ctx.params.id)}`, ['/chats']));
+  })
+  .post("/chats/leave/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    try {
+      await chatsModel.leaveChat(ctx.params.id);
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, '/chats?filter=all', ['/chats']));
+  })
+  .post("/chats/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'chats', 'add'))
+  .post("/chats/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'chats', 'remove'))
+  .post("/chats/:chatId/message", koaBody({ multipart: true }), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const text = stripDangerousTags(String(ctx.request.body.text || '').trim());
+    const imageBlob = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : null;
+    if (!text && !imageBlob) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
+    try {
+      await chatsModel.sendMessage(ctx.params.chatId, text, imageBlob);
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(ctx.params.chatId)}`, ['/chats']));
+  })
+  .post("/pads/create", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const tribeId = b.tribeId || null;
+    const msg = await padsModel.createPad(
+      stripDangerousTags(b.title || ""),
+      b.status || "OPEN",
+      b.deadline || "",
+      b.tags || "",
+      tribeId
+    );
+    ctx.redirect(tribeId ? `/tribe/${encodeURIComponent(tribeId)}?section=pads` : `/pads/${encodeURIComponent(msg.key)}`);
+  })
+  .post("/pads/update/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    await padsModel.updatePadById(ctx.params.id, {
+      title: stripDangerousTags(b.title || ""),
+      status: b.status || "OPEN",
+      deadline: b.deadline || "",
+      tags: b.tags || ""
+    });
+    ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/pads/close/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    try { await padsModel.closePadById(ctx.params.id); } catch (_) {}
+    ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/pads/delete/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    await padsModel.deletePadById(ctx.params.id);
+    ctx.redirect('/pads');
+  })
+  .post("/pads/generate-invite/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    const code = await padsModel.generateInvite(ctx.params.id);
+    ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}?inviteCode=${encodeURIComponent(code)}`);
+  })
+  .post("/pads/join-code", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    const code = String((ctx.request.body || {}).code || "").trim();
+    try {
+      const padId = await padsModel.joinByInvite(code);
+      ctx.redirect(`/pads/${encodeURIComponent(padId)}`);
+    } catch (_) {
+      ctx.redirect('/pads');
+    }
+  })
+  .post("/pads/join/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    const uid = getViewerId();
+    await padsModel.addMemberToPad(ctx.params.id, uid);
+    ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/pads/entry/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const text = stripDangerousTags(String(b.text || "").trim());
+    if (text) await padsModel.addEntry(ctx.params.id, text);
+    ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/pads/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'pads', 'add'))
+  .post("/pads/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'pads', 'remove'))
+  .post("/calendars/create", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const tribeId = b.tribeId || null;
+    const intervalWeekly  = [].concat(b.intervalWeekly).includes("1");
+    const intervalMonthly = [].concat(b.intervalMonthly).includes("1");
+    const intervalYearly  = [].concat(b.intervalYearly).includes("1");
+    try {
+      const msg = await calendarsModel.createCalendar({
+        title: stripDangerousTags(b.title || ""),
+        status: b.status || "OPEN",
+        deadline: b.deadline || "",
+        tags: b.tags || "",
+        firstDate: b.firstDate || "",
+        firstDateLabel: stripDangerousTags(b.firstDateLabel || ""),
+        firstNote: stripDangerousTags(b.firstNote || ""),
+        intervalWeekly, intervalMonthly, intervalYearly,
+        tribeId
+      });
+      ctx.redirect(tribeId ? `/tribe/${encodeURIComponent(tribeId)}?section=calendars` : `/calendars/${encodeURIComponent(msg.key)}`);
+    } catch (e) {
+      console.error("[calendars/create]", e && e.message ? e.message : e)
+      ctx.redirect(tribeId ? `/tribe/${encodeURIComponent(tribeId)}?section=calendars` : '/calendars');
+    }
+  })
+  .post("/calendars/update/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    try {
+      await calendarsModel.updateCalendarById(ctx.params.id, {
+        title: stripDangerousTags(b.title || ""),
+        status: b.status || "OPEN",
+        deadline: b.deadline || "",
+        tags: b.tags || ""
+      });
+    } catch (_) {}
+    ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/calendars/delete/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    try { await calendarsModel.deleteCalendarById(ctx.params.id); } catch (_) {}
+    ctx.redirect('/calendars');
+  })
+  .post("/calendars/join/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    try { await calendarsModel.joinCalendar(ctx.params.id); } catch (_) {}
+    ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/calendars/leave/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    try { await calendarsModel.leaveCalendar(ctx.params.id); } catch (_) {}
+    ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/calendars/add-date/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const intervalWeekly  = [].concat(b.intervalWeekly).includes("1");
+    const intervalMonthly = [].concat(b.intervalMonthly).includes("1");
+    const intervalYearly  = [].concat(b.intervalYearly).includes("1");
+    try {
+      const dateMsgs = await calendarsModel.addDate(ctx.params.id, b.date || "", stripDangerousTags(b.label || ""), intervalWeekly, intervalMonthly, intervalYearly, b.intervalDeadline || "");
+      const noteText = stripDangerousTags(String(b.text || "").trim());
+      if (noteText && Array.isArray(dateMsgs)) {
+        for (const msg of dateMsgs) {
+          if (msg && msg.key) {
+            try { await calendarsModel.addNote(ctx.params.id, msg.key, noteText); } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[calendars/add-date]", e && e.message ? e.message : e)
+    }
+    ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/calendars/add-note/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const text = stripDangerousTags(String(b.text || "").trim());
+    if (text) {
+      try { await calendarsModel.addNote(ctx.params.id, b.dateId || "", text); } catch (_) {}
+    }
+    ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/calendars/delete-note/:noteId", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const calendarId = (ctx.request.body || {}).calendarId || "";
+    try { await calendarsModel.deleteNote(ctx.params.noteId); } catch (_) {}
+    ctx.redirect(calendarId ? `/calendars/${encodeURIComponent(calendarId)}` : '/calendars');
+  })
+  .post("/calendars/delete-date/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const calendarId = (ctx.request.body || {}).calendarId || "";
+    try { await calendarsModel.deleteDate(ctx.params.id, calendarId); } catch (_) {}
+    ctx.redirect(calendarId ? `/calendars/${encodeURIComponent(calendarId)}` : '/calendars');
+  })
+  .post("/calendars/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'calendars', 'add'))
+  .post("/calendars/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'calendars', 'remove'))
   .post("/projects/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'projectsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {}, image = ctx.request.files?.image ? await handleBlobUpload(ctx, "image") : null;
@@ -3242,39 +3639,35 @@ router
     ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]));
   })
   .post("/projects/:projectId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'projects', 'projectId'))
+  .post("/banking/claim-ubi", koaBody(), async (ctx) => {
+    const userId = getViewerId();
+    try {
+      await bankingModel.claimUBI(userId);
+      ctx.redirect("/banking?filter=overview&msg=claimed_pending");
+    } catch (e) {
+      ctx.redirect(`/banking?filter=overview&msg=${encodeURIComponent(e.message || "error")}`);
+    }
+  })
   .post("/banking/claim/:id", koaBody(), async (ctx) => {
+    const { i18n: _i18n } = require("../views/main_views");
     const userId = getViewerId(), allocation = await bankingModel.getAllocationById(ctx.params.id);
-    if (!allocation) { ctx.body = { error: i18n.errorNoAllocation }; return; }
-    if (allocation.to !== userId || allocation.status !== "UNCONFIRMED") { ctx.body = { error: i18n.errorInvalidClaim }; return; }
+    if (!allocation) { ctx.body = { error: _i18n.errorNoAllocation }; return; }
+    if (allocation.to !== userId || (allocation.status !== "UNCLAIMED" && allocation.status !== "UNCONFIRMED")) { ctx.body = { error: _i18n.errorInvalidClaim }; return; }
+    if (!bankingModel.isPubNode()) {
+      ctx.redirect("/banking?filter=overview&msg=claimed_pending");
+      return;
+    }
     const { txid } = await bankingModel.claimAllocation({ transferId: ctx.params.id, claimerId: userId });
     await bankingModel.publishBankClaim({ amount: allocation.amount, epochId: allocation.concept, allocationId: allocation.id, txid });
-    try {
-      const ssbClient = await cooler.open();
-      const now = new Date().toISOString();
-      await new Promise((resolve, reject) => ssbClient.publish({
-        type: "transfer",
-        from: "PUB",
-        to: userId,
-        concept: `UBI ${allocation.concept || ""}`.trim(),
-        amount: Number(allocation.amount || 0).toFixed(6),
-        createdAt: now,
-        updatedAt: now,
-        deadline: new Date(Date.now() + 14 * 86400000).toISOString(),
-        confirmedBy: [userId],
-        status: "CLOSED",
-        tags: ["UBI"],
-        opinions: {},
-        opinions_inhabitants: [],
-        txid
-      }, (err, msg) => err ? reject(err) : resolve(msg)));
-    } catch (_) {}
     ctx.redirect(`/banking?claimed=${encodeURIComponent(txid)}`);
   })
   .post("/banking/simulate", koaBody(), async (ctx) => {
+    if (!bankingModel.isPubNode()) { ctx.status = 403; ctx.body = { error: require("../views/main_views").i18n.bankPubOnly }; return; }
     const { epochId, rules } = ctx.request.body || {};
     ctx.body = await bankingModel.computeEpoch({ epochId, rules });
   })
   .post("/banking/run", koaBody(), async (ctx) => {
+    if (!bankingModel.isPubNode()) { ctx.status = 403; ctx.body = { error: require("../views/main_views").i18n.bankPubOnly }; return; }
     const { epochId, rules } = ctx.request.body || {};
     ctx.body = await bankingModel.executeEpoch({ epochId, rules });
   })
@@ -3391,11 +3784,11 @@ router
   })
   .post("/settings/rebuild", async ctx => { meta.rebuild(); ctx.redirect("/settings"); })
   .post("/modules/preset", koaBody(), async (ctx) => {
-    const ALL_MODULES = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
+    const ALL_MODULES = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
     const PRESETS = {
-      minimal: ['feed', 'forum', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
-      social: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-      economy: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
+      minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
+      social: ['agenda', 'audios', 'bookmarks', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
+      economy: ['agenda', 'audios', 'bookmarks', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
       full: ALL_MODULES
     };
     const preset = String(ctx.request.body.preset || '');
@@ -3407,7 +3800,7 @@ router
     ctx.redirect('/modules');
   })
   .post("/save-modules", koaBody(), async (ctx) => {
-    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
+    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
     const cfg = getConfig();
     modules.forEach(mod => cfg.modules[`${mod}Mod`] = ctx.request.body[`${mod}Form`] === 'on' ? 'on' : 'off');
     saveConfig(cfg);
@@ -3425,6 +3818,12 @@ router
     const b = ctx.request.body, cfg = getConfig();
     cfg.walletPub = { url: String(b.wallet_url || "").trim(), user: String(b.wallet_user || "").trim(), pass: String(b.wallet_pass || "").trim() };
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+    ctx.redirect("/settings");
+  })
+  .post("/settings/pub-id", koaBody(), async (ctx) => {
+    const b = ctx.request.body, cfg = getConfig();
+    cfg.pubId = String(b.pub_id || "").trim();
+    saveConfig(cfg);
     ctx.redirect("/settings");
   })
   .post('/transfers/create', koaBody(), async ctx => {
@@ -3524,6 +3923,7 @@ const middleware = [
           sharedState.setCarbonHcH(hcH);
         } catch (_) {}
         try { await refreshInboxCount(); } catch (_) {}
+        try { await calendarsModel.checkDueReminders(); } catch (_) {}
       }
     }
     await next();

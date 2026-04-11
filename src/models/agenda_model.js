@@ -140,7 +140,7 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
-      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll, projectsAll] = await Promise.all([
+      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll, projectsAll, calendarsAll] = await Promise.all([
         fetchItems('task'),
         fetchItems('event'),
         fetchItems('transfer'),
@@ -148,7 +148,8 @@ module.exports = ({ cooler }) => {
         fetchItems('market'),
         fetchItems('report'),
         fetchItems('job'),
-        fetchItems('project')
+        fetchItems('project'),
+        fetchItems('calendar')
       ]);
 
       const tasks = tasksAll.filter(c => Array.isArray(c.assignees) && c.assignees.includes(userId)).map(t => ({ ...t, type: 'task' }));
@@ -161,6 +162,9 @@ module.exports = ({ cooler }) => {
       const reports = reportsAll.filter(c => c.author === userId || (Array.isArray(c.confirmations) && c.confirmations.includes(userId))).map(r => ({ ...r, type: 'report' }));
       const jobs = jobsAll.filter(c => c.author === userId || (Array.isArray(c.subscribers) && c.subscribers.includes(userId))).map(j => ({ ...j, type: 'job', title: j.title }));
       const projects = projectsAll.map(p => ({ ...p, type: 'project' }));
+      const calendars = calendarsAll
+        .filter(c => c.author === userId || (Array.isArray(c.participants) && c.participants.includes(userId)))
+        .map(c => ({ ...c, type: 'calendar' }));
 
       let combined = [
         ...tasks,
@@ -170,7 +174,8 @@ module.exports = ({ cooler }) => {
         ...marketItems,
         ...reports,
         ...jobs,
-        ...projects
+        ...projects,
+        ...calendars
       ];
 
       let filtered;
@@ -188,6 +193,7 @@ module.exports = ({ cooler }) => {
         else if (filter === 'closed') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'CLOSED');
         else if (filter === 'jobs') filtered = filtered.filter(i => i.type === 'job');
         else if (filter === 'projects') filtered = filtered.filter(i => i.type === 'project');
+        else if (filter === 'calendars') filtered = filtered.filter(i => i.type === 'calendar');
       }
 
       filtered.sort((a, b) => {
@@ -213,6 +219,7 @@ module.exports = ({ cooler }) => {
           reports: mainItems.filter(i => i.type === 'report').length,
           jobs: mainItems.filter(i => i.type === 'job').length,
           projects: mainItems.filter(i => i.type === 'project').length,
+          calendars: mainItems.filter(i => i.type === 'calendar').length,
           discarded: discarded.length
         }
       };

@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, padsModel }) => {
   let ssb;
   const openSsb = async () => {
     if (!ssb) ssb = await cooler.open();
@@ -149,6 +149,21 @@ module.exports = ({ cooler }) => {
           const prev = counts.get(k);
           if (!prev) counts.set(k, { name: display, count: 1 });
           else counts.set(k, { name: prev.name || display, count: prev.count + 1 });
+        }
+      }
+
+      if (padsModel) {
+        const viewerId = '';
+        const pads = await padsModel.listAll({ filter: 'all', viewerId }).catch(() => []);
+        for (const pad of pads) {
+          if (!Array.isArray(pad.tags)) continue;
+          const uniquePadTags = new Set(pad.tags.map(tagKey).filter(Boolean));
+          for (const k of uniquePadTags) {
+            const display = normalizeTag(pad.tags.find(t => tagKey(t) === k) || k) || k;
+            const prev = counts.get(k);
+            if (!prev) counts.set(k, { name: display, count: 1 });
+            else counts.set(k, { name: prev.name || display, count: prev.count + 1 });
+          }
         }
       }
 

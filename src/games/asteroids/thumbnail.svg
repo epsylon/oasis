@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220">
+  <rect width="400" height="220" fill="#000"/>
+  <circle cx="30" cy="20" r="1.5" fill="#fff" opacity="0.8"/>
+  <circle cx="80" cy="45" r="1" fill="#fff" opacity="0.6"/>
+  <circle cx="120" cy="10" r="2" fill="#fff" opacity="0.9"/>
+  <circle cx="200" cy="30" r="1" fill="#fff" opacity="0.7"/>
+  <circle cx="320" cy="15" r="1.5" fill="#fff" opacity="0.8"/>
+  <circle cx="370" cy="50" r="1" fill="#fff" opacity="0.6"/>
+  <circle cx="50" cy="180" r="1" fill="#fff" opacity="0.5"/>
+  <circle cx="350" cy="190" r="1.5" fill="#fff" opacity="0.7"/>
+  <circle cx="280" cy="8" r="1" fill="#fff" opacity="0.8"/>
+  <polygon points="85,60 110,45 140,55 155,80 140,110 110,120 75,105 65,80" fill="#888" stroke="#aaa" stroke-width="2"/>
+  <polygon points="240,30 265,22 290,35 300,60 285,85 255,90 230,75 225,50" fill="#777" stroke="#999" stroke-width="2"/>
+  <polygon points="310,130 330,118 355,128 365,152 350,172 325,178 305,165 298,142" fill="#999" stroke="#bbb" stroke-width="2"/>
+  <polygon points="40,130 58,120 75,132 80,155 65,170 43,172 28,160 25,140" fill="#666" stroke="#888" stroke-width="2"/>
+  <polygon points="200,105 196,95 200,92 204,95 200,108" fill="#FFA500" stroke="#FFA500" stroke-width="1"/>
+  <polygon points="196,108 192,118 200,112 208,118 204,108" fill="#FFA500"/>
+  <circle cx="200" cy="96" r="4" fill="#fff" stroke="#FFA500" stroke-width="1.5"/>
+  <rect x="192" y="107" width="4" height="10" fill="#ff6600" opacity="0.8"/>
+  <rect x="204" y="107" width="4" height="10" fill="#ff6600" opacity="0.8"/>
+  <rect x="197" y="115" width="6" height="14" fill="#ff3300" opacity="0.6"/>
+  <line x1="200" y1="80" x2="200" y2="50" stroke="#fff" stroke-width="2" opacity="0.8"/>
+  <circle cx="200" cy="46" r="3" fill="#fff" opacity="0.9"/>
+  <text x="200" y="215" font-family="monospace" font-size="12" fill="#FFA500" text-anchor="middle">SCORE: 0</text>
+</svg>

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PingPong</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#topbar a:hover { text-decoration: underline; }
+canvas { display: block; flex: 1; align-self: stretch; min-height: 0; width: 100%; background: #000; border: 1px solid #333; }
+#msg { font-size: 18px; color: #FFA500; margin: 6px; text-align: center; min-height: 28px; }
+#controls { color: #888; font-size: 13px; text-align: center; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">PINGPONG</span>
+</div>
+<canvas id="c" width="640" height="400"></canvas>
+<div id="msg">Press SPACE to start</div>
+<div id="controls">&#8593;&#8595; or W/S — Move paddle &nbsp;|&nbsp; First to 5 wins</div>
+<div id="scoreSubmit" style="display:none;text-align:center;margin:6px">
+  <form method="POST" action="/games/submit-score" target="_top">
+    <input type="hidden" name="game" value="pingpong">
+    <input type="hidden" id="scoreInput" name="score" value="0">
+    <button type="submit" style="background:#1a3a1a;border:1px solid #FFA500;color:#FFA500;padding:6px 16px;cursor:pointer;font-family:monospace;font-size:14px">Submit Score to Hall of Fame</button>
+  </form>
+</div>
+<script>
+document.addEventListener("keydown", e => { if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space"].includes(e.code)) e.preventDefault(); });
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const PADDLE_W = 12, PADDLE_H = 70, PADDLE_OFF = 18;
+const BALL_R = 8;
+const WIN_SCORE = 5;
+
+let state = 'idle';
+let playerScore = 0, aiScore = 0;
+let player, ai, ball;
+let frames = 0;
+
+function initGame() {
+  player = { x: PADDLE_OFF, y: H / 2 - PADDLE_H / 2, w: PADDLE_W, h: PADDLE_H, speed: 5 };
+  ai = { x: W - PADDLE_OFF - PADDLE_W, y: H / 2 - PADDLE_H / 2, w: PADDLE_W, h: PADDLE_H, speed: 3.8 };
+  resetBall(1);
+  frames = 0;
+}
+
+function resetBall(dir) {
+  const angle = (Math.random() * 0.5 - 0.25) * Math.PI;
+  const speed = 5;
+  ball = {
+    x: W / 2, y: H / 2,
+    vx: dir * speed * Math.cos(angle),
+    vy: speed * Math.sin(angle),
+    r: BALL_R
+  };
+}
+
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (state === 'idle' || state === 'over') {
+      playerScore = 0; aiScore = 0;
+      initGame();
+      state = 'play';
+      document.getElementById('msg').textContent = '';
+    }
+  }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+function paddleCollide(ball, pad) {
+  return ball.x - ball.r < pad.x + pad.w &&
+         ball.x + ball.r > pad.x &&
+         ball.y + ball.r > pad.y &&
+         ball.y - ball.r < pad.y + pad.h;
+}
+
+function loop() {
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([12, 10]);
+  ctx.beginPath();
+  ctx.moveTo(W / 2, 0);
+  ctx.lineTo(W / 2, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (state === 'play') {
+    if ((keys['ArrowUp'] || keys['KeyW']) && player.y > 0) player.y -= player.speed;
+    if ((keys['ArrowDown'] || keys['KeyS']) && player.y + player.h < H) player.y += player.speed;
+
+    const aiCenter = ai.y + ai.h / 2;
+    const aiSpeed = ai.speed + Math.min(frames * 0.001, 1);
+    if (aiCenter < ball.y - 4) ai.y = Math.min(H - ai.h, ai.y + aiSpeed);
+    else if (aiCenter > ball.y + 4) ai.y = Math.max(0, ai.y - aiSpeed);
+
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    if (ball.y - ball.r < 0) { ball.y = ball.r; ball.vy = Math.abs(ball.vy); }
+    if (ball.y + ball.r > H) { ball.y = H - ball.r; ball.vy = -Math.abs(ball.vy); }
+
+    if (paddleCollide(ball, player)) {
+      ball.x = player.x + player.w + ball.r;
+      const rel = (ball.y - (player.y + player.h / 2)) / (player.h / 2);
+      const speed = Math.min(Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy) + 0.3, 14);
+      const angle = rel * 0.75;
+      ball.vx = speed * Math.cos(angle);
+      ball.vy = speed * Math.sin(angle);
+    }
+
+    if (paddleCollide(ball, ai)) {
+      ball.x = ai.x - ball.r;
+      const rel = (ball.y - (ai.y + ai.h / 2)) / (ai.h / 2);
+      const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+      const angle = rel * 0.75;
+      ball.vx = -speed * Math.cos(angle);
+      ball.vy = speed * Math.sin(angle);
+    }
+
+    if (ball.x - ball.r < 0) {
+      aiScore++;
+      if (aiScore >= WIN_SCORE) { state = 'over'; document.getElementById('msg').textContent = 'AI WINS — Press SPACE to retry'; }
+      else resetBall(1);
+    }
+    if (ball.x + ball.r > W) {
+      playerScore++;
+      if (playerScore >= WIN_SCORE) { state = 'over'; document.getElementById('msg').textContent = 'YOU WIN! — Press SPACE to play again'; document.getElementById('scoreInput').value = playerScore * 100; document.getElementById('scoreSubmit').style.display = 'block'; }
+      else resetBall(-1);
+    }
+
+    frames++;
+  }
+
+  ctx.fillStyle = '#FFA500';
+  ctx.beginPath(); ctx.roundRect(player.x, player.y, player.w, player.h, 4); ctx.fill();
+
+  ctx.fillStyle = '#4CAF50';
+  ctx.beginPath(); ctx.roundRect(ai.x, ai.y, ai.w, ai.h, 4); ctx.fill();
+
+  if (state !== 'idle') {
+    ctx.fillStyle = '#fff';
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = '#fff';
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.font = 'bold 48px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#FFA500';
+  ctx.fillText(playerScore, W / 4, 60);
+  ctx.fillStyle = '#4CAF50';
+  ctx.fillText(aiScore, W * 3 / 4, 60);
+
+  ctx.font = '13px monospace';
+  ctx.fillStyle = '#555';
+  ctx.fillText('YOU', W / 4, 78);
+  ctx.fillText('AI', W * 3 / 4, 78);
+
+  if (state === 'idle') {
+    ctx.font = '22px monospace';
+    ctx.fillStyle = '#FFA500';
+    ctx.fillText('PINGPONG', W / 2, H / 2 - 10);
+    ctx.font = '16px monospace';
+    ctx.fillStyle = '#888';
+    ctx.fillText('Press SPACE to start', W / 2, H / 2 + 20);
+  }
+
+  requestAnimationFrame(loop);
+}
+
+initGame();
+loop();
+</script>
+</body>
+</html>

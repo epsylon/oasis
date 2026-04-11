@@ -12,14 +12,16 @@ const FILTER_LABELS = {
   transfer: i18n.typeTransfer, market: i18n.typeMarket, job: i18n.typeJob, tribe: i18n.typeTribe,
   project: i18n.typeProject, banking: i18n.typeBanking, bankWallet: i18n.typeBankWallet, bankClaim: i18n.typeBankClaim,
   aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts,
-  map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product'
+  map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product',
+  pad: i18n.typePad || 'PAD', chat: i18n.typeChat || 'CHAT', gameScore: i18n.typeGameScore || 'GAME SCORE',
+  calendar: i18n.typeCalendar || 'CALENDAR'
 };
 
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone'];
-const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'parliament', 'courts'];
+const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
-const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia', 'shop'];
-const CAT_BLOCK4  = ['forum', 'bookmark', 'image', 'video', 'audio', 'document', 'map'];
+const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
+const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map'];
 
 const SEARCH_FIELDS = ['author','id','from','to'];
 
@@ -103,6 +105,7 @@ const getViewDetailsAction = (type, block) => {
     case 'job': return `/jobs/${encodeURIComponent(block.id)}`;
     case 'project': return `/projects/${encodeURIComponent(block.id)}`;
     case 'report': return `/reports/${encodeURIComponent(block.id)}`;
+    case 'calendar': return `/calendars/${encodeURIComponent(block.id)}`;
     case 'bankWallet': return `/wallet`;
     case 'bankClaim': return `/banking${block.content?.epochId ? `/epoch/${encodeURIComponent(block.content.epochId)}` : ''}`;
     case 'parliamentTerm': return `/parliament`;
@@ -123,6 +126,9 @@ const getViewDetailsAction = (type, block) => {
     case 'mapMarker': return block.content?.mapId ? `/maps/${encodeURIComponent(block.content.mapId)}` : `/maps`;
     case 'shop': return `/shops/${encodeURIComponent(block.id)}`;
     case 'shopProduct': return `/shops/product/${encodeURIComponent(block.id)}`;
+    case 'pad': return `/pads/${encodeURIComponent(block.id)}`;
+    case 'chat': return `/chats/${encodeURIComponent(block.id)}`;
+    case 'gameScore': return `/games?filter=scoring`;
     default: return null;
   }
 };
@@ -139,7 +145,9 @@ const TYPE_COLORS = {
   courtsCase:'#c0392b', courtsEvidence:'#c0392b', courtsAnswer:'#c0392b',
   courtsVerdict:'#c0392b', courtsSettlement:'#c0392b', courtsNomination:'#c0392b',
   map:'#27ae60', mapMarker:'#27ae60',
-  shop:'#e67e22', shopProduct:'#e67e22'
+  shop:'#e67e22', shopProduct:'#e67e22',
+  pad:'#2ecc71', chat:'#3498db', gameScore:'#f39c12',
+  calendar:'#e74c3c'
 };
 
 const renderBlockDiagram = (blocks, qs) => {

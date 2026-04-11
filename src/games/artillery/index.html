@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Artillery</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#ui { display: flex; gap: 16px; padding: 8px; font-size: 14px; color: #FFA500; flex-wrap: wrap; justify-content: center; }
+canvas { display: block; flex: 1; align-self: stretch; min-height: 0; width: 100%; background: #000; border: 1px solid #333; }
+#controls-panel { display: flex; gap: 16px; align-items: center; padding: 8px; flex-wrap: wrap; justify-content: center; }
+#controls-panel label { color: #aaa; font-size: 13px; }
+#controls-panel input[type=range] { width: 120px; }
+#controls-panel span { color: #FFA500; font-size: 14px; min-width: 40px; }
+#fire-btn { background: #3a0000; border: 1px solid #f44; color: #f44; padding: 6px 20px; cursor: pointer; font-family: monospace; font-size: 15px; font-weight: bold; }
+#fire-btn:hover { background: #5a0000; }
+#msg { font-size: 15px; color: #FFA500; margin: 4px; text-align: center; min-height: 22px; }
+#scoreSubmit { text-align: center; margin: 6px; }
+#scoreSubmit button { background: #1a3a1a; border: 1px solid #FFA500; color: #FFA500; padding: 6px 16px; cursor: pointer; font-family: monospace; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">ARTILLERY</span>
+</div>
+<div id="ui">
+  <span>ROUND: <b id="roundEl">1/5</b></span>
+  <span>SHOTS: <b id="shotsEl">0</b></span>
+  <span>SCORE: <b id="scoreEl">0</b></span>
+  <span>WIND: <b id="windEl">0</b></span>
+  <span>BEST: <b id="bestEl">-</b></span>
+</div>
+<canvas id="c" width="800" height="400"></canvas>
+<div id="controls-panel">
+  <label>Angle: <input type="range" id="angleInput" min="1" max="89" value="45"> <span id="angleVal">45</span>°</label>
+  <label>Power: <input type="range" id="powerInput" min="1" max="100" value="60"> <span id="powerVal">60</span></label>
+  <button id="fire-btn">FIRE!</button>
+</div>
+<div id="msg">Adjust angle and power, then fire!</div>
+<div id="scoreSubmit" style="display:none">
+  <form method="POST" action="/games/submit-score" target="_top">
+    <input type="hidden" name="game" value="artillery">
+    <input type="hidden" id="scoreInput" name="score" value="0">
+    <button type="submit">Submit Score to Hall of Fame</button>
+  </form>
+</div>
+<script>
+document.addEventListener("keydown", e => { if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space"].includes(e.code)) e.preventDefault(); });
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const TOTAL_ROUNDS = 5;
+let round = 1, shots = 0, score = 0, roundShots = 0;
+let terrain = [], cannonY = 0, targetX = 0, targetY = 0, wind = 0;
+let lastPath = [], lastHit = null, hitFlag = false;
+let gameOver = false;
+let best = parseInt(localStorage.getItem('artillery_best') || '-1');
+
+function seededRand(seed) {
+  let s = seed;
+  return function() { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+}
+
+function generateTerrain(seed) {
+  const rng = seededRand(seed);
+  const pts = new Array(80).fill(0);
+  pts[0] = 150 + rng() * 80;
+  pts[79] = 150 + rng() * 80;
+  function subdivide(arr, lo, hi, rough) {
+    if (hi - lo <= 1) return;
+    const mid = Math.floor((lo + hi) / 2);
+    arr[mid] = (arr[lo] + arr[hi]) / 2 + (rng() - 0.5) * rough;
+    subdivide(arr, lo, mid, rough * 0.6);
+    subdivide(arr, mid, hi, rough * 0.6);
+  }
+  subdivide(pts, 0, 79, 100);
+  for (let i = 0; i < 80; i++) pts[i] = Math.max(60, Math.min(H - 30, pts[i]));
+  return pts;
+}
+
+function terrainHeightAt(x) {
+  const idx = Math.floor(x / (W / 79));
+  const clamped = Math.max(0, Math.min(78, idx));
+  return terrain[clamped];
+}
+
+function startRound() {
+  const seed = Date.now() + round * 1337;
+  terrain = generateTerrain(seed);
+  const rng = seededRand(seed + 42);
+  targetX = Math.floor(W * 0.6 + rng() * W * 0.3);
+  targetY = terrainHeightAt(targetX) - 1;
+  wind = (rng() - 0.5) * 16;
+  roundShots = 0;
+  lastPath = []; lastHit = null; hitFlag = false;
+  document.getElementById('windEl').textContent = wind.toFixed(1);
+  document.getElementById('roundEl').textContent = `${round}/${TOTAL_ROUNDS}`;
+  document.getElementById('msg').textContent = `Round ${round} — Adjust angle and power, then fire!`;
+}
+
+function calcTrajectory(angleDeg, pw) {
+  const angle = angleDeg * Math.PI / 180;
+  let vx = Math.cos(angle) * pw * 0.45;
+  let vy = -Math.sin(angle) * pw * 0.45;
+  const gravity = 0.18;
+  const windA = wind * 0.012;
+  const cannonX = 30;
+  const startY = terrainHeightAt(cannonX) - 6;
+  let x = cannonX, y = startY;
+  const path = [[x, y]];
+  let hitX = null;
+  for (let i = 0; i < 500; i++) {
+    vx += windA; vy += gravity;
+    x += vx; y += vy;
+    if (x < 0 || x > W) break;
+    if (y > H) break;
+    const th = terrainHeightAt(x);
+    if (y >= th) { hitX = x; break; }
+    path.push([x, y]);
+  }
+  return { path, hitX };
+}
+
+function fire() {
+  if (gameOver) return;
+  lastPath = [];
+  lastHit = null;
+  hitFlag = false;
+  const angle = parseInt(document.getElementById('angleInput').value);
+  const pw = parseInt(document.getElementById('powerInput').value);
+  const { path, hitX } = calcTrajectory(angle, pw);
+  lastPath = path;
+  lastHit = hitX;
+  shots++; roundShots++;
+  document.getElementById('shotsEl').textContent = shots;
+  if (hitX !== null && Math.abs(hitX - targetX) < 28) {
+    hitFlag = true;
+    const roundScore = Math.max(10, 100 - (roundShots - 1) * 15) + (roundShots === 1 ? 50 : 0);
+    score += roundScore;
+    document.getElementById('scoreEl').textContent = score;
+    document.getElementById('msg').textContent = `HIT! +${roundScore} pts. ${round < TOTAL_ROUNDS ? 'Next round...' : 'Game over!'}`;
+    setTimeout(() => {
+      lastPath = []; lastHit = null; hitFlag = false;
+      if (round < TOTAL_ROUNDS) { round++; startRound(); } else { endGame(); }
+    }, 1400);
+  } else {
+    const dist = hitX ? Math.abs(Math.round(hitX - targetX)) : '?';
+    document.getElementById('msg').textContent = `Miss! Distance: ${dist}px from target.`;
+  }
+}
+
+function endGame() {
+  gameOver = true;
+  if (best < 0 || score > best) {
+    best = score;
+    localStorage.setItem('artillery_best', best);
+    document.getElementById('bestEl').textContent = best;
+  }
+  document.getElementById('msg').textContent = `All rounds done! Final score: ${score}. SPACE = new game`;
+  document.getElementById('scoreInput').value = score;
+  document.getElementById('scoreSubmit').style.display = 'block';
+}
+
+function newGame() {
+  round = 1; shots = 0; score = 0; roundShots = 0; gameOver = false;
+  document.getElementById('scoreEl').textContent = '0';
+  document.getElementById('shotsEl').textContent = '0';
+  document.getElementById('scoreSubmit').style.display = 'none';
+  startRound();
+}
+
+document.getElementById('angleInput').addEventListener('input', function() { document.getElementById('angleVal').textContent = this.value; });
+document.getElementById('powerInput').addEventListener('input', function() { document.getElementById('powerVal').textContent = this.value; });
+document.getElementById('fire-btn').addEventListener('click', fire);
+document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); if (gameOver) newGame(); else fire(); } });
+
+if (best >= 0) document.getElementById('bestEl').textContent = best;
+
+function drawTerrain() {
+  ctx.fillStyle = '#4a7c3f';
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  for (let i = 0; i < 80; i++) {
+    const x = i * (W / 79);
+    ctx.lineTo(x, terrain[i]);
+  }
+  ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#2d5a25'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 80; i++) ctx.lineTo(i * (W / 79), terrain[i]);
+  ctx.stroke();
+}
+
+function drawSky() {
+  const grad = ctx.createLinearGradient(0, 0, 0, H * 0.7);
+  grad.addColorStop(0, '#000020');
+  grad.addColorStop(1, '#1a3a6a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawCannon() {
+  const cx = 30, cy = terrainHeightAt(30);
+  const angle = parseInt(document.getElementById('angleInput').value) * Math.PI / 180;
+  ctx.fillStyle = '#888';
+  ctx.fillRect(cx - 10, cy - 8, 20, 10);
+  ctx.strokeStyle = '#aaa'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 3);
+  ctx.lineTo(cx + Math.cos(angle) * 28, cy - 3 - Math.sin(angle) * 28);
+  ctx.stroke();
+  ctx.fillStyle = '#666';
+  ctx.beginPath(); ctx.arc(cx, cy + 2, 8, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawTarget() {
+  const x = targetX, y = targetY;
+  ctx.strokeStyle = '#f44'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x - 14, y); ctx.lineTo(x + 14, y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y - 14); ctx.lineTo(x, y + 14); ctx.stroke();
+  ctx.fillStyle = '#f44';
+  ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#f44'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 22, y - 16); ctx.lineTo(x + 22, y - 5); ctx.stroke();
+  ctx.fillStyle = '#f44';
+  ctx.beginPath(); ctx.moveTo(x + 22, y - 16); ctx.lineTo(x + 34, y - 10); ctx.lineTo(x + 22, y - 5); ctx.fill();
+}
+
+function drawTrajectory() {
+  if (lastPath.length < 2) return;
+  ctx.strokeStyle = hitFlag ? 'rgba(100,255,100,0.6)' : 'rgba(255,200,0,0.5)';
+  ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  lastPath.forEach((pt, i) => i === 0 ? ctx.moveTo(pt[0], pt[1]) : ctx.lineTo(pt[0], pt[1]));
+  ctx.stroke(); ctx.setLineDash([]);
+  if (lastHit !== null) {
+    const hy = terrainHeightAt(lastHit);
+    ctx.fillStyle = hitFlag ? '#0f0' : '#f80';
+    ctx.beginPath(); ctx.arc(lastHit, hy, 8, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawWind() {
+  const arrow = wind >= 0 ? '→' : '←';
+  const strength = Math.abs(wind).toFixed(1);
+  ctx.fillStyle = '#87CEEB'; ctx.font = '13px monospace';
+  ctx.fillText(`WIND ${arrow} ${strength}`, W - 130, 22);
+}
+
+newGame();
+
+function loop() {
+  drawSky();
+  if (terrain.length) {
+    drawTerrain();
+    drawTrajectory();
+    drawCannon();
+    drawTarget();
+    drawWind();
+  }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

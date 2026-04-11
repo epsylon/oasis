@@ -136,6 +136,18 @@ exports.favoritesView = async (items, filter = "all", counts = {}) => {
             `${i18n.favoritesFilterMaps} (${c.maps || 0})`
           ),
           button(
+            { type: "submit", name: "filter", value: "pads", class: filter === "pads" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterPads || "PADS"} (${c.pads || 0})`
+          ),
+          button(
+            { type: "submit", name: "filter", value: "chats", class: filter === "chats" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterChats || "CHATS"} (${c.chats || 0})`
+          ),
+          button(
+            { type: "submit", name: "filter", value: "calendars", class: filter === "calendars" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterCalendars || "CALENDARS"} (${c.calendars || 0})`
+          ),
+          button(
             { type: "submit", name: "filter", value: "videos", class: filter === "videos" ? "filter-btn active" : "filter-btn" },
             `${i18n.favoritesFilterVideos} (${c.videos || 0})`
           )

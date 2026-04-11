@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" style="background:#000">
+  <rect width="400" height="220" fill="#000"/>
+  <rect x="10" y="10" width="380" height="200" rx="6" fill="#0a0a0a" stroke="#1a1a1a" stroke-width="1"/>
+
+  <line x1="200" y1="30" x2="200" y2="220" stroke="#2b6fff" stroke-width="1" opacity="0.4"/>
+  <line x1="10" y1="110" x2="390" y2="110" stroke="#2b6fff" stroke-width="1" opacity="0.4"/>
+
+  <circle cx="200" cy="50" r="5" fill="#4a9eff"/>
+  <circle cx="200" cy="50" r="2" fill="#fff"/>
+
+  <line x1="200" y1="50" x2="148" y2="128" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <line x1="148" y1="128" x2="220" y2="185" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+
+  <circle cx="148" cy="128" r="10" fill="#ff6b4a"/>
+  <circle cx="148" cy="128" r="10" fill="none" stroke="#fff" stroke-width="1.5"/>
+
+  <circle cx="220" cy="185" r="12" fill="#4aff6b"/>
+  <circle cx="220" cy="185" r="12" fill="none" stroke="#fff" stroke-width="1.5"/>
+
+  <path d="M 200 50 Q 175 90 148 128 Q 130 155 120 170 Q 110 185 130 192 Q 155 200 175 185 Q 200 168 220 152 Q 245 135 255 118 Q 265 100 248 88 Q 228 76 210 88 Q 192 100 178 115" stroke="#ff6b4a" stroke-width="1.2" fill="none" opacity="0.6"/>
+  <path d="M 148 128 Q 170 148 195 162 Q 218 175 232 180 Q 248 184 255 175 Q 265 163 258 148 Q 250 132 235 125 Q 218 117 205 122 Q 190 128 182 138 Q 172 150 168 162" stroke="#4aff6b" stroke-width="1.5" fill="none" opacity="0.75"/>
+
+  <path d="M 270 85 Q 278 78 278 85 Q 278 92 270 92" stroke="#ff9500" stroke-width="1.5" fill="none" opacity="0.9"/>
+  <path d="M 278 80 Q 290 72 290 85 Q 290 98 278 90" stroke="#ff9500" stroke-width="1.5" fill="none" opacity="0.7"/>
+  <path d="M 290 75 Q 305 65 305 85 Q 305 105 290 95" stroke="#ff9500" stroke-width="1.5" fill="none" opacity="0.5"/>
+
+  <path d="M 285 128 Q 293 121 293 128 Q 293 135 285 135" stroke="#4aff6b" stroke-width="1.5" fill="none" opacity="0.9"/>
+  <path d="M 293 123 Q 305 115 305 128 Q 305 141 293 133" stroke="#4aff6b" stroke-width="1.5" fill="none" opacity="0.7"/>
+
+  <text x="200" y="213" font-family="'Courier New', monospace" font-size="13" fill="#ff9500" text-anchor="middle" font-weight="bold" letter-spacing="3">AUDIOPENDULUM</text>
+</svg>

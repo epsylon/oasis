@@ -2,6 +2,11 @@ const { div, h2, p, section, button, form, input, ul, li, a, h3, span, strong, t
 const { template, i18n } = require('./main_views');
 
 Object.assign(i18n, {
+  statsChat: "Chats",
+  statsChatMessage: "Chat messages",
+  statsPad: "Pads",
+  statsPadEntry: "Pad entries",
+  statsGameScore: "Game scores",
   statsParliamentCandidature: "Parliament candidatures",
   statsParliamentTerm: "Parliament terms",
   statsParliamentProposal: "Parliament proposals",
@@ -29,6 +34,7 @@ exports.statsView = (stats, filter) => {
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project',
     'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
+    'chat', 'chatMessage', 'pad', 'padEntry', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
@@ -54,6 +60,14 @@ exports.statsView = (stats, filter) => {
     map: i18n.statsMap,
     shop: i18n.statsShop,
     shopProduct: i18n.statsShopProduct,
+    chat: i18n.statsChat,
+    chatMessage: i18n.statsChatMessage,
+    pad: i18n.statsPad,
+    padEntry: i18n.statsPadEntry,
+    gameScore: i18n.statsGameScore,
+    calendar: i18n.statsCalendar,
+    calendarDate: i18n.statsCalendarDate,
+    calendarNote: i18n.statsCalendarNote,
     parliamentCandidature: i18n.statsParliamentCandidature,
     parliamentTerm: i18n.statsParliamentTerm,
     parliamentProposal: i18n.statsParliamentProposal,
@@ -266,11 +280,19 @@ exports.statsView = (stats, filter) => {
               div({ style: blockStyle },
                 h2(`${i18n.statsNetworkContent}: ${totalContent}`),
                 ul(
-                  types.filter(t => t !== 'karmaScore' && t !== 'shopProduct').map(t => {
+                  types.filter(t => t !== 'karmaScore' && t !== 'shopProduct' && t !== 'padEntry' && t !== 'chatMessage').map(t => {
                     if (C(stats, t) <= 0) return null;
                     if (t === 'shop') return li(
                       span(`${labels[t]}: ${C(stats, t)}`),
                       ul([li(`${labels.shopProduct}: ${C(stats, 'shopProduct')}`)])
+                    );
+                    if (t === 'pad') return li(
+                      span(`${labels[t]}: ${C(stats, t)}`),
+                      ul([li(`${labels.padEntry}: ${C(stats, 'padEntry')}`)])
+                    );
+                    if (t === 'chat') return li(
+                      span(`${labels[t]}: ${C(stats, t)}`),
+                      ul([li(`${labels.chatMessage}: ${C(stats, 'chatMessage')}`)])
                     );
                     if (t !== 'tribe') return li(`${labels[t]}: ${C(stats, t)}`);
                     return li(

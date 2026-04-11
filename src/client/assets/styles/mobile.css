@@ -496,3 +496,10 @@ h3 { font-size: 1em !important; }
 [style*="width:50%"] {
   width: 100% !important;
 }
+.inhabitant-karma-ubi .ubi-line{display:block;font-size:0.9em}
+.pad-editor-container{flex-direction:column !important}
+.pad-editor-area,.pad-members-list{width:100% !important;min-width:unset !important}
+.chat-main-split{flex-direction:column !important}
+.chat-messages-column,.chat-participants-column{width:100% !important;min-width:unset !important;flex:unset !important}
+.games-grid{grid-template-columns:1fr !important}
+.game-card{width:100% !important}

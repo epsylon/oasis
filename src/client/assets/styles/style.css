@@ -3654,7 +3654,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 
 .tribe-card-members {
-  border: 1px solid #555;
+  border: none;
   border-radius: 4px;
   padding: 8px;
   margin: 6px 0;
@@ -3688,6 +3688,14 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   background: #ffa300;
   color: #000;
 }
+.tribe-action-btn.danger-btn { border-color: #d9534f; color: #d9534f; }
+.tribe-action-btn.danger-btn:hover { background: #d9534f; color: #000; }
+
+.calendar-interval-block { margin: 8px 0 16px; }
+.calendar-interval-label { display: block; margin-bottom: 6px; }
+.calendar-interval-until { margin-top: 10px; }
+.calendar-interval-row { display: flex; gap: 16px; flex-wrap: wrap; border: 0px; }
+.calendar-interval-option { display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
 
 .tribe-thumb-grid {
   display: grid;
@@ -4876,3 +4884,136 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .shop-product-actions:empty {
   display: none;
 }
+.ubi-available{color:#4CAF50;font-weight:bold}
+.ubi-unavailable{color:#F44336;font-weight:bold}
+.banking-ubi .card-field{margin:4px 0}
+.pad-status-open{font-weight:bold}
+.pad-status-invite{color:#FFA500;font-weight:bold}
+.pad-status-closed{font-weight:bold}
+.pad-deadline{color:#FFA500;font-size:0.9rem}
+.pad-editor-container{display:flex;gap:16px;margin-top:12px}
+.pad-editor-area{flex:2;display:flex;flex-direction:column;gap:8px}
+.pad-editor-area textarea{width:100%;min-height:200px;background:#1a1a1a;color:#eee;border:1px solid #444;border-radius:4px;padding:10px;font-family:monospace;font-size:0.95rem;resize:vertical;box-sizing:border-box}
+.pad-members-list{flex:1;min-width:160px;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:10px}
+.pad-members-list h4{margin:0 0 8px 0;color:#aaa;font-size:0.85rem;text-transform:uppercase}
+.pad-member-item{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.85rem}
+.pad-color-indicator{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.pad-entries{margin-top:16px;display:flex;flex-direction:column;gap:8px}
+.pad-entry{padding:8px 12px;border-left:4px solid #444;background:#1a1a1a;border-radius:0 4px 4px 0}
+.pad-entry-header{font-size:0.8rem;color:#888;margin-bottom:4px}
+.pad-entry-text{white-space:pre-wrap;word-break:break-word;font-family:monospace;font-size:0.9rem}
+.pad-invite-section{margin-top:12px;padding:12px;background:#1a1a1a;border:1px solid #333;border-radius:4px}
+.pad-invite-section input[type="text"]{width:100%;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:8px;box-sizing:border-box;margin-bottom:8px}
+.chat-main-split{display:flex;gap:16px;width:100%}
+.chat-messages-column{flex:2;min-width:0;display:flex;flex-direction:column;gap:8px}
+.chat-participants-column{flex:1;min-width:140px;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:12px}
+.chat-participants-column h2{margin:0 0 8px 0;color:#aaa;font-size:0.85rem;text-transform:uppercase;font-weight:normal}
+.chat-participants-list{list-style:none;padding:0;margin:0}
+.chat-participants-list li{padding:4px 0;font-size:0.85rem}
+.chat-message-form{background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:10px}
+.chat-message-form textarea{width:100%;box-sizing:border-box;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:8px;resize:vertical;font-family:inherit}
+.chat-messages-list{display:flex;flex-direction:column;gap:4px}
+.chat-message{padding:6px 10px;border-radius:4px;background:#1a1a1a;word-break:break-word;border:none}
+.chat-message-author{border-left-color:#FFA500;background:#1f1800}
+.chat-message-self{border-left-color:#888;background:#181818}
+.chat-message-meta{font-size:0.8rem;color:#888;border:none}
+.chat-message-date{color:#666}
+.chat-message-sender a{color:#aaa}
+.chat-message-text{display:block;margin-top:2px;font-size:0.9rem;white-space:pre-wrap;word-break:break-word}
+.calendar-note-card{position:relative;padding:10px 80px 10px 10px;min-height:56px}
+.calendar-note-delete{position:absolute;top:8px;right:8px;margin:0}
+.calendar-note-delete button{padding:4px 10px;font-size:0.8rem}
+.chat-no-messages{color:#666;font-style:italic;padding:12px 0}
+.chat-join-section{margin-top:12px;padding:12px;background:#1a1a1a;border:1px solid #333;border-radius:4px}
+.chat-invite-form input[type="text"]{width:100%;background:#111;color:#eee;border:1px solid #555;border-radius:4px;padding:8px;box-sizing:border-box;margin-bottom:8px}
+.games-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-top:16px}
+.game-card{border:1px solid #333;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;background:#111}
+.game-card-media{width:100%;max-height:180px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
+.game-card-media img{width:100%;max-height:180px;object-fit:cover}
+.game-card-body{padding:14px;display:flex;flex-direction:column;gap:8px;flex:1}
+.game-card-title{margin:0;font-size:1.1rem;color:#FFA500}
+.game-card-desc{margin:0;font-size:0.9rem;color:#ccc;flex:1}
+.game-card-actions{display:flex;justify-content:center;margin-top:8px}
+.hall-of-fame-table{width:100%;border-collapse:collapse;font-size:0.9rem}
+.hall-of-fame-table th{color:#FFA500;text-align:left;padding:4px 8px;border-bottom:1px solid #444}
+.hall-of-fame-table td{padding:4px 8px;color:#ccc;border-bottom:1px solid #222}
+.hall-of-fame-table tr:hover td{background:#1a1a1a}
+
+.activity-filter-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-bottom:24px}
+.activity-filter-col{display:flex;flex-direction:column;gap:8px}
+
+.visit-btn-centered{display:flex;justify-content:center;margin-top:10px}
+
+.pad-editor-white{width:100%;box-sizing:border-box;background:#fff;color:#111;border:1px solid #aaa;border-radius:4px;padding:10px;resize:vertical;font-family:inherit;font-size:0.95rem}
+.pad-readonly-text{background:#fff;color:#111;border:1px solid #aaa;border-radius:4px;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:0.95rem}
+.pad-version-list{margin-top:12px}
+.pad-version-item{display:flex;flex-direction:column;gap:4px;padding:8px;border-bottom:1px solid #333;font-size:0.85rem}
+.pad-version-date{color:#888}
+.pad-version-author a{color:#FFA500}
+.pad-version-link{color:#aaa;text-decoration:underline;cursor:pointer}
+.pad-author-color-0{background-color:#e74c3c}
+.pad-author-color-1{background-color:#3498db}
+.pad-author-color-2{background-color:#2ecc71}
+.pad-author-color-3{background-color:#f39c12}
+.pad-author-color-4{background-color:#9b59b6}
+.pad-author-color-5{background-color:#1abc9c}
+.pad-author-color-6{background-color:#e67e22}
+.pad-author-color-7{background-color:#e91e63}
+.pad-author-color-8{background-color:#00bcd4}
+.pad-author-color-9{background-color:#8bc34a}
+.pad-author-color-none{background-color:#888}
+.pad-entry-author{display:block;font-size:.75rem;margin-bottom:4px;opacity:.75}
+.pad-author-swatch{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:6px;vertical-align:middle;border:1px solid #000}
+.pad-readonly-colored{background:#fff;color:#111;padding:12px;border-radius:4px;min-height:120px;white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:.95rem;border:1px solid #aaa;margin-bottom:10px}
+.pad-author-span{padding:1px 2px;border-radius:2px}
+.pad-members-section{margin-top:12px;border:none}
+.pad-members-below-tags{margin-top:12px;border:none}
+.pad-member-card{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.85rem}
+.pad-members-grid{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.pad-main-layout{display:flex;gap:20px}
+.pad-main-left{flex:2;min-width:0}
+.pad-main-right{flex:1;min-width:180px}
+
+.chat-full-width{flex:1;min-width:0}
+.chat-participants-section{margin-top:12px;padding:12px;background:#1a1a1a;border:none;border-radius:4px}
+.chat-participants-below{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.chat-participants-below a{font-size:0.85rem;color:#aaa}
+.chat-message-image-wrap{margin:4px 0}
+.chat-message-image{max-width:100%;max-height:300px;border-radius:4px}
+
+.games-single-col{display:flex;flex-direction:column;gap:16px;margin-top:16px}
+.game-row{display:flex;gap:16px;border:1px solid #333;border-radius:8px;overflow:hidden;background:#111;padding:12px;align-items:flex-start}
+.game-row-media{flex-shrink:0;width:120px}
+.game-row-media img{width:100%;border-radius:4px}
+.game-row-body{flex:1;display:flex;flex-direction:column;gap:6px}
+.game-top-score{font-size:0.85rem;color:#aaa}
+.score-first{color:#2ecc71;font-weight:bold}
+.games-scoring-list{display:flex;flex-direction:column;gap:24px;margin-top:16px}
+.game-scoring-section{border:1px solid #333;border-radius:8px;padding:16px;background:#111}
+.game-scoring-header{display:flex;gap:16px;align-items:flex-start;margin-bottom:12px}
+.game-scoring-thumb{width:80px;border-radius:4px;flex-shrink:0}
+.game-scoring-info{flex:1}
+.game-shell-section{padding:0!important;margin:0}
+.game-iframe{width:100%;height:82vh;border:none;background:#000;display:block}
+.game-iframe-ecoinflow{height:95vh}
+.game-iframe-audiopendulum{height:95vh}
+.game-iframe-flipflop{height:720px}
+.game-iframe-tiktaktoe{height:580px}
+.game-desc-yellow{color:yellow}
+.game-new-record-label{color:#FFA500;font-weight:bold}
+.game-row-actions{display:flex;align-items:center;text-align:center;flex-shrink:0;border:0px;}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:12px 0}
+.calendar-day-header{font-weight:bold;padding:8px;text-align:center;color:#FFA500}
+.calendar-day{padding:10px 4px;text-align:center;background:#222;border-radius:4px;min-height:36px}
+.calendar-day-empty{background:#111;opacity:.4}
+.calendar-day-marked{background:#FFA500;color:#000;font-weight:bold}
+.calendar-day-marked a{color:#000;text-decoration:none;display:block}
+.calendar-nav{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+.calendar-date-list{margin-top:16px}
+.calendar-date-item{background:#333;border-radius:6px;margin-bottom:14px;position:relative;min-height:64px}
+.calendar-date-delete{position:absolute;top:12px;right:12px;margin:0}
+.calendar-date-delete button{padding:4px 10px;font-size:0.8rem;top:12px;margin-top: 25px;margin-right: 35px;}
+.calendar-date-item-header{color:#FFA500;font-weight:bold;margin-bottom:6px}
+.calendar-participants-count{color:#FFA500;font-weight:bold}
+.calendar-day-notes{margin-top:16px}
+.pad-viewer-back{margin-bottom:12px}

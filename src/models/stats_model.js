@@ -36,7 +36,8 @@ module.exports = ({ cooler }) => {
   const types = [
     'bookmark','event','task','votes','report','feed','project',
     'image','audio','video','document','transfer','post','tribe',
-    'market','forum','job','aiExchange','map','shop','shopProduct',
+    'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
+    'pad','padEntry','gameScore','calendar','calendarDate','calendarNote',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
@@ -136,6 +137,8 @@ module.exports = ({ cooler }) => {
     if (c.type === 'map') return 'map';
     if (c.type === 'shop') return 'shop';
     if (c.type === 'shopProduct') return 'shopProduct';
+    if (c.type === 'chat') return 'chat';
+    if (c.type === 'chatMessage') return 'chatMessage';
     return '';
   };
 

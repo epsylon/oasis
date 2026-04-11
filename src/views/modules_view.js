@@ -10,6 +10,8 @@ const modulesView = () => {
     { name: 'audios', label: i18n.modulesAudiosLabel, description: i18n.modulesAudiosDescription },
     { name: 'banking', label: i18n.modulesBankingLabel, description: i18n.modulesBankingDescription },
     { name: 'bookmarks', label: i18n.modulesBookmarksLabel, description: i18n.modulesBookmarksDescription },
+    { name: 'calendars', label: i18n.modulesCalendarsLabel, description: i18n.modulesCalendarsDescription },
+    { name: 'chats', label: i18n.modulesChatsLabel, description: i18n.modulesChatsDescription },
     { name: 'cipher', label: i18n.modulesCipherLabel, description: i18n.modulesCipherDescription },
     { name: 'courts', label: i18n.modulesCourtsLabel, description: i18n.modulesCourtsDescription },
     { name: 'docs', label: i18n.modulesDocsLabel, description: i18n.modulesDocsDescription },
@@ -17,6 +19,7 @@ const modulesView = () => {
     { name: 'favorites', label: i18n.modulesFavoritesLabel, description: i18n.modulesFavoritesDescription },
     { name: 'feed', label: i18n.modulesFeedLabel, description: i18n.modulesFeedDescription },
     { name: 'forum', label: i18n.modulesForumLabel, description: i18n.modulesForumDescription },
+    { name: 'games', label: i18n.modulesGamesLabel, description: i18n.modulesGamesDescription },
     { name: 'images', label: i18n.modulesImagesLabel, description: i18n.modulesImagesDescription },
     { name: 'invites', label: i18n.modulesInvitesLabel, description: i18n.modulesInvitesDescription },
     { name: 'jobs', label: i18n.modulesJobsLabel, description: i18n.modulesJobsDescription },
@@ -26,6 +29,7 @@ const modulesView = () => {
     { name: 'market', label: i18n.modulesMarketLabel, description: i18n.modulesMarketDescription },
     { name: 'multiverse', label: i18n.modulesMultiverseLabel, description: i18n.modulesMultiverseDescription },
     { name: 'opinions', label: i18n.modulesOpinionsLabel, description: i18n.modulesOpinionsDescription },
+    { name: 'pads', label: i18n.modulesPadsLabel, description: i18n.modulesPadsDescription },
     { name: 'parliament', label: i18n.modulesParliamentLabel, description: i18n.modulesParliamentDescription },
     { name: 'pixelia', label: i18n.modulesPixeliaLabel, description: i18n.modulesPixeliaDescription },
     { name: 'projects', label: i18n.modulesProjectsLabel, description: i18n.modulesProjectsDescription },
@@ -74,9 +78,9 @@ const modulesView = () => {
   );
 
   const PRESETS = {
-    minimal: ['feed', 'forum', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
-    social: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'maps', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-    economy: ['agenda', 'audios', 'bookmarks', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'images', 'invites', 'legacy', 'maps', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
+    minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
+    social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
+    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
     full: modules.map(m => m.name)
   };
 

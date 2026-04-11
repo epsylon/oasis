@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ECOINFLOW</title>
+<style>
+:root {
+  --pub: #FFA500;
+  --hab: #8BC34A;
+  --val: #eeeeee;
+  --shop: #4CAF50;
+  --acum: #FF5252;
+  --check: #FFFF55;
+  --cbdc: #607D8B;
+  --bg: #000;
+  --fg: #eee;
+  --cell: 64px;
+  --gap: 5px;
+  --pad: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100vh; overflow: hidden; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: 'Courier New', ui-monospace, monospace;
+  height: 100vh; display: flex; flex-direction: column;
+  align-items: center; user-select: none; -webkit-user-select: none;
+}
+#topbar { width:100%; padding:8px 16px; display:flex; align-items:center; gap:16px; background:#111; border-bottom:1px solid #333; }
+#topbar a { color:#FFA500; text-decoration:none; font-size:14px; }
+#topbar a:hover { text-decoration:underline; }
+#ui { display:flex; gap:16px; padding:8px; font-size:14px; color:#FFA500; flex-wrap:wrap; justify-content:center; }
+#ui b { font-size:15px; }
+#hudTurn { transition:color 0.3s; }
+#boardWrap { position:relative; flex:1; min-height:0; margin:0; display:flex; align-items:center; justify-content:center; width:100%; overflow:hidden; }
+#board { display:grid; gap:var(--gap); background:#222; padding:var(--pad); border:1px solid #3a3a3a; position:relative; }
+.cell { width:var(--cell); height:var(--cell); background:#2c2c2c; border:1px solid #444; display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; transition:background 0.15s; }
+.cell.empty:hover { background:#3a3a3a; }
+.cell.drawable { background:#4a3800; border-color:#9a7200; }
+.cell.drawable.empty:hover { background:#5e4700; }
+.cell.in-path { background:#524000; }
+.cell.cursor { outline:2px solid var(--pub); outline-offset:-2px; z-index:3; }
+.node-label { font-size:40px; font-weight:bold; color:#fff; pointer-events:none; line-height:1; text-align:center; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.45); padding:2px 7px; border-radius:3px; }
+.node.validator .node-label,.node.accumulator .node-label { font-size:22px; padding:1px 4px; }
+.node { width:82%; height:82%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; font-weight:bold; font-size:11px; color:#000; position:relative; transition:transform 0.2s,opacity 0.2s; }
+.node-icon { display:flex; align-items:center; justify-content:center; pointer-events:none; line-height:1; font-size:34px; }
+.node.validator .node-icon { font-size:22px; }
+.node.inactive { opacity:0.42; }
+.node.active { animation:pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.07);} }
+.node.danger { animation:danger 0.42s ease-in-out infinite !important; opacity:1 !important; }
+@keyframes danger { 0%,100%{background:var(--hab);box-shadow:0 0 0 2px var(--hab);} 50%{background:#c83030;box-shadow:0 0 0 5px rgba(255,82,82,.9),0 0 16px rgba(255,82,82,.5);} }
+.node.acum-danger { animation:acumDanger 0.44s ease-in-out infinite !important; opacity:1 !important; }
+@keyframes acumDanger { 0%,100%{filter:drop-shadow(0 0 3px rgba(255,82,82,.45));} 50%{filter:drop-shadow(0 0 12px rgba(255,17,68,1)) drop-shadow(0 0 4px rgba(255,82,82,.9));} }
+.node.cbdc-threat { animation:cbdcThreat 0.55s ease-in-out infinite !important; opacity:1 !important; }
+@keyframes cbdcThreat { 0%,100%{background:var(--hab);box-shadow:0 0 0 2px var(--hab);} 50%{background:#4a6572;box-shadow:0 0 0 5px rgba(96,125,139,.85),0 0 14px rgba(96,125,139,.5);} }
+.node.cbdc-alarm { animation:cbdcAlarm 0.7s ease-in-out infinite; }
+@keyframes cbdcAlarm { 0%,100%{box-shadow:0 0 0 2px var(--cbdc);} 50%{box-shadow:0 0 0 6px rgba(96,125,139,.8),0 0 14px rgba(96,125,139,.5);} }
+.node.pub { background:var(--pub); border-radius:3px; box-shadow:0 0 0 2px var(--pub),0 0 10px rgba(255,165,0,.18); }
+.node.pub::before { content:''; position:absolute; width:2px; height:10px; background:var(--pub); top:-10px; left:50%; transform:translateX(-50%); }
+.node.pub::after { content:''; position:absolute; width:6px; height:6px; background:var(--pub); border-radius:50%; top:-16px; left:50%; transform:translateX(-50%); }
+.node.pub.reduced { outline:2px dashed #c47800; outline-offset:2px; }
+.node.inhabitant { background:var(--hab); border-radius:50%; box-shadow:0 0 0 2px var(--hab),0 0 10px rgba(139,195,74,.18); }
+.node.inhabitant.cbdc-controlled { background:#455a64; border-radius:50%; box-shadow:0 0 0 2px #455a64; }
+.node.checkpoint { background:transparent; border-radius:3px; border:3px solid var(--check); box-shadow:0 0 6px rgba(255,215,0,.35); opacity:1 !important; }
+.node.checkpoint.active { background:transparent !important; border:3px solid var(--check) !important; box-shadow:0 0 0 2px var(--check),0 0 18px rgba(255,229,102,.9) !important; filter:none !important; animation:checkActive 1.8s ease-in-out infinite !important; }
+.node.checkpoint .node-label { color:var(--check); text-shadow:0 1px 4px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.9); }
+@keyframes checkActive { 0%,100%{transform:scale(1.1);box-shadow:0 0 0 2px var(--check),0 0 12px rgba(255,229,102,.65);} 50%{transform:scale(1.22);box-shadow:0 0 0 5px var(--check),0 0 26px rgba(255,229,102,1);} }
+.node.validator { background:rgba(200,218,230,.55); clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%); width:68%; height:68%; overflow:hidden; filter:drop-shadow(0 0 5px rgba(200,218,230,.7)); }
+.node.validator.active { background:var(--val) !important; filter:drop-shadow(0 0 8px rgba(238,238,238,.9)) !important; }
+.node.shop { background:var(--shop); clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%); filter:drop-shadow(0 0 4px rgba(76,175,80,.45)); }
+.node.accumulator { background:rgba(255,82,82,.18); clip-path:polygon(50% 0,100% 100%,0 100%); overflow:hidden; filter:drop-shadow(0 0 4px rgba(255,82,82,.42)); }
+.node.cbdc { background:var(--cbdc); border-radius:3px; color:#cfd8dc; font-size:14px; box-shadow:0 0 0 2px var(--cbdc),0 0 10px rgba(96,125,139,.25); }
+#pipes { position:absolute; pointer-events:none; }
+#pipes path { stroke:var(--pub); stroke-width:5; stroke-linecap:round; stroke-linejoin:round; opacity:.4; fill:none; }
+#pipes path.flowing { opacity:1; stroke-width:6; filter:drop-shadow(0 0 4px rgba(255,165,0,.85)) drop-shadow(0 0 10px rgba(255,165,0,.4)); stroke-dasharray:14 8; animation:pipeDash 1.1s linear infinite; }
+#pipes path.clickable { pointer-events:auto; cursor:pointer; }
+#pipes path.clickable:hover { stroke:#fff; filter:none; stroke-dasharray:none; animation:none; }
+#pipes path.cbdc-line { stroke:var(--cbdc); stroke-width:3; stroke-dasharray:5 4; opacity:.75; pointer-events:none; }
+#particleLayer { position:absolute; pointer-events:none; }
+.flow-particle { position:absolute; width:7px; height:7px; background:var(--pub); border-radius:50%; box-shadow:0 0 7px var(--pub),0 0 14px rgba(255,165,0,.6),0 0 22px rgba(255,165,0,.3); offset-distance:0%; animation:flowParticle 900ms linear infinite; will-change:offset-distance,opacity; }
+@keyframes flowParticle { 0%{offset-distance:0%;opacity:0;} 8%{opacity:1;} 85%{opacity:1;} 100%{offset-distance:100%;opacity:0;} }
+@keyframes pipeDash { to { stroke-dashoffset:-22; } }
+.pot-float { position:absolute; color:var(--acum); font-size:15px; font-weight:bold; font-family:'Courier New',monospace; letter-spacing:1px; pointer-events:none; text-shadow:0 0 8px rgba(255,82,82,.7); animation:potFloat 1.4s ease-out forwards; z-index:20; white-space:nowrap; }
+@keyframes potFloat { 0%{transform:translateY(0) scale(1);opacity:1;} 20%{transform:translateY(-6px) scale(1.15);} 100%{transform:translateY(-48px) scale(.9);opacity:0;} }
+.check-pulse { position:absolute; border-radius:50%; border:2px solid var(--check); box-shadow:0 0 10px var(--check); pointer-events:none; animation:checkPulse .8s ease-out forwards; z-index:15; }
+@keyframes checkPulse { 0%{transform:translate(-50%,-50%) scale(.3);opacity:1;} 100%{transform:translate(-50%,-50%) scale(2.5);opacity:0;} }
+#message { margin:8px 0; min-height:18px; font-size:12px; color:#888; text-align:center; max-width:500px; padding:0 16px; line-height:1.5; }
+#message.warning { color:var(--pub); background:rgba(255,165,0,.07); border:1px solid rgba(255,165,0,.2); padding:6px 16px; border-radius:2px; }
+#message.alert { color:var(--acum); background:rgba(255,82,82,.07); border:1px solid rgba(255,82,82,.2); padding:6px 16px; border-radius:2px; }
+#legend { display:flex; flex-wrap:wrap; justify-content:center; gap:10px 16px; margin:4px 0; padding:8px 16px; max-width:560px; font-size:11px; color:#888; }
+#legend .item { display:flex; align-items:center; gap:6px; }
+#legend .mini { width:16px; height:16px; display:inline-block; flex-shrink:0; }
+#legend .mini.pub { background:var(--pub); border-radius:2px; }
+#legend .mini.inhabitant { background:var(--hab); border-radius:50%; }
+#legend .mini.validator { background:var(--val); clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%); width:14px; height:14px; margin:1px; }
+#legend .mini.shop { background:var(--shop); clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%); }
+#legend .mini.accumulator { background:var(--acum); clip-path:polygon(50% 0,100% 100%,0 100%); }
+#legend .mini.checkpoint { background:transparent; border:2px solid var(--check); border-radius:2px; }
+#legend .mini.cbdc { background:var(--cbdc); border-radius:2px; }
+#controls { color:#888; font-size:13px; text-align:center; margin-bottom:8px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center; padding:0 16px; }
+#btnAdvanceTurn { background:#0a0a0a; color:var(--fg); border:1px solid var(--pub); padding:8px 18px; font-family:inherit; font-size:12px; cursor:pointer; text-transform:uppercase; letter-spacing:1px; }
+#btnAdvanceTurn:hover { background:var(--pub); color:#000; }
+button { background:#0a0a0a; color:var(--fg); border:1px solid var(--pub); padding:10px 16px; font-family:inherit; font-size:12px; cursor:pointer; text-transform:uppercase; letter-spacing:1px; }
+button:hover { background:var(--pub); color:#000; }
+button.primary { background:var(--pub); color:#000; font-weight:bold; }
+button.primary:hover { background:#ffb733; }
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.97); display:flex; align-items:center; justify-content:center; z-index:100; padding:20px; }
+.overlay.hidden { display:none; }
+.overlay .panel { max-width:480px; border:1px solid var(--pub); padding:24px 28px; background:#050505; }
+.overlay h2 { color:var(--pub); margin-bottom:14px; font-size:16px; letter-spacing:1px; }
+.overlay p { margin:10px 0; line-height:1.55; font-size:13px; color:#bbb; }
+.overlay .hint { color:#bbb; font-size:12px; border-left:2px solid #444; padding-left:10px; margin-top:16px; }
+.info-panel { max-width:560px !important; max-height:85vh; overflow-y:auto; }
+.info-panel h3 { color:var(--pub); font-size:13px; letter-spacing:1px; margin-top:18px; margin-bottom:6px; text-transform:uppercase; }
+.info-panel h3:first-of-type { margin-top:4px; }
+.info-panel ul { list-style:none; padding-left:0; margin:8px 0; }
+.info-panel ul li { font-size:13px; color:#bbb; padding:4px 0 4px 14px; position:relative; line-height:1.5; }
+.info-panel ul li::before { content:'>'; color:var(--pub); position:absolute; left:0; }
+.info-panel .stat-line { font-family:inherit; color:#888; font-size:12px; margin:6px 0 12px; }
+.info-panel .stat-line b { color:var(--pub); }
+.overlay .buttons { margin-top:20px; display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+#scoreSubmit { margin-top:14px; text-align:center; }
+#scoreSubmit button { border-color:var(--check); color:var(--check); background:#1a3a1a; padding:6px 16px; font-size:14px; }
+#scoreSubmit button:hover { background:var(--check); color:#000; }
+#winBreakdown { font-size:11px; color:#555; line-height:1.9; margin:4px 0 10px; border-left:2px solid #222; padding-left:10px; }
+#winBreakdown .positive { color:#6a9a3a; }
+#winBreakdown .negative { color:var(--acum); }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">ECOINFLOW</span>
+</div>
+<div id="ui">
+  <span>LEVEL: <b id="hudLevel">1</b>/<b id="hudLevelTotal">8</b></span>
+  <span>TURN: <b id="hudTurn">0</b></span>
+  <span>PAR: <b id="hudPar">2</b></span>
+  <span>SCORE: <b id="hudScore">0</b></span>
+  <span>BEST: <b id="topBest">-</b></span>
+</div>
+<div id="boardWrap">
+  <div id="board"></div>
+  <svg id="pipes"></svg>
+  <div id="particleLayer"></div>
+</div>
+<div id="message"></div>
+<div id="legend"></div>
+<div id="controls">
+  <button id="btnAdvanceTurn" onclick="tick()">ADVANCE TURN</button>
+  <span>ENTER &#8212; advance &nbsp;|&nbsp; Backspace &#8212; undo &nbsp;|&nbsp; I &#8212; info</span>
+</div>
+<div id="overlayIntro" class="overlay">
+  <div class="panel">
+    <h2 id="introTitle">LEVEL 1 &#8212; Your first PUB</h2>
+    <p id="introText"></p>
+    <p style="margin-top:10px;font-size:12px;line-height:2.2">
+      <a href="https://wiki.solarnethub.com/ecoin/overview" target="_blank" rel="noopener" style="color:var(--pub);text-decoration:none;margin-right:14px">ECOin &#8599;</a>
+      <a href="https://wiki.solarnethub.com/socialnet/overview" target="_blank" rel="noopener" style="color:var(--pub);text-decoration:none;margin-right:14px">Oasis &#8599;</a>
+      <a href="https://wiki.solarnethub.com/" target="_blank" rel="noopener" style="color:var(--pub);text-decoration:none">SolarNET.HuB &#8599;</a>
+    </p>
+    <p class="hint">Click a node to start a pipe, then click adjacent cells to extend it, and finish on another node. Click an existing pipe to remove it. Press <b>ENTER</b> (or ADVANCE TURN button) to process one flow cycle.</p>
+    <div class="buttons"><button class="primary" onclick="closeIntro()">START</button></div>
+  </div>
+</div>
+<div id="overlayWin" class="overlay hidden">
+  <div class="panel">
+    <h2>&#10003; LEVEL COMPLETE</h2>
+    <p id="winText"></p>
+    <p>Level score: <b id="winLevelPoints" style="color:var(--pub);font-size:18px">0</b></p>
+    <p>Total score: <b id="winTotalPoints" style="color:var(--check);font-size:18px">0</b></p>
+    <div id="winBreakdown"></div>
+    <div id="scoreSubmit" style="display:none">
+      <form method="POST" action="/games/submit-score" target="_top">
+        <input type="hidden" name="game" value="ecoinflow">
+        <input type="hidden" id="scoreInput" name="score" value="0">
+        <button type="submit">Submit Score to Hall of Fame</button>
+      </form>
+    </div>
+    <div class="buttons">
+      <button onclick="restartLevel()">RETRY</button>
+      <button id="btnNextLevel" class="primary" onclick="goNextLevel()">NEXT LEVEL</button>
+    </div>
+  </div>
+</div>
+<div id="overlayLoss" class="overlay hidden">
+  <div class="panel">
+    <h2 style="color:var(--acum)">&#10007; NETWORK DOWN</h2>
+    <p id="lossText"></p>
+    <div class="buttons"><button class="primary" onclick="restartLevel()">RETRY</button></div>
+  </div>
+</div>
+<div id="overlayInfo" class="overlay hidden">
+  <div class="panel info-panel">
+    <h2>INFORMATION</h2>
+    <div id="infoBody"></div>
+    <div class="buttons"><button class="primary" onclick="closeInfo()">CLOSE</button></div>
+  </div>
+</div>
+<script>
+var ecoflowBest = parseInt(localStorage.getItem('ecoinflow_best') || '0');
+function updateBest(score) {
+  if (score > ecoflowBest) { ecoflowBest = score; localStorage.setItem('ecoinflow_best', ecoflowBest); }
+  document.getElementById('topBest').textContent = ecoflowBest > 0 ? String(ecoflowBest) : '-';
+}
+updateBest(0);
+
+var LEVELS = [
+  { id:1, size:3, par:2,
+    grid:[['empty','inhabitant','empty'],['pub','empty','inhabitant'],['empty','empty','checkpoint']],
+    concept:'Your first PUB',
+    introText:'A PUB is a public server in the Oasis network. It generates ECOin and distributes it to those connected. Your task: connect the PUB to the inhabitants and reach the checkpoint.',
+    winText:'Network active. Inhabitants receive their flow. This is how a PUB works: it does not accumulate, it distributes.' },
+  { id:2, size:4, par:4,
+    grid:[['inhabitant','empty','inhabitant','empty'],['empty','pub','empty','pub'],['inhabitant','empty','inhabitant','empty'],['empty','empty','checkpoint','empty']],
+    concept:'Universal Basic Income',
+    introText:'UBI is the flow that reaches every inhabitant of Oasis, regardless of what they do. It is not charity: it is the network recognizing that your time has value. Each PUB emits UBI to connected inhabitants. None can be left without it.',
+    winText:'All inhabitants receive UBI. The network is fair when no one is disconnected.' },
+  { id:3, size:4, par:5,
+    grid:[['pub','empty','empty','inhabitant'],['empty','validator','empty','empty'],['inhabitant','empty','validator','empty'],['empty','empty','inhabitant','checkpoint']],
+    concept:'Validators',
+    introText:'The ECOin network needs validators: nodes that confirm transactions are legitimate. A validator must accumulate minimum flow before it can pass ECOin through. Plan the connection order: charge validators first, then extend the network through them.',
+    winText:'Validators active. The blockchain advances. Without validators, there is no network.' },
+  { id:4, size:4, par:6,
+    grid:[['pub','empty','inhabitant','empty'],['inhabitant','accumulator','empty','shop'],['empty','empty','shop','empty'],['inhabitant','empty','pub','checkpoint']],
+    concept:'Proof of Transaction',
+    introText:'PoT discourages accumulating ECOin without using it. If flow reaches an accumulator and does not exit, the network penalizes it. You can route around it or connect it to a Shop so the flow keeps circulating. ECOin that does not circulate serves no one.',
+    winText:'Clean flow. This is how the network maintains its economic health.',
+    winTextPoT:'PoT triggered. Penalty applied. Next time, keep the flow moving.' },
+  { id:5, size:5, par:8,
+    grid:[['pub','empty','inhabitant','empty','inhabitant'],['empty','validator','empty','shop','empty'],['inhabitant','empty','accumulator','empty','validator'],['empty','shop','empty','inhabitant','empty'],['pub','empty','empty','empty','checkpoint']],
+    concept:'The Checkpoint',
+    introText:'The ECOin chain advances through checkpoints: milestones confirming that a number of blocks have been mined and validated. This level integrates all elements seen so far. Manage flow carefully: validators block until loaded, the accumulator penalizes if full. Plan before advancing the turn.',
+    winText:'Checkpoint reached. The network advances. Every mined block is a step toward digital sovereignty.',
+    winTextPoT:'Checkpoint reached, but PoT triggered. Penalty applied.' },
+  { id:6, size:5, par:10,
+    grid:[[{type:'pub',capacity:2},'empty','inhabitant','empty','pub'],['inhabitant','validator','empty','shop','inhabitant'],['empty','empty','accumulator','checkpoint','validator'],['pub','shop','empty','inhabitant','empty'],['inhabitant','validator','shop','accumulator','checkpoint']],
+    concept:'Network Under Pressure',
+    introText:'The real network operates with limited resources. One PUB is running at reduced capacity (marked with a dashed border). You cannot always feed all nodes at once: learn to prioritize. Inhabitants first, then validators, shops if there is surplus. Two checkpoints to activate.',
+    winText:'Network stabilized under pressure. Digital sovereignty requires conscious management of real resources.',
+    winTextPoT:'Network stabilized, but PoT penalized. Optimize the accumulator flow.' },
+  { id:7, size:5, par:12,
+    grid:[['pub','inhabitant','empty','inhabitant','pub'],['inhabitant','cbdc','inhabitant','empty','empty'],['empty','inhabitant','empty','validator','shop'],['pub','empty','shop','empty','inhabitant'],['empty','inhabitant','empty','validator','checkpoint']],
+    concept:'The Digital Euro',
+    introText:'The Digital Euro is being implemented. Unlike ECOin, a CBDC (Central Bank Digital Currency) is not sovereignty: it is surveillance. The CBDC node tries to capture adjacent inhabitants not connected to a PUB every 2 turns. Connect your PUBs to vulnerable inhabitants first. Speed matters.',
+    winText:'Sovereign network. Inhabitants are connected to community PUBs, not surveillance infrastructure. This is what is at stake.',
+    winTextCBDC:'Some inhabitants were captured by CBDC before you could connect them. The network survived, but not all are free.' },
+  { id:8, size:6, par:14,
+    grid:[['pub','empty','inhabitant','empty','inhabitant','pub'],['empty','validator','empty','shop','empty','inhabitant'],['inhabitant','empty','accumulator','empty','validator','empty'],['empty','shop','empty','inhabitant','empty','shop'],['pub','empty','validator','empty','pub','empty'],['inhabitant','empty','cbdc','inhabitant','empty','checkpoint']],
+    concept:'Complete Oasis',
+    introText:'This is Oasis. A decentralized network where ECOin flows from PUBs to inhabitants as universal basic income, validators maintain blockchain integrity, shops sustain the internal economy, and checkpoints consolidate network history. CBDC tries to expand from the edge. There is no central bank. Only the network. Complete the picture.',
+    winText:'Oasis active. You have built a sovereign network. Now you know how it works. Now you can be part of it.' }
+];
+
+function createCell(type) {
+  return { type:type, active:type==='pub', flowReceivedThisTurn:0, turnosSinFlujo:0, acumulado:0, validadorCargado:0, contadorActivo:0, bloqueado:false, capacity:null, cbdcControlled:false };
+}
+
+var state = { levelIndex:0, size:0, board:[], paths:[], drawing:null, turn:0, score:0, potActivations:0, cbdcCaptured:new Set(), pendingEvents:[], status:'intro', cursor:{r:0,c:0} };
+
+function loadLevel(i) {
+  var lvl = LEVELS[i];
+  state.levelIndex = i; state.size = lvl.size;
+  state.board = lvl.grid.map(function(row) { return row.map(function(def) {
+    if (typeof def === 'string') return createCell(def);
+    var cell = createCell(def.type);
+    if (def.capacity !== undefined) cell.capacity = def.capacity;
+    return cell;
+  }); });
+  state.paths = []; state.drawing = null; state.turn = 0;
+  if (i === 0) state.score = 0;
+  state.potActivations = 0; state.cbdcCaptured = new Set(); state.pendingEvents = [];
+  state.status = 'playing'; state.cursor = {r:0,c:0};
+  document.getElementById('hudLevel').textContent = lvl.id;
+  document.getElementById('hudLevelTotal').textContent = LEVELS.length;
+  document.getElementById('hudPar').textContent = lvl.par;
+  document.getElementById('introTitle').textContent = 'LEVEL ' + lvl.id + ' \u2014 ' + lvl.concept;
+  document.getElementById('introText').textContent = lvl.introText;
+  renderLegend(); showMessage(''); resizeBoard(); render();
+}
+
+var LEGEND_LABELS = { pub:'PUB', inhabitant:'Inhabitant', validator:'Validator', shop:'Shop', accumulator:'Accumulator', checkpoint:'Checkpoint', cbdc:'CBDC' };
+var LEGEND_ORDER = ['pub','inhabitant','validator','shop','accumulator','checkpoint','cbdc'];
+
+function renderLegend() {
+  var present = new Set();
+  for (var r=0;r<state.size;r++) for (var c=0;c<state.size;c++) { var t=state.board[r][c].type; if(t!=='empty') present.add(t); }
+  var el = document.getElementById('legend');
+  el.innerHTML = '';
+  LEGEND_ORDER.forEach(function(type) {
+    if (!present.has(type)) return;
+    var item = document.createElement('div'); item.className = 'item';
+    var mini = document.createElement('span'); mini.className = 'mini '+type;
+    var label = document.createElement('span'); label.textContent = LEGEND_LABELS[type];
+    item.appendChild(mini); item.appendChild(label); el.appendChild(item);
+  });
+}
+
+function getCell(r,c) { if(r<0||c<0||r>=state.size||c>=state.size) return null; return state.board[r][c]; }
+function areAdjacent(a,b) { return Math.abs(a.r-b.r)+Math.abs(a.c-b.c)===1; }
+function cellInOtherPath(r,c,exc) {
+  for(var i=0;i<state.paths.length;i++) { if(i===exc) continue; var p=state.paths[i]; for(var k=1;k<p.length-1;k++) if(p[k].r===r&&p[k].c===c) return true; }
+  return false;
+}
+function countConnections(r,c) {
+  return state.paths.filter(function(p){var a=p[0],b=p[p.length-1]; return(a.r===r&&a.c===c)||(b.r===r&&b.c===c);}).length;
+}
+function getConnectedNodes(r,c) {
+  var result=[];
+  state.paths.forEach(function(path){ var a=path[0],b=path[path.length-1]; if(a.r===r&&a.c===c) result.push(b); else if(b.r===r&&b.c===c) result.push(a); });
+  return result;
+}
+function isConnectedToPUB(sr,sc) {
+  var visited=new Set(), queue=[sr+','+sc]; visited.add(sr+','+sc);
+  while(queue.length>0) {
+    var key=queue.shift(), parts=key.split(','), kr=+parts[0], kc=+parts[1], cell=state.board[kr][kc];
+    if(cell.type==='pub'&&cell.active&&!cell.bloqueado) return true;
+    getConnectedNodes(kr,kc).forEach(function(n){ var nk=n.r+','+n.c; if(!visited.has(nk)){visited.add(nk);queue.push(nk);} });
+  }
+  return false;
+}
+
+var PUB_OUTPUT=4;
+
+function computePreviewFlow() {
+  var flow={};
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) flow[r+','+c]=0;
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) {
+    var cell=state.board[r][c];
+    if(cell.type!=='pub'||!cell.active||cell.bloqueado) continue;
+    var outs=getConnectedNodes(r,c); if(!outs.length) continue;
+    var pubOut=cell.capacity!==null?cell.capacity:PUB_OUTPUT, share=pubOut/outs.length;
+    outs.forEach(function(n){ previewPropagate(n.r,n.c,share,new Set([r+','+c]),flow); });
+  }
+  return flow;
+}
+function previewPropagate(r,c,amount,visited,flow) {
+  var cell=state.board[r][c], k=r+','+c;
+  if(visited.has(k)) return; visited.add(k);
+  if(cell.type!=='pub') flow[k]=(flow[k]||0)+amount;
+  if(cell.type!=='validator'||!cell.active||cell.bloqueado) return;
+  getConnectedNodes(r,c).filter(function(n){return!visited.has(n.r+','+n.c);}).forEach(function(n){ previewPropagate(n.r,n.c,amount,new Set(visited),flow); });
+}
+
+function render() { renderBoard(); renderPipes(); renderParticles(); renderHud(); }
+
+function makeEcoinSVG() {
+  var ns='http://www.w3.org/2000/svg';
+  var svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('viewBox','0 0 32 32'); svg.setAttribute('width','68%'); svg.setAttribute('height','68%');
+  svg.classList.add('node-icon');
+  var c1=document.createElementNS(ns,'circle'); c1.setAttribute('cx','16'); c1.setAttribute('cy','16'); c1.setAttribute('r','13'); c1.setAttribute('fill','#0d0800'); c1.setAttribute('stroke','#FFA500'); c1.setAttribute('stroke-width','2.5');
+  var c2=document.createElementNS(ns,'circle'); c2.setAttribute('cx','16'); c2.setAttribute('cy','16'); c2.setAttribute('r','9'); c2.setAttribute('fill','none'); c2.setAttribute('stroke','rgba(255,165,0,0.35)'); c2.setAttribute('stroke-width','1');
+  var t=document.createElementNS(ns,'text'); t.setAttribute('x','16'); t.setAttribute('y','21'); t.setAttribute('text-anchor','middle'); t.setAttribute('font-size','15'); t.setAttribute('font-weight','bold'); t.setAttribute('fill','#FFA500'); t.setAttribute('font-family','monospace'); t.textContent='E';
+  svg.appendChild(c1); svg.appendChild(c2); svg.appendChild(t);
+  return svg;
+}
+function renderBoard() {
+  var preview=computePreviewFlow();
+  var fmtFlow=function(v){return Number.isInteger(v)?String(v):v.toFixed(1);};
+  var board=document.getElementById('board');
+  board.innerHTML='';
+  board.style.gridTemplateColumns='repeat('+state.size+', var(--cell))';
+  var last=state.drawing?state.drawing.cells[state.drawing.cells.length-1]:null;
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) {
+    (function(r,c){
+    var cell=state.board[r][c];
+    var div=document.createElement('div'); div.className='cell';
+    if(cell.type==='empty') div.classList.add('empty');
+    if(state.cursor&&state.cursor.r===r&&state.cursor.c===c) div.classList.add('cursor');
+    if(last&&areAdjacent(last,{r:r,c:c})) {
+      var alreadyIn=state.drawing.cells.some(function(p){return p.r===r&&p.c===c;});
+      var blocked=cell.type==='empty'&&cellInOtherPath(r,c);
+      if(!alreadyIn&&!blocked) div.classList.add('drawable');
+    }
+    if(state.drawing&&state.drawing.cells.some(function(p){return p.r===r&&p.c===c;})) div.classList.add('in-path');
+    if(cell.type!=='empty') {
+      var node=document.createElement('div'); node.className='node '+cell.type;
+      if(cell.cbdcControlled){ node.classList.add('cbdc-controlled'); node.classList.add('inactive'); }
+      else if(cell.active&&!cell.bloqueado) node.classList.add('active');
+      else node.classList.add('inactive');
+      if(cell.type==='inhabitant'&&!cell.cbdcControlled&&cell.turnosSinFlujo>=2){ node.classList.remove('inactive'); node.classList.add('danger'); }
+      if(cell.type==='inhabitant'&&!cell.cbdcControlled&&!node.classList.contains('danger')) {
+        var adjToCBDC=[{r:r-1,c:c},{r:r+1,c:c},{r:r,c:c-1},{r:r,c:c+1}].some(function(p){ if(p.r<0||p.c<0||p.r>=state.size||p.c>=state.size) return false; return state.board[p.r][p.c].type==='cbdc'; });
+        if(adjToCBDC&&!isConnectedToPUB(r,c)){ node.classList.remove('inactive'); node.classList.add('cbdc-threat'); }
+      }
+      if(cell.type==='accumulator'&&!cell.bloqueado&&cell.acumulado>=4) node.classList.add('acum-danger');
+      if(cell.type==='cbdc') {
+        var hasVuln=[{r:r-1,c:c},{r:r+1,c:c},{r:r,c:c-1},{r:r,c:c+1}].some(function(p){ if(p.r<0||p.c<0||p.r>=state.size||p.c>=state.size) return false; var adj=state.board[p.r][p.c]; return adj.type==='inhabitant'&&!adj.cbdcControlled&&!isConnectedToPUB(p.r,p.c); });
+        if(hasVuln){ node.classList.remove('inactive'); node.classList.add('cbdc-alarm'); }
+      }
+      if(cell.type==='pub'&&cell.capacity!==null) node.classList.add('reduced');
+      if(cell.type==='pub'){ node.appendChild(makeEcoinSVG()); }
+      else if(cell.type==='inhabitant'){ var ico=document.createElement('span'); ico.className='node-icon'; ico.textContent='\uD83E\uDD65'; node.appendChild(ico); }
+      else if(cell.type==='validator'){ var ico=document.createElement('span'); ico.className='node-icon'; ico.textContent='\u2714'; node.appendChild(ico); }
+      else if(cell.type==='cbdc'){ var ico=document.createElement('span'); ico.className='node-icon'; ico.textContent='\uD83D\uDC80'; node.appendChild(ico); }
+      if(cell.type==='checkpoint'){ var lbl=document.createElement('span'); lbl.className='node-label'; lbl.textContent=Math.min(cell.contadorActivo,3); node.appendChild(lbl); }
+      if(cell.type==='validator') {
+        if(!cell.active){ var pct=Math.round(Math.min(100,(cell.validadorCargado/3)*100)); node.style.background='linear-gradient(to top,#c8dde8 '+pct+'%,rgba(200,218,230,.55) '+pct+'%)'; }
+        var pf=preview[r+','+c]||0; var lbl=document.createElement('span'); lbl.className='node-label'; lbl.textContent=fmtFlow(pf); node.appendChild(lbl);
+      }
+      if(cell.type==='pub') {
+        var pubOutput=cell.capacity!==null?cell.capacity:4, conns=countConnections(r,c), share=conns>1?pubOutput/conns:pubOutput;
+        var lbl=document.createElement('span'); lbl.className='node-label'; lbl.textContent=Number.isInteger(share)?share:share.toFixed(1); node.appendChild(lbl);
+      }
+      if(cell.type==='inhabitant'&&!cell.cbdcControlled) {
+        var pf=preview[r+','+c]||0, health=3-cell.turnosSinFlujo;
+        var lbl=document.createElement('span'); lbl.className='node-label'; lbl.textContent=health;
+        lbl.style.color=pf>=1?'#fff':pf>0?'#FFA500':'#FF5252'; node.appendChild(lbl);
+      }
+      if(cell.type==='accumulator'&&!cell.bloqueado) {
+        var acc=cell.acumulado, pct=Math.round(Math.min(100,(acc/5)*100));
+        var fillColor=acc>=4.5?'#FF1744':acc>=3?'#FF5252':acc>=1.5?'#E53935':'#B71C1C';
+        node.style.background='linear-gradient(to top,'+fillColor+' '+pct+'%,rgba(255,82,82,.18) '+pct+'%)';
+        var pf=preview[r+','+c]||0, projected=Math.min(acc+pf,5);
+        var lbl=document.createElement('span'); lbl.className='node-label'; lbl.textContent=fmtFlow(projected)+'/5'; node.appendChild(lbl);
+      }
+      div.appendChild(node);
+    }
+    div.setAttribute('role','button');
+    div.setAttribute('aria-label',cell.type==='empty'?'Empty cell':LEGEND_LABELS[cell.type]||cell.type);
+    div.addEventListener('click',function(){onCellClick(r,c);});
+    board.appendChild(div);
+    })(r,c);
+  }
+}
+
+function cellCenter(r,c) {
+  var boardEl=document.getElementById('board'), cellEls=boardEl.querySelectorAll('.cell');
+  if(cellEls.length>0) {
+    var idx=r*state.size+c, rect=cellEls[idx]?cellEls[idx].getBoundingClientRect():null, boardRect=boardEl.getBoundingClientRect();
+    if(rect) return {x:rect.left-boardRect.left+rect.width/2,y:rect.top-boardRect.top+rect.height/2};
+  }
+  var pad=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--pad'))||8;
+  var gap=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'))||4;
+  var cs=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell'))||72;
+  return {x:pad+c*(cs+gap)+cs/2,y:pad+r*(cs+gap)+cs/2};
+}
+
+function boardOffset() {
+  var boardEl=document.getElementById('board'), wrapEl=document.getElementById('boardWrap');
+  if(!boardEl||!wrapEl) return {x:0,y:0};
+  var br=boardEl.getBoundingClientRect(), wr=wrapEl.getBoundingClientRect();
+  return {x:br.left-wr.left, y:br.top-wr.top};
+}
+function renderPipes() {
+  var svg=document.getElementById('pipes'), boardEl=document.getElementById('board');
+  var off=boardOffset(), w=boardEl.offsetWidth, h=boardEl.offsetHeight;
+  svg.setAttribute('width',w); svg.setAttribute('height',h);
+  svg.style.width=w+'px'; svg.style.height=h+'px';
+  svg.style.left=off.x+'px'; svg.style.top=off.y+'px';
+  svg.innerHTML='';
+  var flowingIdx=computeFlowingPaths();
+  var cellEl=document.querySelector('#board .cell'), nodeR=cellEl?cellEl.offsetWidth*0.40:26;
+  function trimPt(from,toward,r){ var dx=toward.x-from.x,dy=toward.y-from.y,len=Math.sqrt(dx*dx+dy*dy); return len>0?{x:from.x+dx/len*r,y:from.y+dy/len*r}:from; }
+  function makePath(pts){ var d='M '+pts[0].x.toFixed(1)+' '+pts[0].y.toFixed(1); for(var i=1;i<pts.length;i++) d+=' L '+pts[i].x.toFixed(1)+' '+pts[i].y.toFixed(1); return d; }
+  state.paths.forEach(function(path,idx) {
+    var pts=path.map(function(p){return cellCenter(p.r,p.c);});
+    if(pts.length>=2){ pts=pts.slice(); pts[0]=trimPt(pts[0],pts[1],nodeR); pts[pts.length-1]=trimPt(pts[pts.length-1],pts[pts.length-2],nodeR); }
+    var el=document.createElementNS('http://www.w3.org/2000/svg','path');
+    el.setAttribute('d',makePath(pts)); el.classList.add('clickable');
+    if(flowingIdx.has(idx)) el.classList.add('flowing');
+    el.addEventListener('click',function(e){e.stopPropagation();removePath(idx);});
+    svg.appendChild(el);
+  });
+  state.cbdcCaptured.forEach(function(key){
+    var parts=key.split(','), cr=+parts[0], cc=+parts[1];
+    for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) {
+      if(state.board[r][c].type!=='cbdc') continue;
+      var from=cellCenter(r,c), to=cellCenter(cr,cc);
+      var el=document.createElementNS('http://www.w3.org/2000/svg','path');
+      el.setAttribute('d','M '+from.x.toFixed(1)+' '+from.y.toFixed(1)+' L '+to.x.toFixed(1)+' '+to.y.toFixed(1)); el.classList.add('cbdc-line'); svg.appendChild(el);
+    }
+  });
+  if(state.drawing&&state.drawing.cells.length>0) {
+    var pts=state.drawing.cells.map(function(p){return cellCenter(p.r,p.c);});
+    if(pts.length>1){
+      var el=document.createElementNS('http://www.w3.org/2000/svg','path');
+      el.setAttribute('d',makePath(pts)); el.setAttribute('stroke-dasharray','8 5'); el.setAttribute('opacity','0.75'); el.setAttribute('stroke-width','4'); svg.appendChild(el);
+    }
+    var start=pts[0], circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx',start.x.toFixed(1)); circle.setAttribute('cy',start.y.toFixed(1)); circle.setAttribute('r',nodeR);
+    circle.setAttribute('fill','rgba(255,165,0,.15)'); circle.setAttribute('stroke','#FFA500'); circle.setAttribute('stroke-width','2'); svg.appendChild(circle);
+  }
+}
+function computeFlowingPaths() {
+  var flowing=new Set();
+  state.paths.forEach(function(p,i){ var a=state.board[p[0].r][p[0].c], b=state.board[p[p.length-1].r][p[p.length-1].c]; var aPub=a.type==='pub'&&a.active&&!a.bloqueado, bPub=b.type==='pub'&&b.active&&!b.bloqueado; if(aPub&&!b.bloqueado) flowing.add(i); if(bPub&&!a.bloqueado) flowing.add(i); });
+  return flowing;
+}
+function renderParticles() {
+  var layer=document.getElementById('particleLayer'); if(!layer) return;
+  var boardEl=document.getElementById('board'), off=boardOffset();
+  layer.style.left=off.x+'px'; layer.style.top=off.y+'px';
+  layer.style.width=boardEl.offsetWidth+'px'; layer.style.height=boardEl.offsetHeight+'px';
+  layer.querySelectorAll('.flow-particle').forEach(function(el){el.remove();});
+  if(state.status!=='playing'&&state.status!=='won') return;
+  var flowingIdx=computeFlowingPaths(), DURATION=900, N=4;
+  flowingIdx.forEach(function(idx){
+    var path=state.paths[idx]; if(!path||path.length<2) return;
+    var pts=path.map(function(p){return cellCenter(p.r,p.c);});
+    var cellA=state.board[path[0].r][path[0].c], cellB=state.board[path[path.length-1].r][path[path.length-1].c];
+    if(cellB.type==='pub'&&cellA.type!=='pub') pts=pts.slice().reverse();
+    var d='M '+pts.map(function(p){return p.x.toFixed(1)+' '+p.y.toFixed(1);}).join(' L ');
+    for(var k=0;k<N;k++){
+      var particle=document.createElement('div'); particle.className='flow-particle';
+      particle.style.offsetPath='path("'+d+'")'; particle.style.animationDuration=DURATION+'ms'; particle.style.animationDelay=(-k*DURATION/N)+'ms';
+      layer.appendChild(particle);
+    }
+  });
+}
+function fireEvents() {
+  var layer=document.getElementById('particleLayer'); if(!layer||state.pendingEvents.length===0) return;
+  state.pendingEvents.forEach(function(evt){
+    var center=cellCenter(evt.r,evt.c);
+    if(evt.type==='pot'){ var txt=document.createElement('div'); txt.className='pot-float'; txt.textContent='\u221250'; txt.style.left=(center.x-16)+'px'; txt.style.top=(center.y-10)+'px'; layer.appendChild(txt); txt.addEventListener('animationend',function(){txt.remove();}); }
+    if(evt.type==='checkpoint'){ var ring=document.createElement('div'); ring.className='check-pulse'; ring.style.left=center.x+'px'; ring.style.top=center.y+'px'; ring.style.width='30px'; ring.style.height='30px'; layer.appendChild(ring); ring.addEventListener('animationend',function(){ring.remove();}); }
+  });
+}
+function renderHud() {
+  document.getElementById('hudScore').textContent=state.score;
+  var lvl=LEVELS[state.levelIndex], turnEl=document.getElementById('hudTurn');
+  turnEl.textContent=state.turn;
+  turnEl.style.color=state.turn>lvl.par?'#FF5252':state.turn===lvl.par?'#FFA500':'var(--pub)';
+}
+function showMessage(text,type) {
+  var el=document.getElementById('message'); el.textContent=text||'';
+  el.className=type==='alert'?'alert':type==='warning'?'warning':'';
+}
+function buildTurnStatus() {
+  var parts=[];
+  var checks=[];
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++){ var cell=state.board[r][c]; if(cell.type==='checkpoint') checks.push(cell.active?'\u2713':cell.contadorActivo+'/3'); }
+  if(checks.length>0) parts.push('Checkpoint: '+checks.join(' '));
+  var habRisk1=0,habRisk2=0;
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++){ var cell=state.board[r][c]; if(cell.type==='inhabitant'&&!cell.cbdcControlled){ if(cell.turnosSinFlujo===1) habRisk1++; else if(cell.turnosSinFlujo>=2) habRisk2++; } }
+  if(habRisk2>0) parts.push('\u26a0 '+habRisk2+' inhabitant(s) in danger');
+  else if(habRisk1>0) parts.push(habRisk1+' inhabitant(s) without flow');
+  var acumP=0;
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++){ var cell=state.board[r][c]; if(cell.type==='accumulator'&&!cell.bloqueado&&cell.acumulado>=4) acumP++; }
+  if(acumP>0) parts.push('\u26a0 Accumulator almost full');
+  return parts.join(' \u00b7 ');
+}
+
+function onCellClick(r,c) {
+  if(state.status!=='playing') return;
+  var cell=state.board[r][c];
+  if(!state.drawing) {
+    if(cell.type==='empty'){ showMessage('Start drawing by clicking on a node.'); return; }
+    if(cell.type==='inhabitant'){ showMessage('Inhabitants can only receive connections.'); return; }
+    state.drawing={cells:[{r:r,c:c}]};
+    showMessage('Drawing from '+(LEGEND_LABELS[cell.type]||cell.type).toUpperCase()+'. Click adjacent cells and finish on another node.');
+    render(); return;
+  }
+  var cells=state.drawing.cells, last=cells[cells.length-1];
+  if(cells.length===1&&last.r===r&&last.c===c){ cancelDrawing(); return; }
+  if(!areAdjacent(last,{r:r,c:c})){ showMessage('Can only extend to adjacent cells.'); return; }
+  if(cells.some(function(p){return p.r===r&&p.c===c;})){ showMessage('That cell is already in the path.'); return; }
+  if(cell.type==='empty'&&cellInOtherPath(r,c)){ showMessage('That cell already has a pipe.'); return; }
+  cells.push({r:r,c:c});
+  if(cell.type!=='empty'){ finalizeDrawing(); return; }
+  render();
+}
+function finalizeDrawing() {
+  var cells=state.drawing.cells, first=state.board[cells[0].r][cells[0].c], last=state.board[cells[cells.length-1].r][cells[cells.length-1].c];
+  if(first.type==='empty'||last.type==='empty'||cells.length<2){ cancelDrawing(); return; }
+  var a=cells[0], b=cells[cells.length-1];
+  if(countConnections(a.r,a.c)>=4){ showMessage('That node already has 4 connections (maximum).'); cancelDrawing(); return; }
+  if(last.type==='inhabitant'&&countConnections(b.r,b.c)>=1){ showMessage('This inhabitant is already connected.'); cancelDrawing(); return; }
+  if(countConnections(b.r,b.c)>=4){ showMessage('That node already has 4 connections (maximum).'); cancelDrawing(); return; }
+  var dup=state.paths.some(function(p){ var x=p[0],y=p[p.length-1]; return(x.r===a.r&&x.c===a.c&&y.r===b.r&&y.c===b.c)||(x.r===b.r&&x.c===b.c&&y.r===a.r&&y.c===a.c); });
+  if(dup){ showMessage('A pipe between those nodes already exists.'); cancelDrawing(); return; }
+  state.paths.push(cells); state.drawing=null; state.score+=2; showMessage('Pipe created. (+2)'); render();
+}
+function cancelDrawing(){ state.drawing=null; showMessage(''); render(); }
+function removePath(idx){ if(state.status!=='playing') return; state.paths.splice(idx,1); showMessage('Pipe removed.'); render(); }
+
+function propagateFrom(r,c,amount,visited) {
+  var cell=state.board[r][c], k=r+','+c;
+  if(visited.has(k)) return; visited.add(k);
+  if(cell.type!=='pub') cell.flowReceivedThisTurn+=amount;
+  if(cell.type!=='validator'||!cell.active||cell.bloqueado) return;
+  getConnectedNodes(r,c).filter(function(n){return!visited.has(n.r+','+n.c);}).forEach(function(n){propagateFrom(n.r,n.c,amount,new Set(visited));});
+}
+
+function tick() {
+  if(state.status!=='playing') return;
+  if(state.paths.length===0) showMessage('No pipes: connect nodes before advancing. Inhabitants will lose flow.','warning');
+  state.turn++;
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) state.board[r][c].flowReceivedThisTurn=0;
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) {
+    var cell=state.board[r][c];
+    if(cell.type!=='pub'||!cell.active||cell.bloqueado) continue;
+    var outs=getConnectedNodes(r,c); if(!outs.length) continue;
+    var pubOutput=cell.capacity!==null?cell.capacity:PUB_OUTPUT, share=pubOutput/outs.length;
+    outs.forEach(function(n){ var v=new Set(); v.add(r+','+c); propagateFrom(n.r,n.c,share,v); });
+  }
+  var caidoDesc=null;
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) {
+    var cell=state.board[r][c], f=cell.flowReceivedThisTurn;
+    switch(cell.type) {
+      case 'inhabitant':
+        if(cell.cbdcControlled) break;
+        if(f>=1){ cell.active=true; cell.turnosSinFlujo=0; }
+        else{ cell.active=false; cell.turnosSinFlujo++; if(cell.turnosSinFlujo>=3&&!caidoDesc) caidoDesc='Inhabitant at row '+(r+1)+', col '+(c+1)+' has gone 3 turns without ECOin.'; }
+        break;
+      case 'validator': cell.validadorCargado+=f; if(cell.validadorCargado>=3) cell.active=true; break;
+      case 'shop': cell.active=f>=2; break;
+      case 'accumulator':
+        cell.acumulado+=f;
+        if(cell.acumulado>5&&!cell.bloqueado){ cell.bloqueado=true; cell.active=false; state.potActivations++; state.pendingEvents.push({type:'pot',r:r,c:c}); }
+        break;
+      case 'checkpoint':
+        if(f>0){ cell.contadorActivo++; if(cell.contadorActivo>=3){ cell.active=true; if(cell.contadorActivo===3) state.pendingEvents.push({type:'checkpoint',r:r,c:c}); } }
+        break;
+    }
+  }
+  if(state.turn%2===0) {
+    for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) {
+      if(state.board[r][c].type!=='cbdc') continue;
+      [{r:r-1,c:c},{r:r+1,c:c},{r:r,c:c-1},{r:r,c:c+1}].filter(function(p){return p.r>=0&&p.c>=0&&p.r<state.size&&p.c<state.size;}).forEach(function(p){
+        var adjCell=state.board[p.r][p.c];
+        if(adjCell.type!=='inhabitant'||adjCell.cbdcControlled) return;
+        if(isConnectedToPUB(p.r,p.c)) return;
+        adjCell.cbdcControlled=true; adjCell.active=false; state.cbdcCaptured.add(p.r+','+p.c);
+        if(!caidoDesc) caidoDesc='Inhabitant at row '+(p.r+1)+', col '+(p.c+1)+' was captured by CBDC. Connect PUBs first.';
+      });
+    }
+  }
+  if(caidoDesc){ state.status='lost'; document.getElementById('lossText').textContent=caidoDesc+' The network cannot leave anyone disconnected. Review your connections.'; document.getElementById('overlayLoss').classList.remove('hidden'); render(); return; }
+  var hasCheckpoint=false, allActive=true;
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++){ var cell=state.board[r][c]; if(cell.type==='checkpoint'){ hasCheckpoint=true; if(!cell.active) allActive=false; } }
+  if(hasCheckpoint&&allActive) {
+    state.status='won';
+    var lvl=LEVELS[state.levelIndex], base=100, shopsActive=0;
+    for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++) if(state.board[r][c].type==='shop'&&state.board[r][c].active) shopsActive++;
+    var bonusShops=shopsActive*10, bonusTurns=Math.max(0,lvl.par-state.turn)*5, penalPot=state.potActivations*50, levelScore=base+bonusShops+bonusTurns-penalPot;
+    state.score+=levelScore;
+    var winMsg=lvl.winText;
+    if(state.potActivations>0&&lvl.winTextPoT) winMsg=lvl.winTextPoT;
+    if(state.cbdcCaptured.size>0&&lvl.winTextCBDC) winMsg=lvl.winTextCBDC;
+    document.getElementById('winText').textContent=winMsg;
+    document.getElementById('winLevelPoints').textContent=levelScore;
+    document.getElementById('winTotalPoints').textContent=state.score;
+    document.getElementById('scoreInput').value=state.score;
+    var bd=document.getElementById('winBreakdown'); bd.innerHTML='';
+    function bdLine(cls,txt){ var s=document.createElement('span'); s.className=cls; s.textContent=txt; bd.appendChild(s); }
+    bdLine('positive','Base: +'+base);
+    if(bonusShops>0) bdLine('positive','Active shops ('+shopsActive+'): +'+bonusShops);
+    if(bonusTurns>0) bdLine('positive','Turns under par ('+(lvl.par-state.turn)+'): +'+bonusTurns);
+    if(penalPot>0) bdLine('negative','PoT triggered (\u00d7'+state.potActivations+'): \u221250');
+    var isLastLevel=state.levelIndex+1>=LEVELS.length;
+    var beatsBest=state.score>ecoflowBest;
+    updateBest(state.score);
+    document.getElementById('scoreSubmit').style.display=(isLastLevel&&beatsBest&&state.score>0)?'block':'none';
+    var nextBtn=document.getElementById('btnNextLevel'); nextBtn.style.display=(state.levelIndex+1<LEVELS.length)?'inline-block':'none';
+    render(); fireEvents(); state.pendingEvents=[];
+    setTimeout(function(){document.getElementById('overlayWin').classList.remove('hidden');},1500);
+    return;
+  }
+  var statusMsg=buildTurnStatus();
+  if(statusMsg){ showMessage(statusMsg,statusMsg.includes('danger')||statusMsg.includes('full')?'alert':null); }
+  else showMessage('Turn '+state.turn+' \u2014 no issues.');
+  render(); fireEvents(); state.pendingEvents=[];
+}
+
+function restartLevel() {
+  document.getElementById('overlayWin').classList.add('hidden'); document.getElementById('overlayLoss').classList.add('hidden');
+  if(state.levelIndex===0) state.score=0;
+  loadLevel(state.levelIndex);
+}
+function goNextLevel() {
+  if(state.levelIndex+1>=LEVELS.length) return;
+  document.getElementById('overlayWin').classList.add('hidden'); document.getElementById('overlayLoss').classList.add('hidden');
+  loadLevel(state.levelIndex+1); state.status='intro'; document.getElementById('overlayIntro').classList.remove('hidden');
+}
+function closeIntro(){ document.getElementById('overlayIntro').classList.add('hidden'); state.status='playing'; }
+function closeInfo(){ document.getElementById('overlayInfo').classList.add('hidden'); }
+
+function mk(tag,cls,txt){ var el=document.createElement(tag); if(cls) el.className=cls; if(txt!==undefined) el.textContent=txt; return el; }
+function mka(tag,cls,attrs){ var el=document.createElement(tag); if(cls) el.className=cls; if(attrs) Object.keys(attrs).forEach(function(k){el.setAttribute(k,attrs[k]);}); return el; }
+
+function openInfo() {
+  var lvl=LEVELS[state.levelIndex], body=document.getElementById('infoBody'); body.innerHTML='';
+  var habOK=0,habRiesgo=0,habCount=0,habCBDC=0,checkpoints=[],valActivos=0,valCargando=[],acumFilling=[],acumBloqueados=0,shopsActive=0,shopsInactive=0,pubsActivos=0;
+  var fmt=function(n){return(Math.round(n*10)/10).toString();};
+  for(var r=0;r<state.size;r++) for(var c=0;c<state.size;c++){
+    var cell=state.board[r][c];
+    switch(cell.type){
+      case 'pub': if(cell.active&&!cell.bloqueado) pubsActivos++; break;
+      case 'inhabitant': habCount++; if(cell.cbdcControlled) habCBDC++; else if(cell.turnosSinFlujo===0) habOK++; else habRiesgo++; break;
+      case 'checkpoint': checkpoints.push(cell.contadorActivo); break;
+      case 'validator': if(cell.active) valActivos++; else valCargando.push(cell.validadorCargado); break;
+      case 'accumulator': if(cell.bloqueado) acumBloqueados++; else acumFilling.push(cell.acumulado); break;
+      case 'shop': if(cell.active) shopsActive++; else shopsInactive++; break;
+    }
+  }
+  function h3(t){ var el=mk('h3'); el.textContent=t; body.appendChild(el); }
+  function p(t){ var el=mk('p'); el.textContent=t; body.appendChild(el); }
+  function ul(items){ var ul=mk('ul'); items.forEach(function(t){ var li=mk('li'); li.textContent=t; ul.appendChild(li); }); body.appendChild(ul); }
+  h3('Level objective');
+  p(lvl.introText);
+  p('Goal: activate all checkpoints (3 turns with flow) without any inhabitant going 3 turns without ECOin.');
+  h3('Current status');
+  var stat=mk('div','stat-line');
+  stat.textContent='Turn '+state.turn+' \u00b7 Par '+lvl.par+' \u00b7 Score '+state.score+' \u00b7 Active PUBs '+pubsActivos+' \u00b7 PoT activations '+state.potActivations;
+  body.appendChild(stat);
+  var statusItems=[];
+  if(habCount>0){ var t='Inhabitants: '+habOK+' with flow'; if(habRiesgo>0) t+=', '+habRiesgo+' without flow (fall at 3 turns)'; if(habCBDC>0) t+=', '+habCBDC+' captured by CBDC'; statusItems.push(t); }
+  if(checkpoints.length>0) statusItems.push('Checkpoints: '+checkpoints.map(function(p){return p>=3?'active':p+'/3';}).join(' / '));
+  if(valActivos>0||valCargando.length>0){ var t=(valActivos>0?valActivos+' active':'')+(valCargando.length>0?(valActivos>0?', ':'')+'loading: '+valCargando.map(function(v){return fmt(v)+'/3';}).join(', '):''); statusItems.push('Validators: '+t); }
+  if(acumFilling.length>0||acumBloqueados>0){ var t=(acumFilling.length>0?'filling: '+acumFilling.map(function(a){return fmt(a)+'/5';}).join(', '):'')+(acumBloqueados>0?(acumFilling.length>0?', ':'')+acumBloqueados+' blocked (PoT)':''); statusItems.push('Accumulators: '+t+' (-50 pts when exceeding 5)'); }
+  if(shopsActive>0||shopsInactive>0) statusItems.push('Shops: '+shopsActive+' active'+(shopsInactive>0?', '+shopsInactive+' inactive':'')+' (+10 pts each when winning)');
+  ul(statusItems);
+  h3('How to play');
+  ul(['Click a node to start a pipe, click adjacent cells to extend, finish on another node.','Click an existing pipe to remove it.','Press ENTER (or ADVANCE TURN button) to process one flow cycle.','A node can have a maximum of 4 connections. Inhabitants accept only 1.', '+2 score per pipe placed.']);
+  h3('ECOin rules');
+  ul(['Each active PUB generates 4 ECOin units/turn (2 if reduced capacity), split equally among connections.','An inhabitant needs at least 1 unit/turn. Three turns without flow = defeat.','A validator blocks flow until it accumulates 3 units. Once active it forwards flow to other connections.','An accumulator absorbs without redistributing. Exceeding 5 units triggers PoT: -50 pts and node blocked.','A shop needs at least 2 units/turn to operate. Active shops when winning: +10 pts each.','A checkpoint activates after receiving flow for 3 consecutive turns. Activating all checkpoints wins the level.','CBDC captures adjacent inhabitants not connected to a PUB every 2 turns = defeat.']);
+  h3('Scoring');
+  ul(['+2 per pipe placed','+100 per level completed','+10 per active shop at completion','+5 per turn saved vs. par (only if completed under par)','-50 per accumulator blocked by PoT','Score accumulates across all levels']);
+  h3('Glossary');
+  ul(['PUB - Public Server: Oasis network node distributing ECOin to connected inhabitants. Not centralized.','ECOin: Community currency. Its value is anchored to human time. Cannot be issued arbitrarily.','UBI - Universal Basic Income: Flow reaching every inhabitant regardless of activity.','PoT - Proof of Transaction: Discourages accumulating ECOin without using it.','Validator: Confirms transaction legitimacy. Needs minimum flow before it can operate.','Checkpoint: Milestone on the ECOin blockchain. When reached, history is consolidated and immutable.','CBDC - Central Bank Digital Currency: Digital currency by a central bank. Enables tracking every transaction = total financial surveillance.']);
+  document.getElementById('overlayInfo').classList.remove('hidden');
+}
+
+function undoAction() {
+  if(state.status!=='playing') return;
+  if(state.drawing){ cancelDrawing(); }
+  else if(state.paths.length>0){ state.paths.pop(); showMessage('Pipe undone.'); render(); }
+  else showMessage('Nothing to undo.');
+}
+function deletePipeAtCursor() {
+  if(state.status!=='playing') return;
+  if(state.drawing){ cancelDrawing(); return; }
+  var r=state.cursor.r, c=state.cursor.c, before=state.paths.length;
+  state.paths=state.paths.filter(function(path){return!path.some(function(p){return p.r===r&&p.c===c;});});
+  if(state.paths.length<before){ showMessage('Pipe removed.'); render(); }
+}
+
+document.addEventListener('keydown',function(e){
+  if(e.code==='Enter'){
+    e.preventDefault();
+    if(!document.getElementById('overlayInfo').classList.contains('hidden')) closeInfo();
+    else if(!document.getElementById('overlayIntro').classList.contains('hidden')) closeIntro();
+    else if(!document.getElementById('overlayWin').classList.contains('hidden')){ var nb=document.getElementById('btnNextLevel'); if(nb&&!nb.disabled) goNextLevel(); else restartLevel(); }
+    else if(!document.getElementById('overlayLoss').classList.contains('hidden')) restartLevel();
+    else if(state.status==='playing') tick();
+  }
+  if(e.code==='Backspace'&&state.status==='playing'){ e.preventDefault(); undoAction(); }
+  if(e.code==='Space'&&state.status==='playing'){ e.preventDefault(); deletePipeAtCursor(); }
+  if(e.code==='Space'&&(state.status==='lost'||state.status==='won')){ e.preventDefault(); restartLevel(); }
+  if((e.ctrlKey||e.metaKey)&&e.code==='KeyZ'){ e.preventDefault(); undoAction(); }
+  var DIRS={ArrowUp:[-1,0],ArrowDown:[1,0],ArrowLeft:[0,-1],ArrowRight:[0,1]};
+  if(DIRS[e.code]!==undefined&&state.status==='playing'){
+    e.preventDefault();
+    var dr=DIRS[e.code][0], dc=DIRS[e.code][1], nr=state.cursor.r+dr, nc=state.cursor.c+dc;
+    if(nr>=0&&nc>=0&&nr<state.size&&nc<state.size){
+      if(e.shiftKey){ var curCell=state.board[state.cursor.r][state.cursor.c]; if(!state.drawing&&curCell.type!=='empty') onCellClick(state.cursor.r,state.cursor.c); state.cursor={r:nr,c:nc}; if(state.drawing) onCellClick(nr,nc); }
+      else state.cursor={r:nr,c:nc};
+      render();
+    }
+  }
+  if((e.key==='i'||e.key==='I'||e.key==='?')&&!e.ctrlKey&&!e.metaKey){
+    if(document.getElementById('overlayInfo').classList.contains('hidden')&&document.getElementById('overlayIntro').classList.contains('hidden')&&document.getElementById('overlayWin').classList.contains('hidden')&&document.getElementById('overlayLoss').classList.contains('hidden')){ e.preventDefault(); openInfo(); }
+  }
+  if(e.code==='Escape'){ if(!document.getElementById('overlayInfo').classList.contains('hidden')) closeInfo(); else if(state.drawing) cancelDrawing(); }
+});
+function resizeBoard() {
+  var sz = state.size || LEVELS[state.levelIndex].size;
+  var gap = 5, pad = 10;
+  var topbar = document.getElementById('topbar').offsetHeight || 40;
+  var ui = document.getElementById('ui').offsetHeight || 32;
+  var msg = document.getElementById('message').offsetHeight || 18;
+  var legend = document.getElementById('legend').offsetHeight || 0;
+  var controls = document.getElementById('controls').offsetHeight || 40;
+  var usedH = topbar + ui + msg + legend + controls + 12;
+  var avW = window.innerWidth;
+  var avH = Math.max(80, window.innerHeight - usedH);
+  var cell = Math.floor(Math.min(
+    (avW - pad*2 - gap*(sz-1)) / sz,
+    (avH - pad*2 - gap*(sz-1)) / sz
+  ));
+  cell = Math.max(32, cell);
+  document.documentElement.style.setProperty('--cell', cell+'px');
+}
+window.addEventListener('resize', function() { resizeBoard(); renderPipes(); renderParticles(); });
+loadLevel(0);
+state.status='intro';
+</script>
+</body>
+</html>

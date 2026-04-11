@@ -91,7 +91,13 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
       ...lastActivityBadge(user, isMe),
       div({ class: 'inhabitant-karma-ubi' },
         span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0))),
-        span({ class: 'ubi-line' }, `${i18n.bankingFutureUBI}: `, strong(`${Number(user.estimatedUBI || 0).toFixed(6)} ECO`))
+        span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth}: `, strong(`${Number(user.estimatedUBI || 0).toFixed(6)} ECO`)),
+        span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed}: `,
+          user.lastClaimedDate
+            ? a({ href: '/transfers?filter=ubi', class: 'user-link' }, new Date(user.lastClaimedDate).toLocaleDateString())
+            : strong(i18n.bankUbiNeverClaimed)
+        ),
+        span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(user.totalClaimed || 0).toFixed(6)} ECO`))
       )
     ),
     div({ class: 'inhabitant-details' },
@@ -267,6 +273,8 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
   const title = i18n.inhabitantProfileTitle || i18n.inhabitantviewDetails;
   const karmaScore = typeof safe.karmaScore === 'number' ? safe.karmaScore : 0;
   const estimatedUBI = Number(safe.estimatedUBI || 0);
+  const lastClaimedDate = safe.lastClaimedDate || null;
+  const totalClaimed = Number(safe.totalClaimed || 0);
 
   const providedBucket = typeof safe.lastActivityBucket === 'string' ? safe.lastActivityBucket : null;
   const dotClass = providedBucket === 'green' ? 'green' : providedBucket === 'orange' ? 'orange' : 'red';
@@ -298,7 +306,13 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
           ...lastActivityBadge({ lastActivityBucket: dotClass, deviceSource: safe.deviceSource }, isMe),
           div({ class: 'inhabitant-karma-ubi' },
             span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore))),
-            span({ class: 'ubi-line' }, `${i18n.bankingFutureUBI}: `, strong(`${estimatedUBI.toFixed(6)} ECO`))
+            span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth}: `, strong(`${estimatedUBI.toFixed(6)} ECO`)),
+            span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed}: `,
+              lastClaimedDate
+                ? a({ href: '/transfers?filter=ubi', class: 'user-link' }, new Date(lastClaimedDate).toLocaleDateString())
+                : strong(i18n.bankUbiNeverClaimed)
+            ),
+            span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed}: `, strong(`${totalClaimed.toFixed(6)} ECO`))
           ),
           (!isMe && (id || viewedId))
             ? form(

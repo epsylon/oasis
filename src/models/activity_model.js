@@ -23,6 +23,8 @@ function inferType(c = {}) {
   if (c.type === 'courts_mediators') return 'courtsMediators';
   if (c.type === 'map') return 'map';
   if (c.type === 'mapMarker') return 'mapMarker';
+  if (c.type === 'chat') return 'chat';
+  if (c.type === 'chatMessage') return 'chatMessage';
   if (c.type === 'vote' && c.vote && typeof c.vote.link === 'string') {
     const br = Array.isArray(c.branch) ? c.branch : [];
     if (br.includes(c.vote.link) && Number(c.vote.value) === 1) return 'spread';
@@ -492,12 +494,20 @@ module.exports = ({ cooler }) => {
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
 
       const tribeInternalTypes = new Set(['tribeLeave', 'tribeFeedPost', 'tribeFeedRefeed', 'tribe-content']);
+      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent']);
       const isAllowedTribeActivity = (a) => !tribeInternalTypes.has(a.type);
+      const isVisible = (a) => {
+        if (hiddenTypes.has(a.type)) return false;
+        if (a.type === 'pad' && (a.content || {}).status !== 'OPEN') return false;
+        if (a.type === 'chat' && (a.content || {}).status !== 'OPEN') return false;
+        if (a.type === 'calendar' && (a.content || {}).status !== 'OPEN') return false;
+        return true;
+      };
 
       let out;
-      if (filter === 'mine') out = deduped.filter(a => a.author === userId && isAllowedTribeActivity(a));
-      else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff && isAllowedTribeActivity(a)) }
-      else if (filter === 'all') out = deduped.filter(isAllowedTribeActivity);
+      if (filter === 'mine') out = deduped.filter(a => a.author === userId && isAllowedTribeActivity(a) && isVisible(a));
+      else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff && isAllowedTribeActivity(a) && isVisible(a)) }
+      else if (filter === 'all') out = deduped.filter(a => isAllowedTribeActivity(a) && isVisible(a));
       else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
       else if (filter === 'karma') out = deduped.filter(a => a.type === 'karmaScore');
       else if (filter === 'tribe') out = deduped.filter(a => a.type === 'tribe' || String(a.type || '').startsWith('tribe'));
@@ -513,6 +523,10 @@ module.exports = ({ cooler }) => {
         });
       else if (filter === 'task')
         out = deduped.filter(a => a.type === 'task' || a.type === 'taskAssignment');
+      else if (filter === 'gameScore') out = deduped.filter(a => a.type === 'gameScore');
+      else if (filter === 'pad') out = deduped.filter(a => a.type === 'pad' && (a.content || {}).status === 'OPEN');
+      else if (filter === 'chat') out = deduped.filter(a => a.type === 'chat' && (a.content || {}).status === 'OPEN');
+      else if (filter === 'calendar') out = deduped.filter(a => a.type === 'calendar' && (a.content || {}).status === 'OPEN');
       else out = deduped.filter(a => a.type === filter);
 
       out.sort((a, b) => (b.ts || 0) - (a.ts || 0));

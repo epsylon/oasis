@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Labyrinth</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#ui { display: flex; gap: 24px; padding: 8px; font-size: 15px; color: #FFA500; }
+canvas { display: block; flex: 1; align-self: stretch; min-height: 0; width: 100%; border: 1px solid #333; }
+#msg { font-size: 16px; color: #FFA500; margin: 4px; text-align: center; min-height: 22px; }
+#dpad { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 6px; }
+#dpad-row { display: flex; gap: 4px; }
+#dpad button { width: 44px; height: 44px; background: #222; border: 1px solid #555; color: #FFA500; font-size: 18px; cursor: pointer; }
+#dpad button:active { background: #444; }
+#controls { color: #888; font-size: 13px; text-align: center; margin-bottom: 4px; }
+#scoreSubmit { text-align: center; margin: 6px; }
+#scoreSubmit button { background: #1a3a1a; border: 1px solid #FFA500; color: #FFA500; padding: 6px 16px; cursor: pointer; font-family: monospace; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">LABYRINTH</span>
+</div>
+<div id="ui">
+  <span>LEVEL: <b id="levelEl">1</b></span>
+  <span>MOVES: <b id="movesEl">150</b></span>
+  <span>SCORE: <b id="scoreEl">0</b></span>
+  <span>BEST: <b id="bestEl">-</b></span>
+</div>
+<canvas id="c"></canvas>
+<div id="msg">Press SPACE or tap to start</div>
+<div id="dpad">
+  <div id="dpad-row"><button id="btn-up">&#8593;</button></div>
+  <div id="dpad-row"><button id="btn-left">&#8592;</button><button id="btn-down">&#8595;</button><button id="btn-right">&#8594;</button></div>
+</div>
+<div id="controls">Arrow keys / WASD &nbsp;|&nbsp; SPACE — new game</div>
+<div id="scoreSubmit" style="display:none">
+  <form method="POST" action="/games/submit-score" target="_top">
+    <input type="hidden" name="game" value="labyrinth">
+    <input type="hidden" id="scoreInput" name="score" value="0">
+    <button type="submit">Submit Score to Hall of Fame</button>
+  </form>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const BASE_SIZE = 10;
+let CELL = 36;
+
+let level = 1, moves = 0, maxMoves = 150, score = 0, total = 0, gameState = 'idle';
+let cols, rows, grid, px, py;
+let best = parseInt(localStorage.getItem('labyrinth_best') || '-1');
+
+function seededRand(seed) {
+  let s = seed;
+  return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+}
+
+function generateMaze(c, r, seed) {
+  const rng = seededRand(seed);
+  const cells = Array.from({length: r}, () => Array.from({length: c}, () => ({ n: true, s: true, e: true, w: true, visited: false })));
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+  function carve(x, y) {
+    cells[y][x].visited = true;
+    const dirs = shuffle([['n', 0, -1], ['s', 0, 1], ['e', 1, 0], ['w', -1, 0]]);
+    for (const [d, dx, dy] of dirs) {
+      const nx = x + dx, ny = y + dy;
+      if (nx >= 0 && nx < c && ny >= 0 && ny < r && !cells[ny][nx].visited) {
+        const opp = { n: 's', s: 'n', e: 'w', w: 'e' };
+        cells[y][x][d] = false;
+        cells[ny][nx][opp[d]] = false;
+        carve(nx, ny);
+      }
+    }
+  }
+  carve(0, 0);
+  return cells;
+}
+
+function getAvailableSize() {
+  const usedH = (document.getElementById('topbar').offsetHeight || 40)
+    + (document.getElementById('ui').offsetHeight || 30)
+    + (document.getElementById('msg').offsetHeight || 22)
+    + (document.getElementById('dpad').offsetHeight || 100)
+    + (document.getElementById('controls').offsetHeight || 16)
+    + 24;
+  return { w: window.innerWidth - 8, h: Math.max(200, window.innerHeight - usedH) };
+}
+
+function startLevel() {
+  cols = BASE_SIZE + (level - 1) * 2;
+  rows = Math.floor(cols * 0.7);
+  maxMoves = cols * rows * 2;
+  moves = 0;
+  grid = generateMaze(cols, rows, level * 7919 + 42);
+  px = Math.floor(cols / 2); py = Math.floor(rows / 2);
+  const avail = getAvailableSize();
+  CELL = Math.max(16, Math.floor(Math.min(avail.w / cols, avail.h / rows)));
+  canvas.width = cols * CELL;
+  canvas.height = rows * CELL;
+  document.getElementById('levelEl').textContent = level;
+  document.getElementById('movesEl').textContent = maxMoves;
+  document.getElementById('msg').textContent = `Level ${level} — Reach the exit!`;
+  gameState = 'play';
+}
+
+function tryMove(dx, dy) {
+  if (gameState !== 'play') return;
+  const cell = grid[py][px];
+  const dirs = { '0,-1': 'n', '0,1': 's', '1,0': 'e', '-1,0': 'w' };
+  const key = `${dx},${dy}`;
+  const wall = dirs[key];
+  if (!wall || cell[wall]) return;
+  px += dx; py += dy;
+  moves++;
+  document.getElementById('movesEl').textContent = maxMoves - moves;
+  if (px === cols - 1 && py === rows - 1) {
+    const remaining = maxMoves - moves;
+    const levelScore = remaining + level * 50;
+    total += levelScore;
+    document.getElementById('scoreEl').textContent = total;
+    document.getElementById('msg').textContent = `EXIT! +${levelScore} pts. Next level...`;
+    gameState = 'transit';
+    setTimeout(() => { level++; startLevel(); }, 1000);
+  } else if (moves >= maxMoves) {
+    endGame();
+  }
+}
+
+function endGame() {
+  gameState = 'over';
+  if (best < 0 || total > best) {
+    best = total;
+    localStorage.setItem('labyrinth_best', best);
+    document.getElementById('bestEl').textContent = best;
+  }
+  document.getElementById('msg').textContent = `Out of moves! Score: ${total}. SPACE = new game`;
+  document.getElementById('scoreInput').value = total;
+  document.getElementById('scoreSubmit').style.display = 'block';
+}
+
+function newGame() {
+  level = 1; total = 0; score = 0;
+  document.getElementById('scoreEl').textContent = '0';
+  document.getElementById('scoreSubmit').style.display = 'none';
+  startLevel();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); newGame(); return; }
+  const map = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0], KeyW: [0,-1], KeyS: [0,1], KeyA: [-1,0], KeyD: [1,0] };
+  if (map[e.code]) { e.preventDefault(); if (gameState === 'idle') newGame(); else tryMove(...map[e.code]); }
+});
+
+canvas.addEventListener('click', () => { if (gameState === 'idle') newGame(); });
+window.addEventListener('resize', () => { if (gameState !== 'idle') startLevel(); });
+
+const dpadStart = () => { if (gameState === 'idle') newGame(); };
+document.getElementById('btn-up').addEventListener('click', () => { dpadStart(); tryMove(0, -1); });
+document.getElementById('btn-down').addEventListener('click', () => { dpadStart(); tryMove(0, 1); });
+document.getElementById('btn-left').addEventListener('click', () => { dpadStart(); tryMove(-1, 0); });
+document.getElementById('btn-right').addEventListener('click', () => { dpadStart(); tryMove(1, 0); });
+
+if (best >= 0) document.getElementById('bestEl').textContent = best;
+
+const VIEW = 6;
+
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, W, H);
+  if (gameState === 'idle') { requestAnimationFrame(draw); return; }
+
+  const viewCols = Math.min(cols, Math.floor(W / CELL));
+  const viewRows = Math.min(rows, Math.floor(H / CELL));
+  const offX = Math.max(0, Math.min(px - Math.floor(viewCols / 2), cols - viewCols));
+  const offY = Math.max(0, Math.min(py - Math.floor(viewRows / 2), rows - viewRows));
+
+  for (let r = offY; r < Math.min(offY + viewRows + 1, rows); r++) {
+    for (let c = offX; c < Math.min(offX + viewCols + 1, cols); c++) {
+      const x = (c - offX) * CELL, y = (r - offY) * CELL;
+      const cell = grid[r][c];
+      ctx.strokeStyle = '#FFA500'; ctx.lineWidth = 2;
+      if (cell.n) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + CELL, y); ctx.stroke(); }
+      if (cell.s) { ctx.beginPath(); ctx.moveTo(x, y + CELL); ctx.lineTo(x + CELL, y + CELL); ctx.stroke(); }
+      if (cell.w) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + CELL); ctx.stroke(); }
+      if (cell.e) { ctx.beginPath(); ctx.moveTo(x + CELL, y); ctx.lineTo(x + CELL, y + CELL); ctx.stroke(); }
+    }
+  }
+
+  const ex = (cols - 1 - offX) * CELL + CELL / 2, ey = (rows - 1 - offY) * CELL + CELL / 2;
+  if (cols - 1 >= offX && cols - 1 < offX + viewCols && rows - 1 >= offY && rows - 1 < offY + viewRows) {
+    ctx.fillStyle = '#f44';
+    ctx.beginPath(); ctx.arc(ex, ey, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('EXIT', ex, ey);
+  }
+
+  const ppx = (px - offX) * CELL + CELL / 2, ppy = (py - offY) * CELL + CELL / 2;
+  ctx.fillStyle = '#00ff88';
+  ctx.beginPath(); ctx.arc(ppx, ppy, 7, 0, Math.PI * 2); ctx.fill();
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>

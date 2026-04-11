@@ -55,6 +55,8 @@ And some other nice modules, like for example:
  
 And much more, that we invite you to discover by yourself ;-)
 
+   ![SNH](https://solarnethub.com/git/snh-games.jpeg "SolarNET.HuB")
+   
 ----------
 
 ## Modules:
@@ -67,13 +69,16 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Banking: Module to determine the real value of ECOIN and distribute a UBI using the common treasury.
  + BlockExplorer: Module to navigate the blockchain.
  + Bookmarks: Module to discover and manage bookmarks.	
+ + Calendars: Module to discover and manage calendars.
+ + Chats: Module to discover and manage encrypted chats.
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
  + Courts: Module to resolve conflicts and emit veredicts.	
  + Documents: Module to discover and manage documents.	
  + Events: Module to discover and manage events.
  + Favorites: Module to manage your favorite content.
  + Feed: Module to discover and share short-texts (feeds).
- + Forums: Module to discover and manage forums.	
+ + Forums: Module to discover and manage forums.
+ + Games: Module to play and share your scores in various mini-games.	
  + Governance: Module to discover and manage votes.	
  + Images: Module to discover and manage images.
  + Invites: Module to manage and apply invite codes.
@@ -84,6 +89,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Market: Module to exchange goods or services.
  + Multiverse: Module to receive content from other federated peers.
  + Opinions: Module to discover and vote on opinions.	
+ + Pads: Module to manage collaborative encrypted text editors.
  + Parliament: Module to elect governments and vote on laws.	
  + Pixelia: Module to draw on a collaborative grid.	
  + Projects: Module to explore, crowd-funding and manage projects.

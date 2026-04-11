@@ -1,7 +1,7 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.6.9",
-  "description": "Oasis Social Networking Project Utopia",
+  "version": "0.7.0",
+  "description": "Oasis - Social Networking Utopia",
   "repository": {
     "type": "git",
     "url": "git+ssh://git@code.03c8.net/krakenlabs/oasis.git"

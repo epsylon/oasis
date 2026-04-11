@@ -1,4 +1,5 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const pkg = require('./package.json');
 const config = require('./ssb_config');
@@ -52,6 +53,11 @@ async function printMetadata(mode, modeColor = colors.cyan) {
   console.log(`- Package: ${colors.blue}${name} ${colors.yellow}[Version: ${version}]${colors.reset}`);
   console.log("- Logging Level:", logLevel);
   console.log(`- Oasis ID: [ ${colors.orange}@${publicKey}${colors.reset} ]`);
+  const ifaces = os.networkInterfaces();
+  const isOnline = Object.values(ifaces).some(list =>
+    list && list.some(i => !i.internal && i.family === 'IPv4')
+  );
+  console.log(`- Mode: ${isOnline ? 'online' : 'offline'}`);
   console.log("");
   console.log("=========================");
   console.log("Modules loaded: [", modules.length, "]");

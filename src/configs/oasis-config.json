@@ -27,12 +27,15 @@
     "tribesMod": "on",
     "reportsMod": "on",
     "opinionsMod": "on",
+    "padsMod": "on",
+    "calendarsMod": "on",
     "transfersMod": "on",
     "feedMod": "on",
     "pixeliaMod": "on",
     "agendaMod": "on",
     "aiMod": "on",
     "forumMod": "on",
+    "gamesMod": "on",
     "jobsMod": "on",
     "shopsMod": "on",
     "projectsMod": "on",
@@ -40,7 +43,8 @@
     "parliamentMod": "on",
     "courtsMod": "on",
     "favoritesMod": "on",
-    "mapsMod": "on"
+    "mapsMod": "on",
+    "chatsMod": "on"
   },
   "wallet": {
     "url": "http://localhost:7474",
@@ -60,5 +64,6 @@
     "limit": 2000
   },
   "homePage": "activity",
-  "language": "en"
+  "language": "en",
+  "pubId": ""
 }

@@ -341,6 +341,21 @@ const renderMapsLink = () => {
   return "";
 };
 
+const renderChatsLink = () => {
+  const chatsMod = getConfig().modules.chatsMod === "on";
+  if (chatsMod) {
+    return [
+      navLink({
+        href: "/chats",
+        emoji: "ꖒ",
+        text: i18n.chatsTitle,
+        class: "chats-link enabled"
+      })
+    ];
+  }
+  return "";
+};
+
 const renderVideosLink = () => {
   const videosMod = getConfig().modules.videosMod === "on";
   if (videosMod) {
@@ -571,6 +586,20 @@ const renderOpinionsLink = () => {
     : "";
 };
 
+const renderPadsLink = () => {
+  const padsMod = getConfig().modules.padsMod === "on";
+  return padsMod
+    ? [
+        navLink({
+          href: "/pads",
+          emoji: "ꔗ",
+          text: i18n.padsTitle,
+          class: "pads-link enabled"
+        })
+      ]
+    : "";
+};
+
 const renderTransfersLink = () => {
   const transfersMod = getConfig().modules.transfersMod === "on";
   return transfersMod
@@ -608,6 +637,13 @@ const renderPixeliaLink = () => {
           class: "pixelia-link enabled"
         })
       ]
+    : "";
+};
+
+const renderGamesLink = () => {
+  const gamesMod = getConfig().modules.gamesMod === "on";
+  return gamesMod
+    ? [navLink({ href: "/games", emoji: "ꕇ", text: i18n.gamesTitle, class: "games-link enabled" })]
     : "";
 };
 
@@ -676,6 +712,20 @@ const renderEventsLink = () => {
           emoji: "ꕆ",
           text: i18n.eventsLabel,
           class: "events-link enabled"
+        })
+      ]
+    : "";
+};
+
+const renderCalendarsLink = () => {
+  const calendarsMod = getConfig().modules.calendarsMod === "on";
+  return calendarsMod
+    ? [
+        navLink({
+          href: "/calendars",
+          emoji: "\uA5AF",
+          text: i18n.calendarsTitle || "Calendars",
+          class: "calendars-link enabled"
         })
       ]
     : "";
@@ -852,6 +902,7 @@ const template = (titlePrefix, ...elements) => {
                 },
                 renderVotationsLink(),
                 renderEventsLink(),
+                renderCalendarsLink(),
                 renderTasksLink(),
                 renderReportsLink()
               ),
@@ -896,8 +947,10 @@ const template = (titlePrefix, ...elements) => {
                 }),
                 renderTrendingLink(),
                 renderOpinionsLink(),
+                renderPadsLink(),
                 renderForumLink(),
                 renderMapsLink(),
+                renderChatsLink(),
                 renderInvitesLink(),
                 navLink({
                   href: "/peers",
@@ -912,6 +965,7 @@ const template = (titlePrefix, ...elements) => {
                   title: i18n.menuCreative
                 },
                 renderFeedLink(),
+                renderGamesLink(),
                 renderPixeliaLink()
               ),
               navGroup(
@@ -1559,6 +1613,8 @@ exports.authorView = ({
   ecoAddress,
   karmaScore = 0,
   estimatedUBI = 0,
+  lastClaimedDate = null,
+  totalClaimed = 0,
   lastActivityBucket
 }) => {
   const linkUrl = `/author/${encodeURIComponent(feedId)}`;
@@ -1610,7 +1666,13 @@ exports.authorView = ({
         ...lastActivityBadge({ lastActivityBucket: bucket }, true),
         div({ class: "inhabitant-karma-ubi" },
           span({ class: "karma-line" }, `${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)),
-          span({ class: "ubi-line" }, `${i18n.bankingFutureUBI}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`))
+          span({ class: "ubi-line" }, `${i18n.bankUbiThisMonth}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)),
+          span({ class: "ubi-line" }, `${i18n.bankUbiLastClaimed}: `,
+            lastClaimedDate
+              ? a({ href: "/transfers?filter=ubi", class: "user-link" }, new Date(lastClaimedDate).toLocaleDateString())
+              : strong(i18n.bankUbiNeverClaimed)
+          ),
+          span({ class: "ubi-line" }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`))
         ),
         div({ class: "eco-wallet" },
           p(`${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `,
@@ -2077,6 +2139,8 @@ exports.privateView = async (messagesInput, filter) => {
       .replace(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="job-link" href="${hrefFor.job(id)}">${match}</a>`)
       .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`)
       .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`)
+      .replace(/\/calendars\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="calendar-link" href="/calendars/${encodeURIComponent(id)}">${match}</a>`)
+      .replace(/(https?:\/\/[^\s<"]+)/g, (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`)
   }
 
   const threads = {}

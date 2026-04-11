@@ -21,6 +21,7 @@ By default it uses port 8008, so make sure to expose that port (or whatever port
 
 Before running the server, create a config file that enables needed plugins and network options.
 
+   mkdir -p ~/.ssb
    nano ~/.ssb/config
 
 Paste this:
@@ -96,7 +97,6 @@ Be sure to replace {your-hostname} with your server’s domain or IP.
 
    npm -g install ssb-server
 
-   mkdir -p ~/.ssb
    cd ~/.ssb
    npm init -y
 
@@ -147,7 +147,7 @@ And make it executable:
 
 Use a session-manager such as screen or tmux to create a detachable session. Start the session and run the script:
 
-   sh ~/oasis-pub/oasis-pub-server.sh
+   ~/oasis-pub/oasis-pub-server.sh
 
 Then, detach the session.
 

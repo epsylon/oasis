@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cocoland</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#topbar a:hover { text-decoration: underline; }
+#ui { display: flex; gap: 24px; padding: 8px; font-size: 15px; color: #FFA500; }
+canvas { display: block; flex: 1; align-self: stretch; min-height: 0; width: 100%; background: #000; border: 1px solid #333; }
+#msg { font-size: 18px; color: #FFA500; margin: 8px; text-align: center; min-height: 28px; }
+#controls { color: #888; font-size: 13px; text-align: center; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">COCOLAND</span>
+</div>
+<div id="ui">
+  <span>SCORE: <b id="score">0</b></span>
+  <span>BEST: <b id="best">0</b></span>
+</div>
+<canvas id="c" width="600" height="250"></canvas>
+<div id="msg">Press SPACE or TAP to start</div>
+<div id="controls">SPACE / TAP — Jump &nbsp;|&nbsp; Double jump allowed</div>
+<div id="scoreSubmit" style="display:none;text-align:center;margin:6px">
+  <form method="POST" action="/games/submit-score" target="_top">
+    <input type="hidden" name="game" value="cocoland">
+    <input type="hidden" id="scoreInput" name="score" value="0">
+    <button type="submit" style="background:#1a3a1a;border:1px solid #FFA500;color:#FFA500;padding:6px 16px;cursor:pointer;font-family:monospace;font-size:14px">Submit Score to Hall of Fame</button>
+  </form>
+</div>
+<script>
+document.addEventListener("keydown", e => { if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","Space"].includes(e.code)) e.preventDefault(); });
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const bestEl = document.getElementById('best');
+const msgEl = document.getElementById('msg');
+
+const W = canvas.width, H = canvas.height;
+const GROUND = H - 40;
+const GRAVITY = 0.6;
+const JUMP = -13;
+
+let state = 'idle';
+let score = 0, best = 0, frames = 0;
+let coco, obstacles, coins, speed;
+
+function reset() {
+  coco = { x: 80, y: GROUND - 44, vy: 0, r: 22, jumps: 0 };
+  obstacles = [];
+  coins = [];
+  speed = 2;
+  score = 0;
+  frames = 0;
+  scoreEl.textContent = '0';
+}
+
+function jump() {
+  if (state === 'idle' || state === 'over') {
+    reset();
+    state = 'play';
+    msgEl.textContent = '';
+    return;
+  }
+  if (coco.jumps < 2) {
+    coco.vy = JUMP;
+    coco.jumps++;
+  }
+}
+
+document.addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); jump(); } });
+canvas.addEventListener('click', jump);
+
+function spawnObstacle() {
+  const h = 30 + Math.random() * 40;
+  obstacles.push({ x: W, y: GROUND - h, w: 22, h });
+}
+
+function spawnCoin() {
+  const y = GROUND - 60 - Math.random() * 80;
+  coins.push({ x: W, y, r: 9, collected: false });
+}
+
+function drawCoco() {
+  const x = coco.x, y = coco.y;
+  ctx.fillStyle = '#8B4513';
+  ctx.beginPath();
+  ctx.arc(x, y + coco.r, coco.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x - 8, y + coco.r - 6, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 8, y + coco.r - 6, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(x - 7, y + coco.r - 6, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 9, y + coco.r - 6, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#5a2000';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y + coco.r + 7, 8, 0.1 * Math.PI, 0.9 * Math.PI);
+  ctx.stroke();
+  ctx.fillStyle = '#3a8000';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x - 14, y - 14, x - 8, y - 24);
+  ctx.quadraticCurveTo(x, y - 10, x, y);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x + 14, y - 14, x + 8, y - 24);
+  ctx.quadraticCurveTo(x, y - 10, x, y);
+  ctx.fill();
+}
+
+function drawPalmTree(px, groundY) {
+  ctx.strokeStyle = '#4a7a00';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(px, groundY);
+  ctx.quadraticCurveTo(px + 6, groundY - 60, px - 4, groundY - 110);
+  ctx.stroke();
+  ctx.fillStyle = '#3a8000';
+  for (let a = -0.6; a <= 0.7; a += 0.3) {
+    ctx.beginPath();
+    ctx.ellipse(px - 4 + Math.cos(a) * 32, groundY - 110 + Math.sin(a) * 12 - 10, 30, 10, a, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#8B4513';
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc(px - 4 + (i - 1) * 9, groundY - 115, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawCoin(c) {
+  if (c.collected) return;
+  ctx.fillStyle = '#FFA500';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('E', c.x, c.y);
+}
+
+function collides(ax, ay, aw, ah, bx, by, bw, bh) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+let bgOffset = 0;
+let palmTimer = 0, coinTimer = 0;
+
+function loop() {
+  ctx.clearRect(0, 0, W, H);
+
+  ctx.fillStyle = '#1a3a00';
+  ctx.fillRect(0, GROUND, W, H - GROUND);
+
+  if (state === 'play') {
+    bgOffset = (bgOffset + speed * 0.5) % W;
+    palmTimer += speed;
+    coinTimer += speed;
+    if (palmTimer > 350 + Math.random() * 150) {
+      spawnObstacle();
+      palmTimer = 0;
+    }
+    if (coinTimer > 150 + Math.random() * 80) {
+      spawnCoin();
+      coinTimer = 0;
+    }
+  }
+
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    const o = obstacles[i];
+    if (state === 'play') o.x -= speed;
+    if (o.x + o.w < 0) { obstacles.splice(i, 1); continue; }
+    drawPalmTree(o.x + 11, GROUND);
+    if (state === 'play' && collides(coco.x - coco.r + 4, coco.y, coco.r * 2 - 8, coco.r * 2, o.x, o.y, o.w, o.h)) {
+      state = 'over';
+      if (score > best) { best = score; bestEl.textContent = best; }
+      msgEl.textContent = 'GAME OVER — Press SPACE to retry';
+      document.getElementById('scoreInput').value = score;
+      document.getElementById('scoreSubmit').style.display = 'block';
+    }
+  }
+
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const c = coins[i];
+    if (state === 'play') c.x -= speed;
+    if (c.x + c.r < 0) { coins.splice(i, 1); continue; }
+    drawCoin(c);
+    if (!c.collected && state === 'play') {
+      const dx = coco.x - c.x, dy = (coco.y + coco.r) - c.y;
+      if (Math.sqrt(dx * dx + dy * dy) < coco.r + c.r) {
+        c.collected = true;
+        score += 10;
+        scoreEl.textContent = score;
+      }
+    }
+  }
+
+  if (state === 'play') {
+    coco.vy += GRAVITY;
+    coco.y += coco.vy;
+    if (coco.y >= GROUND - coco.r * 2) {
+      coco.y = GROUND - coco.r * 2;
+      coco.vy = 0;
+      coco.jumps = 0;
+    }
+    frames++;
+    if (frames % 6 === 0) {
+      score++;
+      scoreEl.textContent = score;
+    }
+    if (frames % 60 === 0 && speed < 10) speed += 0.1;
+  }
+
+  drawCoco();
+  requestAnimationFrame(loop);
+}
+
+reset();
+loop();
+</script>
+</body>
+</html>

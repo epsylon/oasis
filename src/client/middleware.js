@@ -60,6 +60,10 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   app.use(mount("/mapcache", mapcache));
 
 
+  const gamesStatic = new Koa();
+  gamesStatic.use(koaStatic(join(__dirname, "..", "games")));
+  app.use(mount("/game-assets", gamesStatic));
+
   app.use(mount("/js", koaStatic(path.join(__dirname, 'public/js'))));
   app.use(koaStatic(path.join(__dirname, 'public')));
 

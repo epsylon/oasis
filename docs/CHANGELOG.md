@@ -13,6 +13,19 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.7.0 - 2026-04-12
+
+### Added
+
+- Pads module: create, manage and discover collaborative encrypted text editors (Pads plugin).
+- Chats module: create, manage and discover encrypted chats (Chats plugin).
+- Games module: play and share your scores in various mini-games (Games plugin).
+- Calendars module: create, manage and discover calendars (Calendars plugin).
+
+### Changed
+
+- Connectivity mode notice: offline/online (Core plugin).
+
 ## v0.6.9 - 2026-04-04
 
 ### Added

@@ -285,7 +285,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
     title,
     section(header),
     section(renderModeButtons(filter)),
-    section(searchBar),
+    !isForm ? section(searchBar) : null,
     section(
       isForm
         ? renderShopForm(filter, filter === "edit" ? (shopToEdit || {}) : {}, params)
@@ -318,6 +318,9 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       span({ class: "tribe-info-label" }, `${i18n.shopShareUrl}: `),
       input({ type: "text", value: fullShareUrl, readonly: true, class: "shop-share-input" })
     ),
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
+    ),
     table({ class: "tribe-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.shopCreatedAt || "CREATED"),
@@ -339,7 +342,6 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         td({ class: "tribe-info-value", colspan: "3" }, ...renderUrl(shop.url))
       ) : null
     ),
-    h2({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`),
     shop.description ? p({ class: "tribe-side-description" }, ...renderUrl(shop.description)) : null,
     renderMapEmbed(params.mapData, shop.mapUrl),
     div({ class: "tribe-side-actions" },

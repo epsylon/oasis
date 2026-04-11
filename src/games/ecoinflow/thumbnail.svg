@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" style="background:#000">
+  <rect width="400" height="220" fill="#000"/>
+  <rect x="10" y="10" width="380" height="200" rx="4" fill="#111" stroke="#222" stroke-width="1"/>
+
+  <!-- Grid cells -->
+  <rect x="22" y="22" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="82" y="22" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="142" y="22" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="202" y="22" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="262" y="22" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="322" y="22" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+
+  <rect x="22" y="82" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="82" y="82" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="142" y="82" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="202" y="82" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="262" y="82" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="322" y="82" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+
+  <rect x="22" y="142" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="82" y="142" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="142" y="142" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="202" y="142" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="262" y="142" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+  <rect x="322" y="142" width="52" height="52" rx="2" fill="#1c1c1c" stroke="#333" stroke-width="1"/>
+
+  <!-- Pipes (orange paths between nodes) -->
+  <path d="M48 74 L48 82" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M48 134 L48 142" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M74 48 L82 48" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M134 48 L142 48" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M108 74 L108 82" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M108 134 L108 142" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M194 108 L202 108" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M254 108 L262 108" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M228 74 L228 82" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M288 74 L288 82" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M288 134 L288 142" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M314 168 L322 168" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+  <path d="M168 134 L168 142" stroke="#FFA500" stroke-width="4" stroke-linecap="round" opacity="0.9"/>
+
+  <!-- PUB node (orange square) row1 col1 -->
+  <rect x="34" y="34" width="36" height="36" rx="2" fill="#FFA500" opacity="0.92"/>
+  <line x1="52" y1="24" x2="52" y2="34" stroke="#FFA500" stroke-width="2"/>
+  <circle cx="52" cy="21" r="3" fill="#FFA500"/>
+  <text x="52" y="57" font-family="monospace" font-size="9" fill="#000" text-anchor="middle" font-weight="bold">PUB</text>
+
+  <!-- habitante node (green circle) row1 col2 -->
+  <circle cx="108" cy="48" r="18" fill="#8BC34A" opacity="0.9"/>
+  <text x="108" y="52" font-family="monospace" font-size="8" fill="#000" text-anchor="middle" font-weight="bold">HAB</text>
+
+  <!-- validador (diamond) row1 col3 -->
+  <polygon points="168,30 186,48 168,66 150,48" fill="rgba(200,218,230,0.55)" stroke="#ccc" stroke-width="1"/>
+  <text x="168" y="52" font-family="monospace" font-size="7" fill="#000" text-anchor="middle" font-weight="bold">VAL</text>
+
+  <!-- tienda (hexagon) row1 col4 -->
+  <polygon points="228,30 241,38 241,58 228,66 215,58 215,38" fill="#4CAF50" opacity="0.9"/>
+  <text x="228" y="52" font-family="monospace" font-size="7" fill="#000" text-anchor="middle" font-weight="bold">SHP</text>
+
+  <!-- acumulador (triangle) row1 col5 -->
+  <polygon points="288,30 310,66 266,66" fill="rgba(255,82,82,0.25)" stroke="#FF5252" stroke-width="1"/>
+  <text x="288" y="58" font-family="monospace" font-size="7" fill="#eee" text-anchor="middle" font-weight="bold">ACU</text>
+
+  <!-- CBDC (grey square) row1 col6 -->
+  <rect x="334" y="34" width="36" height="36" rx="2" fill="#607D8B" opacity="0.9"/>
+  <text x="352" y="57" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle" font-weight="bold">CBD</text>
+
+  <!-- row2 nodes -->
+  <!-- PUB node row2 col1 -->
+  <rect x="34" y="94" width="36" height="36" rx="2" fill="#FFA500" opacity="0.7"/>
+  <text x="52" y="117" font-family="monospace" font-size="9" fill="#000" text-anchor="middle" font-weight="bold">PUB</text>
+
+  <!-- hab row2 col2 -->
+  <circle cx="108" cy="108" r="18" fill="#8BC34A" opacity="0.7"/>
+  <text x="108" y="112" font-family="monospace" font-size="8" fill="#000" text-anchor="middle" font-weight="bold">HAB</text>
+
+  <!-- hab row2 col4 -->
+  <circle cx="228" cy="108" r="18" fill="#8BC34A" opacity="0.85"/>
+  <text x="228" y="112" font-family="monospace" font-size="8" fill="#000" text-anchor="middle" font-weight="bold">HAB</text>
+
+  <!-- tienda row2 col5 -->
+  <polygon points="288,90 301,98 301,118 288,126 275,118 275,98" fill="#4CAF50" opacity="0.75"/>
+  <text x="288" y="112" font-family="monospace" font-size="7" fill="#000" text-anchor="middle" font-weight="bold">SHP</text>
+
+  <!-- checkpoint row3 col2 -->
+  <rect x="90" y="154" width="36" height="36" rx="2" fill="none" stroke="#FFFF55" stroke-width="3"/>
+  <text x="108" y="177" font-family="monospace" font-size="7" fill="#FFFF55" text-anchor="middle" font-weight="bold">CHK</text>
+
+  <!-- hab row3 col3 -->
+  <circle cx="168" cy="168" r="18" fill="#8BC34A" opacity="0.8"/>
+  <text x="168" y="172" font-family="monospace" font-size="8" fill="#000" text-anchor="middle" font-weight="bold">HAB</text>
+
+  <!-- CBDC row3 col4 -->
+  <rect x="214" y="154" width="36" height="36" rx="2" fill="#607D8B" opacity="0.8"/>
+  <text x="232" y="177" font-family="monospace" font-size="8" fill="#cfd8dc" text-anchor="middle" font-weight="bold">CBD</text>
+
+  <!-- tienda row3 col6 -->
+  <polygon points="348,154 361,162 361,182 348,190 335,182 335,162" fill="#4CAF50" opacity="0.8"/>
+  <text x="348" y="176" font-family="monospace" font-size="7" fill="#000" text-anchor="middle" font-weight="bold">SHP</text>
+
+  <!-- Flow particles on some pipes -->
+  <circle cx="48" cy="78" r="3" fill="#FFA500" opacity="0.95">
+    <animate attributeName="cy" values="74;82" dur="0.9s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="0.9s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="91" cy="48" r="3" fill="#FFA500" opacity="0.95">
+    <animate attributeName="cx" values="74;82" dur="0.9s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;1;1;0" dur="0.9s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Title -->
+  <text x="200" y="212" font-family="'Courier New', monospace" font-size="14" fill="#FFA500" text-anchor="middle" font-weight="bold" letter-spacing="3">ECOINFLOW</text>
+</svg>

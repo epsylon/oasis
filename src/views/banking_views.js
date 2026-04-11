@@ -8,6 +8,8 @@ const FILTER_LABELS = {
   mine: i18n.mine,
   pending: i18n.pending,
   closed: i18n.closed,
+  claimed: i18n.bankStatusClaimed,
+  expired: i18n.bankStatusExpired,
   epochs: i18n.bankEpochs,
   rules: i18n.bankRules,
   addresses: i18n.bankAddresses
@@ -25,14 +27,14 @@ const generateFilterButtons = (filters, currentFilter, action) =>
 
 const kvRow = (label, value) =>
   tr(td({ class: "card-label" }, label), td({ class: "card-value" }, value));
-  
+
 const fmtIndex = (value) => {
     return value ? value.toFixed(6) : "0.000000";
 };
 
 const pct = (value) => {
     if (value === undefined || value === null) return "0.000001%";
-    const formattedValue = (value).toFixed(6); 
+    const formattedValue = (value).toFixed(6);
     const sign = value >= 0 ? "+" : "";
     return `${sign}${formattedValue}%`;
 };
@@ -50,7 +52,7 @@ const renderExchange = (ex) => {
     div({ class: "bank-summary" },
       table({ class: "bank-info-table" },
         tbody(
-          kvRow(i18n.bankingSyncStatus, 
+          kvRow(i18n.bankingSyncStatus,
             span({ class: syncStatusClass }, syncStatus)
           ),
           kvRow(i18n.bankExchangeCurrentValue, `${fmtIndex(ex.ecoValue)} ECO`),
@@ -71,45 +73,59 @@ const renderOverviewSummaryTable = (s, rules) => {
   const w = 1 + score / 100;
   const cap = rules?.caps?.cap_user_epoch ?? 50;
   const future = Math.min(pool * (w / W), cap);
+  const availClass = s.ubiAvailability === "OK" ? "ubi-available" : "ubi-unavailable";
+  const availLabel = s.ubiAvailability === "OK" ? i18n.bankUbiAvailableOk : i18n.bankUbiAvailableNo;
   return div({ class: "bank-summary" },
     table({ class: "bank-info-table" },
       tbody(
         kvRow(i18n.bankUserBalance, `${Number(s.userBalance || 0).toFixed(6)} ECO`),
         kvRow(i18n.bankPubBalance, `${Number(s.pubBalance || 0).toFixed(6)} ECO`),
+        kvRow(i18n.bankUbiAvailability, span({ class: availClass }, availLabel)),
+        s.pubId ? kvRow(i18n.pubIdLabel, a({ href: `/author/${encodeURIComponent(s.pubId)}`, class: "user-link" }, s.pubId)) : null,
         kvRow(i18n.bankEpoch, String(s.epochId || "-")),
         kvRow(i18n.bankPool, `${pool.toFixed(6)} ECO`),
         kvRow(i18n.bankWeightsSum, String(W.toFixed(6))),
         kvRow(i18n.bankingUserEngagementScore, String(score)),
-        kvRow(i18n.bankingFutureUBI, `${future.toFixed(6)} ECO`)
+        kvRow(i18n.bankUbiThisMonth, `${future.toFixed(6)} ECO`)
       )
     )
   );
 };
 
-const renderClaimUBIBlock = (pendingAllocation) => {
+const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId) => {
+  if (alreadyClaimed) {
+    return div({ class: "bank-claim-ubi" }, p(i18n.bankAlreadyClaimedThisMonth));
+  }
+  if (!pubId && !isPub) {
+    return div({ class: "bank-claim-ubi" }, p(i18n.bankNoPubConfigured));
+  }
+  if (!pendingAllocation && !isPub) {
+    return div({ class: "bank-claim-ubi" },
+      div({ class: "bank-claim-card" },
+        form({ method: "POST", action: "/banking/claim-ubi" },
+          button({ type: "submit", class: "create-button bank-claim-btn" }, i18n.bankClaimUBI)
+        )
+      )
+    );
+  }
   if (!pendingAllocation) return div({ class: "bank-claim-ubi" }, p(i18n.bankNoPendingUBI));
   return div({ class: "bank-claim-ubi" },
     div({ class: "bank-claim-card" },
-      p(`${i18n.bankingFutureUBI}: `, span({ class: "accent" }, `${Number(pendingAllocation.amount || 0).toFixed(6)} ECO`)),
+      p(`${i18n.bankUbiThisMonth}: `, span({ class: "accent" }, `${Number(pendingAllocation.amount || 0).toFixed(6)} ECO`)),
       p(`${i18n.bankEpoch}: `, span(pendingAllocation.concept || "")),
       form({ method: "POST", action: `/banking/claim/${encodeURIComponent(pendingAllocation.id)}` },
-        button({ type: "submit", class: "create-button bank-claim-btn" }, i18n.bankClaimUBI)
+        button({ type: "submit", class: "create-button bank-claim-btn" }, isPub ? i18n.bankClaimAndPay : i18n.bankClaimUBI)
       )
     )
   );
 };
 
-function calculateFutureUBI(userEngagementScore, poolAmount) {
-  const maxScore = 100;
-  const scorePercentage = userEngagementScore / maxScore;
-  const estimatedUBI = poolAmount * scorePercentage;
-  return estimatedUBI;
-}
-
 const filterAllocations = (allocs, filter, userId) => {
-  if (filter === "mine") return allocs.filter(a => a.to === userId && a.status === "UNCONFIRMED");
-  if (filter === "pending") return allocs.filter(a => a.status === "UNCONFIRMED");
+  if (filter === "mine") return allocs.filter(a => a.to === userId && (a.status === "UNCLAIMED" || a.status === "UNCONFIRMED"));
+  if (filter === "pending") return allocs.filter(a => a.status === "UNCLAIMED" || a.status === "UNCONFIRMED");
   if (filter === "closed") return allocs.filter(a => a.status === "CLOSED");
+  if (filter === "claimed") return allocs.filter(a => a.status === "CLAIMED");
+  if (filter === "expired") return allocs.filter(a => a.status === "EXPIRED");
   return allocs;
 };
 
@@ -139,7 +155,7 @@ const allocationsTable = (rows = [], userId) =>
               td(String(Number(r.amount || 0).toFixed(6))),
               td(r.status),
               td(
-                r.status === "UNCONFIRMED" && r.to === userId
+                (r.status === "UNCLAIMED" || r.status === "UNCONFIRMED") && r.to === userId
                   ? form({ method: "POST", action: `/banking/claim/${encodeURIComponent(r.id)}` },
                       button({ type: "submit", class: "filter-btn" }, i18n.bankClaimNow)
                     )
@@ -187,11 +203,15 @@ const flashText = (key) => {
   if (key === "invalid") return i18n.bankAddressInvalid;
   if (key === "deleted") return i18n.bankAddressDeleted;
   if (key === "not_found") return i18n.bankAddressNotFound;
+  if (key === "claimed_pending") return i18n.bankClaimedPending;
+  if (key === "already_claimed") return i18n.bankAlreadyClaimedThisMonth;
+  if (key === "no_pub_configured") return i18n.bankNoPubConfigured;
+  if (key === "no_funds") return i18n.bankUbiAvailableNo;
   return "";
 };
 
 const flashBanner = (msgKey) =>
-  !msgKey ? null : div({ class: "flash-banner" }, p(flashText(msgKey)));
+  !msgKey ? null : div({ class: "flash-banner" }, p(flashText(msgKey) || msgKey));
 
 const addressesToolbar = (rows = [], search = "") =>
   div({ class: "addr-toolbar" },
@@ -264,15 +284,15 @@ const renderAddresses = (data, userId) => {
                     td(a({ href: `/author/${encodeURIComponent(r.id)}`, class: "user-link" }, r.id)),
                     td(r.address),
                     td(r.source === "local" ? i18n.bankLocal : i18n.bankFromOasis),
-			td(
-			  div({ class: "row-actions" },
-				form({ method: "POST", action: "/banking/addresses/delete", class: "addr-del" },
-				  input({ type: "hidden", name: "userId", value: r.id }),
-				  input({ type: "hidden", name: "source", value: r.source || "local" }),
-				  button({ type: "submit", class: "delete-btn", onclick: `return confirm(${JSON.stringify(i18n.bankAddressDeleteConfirm)})` }, i18n.bankAddressDelete)
-				)
-			  )
+		td(
+		  div({ class: "row-actions" },
+			form({ method: "POST", action: "/banking/addresses/delete", class: "addr-del" },
+			  input({ type: "hidden", name: "userId", value: r.id }),
+			  input({ type: "hidden", name: "source", value: r.source || "local" }),
+			  button({ type: "submit", class: "delete-btn", onclick: `return confirm(${JSON.stringify(i18n.bankAddressDeleteConfirm)})` }, i18n.bankAddressDelete)
 			)
+		  )
+		)
                   )
                 )
               )
@@ -282,16 +302,17 @@ const renderAddresses = (data, userId) => {
   );
 };
 
-const renderBankingView = (data, filter, userId) =>
+const renderBankingView = (data, filter, userId, isPub) =>
   template(
     i18n.banking,
     section(
       div({ class: "tags-header" }, h2(i18n.banking), p(i18n.bankingDescription)),
-      generateFilterButtons(["overview","exchange","mine","pending","closed","epochs","rules","addresses"], filter, "/banking"),
+      data.flash ? div({ class: "flash-banner" }, p(flashText(data.flash) || data.flash)) : null,
+      generateFilterButtons(["overview","exchange","mine","pending","closed","claimed","expired","epochs","rules","addresses"], filter, "/banking"),
       filter === "overview"
         ? div(
             renderOverviewSummaryTable(data.summary || {}, data.rules),
-            renderClaimUBIBlock(data.pendingUBI || null),
+            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId),
             allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
           )
         : filter === "exchange"
@@ -307,8 +328,8 @@ const renderBankingView = (data, filter, userId) =>
             userId
           )
     )
-  )
-  
+  );
+
 const renderSingleAllocationView = (alloc, userId) => {
   if (!alloc) return template(i18n.banking, section(div(p(i18n.bankNoAllocations))));
   return template(
@@ -362,4 +383,3 @@ const renderEpochView = (epoch, allocations) => {
 };
 
 module.exports = { renderBankingView, renderSingleAllocationView, renderEpochView };
-

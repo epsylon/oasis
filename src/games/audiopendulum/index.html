@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Musical Double Pendulum</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --panel: #1a1a1a;
+      --border: #333;
+      --accent: #4a9eff;
+      --axis: #2b6fff;
+      --grid: #121212;
+      --text: #ffffff;
+      --muted: #888;
+      --trace1: #ff6b4a;
+      --trace2: #4aff6b;
+      --warning: #ff6b4a;
+      --success: #4aff6b;
+      --audio: #ff9500;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 14px; font-family: Consolas, monospace; background: var(--bg); color: var(--text); }
+    .container { display: flex; gap: 14px; align-items: flex-start; }
+    .simulation-panel {
+      background: var(--panel); border: 2px solid var(--border); border-radius: 10px;
+      padding: 14px; flex: 1; min-width: 0;
+    }
+    .controls-panel {
+      background: var(--panel); border: 2px solid var(--border); border-radius: 10px;
+      padding: 14px; width: 340px; flex-shrink: 0;
+    }
+    h3 { margin: 0 0 8px 0; color: var(--accent); font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
+    .audio-section { border: 2px solid var(--audio); border-radius: 8px; padding: 10px; margin: 8px 0; background: #1a0f00; }
+    .audio-section h3 { color: var(--audio); margin-bottom: 8px; }
+    .status { background:#000; color:var(--accent); padding:7px 10px; border-radius:6px; margin-bottom:7px; font-size:11px; }
+    .audio-status { background:#1a0f00; color:var(--audio); border: 1px solid var(--audio); }
+    .toolbar { display:flex; gap:8px; margin-bottom:8px; flex-wrap: wrap; }
+    button {
+      padding: 6px 10px; border: 1px solid var(--accent); background: var(--panel); color: var(--accent);
+      border-radius: 6px; cursor: pointer; transition: all .2s; font-family: inherit; font-size: 12px;
+    }
+    button:hover { background: var(--accent); color: #000; }
+    button.audio-btn { border-color: var(--audio); color: var(--audio); }
+    button.audio-btn:hover { background: var(--audio); color: #000; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    canvas { background:#000; border:1px solid #444; display:block; width:100%; cursor:grab; }
+    canvas:active { cursor:grabbing; }
+    .geometry-info { background:#0a0a2a; color:#99aaff; padding:8px 10px; border-radius:6px; margin-top:8px; font-size:11px; }
+    .energy-info { background:#0a2a0a; color:#99ff99; padding:8px 10px; border-radius:6px; margin-top:5px; font-size:11px; }
+    .control-group { margin-bottom: 10px; padding-bottom:10px; border-bottom:1px solid #333; }
+    .control-group:last-child { border-bottom: none; }
+    label { display:block; margin-bottom:4px; font-size:11px; color:#ccc; text-transform:uppercase; letter-spacing:1px; }
+    input[type="range"] { width:100%; margin-bottom:4px; accent-color: var(--accent); }
+    .audio-control input[type="range"] { accent-color: var(--audio); }
+    .value-display { background:#000; color:var(--accent); padding:2px 6px; border-radius:3px; font-size:11px; float:right; }
+    .audio-value { color: var(--audio); }
+    .state-tag { display: none; font-size: 11px; }
+    .state-tag.visible { display: inline; }
+    #topbar { width:100%; padding:8px 16px; display:flex; align-items:center; gap:16px; background:#111; border-bottom:1px solid #333; margin-bottom:10px; }
+    #topbar a { color:#FFA500; text-decoration:none; font-size:14px; }
+    #topbar a:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <a href="/games" target="_top">&#8592; Back to Games</a>
+    <span style="color:#FFA500;font-weight:bold">AUDIO PENDULUM</span>
+  </div>
+  <div class="container">
+    <div class="simulation-panel" id="simPanel">
+      <div class="status" id="status">Status: Stopped | Energy: 0.00 J | Time: 0.00 s</div>
+      <div class="status audio-status" id="audioStatus">Tonal: Disabled | Percussion: Disabled | ♪: -- Hz | 🥁: 0 hits</div>
+      <div class="toolbar">
+        <button id="startBtn">&#9654; Start</button>
+        <button id="stopBtn">&#9209; Stop</button>
+        <button id="resetBtn">&#8635; Reset</button>
+        <button id="clearBtn">Clear Traces</button>
+        <button id="audioBtn" class="audio-btn">&#128266; Enable Audio</button>
+      </div>
+      <canvas id="pendulumCanvas" width="680" height="540"></canvas>
+      <div class="geometry-info" id="geometryInfo">
+        <strong>Physical State:</strong><br />
+        <span id="geoTheta">Initial position: vertical up (12 o'clock)</span><br />
+        <span id="geoOmega">State: Unstable equilibrium</span><br />
+        <span id="geoStateNearEq" class="state-tag" style="color:var(--success)">&#10003; NEAR EQUILIBRIUM</span>
+        <span id="geoStateMoving" class="state-tag visible">In motion</span>
+        <span id="geoStateRest" class="state-tag" style="color:var(--success)"><br />&#10003; AT REST</span>
+        <span id="geoStateTonal" class="state-tag" style="color:var(--audio)"><br />&#127925; TONAL AUDIO ACTIVE</span>
+        <span id="geoStatePerc" class="state-tag" style="color:var(--audio)"><br />&#129345; PERCUSSION ACTIVE</span>
+      </div>
+      <div class="energy-info" id="energyInfo">
+        <strong>Energy Conservation:</strong><br />
+        <span id="energyLine1">Initial: -- J | Current: -- J</span><br />
+        <span id="energyLine2">Energy drift: 0.000% | Status: CORRECT</span>
+        <span id="energySingularity" class="state-tag" style="color:var(--warning)"><br />Singularities: 0</span>
+      </div>
+    </div>
+
+    <div class="controls-panel">
+      <div class="control-group">
+        <label>Pendulum 1 Length (m) <span class="value-display" id="l1Display">1.00</span></label>
+        <input type="range" id="l1" min="0.2" max="3.0" step="0.05" value="1.0" />
+        <label>Pendulum 2 Length (m) <span class="value-display" id="l2Display">1.00</span></label>
+        <input type="range" id="l2" min="0.2" max="3.0" step="0.05" value="1.0" />
+      </div>
+      <div class="control-group">
+        <label>Pendulum 1 Mass (kg) <span class="value-display" id="m1Display">1.00</span></label>
+        <input type="range" id="m1" min="0.2" max="5.0" step="0.1" value="1.0" />
+        <label>Pendulum 2 Mass (kg) <span class="value-display" id="m2Display">1.00</span></label>
+        <input type="range" id="m2" min="0.2" max="5.0" step="0.1" value="1.0" />
+      </div>
+      <div class="control-group">
+        <label>Gravity (m/s²) <span class="value-display" id="gDisplay">9.81</span></label>
+        <input type="range" id="g" min="0.1" max="20.0" step="0.1" value="9.81" />
+        <label>Friction / Damping <span class="value-display" id="dampingDisplay">0.10</span></label>
+        <input type="range" id="damping" min="0" max="2.0" step="0.01" value="0.1" />
+      </div>
+      <div class="control-group">
+        <label>Angular Velocity 1 (rad/s) <span class="value-display" id="w1Display">0.00</span></label>
+        <input type="range" id="w1" min="-6.0" max="6.0" step="0.1" value="0.0" />
+        <label>Angular Velocity 2 (rad/s) <span class="value-display" id="w2Display">0.00</span></label>
+        <input type="range" id="w2" min="-6.0" max="6.0" step="0.1" value="0.0" />
+      </div>
+
+      <div class="audio-section">
+        <div class="control-group audio-control">
+          <label>Master Volume <span class="value-display audio-value" id="volumeDisplay">0.30</span></label>
+          <input type="range" id="volume" min="0" max="1.0" step="0.05" value="0.3" />
+          <label>Base Freq - Pendulum 1 (Hz) <span class="value-display audio-value" id="freq1Display">440</span></label>
+          <input type="range" id="freq1" min="200" max="1000" step="10" value="440" />
+          <label>Base Freq - Pendulum 2 (Hz) <span class="value-display audio-value" id="freq2Display">550</span></label>
+          <input type="range" id="freq2" min="200" max="1000" step="10" value="550" />
+          <label>Sensitivity <span class="value-display audio-value" id="sensitivityDisplay">2.0</span></label>
+          <input type="range" id="sensitivity" min="0.5" max="5.0" step="0.1" value="2.0" />
+        </div>
+        <div class="control-group audio-control">
+          <label>Percussion Volume <span class="value-display audio-value" id="percVolumeDisplay">0.00</span></label>
+          <input type="range" id="percVolume" min="0" max="1.0" step="0.05" value="0" />
+          <label>Peak Threshold <span class="value-display audio-value" id="thresholdDisplay">1.0</span></label>
+          <input type="range" id="threshold" min="0.2" max="3.0" step="0.1" value="1.0" />
+          <label>Cooldown (ms) <span class="value-display audio-value" id="cooldownDisplay">100</span></label>
+          <input type="range" id="cooldown" min="50" max="500" step="10" value="100" />
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Integration &#916;t (s) <span class="value-display" id="dtDisplay">0.005</span></label>
+        <input type="range" id="dt" min="0.001" max="0.020" step="0.001" value="0.005" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    class MusicalDoublePendulum {
+      constructor(canvasId, panelId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.panel = document.getElementById(panelId);
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+        this.originX = this.width / 2;
+        this.originY = this.height / 2;
+        this.l1 = 1.0; this.l2 = 1.0;
+        this.m1 = 1.0; this.m2 = 1.0;
+        this.g = 9.81;
+        this.damping = 0.1;
+        this.theta1 = Math.PI;
+        this.theta2 = 0.0;
+        this.omega1 = 0.0; this.omega2 = 0.0;
+        this.running = false;
+        this.time = 0;
+        this.dt = 0.005;
+        this.scale = 100;
+        this.trace1 = []; this.trace2 = [];
+        this.maxTraceLength = 3000;
+        this.dragging = false;
+        this.dragTarget = null;
+        this.initialEnergy = 0;
+        this.currentEnergy = 0;
+        this.maxEnergyDrift = 0;
+        this.energyHistory = [];
+        this.singularityCount = 0;
+        this.audioContext = null;
+        this.oscillator1 = null; this.oscillator2 = null;
+        this.gainNode1 = null; this.gainNode2 = null;
+        this.masterGain = null;
+        this.audioEnabled = false;
+        this.percussionEnabled = false;
+        this.kickBuffer = null; this.snareBuffer = null;
+        this.lastOmega1 = 0; this.lastOmega2 = 0;
+        this.omega1Trend = 0; this.omega2Trend = 0;
+        this.lastTrigger1 = 0; this.lastTrigger2 = 0;
+        this.triggerCooldown = 0.1;
+        this.baseFreq1 = 440; this.baseFreq2 = 550;
+        this.volume = 0.3;
+        this.sensitivity = 2.0;
+        this.percussionVolume = 0;
+        this.peakThreshold = 1.0;
+        this.currentFreq1 = 0; this.currentFreq2 = 0;
+        this.kickCount = 0; this.snareCount = 0;
+        this.setupEventListeners();
+        this.updateControls();
+        this.initialEnergy = this.computeEnergy();
+        requestAnimationFrame(() => { this.resizeCanvas(); });
+      }
+
+      createPercussionSounds() {
+        if (!this.audioContext) return;
+        const sr = this.audioContext.sampleRate;
+        const kickBuf = this.audioContext.createBuffer(1, 0.5 * sr, sr);
+        const kd = kickBuf.getChannelData(0);
+        for (let i = 0; i < kd.length; i++) {
+          const t = i / sr;
+          const env = Math.exp(-t * 15);
+          kd[i] = Math.sin(2 * Math.PI * 60 * (1 - t * 0.8) * t) * env + (Math.random() - 0.5) * 0.1 * env;
+        }
+        this.kickBuffer = kickBuf;
+        const snareBuf = this.audioContext.createBuffer(1, 0.2 * sr, sr);
+        const sd = snareBuf.getChannelData(0);
+        for (let i = 0; i < sd.length; i++) {
+          const t = i / sr;
+          const env = Math.exp(-t * 30);
+          sd[i] = (Math.sin(2 * Math.PI * 200 * t) * 0.3 + (Math.random() - 0.5) * 0.7) * env;
+        }
+        this.snareBuffer = snareBuf;
+      }
+
+      playPercussion(type) {
+        if (!this.percussionEnabled || !this.audioContext) return;
+        const buf = type === 'kick' ? this.kickBuffer : this.snareBuffer;
+        if (!buf) return;
+        const now = this.audioContext.currentTime;
+        const src = this.audioContext.createBufferSource();
+        const gain = this.audioContext.createGain();
+        src.buffer = buf;
+        gain.gain.setValueAtTime(this.percussionVolume * (type === 'kick' ? 0.8 : 0.6), now);
+        src.connect(gain);
+        gain.connect(this.audioContext.destination);
+        src.start(now);
+        if (type === 'kick') this.kickCount++; else this.snareCount++;
+        setTimeout(() => { try { src.disconnect(); gain.disconnect(); } catch (e) {} }, 600);
+      }
+
+      detectPeaks() {
+        if (!this.percussionEnabled) return;
+        const now = this.audioContext ? this.audioContext.currentTime : this.time;
+        const d1 = this.omega1 - this.lastOmega1;
+        const d2 = this.omega2 - this.lastOmega2;
+        const t1 = d1 > 0.01 ? 1 : (d1 < -0.01 ? -1 : 0);
+        const t2 = d2 > 0.01 ? 1 : (d2 < -0.01 ? -1 : 0);
+        if (this.omega1Trend === 1 && t1 === -1 && Math.abs(this.omega1) > this.peakThreshold && now - this.lastTrigger1 > this.triggerCooldown) {
+          this.playPercussion('kick');
+          this.lastTrigger1 = now;
+          this.flashPercStatus('kick');
+        }
+        if (this.omega2Trend === 1 && t2 === -1 && Math.abs(this.omega2) > this.peakThreshold && now - this.lastTrigger2 > this.triggerCooldown) {
+          this.playPercussion('snare');
+          this.lastTrigger2 = now;
+          this.flashPercStatus('snare');
+        }
+        this.lastOmega1 = this.omega1; this.lastOmega2 = this.omega2;
+        this.omega1Trend = t1; this.omega2Trend = t2;
+      }
+
+      flashPercStatus(type) {
+        const el = document.getElementById(type === 'kick' ? 'kick-status' : 'snare-status');
+        if (!el) return;
+        const orig = el.textContent;
+        el.textContent = type === 'kick' ? '\u{1F941} Kick: HIT!' : '\u{1F514} Snare: HIT!';
+        el.style.color = type === 'kick' ? '#ff6b4a' : '#4aff6b';
+        setTimeout(() => { el.textContent = orig; el.style.color = ''; }, 150);
+      }
+
+      async initAudio() {
+        try {
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          this.masterGain = this.audioContext.createGain();
+          this.masterGain.connect(this.audioContext.destination);
+          this.masterGain.gain.setValueAtTime(this.volume, this.audioContext.currentTime);
+          this.oscillator1 = this.audioContext.createOscillator();
+          this.gainNode1 = this.audioContext.createGain();
+          this.oscillator1.connect(this.gainNode1);
+          this.gainNode1.connect(this.masterGain);
+          this.oscillator2 = this.audioContext.createOscillator();
+          this.gainNode2 = this.audioContext.createGain();
+          this.oscillator2.connect(this.gainNode2);
+          this.gainNode2.connect(this.masterGain);
+          this.oscillator1.type = 'sine';
+          this.oscillator2.type = 'triangle';
+          this.oscillator1.frequency.setValueAtTime(this.baseFreq1, this.audioContext.currentTime);
+          this.oscillator2.frequency.setValueAtTime(this.baseFreq2, this.audioContext.currentTime);
+          this.gainNode1.gain.setValueAtTime(0, this.audioContext.currentTime);
+          this.gainNode2.gain.setValueAtTime(0, this.audioContext.currentTime);
+          this.oscillator1.start();
+          this.oscillator2.start();
+          this.audioEnabled = true;
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      updateAudio() {
+        if (!this.audioEnabled || !this.audioContext) return;
+        const now = this.audioContext.currentTime;
+        this.currentFreq1 = Math.max(100, Math.min(2000, this.baseFreq1 * (1 + Math.abs(this.omega1) * this.sensitivity * 0.1)));
+        this.currentFreq2 = Math.max(100, Math.min(2000, this.baseFreq2 * (1 + Math.abs(this.omega2) * this.sensitivity * 0.1)));
+        this.oscillator1.frequency.setTargetAtTime(this.currentFreq1, now, 0.01);
+        this.oscillator2.frequency.setTargetAtTime(this.currentFreq2, now, 0.01);
+        this.gainNode1.gain.setTargetAtTime(Math.min(0.5, Math.abs(this.omega1) * 0.1) * this.volume, now, 0.01);
+        this.gainNode2.gain.setTargetAtTime(Math.min(0.5, Math.abs(this.omega2) * 0.1) * this.volume, now, 0.01);
+      }
+
+      stopAudio() {
+        if (this.audioContext && this.audioEnabled) {
+          try { this.oscillator1.stop(); this.oscillator2.stop(); this.audioContext.close(); } catch (e) {}
+        }
+        this.audioEnabled = false;
+        this.audioContext = null;
+      }
+
+      setupEventListeners() {
+        const controls = ['l1','l2','m1','m2','g','damping','w1','w2','dt','volume','freq1','freq2','sensitivity','percVolume','threshold','cooldown'];
+        controls.forEach(id => {
+          document.getElementById(id).addEventListener('input', (e) => {
+            const v = parseFloat(e.target.value);
+            if (id === 'w1') this.omega1 = v;
+            else if (id === 'w2') this.omega2 = v;
+            else if (id === 'dt') this.dt = v;
+            else if (id === 'volume') this.volume = v;
+            else if (id === 'freq1') this.baseFreq1 = v;
+            else if (id === 'freq2') this.baseFreq2 = v;
+            else if (id === 'sensitivity') this.sensitivity = v;
+            else if (id === 'percVolume') {
+              this.percussionVolume = v;
+              if (v > 0 && !this.percussionEnabled) {
+                if (!this.audioContext) this.initAudio().then(ok => { if (ok) { this.createPercussionSounds(); this.percussionEnabled = true; } });
+                else { this.createPercussionSounds(); this.percussionEnabled = true; }
+              } else if (v === 0) {
+                this.percussionEnabled = false;
+              }
+            }
+            else if (id === 'threshold') this.peakThreshold = v;
+            else if (id === 'cooldown') this.triggerCooldown = v / 1000;
+            else this[id] = v;
+            this.updateControls();
+            if (id === 'l1' || id === 'l2') this.updateScale();
+            if (this.audioEnabled && this.masterGain && (id === 'volume' || id === 'freq1' || id === 'freq2' || id === 'sensitivity')) {
+              this.masterGain.gain.setTargetAtTime(this.volume, this.audioContext.currentTime, 0.1);
+            }
+            if (!this.running) { this.initialEnergy = this.computeEnergy(); this.maxEnergyDrift = 0; this.energyHistory = []; }
+            if (!this.running) this.draw();
+          });
+        });
+
+        document.getElementById('startBtn').addEventListener('click', () => this.start());
+        document.getElementById('stopBtn').addEventListener('click', () => this.stop());
+        document.getElementById('resetBtn').addEventListener('click', () => this.reset());
+        document.getElementById('clearBtn').addEventListener('click', () => this.clearTraces());
+        document.getElementById('audioBtn').addEventListener('click', async () => {
+          const btn = document.getElementById('audioBtn');
+          if (!this.audioEnabled) {
+            if (await this.initAudio()) {
+              btn.textContent = 'Disable Audio';
+              btn.style.background = '#ff9500';
+              btn.style.color = '#000';
+            }
+          } else {
+            this.stopAudio();
+            btn.textContent = '\u{1F50A} Enable Audio';
+            btn.style.background = '';
+            btn.style.color = '#ff9500';
+          }
+        });
+
+        this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
+        this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+        this.canvas.addEventListener('mouseup', () => this.onMouseUp());
+        this.canvas.addEventListener('mouseleave', () => this.onMouseUp());
+        window.addEventListener('resize', () => this.resizeCanvas());
+      }
+
+      updateControls() {
+        const set = (id, v, d=2) => { const el = document.getElementById(id); if (el) el.textContent = v.toFixed(d); };
+        set('l1Display', this.l1); set('l2Display', this.l2);
+        set('m1Display', this.m1); set('m2Display', this.m2);
+        set('gDisplay', this.g); set('dampingDisplay', this.damping);
+        set('w1Display', this.omega1); set('w2Display', this.omega2);
+        set('dtDisplay', this.dt, 3);
+        set('volumeDisplay', this.volume);
+        const f1el = document.getElementById('freq1Display'); if (f1el) f1el.textContent = this.baseFreq1.toFixed(0);
+        const f2el = document.getElementById('freq2Display'); if (f2el) f2el.textContent = this.baseFreq2.toFixed(0);
+        set('sensitivityDisplay', this.sensitivity, 1);
+        set('percVolumeDisplay', this.percussionVolume);
+        set('thresholdDisplay', this.peakThreshold, 1);
+        const cdel = document.getElementById('cooldownDisplay'); if (cdel) cdel.textContent = (this.triggerCooldown * 1000).toFixed(0);
+      }
+
+      resizeCanvas() {
+        const w = this.canvas.clientWidth;
+        if (w < 10) return;
+        this.canvas.width = w;
+        this.canvas.height = Math.round(w * (540 / 680));
+        this.updateCanvasMetrics();
+      }
+
+      getMousePos(e) {
+        const r = this.canvas.getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+      }
+
+      onMouseDown(e) {
+        if (this.running) return;
+        const m = this.getMousePos(e);
+        const p1 = this.getPendulumPosition(1);
+        const p2 = this.getPendulumPosition(2);
+        if (Math.hypot(m.x - p1.x, m.y - p1.y) < 20) { this.dragging = true; this.dragTarget = 1; }
+        else if (Math.hypot(m.x - p2.x, m.y - p2.y) < 20) { this.dragging = true; this.dragTarget = 2; }
+      }
+
+      onMouseMove(e) {
+        if (!this.dragging || this.running) return;
+        const m = this.getMousePos(e);
+        if (this.dragTarget === 1) {
+          this.theta1 = Math.atan2(m.x - this.originX, m.y - this.originY);
+        } else {
+          const p1 = this.getPendulumPosition(1);
+          this.theta2 = Math.atan2(m.x - p1.x, m.y - p1.y) - this.theta1;
+        }
+        this.initialEnergy = this.computeEnergy();
+        this.maxEnergyDrift = 0;
+        this.energyHistory = [];
+        this.draw();
+      }
+
+      onMouseUp() { this.dragging = false; this.dragTarget = null; }
+
+      updateCanvasMetrics() {
+        this.width = this.canvas.width; this.height = this.canvas.height;
+        this.originX = this.width / 2; this.originY = this.height / 2;
+        this.updateScale();
+        if (!this.running) this.draw();
+      }
+
+      updateScale() {
+        const half = 0.5 * Math.min(this.width, this.height) * 0.9;
+        const len = this.l1 + this.l2;
+        this.scale = len > 0 ? half / len : 100;
+      }
+
+      getPendulumPosition(n) {
+        if (n === 1) return {
+          x: this.originX + this.l1 * this.scale * Math.sin(this.theta1),
+          y: this.originY + this.l1 * this.scale * Math.cos(this.theta1)
+        };
+        const p1 = this.getPendulumPosition(1);
+        return {
+          x: p1.x + this.l2 * this.scale * Math.sin(this.theta1 + this.theta2),
+          y: p1.y + this.l2 * this.scale * Math.cos(this.theta1 + this.theta2)
+        };
+      }
+
+      accelerations() {
+        const { m1, m2, l1, l2, g } = this;
+        const th1 = this.theta1, th2 = this.theta2, w1 = this.omega1, w2 = this.omega2;
+        const s12 = Math.sin(th1 - th2), c12 = Math.cos(th1 - th2);
+        const den = 2*m1 + m2 - m2 * Math.cos(2*th1 - 2*th2);
+        if (Math.abs(den) < 1e-8) {
+          this.singularityCount++;
+          return { a1: -0.1*w1 - 0.5*th1, a2: -0.1*w2 - 0.5*th2 };
+        }
+        let a1 = (-g*(2*m1+m2)*Math.sin(th1) - m2*g*Math.sin(th1-2*th2) - 2*s12*m2*(w2*w2*l2 + w1*w1*l1*c12)) / (l1*den);
+        let a2 = (2*s12*(w1*w1*l1*(m1+m2) + g*(m1+m2)*Math.cos(th1) + w2*w2*l2*m2*c12)) / (l2*den);
+        if (this.damping > 0) {
+          const vx1 = l1*w1*Math.cos(th1), vy1 = -l1*w1*Math.sin(th1);
+          const vx2 = vx1 + l2*(w1+w2)*Math.cos(th1+th2), vy2 = vy1 - l2*(w1+w2)*Math.sin(th1+th2);
+          const dr = this.damping * 0.05;
+          const v1sq = vx1*vx1+vy1*vy1, v2sq = vx2*vx2+vy2*vy2;
+          if (v1sq > 1e-6) a1 += -dr * v1sq * Math.sign(w1) / l1;
+          if (v2sq > 1e-6) a2 += -dr * v2sq * Math.sign(w2) / l2;
+          const jf = this.damping * 0.3;
+          a1 -= jf*(w1 + 0.5*th1); a2 -= jf*(w2 + 0.5*th2);
+          if (this.damping > 1.0) { const hd = (this.damping-1.0)*2.0; a1 -= hd*w1; a2 -= hd*w2; }
+        }
+        return { a1, a2 };
+      }
+
+      rk4Step(dt) {
+        const deriv = (th1, th2, w1, w2) => {
+          const [st1, st2, sw1, sw2] = [this.theta1, this.theta2, this.omega1, this.omega2];
+          this.theta1=th1; this.theta2=th2; this.omega1=w1; this.omega2=w2;
+          const {a1,a2} = this.accelerations();
+          this.theta1=st1; this.theta2=st2; this.omega1=sw1; this.omega2=sw2;
+          return {dth1:w1, dth2:w2, dw1:a1, dw2:a2};
+        };
+        const s = {th1:this.theta1, th2:this.theta2, w1:this.omega1, w2:this.omega2};
+        const k1=deriv(s.th1,s.th2,s.w1,s.w2);
+        const k2=deriv(s.th1+.5*dt*k1.dth1, s.th2+.5*dt*k1.dth2, s.w1+.5*dt*k1.dw1, s.w2+.5*dt*k1.dw2);
+        const k3=deriv(s.th1+.5*dt*k2.dth1, s.th2+.5*dt*k2.dth2, s.w1+.5*dt*k2.dw1, s.w2+.5*dt*k2.dw2);
+        const k4=deriv(s.th1+dt*k3.dth1, s.th2+dt*k3.dth2, s.w1+dt*k3.dw1, s.w2+dt*k3.dw2);
+        this.theta1 += (dt/6)*(k1.dth1+2*k2.dth1+2*k3.dth1+k4.dth1);
+        this.theta2 += (dt/6)*(k1.dth2+2*k2.dth2+2*k3.dth2+k4.dth2);
+        this.omega1 += (dt/6)*(k1.dw1+2*k2.dw1+2*k3.dw1+k4.dw1);
+        this.omega2 += (dt/6)*(k1.dw2+2*k2.dw2+2*k3.dw2+k4.dw2);
+      }
+
+      update() {
+        if (!this.running) return;
+        this.rk4Step(this.dt);
+        this.updateAudio();
+        this.detectPeaks();
+        const p1 = this.getPendulumPosition(1), p2 = this.getPendulumPosition(2);
+        this.trace1.push({x:p1.x, y:p1.y}); this.trace2.push({x:p2.x, y:p2.y});
+        if (this.trace1.length > this.maxTraceLength) this.trace1.shift();
+        if (this.trace2.length > this.maxTraceLength) this.trace2.shift();
+        this.currentEnergy = this.computeEnergy();
+        this.energyHistory.push(this.currentEnergy);
+        if (this.energyHistory.length > 1000) this.energyHistory.shift();
+        this.maxEnergyDrift = Math.max(this.maxEnergyDrift, Math.abs(this.currentEnergy - this.initialEnergy));
+        this.time += this.dt;
+        this.updateStatus();
+      }
+
+      computeEnergy() {
+        const vx1 = this.l1*this.omega1*Math.cos(this.theta1);
+        const vy1 = -this.l1*this.omega1*Math.sin(this.theta1);
+        const vx2 = vx1 + this.l2*(this.omega1+this.omega2)*Math.cos(this.theta1+this.theta2);
+        const vy2 = vy1 - this.l2*(this.omega1+this.omega2)*Math.sin(this.theta1+this.theta2);
+        const T = 0.5*this.m1*(vx1*vx1+vy1*vy1) + 0.5*this.m2*(vx2*vx2+vy2*vy2);
+        const V = this.m1*this.g*this.l1*(1-Math.cos(this.theta1)) +
+                  this.m2*this.g*(this.l1*(1-Math.cos(this.theta1)) + this.l2*(1-Math.cos(this.theta1+this.theta2)));
+        return T + V;
+      }
+
+      setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+      setVisible(id, v) { const el = document.getElementById(id); if (el) el.classList.toggle('visible', v); }
+
+      updateStatus() {
+        const state = this.running ? 'Running' : 'Stopped';
+        this.setText('status', 'Status: ' + state + ' | Energy: ' + this.currentEnergy.toFixed(3) + ' J | Time: ' + this.time.toFixed(2) + ' s');
+        const f1 = this.audioEnabled ? this.currentFreq1.toFixed(0) : '--';
+        const f2 = this.audioEnabled ? this.currentFreq2.toFixed(0) : '--';
+        this.setText('audioStatus',
+          'Tonal: ' + (this.audioEnabled ? 'Active' : 'Disabled') +
+          ' | Percussion: ' + (this.percussionEnabled ? 'Active' : 'Disabled') +
+          ' | \u266a: ' + f1 + '/' + f2 + ' Hz | \u{1F941}: ' + (this.kickCount + this.snareCount) + ' hits');
+        const driftPct = this.initialEnergy !== 0 ? (this.maxEnergyDrift / Math.abs(this.initialEnergy)) * 100 : 0;
+        let energyStatus = 'CORRECT';
+        if (driftPct > 1.0) energyStatus = 'HIGH DRIFT';
+        else if (driftPct > 0.1) energyStatus = 'MINOR DRIFT';
+        this.setText('energyLine1', 'Initial: ' + this.initialEnergy.toFixed(4) + ' J | Current: ' + this.currentEnergy.toFixed(4) + ' J');
+        this.setText('energyLine2', 'Energy drift: ' + driftPct.toFixed(3) + '% | Status: ' + energyStatus);
+        this.setVisible('energySingularity', this.singularityCount > 0);
+        if (this.singularityCount > 0) this.setText('energySingularity', 'Singularities: ' + this.singularityCount);
+
+        this.setText('geoTheta', '\u03b8\u2081=' + this.theta1.toFixed(3) + ' rad, \u03b8\u2082=' + this.theta2.toFixed(3) + ' rad');
+        this.setText('geoOmega', '\u03c9\u2081=' + this.omega1.toFixed(3) + ' rad/s, \u03c9\u2082=' + this.omega2.toFixed(3) + ' rad/s');
+        const vel = Math.sqrt(this.omega1*this.omega1 + this.omega2*this.omega2);
+        const nearEq = Math.abs(this.theta1) < 0.1 && Math.abs(this.theta2) < 0.1 && vel < 0.1;
+        this.setVisible('geoStateNearEq', nearEq);
+        this.setVisible('geoStateMoving', !nearEq);
+        this.setVisible('geoStateRest', this.damping > 1.0 && vel < 0.01);
+        this.setVisible('geoStateTonal', this.audioEnabled && vel > 0.1);
+        this.setVisible('geoStatePerc', this.percussionEnabled && vel > 0.1);
+      }
+
+      draw() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        this.drawGridAndAxes();
+        this.drawTraces();
+        this.drawPendulum();
+        this.drawInfo();
+      }
+
+      drawGridAndAxes() {
+        this.ctx.strokeStyle = '#121212'; this.ctx.lineWidth = 1;
+        for (let x = 0; x <= this.width; x += 40) { this.ctx.beginPath(); this.ctx.moveTo(x,0); this.ctx.lineTo(x,this.height); this.ctx.stroke(); }
+        for (let y = 0; y <= this.height; y += 40) { this.ctx.beginPath(); this.ctx.moveTo(0,y); this.ctx.lineTo(this.width,y); this.ctx.stroke(); }
+        this.ctx.strokeStyle = '#2b6fff'; this.ctx.lineWidth = 2;
+        this.ctx.beginPath(); this.ctx.moveTo(this.originX,0); this.ctx.lineTo(this.originX,this.height); this.ctx.stroke();
+        this.ctx.beginPath(); this.ctx.moveTo(0,this.originY); this.ctx.lineTo(this.width,this.originY); this.ctx.stroke();
+        this.ctx.fillStyle = '#4a9eff'; this.ctx.beginPath(); this.ctx.arc(this.originX,this.originY,5,0,Math.PI*2); this.ctx.fill();
+        this.ctx.fillStyle = '#fff'; this.ctx.beginPath(); this.ctx.arc(this.originX,this.originY,2,0,Math.PI*2); this.ctx.fill();
+      }
+
+      drawTraces() {
+        const drawTrace = (trace, color, lw, alpha) => {
+          if (trace.length < 2) return;
+          this.ctx.strokeStyle = color; this.ctx.lineWidth = lw; this.ctx.globalAlpha = alpha;
+          this.ctx.beginPath(); this.ctx.moveTo(trace[0].x, trace[0].y);
+          for (let i = 1; i < trace.length; i++) this.ctx.lineTo(trace[i].x, trace[i].y);
+          this.ctx.stroke();
+        };
+        drawTrace(this.trace1, '#ff6b4a', 1.5, 0.7);
+        drawTrace(this.trace2, '#4aff6b', 2.5, 0.9);
+        this.ctx.globalAlpha = 1.0;
+      }
+
+      drawPendulum() {
+        const p1 = this.getPendulumPosition(1), p2 = this.getPendulumPosition(2);
+        this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 4;
+        this.ctx.beginPath(); this.ctx.moveTo(this.originX,this.originY); this.ctx.lineTo(p1.x,p1.y); this.ctx.stroke();
+        this.ctx.beginPath(); this.ctx.moveTo(p1.x,p1.y); this.ctx.lineTo(p2.x,p2.y); this.ctx.stroke();
+        const r1 = Math.max(6, 4+this.m1*4), r2 = Math.max(6, 4+this.m2*4);
+        const drawBob = (px, py, r, color, omega) => {
+          if (this.audioEnabled && this.running) {
+            const intensity = Math.min(1, Math.abs(omega) * 0.2);
+            if (intensity > 0.1) { this.ctx.shadowBlur = 15*intensity; this.ctx.shadowColor = color; }
+          }
+          this.ctx.fillStyle = color; this.ctx.beginPath(); this.ctx.arc(px,py,r,0,Math.PI*2); this.ctx.fill();
+          this.ctx.strokeStyle = '#fff'; this.ctx.lineWidth = 2; this.ctx.beginPath(); this.ctx.arc(px,py,r,0,Math.PI*2); this.ctx.stroke();
+          this.ctx.shadowBlur = 0;
+        };
+        drawBob(p1.x, p1.y, r1, '#ff6b4a', this.omega1);
+        drawBob(p2.x, p2.y, r2, '#4aff6b', this.omega2);
+      }
+
+      drawInfo() {
+        this.ctx.fillStyle = '#4a9eff'; this.ctx.font = '13px Consolas';
+        this.ctx.fillText('\u03b8\u2081: ' + this.theta1.toFixed(3) + ' rad', 10, 20);
+        this.ctx.fillText('\u03b8\u2082: ' + this.theta2.toFixed(3) + ' rad', 10, 36);
+        this.ctx.fillText('\u03c9\u2081: ' + this.omega1.toFixed(3) + ' rad/s', 10, 52);
+        this.ctx.fillText('\u03c9\u2082: ' + this.omega2.toFixed(3) + ' rad/s', 10, 68);
+        let y = 84;
+        if (this.audioEnabled && this.running) {
+          this.ctx.fillStyle = '#ff9500';
+          this.ctx.fillText('\u266a1: ' + this.currentFreq1.toFixed(0) + ' Hz', 10, y);
+          this.ctx.fillText('\u266a2: ' + this.currentFreq2.toFixed(0) + ' Hz', 10, y+16);
+          y += 32;
+        }
+        if (this.percussionEnabled && this.running) {
+          this.ctx.fillStyle = '#ff6b4a';
+          this.ctx.fillText('\u{1F941}: ' + this.kickCount + ' hits', 10, y);
+          this.ctx.fillStyle = '#4aff6b';
+          this.ctx.fillText('\u{1F514}: ' + this.snareCount + ' hits', 10, y+16);
+          y += 32;
+        }
+        if (this.damping > 0) {
+          this.ctx.fillStyle = this.damping > 1.0 ? '#ff6b4a' : '#ffaa4a';
+          this.ctx.fillText('Friction: ' + this.damping.toFixed(2), 10, y);
+        }
+        this.ctx.fillStyle = '#888'; this.ctx.font = '11px Consolas';
+        this.ctx.fillText('Scale: ' + this.scale.toFixed(1) + ' px/m', 10, this.height-10);
+      }
+
+      start() {
+        if (!this.running) {
+          this.running = true;
+          this.initialEnergy = this.computeEnergy();
+          this.maxEnergyDrift = 0;
+          this.animate();
+        }
+      }
+
+      stop() {
+        this.running = false;
+        if (this.audioEnabled) {
+          this.gainNode1.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.1);
+          this.gainNode2.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.1);
+        }
+      }
+
+      reset() {
+        this.stop();
+        this.theta1 = Math.PI; this.theta2 = 0.0;
+        this.omega1 = 0; this.omega2 = 0;
+        this.time = 0;
+        this.clearTraces();
+        this.initialEnergy = this.computeEnergy();
+        this.currentEnergy = this.initialEnergy;
+        this.maxEnergyDrift = 0; this.energyHistory = []; this.singularityCount = 0;
+        this.kickCount = 0; this.snareCount = 0;
+        this.lastTrigger1 = 0; this.lastTrigger2 = 0;
+        this.lastOmega1 = 0; this.lastOmega2 = 0;
+        this.omega1Trend = 0; this.omega2Trend = 0;
+        this.resizeCanvas();
+      }
+
+      clearTraces() { this.trace1 = []; this.trace2 = []; if (!this.running) this.draw(); }
+
+      animate() {
+        if (!this.running) return;
+        this.update(); this.draw();
+        requestAnimationFrame(() => this.animate());
+      }
+    }
+
+    const pendulum = new MusicalDoublePendulum('pendulumCanvas', 'simPanel');
+  </script>
+</body>
+</html>

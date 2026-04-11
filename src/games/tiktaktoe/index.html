@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TikTakToe — Rock Paper Scissors</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#topbar a:hover { text-decoration: underline; }
+h1 { color: #FFA500; font-size: 1.4rem; margin: 18px 0 6px; }
+#score-bar { display: flex; gap: 32px; font-size: 15px; color: #aaa; margin-bottom: 14px; }
+#score-bar span b { color: #FFA500; }
+#arena { display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; max-width: 480px; padding: 0 12px; }
+#choices { display: flex; gap: 16px; }
+.choice-btn { font-size: 3rem; background: #111; border: 2px solid #333; border-radius: 12px; cursor: pointer; padding: 14px 20px; transition: border-color 0.15s, background 0.15s; line-height: 1; }
+.choice-btn:hover { border-color: #FFA500; background: #1a1a00; }
+.choice-btn.selected { border-color: #FFA500; background: #2a1a00; }
+#battle { display: flex; align-items: center; gap: 24px; font-size: 2.2rem; min-height: 72px; }
+#vs { font-size: 1rem; color: #555; }
+#result { font-size: 1.3rem; min-height: 32px; text-align: center; }
+.win { color: #4CAF50; } .lose { color: #e74c3c; } .draw { color: #FFA500; }
+#rounds { display: flex; gap: 8px; margin-top: 4px; }
+.round-dot { width: 14px; height: 14px; border-radius: 50%; background: #222; border: 2px solid #444; }
+.round-dot.win { background: #4CAF50; border-color: #4CAF50; }
+.round-dot.lose { background: #e74c3c; border-color: #e74c3c; }
+.round-dot.draw { background: #FFA500; border-color: #FFA500; }
+#play-btn { margin-top: 10px; padding: 10px 32px; font-family: monospace; font-size: 1rem; background: #FFA500; color: #000; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+#play-btn:hover { background: #ffb700; }
+#play-btn:disabled { background: #333; color: #666; cursor: default; }
+#final { font-size: 1.4rem; min-height: 36px; text-align: center; margin-top: 8px; }
+#hint { color: #555; font-size: 13px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">ROCK PAPER SCISSORS</span>
+</div>
+<h1>Rock &middot; Paper &middot; Scissors</h1>
+<div id="score-bar">
+  <span>YOU: <b id="playerWins">0</b></span>
+  <span>AI: <b id="aiWins">0</b></span>
+  <span>DRAWS: <b id="draws">0</b></span>
+</div>
+<div id="arena">
+  <div id="choices">
+    <button class="choice-btn" data-choice="rock" title="Rock">&#9994;</button>
+    <button class="choice-btn" data-choice="paper" title="Paper">&#9995;</button>
+    <button class="choice-btn" data-choice="scissors" title="Scissors">✌️</button>
+  </div>
+  <div id="battle">
+    <span id="playerEmoji">?</span>
+    <span id="vs">VS</span>
+    <span id="aiEmoji">?</span>
+  </div>
+  <div id="result">&nbsp;</div>
+  <div id="rounds"></div>
+  <button id="play-btn" disabled>Choose a move!</button>
+  <div id="final">&nbsp;</div>
+  <div id="hint">Best of 5 rounds</div>
+  <div id="scoreSubmit" style="display:none;text-align:center;margin:6px">
+    <form method="POST" action="/games/submit-score" target="_top">
+      <input type="hidden" name="game" value="tiktaktoe">
+      <input type="hidden" id="scoreInput" name="score" value="0">
+      <button type="submit" style="background:#1a3a1a;border:1px solid #FFA500;color:#FFA500;padding:6px 16px;cursor:pointer;font-family:monospace;font-size:14px">Submit Score to Hall of Fame</button>
+    </form>
+  </div>
+</div>
+<script>
+const EMOJI = { rock: '\u270A', paper: '\u270B', scissors: '✌️' };
+const BEATS = { rock: 'scissors', scissors: 'paper', paper: 'rock' };
+const NAMES = { rock: 'Rock', paper: 'Paper', scissors: 'Scissors' };
+
+let playerWins = 0, aiWins = 0, draws = 0;
+let roundHistory = [];
+let chosen = null;
+let gameOver = false;
+let streak = 0, bestStreak = 0;
+const MAX_ROUNDS = 5;
+
+const playerWinsEl = document.getElementById('playerWins');
+const aiWinsEl = document.getElementById('aiWins');
+const drawsEl = document.getElementById('draws');
+const playerEmojiEl = document.getElementById('playerEmoji');
+const aiEmojiEl = document.getElementById('aiEmoji');
+const resultEl = document.getElementById('result');
+const roundsEl = document.getElementById('rounds');
+const playBtn = document.getElementById('play-btn');
+const finalEl = document.getElementById('final');
+
+function updateRounds() {
+  while (roundsEl.firstChild) roundsEl.removeChild(roundsEl.firstChild);
+  for (let i = 0; i < MAX_ROUNDS; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'round-dot' + (roundHistory[i] ? ' ' + roundHistory[i] : '');
+    roundsEl.appendChild(dot);
+  }
+}
+
+document.querySelectorAll('.choice-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (gameOver) return;
+    document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    chosen = btn.dataset.choice;
+    playBtn.disabled = false;
+    playBtn.textContent = 'PLAY!';
+  });
+});
+
+function onPlay() {
+  if (!chosen || gameOver) return;
+  const choices = ['rock', 'paper', 'scissors'];
+  const aiChoice = choices[Math.floor(Math.random() * 3)];
+
+  playerEmojiEl.textContent = EMOJI[chosen];
+  aiEmojiEl.textContent = EMOJI[aiChoice];
+
+  let outcome, outcomeClass;
+  if (chosen === aiChoice) {
+    outcome = 'DRAW!'; outcomeClass = 'draw';
+    draws++;
+    roundHistory.push('draw');
+    drawsEl.textContent = draws;
+  } else if (BEATS[chosen] === aiChoice) {
+    outcome = NAMES[chosen] + ' beats ' + NAMES[aiChoice] + ' \u2014 YOU WIN!'; outcomeClass = 'win';
+    playerWins++; streak++;
+    if (streak > bestStreak) bestStreak = streak;
+    roundHistory.push('win');
+    playerWinsEl.textContent = playerWins;
+  } else {
+    outcome = NAMES[aiChoice] + ' beats ' + NAMES[chosen] + ' \u2014 AI WINS!'; outcomeClass = 'lose';
+    aiWins++; streak = 0;
+    roundHistory.push('lose');
+    aiWinsEl.textContent = aiWins;
+  }
+
+  resultEl.className = outcomeClass;
+  resultEl.textContent = outcome;
+  updateRounds();
+
+  const total = playerWins + aiWins + draws;
+  if (playerWins >= 3 || aiWins >= 3 || total >= MAX_ROUNDS) {
+    gameOver = true;
+    if (playerWins > aiWins) { finalEl.className = 'win'; finalEl.textContent = 'YOU WIN THE MATCH! Best streak: ' + bestStreak; document.getElementById('scoreInput').value = bestStreak; document.getElementById('scoreSubmit').style.display = 'block'; }
+    else if (aiWins > playerWins) { finalEl.className = 'lose'; finalEl.textContent = 'AI WINS THE MATCH!'; }
+    else { finalEl.className = 'draw'; finalEl.textContent = "IT'S A TIE!"; }
+    playBtn.textContent = 'New Game';
+    playBtn.disabled = false;
+    playBtn.onclick = resetGame;
+  } else {
+    chosen = null;
+    document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+    playBtn.disabled = true;
+    playBtn.textContent = 'Choose a move!';
+  }
+}
+
+playBtn.addEventListener('click', onPlay);
+
+function resetGame() {
+  playerWins = 0; aiWins = 0; draws = 0; roundHistory = []; chosen = null; gameOver = false; streak = 0; bestStreak = 0;
+  playerWinsEl.textContent = '0'; aiWinsEl.textContent = '0'; drawsEl.textContent = '0';
+  playerEmojiEl.textContent = '?'; aiEmojiEl.textContent = '?';
+  resultEl.textContent = '\u00a0'; resultEl.className = '';
+  finalEl.textContent = '\u00a0'; finalEl.className = '';
+  document.getElementById('scoreSubmit').style.display = 'none';
+  document.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+  playBtn.disabled = true;
+  playBtn.textContent = 'Choose a move!';
+  playBtn.onclick = onPlay;
+  updateRounds();
+}
+
+updateRounds();
+</script>
+</body>
+</html>

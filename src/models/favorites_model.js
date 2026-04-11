@@ -15,7 +15,7 @@ const toTs = (d) => {
   return Number.isFinite(t) ? t : 0;
 };
 
-module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel }) => {
+module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel }) => {
   const kindConfig = {
     audios: {
       base: "/audios/",
@@ -40,10 +40,22 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     videos: {
       base: "/videos/",
       getById: getFn(videosModel, ["getVideoById", "getById"])
+    },
+    pads: {
+      base: "/pads/",
+      getById: getFn(padsModel, ["getPadById", "getById"])
+    },
+    chats: {
+      base: "/chats/",
+      getById: getFn(chatsModel, ["getChatById", "getById"])
+    },
+    calendars: {
+      base: "/calendars/",
+      getById: getFn(calendarsModel, ["getCalendarById", "getById"])
     }
   };
 
-  const kindOrder = ["audios", "bookmarks", "documents", "images", "maps", "videos"];
+  const kindOrder = ["audios", "bookmarks", "calendars", "chats", "documents", "images", "maps", "pads", "videos"];
 
   const hydrateKind = async (kind, ids) => {
     const cfg = kindConfig[kind];
@@ -97,9 +109,12 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     const counts = {
       audios: byKind.audios.length,
       bookmarks: byKind.bookmarks.length,
+      calendars: byKind.calendars.length,
+      chats: byKind.chats.length,
       documents: byKind.documents.length,
       images: byKind.images.length,
       maps: byKind.maps.length,
+      pads: byKind.pads.length,
       videos: byKind.videos.length,
       all: flat.length
     };

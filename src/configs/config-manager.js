@@ -33,6 +33,8 @@ if (!fs.existsSync(configFilePath)) {
       "tribesMod": "on",
       "reportsMod": "on",
       "opinionsMod": "on",
+      "padsMod": "on",
+      "calendarsMod": "on",
       "transfersMod": "on",
       "feedMod": "on",
       "pixeliaMod": "on",
@@ -66,7 +68,8 @@ if (!fs.existsSync(configFilePath)) {
       "limit": 2000
     },
     "homePage": "activity",
-    "language": "en"
+    "language": "en",
+    "pubId": ""
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
 }

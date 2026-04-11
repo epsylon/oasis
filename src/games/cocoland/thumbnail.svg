@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" style="background:#000">
+  <rect width="400" height="220" fill="#000"/>
+  <rect x="0" y="180" width="400" height="40" fill="#1a3a00"/>
+  <line x1="300" y1="180" x2="280" y2="50" stroke="#4a7a00" stroke-width="8" stroke-linecap="round"/>
+  <ellipse cx="265" cy="55" rx="50" ry="30" fill="#2d6a00"/>
+  <ellipse cx="285" cy="45" rx="45" ry="25" fill="#3a8000"/>
+  <ellipse cx="275" cy="35" rx="40" ry="20" fill="#4a9400"/>
+  <circle cx="268" cy="62" r="8" fill="#8B4513"/>
+  <circle cx="282" cy="65" r="7" fill="#8B4513"/>
+  <circle cx="275" cy="58" r="7" fill="#8B4513"/>
+  <line x1="100" y1="180" x2="90" y2="90" stroke="#4a7a00" stroke-width="6" stroke-linecap="round"/>
+  <ellipse cx="80" cy="95" rx="35" ry="22" fill="#2d6a00"/>
+  <ellipse cx="95" cy="87" rx="30" ry="18" fill="#3a8000"/>
+  <circle cx="88" cy="100" r="6" fill="#8B4513"/>
+  <circle cx="100" cy="102" r="5" fill="#8B4513"/>
+  <circle cx="58" cy="150" r="22" fill="#8B4513"/>
+  <circle cx="48" cy="143" r="7" fill="#fff"/>
+  <circle cx="68" cy="143" r="7" fill="#fff"/>
+  <circle cx="50" cy="143" r="4" fill="#222"/>
+  <circle cx="70" cy="143" r="4" fill="#222"/>
+  <path d="M48 158 Q58 164 68 158" stroke="#5a2000" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <polygon points="150,165 158,145 166,165" fill="#FFA500"/>
+  <polygon points="190,170 198,150 206,170" fill="#FFA500"/>
+  <polygon points="230,162 238,142 246,162" fill="#FFA500"/>
+  <text x="200" y="210" font-family="monospace" font-size="13" fill="#FFA500" text-anchor="middle" opacity="0.7">SCORE: 0</text>
+</svg>

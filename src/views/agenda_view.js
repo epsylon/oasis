@@ -24,6 +24,7 @@ function getViewDetailsAction(item) {
     case 'report': return `/reports/${encodeURIComponent(item.id)}`;
     case 'job': return `/jobs/${encodeURIComponent(item.id)}`;
     case 'project': return `/projects/${encodeURIComponent(item.id)}`;
+    case 'calendar': return `/calendars/${encodeURIComponent(item.id)}`;
     default: return `/messages/${encodeURIComponent(item.id)}`;
   }
 }
@@ -141,6 +142,14 @@ const renderAgendaItem = (item, userId, filter) => {
     ];
   }
 
+  if (item.type === 'calendar') {
+    details = [
+      renderCardField((i18n.calendarStatusLabel || 'Status') + ':', item.isClosed ? (i18n.calendarStatusClosed || 'CLOSED') : (i18n.calendarStatusOpen || 'OPEN')),
+      renderCardField((i18n.calendarDeadlineLabel || 'Deadline') + ':', item.deadline ? moment(item.deadline).format('YYYY/MM/DD HH:mm') : ''),
+      renderCardField((i18n.calendarParticipantsLabel || 'Participants') + ':', Array.isArray(item.participants) ? item.participants.length : 0)
+    ];
+  }
+
   if (item.type === 'job') {
     const subs = Array.isArray(item.subscribers)
       ? item.subscribers
@@ -192,7 +201,7 @@ const renderAgendaItem = (item, userId, filter) => {
 
 exports.agendaView = async (data, filter) => {
   const { items = [], counts: _c = {} } = data || {};
-  const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, discarded: 0, ..._c };
+  const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, calendars: 0, discarded: 0, ..._c };
   return template(
     i18n.agendaTitle,
     section(
@@ -222,6 +231,8 @@ exports.agendaView = async (data, filter) => {
             `${i18n.agendaFilterMarket} (${counts.market})`),
           button({ type: 'submit', name: 'filter', value: 'projects', class: filter === 'projects' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterProjects} (${counts.projects})`),
+          button({ type: 'submit', name: 'filter', value: 'calendars', class: filter === 'calendars' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterCalendars || 'CALENDARS'} (${counts.calendars})`),
           button({ type: 'submit', name: 'filter', value: 'transfers', class: filter === 'transfers' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterTransfers} (${counts.transfers})`),
           button({ type: 'submit', name: 'filter', value: 'discarded', class: filter === 'discarded' ? 'filter-btn active' : 'filter-btn' },
