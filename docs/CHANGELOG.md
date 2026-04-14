@@ -13,7 +13,24 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
-## v0.7.0 - 2026-04-12
+## v0.7.1 - 2026-04-14
+
+### Added
+
+- "nodemon" dev running scripts and documentation (Core plugin).
+- TikTakToe game (Games plugin).
+- Neon Infiltrator (Games plugin).
+
+### Changed
+
+- Console output configuration parameters verbose (Core plugin).
+- More layers of privacy/encryption applied to sensitive content at different places (Core plugin).
+
+### Fixed
+
+- Refeeds activity (Feeds plugin).
+
+## v0.7.0 - 2026-04-11
 
 ### Added
 

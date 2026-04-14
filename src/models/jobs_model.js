@@ -33,7 +33,7 @@ const matchSearch = (job, q) => {
   return hay.includes(qq)
 }
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribeCrypto }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
@@ -114,6 +114,7 @@ module.exports = ({ cooler }) => {
   }
 
   const buildJobObject = (node, rootId, subscribers) => {
+    const visibleSubs = (tribeCrypto && tribeCrypto.getKey(rootId)) || ssb?.id === (node.c?.author || node.author) ? subscribers : [];
     const c = node.c || {}
     let blobId = c.image || null
     if (blobId && /\(([^)]+)\)/.test(String(blobId))) blobId = String(blobId).match(/\(([^)]+)\)/)[1]
@@ -141,7 +142,7 @@ module.exports = ({ cooler }) => {
       updatedAt: c.updatedAt || null,
       status: c.status || "OPEN",
       tags: Array.isArray(c.tags) ? c.tags : normalizeTags(c.tags),
-      subscribers: Array.isArray(subscribers) ? subscribers : [],
+      subscribers: Array.isArray(visibleSubs) ? visibleSubs : [],
       mapUrl: c.mapUrl || ""
     }
   }
@@ -196,7 +197,14 @@ module.exports = ({ cooler }) => {
         mapUrl: String(jobData.mapUrl || "").trim()
       }
 
-      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => e ? rej(e) : res(m)))
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => {
+        if (e) return rej(e)
+        if (m && m.key && tribeCrypto) {
+          const key = tribeCrypto.generateTribeKey()
+          tribeCrypto.setKey(m.key, key, 1)
+        }
+        res(m)
+      }))
     },
 
     async resolveCurrentId(jobId) {

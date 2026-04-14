@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220">
+  <rect width="400" height="220" fill="#000"/>
+  <rect x="30" y="55" width="90" height="100" rx="14" fill="#111" stroke="#FFA500" stroke-width="2"/>
+  <rect x="42" y="38" width="66" height="26" rx="10" fill="#111" stroke="#FFA500" stroke-width="2"/>
+  <rect x="42" y="56" width="22" height="10" rx="4" fill="#FFA500" opacity="0.3"/>
+  <rect x="68" y="56" width="22" height="10" rx="4" fill="#FFA500" opacity="0.3"/>
+  <ellipse cx="75" cy="105" rx="28" ry="34" fill="#FFA500" opacity="0.15"/>
+  <text x="75" y="115" font-family="monospace" font-size="30" fill="#FFA500" text-anchor="middle">✊</text>
+  <text x="75" y="170" font-family="monospace" font-size="10" fill="#FFA500" text-anchor="middle">ROCK</text>
+  <rect x="155" y="40" width="90" height="115" rx="14" fill="#111" stroke="#4CAF50" stroke-width="2"/>
+  <text x="200" y="115" font-family="monospace" font-size="30" fill="#4CAF50" text-anchor="middle">✋</text>
+  <text x="200" y="170" font-family="monospace" font-size="10" fill="#4CAF50" text-anchor="middle">PAPER</text>
+  <rect x="280" y="55" width="90" height="100" rx="14" fill="#111" stroke="#FFA500" stroke-width="2"/>
+  <text x="325" y="115" font-family="monospace" font-size="30" fill="#FFA500" text-anchor="middle">✌️</text>
+  <text x="325" y="170" font-family="monospace" font-size="10" fill="#FFA500" text-anchor="middle">SCISSORS</text>
+  <text x="200" y="210" font-family="monospace" font-size="11" fill="#FFA500" text-anchor="middle">Rock · Paper · Scissors</text>
+</svg>

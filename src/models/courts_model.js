@@ -9,7 +9,13 @@ const CASE_DECISION_DAYS = 21;
 const POPULAR_DAYS = 14;
 const FEED_ID_RE = /^@.+\.ed25519$/;
 
-module.exports = ({ cooler, services = {} }) => {
+const CASE_FIELDS = ['title', 'accuser', 'respondentId', 'mediatorsAccuser', 'mediatorsRespondent'];
+const EVIDENCE_FIELDS = ['text', 'link', 'imageUrl'];
+const ANSWER_FIELDS = ['stance', 'text'];
+const VERDICT_FIELDS = ['result', 'orders'];
+const SETTLEMENT_FIELDS = ['terms'];
+
+module.exports = ({ cooler, services = {}, tribeCrypto }) => {
   let ssb;
   let userId;
 
@@ -23,6 +29,45 @@ module.exports = ({ cooler, services = {} }) => {
 
   const nowISO = () => new Date().toISOString();
   const ensureArray = (x) => (Array.isArray(x) ? x : x ? [x] : []);
+
+  const encryptFields = (content, keyHex, fields) => {
+    const payload = {};
+    for (const f of fields) {
+      if (content[f] !== undefined) payload[f] = content[f];
+    }
+    const enc = tribeCrypto.encryptWithKey(JSON.stringify(payload), keyHex);
+    const result = { ...content };
+    for (const f of fields) delete result[f];
+    result.encryptedPayload = enc;
+    return result;
+  };
+
+  const decryptFields = (content, keyHex) => {
+    if (!content || !content.encryptedPayload) return content;
+    try {
+      const plain = tribeCrypto.decryptWithKey(content.encryptedPayload, keyHex);
+      const payload = JSON.parse(plain);
+      const result = { ...content };
+      delete result.encryptedPayload;
+      return { ...result, ...payload };
+    } catch (e) {
+      return { ...content, encrypted: true };
+    }
+  };
+
+  const getCaseKey = (obj) => {
+    if (!tribeCrypto || !obj) return null;
+    return tribeCrypto.getKey(obj.rootCaseId || obj.id);
+  };
+
+  const distributeKey = async (caseKey, caseRootId, recipientId) => {
+    if (!tribeCrypto || !recipientId) return;
+    const ssbClient = await openSsb();
+    const ssbKeys = require('../server/node_modules/ssb-keys');
+    const boxed = tribeCrypto.boxKeyForMember(caseKey, recipientId, ssbKeys);
+    const content = { type: 'courts-key', caseRootId, for: recipientId, memberKey: boxed };
+    await new Promise((res, rej) => ssbClient.publish(content, (e) => e ? rej(e) : res()));
+  };
 
   async function readLog() {
     const ssbClient = await openSsb();
@@ -119,14 +164,36 @@ module.exports = ({ cooler, services = {} }) => {
       mediatorsRespondent: [],
       createdAt: openedAt
     };
-    return await new Promise((resolve, reject) =>
+
+    if (tribeCrypto) {
+      const initialMsg = await new Promise((res, rej) =>
+        ssbClient.publish(content, (err, msg) => (err ? rej(err) : res(msg)))
+      );
+      const caseRootId = initialMsg.key;
+      const caseKey = tribeCrypto.generateTribeKey();
+      tribeCrypto.setKey(caseRootId, caseKey, 1);
+      const encrypted = encryptFields({ ...content, rootCaseId: caseRootId }, caseKey, CASE_FIELDS);
+      const update = { ...encrypted, replaces: caseRootId, updatedAt: openedAt };
+      const finalMsg = await new Promise((res, rej) =>
+        ssbClient.publish(update, (err, msg) => (err ? rej(err) : res(msg)))
+      );
+      await distributeKey(caseKey, caseRootId, resp.id);
+      return finalMsg;
+    }
+
+    return new Promise((resolve, reject) =>
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
   }
 
   async function listCases(filter = 'open') {
     const all = await listByType('courtsCase');
-    const sorted = all.sort((a, b) => {
+    const decrypted = all.map(c => {
+      if (!tribeCrypto) return c;
+      const key = getCaseKey(c);
+      return key ? decryptFields(c, key) : c;
+    });
+    const sorted = decrypted.sort((a, b) => {
       const ta = new Date(a.openedAt || a.createdAt || 0).getTime();
       const tb = new Date(b.openedAt || b.createdAt || 0).getTime();
       return tb - ta;
@@ -150,7 +217,8 @@ module.exports = ({ cooler, services = {} }) => {
     const all = await listByType('courtsCase');
     const id = String(uid || userId || '');
     const rows = [];
-    for (const c of all) {
+    for (const raw of all) {
+      const c = tribeCrypto ? (getCaseKey(raw) ? decryptFields(raw, getCaseKey(raw)) : raw) : raw;
       const isAccuser = String(c.accuser || '') === id;
       const isRespondent = String(c.respondentId || '') === id;
       const ma = ensureArray(c.mediatorsAccuser || []);
@@ -190,19 +258,24 @@ module.exports = ({ cooler, services = {} }) => {
     const id = String(caseId || '').trim();
     if (!id) return null;
     const all = await listByType('courtsCase');
-    return all.find((c) => c.id === id) || null;
+    const found = all.find((c) => c.id === id) || null;
+    if (!found || !tribeCrypto) return found;
+    const caseKey = getCaseKey(found);
+    if (!caseKey) return found;
+    return decryptFields(found, caseKey);
   }
 
   async function upsertCase(obj) {
     const ssbClient = await openSsb();
     const { id, ...rest } = obj;
-    const updated = {
-      ...rest,
-      type: 'courtsCase',
-      replaces: id,
-      updatedAt: nowISO()
-    };
-    return await new Promise((resolve, reject) =>
+    let updated = { ...rest, type: 'courtsCase', replaces: id, updatedAt: nowISO() };
+    if (tribeCrypto) {
+      const caseKey = getCaseKey(updated);
+      if (caseKey) {
+        updated = encryptFields(updated, caseKey, CASE_FIELDS);
+      }
+    }
+    return new Promise((resolve, reject) =>
       ssbClient.publish(updated, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
   }
@@ -237,6 +310,17 @@ module.exports = ({ cooler, services = {} }) => {
     const clean = list.filter((id) => id !== c.accuser && id !== c.respondentId);
     if (side === 'accuser') c.mediatorsAccuser = clean;
     else c.mediatorsRespondent = clean;
+
+    if (tribeCrypto) {
+      const caseKey = getCaseKey(c);
+      if (caseKey) {
+        const caseRootId = c.rootCaseId || c.id;
+        for (const mediatorId of clean) {
+          await distributeKey(caseKey, caseRootId, mediatorId);
+        }
+      }
+    }
+
     await upsertCase(c);
     return c;
   }
@@ -255,6 +339,14 @@ module.exports = ({ cooler, services = {} }) => {
       throw new Error('Judge cannot be a party of the case.');
     }
     c.judgeId = id;
+
+    if (tribeCrypto) {
+      const caseKey = getCaseKey(c);
+      if (caseKey) {
+        await distributeKey(caseKey, c.rootCaseId || c.id, id);
+      }
+    }
+
     await upsertCase(c);
     return c;
   }
@@ -273,9 +365,9 @@ module.exports = ({ cooler, services = {} }) => {
     }
     if (!t && !l && !imageUrl) throw new Error('Text, link or image is required.');
     const ssbClient = await openSsb();
-    const content = {
+    let content = {
       type: 'courtsEvidence',
-      caseId: c.id,
+      caseId: c.rootCaseId || c.id,
       author: userId,
       role,
       text: t,
@@ -283,7 +375,11 @@ module.exports = ({ cooler, services = {} }) => {
       imageUrl,
       createdAt: nowISO()
     };
-    return await new Promise((resolve, reject) =>
+    if (tribeCrypto) {
+      const caseKey = getCaseKey(c);
+      if (caseKey) content = encryptFields(content, caseKey, EVIDENCE_FIELDS);
+    }
+    return new Promise((resolve, reject) =>
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
   }
@@ -298,14 +394,18 @@ module.exports = ({ cooler, services = {} }) => {
     const t = String(text || '').trim();
     if (!t) throw new Error('Response text is required.');
     const ssbClient = await openSsb();
-    const content = {
+    let content = {
       type: 'courtsAnswer',
-      caseId: c.id,
+      caseId: c.rootCaseId || c.id,
       respondent: userId,
       stance: s,
       text: t,
       createdAt: nowISO()
     };
+    if (tribeCrypto) {
+      const caseKey = getCaseKey(c);
+      if (caseKey) content = encryptFields(content, caseKey, ANSWER_FIELDS);
+    }
     await new Promise((resolve, reject) =>
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
@@ -328,14 +428,18 @@ module.exports = ({ cooler, services = {} }) => {
     if (!r) throw new Error('Result is required.');
     const o = String(orders || '').trim();
     const ssbClient = await openSsb();
-    const content = {
+    let content = {
       type: 'courtsVerdict',
-      caseId: c.id,
+      caseId: c.rootCaseId || c.id,
       judgeId: userId,
       result: r,
       orders: o,
       createdAt: nowISO()
     };
+    if (tribeCrypto) {
+      const caseKey = getCaseKey(c);
+      if (caseKey) content = encryptFields(content, caseKey, VERDICT_FIELDS);
+    }
     await new Promise((resolve, reject) =>
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
@@ -354,14 +458,18 @@ module.exports = ({ cooler, services = {} }) => {
     const t = String(terms || '').trim();
     if (!t) throw new Error('Terms are required.');
     const ssbClient = await openSsb();
-    const content = {
+    let content = {
       type: 'courtsSettlementProposal',
-      caseId: c.id,
+      caseId: c.rootCaseId || c.id,
       proposer: userId,
       terms: t,
       createdAt: nowISO()
     };
-    return await new Promise((resolve, reject) =>
+    if (tribeCrypto) {
+      const caseKey = getCaseKey(c);
+      if (caseKey) content = encryptFields(content, caseKey, SETTLEMENT_FIELDS);
+    }
+    return new Promise((resolve, reject) =>
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
   }
@@ -374,7 +482,7 @@ module.exports = ({ cooler, services = {} }) => {
     const ssbClient = await openSsb();
     const content = {
       type: 'courtsSettlementAccepted',
-      caseId: c.id,
+      caseId: c.rootCaseId || c.id,
       by: userId,
       createdAt: nowISO()
     };
@@ -462,7 +570,7 @@ module.exports = ({ cooler, services = {} }) => {
       judgeId: id,
       createdAt: nowISO()
     };
-    return await new Promise((resolve, reject) =>
+    return new Promise((resolve, reject) =>
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
   }
@@ -490,7 +598,7 @@ module.exports = ({ cooler, services = {} }) => {
       voter: userId,
       createdAt: nowISO()
     };
-    return await new Promise((resolve, reject) =>
+    return new Promise((resolve, reject) =>
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
   }
@@ -550,26 +658,45 @@ module.exports = ({ cooler, services = {} }) => {
       myPublicPreference = base.publicPrefRespondent;
     }
     const publicDetails = base.publicPrefAccuser === true && base.publicPrefRespondent === true;
+
+    const caseKey = getCaseKey(base);
+    const caseRootId = base.rootCaseId || base.id;
+
+    const matchCase = (e) => {
+      const eCaseId = String(e.caseId || '');
+      return eCaseId === id || eCaseId === caseRootId;
+    };
+
+    const tryDecrypt = (item) => {
+      if (!caseKey) return item;
+      return decryptFields(item, caseKey);
+    };
+
     const evidencesAll = await listByType('courtsEvidence');
     const answersAll = await listByType('courtsAnswer');
     const settlementsAll = await listByType('courtsSettlementProposal');
     const verdictsAll = await listByType('courtsVerdict');
     const acceptedAll = await listByType('courtsSettlementAccepted');
+
     const evidences = evidencesAll
-      .filter((e) => String(e.caseId || '') === id)
+      .filter(matchCase)
+      .map(tryDecrypt)
       .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
     const answers = answersAll
-      .filter((a) => String(a.caseId || '') === id)
+      .filter(matchCase)
+      .map(tryDecrypt)
       .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
     const settlements = settlementsAll
-      .filter((s) => String(s.caseId || '') === id)
+      .filter(matchCase)
+      .map(tryDecrypt)
       .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
     const verdicts = verdictsAll
-      .filter((v) => String(v.caseId || '') === id)
+      .filter(matchCase)
+      .map(tryDecrypt)
       .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
     const verdict = verdicts.length ? verdicts[verdicts.length - 1] : null;
     const acceptedSettlements = acceptedAll
-      .filter((s) => String(s.caseId || '') === id)
+      .filter(matchCase)
       .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
     const decidedAt =
       base.verdictAt ||
@@ -601,6 +728,30 @@ module.exports = ({ cooler, services = {} }) => {
     };
   }
 
+  async function processIncomingCourtsKeys() {
+    if (!tribeCrypto) return;
+    const ssbKeys = require('../server/node_modules/ssb-keys');
+    const ssbConfig = require('../server/ssb_config');
+    const ssbClient = await openSsb();
+    const msgs = await new Promise((res, rej) => {
+      pull(
+        ssbClient.createLogStream({ limit: logLimit }),
+        pull.collect((err, arr) => (err ? rej(err) : res(arr)))
+      );
+    });
+    for (const m of msgs) {
+      const c = m.value?.content;
+      if (!c || c.type !== 'courts-key') continue;
+      if (c.for !== ssbClient.id) continue;
+      if (!c.memberKey || !c.caseRootId) continue;
+      if (tribeCrypto.getKey(c.caseRootId)) continue;
+      try {
+        const key = tribeCrypto.unboxKeyFromMember(c.memberKey, ssbConfig.keys, ssbKeys);
+        if (key) tribeCrypto.setKey(c.caseRootId, key, 1);
+      } catch (e) {}
+    }
+  }
+
   return {
     getCurrentUserId,
     openCase,
@@ -619,7 +770,7 @@ module.exports = ({ cooler, services = {} }) => {
     nominateJudge,
     voteNomination,
     listNominations,
-    getCaseDetails
+    getCaseDetails,
+    processIncomingCourtsKeys
   };
 };
-

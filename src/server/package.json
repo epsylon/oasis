@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Oasis - Social Networking Utopia",
   "repository": {
     "type": "git",
@@ -16,6 +16,8 @@
     "start": "npm run start:ssb && sleep 10 && npm run start:backend",
     "start:backend": "node ../backend/backend.js",
     "start:ssb": "node SSB_server.js start &",
+    "dev": "npm run dev:backend",
+    "dev:backend": "nodemon",
     "postinstall": "node ../../scripts/patch-node-modules.js"
   },
   "dependencies": {
@@ -136,6 +138,9 @@
   "optionalDependencies": {
     "fsevents": "^2.3.2",
     "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   },
   "bugs": {
     "url": "https://github.com/epsylon/oasis/issues"

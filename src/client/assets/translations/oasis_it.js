@@ -2943,6 +2943,8 @@ module.exports = {
     gamesCocolandDesc: "Una noce di cocco con occhi che salta palme e raccoglie ECOins.",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "Collega i PUB agli abitanti tramite validatori, negozi e accumulatori. Sopravvivi alla minaccia CBDC!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "Infiltra la griglia, raccogli dati riservati, evita i droni di sicurezza e fuggi. Quanti livelli riesci a superare?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "Fermate l'invasione aliena! Abbattete le ondate di invasori.",
     gamesArkanoidTitle: "Arkanoid",
@@ -2953,8 +2955,10 @@ module.exports = {
     gamesOutrunDesc: "Corsa contro il tempo! Evita il traffico e raggiungi il traguardo prima che scada.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "Pilota la tua navicella in un campo di asteroidi. Sparali prima che ti colpiscano.",
+    gamesRockPaperScissorsTitle: "Carta Forbici Sasso",
+    gamesRockPaperScissorsDesc: "Carta, forbici, sasso contro una IA. Il migliore dei tre round vince.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "Carta, forbici, sasso contro una IA. Il migliore dei tre round vince.",
+    gamesTikTakToeDesc: "Tris classico contro l'IA. Allinea tre simboli per vincere.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "Lancia una moneta e scommetti su testa o croce. Quanta fortuna hai?",
     games8BallTitle: "8Ball Pool",
@@ -3042,6 +3046,13 @@ module.exports = {
     calendarLeave: "Lascia Calendario",
     statsCalendar: "Calendari",
     statsCalendarDate: "Date calendario",
-    statsCalendarNote: "Note calendario"
+    statsCalendarNote: "Note calendario",
+    chatAccessDenied: "Non hai accesso a questa chat. Chiedi un invito per accedere al contenuto.",
+    padAccessDenied: "Non hai accesso a questo pad. Chiedi un invito per accedere al contenuto.",
+    contentAccessDenied: "Non hai accesso a questo contenuto.",
+    blockAccessRestricted: "Accesso limitato",
+    tribeContentAccessDenied: "Accesso Negato",
+    tribeContentAccessDeniedMsg: "Questo contenuto appartiene a una tribù. Devi essere membro per accedervi.",
+    tribeViewTribes: "Visualizza Tribù"
     }
 };

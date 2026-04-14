@@ -12,7 +12,7 @@ const normalizeTags = (raw) => {
 }
 const voteSum = (opinions = {}) => Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribeCrypto }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
@@ -91,7 +91,7 @@ module.exports = ({ cooler }) => {
       updatedAt: c.updatedAt || null,
       opinions: c.opinions || {},
       opinions_inhabitants: safeArr(c.opinions_inhabitants),
-      buyers: safeArr(c.buyers)
+      buyers: (tribeCrypto && tribeCrypto.getKey(rootId)) || ssb?.id === (c.author || node.author) ? safeArr(c.buyers) : []
     }
   }
 
@@ -301,7 +301,14 @@ module.exports = ({ cooler }) => {
       }
 
       return new Promise((resolve, reject) => {
-        ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
+        ssbClient.publish(content, (err, msg) => {
+          if (err) return reject(err)
+          if (msg && msg.key && tribeCrypto) {
+            const key = tribeCrypto.generateTribeKey()
+            tribeCrypto.setKey(msg.key, key, 1)
+          }
+          resolve(msg)
+        })
       })
     },
 

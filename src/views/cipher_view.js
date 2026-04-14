@@ -67,10 +67,7 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
     ? div({ class: "cipher-result visible encrypted-result" }, 
         label(i18n.cipherEncryptedMessageLabel),
         br(),br(),
-        div({ class: "cipher-text" }, encryptedText),
-        label(i18n.cipherPasswordUsedLabel),
-        br(),br(),
-        div({ class: "cipher-text" }, password) 
+        div({ class: "cipher-text" }, encryptedText)
       )
     : null;
 

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Neon Infiltrator</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#ui { display: flex; gap: 16px; padding: 6px 8px; font-size: 14px; color: #FFA500; flex-wrap: wrap; justify-content: center; width: 100%; }
+canvas { display: block; width: 100%; height: auto; max-width: 700px; border: 1px solid #333; image-rendering: crisp-edges; }
+#msg { font-size: 13px; color: #FFA500; margin: 3px; text-align: center; min-height: 18px; }
+#dpad { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 4px; }
+.dpad-row { display: flex; gap: 4px; }
+#dpad button { width: 50px; height: 50px; background: #1a0d00; border: 1px solid #FF6600; color: #FF6600; font-size: 20px; cursor: pointer; border-radius: 4px; }
+#dpad button:active { background: #3a1a00; }
+#controls { color: #666; font-size: 12px; text-align: center; margin-bottom: 3px; }
+#scoreSubmit { text-align: center; margin: 6px; }
+#scoreSubmit button { background: #1a3a1a; border: 1px solid #FFA500; color: #FFA500; padding: 6px 16px; cursor: pointer; font-family: monospace; font-size: 14px; }
+@media (min-width: 768px) { #dpad, #controls { display: none; } }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">NEON INFILTRATOR</span>
+</div>
+<div id="ui">
+  <span>DATA: <b id="dataEl">0/0</b></span>
+  <span>LEVEL: <b id="levelEl">1</b></span>
+  <span>SCORE: <b id="scoreEl">0</b></span>
+  <span>BEST: <b id="bestEl">-</b></span>
+  <span>ENEMIES: <b id="enemyEl">0</b></span>
+</div>
+<canvas id="c"></canvas>
+<div id="msg">Press any arrow key or tap to start</div>
+<div id="dpad">
+  <div class="dpad-row"><button id="btn-up">&#8593;</button></div>
+  <div class="dpad-row">
+    <button id="btn-left">&#8592;</button>
+    <button id="btn-down">&#8595;</button>
+    <button id="btn-right">&#8594;</button>
+  </div>
+</div>
+<div id="controls">Arrow keys / WASD &nbsp;|&nbsp; SPACE — new game</div>
+<div id="scoreSubmit" style="display:none">
+  <form method="POST" action="/games/submit-score" target="_top">
+    <input type="hidden" name="game" value="neoninfiltrator">
+    <input type="hidden" id="scoreInput" name="score" value="0">
+    <button type="submit">Submit Score to Hall of Fame</button>
+  </form>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const CELL = 28;
+let MAP_W = 0, MAP_H = 0;
+let walls = [], enemies = [], dataItems = [], exitPos = { x: -1, y: -1 };
+let player = { x: 1, y: 1 };
+let level = 1, dataCollected = 0, totalData = 0;
+let score = 0;
+let best = parseInt(localStorage.getItem('ni_best') || '-1');
+let gameState = 'idle';
+let lastPlayerMove = 0, lastEnemyStep = 0;
+const MOVE_DELAY = 140, ENEMY_INTERVAL = 500;
+const keys = {};
+
+function setMsg(txt) { document.getElementById('msg').textContent = txt; }
+
+function updateUI() {
+  document.getElementById('dataEl').textContent = dataCollected + '/' + totalData;
+  document.getElementById('levelEl').textContent = level;
+  document.getElementById('scoreEl').textContent = score;
+  document.getElementById('bestEl').textContent = best < 0 ? '-' : best;
+  document.getElementById('enemyEl').textContent = enemies.length;
+}
+
+function resizeCanvas() {
+  let bw = 18, bh = 14;
+  if (level >= 5) { bw = 22; bh = 18; }
+  else if (level >= 3) { bw = 20; bh = 16; }
+  MAP_W = bw; MAP_H = bh;
+  canvas.width = MAP_W * CELL;
+  canvas.height = MAP_H * CELL;
+}
+
+function generateLevel() {
+  resizeCanvas();
+  walls = Array(MAP_H).fill(null).map(() => Array(MAP_W).fill(false));
+  for (let i = 0; i < MAP_W; i++) { walls[0][i] = true; walls[MAP_H - 1][i] = true; }
+  for (let i = 0; i < MAP_H; i++) { walls[i][0] = true; walls[i][MAP_W - 1] = true; }
+
+  for (let i = 0; i < Math.floor(MAP_W * MAP_H / 7); i++) {
+    const x = 2 + Math.floor(Math.random() * (MAP_W - 4));
+    const y = 2 + Math.floor(Math.random() * (MAP_H - 4));
+    if (!walls[y][x] && !(Math.abs(x - player.x) < 2 && Math.abs(y - player.y) < 2)) {
+      if (Math.random() < 0.55) walls[y][x] = true;
+    }
+  }
+  for (let i = 0; i < MAP_W * 2; i++) {
+    const x = 1 + Math.floor(Math.random() * (MAP_W - 2));
+    const y = 1 + Math.floor(Math.random() * (MAP_H - 2));
+    if (walls[y][x] && x > 1 && x < MAP_W - 2 && y > 1 && y < MAP_H - 2) {
+      if (Math.random() < 0.5) walls[y][x] = false;
+    }
+  }
+
+  player.x = 1; player.y = 1;
+  if (walls[player.y][player.x]) {
+    outer: for (let y = 1; y < MAP_H - 1; y++) {
+      for (let x = 1; x < MAP_W - 1; x++) {
+        if (!walls[y][x]) { player.x = x; player.y = y; break outer; }
+      }
+    }
+  }
+
+  exitPos = { x: MAP_W - 2, y: MAP_H - 2 };
+  for (let t = 0; t < 200; t++) {
+    const ex = MAP_W - 2 - Math.floor(Math.random() * 3);
+    const ey = MAP_H - 2 - Math.floor(Math.random() * 3);
+    if (ex >= 1 && ey >= 1 && !walls[ey][ex] && (Math.abs(ex - player.x) + Math.abs(ey - player.y)) > 6) {
+      exitPos = { x: ex, y: ey }; break;
+    }
+  }
+
+  totalData = Math.min(12, 3 + Math.floor(level / 1.5));
+  dataItems = [];
+  for (let i = 0; i < totalData; i++) {
+    let placed = false;
+    for (let t = 0; t < 100; t++) {
+      const dx = 1 + Math.floor(Math.random() * (MAP_W - 2));
+      const dy = 1 + Math.floor(Math.random() * (MAP_H - 2));
+      if (!walls[dy][dx] && !(dx === player.x && dy === player.y) && !(dx === exitPos.x && dy === exitPos.y) && !dataItems.some(d => d.x === dx && d.y === dy)) {
+        dataItems.push({ x: dx, y: dy, collected: false }); placed = true; break;
+      }
+    }
+    if (!placed) {
+      outer2: for (let y = 1; y < MAP_H - 1; y++) {
+        for (let x = 1; x < MAP_W - 1; x++) {
+          if (!walls[y][x] && !(x === player.x && y === player.y) && !(x === exitPos.x && y === exitPos.y) && !dataItems.some(d => d.x === x && d.y === y)) {
+            dataItems.push({ x, y, collected: false }); break outer2;
+          }
+        }
+      }
+    }
+  }
+  dataCollected = 0;
+
+  const enemyCount = Math.min(6, 1 + Math.floor(level / 2));
+  enemies = [];
+  for (let i = 0; i < enemyCount; i++) {
+    let placed = false;
+    for (let t = 0; t < 150; t++) {
+      const ex = 2 + Math.floor(Math.random() * (MAP_W - 4));
+      const ey = 2 + Math.floor(Math.random() * (MAP_H - 4));
+      if (!walls[ey][ex] && (Math.abs(ex - player.x) + Math.abs(ey - player.y)) > 4 && !(ex === exitPos.x && ey === exitPos.y) && !dataItems.some(d => d.x === ex && d.y === ey)) {
+        enemies.push({ x: ex, y: ey }); placed = true; break;
+      }
+    }
+    if (!placed) {
+      outer3: for (let y = 2; y < MAP_H - 2; y++) {
+        for (let x = 2; x < MAP_W - 2; x++) {
+          if (!walls[y][x] && (Math.abs(x - player.x) + Math.abs(y - player.y)) > 3 && !enemies.some(e => e.x === x && e.y === y)) {
+            enemies.push({ x, y }); break outer3;
+          }
+        }
+      }
+    }
+  }
+  updateUI();
+  setMsg(`Level ${level} — Collect ${totalData} data items and reach the exit`);
+}
+
+function checkEnemyCollision() {
+  for (const e of enemies) {
+    if (e.x === player.x && e.y === player.y) { endGame(); return true; }
+  }
+  return false;
+}
+
+function tryMove(dx, dy) {
+  if (gameState !== 'play') return;
+  const nx = player.x + dx, ny = player.y + dy;
+  if (nx < 0 || nx >= MAP_W || ny < 0 || ny >= MAP_H || walls[ny][nx]) return;
+  player.x = nx; player.y = ny;
+
+  for (const d of dataItems) {
+    if (!d.collected && d.x === player.x && d.y === player.y) {
+      d.collected = true; dataCollected++; score += 100;
+      updateUI(); setMsg(`Data collected! (${dataCollected}/${totalData})`); break;
+    }
+  }
+
+  if (dataCollected === totalData && exitPos.x === player.x && exitPos.y === player.y) {
+    const bonus = level * 50;
+    score += bonus;
+    updateUI();
+    setMsg(`Level ${level} complete! +${bonus} bonus. Advancing...`);
+    gameState = 'transit';
+    setTimeout(() => { level++; generateLevel(); gameState = 'play'; lastPlayerMove = performance.now(); lastEnemyStep = performance.now(); }, 1400);
+    return;
+  }
+
+  checkEnemyCollision();
+}
+
+function moveEnemies() {
+  if (gameState !== 'play') return;
+  for (const e of enemies) {
+    let dx = 0, dy = 0;
+    if (Math.random() < 0.6) {
+      if (Math.abs(e.x - player.x) > Math.abs(e.y - player.y)) dx = e.x > player.x ? -1 : 1;
+      else dy = e.y > player.y ? -1 : 1;
+    } else {
+      const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      [dx, dy] = dirs[Math.floor(Math.random() * 4)];
+    }
+    const nx = e.x + dx, ny = e.y + dy;
+    if (nx >= 0 && nx < MAP_W && ny >= 0 && ny < MAP_H && !walls[ny][nx] && !(nx === exitPos.x && ny === exitPos.y)) {
+      e.x = nx; e.y = ny;
+    } else {
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const bx = e.x + sx, by = e.y + sy;
+        if (bx >= 0 && bx < MAP_W && by >= 0 && by < MAP_H && !walls[by][bx] && !(bx === exitPos.x && by === exitPos.y)) {
+          e.x = bx; e.y = by; break;
+        }
+      }
+    }
+  }
+  checkEnemyCollision();
+  updateUI();
+}
+
+function endGame() {
+  gameState = 'over';
+  if (best < 0 || score > best) { best = score; localStorage.setItem('ni_best', best); }
+  updateUI();
+  setMsg(`DETECTED! Score: ${score}. Press SPACE for new game.`);
+  document.getElementById('scoreInput').value = score;
+  document.getElementById('scoreSubmit').style.display = 'block';
+}
+
+function newGame() {
+  score = 0; level = 1;
+  document.getElementById('scoreSubmit').style.display = 'none';
+  generateLevel();
+  gameState = 'play';
+  lastPlayerMove = performance.now();
+  lastEnemyStep = performance.now();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#050505';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = '#1a0d00'; ctx.lineWidth = 0.6;
+  for (let i = 0; i <= MAP_W; i++) {
+    ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, canvas.height); ctx.stroke();
+  }
+  for (let i = 0; i <= MAP_H; i++) {
+    ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(canvas.width, i * CELL); ctx.stroke();
+  }
+
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      if (walls[y][x]) {
+        ctx.fillStyle = '#1a0a05';
+        ctx.fillRect(x * CELL, y * CELL, CELL - 0.5, CELL - 0.5);
+        ctx.strokeStyle = '#FF6600'; ctx.lineWidth = 1;
+        ctx.strokeRect(x * CELL, y * CELL, CELL - 0.5, CELL - 0.5);
+      }
+    }
+  }
+
+  for (const d of dataItems) {
+    if (!d.collected) {
+      ctx.fillStyle = '#FFB347'; ctx.shadowBlur = 6; ctx.shadowColor = '#FF6600';
+      ctx.beginPath(); ctx.arc(d.x * CELL + CELL / 2, d.y * CELL + CELL / 2, CELL * 0.25, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#FF884D';
+      ctx.beginPath(); ctx.arc(d.x * CELL + CELL / 2, d.y * CELL + CELL / 2, CELL * 0.12, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  ctx.fillStyle = '#FFA500'; ctx.globalAlpha = 0.7;
+  ctx.fillRect(exitPos.x * CELL + 4, exitPos.y * CELL + 4, CELL - 8, CELL - 8);
+  ctx.globalAlpha = 1; ctx.fillStyle = '#FFA500';
+  ctx.font = `${CELL - 6}px monospace`;
+  ctx.fillText('\u25C8', exitPos.x * CELL + CELL * 0.28, exitPos.y * CELL + CELL * 0.78);
+
+  if (dataCollected === totalData && gameState === 'play') {
+    ctx.fillStyle = '#FFB347'; ctx.shadowBlur = 4; ctx.shadowColor = '#FF6600';
+    ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('\u2192 EXIT AVAILABLE \u2190', canvas.width / 2, 20);
+    ctx.shadowBlur = 0; ctx.textAlign = 'left';
+  }
+
+  for (const e of enemies) {
+    ctx.fillStyle = '#FF4400'; ctx.shadowBlur = 6; ctx.shadowColor = '#FF2200';
+    ctx.fillRect(e.x * CELL + 4, e.y * CELL + 4, CELL - 8, CELL - 8);
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.fillStyle = '#FF6600'; ctx.shadowBlur = 8; ctx.shadowColor = '#FF6600';
+  ctx.fillRect(player.x * CELL + 6, player.y * CELL + 6, CELL - 12, CELL - 12);
+  ctx.fillStyle = '#FFB347';
+  ctx.fillRect(player.x * CELL + 10, player.y * CELL + 10, 5, 5);
+  ctx.shadowBlur = 0;
+}
+
+function gameLoop(now) {
+  if (gameState === 'play') {
+    let dx = 0, dy = 0;
+    if (keys.ArrowUp || keys.w) dy = -1;
+    if (keys.ArrowDown || keys.s) dy = 1;
+    if (keys.ArrowLeft || keys.a) dx = -1;
+    if (keys.ArrowRight || keys.d) dx = 1;
+    if ((dx !== 0 || dy !== 0) && now - lastPlayerMove >= MOVE_DELAY) {
+      tryMove(dx, dy); lastPlayerMove = now;
+    }
+    if (now - lastEnemyStep >= ENEMY_INTERVAL) { moveEnemies(); lastEnemyStep = now; }
+  }
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+document.addEventListener('keydown', e => {
+  const key = e.key;
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 's', 'a', 'd', ' '].includes(key)) e.preventDefault();
+  if (key === ' ') { if (gameState === 'idle' || gameState === 'over') { newGame(); } return; }
+  keys[key] = true;
+  if (gameState === 'idle') newGame();
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+const dpadStart = () => { if (gameState === 'idle' || gameState === 'over') newGame(); };
+document.getElementById('btn-up').addEventListener('click', () => { dpadStart(); tryMove(0, -1); });
+document.getElementById('btn-down').addEventListener('click', () => { dpadStart(); tryMove(0, 1); });
+document.getElementById('btn-left').addEventListener('click', () => { dpadStart(); tryMove(-1, 0); });
+document.getElementById('btn-right').addEventListener('click', () => { dpadStart(); tryMove(1, 0); });
+
+generateLevel();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

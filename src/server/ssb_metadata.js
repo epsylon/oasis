@@ -37,7 +37,7 @@ async function checkForUpdate() {
   await updater.getRemoteVersion();
 }
 
-async function printMetadata(mode, modeColor = colors.cyan) {
+async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, httpHost = 'localhost', offline = false, isPublic = false) {
   if (printed) return;
   printed = true;
 
@@ -46,17 +46,26 @@ async function printMetadata(mode, modeColor = colors.cyan) {
   const name = pkg.name;
   const logLevel = config.logging?.level || 'info';
   const publicKey = config.keys?.public || '';
+  const httpUrl = `http://${httpHost}:${httpPort}`;
+  const oscLink = `\x1b]8;;${httpUrl}\x07${httpUrl}\x1b]8;;\x07`;
+  const ssbPort = config.connections?.incoming?.net?.[0]?.port || config.port || 8008;
+  const localDiscovery = config.local === true;
+  const hops = config.conn?.hops ?? config.friends?.hops ?? 2;
 
   console.log("=========================");
   console.log(`Running mode: ${modeColor}${mode}${colors.reset}`);
   console.log("=========================");
   console.log(`- Package: ${colors.blue}${name} ${colors.yellow}[Version: ${version}]${colors.reset}`);
-  console.log("- Logging Level:", logLevel);
+  console.log(`- URL: ${colors.cyan}${oscLink}${colors.reset}`);
   console.log(`- Oasis ID: [ ${colors.orange}@${publicKey}${colors.reset} ]`);
+  console.log("- Logging Level:", logLevel);
   const ifaces = os.networkInterfaces();
   const isOnline = Object.values(ifaces).some(list =>
     list && list.some(i => !i.internal && i.family === 'IPv4')
   );
+  console.log(`- Protocol (port): ${ssbPort}`);
+  console.log(`- LAN broadcasting (UDP): ${localDiscovery ? 'enabled' : 'disabled'}`);
+  console.log(`- Replication (hops): ${hops}`);
   console.log(`- Mode: ${isOnline ? 'online' : 'offline'}`);
   console.log("");
   console.log("=========================");

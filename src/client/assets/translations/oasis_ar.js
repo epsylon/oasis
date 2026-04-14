@@ -2942,6 +2942,8 @@ module.exports = {
     gamesCocolandDesc: "جوزة هند بعيون تقفز فوق أشجار النخيل وتجمع ECOins.",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "اربط PUBs بالسكان عبر المدققين والمتاجر والمجمّعات. انجُ من تهديد CBDC!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "تسلل عبر الشبكة، اجمع بيانات سرية، تجنب طائرات الأمن واهرب. كم مستوى تستطيع اجتيازه؟",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "أوقف الغزو الفضائي! أسقط موجات الغزاة قبل أن يصلوا إلى الأرض.",
     gamesArkanoidTitle: "Arkanoid",
@@ -2952,8 +2954,10 @@ module.exports = {
     gamesOutrunDesc: "سباق ضد الوقت! تجنب السيارات وصل إلى خط النهاية قبل انتهاء الوقت.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "قد مركبتك عبر حقل الكويكبات. دمرها قبل أن تصطدم بك.",
+    gamesRockPaperScissorsTitle: "حجر ورقة مقص",
+    gamesRockPaperScissorsDesc: "حجر، ورقة أو مقص ضد ذكاء اصطناعي. الأفضل في ثلاث جولات يفوز.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "حجر، ورقة أو مقص ضد ذكاء اصطناعي. الأفضل في ثلاث جولات يفوز.",
+    gamesTikTakToeDesc: "تيك-تاك-تو الكلاسيكي ضد الذكاء الاصطناعي. ثلاثة في صف واحد للفوز.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "اقلب عملة معدنية وراهن على الوجه أو الظهر. كم أنت محظوظ?",
     games8BallTitle: "8Ball Pool",
@@ -3041,6 +3045,13 @@ module.exports = {
     calendarLeave: "مغادرة التقويم",
     statsCalendar: "التقاويم",
     statsCalendarDate: "تواريخ التقويم",
-    statsCalendarNote: "ملاحظات التقويم"
+    statsCalendarNote: "ملاحظات التقويم",
+    chatAccessDenied: "ليس لديك حق الوصول إلى هذه المحادثة. اطلب دعوة للوصول إلى المحتوى.",
+    padAccessDenied: "ليس لديك حق الوصول إلى هذا الوسادة. اطلب دعوة للوصول إلى المحتوى.",
+    contentAccessDenied: "ليس لديك حق الوصول إلى هذا المحتوى.",
+    blockAccessRestricted: "الوصول مقيد",
+    tribeContentAccessDenied: "تم رفض الوصول",
+    tribeContentAccessDeniedMsg: "هذا المحتوى ينتمي إلى قبيلة. يجب أن تكون عضواً للوصول إليه.",
+    tribeViewTribes: "عرض القبائل"
     }
 };

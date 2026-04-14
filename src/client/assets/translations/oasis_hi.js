@@ -2942,6 +2942,8 @@ module.exports = {
     gamesCocolandDesc: "आंखों वाला एक नारियल ताड़ के पेड़ों के ऊपर कूदता है और ECOins इकट्ठा करता है।",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "PUBs को validators, shops और accumulators के ज़रिए habitants से जोड़ें। CBDC के खतरे से बचें!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "ग्रिड में घुसें, गोपनीय डेटा इकट्ठा करें, सुरक्षा ड्रोन से बचें और भागें. कितने लेवल साफ कर सकते हैं?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "एलियन आक्रमण रोकें! आक्रमणकारियों की लहरों को मार गिराएं।",
     gamesArkanoidTitle: "Arkanoid",
@@ -2952,8 +2954,10 @@ module.exports = {
     gamesOutrunDesc: "समय के खिलाफ दौड़! यातायात से बचें और समय से पहले मंजिल पर पहुंचें।",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "क्षुद्रग्रह क्षेत्र में अपना यान उड़ाएं। उन्हें आने से पहले नष्ट करें।",
+    gamesRockPaperScissorsTitle: "पत्थर कागज कैंची",
+    gamesRockPaperScissorsDesc: "AI के खिलाफ पत्थर, कागज या कैंची। तीन में से दो जीतने वाला विजेता।",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "AI के खिलाफ पत्थर, कागज या कैंची। तीन में से दो जीतने वाला विजेता।",
+    gamesTikTakToeDesc: "AI के खिलाफ क्लासिक टिक-टैक-टो। तीन एक पंक्ति में जीत है।",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "एक सिक्का उछालें और हेड या टेल पर दांव लगाएं। आप कितने भाग्यशाली हैं?",
     games8BallTitle: "8Ball Pool",
@@ -3041,6 +3045,13 @@ module.exports = {
     calendarLeave: "कैलेंडर छोड़ें",
     statsCalendar: "कैलेंडर",
     statsCalendarDate: "कैलेंडर तारीखें",
-    statsCalendarNote: "कैलेंडर नोट"
+    statsCalendarNote: "कैलेंडर नोट",
+    chatAccessDenied: "आपके पास इस चैट तक पहुंच नहीं है। सामग्री तक पहुंचने के लिए आमंत्रण मांगें।",
+    padAccessDenied: "आपके पास इस पैड तक पहुंच नहीं है। सामग्री तक पहुंचने के लिए आमंत्रण मांगें।",
+    contentAccessDenied: "आपके पास इस सामग्री तक पहुंच नहीं है।",
+    blockAccessRestricted: "पहुंच प्रतिबंधित",
+    tribeContentAccessDenied: "पहुंच अस्वीकृत",
+    tribeContentAccessDeniedMsg: "यह सामग्री एक जनजाति की है। इसे देखने के लिए आपको सदस्य होना चाहिए।",
+    tribeViewTribes: "जनजातियाँ देखें"
     }
 };

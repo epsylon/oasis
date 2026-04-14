@@ -215,7 +215,7 @@ const renderBlockDiagram = (blocks, qs) => {
   );
 };
 
-const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, viewMode = 'block') => {
+const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, viewMode = 'block', restricted = false) => {
   if (!block) {
     return template(
       i18n.blockchain,
@@ -232,9 +232,8 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
   const qs = toQueryString(filter, search);
   const isDatagram = viewMode === 'datagram';
 
-  const blockContent = isDatagram
-    ? renderBlockDiagram([block], qs)
-    : div(
+  const blockContent = restricted
+    ? div(
         div({ class: 'block-single' },
           div({ class: 'block-row block-row--meta' },
             span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockID}:`),
@@ -245,17 +244,36 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
             span({ class: 'blockchain-card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ')),
             span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
             span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
-          ),
-          div({ class: 'block-row block-row--meta block-row--meta-spaced' },
-            a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author)
           )
         ),
-        div({ class:'block-row block-row--content' },
-          div({ class:'block-content-preview' },
-            pre({ class:'json-content' }, JSON.stringify(block.content,null,2))
-          )
+        div({ class: 'block-row block-row--content' },
+          p({ class: 'access-denied-msg' }, i18n.blockAccessRestricted)
         )
-      );
+      )
+    : isDatagram
+      ? renderBlockDiagram([block], qs)
+      : div(
+          div({ class: 'block-single' },
+            div({ class: 'block-row block-row--meta' },
+              span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockID}:`),
+              span({ class: 'blockchain-card-value' }, block.id)
+            ),
+            div({ class: 'block-row block-row--meta' },
+              span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockTimestamp}:`),
+              span({ class: 'blockchain-card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ')),
+              span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
+              span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
+            ),
+            div({ class: 'block-row block-row--meta block-row--meta-spaced' },
+              a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author)
+            )
+          ),
+          div({ class:'block-row block-row--content' },
+            div({ class:'block-content-preview' },
+              pre({ class:'json-content' }, JSON.stringify(block.content,null,2))
+            )
+          )
+        );
 
   return template(
     i18n.blockchain,
@@ -363,8 +381,8 @@ const renderBlockchainView = (blocks, filter, userId, search = {}) => {
             .map(block=>
               div({ class:'block' },
                 div({ class:'block-buttons' },
-                  a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}`, class:'btn-singleview', title:i18n.blockchainDetails }, '⦿'),
-                  a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}&view=datagram`, class:'btn-singleview btn-datagram', title:i18n.blockchainDatagram || 'Datagram' }, '⊞'),
+                  block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}`, class:'btn-singleview', title:i18n.blockchainDetails }, '⦿'),
+                  block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}&view=datagram`, class:'btn-singleview btn-datagram', title:i18n.blockchainDatagram || 'Datagram' }, '⊞'),
                   !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
                     form({ method:'GET', action:getViewDetailsAction(block.type, block) },
                       button({ type:'submit', class:'filter-btn' }, i18n.visitContent)

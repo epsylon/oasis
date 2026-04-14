@@ -170,7 +170,7 @@ const renderFeedCard = (feed) => {
                 h1(String(refeedsNum)),
                 form(
                     { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
-                    button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", disabled: !!alreadyRefeeded }, i18n.refeedButton)
+                    button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", ...(alreadyRefeeded ? { disabled: true } : {}) }, i18n.refeedButton)
                 ),
                 alreadyRefeeded ? p({ class: "muted" }, i18n.alreadyRefeeded) : null
             ),
@@ -344,7 +344,7 @@ exports.singleFeedView = (feed, comments = []) => {
             h1(String(refeedsNum)),
             form(
               { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
-              button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", disabled: !!alreadyRefeeded }, i18n.refeedButton)
+              button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", ...(alreadyRefeeded ? { disabled: true } : {}) }, i18n.refeedButton)
             ),
             alreadyRefeeded ? p({ class: "muted" }, i18n.alreadyRefeeded) : null
           ),
@@ -372,7 +372,7 @@ exports.singleFeedView = (feed, comments = []) => {
             form(
               { method: "POST", action: `/feed/opinions/${encodeURIComponent(feed.key)}/${cat}` },
               button(
-                { class: alreadyVoted ? "vote-btn disabled" : "vote-btn", type: "submit", disabled: !!alreadyVoted },
+                { class: alreadyVoted ? "vote-btn disabled" : "vote-btn", type: "submit", ...(alreadyVoted ? { disabled: true } : {}) },
                 `${i18n["vote" + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${content.opinions?.[cat] || 0}]`
               )
             )

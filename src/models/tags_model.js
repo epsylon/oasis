@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-module.exports = ({ cooler, padsModel }) => {
+module.exports = ({ cooler, padsModel, tribesModel }) => {
   let ssb;
   const openSsb = async () => {
     if (!ssb) ssb = await cooler.open();
@@ -130,11 +130,25 @@ module.exports = ({ cooler, padsModel }) => {
 
       for (const oldId of replacesMap.keys()) latestByKey.delete(oldId);
 
+      const anonTribeIds = new Set();
+      if (tribesModel) {
+        const allTribes = await tribesModel.listAll().catch(() => []);
+        for (const tribe of allTribes) {
+          if (tribe.isAnonymous === true) anonTribeIds.add(tribe.id);
+        }
+      }
+
       let filtered = Array.from(latestByKey.values()).filter(msg => {
         const c = msg?.value?.content;
         if (!c || c.type === 'tombstone') return false;
         if (tombstoned.has(msg.key)) return false;
-        return Array.isArray(c.tags) && c.tags.filter(Boolean).length > 0;
+        if (!Array.isArray(c.tags) || !c.tags.filter(Boolean).length) return false;
+        if (c.tribeId && anonTribeIds.has(c.tribeId)) return false;
+        if (c.type === 'event' && c.isPublic === 'private') return false;
+        if (c.type === 'task' && String(c.isPublic).toUpperCase() === 'PRIVATE') return false;
+        if ((c.type === 'chat' || c.type === 'pad') && c.status === 'INVITE-ONLY') return false;
+        if (c.type === 'shop' && c.visibility === 'CLOSED') return false;
+        return true;
       });
 
       filtered = dedupeKeepLatest(filtered);
@@ -153,9 +167,11 @@ module.exports = ({ cooler, padsModel }) => {
       }
 
       if (padsModel) {
-        const viewerId = '';
+        const ssbClient2 = await openSsb();
+        const viewerId = ssbClient2.id;
         const pads = await padsModel.listAll({ filter: 'all', viewerId }).catch(() => []);
         for (const pad of pads) {
+          if (pad.status === 'INVITE-ONLY' && pad.author !== viewerId && !(Array.isArray(pad.members) && pad.members.includes(viewerId))) continue;
           if (!Array.isArray(pad.tags)) continue;
           const uniquePadTags = new Set(pad.tags.map(tagKey).filter(Boolean));
           for (const k of uniquePadTags) {

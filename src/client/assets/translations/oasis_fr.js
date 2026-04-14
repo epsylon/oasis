@@ -2940,6 +2940,8 @@ module.exports = {
     gamesCocolandDesc: "Une noix de coco avec des yeux qui saute par-dessus des palmiers en collectant des ECOins.",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "Connectez les PUBs aux habitants via validateurs, boutiques et accumulateurs. Résistez à la menace CBDC !",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "Infiltrez la grille, collectez les données confidentielles, évitez les drones et échappez-vous. Combien de niveaux pouvez-vous passer?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "Arrêtez l'invasion extraterrestre! Abattez les vagues d'envahisseurs.",
     gamesArkanoidTitle: "Arkanoid",
@@ -2950,8 +2952,10 @@ module.exports = {
     gamesOutrunDesc: "Course contre la montre! Évitez les obstacles et atteignez l'arrivée à temps.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "Pilotez votre vaisseau dans un champ d'astéroïdes. Détruisez-les avant qu'ils ne vous touchent.",
+    gamesRockPaperScissorsTitle: "Pierre Feuille Ciseaux",
+    gamesRockPaperScissorsDesc: "Pierre, papier, ciseaux contre une IA. Le meilleur des trois manches gagne.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "Pierre, papier, ciseaux contre une IA. Le meilleur des trois manches gagne.",
+    gamesTikTakToeDesc: "Morpion classique contre l'IA. Alignez trois symboles pour gagner.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "Lancez une pièce et pariez sur pile ou face. Quelle est votre chance?",
     games8BallTitle: "8Ball Pool",
@@ -3039,7 +3043,13 @@ module.exports = {
     calendarLeave: "Quitter le calendrier",
     statsCalendar: "Calendriers",
     statsCalendarDate: "Dates de calendrier",
-    statsCalendarNote: "Notes de calendrier"
+    statsCalendarNote: "Notes de calendrier",
+    chatAccessDenied: "Vous n'avez pas accès à ce chat. Demandez une invitation pour accéder au contenu.",
+    padAccessDenied: "Vous n'avez pas accès à ce pad. Demandez une invitation pour accéder au contenu.",
+    contentAccessDenied: "Vous n'avez pas accès à ce contenu.",
+    blockAccessRestricted: "Accès restreint",
+    tribeContentAccessDenied: "Accès Refusé",
+    tribeContentAccessDeniedMsg: "Ce contenu appartient à une tribu. Vous devez en être membre pour y accéder.",
+    tribeViewTribes: "Voir les Tribus"
     }
 };
-// calendar keys added

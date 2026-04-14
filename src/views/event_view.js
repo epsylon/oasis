@@ -412,25 +412,38 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   const attendees = safeArray(event.attendees);
   const urlHref = safeExternalHref(event.url);
 
+  const isPrivateNoAccess = normalizePrivacy(event.isPublic) === "private" &&
+    String(event.organizer) !== String(userId) &&
+    !attendees.includes(userId);
+
+  const filterBar = div(
+    { class: "filters" },
+    form(
+      { method: "GET", action: "/events" },
+      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterAll),
+      button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterMine),
+      button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterToday),
+      button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterWeek),
+      button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterMonth),
+      button({ type: "submit", name: "filter", value: "year", class: currentFilter === "year" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterYear),
+      button({ type: "submit", name: "filter", value: "archived", class: currentFilter === "archived" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterArchived),
+      button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.eventCreateButton)
+    )
+  );
+
+  if (isPrivateNoAccess) {
+    return template(
+      event.title,
+      section(filterBar, p({ class: "access-denied-msg" }, i18n.contentAccessDenied))
+    );
+  }
+
   const topbar = renderEventTopbar(event, currentFilter, { single: true });
 
   return template(
     event.title,
     section(
-      div(
-        { class: "filters" },
-        form(
-          { method: "GET", action: "/events" },
-          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterMine),
-          button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterToday),
-          button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterWeek),
-          button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterMonth),
-          button({ type: "submit", name: "filter", value: "year", class: currentFilter === "year" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterYear),
-          button({ type: "submit", name: "filter", value: "archived", class: currentFilter === "archived" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterArchived),
-          button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.eventCreateButton)
-        )
-      ),
+      filterBar,
       div(
         { class: "card card-section event" },
         topbar ? topbar : null,

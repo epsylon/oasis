@@ -97,7 +97,7 @@ const renderPadCard = (pad, filter) => {
       ),
       table({ class: "tribe-info-table" },
         tr(td(i18n.padStatusLabel || "Status"), td(renderStatus(pad.status, pad.isClosed))),
-        tr(td(i18n.padDeadlineLabel || "Deadline"), td(pad.deadline ? moment(pad.deadline).format("YYYY-MM-DD HH:mm") : "\u2014"))
+        pad.deadline ? tr(td(i18n.padDeadlineLabel || "Deadline"), td(moment(pad.deadline).format("YYYY-MM-DD HH:mm"))) : null
       ),
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.padMembersLabel || "Members"}: ${pad.members.length}`)
@@ -142,6 +142,17 @@ const renderCreateForm = (padToEdit, params) => {
       button({ type: "submit", class: "create-button" }, padToEdit ? (i18n.padUpdate || "Update Pad") : (i18n.padCreate || "Create Pad"))
     )
   )
+}
+
+exports.renderPadInvitePage = (code) => {
+  const pageContent = div({ class: "invite-page" },
+    h2(i18n.tribeInviteCodeText, code),
+    form({ method: "GET", action: "/pads" },
+      input({ type: "hidden", name: "filter", value: "all" }),
+      button({ type: "submit", class: "filter-btn" }, i18n.walletBack)
+    )
+  )
+  return template(i18n.padInviteMode || "Invite", section(pageContent))
 }
 
 exports.padsView = async (pads, filter, padToEdit, params) => {
@@ -194,10 +205,10 @@ exports.singlePadView = async (pad, entries, params) => {
   const isMember = pad.members.includes(userId)
   const padClosed = pad.isClosed
   const returnTo = `/pads/${encodeURIComponent(pad.rootId)}`
-
   const shareUrl = `/pads/${encodeURIComponent(pad.rootId)}`
+  const isRestrictedInviteOnly = !isMember && !isAuthor && pad.status === "INVITE-ONLY"
 
-  const tags = Array.isArray(pad.tags) && pad.tags.length > 0
+  const tags = !isRestrictedInviteOnly && Array.isArray(pad.tags) && pad.tags.length > 0
     ? div({ class: "tribe-side-tags" }, ...pad.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}` }, `#${t}`)))
     : null
 
@@ -215,11 +226,11 @@ exports.singlePadView = async (pad, entries, params) => {
     ),
     table({ class: "tribe-info-table" },
       tr(td({ class: "tribe-info-label" }, i18n.padCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(pad.createdAt).format("YYYY-MM-DD"))),
-      tr(td({ class: "tribe-info-value", colspan: "4" }, a({ href: `/author/${encodeURIComponent(pad.author)}`, class: "user-link" }, pad.author))),
+      isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-value", colspan: "4" }, a({ href: `/author/${encodeURIComponent(pad.author)}`, class: "user-link" }, pad.author))),
       tr(td({ class: "tribe-info-label" }, i18n.padStatusLabel || "Status"), td({ class: "tribe-info-value", colspan: "3" }, renderStatus(pad.status, padClosed))),
-      tr(td({ class: "tribe-info-label" }, i18n.padDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, pad.deadline ? moment(pad.deadline).format("YYYY-MM-DD HH:mm") : "\u2014"))
+      isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-label" }, i18n.padDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, pad.deadline ? moment(pad.deadline).format("YYYY-MM-DD HH:mm") : "\u2014"))
     ),
-    div({ class: "tribe-side-actions" },
+    isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions" },
       isAuthor
         ? form({ method: "POST", action: `/pads/generate-invite/${encodeURIComponent(pad.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn" }, i18n.padGenerateCode || "Generate Code")
@@ -260,18 +271,12 @@ exports.singlePadView = async (pad, entries, params) => {
           )
         )
       : null,
-    (!isAuthor && (pad.status === "OPEN" || isMember) && !padClosed)
+    !isRestrictedInviteOnly && (!isAuthor && (pad.status === "OPEN" || isMember) && !padClosed)
       ? form({ method: "POST", action: `/pads/join/${encodeURIComponent(pad.rootId)}` },
           button({ type: "submit", class: "create-button" }, i18n.padStartEditing || "START EDITING!")
         )
       : null,
-    tags,
-    params.inviteCode
-      ? div({ class: "pad-invite-section" },
-          p(i18n.padInviteGenerated || "Invite Code Generated"),
-          input({ type: "text", readonly: true, value: params.inviteCode })
-        )
-      : null
+    tags
   )
 
   let canonicalEntries = entries
@@ -291,24 +296,6 @@ exports.singlePadView = async (pad, entries, params) => {
       )
     : p(i18n.padNoEntries || "No entries yet.")
 
-  const editorArea = isMember && !padClosed && !params.selectedVersion
-    ? div({ class: "pad-editor-area" },
-        coloredView,
-        form({ method: "POST", action: `/pads/entry/${encodeURIComponent(pad.rootId)}` },
-          textarea({ name: "text", rows: "12", class: "pad-editor-white", placeholder: i18n.padEditorPlaceholder || "Start writing..." }, currentText),
-          button({ type: "submit", class: "create-button" }, i18n.padSubmitEntry || "Submit")
-        )
-      )
-    : div({ class: "pad-editor-area" },
-        params.selectedVersion
-          ? div({ class: "pad-viewer-back" },
-              a({ href: `/pads/${encodeURIComponent(pad.rootId)}`, class: "filter-btn" },
-                "\u2190 " + (i18n.padBackToEditor || "Back to editor"))
-            )
-          : null,
-        coloredView
-      )
-
   const versionList = entries.length > 0
     ? div({ class: "pad-version-list" },
         h4(i18n.padVersionHistory || "Version History"),
@@ -325,14 +312,29 @@ exports.singlePadView = async (pad, entries, params) => {
       )
     : null
 
-  const padMain = div({ class: "tribe-main" },
-    div({ class: "pad-main-layout" },
-      div({ class: "pad-main-left" },
-        div({ class: "pad-editor-container" }, editorArea)
-      ),
-      versionList ? div({ class: "pad-main-right" }, versionList) : null
-    )
-  )
+  const editorArea = isMember && !padClosed && !params.selectedVersion
+    ? div({ class: "pad-editor-area" },
+        coloredView,
+        form({ method: "POST", action: `/pads/entry/${encodeURIComponent(pad.rootId)}` },
+          textarea({ name: "text", rows: "12", class: "pad-editor-white", placeholder: i18n.padEditorPlaceholder || "Start writing..." }, currentText),
+          button({ type: "submit", class: "create-button" }, i18n.padSubmitEntry || "Submit")
+        ),
+        versionList ? div({ class: "pad-version-section" }, versionList) : null
+      )
+    : div({ class: "pad-editor-area" },
+        params.selectedVersion
+          ? div({ class: "pad-viewer-back" },
+              a({ href: `/pads/${encodeURIComponent(pad.rootId)}`, class: "filter-btn" },
+                "\u2190 " + (i18n.padBackToEditor || "Back to editor"))
+            )
+          : null,
+        coloredView,
+        versionList ? div({ class: "pad-version-section" }, versionList) : null
+      )
+
+  const padMain = isRestrictedInviteOnly
+    ? div({ class: "tribe-main" }, p({ class: "access-denied-msg" }, i18n.padAccessDenied))
+    : div({ class: "tribe-main" }, editorArea)
 
   return template(
     pad.title || i18n.padsTitle || "Pad",

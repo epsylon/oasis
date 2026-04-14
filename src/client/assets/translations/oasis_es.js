@@ -3019,6 +3019,8 @@ module.exports = {
     gamesCocolandDesc: "Un coco con ojos saltando palmeras y coleccionando ECOins. ¿Hasta dónde puedes llegar?",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "Conecta PUBs a habitantes mediante validadores, tiendas y acumuladores. ¡Sobrevive a la amenaza CBDC!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "Infiltra la cuadricula, recolecta datos confidenciales, evade los drones de seguridad y escapa. ¿Cuantos niveles puedes superar?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "¡Detén la invasión alienígena! Destruye oleadas de invasores antes de que lleguen al suelo.",
     gamesArkanoidTitle: "Arkanoid",
@@ -3029,8 +3031,10 @@ module.exports = {
     gamesOutrunDesc: "¡Corre contra el tiempo! Esquiva el tráfico y llega a la meta antes de que se acabe el tiempo.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "Pilota tu nave por un campo de asteroides mortal. Dispárales antes de que te alcancen.",
+    gamesRockPaperScissorsTitle: "Piedra Papel Tijeras",
+    gamesRockPaperScissorsDesc: "Piedra, papel o tijera contra una IA. Gana el mejor de tres rondas.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "Piedra, papel o tijera contra una IA. Gana el mejor de tres rondas.",
+    gamesTikTakToeDesc: "Tres en raya clásico contra la IA. Consigue tres en línea para ganar.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "Lanza una moneda y apuesta cara o cruz. ¿Cuánta suerte tienes?",
     games8BallTitle: "8Ball Pool",
@@ -3051,6 +3055,13 @@ module.exports = {
     gamesHallOfFame: "Hall of Fame",
     gamesHallPlayer: "Player",
     gamesHallScore: "Score",
-    gamesNoScores: "No scores yet."
+    gamesNoScores: "No scores yet.",
+    chatAccessDenied: "No tienes acceso a este chat. Solicita una invitación para acceder al contenido.",
+    padAccessDenied: "No tienes acceso a este pad. Solicita una invitación para acceder al contenido.",
+    contentAccessDenied: "No tienes acceso a este contenido.",
+    blockAccessRestricted: "Acceso restringido",
+    tribeContentAccessDenied: "Acceso Denegado",
+    tribeContentAccessDeniedMsg: "Este contenido pertenece a una tribu. Debes ser miembro para acceder.",
+    tribeViewTribes: "Ver Tribus"
     }
 };

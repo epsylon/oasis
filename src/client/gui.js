@@ -73,7 +73,7 @@ const ensureConnection = (customConfig) => {
   return pendingConnection;
 };
 
-module.exports = ({ offline }) => {
+module.exports = ({ offline, port = 3000, host = 'localhost', isPublic = false }) => {
   const customConfig = JSON.parse(JSON.stringify(ssbConfig));
   if (offline === true) {
     lodash.set(customConfig, "conn.autostart", false);
@@ -89,7 +89,7 @@ module.exports = ({ offline }) => {
       return new Promise((resolve, reject) => {
         if (internalSSB) {
           const { printMetadata, colors } = require('../server/ssb_metadata');
-          printMetadata('OASIS GUI running at: http://localhost:3000', colors.yellow);
+          printMetadata('OASIS GUI', colors.yellow, port, host, offline, isPublic);
           return resolve(internalSSB);
         }
 
@@ -105,7 +105,7 @@ module.exports = ({ offline }) => {
             reject(new Error("Closing Oasis"));
           } else {
             const { printMetadata, colors } = require('../server/ssb_metadata');
-            printMetadata('OASIS GUI running at: http://localhost:3000', colors.yellow);
+            printMetadata('OASIS GUI', colors.yellow, port, host, offline, isPublic);
             resolve(ssb);
           }
         }).catch(reject);

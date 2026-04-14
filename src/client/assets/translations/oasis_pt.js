@@ -2943,6 +2943,8 @@ module.exports = {
     gamesCocolandDesc: "Um coco com olhos a saltar palmeiras e a colecionar ECOins.",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "Liga PUBs a habitantes através de validadores, lojas e acumuladores. Sobrevive à ameaça CBDC!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "Infiltre a grade, colete dados confidenciais, evite os drones de segurança e escape. Quantos níveis consegue passar?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "Pare a invasão alienígena! Destrua ondas de invasores.",
     gamesArkanoidTitle: "Arkanoid",
@@ -2953,8 +2955,10 @@ module.exports = {
     gamesOutrunDesc: "Corrida contra o tempo! Desvie do tráfego e chegue à meta antes do tempo acabar.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "Pilote sua nave por um campo de asteroides mortais. Destrua-os antes que te atinjam.",
+    gamesRockPaperScissorsTitle: "Pedra Papel Tesoura",
+    gamesRockPaperScissorsDesc: "Pedra, papel ou tesoura contra uma IA. Melhor de três rodadas vence.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "Pedra, papel ou tesoura contra uma IA. Melhor de três rodadas vence.",
+    gamesTikTakToeDesc: "Jogo da Velha clássico contra a IA. Alinhe três para ganhar.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "Lance uma moeda e aposte em cara ou coroa. Qual é a sua sorte?",
     games8BallTitle: "8Ball Pool",
@@ -3042,6 +3046,13 @@ module.exports = {
     calendarLeave: "Sair do Calendário",
     statsCalendar: "Calendários",
     statsCalendarDate: "Datas de calendário",
-    statsCalendarNote: "Notas de calendário"
+    statsCalendarNote: "Notas de calendário",
+    chatAccessDenied: "Você não tem acesso a este chat. Solicite um convite para acessar o conteúdo.",
+    padAccessDenied: "Você não tem acesso a este pad. Solicite um convite para acessar o conteúdo.",
+    contentAccessDenied: "Você não tem acesso a este conteúdo.",
+    blockAccessRestricted: "Acesso restrito",
+    tribeContentAccessDenied: "Acesso Negado",
+    tribeContentAccessDeniedMsg: "Este conteúdo pertence a uma tribo. Você deve ser membro para acessá-lo.",
+    tribeViewTribes: "Ver Tribos"
     }
 };

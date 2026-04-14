@@ -65,6 +65,7 @@ module.exports = ({ cooler }) => {
       const author = decrypted?.value?.author;
       const originalRecps = Array.isArray(content?.to) ? content.to : [];
       if (!content || !author) throw new Error("Malformed message.");
+      if (author !== userId) throw new Error("Not the author.");
       if (content.type === 'tombstone') throw new Error("Message already deleted.");
       const tombstone = {
         type: 'tombstone',

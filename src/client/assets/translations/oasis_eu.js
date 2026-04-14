@@ -2912,6 +2912,8 @@ module.exports = {
     gamesCocolandDesc: "Begiak dituen koko bat palmondoen gainetik jauzika ECOins biltzen.",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "Lotu PUBak biztanleekin baliozkotzaileen, denden eta metatzaileen bidez. Iraun CBDC mehatxuari!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "Sartu saretik, bildu datu konfidentzialak, saihestu segurtasun dronak eta ihes egin. Zenbat maila gainditu ditzakezu?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "Gelditu inbasio extraterrestrea! Inbasore olatuak bota.",
     gamesArkanoidTitle: "Arkanoid",
@@ -2922,8 +2924,10 @@ module.exports = {
     gamesOutrunDesc: "Denboraren aurka lasterketa! Saihestu trafikoa eta iritsi helmugara garaiz.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "Gidatu zure ontzia asteroide eremuaren bidez. Tiro egin haiek jo aurretik.",
+    gamesRockPaperScissorsTitle: "Harria Paper Artaziak",
+    gamesRockPaperScissorsDesc: "Harria, papera edo artaziak IA baten aurka. Hiru txandako onena irabazten du.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "Harria, papera edo artaziak IA baten aurka. Hiru txandako onena irabazten du.",
+    gamesTikTakToeDesc: "Tic-Tac-Toe klasikoa IA aurka. Hiru jarraian lortu irabazteko.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "Bota txanpon bat eta apostatu aurpegian edo buztanean. Zenbat zorte duzu?",
     games8BallTitle: "8Ball Pool",
@@ -3011,6 +3015,13 @@ module.exports = {
     calendarLeave: "Irten Egutegitik",
     statsCalendar: "Egutegiak",
     statsCalendarDate: "Egutegi datak",
-    statsCalendarNote: "Egutegi oharrak"
+    statsCalendarNote: "Egutegi oharrak",
+    chatAccessDenied: "Ez duzu sarbiderik txat honetara. Eskatu gonbidapen bat edukira sartzeko.",
+    padAccessDenied: "Ez duzu sarbiderik pad honetara. Eskatu gonbidapen bat edukira sartzeko.",
+    contentAccessDenied: "Ez duzu sarbiderik eduki honetara.",
+    blockAccessRestricted: "Sarbidea mugatuta",
+    tribeContentAccessDenied: "Sarbidea Ukatua",
+    tribeContentAccessDeniedMsg: "Eduki hau tribu batena da. Kide izan behar zara sartzeko.",
+    tribeViewTribes: "Tribuak Ikusi"
   }
 };

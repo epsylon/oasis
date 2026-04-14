@@ -447,7 +447,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const chat = await this.getChatById(chatId)
       if (!chat) throw new Error("Chat not found")
       if (chat.status === "CLOSED") throw new Error("Chat is closed")
-      if (!chat.members.includes(userId)) throw new Error("Not a participant")
+      if (!chat.members.includes(userId)) {
+        if (chat.status === "OPEN") await this.joinChat(chatId)
+        else throw new Error("Not a participant")
+      }
 
       const messages = await readAll(ssbClient)
       const oneHourAgo = Date.now() - 60 * 60 * 1000

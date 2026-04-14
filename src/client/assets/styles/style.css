@@ -3694,7 +3694,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .calendar-interval-block { margin: 8px 0 16px; }
 .calendar-interval-label { display: block; margin-bottom: 6px; }
 .calendar-interval-until { margin-top: 10px; }
-.calendar-interval-row { display: flex; gap: 16px; flex-wrap: wrap; border: 0px; }
+.calendar-interval-row { display: flex; gap: 16px; flex-wrap: wrap; }
 .calendar-interval-option { display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
 
 .tribe-thumb-grid {
@@ -4891,8 +4891,8 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .pad-status-invite{color:#FFA500;font-weight:bold}
 .pad-status-closed{font-weight:bold}
 .pad-deadline{color:#FFA500;font-size:0.9rem}
-.pad-editor-container{display:flex;gap:16px;margin-top:12px}
-.pad-editor-area{flex:2;display:flex;flex-direction:column;gap:8px}
+.pad-editor-container{margin-top:12px}
+.pad-editor-area{display:flex;flex-direction:column;gap:8px;}
 .pad-editor-area textarea{width:100%;min-height:200px;background:#1a1a1a;color:#eee;border:1px solid #444;border-radius:4px;padding:10px;font-family:monospace;font-size:0.95rem;resize:vertical;box-sizing:border-box}
 .pad-members-list{flex:1;min-width:160px;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:10px}
 .pad-members-list h4{margin:0 0 8px 0;color:#aaa;font-size:0.85rem;text-transform:uppercase}
@@ -4944,7 +4944,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 
 .visit-btn-centered{display:flex;justify-content:center;margin-top:10px}
 
-.pad-editor-white{width:100%;box-sizing:border-box;background:#fff;color:#111;border:1px solid #aaa;border-radius:4px;padding:10px;resize:vertical;font-family:inherit;font-size:0.95rem}
+.pad-editor-white{width:100%;box-sizing:border-box;background:#fff;color:#111;border-radius:4px;padding:10px;resize:vertical;font-family:inherit;font-size:0.95rem}
 .pad-readonly-text{background:#fff;color:#111;border:1px solid #aaa;border-radius:4px;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:0.95rem}
 .pad-version-list{margin-top:12px}
 .pad-version-item{display:flex;flex-direction:column;gap:4px;padding:8px;border-bottom:1px solid #333;font-size:0.85rem}
@@ -4970,9 +4970,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .pad-members-below-tags{margin-top:12px;border:none}
 .pad-member-card{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.85rem}
 .pad-members-grid{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
-.pad-main-layout{display:flex;gap:20px}
-.pad-main-left{flex:2;min-width:0}
-.pad-main-right{flex:1;min-width:180px}
+.pad-version-section{margin-top:16px;border-top:1px solid #333;padding-top:12px}
 
 .chat-full-width{flex:1;min-width:0}
 .chat-participants-section{margin-top:12px;padding:12px;background:#1a1a1a;border:none;border-radius:4px}
@@ -4996,8 +4994,10 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .game-shell-section{padding:0!important;margin:0}
 .game-iframe{width:100%;height:82vh;border:none;background:#000;display:block}
 .game-iframe-ecoinflow{height:95vh}
+.game-iframe-neoninfiltrator{height:95vh}
 .game-iframe-audiopendulum{height:95vh}
 .game-iframe-flipflop{height:720px}
+.game-iframe-rockpaperscissors{height:580px}
 .game-iframe-tiktaktoe{height:580px}
 .game-desc-yellow{color:yellow}
 .game-new-record-label{color:#FFA500;font-weight:bold}
@@ -5010,10 +5010,12 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .calendar-day-marked a{color:#000;text-decoration:none;display:block}
 .calendar-nav{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
 .calendar-date-list{margin-top:16px}
-.calendar-date-item{background:#333;border-radius:6px;margin-bottom:14px;position:relative;min-height:64px}
+.calendar-date-item{background:#333;padding:18px 108px 18px 18px;border-radius:6px;margin-bottom:14px;position:relative;min-height:64px}
 .calendar-date-delete{position:absolute;top:12px;right:12px;margin:0}
-.calendar-date-delete button{padding:4px 10px;font-size:0.8rem;top:12px;margin-top: 25px;margin-right: 35px;}
+.calendar-date-delete button{padding:4px 10px;font-size:0.8rem}
 .calendar-date-item-header{color:#FFA500;font-weight:bold;margin-bottom:6px}
 .calendar-participants-count{color:#FFA500;font-weight:bold}
 .calendar-day-notes{margin-top:16px}
 .pad-viewer-back{margin-bottom:12px}
+
+.access-denied-msg{margin:12px 0;padding:12px;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#ccc;font-style:italic}

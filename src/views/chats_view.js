@@ -148,6 +148,17 @@ const renderMessage = (msg, chatAuthor) => {
 }
 
 
+exports.renderChatInvitePage = (code) => {
+  const pageContent = div({ class: "invite-page" },
+    h2(i18n.tribeInviteCodeText, code),
+    form({ method: "GET", action: "/chats" },
+      input({ type: "hidden", name: "filter", value: "all" }),
+      button({ type: "submit", class: "filter-btn" }, i18n.walletBack)
+    )
+  )
+  return template(i18n.chatInviteMode || "Invite", section(pageContent))
+}
+
 exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
   const q = safeText(params.q || "")
   const list = safeArr(chats)
@@ -204,6 +215,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   const isAuthor = String(chat.author) === String(userId)
   const isMember = safeArr(chat.members).includes(userId)
   const fullShareUrl = `/chats/${encodeURIComponent(chat.key)}`
+  const isRestrictedInviteOnly = !isMember && !isAuthor && chat.status === "INVITE-ONLY"
 
   const statusLabel = chat.status === "CLOSED" ? i18n.chatStatusClosed :
     chat.status === "INVITE-ONLY" ? i18n.chatStatusInviteOnly : i18n.chatStatusOpen
@@ -223,7 +235,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         td({ class: "tribe-info-label" }, i18n.chatCreatedAt),
         td({ class: "tribe-info-value", colspan: "3" }, moment(chat.createdAt).format("YYYY/MM/DD HH:mm"))
       ),
-      tr(
+      isRestrictedInviteOnly ? null : tr(
         td({ class: "tribe-info-value", colspan: "4" },
           a({ href: `/author/${encodeURIComponent(chat.author)}`, class: "user-link" }, chat.author)
         )
@@ -232,12 +244,12 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         td({ class: "tribe-info-label" }, i18n.chatStatus),
         td({ class: "tribe-info-value", colspan: "3" }, statusLabel)
       ),
-      chat.category ? tr(
+      !isRestrictedInviteOnly && chat.category ? tr(
         td({ class: "tribe-info-label" }, i18n.chatCategoryLabel),
         td({ class: "tribe-info-value", colspan: "3" }, catLabel(chat.category))
       ) : null
     ),
-    div({ class: "tribe-side-actions" },
+    isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions" },
       isAuthor
         ? form({ method: "POST", action: `/chats/generate-invite` },
             input({ type: "hidden", name: "chatId", value: chat.key }),
@@ -279,27 +291,19 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           )
         : null
     ),
-    !isMember && chat.status !== "CLOSED"
+    !isMember && chat.status === "INVITE-ONLY"
       ? div({ class: "chat-join-section" },
-          chat.status === "INVITE-ONLY"
-            ? div({ class: "chat-invite-form" },
-                form({ method: "POST", action: "/chats/join-code" },
-                  input({ type: "hidden", name: "returnTo", value: returnTo }),
-                  label(i18n.chatInviteCodeLabel), br(),
-                  input({ type: "text", name: "code", required: true, placeholder: i18n.chatInviteCode }), br(), br(),
-                  button({ type: "submit", class: "filter-btn" }, i18n.chatJoinByInvite)
-                )
-              )
-            : null,
-          chat.status === "OPEN"
-            ? form({ method: "POST", action: `/chats/join/${encodeURIComponent(chat.key)}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                button({ type: "submit", class: "create-button" }, i18n.chatStartChatting)
-              )
-            : null
+          div({ class: "chat-invite-form" },
+            form({ method: "POST", action: "/chats/join-code" },
+              input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}` }),
+              label(i18n.chatInviteCodeLabel), br(),
+              input({ type: "text", name: "code", required: true, placeholder: i18n.chatInviteCode }), br(), br(),
+              button({ type: "submit", class: "filter-btn" }, i18n.chatJoinByInvite)
+            )
+          )
         )
       : null,
-    safeArr(chat.tags).length
+    !isRestrictedInviteOnly && safeArr(chat.tags).length
       ? div({ class: "tribe-side-tags" },
           safeArr(chat.tags).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
         )
@@ -307,9 +311,11 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   )
 
   const msgList = safeArr(messages)
-  const canWrite = isMember && chat.status !== "CLOSED"
+  const canWrite = (isMember || chat.status === "OPEN") && chat.status !== "CLOSED"
 
-  const chatMain = div({ class: "tribe-main chat-full-width" },
+  const chatMain = isRestrictedInviteOnly
+    ? div({ class: "tribe-main chat-full-width" }, p({ class: "access-denied-msg" }, i18n.chatAccessDenied))
+    : div({ class: "tribe-main chat-full-width" },
     canWrite
       ? div({ class: "chat-message-form" },
           form({ method: "POST", action: `/chats/${encodeURIComponent(chat.key)}/message`, enctype: "multipart/form-data" },

@@ -387,28 +387,41 @@ exports.singleTaskView = async (task, filter, comments = []) => {
   const assignees = safeArray(task.assignees);
   const commentCount = typeof task.commentCount === "number" ? task.commentCount : 0;
 
+  const isPrivateNoAccess = String(task.isPublic || "").toUpperCase() === "PRIVATE" &&
+    String(task.author) !== String(userId) &&
+    !assignees.includes(userId);
+
+  const filterBar = div(
+    { class: "filters" },
+    form(
+      { method: "GET", action: "/tasks" },
+      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterAll),
+      button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterMine),
+      button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterAssigned),
+      button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterOpen),
+      button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterInProgress),
+      button({ type: "submit", name: "filter", value: "closed", class: currentFilter === "closed" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterClosed),
+      button({ type: "submit", name: "filter", value: "priority-low", class: currentFilter === "priority-low" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterLow),
+      button({ type: "submit", name: "filter", value: "priority-medium", class: currentFilter === "priority-medium" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterMedium),
+      button({ type: "submit", name: "filter", value: "priority-high", class: currentFilter === "priority-high" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterHigh),
+      button({ type: "submit", name: "filter", value: "priority-urgent", class: currentFilter === "priority-urgent" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterUrgent),
+      button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.taskCreateButton)
+    )
+  );
+
+  if (isPrivateNoAccess) {
+    return template(
+      task.title,
+      section(filterBar, p({ class: "access-denied-msg" }, i18n.contentAccessDenied))
+    );
+  }
+
   const topbar = renderTaskTopbar(task, currentFilter, { single: true });
 
   return template(
     task.title,
     section(
-      div(
-        { class: "filters" },
-        form(
-          { method: "GET", action: "/tasks" },
-          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterMine),
-          button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterAssigned),
-          button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterOpen),
-          button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterInProgress),
-          button({ type: "submit", name: "filter", value: "closed", class: currentFilter === "closed" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterClosed),
-          button({ type: "submit", name: "filter", value: "priority-low", class: currentFilter === "priority-low" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterLow),
-          button({ type: "submit", name: "filter", value: "priority-medium", class: currentFilter === "priority-medium" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterMedium),
-          button({ type: "submit", name: "filter", value: "priority-high", class: currentFilter === "priority-high" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterHigh),
-          button({ type: "submit", name: "filter", value: "priority-urgent", class: currentFilter === "priority-urgent" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterUrgent),
-          button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.taskCreateButton)
-        )
-      ),
+      filterBar,
       div(
         { class: "card card-section task" },
         topbar ? topbar : null,

@@ -322,7 +322,6 @@ module.exports = ({ cooler }) => {
     if (filter === "TOP") {
       feeds.sort(
         (a, b) =>
-          totalVotes(b) - totalVotes(a) ||
           (b.value?.content?.refeeds || 0) - (a.value?.content?.refeeds || 0) ||
           getTs(b) - getTs(a)
       );
@@ -349,7 +348,7 @@ module.exports = ({ cooler }) => {
     let commentCount = 0;
     for (const a of actions) {
       const ac = a?.value?.content || {};
-      if (ac.type === "feed-action" && ac.action === "opinion" && ac.category) {
+      if (ac.type === "feed-action" && ac.action === "vote" && ac.category) {
         opinions[ac.category] = (opinions[ac.category] || 0) + 1;
         if (ac.author || a?.value?.author) opinionsInhabitants.push(ac.author || a.value.author);
       }

@@ -5,11 +5,13 @@ const moment = require("../server/node_modules/moment");
 const getGames = () => [
   { id: 'cocoland', title: () => i18n.gamesCocolandTitle, desc: () => i18n.gamesCocolandDesc },
   { id: 'ecoinflow', title: () => i18n.gamesTheFlowTitle, desc: () => i18n.gamesTheFlowDesc },
+  { id: 'neoninfiltrator', title: () => i18n.gamesNeonInfiltratorTitle, desc: () => i18n.gamesNeonInfiltratorDesc },
   { id: 'audiopendulum', title: () => i18n.gamesAudioPendulumTitle, desc: () => i18n.gamesAudioPendulumDesc },
   { id: 'spaceinvaders', title: () => i18n.gamesSpaceInvadersTitle, desc: () => i18n.gamesSpaceInvadersDesc },
   { id: 'arkanoid', title: () => i18n.gamesArkanoidTitle, desc: () => i18n.gamesArkanoidDesc },
   { id: 'pingpong', title: () => i18n.gamesPingPongTitle, desc: () => i18n.gamesPingPongDesc },
   { id: 'asteroids', title: () => i18n.gamesAsteroidsTitle, desc: () => i18n.gamesAsteroidsDesc },
+  { id: 'rockpaperscissors', title: () => i18n.gamesRockPaperScissorsTitle, desc: () => i18n.gamesRockPaperScissorsDesc },
   { id: 'tiktaktoe', title: () => i18n.gamesTikTakToeTitle, desc: () => i18n.gamesTikTakToeDesc },
   { id: 'flipflop', title: () => i18n.gamesFlipFlopTitle, desc: () => i18n.gamesFlipFlopDesc },
   { id: '8ball', title: () => i18n.games8BallTitle, desc: () => i18n.games8BallDesc },
@@ -53,7 +55,7 @@ const renderHallOfFame = (hall) => {
   );
 };
 
-const VALID_GAME_IDS = new Set(['cocoland','ecoinflow','audiopendulum','spaceinvaders','arkanoid','pingpong','asteroids','tiktaktoe','flipflop','8ball','artillery','labyrinth','cocoman','tetris']);
+const VALID_GAME_IDS = new Set(['cocoland','ecoinflow','neoninfiltrator','audiopendulum','spaceinvaders','arkanoid','pingpong','asteroids','rockpaperscissors','tiktaktoe','flipflop','8ball','artillery','labyrinth','cocoman','tetris']);
 
 exports.gameShellView = (name) => {
   if (!VALID_GAME_IDS.has(name)) {

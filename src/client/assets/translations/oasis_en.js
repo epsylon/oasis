@@ -3019,6 +3019,8 @@ module.exports = {
     gamesCocolandDesc: "A coconut with eyes jumping over palm trees and collecting ECOins. How far can you go?",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "Connect PUBs to habitants through validators, shops and accumulators. Survive the CBDC threat!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "Infiltrate the grid, collect confidential data, evade security drones and escape. How many levels can you clear?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "Stop the alien invasion! Shoot down waves of invaders before they reach the ground.",
     gamesArkanoidTitle: "Arkanoid",
@@ -3029,8 +3031,10 @@ module.exports = {
     gamesOutrunDesc: "Race against time! Dodge traffic and reach the finish line before the clock runs out.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "Pilot your ship through a deadly asteroid field. Shoot them down before they hit you.",
+    gamesRockPaperScissorsTitle: "Rock Paper Scissors",
+    gamesRockPaperScissorsDesc: "Rock, Paper, Scissors against an AI. Best of three rounds wins.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "Rock, Paper, Scissors against an AI. Best of three rounds wins.",
+    gamesTikTakToeDesc: "Classic Tic-Tac-Toe against an AI. Get three in a row to win.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "Flip a coin and bet on heads or tails. How lucky are you?",
     games8BallTitle: "8Ball Pool",
@@ -3060,7 +3064,14 @@ module.exports = {
     statsChatMessage: "Chat messages",
     statsPad: "Pads",
     statsPadEntry: "Pad entries",
-    statsGameScore: "Game scores"
+    statsGameScore: "Game scores",
+    chatAccessDenied: "You do not have access to the chat. Ask for an invitation to access the content.",
+    padAccessDenied: "You do not have access to the pad. Ask for an invitation to access the content.",
+    contentAccessDenied: "You do not have access to content.",
+    blockAccessRestricted: "Access restricted",
+    tribeContentAccessDenied: "Access Denied",
+    tribeContentAccessDeniedMsg: "This content belongs to a tribe. You must be a member to access it.",
+    tribeViewTribes: "View Tribes"
 
     }
 };

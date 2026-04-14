@@ -2905,6 +2905,8 @@ module.exports = {
     gamesCocolandDesc: "Кокос с глазами прыгает через пальмы и собирает ECOins.",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "Соединяй PUB'ы с жителями через валидаторы, магазины и аккумуляторы. Противостой угрозе CBDC!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "Проникни в сеть, собери секретные данные, избегай дронов безопасности и сбеги. Сколько уровней ты пройдёшь?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "Остановите вторжение пришельцев! Уничтожайте волны захватчиков.",
     gamesArkanoidTitle: "Arkanoid",
@@ -2915,8 +2917,10 @@ module.exports = {
     gamesOutrunDesc: "Гонка со временем! Уворачивайтесь от машин и доберитесь до финиша вовремя.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "Пилотируйте корабль через астероидное поле. Уничтожайте их до столкновения.",
+    gamesRockPaperScissorsTitle: "Камень Ножницы Бумага",
+    gamesRockPaperScissorsDesc: "Камень, ножницы, бумага против ИИ. Лучший из трёх раундов побеждает.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "Камень, ножницы, бумага против ИИ. Лучший из трёх раундов побеждает.",
+    gamesTikTakToeDesc: "Классические крестики-нолики против ИИ. Три в ряд — победа.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "Подбросьте монету и угадайте орёл или решку. Насколько вы удачливы?",
     games8BallTitle: "8Ball Pool",
@@ -3004,6 +3008,13 @@ module.exports = {
     calendarLeave: "Покинуть календарь",
     statsCalendar: "Календари",
     statsCalendarDate: "Даты календаря",
-    statsCalendarNote: "Заметки календаря"
+    statsCalendarNote: "Заметки календаря",
+    chatAccessDenied: "У вас нет доступа к этому чату. Запросите приглашение для доступа к содержимому.",
+    padAccessDenied: "У вас нет доступа к этому блокноту. Запросите приглашение для доступа к содержимому.",
+    contentAccessDenied: "У вас нет доступа к этому содержимому.",
+    blockAccessRestricted: "Доступ ограничен",
+    tribeContentAccessDenied: "Доступ Запрещён",
+    tribeContentAccessDeniedMsg: "Этот контент принадлежит племени. Вы должны быть участником, чтобы получить к нему доступ.",
+    tribeViewTribes: "Посмотреть Племена"
     }
 };

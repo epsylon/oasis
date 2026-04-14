@@ -1006,6 +1006,21 @@ const template = (titlePrefix, ...elements) => {
 
 exports.template = template;
 
+exports.tribeAccessDeniedView = (tribe) => {
+  const tribeName = tribe && !tribe.isAnonymous ? tribe.title : "";
+  return template(
+    i18n.tribeContentAccessDenied,
+    div({ class: "div-center" },
+      h2(i18n.tribeContentAccessDenied),
+      p(i18n.tribeContentAccessDeniedMsg),
+      tribeName ? p({ class: "tribe-access-name" }, tribeName) : null,
+      div({ class: "visit-btn-centered" },
+        a({ href: "/tribes", class: "filter-btn" }, i18n.tribeViewTribes)
+      )
+    )
+  );
+};
+
 const thread = (messages) => {
   let lookingForTarget = true;
   let shallowest = Infinity;

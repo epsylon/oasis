@@ -4,6 +4,8 @@ const moment = require("../server/node_modules/moment");
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { renderUrl } = require('../backend/renderUrl');
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
+const { config } = require("../server/SSB_server.js");
+const userId = config.keys.id;
 
 const decodeMaybe = (s) => {
   try { return decodeURIComponent(String(s || '')); } catch { return String(s || ''); }
@@ -477,19 +479,31 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.searchPriceLabel || 'PRICE') + ':'), span({ class: 'card-value' }, `${content.price} ECO`)) : null,
           content.stock !== undefined ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, content.stock)) : null
         );
-      case 'chat':
+      case 'chat': {
+        const chatInviteOnly = content.status === 'INVITE-ONLY' && content.author !== userId && !(Array.isArray(content.members) && content.members.includes(userId));
+        if (chatInviteOnly) return div({ class: 'search-chat' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatsTitle || 'Chat') + ':'), span({ class: 'card-value' }, content.title)) : null,
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatStatus || 'STATUS') + ':'), span({ class: 'card-value' }, i18n.chatStatusInviteOnly || 'INVITE-ONLY'))
+        );
         return div({ class: 'search-chat' },
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatsTitle || 'Chat') + ':'), span({ class: 'card-value' }, content.title)) : null,
           content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatDescription || 'Description') + ':'), span({ class: 'card-value' }, content.description)) : null,
           content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, content.category)) : null,
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatStatus || 'STATUS') + ':'), span({ class: 'card-value' }, content.status)) : null
         );
-      case 'pad':
+      }
+      case 'pad': {
+        const padInviteOnly = content.status === 'INVITE-ONLY' && content.author !== userId && !(Array.isArray(content.members) && content.members.includes(userId));
+        if (padInviteOnly) return div({ class: 'search-pad' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padTitle || 'Pad') + ':'), span({ class: 'card-value' }, content.title)) : null,
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padStatusLabel || 'Status') + ':'), span({ class: 'card-value' }, i18n.padStatusInviteOnly || 'INVITE-ONLY'))
+        );
         return div({ class: 'search-pad' },
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padTitle || 'Pad') + ':'), span({ class: 'card-value' }, content.title)) : null,
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padStatusLabel || 'Status') + ':'), span({ class: 'card-value' }, content.status)) : null,
           content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padDeadlineLabel || 'Deadline') + ':'), span({ class: 'card-value' }, content.deadline)) : null
         );
+      }
       case 'gameScore':
         return div({ class: 'search-game' },
           content.game ? div({ class: 'game-row' },

@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" style="background:#050505">
+  <rect width="400" height="220" fill="#050505"/>
+
+  <line x1="28" y1="10" x2="28" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="56" y1="10" x2="56" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="84" y1="10" x2="84" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="112" y1="10" x2="112" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="140" y1="10" x2="140" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="168" y1="10" x2="168" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="196" y1="10" x2="196" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="224" y1="10" x2="224" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="252" y1="10" x2="252" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="280" y1="10" x2="280" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="308" y1="10" x2="308" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="336" y1="10" x2="336" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="364" y1="10" x2="364" y2="195" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="0" y1="38" x2="392" y2="38" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="0" y1="66" x2="392" y2="66" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="0" y1="94" x2="392" y2="94" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="0" y1="122" x2="392" y2="122" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="0" y1="150" x2="392" y2="150" stroke="#1a0d00" stroke-width="0.6"/>
+  <line x1="0" y1="178" x2="392" y2="178" stroke="#1a0d00" stroke-width="0.6"/>
+
+  <rect x="0" y="10" width="392" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="0" y="37.5" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="0" y="65" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="0" y="92.5" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="0" y="120" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="0" y="147.5" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="364.5" y="37.5" width="27.5" height="140" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="56" y="37.5" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="112" y="65" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="140" y="37.5" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="196" y="92.5" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="224" y="65" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="252" y="120" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="280" y="37.5" width="27.5" height="55" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="308" y="120" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="168" y="147.5" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+  <rect x="84" y="120" width="27.5" height="27.5" fill="#1a0a05" stroke="#FF6600" stroke-width="1"/>
+
+  <circle cx="71" cy="51" r="6" fill="#FFB347">
+    <animate attributeName="opacity" values="1;0.4;1" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="71" cy="51" r="3" fill="#FF884D"/>
+
+  <circle cx="183" cy="107" r="6" fill="#FFB347">
+    <animate attributeName="opacity" values="0.4;1;0.4" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="183" cy="107" r="3" fill="#FF884D"/>
+
+  <circle cx="323" cy="79" r="6" fill="#FFB347">
+    <animate attributeName="opacity" values="1;0.4;1" dur="0.9s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="323" cy="79" r="3" fill="#FF884D"/>
+
+  <rect x="212" y="129" width="12" height="12" fill="#FFA500" opacity="0.7"/>
+  <text x="218" y="140" font-family="monospace" font-size="11" fill="#FFA500" text-anchor="middle">&#9672;</text>
+
+  <rect x="237" y="46" width="20" height="20" fill="#FF4400">
+    <animate attributeName="opacity" values="1;0.6;1" dur="0.8s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="353" y="101" width="20" height="20" fill="#FF4400">
+    <animate attributeName="opacity" values="0.6;1;0.6" dur="0.8s" repeatCount="indefinite"/>
+  </rect>
+
+  <rect x="35" y="46" width="18" height="18" fill="#FF6600">
+    <animate attributeName="opacity" values="1;0.7;1" dur="1s" repeatCount="indefinite"/>
+  </rect>
+  <rect x="39" y="50" width="7" height="7" fill="#FFB347"/>
+
+  <text x="200" y="212" font-family="'Courier New', monospace" font-size="13" fill="#FFA500" text-anchor="middle" font-weight="bold" letter-spacing="3">NEON INFILTRATOR</text>
+</svg>

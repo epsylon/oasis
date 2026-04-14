@@ -2885,6 +2885,8 @@ module.exports = {
     gamesCocolandDesc: "Eine Kokosnuss mit Augen, die über Palmen springt und ECOins sammelt.",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "Verbinde PUBs mit Bewohnern über Validatoren, Shops und Akkumulatoren. Überstehe die CBDC-Bedrohung!",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "Infiltriere das Gitter, sammle vertrauliche Daten, weiche Sicherheitsdrohnen aus und fliehe. Wie viele Level schaffst du?",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "Stoppt die Alien-Invasion! Schießt Wellen von Eindringlingen ab.",
     gamesArkanoidTitle: "Arkanoid",
@@ -2895,8 +2897,10 @@ module.exports = {
     gamesOutrunDesc: "Rennen gegen die Zeit! Weiche dem Verkehr aus und erreiche das Ziel rechtzeitig.",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "Steuere dein Raumschiff durch ein tödliches Asteroidenfeld. Schieße sie ab, bevor sie dich treffen.",
+    gamesRockPaperScissorsTitle: "Schere Stein Papier",
+    gamesRockPaperScissorsDesc: "Schere, Stein, Papier gegen eine KI. Das Beste aus drei Runden gewinnt.",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "Schere, Stein, Papier gegen eine KI. Das Beste aus drei Runden gewinnt.",
+    gamesTikTakToeDesc: "Klassisches Tic-Tac-Toe gegen die KI. Drei in einer Reihe gewinnt.",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "Werfe eine Münze und wette auf Kopf oder Zahl. Wie viel Glück hast du?",
     games8BallTitle: "8Ball Pool",
@@ -3037,6 +3041,13 @@ module.exports = {
     calendarLeave: "Kalender verlassen",
     statsCalendar: "Kalender",
     statsCalendarDate: "Kalenderdaten",
-    statsCalendarNote: "Kalendernotizen"
+    statsCalendarNote: "Kalendernotizen",
+    chatAccessDenied: "Sie haben keinen Zugang zu diesem Chat. Fordern Sie eine Einladung an.",
+    padAccessDenied: "Sie haben keinen Zugang zu diesem Pad. Fordern Sie eine Einladung an.",
+    contentAccessDenied: "Sie haben keinen Zugang zu diesem Inhalt.",
+    blockAccessRestricted: "Zugang gesperrt",
+    tribeContentAccessDenied: "Zugang Verweigert",
+    tribeContentAccessDeniedMsg: "Dieser Inhalt gehört zu einem Stamm. Sie müssen Mitglied sein, um darauf zuzugreifen.",
+    tribeViewTribes: "Stämme Anzeigen"
     }
 }

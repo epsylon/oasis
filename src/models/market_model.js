@@ -53,7 +53,7 @@ const hasBidder = (poll, userId) => {
   return false
 }
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribeCrypto }) => {
   let ssb
   const openSsb = async () => {
     if (!ssb) ssb = await cooler.open()
@@ -138,7 +138,14 @@ module.exports = ({ cooler }) => {
       }
 
       return new Promise((resolve, reject) => {
-        ssbClient.publish(itemContent, (err, res) => (err ? reject(err) : resolve(res)))
+        ssbClient.publish(itemContent, (err, res) => {
+          if (err) return reject(err)
+          if (res && res.key && tribeCrypto) {
+            const key = tribeCrypto.generateTribeKey()
+            tribeCrypto.setKey(res.key, key, 1)
+          }
+          resolve(res)
+        })
       })
     },
 
@@ -326,7 +333,7 @@ module.exports = ({ cooler }) => {
           includesShipping: !!c.includesShipping,
           stock: Number(c.stock) || 0,
           deadline: c.deadline || null,
-          auctions_poll: Array.isArray(c.auctions_poll) ? c.auctions_poll : [],
+          auctions_poll: (tribeCrypto && tribeCrypto.getKey(rootId)) ? (Array.isArray(c.auctions_poll) ? c.auctions_poll : []) : [],
           mapUrl: c.mapUrl || "",
           shopProductId: c.shopProductId || "",
           shopId: c.shopId || "",
@@ -464,7 +471,7 @@ module.exports = ({ cooler }) => {
         includesShipping: !!c.includesShipping,
         stock: Number(c.stock) || 0,
         deadline: c.deadline,
-        auctions_poll: Array.isArray(c.auctions_poll) ? c.auctions_poll : [],
+        auctions_poll: (tribeCrypto && tribeCrypto.getKey(rootId)) ? (Array.isArray(c.auctions_poll) ? c.auctions_poll : []) : [],
         mapUrl: c.mapUrl || "",
         shopProductId: c.shopProductId || "",
         shopId: c.shopId || "",

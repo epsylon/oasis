@@ -2943,6 +2943,8 @@ module.exports = {
     gamesCocolandDesc: "一颗有眼睛的椰子跳过棕榈树，收集ECOins。",
     gamesTheFlowTitle: "ECOinflow",
     gamesTheFlowDesc: "通过验证者、商店和累积器将PUB连接到居民。抵御CBDC威胁！",
+    gamesNeonInfiltratorTitle: "Neon Infiltrator",
+    gamesNeonInfiltratorDesc: "渗透网格，收集机密数据，辺开安全无人机并逃脱。能通过多少层关？",
     gamesSpaceInvadersTitle: "Space Invaders",
     gamesSpaceInvadersDesc: "阻止外星人入侵！在入侵者抵达地面之前击落它们。",
     gamesArkanoidTitle: "Arkanoid",
@@ -2953,8 +2955,10 @@ module.exports = {
     gamesOutrunDesc: "与时间赛跑！躲避交通障碍，在时间用完前到达终点。",
     gamesAsteroidsTitle: "Asteroids",
     gamesAsteroidsDesc: "驾驶飞船穿越小行星带。在它们撞上你之前将其摧毁。",
+    gamesRockPaperScissorsTitle: "石头剪刀布",
+    gamesRockPaperScissorsDesc: "与AI对战石头、剪刀、布。三局两胜获胜。",
     gamesTikTakToeTitle: "TikTakToe",
-    gamesTikTakToeDesc: "与AI对战石头、剪刀、布。三局两胜获胜。",
+    gamesTikTakToeDesc: "与AI对战经典井字游戏。连成三个即可获胜。",
     gamesFlipFlopTitle: "FlipFlop",
     gamesFlipFlopDesc: "抛硬币，猜正面还是反面。你有多幸运？",
     games8BallTitle: "8Ball Pool",
@@ -3042,6 +3046,13 @@ module.exports = {
     calendarLeave: "离开日历",
     statsCalendar: "日历",
     statsCalendarDate: "日历日期",
-    statsCalendarNote: "日历笔记"
+    statsCalendarNote: "日历笔记",
+    chatAccessDenied: "您没有访问此聊天室的权限。请申请邀请以访问内容。",
+    padAccessDenied: "您没有访问此协作板的权限。请申请邀请以访问内容。",
+    contentAccessDenied: "您没有访问此内容的权限。",
+    blockAccessRestricted: "访问受限",
+    tribeContentAccessDenied: "访问被拒绝",
+    tribeContentAccessDeniedMsg: "此内容属于一个部落。您必须是成员才能访问它。",
+    tribeViewTribes: "查看部落"
     }
 };

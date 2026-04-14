@@ -12,5 +12,5 @@ npm run dev
 
 Once Oasis is started in dev mode, visit [http://localhost:3000](http://localhost:3000). 
 
-While the server processes are running, they will restart theirselves automatically every time you save changes in any file into `/src`. Page autoreload feature is not available even for the development environment because we avoid using JavaScript in the browser, so your browser will remain untouched. Reload the page manually to display the changes.
+The backend restarts automatically (via [nodemon](https://nodemon.io)) whenever you save changes to `.js` or `.json` files in `src/backend/`, `src/models/`, `src/views/`, or `src/client/`. Static assets (`src/client/assets/`) do not trigger a restart. Page autoreload is not available because we avoid using JavaScript in the browser — reload the page manually to display your changes.
 

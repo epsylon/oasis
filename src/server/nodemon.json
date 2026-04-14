@@ -1,0 +1,15 @@
+{
+  "watch": [
+    "../backend",
+    "../models",
+    "../views",
+    "../client"
+  ],
+  "exec": "node ../backend/backend.js",
+  "ext": "js,json",
+  "ignore": [
+    "../client/assets/"
+  ],
+  "signal": "SIGTERM",
+  "delay": 500
+}

@@ -3,7 +3,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 5000;
 
 const VALID_GAMES = new Set([
-  'cocoland', 'ecoinflow', 'spaceinvaders', 'arkanoid', 'pingpong',
+  'cocoland', 'ecoinflow', 'neoninfiltrator', 'spaceinvaders', 'arkanoid', 'pingpong',
   'asteroids', 'tiktaktoe', 'flipflop',
   '8ball', 'artillery', 'labyrinth', 'cocoman', 'tetris'
 ]);

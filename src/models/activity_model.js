@@ -228,6 +228,7 @@ module.exports = ({ cooler }) => {
             const baseId = tip.id;
             const baseTitle = (tip.content && tip.content.title) || '';
             const isAnonymous = tip.content && typeof tip.content.isAnonymous === 'boolean' ? tip.content.isAnonymous : false;
+            if (isAnonymous) continue;
 
             const uniq = (xs) => Array.from(new Set((Array.isArray(xs) ? xs : []).filter(x => typeof x === 'string' && x.trim().length)));
             const toSet = (xs) => new Set(uniq(xs));
@@ -494,13 +495,15 @@ module.exports = ({ cooler }) => {
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
 
       const tribeInternalTypes = new Set(['tribeLeave', 'tribeFeedPost', 'tribeFeedRefeed', 'tribe-content']);
-      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent']);
+      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'feed-action']);
       const isAllowedTribeActivity = (a) => !tribeInternalTypes.has(a.type);
       const isVisible = (a) => {
         if (hiddenTypes.has(a.type)) return false;
         if (a.type === 'pad' && (a.content || {}).status !== 'OPEN') return false;
         if (a.type === 'chat' && (a.content || {}).status !== 'OPEN') return false;
         if (a.type === 'calendar' && (a.content || {}).status !== 'OPEN') return false;
+        if (a.type === 'event' && String((a.content || {}).isPublic || '').toLowerCase() === 'private' && (a.content || {}).organizer !== userId && !(Array.isArray((a.content || {}).attendees) && (a.content || {}).attendees.includes(userId))) return false;
+        if (a.type === 'task' && String((a.content || {}).isPublic || '').toUpperCase() === 'PRIVATE' && a.author !== userId && !(Array.isArray((a.content || {}).assignees) && (a.content || {}).assignees.includes(userId))) return false;
         return true;
       };
 
