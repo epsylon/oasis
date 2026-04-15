@@ -664,6 +664,18 @@ function renderActionCards(actions, userId, allActions) {
       );
     }
 
+    if (type === 'torrent') {
+      const { title } = content;
+      cardBody.push(
+        div({ class: 'card-section' },
+          title ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'),
+            span({ class: 'card-value' }, title)
+          ) : null
+        )
+      );
+    }
+
     if (type === 'document') {
       const { url, title, key } = content;
       if (title && seenDocumentTitles.has(title.trim())) {
@@ -1582,6 +1594,7 @@ function getViewDetailsAction(type, action) {
     case 'image':      return `/images/${id}`;
     case 'audio':      return `/audios/${id}`;
     case 'video':      return `/videos/${id}`;
+    case 'torrent':    return `/torrents/${id}`;
     case 'forum':      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
     case 'document':   return `/documents/${id}`;
     case 'bookmark':   return `/bookmarks/${id}`;
@@ -1602,6 +1615,7 @@ function getViewDetailsAction(type, action) {
     case 'report':     return `/reports/${id}`;
     case 'bankWallet': return `/wallet`;
     case 'bankClaim':  return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
+    case 'gameScore':  return `/games?filter=scoring`;
     default:           return `/activity`;
   }
 }
@@ -1645,7 +1659,8 @@ exports.activityView = (actions, filter, userId, q = '') => {
     { type: 'bookmark',  label: i18n.typeBookmark },
     { type: 'image',     label: i18n.typeImage },
     { type: 'document',  label: i18n.typeDocument },
-    { type: 'video',     label: i18n.typeVideo }
+    { type: 'video',     label: i18n.typeVideo },
+    { type: 'torrent',   label: i18n.typeTorrent }
   ];
 
   let filteredActions;
@@ -1675,6 +1690,8 @@ exports.activityView = (actions, filter, userId, q = '') => {
     filteredActions = actions.filter(action => action.type === 'spread');
   } else if (filter === 'gameScore') {
     filteredActions = actions.filter(action => action.type === 'gameScore');
+  } else if (filter === 'torrent') {
+    filteredActions = actions.filter(action => action.type === 'torrent');
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all' || (filter === 'shop' && action.type === 'shopProduct')) && action.type !== 'tombstone');
   }

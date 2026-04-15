@@ -114,6 +114,15 @@ const renderContentHtml = (content, key) => {
           )
         )
       );
+    case 'torrent':
+      return div({ class: 'opinion-torrent' },
+        div({ class: 'card-section' },
+          form({ method: "GET", action: `/torrents/${encodeURIComponent(key)}` },
+            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
+          br(),
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, content.title)) : ""
+        )
+      );
     case 'document': {
       const t = content.title?.trim();
       if (t && seenDocumentTitles.has(t)) return null;

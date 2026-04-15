@@ -101,6 +101,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Tasks: Module to discover and manage tasks.	
  + Threads: Module to receive conversations grouped by topic or question.
  + Topics: Module to receive discussion categories based on shared interests.	
+ + Torrents: Module to explore and manage torrents.
  + Transfers: Module to discover and manage smart-contracts (transfers).	
  + Trending: Module to explore the most popular content.	
  + Tribes: Module to explore or create tribes (groups).	

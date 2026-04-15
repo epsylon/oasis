@@ -32,7 +32,7 @@ exports.statsView = (stats, filter) => {
   const modes = ['ALL', 'MINE', 'TOMBSTONE'];
   const types = [
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project',
-    'image', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
+    'image', 'torrent', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
     'chat', 'chatMessage', 'pad', 'padEntry', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
@@ -47,6 +47,7 @@ exports.statsView = (stats, filter) => {
     feed: i18n.statsFeed,
     project: i18n.statsProject,
     image: i18n.statsImage,
+    torrent: i18n.statsTorrent,
     audio: i18n.statsAudio,
     video: i18n.statsVideo,
     document: i18n.statsDocument,

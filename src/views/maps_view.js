@@ -5,6 +5,7 @@ const moment = require("../server/node_modules/moment");
 const { template, i18n } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderMapWithPins, renderZoomedMapWithPins, getViewportBounds, latLngToPx, pxToLatLng, MAP_W, MAP_H, getMaxTileZoom } = require("../maps/map_renderer");
+const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const userId = config.keys.id;
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -129,7 +130,7 @@ const renderMap = (markers, clickUrl, mainIdx, opts = {}) => {
       const imgBlobId = pinImages[i] && String(pinImages[i]).startsWith("&") ? pinImages[i] : "";
       const imgHtml = imgBlobId ? `<img src="/blob/${encodeURIComponent(imgBlobId)}" class="map-popup-img" alt="">` : "";
       popupAreasHtml += `<area shape="rect" coords="${x1},${y1},${x2},${y2}" title="${escaped}" alt="${escaped}" href="#${popupId}">`;
-      popupsHtml += `<div id="${popupId}" class="map-popup"><div class="map-popup-box"><a href="#" class="map-popup-close">&#x2715;</a>${imgHtml}<div class="map-popup-label">${withLinks}</div><div class="map-popup-coords">${latStr}, ${lngStr}</div></div></div>`;
+      popupsHtml += `<div id="${popupId}" class="map-popup"><div class="map-popup-box"><a href="#" class="map-popup-close">&#x2715;</a>${imgHtml}<div class="map-popup-label">${sanitizeHtml(withLinks)}</div><div class="map-popup-coords">${latStr}, ${lngStr}</div></div></div>`;
     });
   }
   const mapHtml = useMap ? `<map name="${mapTag}">${popupAreasHtml}${gridAreasHtml}</map>` : "";

@@ -326,6 +326,21 @@ const renderImagesLink = () => {
   return "";
 };
 
+const renderTorrentsLink = () => {
+  const torrentsMod = getConfig().modules.torrentsMod === "on";
+  if (torrentsMod) {
+    return [
+      navLink({
+        href: "/torrents",
+        emoji: "ꖅ",
+        text: i18n.torrentsLabel,
+        class: "torrents-link enabled"
+      })
+    ];
+  }
+  return "";
+};
+
 const renderMapsLink = () => {
   const mapsMod = getConfig().modules.mapsMod === "on";
   if (mapsMod) {
@@ -991,6 +1006,7 @@ const template = (titlePrefix, ...elements) => {
                 renderBookmarksLink(),
                 renderDocsLink(),
                 renderImagesLink(),
+                renderTorrentsLink(),
                 renderVideosLink()
               )
             )
@@ -2339,7 +2355,7 @@ exports.privateView = async (messagesInput, filter) => {
             return div(
               { class: 'pm-card normal-pm' },
               headerLine({ sentAt, from: fromResolved, toLinks, subject: subjectRaw }),
-              div({ class: 'message-text', innerHTML: clickableLinks(text) }),
+              div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text)) }),
               actions({ key: msg.key, replyId: fromResolved, subjectRaw, text })
             )
           }

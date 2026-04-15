@@ -13,7 +13,7 @@ module.exports = ({ cooler, padsModel }) => {
   const searchableTypes = [
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
-    'image', 'audio', 'video', 'market', 'bankWallet', 'bankClaim',
+    'image', 'audio', 'video', 'torrent', 'market', 'bankWallet', 'bankClaim',
     'project', 'job', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad'
   ];
 
@@ -39,6 +39,8 @@ module.exports = ({ cooler, padsModel }) => {
         return [content?.url, content?.mimeType, content?.title, content?.description, ...(content?.tags || [])];
       case 'document':
         return [content?.url, content?.title, content?.description, ...(content?.tags || []), content?.key];
+      case 'torrent':
+        return [content?.title, content?.description, ...(content?.tags || []), content?.url];
       case 'market':
         return [content?.item_type, content?.title, content?.description, content?.price, ...(content?.tags || []), content?.status, content?.item_status, content?.deadline, content?.includesShipping, content?.seller, content?.image, content?.auctions_poll, content?.stock];
       case 'bookmark':
@@ -105,6 +107,7 @@ module.exports = ({ cooler, padsModel }) => {
     if (t === 'image') return `image:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
     if (t === 'audio') return `audio:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
     if (t === 'video') return `video:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
+    if (t === 'torrent') return `torrent:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
     if (t === 'bookmark') return `bookmark:${author}|${c.url || norm(c.description) || msg.key}`;
 
     if (t === 'tribe') {

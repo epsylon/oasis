@@ -21,6 +21,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
       pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => err ? reject(err) : resolve(msgs)))
     )
 
+  const decryptBuyers = (val, key) => {
+    if (Array.isArray(val)) return val
+    if (typeof val === 'string' && tribeCrypto && key) {
+      try { return JSON.parse(tribeCrypto.decryptWithKey(val, key)) } catch {}
+    }
+    return []
+  }
+
   const buildIndex = (messages) => {
     const tomb = new Set()
     const nodes = new Map()
@@ -91,7 +99,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       updatedAt: c.updatedAt || null,
       opinions: c.opinions || {},
       opinions_inhabitants: safeArr(c.opinions_inhabitants),
-      buyers: (tribeCrypto && tribeCrypto.getKey(rootId)) || ssb?.id === (c.author || node.author) ? safeArr(c.buyers) : []
+      buyers: decryptBuyers(c.buyers, tribeCrypto ? tribeCrypto.getKey(rootId) : null)
     }
   }
 
@@ -436,65 +444,79 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async buyProduct(productId) {
-      const tipId = await this.resolveCurrentId(productId)
       const ssbClient = await openSsb()
       const userId = ssbClient.id
+      const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
 
-      return new Promise((resolve, reject) => {
-        ssbClient.get(tipId, (err, item) => {
-          if (err || !item?.content) return reject(new Error("Product not found"))
-          const c = item.content
-          if (c.author === userId) return reject(new Error("Cannot buy your own product"))
-          const stock = Number(c.stock) || 0
-          if (stock <= 0) return reject(new Error("Out of stock"))
+      let tip = productId
+      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      if (idx.tomb.has(tip)) throw new Error("Product not found")
+      const tipId = tip
 
-          const updated = {
-            ...c,
-            stock: stock - 1,
-            buyers: safeArr(c.buyers).concat(userId),
-            updatedAt: new Date().toISOString(),
-            replaces: tipId
-          }
+      let rootId = tipId
+      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
 
-          const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-          ssbClient.publish(tombstone, (e1) => {
-            if (e1) return reject(e1)
-            ssbClient.publish(updated, (e2, res) => e2 ? reject(e2) : resolve(res))
-          })
-        })
-      })
+      const node = idx.nodes.get(tipId)
+      if (!node) throw new Error("Product not found")
+      const c = node.c
+      if (c.author === userId) throw new Error("Cannot buy your own product")
+      const stock = Number(c.stock) || 0
+      if (stock <= 0) throw new Error("Out of stock")
+
+      const key = tribeCrypto ? tribeCrypto.getKey(rootId) : null
+      const currentBuyers = decryptBuyers(c.buyers, key)
+      const newBuyers = currentBuyers.concat(userId)
+
+      const updated = {
+        ...c,
+        stock: stock - 1,
+        buyers: key ? tribeCrypto.encryptWithKey(JSON.stringify(newBuyers), key) : newBuyers,
+        updatedAt: new Date().toISOString(),
+        replaces: tipId
+      }
+
+      const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
+      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => e ? rej(e) : res()))
+      return new Promise((res, rej) => ssbClient.publish(updated, (e, m) => e ? rej(e) : res(m)))
     },
 
     async createOpinion(id, category) {
       if (!categories.includes(category)) throw new Error("Invalid category")
       const ssbClient = await openSsb()
       const userId = ssbClient.id
-      const tipId = await this.resolveCurrentId(id)
+      const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
 
-      return new Promise((resolve, reject) => {
-        ssbClient.get(tipId, (err, item) => {
-          if (err || !item?.content) return reject(new Error("Not found"))
-          const c = item.content
-          const buyers = safeArr(c.buyers)
-          if (!buyers.includes(userId)) return reject(new Error("Must purchase before rating"))
-          const voters = safeArr(c.opinions_inhabitants)
-          if (voters.includes(userId)) return reject(new Error("Already voted"))
+      let tip = id
+      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      if (idx.tomb.has(tip)) throw new Error("Not found")
+      const tipId = tip
 
-          const updated = {
-            ...c,
-            opinions: { ...(c.opinions || {}), [category]: ((c.opinions || {})[category] || 0) + 1 },
-            opinions_inhabitants: voters.concat(userId),
-            updatedAt: new Date().toISOString(),
-            replaces: tipId
-          }
+      let rootId = tipId
+      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
 
-          const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-          ssbClient.publish(tombstone, (e1) => {
-            if (e1) return reject(e1)
-            ssbClient.publish(updated, (e2, res) => e2 ? reject(e2) : resolve(res))
-          })
-        })
-      })
+      const node = idx.nodes.get(tipId)
+      if (!node) throw new Error("Not found")
+      const c = node.c
+
+      const key = tribeCrypto ? tribeCrypto.getKey(rootId) : null
+      const buyers = decryptBuyers(c.buyers, key)
+      if (!buyers.includes(userId)) throw new Error("Must purchase before rating")
+      const voters = safeArr(c.opinions_inhabitants)
+      if (voters.includes(userId)) throw new Error("Already voted")
+
+      const updated = {
+        ...c,
+        opinions: { ...(c.opinions || {}), [category]: ((c.opinions || {})[category] || 0) + 1 },
+        opinions_inhabitants: voters.concat(userId),
+        updatedAt: new Date().toISOString(),
+        replaces: tipId
+      }
+
+      const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
+      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => e ? rej(e) : res()))
+      return new Promise((res, rej) => ssbClient.publish(updated, (e, m) => e ? rej(e) : res(m)))
     }
   }
 }

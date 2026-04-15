@@ -7,6 +7,7 @@ const { template, i18n } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
+const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const userId = config.keys.id;
 const BASE_FILTERS = ['hot','all','mine','recent','top'];
@@ -184,7 +185,7 @@ const renderForumList = (forums, currentFilter) =>
             ),
 	    div({
 	      class: 'forum-body',
-	      innerHTML: renderTextWithStyles(f.text || '')
+	      innerHTML: sanitizeHtml(renderTextWithStyles(f.text || ''))
 	    }),
             div({ class: 'forum-meta' },
               span({ class: 'forum-positive-votes' },
@@ -319,7 +320,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
           ),
 	  div({
 	    class: 'forum-body',
-	    innerHTML: renderTextWithStyles(forum.text || '')
+	    innerHTML: sanitizeHtml(renderTextWithStyles(forum.text || ''))
 	  }),
           div({ class: 'forum-meta' },
             span({ class: 'votes-count' },

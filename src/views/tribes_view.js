@@ -387,7 +387,7 @@ const renderSectionNav = (tribe, section) => {
     { items: firstGroup },
     { items: [{ key: 'votations', label: i18n.tribeSectionVotations }, { key: 'events', label: i18n.tribeSectionEvents }, { key: 'tasks', label: i18n.tribeSectionTasks }] },
     { items: [{ key: 'feed', label: i18n.tribeSectionFeed }, { key: 'forum', label: i18n.tribeSectionForum }] },
-    { items: [{ key: 'images', label: i18n.tribeSectionImages || 'IMAGES' }, { key: 'audios', label: i18n.tribeSectionAudios || 'AUDIOS' }, { key: 'videos', label: i18n.tribeSectionVideos || 'VIDEOS' }, { key: 'documents', label: i18n.tribeSectionDocuments || 'DOCUMENTS' }, { key: 'bookmarks', label: i18n.tribeSectionBookmarks || 'BOOKMARKS' }, { key: 'maps', label: i18n.tribeSectionMaps || 'MAPS' }] },
+    { items: [{ key: 'images', label: i18n.tribeSectionImages || 'IMAGES' }, { key: 'audios', label: i18n.tribeSectionAudios || 'AUDIOS' }, { key: 'videos', label: i18n.tribeSectionVideos || 'VIDEOS' }, { key: 'documents', label: i18n.tribeSectionDocuments || 'DOCUMENTS' }, { key: 'bookmarks', label: i18n.tribeSectionBookmarks || 'BOOKMARKS' }, { key: 'maps', label: i18n.tribeSectionMaps || 'MAPS' }, { key: 'torrents', label: i18n.tribeSectionTorrents || 'TORRENTS' }] },
     { items: [{ key: 'pads', label: i18n.tribeSectionPads || 'PADS' }, { key: 'chats', label: i18n.tribeSectionChats || 'CHATS' }, { key: 'calendars', label: i18n.tribeSectionCalendars || 'CALENDARS' }] },
     { items: [{ key: 'search', label: i18n.tribeSectionSearch }] },
   ];
@@ -482,7 +482,7 @@ const activitySectionForItem = (item) => {
 };
 
 const activityMediaTypeName = (mt) => {
-  const map = { image: i18n.tribeSectionImages, audio: i18n.tribeSectionAudios, video: i18n.tribeSectionVideos, document: i18n.tribeSectionDocuments, bookmark: i18n.tribeSectionBookmarks };
+  const map = { image: i18n.tribeSectionImages, audio: i18n.tribeSectionAudios, video: i18n.tribeSectionVideos, document: i18n.tribeSectionDocuments, bookmark: i18n.tribeSectionBookmarks, torrent: i18n.tribeSectionTorrents };
   return map[mt] || i18n.tribeSectionMedia || 'MEDIA';
 };
 
@@ -1065,10 +1065,10 @@ const renderForumSection = (tribe, items, query) => {
   );
 };
 
-const sectionKeyForMediaType = { image: 'images', audio: 'audios', video: 'videos', document: 'documents', bookmark: 'bookmarks' };
-const acceptForMediaType = { image: 'image/*', audio: 'audio/*', video: 'video/*', document: 'application/pdf,.pdf,.doc,.docx,.txt,.odt', bookmark: null };
+const sectionKeyForMediaType = { image: 'images', audio: 'audios', video: 'videos', document: 'documents', bookmark: 'bookmarks', torrent: 'torrents' };
+const acceptForMediaType = { image: 'image/*', audio: 'audio/*', video: 'video/*', document: 'application/pdf,.pdf,.doc,.docx,.txt,.odt', bookmark: null, torrent: '.torrent' };
 const sectionTitleForMediaType = (mt) => {
-  const map = { image: i18n.tribeSectionImages, audio: i18n.tribeSectionAudios, video: i18n.tribeSectionVideos, document: i18n.tribeSectionDocuments, bookmark: i18n.tribeSectionBookmarks };
+  const map = { image: i18n.tribeSectionImages, audio: i18n.tribeSectionAudios, video: i18n.tribeSectionVideos, document: i18n.tribeSectionDocuments, bookmark: i18n.tribeSectionBookmarks, torrent: i18n.tribeSectionTorrents };
   return map[mt] || mt;
 };
 
@@ -1085,6 +1085,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
     video: () => i18n.tribeCreateVideo || 'Create Video',
     document: () => i18n.tribeCreateDocument || 'Create Document',
     bookmark: () => i18n.tribeCreateBookmark || 'Create Bookmark',
+    torrent: () => i18n.tribeCreateTorrent || 'Upload Torrent',
   };
   const mediaBtnLabel = createMediaLabel[mediaType] ? createMediaLabel[mediaType]() : i18n.tribeCreateButton;
 
@@ -1183,6 +1184,16 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
         )
       );
     }
+    if (mediaType === 'torrent') {
+      return div({ class: 'tribe-media-item' },
+        blobUrl ? a({ href: blobUrl, class: 'tribe-action-btn' }, i18n.torrentDownloadButton || 'DOWNLOAD IT!') : p(i18n.tribeMediaEmpty),
+        div({ class: 'tribe-media-item-info' },
+          m.title ? h2(m.title) : null,
+          m.description ? p(...renderUrl(m.description)) : null,
+          ...mediaFooter(m)
+        )
+      );
+    }
     return null;
   };
 
@@ -1253,7 +1264,7 @@ const renderTribeMapsSection = (tribe, maps) => {
     input({ type: 'hidden', name: 'filter', value: 'create' }),
     input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
     button({ type: 'submit', class: 'create-button' }, i18n.mapUploadButton || 'Create Map'));
-  if (items.length === 0) return div({ class: 'tribe-content-list' }, createBtn, p(i18n.noMaps || 'No maps yet'));
+  if (items.length === 0) return div({ class: 'tribe-content-list' }, div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionMaps || 'MAPS'), createBtn), p(i18n.noMaps || 'No maps yet'));
   return div({ class: 'tribe-content-list' },
     div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionMaps || 'MAPS'), createBtn),
     items.map(m =>
@@ -1286,7 +1297,7 @@ const renderTribePadsSection = (tribe, pads) => {
     input({ type: 'hidden', name: 'filter', value: 'create' }),
     input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
     button({ type: 'submit', class: 'create-button' }, i18n.tribePadCreate || 'Create Pad'));
-  if (items.length === 0) return div({ class: 'tribe-content-list' }, createBtn, p(i18n.tribePadsEmpty || 'No pads, yet.'));
+  if (items.length === 0) return div({ class: 'tribe-content-list' }, div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionPads || 'PADS'), createBtn), p(i18n.tribePadsEmpty || 'No pads, yet.'));
   return div({ class: 'tribe-content-list' },
     div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionPads || 'PADS'), createBtn),
     items.map(m =>
@@ -1317,7 +1328,7 @@ const renderTribeChatsSection = (tribe, chats) => {
     input({ type: 'hidden', name: 'filter', value: 'create' }),
     input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
     button({ type: 'submit', class: 'create-button' }, i18n.tribeChatCreate || 'Create Chat'));
-  if (items.length === 0) return div({ class: 'tribe-content-list' }, createBtn, p(i18n.tribeChatsEmpty || 'No chats, yet.'));
+  if (items.length === 0) return div({ class: 'tribe-content-list' }, div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionChats || 'CHATS'), createBtn), p(i18n.tribeChatsEmpty || 'No chats, yet.'));
   return div({ class: 'tribe-content-list' },
     div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionChats || 'CHATS'), createBtn),
     items.map(m =>
@@ -1349,7 +1360,7 @@ const renderTribeCalendarsSection = (tribe, calendars) => {
     input({ type: 'hidden', name: 'filter', value: 'create' }),
     input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
     button({ type: 'submit', class: 'create-button' }, i18n.tribeCalendarCreate || 'Create Calendar'));
-  if (items.length === 0) return div({ class: 'tribe-content-list' }, createBtn, p(i18n.tribeCalendarsEmpty || 'No calendars, yet.'));
+  if (items.length === 0) return div({ class: 'tribe-content-list' }, div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionCalendars || 'CALENDARS'), createBtn), p(i18n.tribeCalendarsEmpty || 'No calendars, yet.'));
   return div({ class: 'tribe-content-list' },
     div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionCalendars || 'CALENDARS'), createBtn),
     items.map(m =>
@@ -1417,6 +1428,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
     case 'videos': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'video'); break;
     case 'documents': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'document'); break;
     case 'bookmarks': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'bookmark'); break;
+    case 'torrents': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'torrent'); break;
     case 'maps': sectionContent = renderTribeMapsSection(tribe, sectionData); break;
     case 'pads': sectionContent = renderTribePadsSection(tribe, sectionData); break;
     case 'chats': sectionContent = renderTribeChatsSection(tribe, sectionData); break;

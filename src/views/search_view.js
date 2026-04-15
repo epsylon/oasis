@@ -32,7 +32,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
-    "report", "task", "event", "bookmark", "image", "audio", "video", "document",
+    "report", "task", "event", "bookmark", "image", "audio", "video", "document", "torrent",
     "bankWallet", "bankClaim", "project", "job", "forum", "vote", "contact", "pub", "map", "shop", "shopProduct", "chat", "pad", "all"
   ];
 
@@ -93,6 +93,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'shopProduct': return `/shops/product/${encodeURIComponent(contentId)}`;
       case 'chat': return `/chats/${encodeURIComponent(contentId)}`;
       case 'pad': return `/pads/${encodeURIComponent(contentId)}`;
+      case 'torrent': return `/torrents/${encodeURIComponent(contentId)}`;
       case 'gameScore': return content && content.game ? `/games/${encodeURIComponent(content.game)}` : '/games';
       default: return '#';
     }
@@ -264,6 +265,16 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
             'data-pdf-url': `/blob/${encodeURIComponent(content.url)}`
           }),
           br(),
+          content.tags && content.tags.length
+            ? div({ class: 'card-tags' }, content.tags.map(tag =>
+              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+            ))
+            : null
+        );
+      case 'torrent':
+        return div({ class: 'search-torrent' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, content.title)) : null,
+          content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentDescriptionLabel || 'Description') + ':'), span({ class: 'card-value' }, content.description)) : null,
           content.tags && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
@@ -514,6 +525,16 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
               a({ href: `/games/${encodeURIComponent(content.game)}`, class: 'filter-btn' }, i18n.gamesPlayButton || 'PLAY!')
             )
           ) : null
+        );
+      case 'torrent':
+        return div({ class: 'search-torrent' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, content.title)) : null,
+          content.size ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentSizeLabel || 'Size') + ':'), span({ class: 'card-value' }, String(content.size))) : null,
+          content.tags && content.tags.length
+            ? div({ class: 'card-tags' }, content.tags.map(tag =>
+              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+            ))
+            : null
         );
       case 'map':
         return div({ class: 'search-map' },

@@ -40,6 +40,7 @@ const modulesView = () => {
     { name: 'tags', label: i18n.modulesTagsLabel, description: i18n.modulesTagsDescription },
     { name: 'tasks', label: i18n.modulesTasksLabel, description: i18n.modulesTasksDescription },
     { name: 'threads', label: i18n.modulesThreadsLabel, description: i18n.modulesThreadsDescription },
+    { name: 'torrents', label: i18n.modulesTorrentsLabel, description: i18n.modulesTorrentsDescription },
     { name: 'transfers', label: i18n.modulesTransfersLabel, description: i18n.modulesTransfersDescription },
     { name: 'trending', label: i18n.modulesTrendingLabel, description: i18n.modulesTrendingDescription },
     { name: 'tribes', label: i18n.modulesTribesLabel, description: i18n.modulesTribesDescription },

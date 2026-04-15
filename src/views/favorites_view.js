@@ -150,6 +150,10 @@ exports.favoritesView = async (items, filter = "all", counts = {}) => {
           button(
             { type: "submit", name: "filter", value: "videos", class: filter === "videos" ? "filter-btn active" : "filter-btn" },
             `${i18n.favoritesFilterVideos} (${c.videos || 0})`
+          ),
+          button(
+            { type: "submit", name: "filter", value: "torrents", class: filter === "torrents" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterTorrents || "TORRENTS"} (${c.torrents || 0})`
           )
         )
       ),

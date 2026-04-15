@@ -94,6 +94,21 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
           : div({ class: 'card-field' }, p(i18n.videoNoFile))
       )
     );
+  } else if (c.type === 'torrent') {
+    const { url, title, description } = c;
+    contentHtml = div({ class: 'trending-torrent' },
+      div({ class: 'card-section torrent' },
+        form({ method: "GET", action: `/torrents/${encodeURIComponent(item.key)}` },
+          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+        ),
+        br(),
+        title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, title)) : "",
+        description ? [span({ class: 'card-label' }, (i18n.torrentDescriptionLabel || 'Description') + ":"), p(...renderUrl(description))] : null,
+        url && url.startsWith("&")
+          ? div({ class: 'card-field' }, a({ href: `/blob/${encodeURIComponent(url)}`, class: 'filter-btn' }, i18n.torrentDownload || 'Download'))
+          : div({ class: 'card-field' }, p(i18n.torrentNoFile || 'No file'))
+      )
+    );
   } else if (c.type === 'document') {
     const { url, title, description } = c;
     const t = title?.trim();
@@ -219,7 +234,7 @@ exports.trendingView = (items, filter, categories = opinionCategories) => {
   const baseFilters = ['RECENT', 'ALL', 'MINE', 'TOP'];
   const contentFilters = [
     ['votes', 'feed', 'transfer'],
-    ['bookmark', 'image', 'video', 'audio', 'document']
+    ['bookmark', 'image', 'video', 'audio', 'document', 'torrent']
   ];
 
   let filteredItems = items.filter(item => {

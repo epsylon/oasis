@@ -3868,6 +3868,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   align-items: center;
   margin-bottom: 16px;
 }
+.tribe-search-form{display:flex;gap:10px;align-items:center}
 
 .tribe-content-filters {
   display: flex;
@@ -5013,9 +5014,15 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .calendar-date-item{background:#333;padding:18px 108px 18px 18px;border-radius:6px;margin-bottom:14px;position:relative;min-height:64px}
 .calendar-date-delete{position:absolute;top:12px;right:12px;margin:0}
 .calendar-date-delete button{padding:4px 10px;font-size:0.8rem}
-.calendar-date-item-header{color:#FFA500;font-weight:bold;margin-bottom:6px}
+.calendar-date-item-header{color:#FFA500;font-weight:bold;margin-bottom:6px;width:max-content}
 .calendar-participants-count{color:#FFA500;font-weight:bold}
 .calendar-day-notes{margin-top:16px}
 .pad-viewer-back{margin-bottom:12px}
 
 .access-denied-msg{margin:12px 0;padding:12px;background:#1a1a1a;border:1px solid #555;border-radius:4px;color:#ccc;font-style:italic}
+
+.torrent-table{width:100%;border-collapse:collapse;margin-top:12px}
+.torrent-table th,.torrent-table td{padding:8px 12px;text-align:left}
+.torrent-table th{background:#1a1a1a;color:#FFA500;font-weight:bold}
+.torrent-download{margin:12px 0}
+.torrent-download .filter-btn{border:none}

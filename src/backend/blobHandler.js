@@ -80,7 +80,8 @@ const handleBlobUpload = async function (ctx, fileFieldName) {
     '.flac': 'audio/flac', '.aac': 'audio/aac', '.opus': 'audio/opus',
     '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
-    '.svg': 'image/svg+xml', '.bmp': 'image/bmp'
+    '.svg': 'image/svg+xml', '.bmp': 'image/bmp',
+    '.torrent': 'application/x-bittorrent'
   };
 
   const blob = { name: blobUpload.originalFilename || blobUpload.name || 'file' };
@@ -101,7 +102,7 @@ const handleBlobUpload = async function (ctx, fileFieldName) {
     blob.mime = 'application/octet-stream';
   }
 
-  if (blob.mime.startsWith('image/')) {
+  if (blob.mime.startsWith('image/') && blob.mime !== 'image/gif') {
     data = await stripImageMetadata(data);
   } else if (blob.mime === 'application/pdf') {
     data = stripPdfMetadata(data);
@@ -120,6 +121,7 @@ const handleBlobUpload = async function (ctx, fileFieldName) {
   if (blob.mime.startsWith("audio/")) return `\n[audio:${blob.name}](${blob.id})`;
   if (blob.mime.startsWith("video/")) return `\n[video:${blob.name}](${blob.id})`;
   if (blob.mime === "application/pdf") return `[pdf:${blob.name}](${blob.id})`;
+  if (blob.mime === "application/x-bittorrent") return `\n[torrent:${blob.name}](${blob.id})`;
 
   return `\n[${blob.name}](${blob.id})`;
 };
@@ -213,8 +215,18 @@ const serveBlob = async function (ctx) {
     if (ft && ft.mime) mime = ft.mime;
   } catch {}
 
+  if (mime === 'application/octet-stream' && buffer.length > 10 && buffer[0] === 0x64) {
+    const head = buffer.slice(0, 128).toString('ascii');
+    if (head.includes('announce') || head.includes('8:announce') || head.includes('4:info')) mime = 'application/x-bittorrent';
+  }
+
+  const isSvg = mime === 'image/svg+xml';
+  const qName = ctx.query.name ? String(ctx.query.name).replace(/["\r\n\\]/g, '').trim() : '';
+  const safeRaw = String(raw).replace(/["\r\n\\]/g, '');
+  const filename = qName || (mime === 'application/x-bittorrent' ? 'download.torrent' : safeRaw);
+  const disposition = isSvg ? 'attachment' : 'inline';
   ctx.type = mime;
-  ctx.set('Content-Disposition', `inline; filename="${raw}"`);
+  ctx.set('Content-Disposition', `${disposition}; filename="${filename}"`);
   ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
 
   const range = ctx.headers.range;

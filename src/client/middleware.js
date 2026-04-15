@@ -43,7 +43,7 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     }
     console.error(err);
     if (ctx && isValidRequest(ctx.request)) {
-      err.message = err.stack;
+      err.message = err.message || 'Internal server error';
       err.expose = true;
     }
     return null;

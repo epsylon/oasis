@@ -35,7 +35,7 @@ module.exports = ({ cooler }) => {
 
   const types = [
     'bookmark','event','task','votes','report','feed','project',
-    'image','audio','video','document','transfer','post','tribe',
+    'image','torrent','audio','video','document','transfer','post','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
     'pad','padEntry','gameScore','calendar','calendarDate','calendarNote',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',

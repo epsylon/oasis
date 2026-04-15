@@ -185,7 +185,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       })
     },
 
-    async updateChatById(id, data) {
+    async updateChatById(id, data, { skipAuthorCheck = false } = {}) {
       const tipId = await this.resolveCurrentId(id)
       const ssbClient = await openSsb()
       const userId = ssbClient.id
@@ -196,7 +196,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
           const c = item.content
 
           const rawAuthor = c.author || (c.encryptedPayload ? null : undefined)
-          if (rawAuthor && rawAuthor !== userId) return reject(new Error("Not the author"))
+          if (!skipAuthorCheck && rawAuthor && rawAuthor !== userId) return reject(new Error("Not the author"))
 
           const rootId = tipId
           const messages = []
@@ -213,8 +213,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
             category: data.category !== undefined ? safeText(data.category) : chat.category,
             status: data.status !== undefined ? (VALID_STATUS.includes(String(data.status).toUpperCase()) ? String(data.status).toUpperCase() : chat.status) : chat.status,
             tags: data.tags !== undefined ? normalizeTags(data.tags) : chat.tags,
-            members: chat.members,
-            invites: chat.invites,
+            members: data.members !== undefined ? safeArr(data.members) : chat.members,
+            invites: data.invites !== undefined ? safeArr(data.invites) : chat.invites,
             author: chat.author,
             createdAt: chat.createdAt,
             updatedAt: new Date().toISOString()
@@ -404,7 +404,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         return inv.code !== code
       })
 
-      await this.updateChatById(matchedChat.key, { members, invites, status: matchedChat.status, title: matchedChat.title, description: matchedChat.description, image: matchedChat.image, category: matchedChat.category, tags: matchedChat.tags })
+      await this.updateChatById(matchedChat.key, { members, invites, status: matchedChat.status, title: matchedChat.title, description: matchedChat.description, image: matchedChat.image, category: matchedChat.category, tags: matchedChat.tags }, { skipAuthorCheck: true })
       return matchedChat.key
     },
 
@@ -427,7 +427,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         }
       }
 
-      await this.updateChatById(chatId, { members, invites: chat.invites, status: chat.status, title: chat.title, description: chat.description, image: chat.image, category: chat.category, tags: chat.tags })
+      await this.updateChatById(chatId, { members, invites: chat.invites, status: chat.status, title: chat.title, description: chat.description, image: chat.image, category: chat.category, tags: chat.tags }, { skipAuthorCheck: true })
       return chat.key
     },
 
@@ -438,7 +438,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!chat) throw new Error("Chat not found")
       if (chat.author === userId) throw new Error("Author cannot leave their own chat")
       const members = chat.members.filter(m => m !== userId)
-      await this.updateChatById(chatId, { members, invites: chat.invites, status: chat.status, title: chat.title, description: chat.description, image: chat.image, category: chat.category, tags: chat.tags })
+      await this.updateChatById(chatId, { members, invites: chat.invites, status: chat.status, title: chat.title, description: chat.description, image: chat.image, category: chat.category, tags: chat.tags }, { skipAuthorCheck: true })
     },
 
     async sendMessage(chatId, text, image = null) {

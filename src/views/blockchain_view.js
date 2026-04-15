@@ -14,14 +14,14 @@ const FILTER_LABELS = {
   aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts,
   map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product',
   pad: i18n.typePad || 'PAD', chat: i18n.typeChat || 'CHAT', gameScore: i18n.typeGameScore || 'GAME SCORE',
-  calendar: i18n.typeCalendar || 'CALENDAR'
+  calendar: i18n.typeCalendar || 'CALENDAR', torrent: i18n.typeTorrent
 };
 
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
 const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
-const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map'];
+const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map', 'torrent'];
 
 const SEARCH_FIELDS = ['author','id','from','to'];
 
@@ -123,6 +123,7 @@ const getViewDetailsAction = (type, block) => {
     case 'courtsNomination': return `/courts`;
     case 'courtsNominationVote': return `/courts`;
     case 'map': return `/maps/${encodeURIComponent(block.id)}`;
+    case 'torrent': return `/torrents/${encodeURIComponent(block.id)}`;
     case 'mapMarker': return block.content?.mapId ? `/maps/${encodeURIComponent(block.content.mapId)}` : `/maps`;
     case 'shop': return `/shops/${encodeURIComponent(block.id)}`;
     case 'shopProduct': return `/shops/product/${encodeURIComponent(block.id)}`;

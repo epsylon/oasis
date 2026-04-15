@@ -13,6 +13,20 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.7.2 - 2026-04-16
+
+### Added
+
+- Torrents module: create, manage and share torrents (Torrents plugin).
+
+### Changed
+
+- More layers of privacy/encryption applied to sensitive content at different places (Core plugin).
+
+### Fixed
+
+- Chat participants (Chats plugin).
+
 ## v0.7.1 - 2026-04-14
 
 ### Added

@@ -44,7 +44,8 @@
     "courtsMod": "on",
     "favoritesMod": "on",
     "mapsMod": "on",
-    "chatsMod": "on"
+    "chatsMod": "on",
+    "torrentsMod": "on"
   },
   "wallet": {
     "url": "http://localhost:7474",

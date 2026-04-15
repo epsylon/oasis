@@ -269,6 +269,7 @@ const inhabitantsModel = require('../models/inhabitants_model')({ cooler, isPubl
 const feedModel = require('../models/feed_model')({ cooler, isPublic: config.public });
 const imagesModel = require("../models/images_model")({ cooler, isPublic: config.public });
 const audiosModel = require("../models/audios_model")({ cooler, isPublic: config.public });
+const torrentsModel = require("../models/torrents_model")({ cooler, isPublic: config.public });
 const videosModel = require("../models/videos_model")({ cooler, isPublic: config.public });
 const documentsModel = require("../models/documents_model")({ cooler, isPublic: config.public });
 const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config.public });
@@ -290,7 +291,7 @@ const projectsModel = require("../models/projects_model")({ cooler, isPublic: co
 const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public });
 const gamesModel = require('../models/games_model')({ cooler });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
-const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel });
+const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const courtsModel = require('../models/courts_model')({ cooler, services: { votes: votesModel, inhabitants: inhabitantsModel, tribes: tribesModel, banking: bankingModel }, tribeCrypto });
 tribesModel.processIncomingKeys().catch(err => {
@@ -327,9 +328,10 @@ const mediaResolvers = {
   chats: id => chatsModel.resolveRootId(id),
   maps: id => mapsModel.resolveRootId(id),
   pads: id => padsModel.resolveRootId(id),
-  calendars: id => calendarsModel.resolveRootId(id)
+  calendars: id => calendarsModel.resolveRootId(id),
+  torrents: id => torrentsModel.resolveRootId(id)
 };
-const mediaModCheck = { images: 'imagesMod', audios: 'audiosMod', videos: 'videosMod', documents: 'documentsMod', bookmarks: 'bookmarksMod', market: 'marketMod', jobs: 'jobsMod', projects: 'projectsMod', shops: 'shopsMod', chats: 'chatsMod', maps: 'mapsMod', pads: 'padsMod', calendars: 'calendarsMod' };
+const mediaModCheck = { images: 'imagesMod', audios: 'audiosMod', videos: 'videosMod', documents: 'documentsMod', bookmarks: 'bookmarksMod', market: 'marketMod', jobs: 'jobsMod', projects: 'projectsMod', shops: 'shopsMod', chats: 'chatsMod', maps: 'mapsMod', pads: 'padsMod', calendars: 'calendarsMod', torrents: 'torrentsMod' };
 const favAction = async (ctx, kind, action) => {
   if (!checkMod(ctx, mediaModCheck[kind])) { ctx.redirect('/modules'); return; }
   try {
@@ -350,8 +352,8 @@ const commentAction = async (ctx, kind, idParam) => {
   await post.publish({ text, root: itemId, dest: itemId });
   ctx.redirect(rt);
 };
-const opinionModels = { images: imagesModel, audios: audiosModel, videos: videosModel, documents: documentsModel, bookmarks: bookmarksModel };
-const deleteModels = { images: imagesModel, audios: audiosModel, videos: videosModel, documents: documentsModel, bookmarks: bookmarksModel };
+const opinionModels = { images: imagesModel, audios: audiosModel, videos: videosModel, documents: documentsModel, bookmarks: bookmarksModel, torrents: torrentsModel };
+const deleteModels = { images: imagesModel, audios: audiosModel, videos: videosModel, documents: documentsModel, bookmarks: bookmarksModel, torrents: torrentsModel };
 const opinionAction = async (ctx, kind, idParam) => {
   const modKey = mediaModCheck[kind];
   if (modKey && !checkMod(ctx, modKey)) { ctx.redirect('/modules'); return; }
@@ -670,6 +672,7 @@ const { pmView } = require("../views/pm_view");
 const { tagsView } = require("../views/tags_view");
 const { videoView, singleVideoView } = require("../views/video_view");
 const { audioView, singleAudioView } = require("../views/audio_view");
+const { torrentsView, singleTorrentView } = require("../views/torrents_view");
 const { eventView, singleEventView } = require("../views/event_view");
 const { invitesView } = require("../views/invites_view");
 const { modulesView } = require("../views/modules_view");
@@ -1027,6 +1030,29 @@ router
     const fav = await mediaFavorites.getFavoriteSet('audios');
     const comments = await getVoteComments(audio.key);
     ctx.body = await singleAudioView({ ...audio, isFavorite: fav.has(String(audio.rootId || audio.key)), commentCount: comments.length }, filter, comments, { q, sort, returnTo: safeReturnTo(ctx, `/audios?filter=${encodeURIComponent(filter)}`, ['/audios']) });
+  })
+  .get("/torrents", async (ctx) => {
+    if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
+    const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
+    const items = await torrentsModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort, viewerId: getViewerId() });
+    const fav = await mediaFavorites.getFavoriteSet('torrents');
+    let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
+    if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
+    ctx.body = await torrentsView(enriched, filter, null, { q, sort });
+  })
+  .get("/torrents/edit/:id", async (ctx) => {
+    if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
+    const torrent = await torrentsModel.getTorrentById(ctx.params.id, getViewerId());
+    const fav = await mediaFavorites.getFavoriteSet('torrents');
+    ctx.body = await torrentsView([{ ...torrent, isFavorite: fav.has(String(torrent.rootId || torrent.key)) }], 'edit', torrent.key, { returnTo: ctx.query.returnTo || '' });
+  })
+  .get("/torrents/:torrentId", async (ctx) => {
+    if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
+    const { torrentId } = ctx.params; const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
+    const torrent = await torrentsModel.getTorrentById(torrentId, getViewerId());
+    const fav = await mediaFavorites.getFavoriteSet('torrents');
+    const comments = await getVoteComments(torrent.key);
+    ctx.body = await singleTorrentView({ ...torrent, isFavorite: fav.has(String(torrent.rootId || torrent.key)), commentCount: comments.length }, filter, comments, { q, sort, returnTo: safeReturnTo(ctx, `/torrents?filter=${encodeURIComponent(filter)}`, ['/torrents']) });
   })
   .get("/videos", async (ctx) => {
     if (!checkMod(ctx, 'videosMod')) { ctx.redirect('/modules'); return; }
@@ -2359,8 +2385,9 @@ router
   })
   .post('/pm', koaBody(), async ctx => {
     const { recipients, subject, text } = ctx.request.body;
-    const recipientsArr = (recipients || '').split(',').map(s => s.trim()).filter(Boolean);
-    await pmModel.sendMessage(recipientsArr, subject, text);
+    const recipientsArr = (recipients || '').split(',').map(s => s.trim()).filter(Boolean).filter(id => ssbRef.isFeedId(id));
+    if (recipientsArr.length === 0) { ctx.throw(400, 'No valid recipients'); return; }
+    await pmModel.sendMessage(recipientsArr, stripDangerousTags(subject), stripDangerousTags(text));
     await refreshInboxCount();
     ctx.redirect('/inbox?filter=sent');
   })
@@ -2484,6 +2511,10 @@ router
   .post("/publish/custom", koaBody(), async (ctx) => {
     const text = String(ctx.request.body.text);
     const obj = JSON.parse(text);
+    const ALLOWED_TYPES = ['post','about','contact','vote','pub','channel'];
+    if (!obj.type || !ALLOWED_TYPES.includes(obj.type)) { ctx.throw(400, 'Invalid message type'); return; }
+    const sanitizeObj = (o) => { for (const k of Object.keys(o)) { if (typeof o[k] === 'string') o[k] = stripDangerousTags(o[k]); else if (o[k] && typeof o[k] === 'object') sanitizeObj(o[k]); } };
+    sanitizeObj(obj);
     ctx.body = await post.publishCustom(obj);
     ctx.redirect(`/public/latest`);
   })
@@ -2685,6 +2716,26 @@ router
   .post("/audios/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'audios', 'add'))
   .post("/audios/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'audios', 'remove'))
   .post("/audios/:audioId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'audios', 'audioId'))
+  .post("/torrents/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
+    const blob = await handleBlobUpload(ctx, 'torrent');
+    const fileSize = ctx.request.files?.torrent?.size || 0;
+    const { tags, title, description } = ctx.request.body;
+    await torrentsModel.createTorrent(blob, stripDangerousTags(tags), stripDangerousTags(title), stripDangerousTags(description), fileSize);
+    ctx.redirect(safeReturnTo(ctx, '/torrents?filter=all', ['/torrents']));
+  })
+  .post("/torrents/update/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
+    const { tags, title, description } = ctx.request.body;
+    const blob = ctx.request.files?.torrent ? await handleBlobUpload(ctx, 'torrent') : null;
+    await torrentsModel.updateTorrentById(ctx.params.id, blob, stripDangerousTags(tags), stripDangerousTags(title), stripDangerousTags(description));
+    ctx.redirect(safeReturnTo(ctx, '/torrents?filter=mine', ['/torrents']));
+  })
+  .post("/torrents/delete/:id", koaBody(), async ctx => deleteAction(ctx, 'torrents'))
+  .post("/torrents/opinions/:torrentId/:category", koaBody(), async ctx => opinionAction(ctx, 'torrents', 'torrentId'))
+  .post("/torrents/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'torrents', 'add'))
+  .post("/torrents/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'torrents', 'remove'))
+  .post("/torrents/:torrentId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'torrents', 'torrentId'))
   .post("/videos/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => mediaCreateAction(ctx, 'videos'))
   .post("/videos/update/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => mediaUpdateAction(ctx, 'videos'))
   .post("/videos/delete/:id", koaBody(), async ctx => deleteAction(ctx, 'videos'))
@@ -3002,12 +3053,12 @@ router
   .post('/reports/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
     const b = ctx.request.body, image = await handleBlobUpload(ctx, 'image');
     await reportsModel.updateReportById(ctx.params.id, {
-      title: b.title, description: b.description, category: b.category, image, tags: b.tags, severity: b.severity,
+      title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), category: b.category, image, tags: b.tags, severity: b.severity,
       template: {
-        stepsToReproduce: b.stepsToReproduce, expectedBehavior: b.expectedBehavior, actualBehavior: b.actualBehavior, environment: b.environment, reproduceRate: b.reproduceRate,
-        problemStatement: b.problemStatement, userStory: b.userStory, acceptanceCriteria: b.acceptanceCriteria,
-        whatHappened: b.whatHappened, reportedUser: b.reportedUser, evidenceLinks: b.evidenceLinks,
-        contentLocation: b.contentLocation, whyInappropriate: b.whyInappropriate, requestedAction: b.requestedAction
+        stepsToReproduce: stripDangerousTags(b.stepsToReproduce), expectedBehavior: stripDangerousTags(b.expectedBehavior), actualBehavior: stripDangerousTags(b.actualBehavior), environment: stripDangerousTags(b.environment), reproduceRate: b.reproduceRate,
+        problemStatement: stripDangerousTags(b.problemStatement), userStory: stripDangerousTags(b.userStory), acceptanceCriteria: stripDangerousTags(b.acceptanceCriteria),
+        whatHappened: stripDangerousTags(b.whatHappened), reportedUser: stripDangerousTags(b.reportedUser), evidenceLinks: stripDangerousTags(b.evidenceLinks),
+        contentLocation: stripDangerousTags(b.contentLocation), whyInappropriate: stripDangerousTags(b.whyInappropriate), requestedAction: stripDangerousTags(b.requestedAction)
       }
     });
     ctx.redirect('/reports?filter=mine');
@@ -3275,13 +3326,13 @@ router
   .post('/jobs/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'jobsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
-    await jobsModel.createJob({ job_type: b.job_type, title: b.title, description: b.description, requirements: b.requirements, languages: b.languages, job_time: b.job_time, tasks: b.tasks, location: b.location, vacants: b.vacants ? parseInt(b.vacants, 10) : 1, salary: b.salary != null && b.salary !== '' ? parseFloat(String(b.salary).replace(',', '.')) : 0, tags: b.tags, image: imageBlob, mapUrl: stripDangerousTags(b.mapUrl) });
+    await jobsModel.createJob({ job_type: stripDangerousTags(b.job_type), title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), requirements: stripDangerousTags(b.requirements), languages: stripDangerousTags(b.languages), job_time: b.job_time, tasks: stripDangerousTags(b.tasks), location: stripDangerousTags(b.location), vacants: b.vacants ? parseInt(b.vacants, 10) : 1, salary: b.salary != null && b.salary !== '' ? parseFloat(String(b.salary).replace(',', '.')) : 0, tags: b.tags, image: imageBlob, mapUrl: stripDangerousTags(b.mapUrl) });
     ctx.redirect(safeReturnTo(ctx, '/jobs?filter=MINE', ['/jobs']));
   })
   .post('/jobs/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'jobsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : undefined;
-    const patch = { job_type: b.job_type, title: b.title, description: b.description, requirements: b.requirements, languages: b.languages, job_time: b.job_time, tasks: b.tasks, location: b.location, tags: b.tags, mapUrl: stripDangerousTags(b.mapUrl) };
+    const patch = { job_type: stripDangerousTags(b.job_type), title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), requirements: stripDangerousTags(b.requirements), languages: stripDangerousTags(b.languages), job_time: b.job_time, tasks: stripDangerousTags(b.tasks), location: stripDangerousTags(b.location), tags: b.tags, mapUrl: stripDangerousTags(b.mapUrl) };
     if (b.vacants !== undefined && b.vacants !== '') patch.vacants = parseInt(b.vacants, 10);
     if (b.salary !== undefined && b.salary !== '') patch.salary = parseFloat(String(b.salary).replace(',', '.'));
     if (imageBlob !== undefined) patch.image = imageBlob;
@@ -3458,9 +3509,7 @@ router
     const text = stripDangerousTags(String(ctx.request.body.text || '').trim());
     const imageBlob = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : null;
     if (!text && !imageBlob) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
-    try {
-      await chatsModel.sendMessage(ctx.params.chatId, text, imageBlob);
-    } catch (_) {}
+    await chatsModel.sendMessage(ctx.params.chatId, text, imageBlob);
     ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(ctx.params.chatId)}`, ['/chats']));
   })
   .post("/pads/create", koaBody(), async (ctx) => {
@@ -3829,7 +3878,7 @@ router
     const theme = String(ctx.request.body.theme || "").trim(), cfg = getConfig();
     cfg.themes.current = theme || "Dark-SNH";
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
-    ctx.cookies.set("theme", cfg.themes.current, { httpOnly: true, sameSite: 'strict' });
+    ctx.cookies.set("theme", cfg.themes.current, { httpOnly: true, sameSite: 'strict', secure: ctx.secure });
     ctx.redirect("/settings");
   })
   .post("/language", koaBody(), async (ctx) => {
@@ -3837,7 +3886,7 @@ router
     const cfg = getConfig();
     cfg.language = lang;
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
-    ctx.cookies.set("language", lang, { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'strict' });
+    ctx.cookies.set("language", lang, { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'strict', secure: ctx.secure });
     ctx.redirect(new URL(ctx.request.header.referer).href);
   })
   .post("/settings/conn/start", koaBody(), async ctx => { await meta.connStart(); ctx.redirect("/peers"); })
