@@ -20,7 +20,7 @@ module.exports = ({ cooler }) => {
 
   const validTypes = [
     'bookmark', 'votes', 'transfer',
-    'feed', 'image', 'audio', 'video', 'document'
+    'feed', 'image', 'audio', 'video', 'document', 'torrent'
   ];
 
   const getPreview = c => {
