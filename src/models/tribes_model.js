@@ -412,6 +412,70 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const parentRoot = rootOf(parentId);
       const all = await this.listAll();
       return all.filter(t => t.parentTribeId && rootOf(t.parentTribeId) === parentRoot);
+    },
+
+    async isTribeMember(userId, tribeId) {
+      if (!userId || !tribeId) return false;
+      try {
+        const tribe = await this.getTribeById(tribeId);
+        if (!tribe) return false;
+        if (tribe.author === userId) return true;
+        return Array.isArray(tribe.members) && tribe.members.includes(userId);
+      } catch (e) {
+        return false;
+      }
+    },
+
+    async canAccessTribe(userId, tribeId) {
+      if (!userId || !tribeId) return false;
+      try {
+        const tribe = await this.getTribeById(tribeId);
+        if (!tribe) return false;
+        if (tribe.author === userId) return true;
+        if (Array.isArray(tribe.members) && tribe.members.includes(userId)) return true;
+        const effective = await this.getEffectiveStatus(tribeId);
+        return !effective.isPrivate;
+      } catch (e) {
+        return false;
+      }
+    },
+
+    async getEffectiveStatus(tribeId) {
+      let current;
+      try { current = await this.getTribeById(tribeId); } catch (e) { return { isPrivate: true, chain: [] }; }
+      const chain = [{ id: current.id, isAnonymous: !!current.isAnonymous, author: current.author }];
+      let cursor = current;
+      const seen = new Set([current.id]);
+      while (cursor.parentTribeId && !seen.has(cursor.parentTribeId)) {
+        seen.add(cursor.parentTribeId);
+        try {
+          cursor = await this.getTribeById(cursor.parentTribeId);
+          chain.push({ id: cursor.id, isAnonymous: !!cursor.isAnonymous, author: cursor.author });
+        } catch (e) { break; }
+      }
+      const isPrivate = chain.some(c => c.isAnonymous);
+      return { isPrivate, chain };
+    },
+
+    async listTribesForViewer(userId) {
+      const all = await this.listAll();
+      const out = [];
+      for (const t of all) {
+        if (!t.isAnonymous) { out.push(t); continue; }
+        if (t.author === userId || (Array.isArray(t.members) && t.members.includes(userId))) out.push(t);
+      }
+      return out;
+    },
+
+    async getViewerTribeScope(userId) {
+      const all = await this.listAll();
+      const memberOf = new Set();
+      const createdBy = new Set();
+      for (const t of all) {
+        if (t.author === userId) { createdBy.add(t.id); memberOf.add(t.id); continue; }
+        if (Array.isArray(t.members) && t.members.includes(userId)) memberOf.add(t.id);
+      }
+      return { memberOf, createdBy, allTribes: all };
     }
   };
 };

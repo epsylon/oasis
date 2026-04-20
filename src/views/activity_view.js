@@ -249,8 +249,6 @@ function renderActionCards(actions, userId, allActions) {
       if (!content || typeof content !== 'object') return false;
       if (content.type === 'tombstone') return false;
       if (content.type === 'post' && content.private === true) return false;
-      if (content.type === 'tribe' && content.isAnonymous === true) return false;
-      if (typeof content.type === 'string' && content.type.startsWith('tribe') && content.isAnonymous === true) return false;
       if (content.type === 'task' && content.isPublic === "PRIVATE") return false;
       if (content.type === 'event' && content.isPublic === "private") return false;
       if ((content.type === 'feed' || action.type === 'feed') && !isValidFeedText(content.text)) return false;
@@ -329,20 +327,16 @@ function renderActionCards(actions, userId, allActions) {
       headerText = `[COURTS · ${finalSub.toUpperCase()}]`;
     } else if (type === 'taskAssignment') {
       headerText = `[${String(i18n.typeTask || 'TASK').toUpperCase()} · ASSIGNMENT]`;
-    } else if (type === 'tribeJoin') {
-      headerText = `[TRIBE · ${String(i18n.tribeActivityJoined || 'JOIN').toUpperCase()}]`;
-    } else if (type === 'tribeLeave') {
-      headerText = `[TRIBE · ${String(i18n.tribeActivityLeft || 'LEAVE').toUpperCase()}]`;
-    } else if (type === 'tribeFeedPost') {
-      headerText = `[TRIBE · FEED]`;
-    } else if (type === 'tribeFeedRefeed') {
-      headerText = `[TRIBE · REFEED]`;
     } else if (type === 'shopProduct') {
       headerText = `[SHOP · PRODUCT]`;
     } else if (type === 'chat') {
       headerText = `[CHAT \u00b7 NEW]`;
     } else if (type === 'pad') {
       headerText = `[PAD · ${String(i18n.padNew || 'NEW').toUpperCase()}]`;
+    } else if (type === 'ubiClaim') {
+      headerText = `[UBI · CLAIM]`;
+    } else if (type === 'ubiclaimresult') {
+      headerText = `[UBI · RESULT]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -441,6 +435,40 @@ function renderActionCards(actions, userId, allActions) {
       );
     }
 
+    if (type === 'ubiClaim') {
+      const { pubId, amount, epochId, claimedAt } = content;
+      const amt = Number(amount || 0);
+      const inhabitantId = action.author || '';
+      cardBody.push(
+        div({ class: 'card-section banking-ubi' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankUbiInhabitant + ':'),
+            span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(inhabitantId)}`, class: 'user-link' }, inhabitantId))
+          ),
+          pubId ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankUbiPub + ':'),
+            span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(pubId)}`, class: 'user-link' }, pubId))
+          ) : "",
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankUbiClaimedAmount + ':'),
+            span({ class: 'card-value' }, `${amt.toFixed(6)} ECO`)
+          ),
+          epochId ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.bankEpochShort + ':'),
+            span({ class: 'card-value' }, epochId)
+          ) : "",
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.status + ':'),
+            span({ class: 'card-value' }, 'UNCONFIRMED')
+          ),
+          claimedAt ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.date + ':'),
+            span({ class: 'card-value' }, moment(claimedAt).format('YYYY-MM-DD HH:mm:ss'))
+          ) : ""
+        )
+      );
+    }
+
     if (type === 'ubiclaimresult') {
       const { txid, userId: inhabitantId, amount, epochId } = content;
       const pubAuthor = action.author || action.value?.author || '';
@@ -504,41 +532,6 @@ function renderActionCards(actions, userId, allActions) {
         )
       );
     }
-    if (type === 'tribeJoin' || type === 'tribeLeave') {
-      const { tribeId, tribeTitle } = content || {};
-      cardBody.push(
-        div({ class: 'card-section tribe' },
-          h2({ class: 'tribe-title' },
-            a({ href: `/tribe/${encodeURIComponent(tribeId || '')}`, class: 'user-link' }, tribeTitle || tribeId || '')
-          )
-        )
-      );
-    }
-
-    if (type === 'tribeFeedPost') {
-      const { tribeId, tribeTitle, text } = content || {};
-      cardBody.push(
-        div({ class: 'card-section tribe' },
-          h2({ class: 'tribe-title' },
-            a({ href: `/tribe/${encodeURIComponent(tribeId || '')}`, class: 'user-link' }, tribeTitle || tribeId || '')
-          ),
-          text ? p({ class: 'post-text' }, ...renderUrl(text)) : ''
-        )
-      );
-    }
-
-    if (type === 'tribeFeedRefeed') {
-      const { tribeId, tribeTitle, text } = content || {};
-      cardBody.push(
-        div({ class: 'card-section tribe' },
-          h2({ class: 'tribe-title' },
-            a({ href: `/tribe/${encodeURIComponent(tribeId || '')}`, class: 'user-link' }, tribeTitle || tribeId || '')
-          ),
-          text ? p({ class: 'post-text' }, ...renderUrl(text)) : ''
-        )
-      );
-    }
-
     if (type === 'curriculum') {
       const { author, name, description, photo, personalSkills, oasisSkills, educationalSkills, languages, professionalSkills, status, preferences, createdAt, updatedAt} = content;
       cardBody.push(
@@ -1572,11 +1565,6 @@ function getViewDetailsAction(type, action) {
     case 'courtsSettlementAccepted':return `/courts?filter=actions`;
     case 'courtsNomination':        return `/courts?filter=judges`;
     case 'courtsNominationVote':    return `/courts?filter=judges`;
-    case 'tribeJoin':
-    case 'tribeLeave':
-    case 'tribeFeedPost':
-    case 'tribeFeedRefeed':
-    return `/tribe/${encodeURIComponent(action.content?.tribeId || '')}`;
     case 'spread': {
       const link = normalizeSpreadLink(action.content?.spreadTargetId || action.content?.vote?.link || '');
       return link ? `/thread/${encodeURIComponent(link)}#${encodeURIComponent(link)}` : `/activity`;
@@ -1615,6 +1603,7 @@ function getViewDetailsAction(type, action) {
     case 'report':     return `/reports/${id}`;
     case 'bankWallet': return `/wallet`;
     case 'bankClaim':  return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
+    case 'ubiClaim':   return action.content?.transferId ? `/transfers/${encodeURIComponent(action.content.transferId)}` : `/transfers?filter=ubi`;
     case 'gameScore':  return `/games?filter=scoring`;
     default:           return `/activity`;
   }
@@ -1670,13 +1659,9 @@ exports.activityView = (actions, filter, userId, q = '') => {
     const now = Date.now();
     filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
   } else if (filter === 'banking') {
-    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim' || action.type === 'ubiclaimresult'));
+    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim' || action.type === 'ubiClaim' || action.type === 'ubiclaimresult'));
   } else if (filter === 'tribe') {
-    filteredActions = actions.filter(action =>
-      action.type !== 'tombstone' &&
-      String(action.type || '').startsWith('tribe') &&
-      action.type !== 'tribe'
-    );
+    filteredActions = actions.filter(action => action.type === 'tribe');
   } else if (filter === 'parliament') {
     filteredActions = actions.filter(action => ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(action.type));
   } else if (filter === 'courts') {

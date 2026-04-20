@@ -25,10 +25,9 @@ const settingsView = ({ version, aiPrompt }) => {
   const walletUrl = currentConfig.wallet.url;
   const walletUser = currentConfig.wallet.user;
   const walletFee = currentConfig.wallet.fee;
-  const pubWalletUrl = currentConfig.walletPub.url || '';
-  const pubWalletUser = currentConfig.walletPub.user || '';
-  const pubWalletPass = currentConfig.walletPub.pass || '';
-  const pubId = currentConfig.pubId || '';
+  const pubId = currentConfig.walletPub?.pubId || '';
+  const currentWish = currentConfig.wish === 'mutuals' ? 'mutuals' : 'whole';
+  const currentPmVisibility = currentConfig.pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
 
   const themeElements = [
     option({ value: "Dark-SNH", selected: theme === "Dark-SNH" ? true : undefined }, "Dark-SNH"),
@@ -150,6 +149,34 @@ const settingsView = ({ version, aiPrompt }) => {
     ),
     section(
       div({ class: "tags-header" },
+        h2(i18n.settingsWishTitle),
+        p(i18n.settingsWishDesc),
+        form(
+          { action: "/settings/wish", method: "POST" },
+          select({ name: "wish" },
+            option({ value: "whole", selected: currentWish === "whole" ? true : undefined }, i18n.settingsWishWhole),
+            option({ value: "mutuals", selected: currentWish === "mutuals" ? true : undefined }, i18n.settingsWishMutuals)
+          ), br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    section(
+      div({ class: "tags-header" },
+        h2(i18n.settingsPmVisibilityTitle),
+        p(i18n.settingsPmVisibilityDesc),
+        form(
+          { action: "/settings/pm-visibility", method: "POST" },
+          select({ name: "pmVisibility" },
+            option({ value: "whole", selected: currentPmVisibility === "whole" ? true : undefined }, i18n.settingsPmVisibilityWhole),
+            option({ value: "mutuals", selected: currentPmVisibility === "mutuals" ? true : undefined }, i18n.settingsPmVisibilityMutuals)
+          ), br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    section(
+      div({ class: "tags-header" },
         h2(i18n.wallet),
 	p(
 	  i18n.walletSettingsDescription, " ",
@@ -172,7 +199,7 @@ const settingsView = ({ version, aiPrompt }) => {
     section(
       div({ class: "tags-header" },
         h2(i18n.pubIdTitle || "PUB Wallet"),
-        p(i18n.pubIdDescription || "Set the PUB wallet URL. This will be used for PUB transactions (including the UBI)."),
+        p(i18n.pubIdDescription || "Set the PUB OASIS ID. This will be used for PUB transactions (including the UBI)."),
         form(
           { action: "/settings/pub-id", method: "POST" },
           input({

@@ -1037,6 +1037,23 @@ exports.tribeAccessDeniedView = (tribe) => {
   );
 };
 
+exports.inviteRequiredView = (kind, tribe) => {
+  const msg = kind === 'pad' ? (i18n.tribePadInviteRequired || 'You do not have access to the pad. Ask for an invitation to access the content.')
+            : kind === 'chat' ? (i18n.tribeChatInviteRequired || 'You do not have access to the chat. Ask for an invitation to access the content.')
+            : (i18n.tribeContentAccessDeniedMsg);
+  const backHref = tribe ? `/tribe/${encodeURIComponent(tribe.id)}?section=${kind === 'chat' ? 'chats' : 'pads'}` : (kind === 'chat' ? '/chats' : '/pads');
+  return template(
+    i18n.tribeContentAccessDenied,
+    div({ class: "div-center" },
+      h2(i18n.tribeContentAccessDenied),
+      p(msg),
+      div({ class: "visit-btn-centered" },
+        a({ href: backHref, class: "filter-btn" }, i18n.walletBack || "Back")
+      )
+    )
+  );
+};
+
 const thread = (messages) => {
   let lookingForTarget = true;
   let shallowest = Infinity;

@@ -159,6 +159,8 @@ const generateTransferCard = (transfer, filter, params = {}) => {
   const isUnconfirmed = String(transfer.status || "").toUpperCase() === "UNCONFIRMED"
   const dl = transfer.deadline ? moment(transfer.deadline) : null
   const isExpired = dl && dl.isValid() ? dl.isBefore(moment()) : false
+  const tags = Array.isArray(transfer.tags) ? transfer.tags.map(t => String(t).toUpperCase()) : []
+  const isUbi = tags.includes("UBI")
   const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired
 
   const topbar = renderTransferTopbar(transfer, filter, params)
@@ -169,7 +171,7 @@ const generateTransferCard = (transfer, filter, params = {}) => {
       { class: "card-section transfer" },
       topbar ? topbar : null,
       renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
-      renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
+      isUbi ? null : renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
       renderCardField(`${i18n.transfersStatus}:`, i18n[statusKey(transfer.status)] || String(transfer.status || "")),
       br,
       div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`)),
@@ -360,6 +362,8 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
   const isUnconfirmed = String(transfer.status || "").toUpperCase() === "UNCONFIRMED"
   const dl = transfer.deadline ? moment(transfer.deadline) : null
   const isExpired = dl && dl.isValid() ? dl.isBefore(moment()) : false
+  const tags = Array.isArray(transfer.tags) ? transfer.tags.map(t => String(t).toUpperCase()) : []
+  const isUbi = tags.includes("UBI")
   const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired
 
   const topbar = renderTransferTopbar(transfer, normalizedFilter, { ...params, q, sort, single: true })
@@ -398,7 +402,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           br,
           div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`)),
           renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
-          renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
+          isUbi ? null : renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
           renderCardField(`${i18n.transfersStatus}:`, i18n[statusKey(transfer.status)] || String(transfer.status || "")),
           br,
           renderConfirmationsBar(confirmedCount, required),

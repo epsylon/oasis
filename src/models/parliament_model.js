@@ -1190,6 +1190,109 @@ module.exports = ({ cooler, services = {} }) => {
     return false;
   }
 
+  const tribeReadLog = async () => {
+    const client = await openSsb();
+    return new Promise((resolve, reject) => {
+      pull(
+        client.createLogStream({ limit: logLimit }),
+        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs || []))
+      );
+    });
+  };
+
+  const tribeListByType = async (type, tribeId) => {
+    const msgs = await tribeReadLog();
+    const tomb = new Set();
+    const replaced = new Set();
+    const items = new Map();
+    for (const m of msgs) {
+      const c = m.value?.content; if (!c) continue;
+      if (c.type === 'tombstone' && c.target) { tomb.add(c.target); continue; }
+      if (c.type !== type) continue;
+      if (c.tribeId !== tribeId) continue;
+      if (c.replaces) replaced.add(c.replaces);
+      items.set(m.key, { ...c, id: m.key, _ts: m.value?.timestamp || 0 });
+    }
+    return [...items.values()].filter(it => !tomb.has(it.id) && !replaced.has(it.id));
+  };
+
+  const tribeGetCurrentTerm = async (tribeId) => {
+    const terms = await tribeListByType('tribeParliamentTerm', tribeId);
+    if (terms.length === 0) return null;
+    const now = moment();
+    const active = terms.find(t => moment(t.startAt).isSameOrBefore(now) && moment(t.endAt).isAfter(now));
+    if (active) return active;
+    terms.sort((a, b) => String(b.startAt).localeCompare(String(a.startAt)));
+    return terms[0] || null;
+  };
+
+  const tribeListCandidatures = (tribeId) => tribeListByType('tribeParliamentCandidature', tribeId);
+  const tribeListRules = (tribeId) => tribeListByType('tribeParliamentRule', tribeId);
+
+  const tribePublishCandidature = async ({ tribeId, candidateId, method }) => {
+    const m = String(method || '').toUpperCase();
+    if (!METHODS.includes(m)) throw new Error('Invalid method');
+    if (!tribeId) throw new Error('Missing tribeId');
+    if (!candidateId) throw new Error('Missing candidateId');
+    const term = await tribeGetCurrentTerm(tribeId);
+    const since = term ? term.startAt : moment().subtract(TERM_DAYS, 'days').toISOString();
+    const existing = await tribeListCandidatures(tribeId);
+    const dupe = existing.find(c => c.candidateId === candidateId && new Date(c.createdAt) >= new Date(since) && (c.status || 'OPEN') === 'OPEN');
+    if (dupe) throw new Error('Candidate already proposed this cycle');
+    const client = await openSsb();
+    const content = {
+      type: 'tribeParliamentCandidature',
+      tribeId, candidateId, method: m,
+      votes: 0, voters: [], proposer: client.id,
+      status: 'OPEN', createdAt: nowISO()
+    };
+    return new Promise((resolve, reject) => client.publish(content, (e, r) => e ? reject(e) : resolve(r)));
+  };
+
+  const tribeVoteCandidature = async ({ tribeId, candidatureId }) => {
+    const client = await openSsb();
+    const all = await tribeListCandidatures(tribeId);
+    const alreadyThisCycle = all.some(c => Array.isArray(c.voters) && c.voters.includes(client.id));
+    if (alreadyThisCycle) throw new Error('Already voted this cycle');
+    const cand = all.find(c => c.id === candidatureId);
+    if (!cand) throw new Error('Candidate not found');
+    const updated = {
+      type: 'tribeParliamentCandidature',
+      tribeId, replaces: candidatureId,
+      candidateId: cand.candidateId, method: cand.method,
+      votes: Number(cand.votes || 0) + 1,
+      voters: [...(cand.voters || []), client.id],
+      proposer: cand.proposer, status: cand.status || 'OPEN',
+      createdAt: cand.createdAt, updatedAt: nowISO()
+    };
+    return new Promise((resolve, reject) => client.publish(updated, (e, r) => e ? reject(e) : resolve(r)));
+  };
+
+  const tribePublishRule = async ({ tribeId, title, body }) => {
+    if (!title || !title.trim()) throw new Error('Title required');
+    const client = await openSsb();
+    const content = {
+      type: 'tribeParliamentRule', tribeId,
+      title: String(title).trim(), body: String(body || '').trim(),
+      author: client.id, createdAt: nowISO()
+    };
+    return new Promise((resolve, reject) => client.publish(content, (e, r) => e ? reject(e) : resolve(r)));
+  };
+
+  const tribeDeleteRule = async (ruleId) => {
+    const client = await openSsb();
+    return new Promise((resolve, reject) => client.publish({ type: 'tombstone', target: ruleId, deletedAt: nowISO(), author: client.id }, (e, r) => e ? reject(e) : resolve(r)));
+  };
+
+  const tribeHasCandidatureInGlobalCycle = async (tribeId, globalTermStart) => {
+    const msgs = await tribeReadLog();
+    const cutoff = globalTermStart ? new Date(globalTermStart) : new Date(Date.now() - TERM_DAYS * 86400000);
+    return msgs.some(m => {
+      const c = m.value?.content; if (!c) return false;
+      return c.type === 'parliamentCandidature' && c.targetType === 'tribe' && c.targetId === tribeId && (c.status || 'OPEN') === 'OPEN' && new Date(c.createdAt) >= cutoff;
+    });
+  };
+
   return {
     proposeCandidature,
     voteCandidature,
@@ -1212,7 +1315,19 @@ module.exports = ({ cooler, services = {} }) => {
     listRevocationsCurrent,
     listFutureRevocationsCurrent,
     closeRevocation,
-    countRevocationsEnacted
+    countRevocationsEnacted,
+    tribe: {
+      METHODS,
+      TERM_DAYS,
+      getCurrentTerm: tribeGetCurrentTerm,
+      listCandidatures: tribeListCandidatures,
+      listRules: tribeListRules,
+      publishTribeCandidature: tribePublishCandidature,
+      voteTribeCandidature: tribeVoteCandidature,
+      publishTribeRule: tribePublishRule,
+      deleteTribeRule: tribeDeleteRule,
+      hasCandidatureInGlobalCycle: tribeHasCandidatureInGlobalCycle
+    }
   };
 };
 

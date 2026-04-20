@@ -39,6 +39,9 @@ module.exports = ({ cooler }) => {
     const nodes = new Map()
     const parent = new Map()
     const child = new Map()
+    const ubiByPub = new Map()
+    const ubiByUser = new Map()
+    const ubiClaimNodes = []
 
     for (const m of messages) {
       const k = m.key
@@ -57,7 +60,46 @@ module.exports = ({ cooler }) => {
           parent.set(k, c.replaces)
           child.set(c.replaces, k)
         }
+        const tags = Array.isArray(c.tags) ? c.tags.map(t => String(t).toUpperCase()) : []
+        if (tags.includes("UBI") && c.to && c.concept) {
+          const key = `${c.to}::${c.concept}`
+          if (v.author === c.from) ubiByPub.set(key, k)
+          else ubiByUser.set(key, k)
+        }
       }
+
+      if (c.type === "ubiClaim") {
+        ubiClaimNodes.push({ k, v, c, ts: v.timestamp || m.timestamp || 0 })
+      }
+    }
+
+    for (const [key, userMsgKey] of ubiByUser.entries()) {
+      if (ubiByPub.has(key)) tomb.add(userMsgKey)
+    }
+
+    for (const { k, v, c, ts } of ubiClaimNodes) {
+      if (tomb.has(k)) continue
+      const claimantId = v.author
+      const epochId = c.epochId || ""
+      const concept = `UBI ${epochId} ${claimantId}`.trim()
+      const key = `${claimantId}::${concept}`
+      if (ubiByPub.has(key) || ubiByUser.has(key)) continue
+      const synthetic = {
+        type: "transfer",
+        from: c.pubId || "",
+        to: claimantId,
+        concept,
+        amount: String(c.amount || 0),
+        createdAt: c.claimedAt || new Date(ts).toISOString(),
+        updatedAt: c.claimedAt || new Date(ts).toISOString(),
+        deadline: null,
+        confirmedBy: [c.pubId || ""].filter(Boolean),
+        status: "UNCONFIRMED",
+        tags: ["UBI", "PENDING"],
+        opinions: {},
+        opinions_inhabitants: []
+      }
+      nodes.set(k, { key: k, ts, c: synthetic, author: claimantId })
     }
 
     const rootOf = (id) => {
@@ -223,10 +265,38 @@ module.exports = ({ cooler }) => {
     async confirmTransferById(id) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
-      const tipId = await this.resolveCurrentId(id)
+      let tipId
+      try { tipId = await this.resolveCurrentId(id) } catch (_) { tipId = id }
       const msg = await getMsg(ssbClient, tipId)
 
-      if (!msg?.content || msg.content.type !== "transfer") throw new Error("Not found")
+      if (!msg?.content) throw new Error("Not found")
+
+      if (msg.content.type === "ubiClaim") {
+        const c = msg.content
+        const epochId = c.epochId || ""
+        const pubId = c.pubId || ""
+        if (!pubId) throw new Error("Not found")
+        if (pubId === userId) throw new Error("Cannot confirm own claim")
+        const now = new Date().toISOString()
+        const transferContent = {
+          type: "transfer",
+          from: pubId,
+          to: userId,
+          concept: `UBI ${epochId} ${userId}`,
+          amount: String(c.amount || 0),
+          createdAt: c.claimedAt || now,
+          updatedAt: now,
+          deadline: null,
+          confirmedBy: [pubId, userId],
+          status: "CLOSED",
+          tags: ["UBI"],
+          opinions: {},
+          opinions_inhabitants: []
+        }
+        return new Promise((resolve, reject) => ssbClient.publish(transferContent, (e, r) => e ? reject(e) : resolve(r)))
+      }
+
+      if (msg.content.type !== "transfer") throw new Error("Not found")
 
       const t = msg.content
       const status = deriveStatus(t)

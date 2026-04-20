@@ -473,45 +473,62 @@ module.exports = ({ cooler, pmModel }) => {
         sentMarkers.add(`${c.calendarId}::${c.dateId}`)
       }
 
-      const dueDates = []
+      const tombstoned = new Set()
       for (const m of messages) {
+        const c = (m.value || {}).content
+        if (c && c.type === "tombstone" && c.target) tombstoned.add(c.target)
+      }
+
+      const dueByCalendar = new Map()
+      for (const m of messages) {
+        if (tombstoned.has(m.key)) continue
         const v = m.value || {}
         const c = v.content
         if (!c || c.type !== "calendarDate") continue
         if (new Date(c.date).getTime() > now) continue
         if (sentMarkers.has(`${c.calendarId}::${m.key}`)) continue
-        dueDates.push({ key: m.key, calendarId: c.calendarId, date: c.date, label: c.label || "" })
+        const entry = { key: m.key, calendarId: c.calendarId, date: c.date, label: c.label || "" }
+        const list = dueByCalendar.get(c.calendarId) || []
+        list.push(entry)
+        dueByCalendar.set(c.calendarId, list)
       }
 
-      for (const dd of dueDates) {
+      const publishMarker = (calendarId, dateId) => new Promise((resolve, reject) => {
+        ssbClient.publish({
+          type: "calendarReminderSent",
+          calendarId,
+          dateId,
+          sentAt: new Date().toISOString()
+        }, (err) => err ? reject(err) : resolve())
+      })
+
+      for (const [calendarId, list] of dueByCalendar.entries()) {
         try {
-          const cal = await this.getCalendarById(dd.calendarId)
+          list.sort((a, b) => new Date(b.date) - new Date(a.date))
+          const primary = list[0]
+          const cal = await this.getCalendarById(calendarId)
           if (!cal) continue
           const participants = cal.participants.filter(p => typeof p === "string" && p.length > 0)
-          if (participants.length === 0) continue
-          const notesForDay = await this.getNotesForDate(dd.calendarId, dd.key)
-          const notesBlock = notesForDay.length > 0
-            ? notesForDay.map(n => `  - ${n.text}`).join("\n\n")
-            : "  (no notes)"
-          const subject = `Calendar Reminder: ${cal.title}`
-          const text =
-            `Reminder from: ${cal.author}\n` +
-            `Title: ${cal.title}\n` +
-            `Date: ${dd.label || dd.date}\n\n` +
-            `Notes for this day:\n\n${notesBlock}\n\n` +
-            `Visit Calendar: /calendars/${cal.rootId}`
-          const chunkSize = 6
-          for (let i = 0; i < participants.length; i += chunkSize) {
-            await pmModel.sendMessage(participants.slice(i, i + chunkSize), subject, text)
+          if (participants.length > 0) {
+            const notesForDay = await this.getNotesForDate(calendarId, primary.key)
+            const notesBlock = notesForDay.length > 0
+              ? notesForDay.map(n => `  - ${n.text}`).join("\n\n")
+              : "  (no notes)"
+            const subject = `Calendar Reminder: ${cal.title}`
+            const text =
+              `Reminder from: ${cal.author}\n` +
+              `Title: ${cal.title}\n` +
+              `Date: ${primary.label || primary.date}\n\n` +
+              `Notes for this day:\n\n${notesBlock}\n\n` +
+              `Visit Calendar: /calendars/${cal.rootId}`
+            const chunkSize = 6
+            for (let i = 0; i < participants.length; i += chunkSize) {
+              await pmModel.sendMessage(participants.slice(i, i + chunkSize), subject, text)
+            }
           }
-          await new Promise((resolve, reject) => {
-            ssbClient.publish({
-              type: "calendarReminderSent",
-              calendarId: dd.calendarId,
-              dateId: dd.key,
-              sentAt: new Date().toISOString()
-            }, (err) => err ? reject(err) : resolve())
-          })
+          for (const dd of list) {
+            try { await publishMarker(calendarId, dd.key) } catch (_) {}
+          }
         } catch (_) {}
       }
     }

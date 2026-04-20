@@ -4943,7 +4943,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .activity-filter-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:16px;margin-bottom:24px}
 .activity-filter-col{display:flex;flex-direction:column;gap:8px}
 
-.visit-btn-centered{display:flex;justify-content:center;margin-top:10px}
+.visit-btn-centered{display:flex;margin-top:10px;border:0px}
 
 .pad-editor-white{width:100%;box-sizing:border-box;background:#fff;color:#111;border-radius:4px;padding:10px;resize:vertical;font-family:inherit;font-size:0.95rem}
 .pad-readonly-text{background:#fff;color:#111;border:1px solid #aaa;border-radius:4px;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:0.95rem}

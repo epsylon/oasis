@@ -13,6 +13,22 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.7.3 - 2026-04-20
+
+### Added
+
+- Wish settings: determines how to access the whole content and your level of experiences into the network (Core plugin).
+- PM settings: configure the level of exposition to private messages in the network (Core plugin).
+
+### Changed
+
+- More layers of privacy/encryption applied to sensitive content at different places (Core plugin).
+
+### Fixed
+
+- Pads ACL (Pads plugin).
+- PUB UBI claim (Banking plugin).
+
 ## v0.7.2 - 2026-04-16
 
 ### Added

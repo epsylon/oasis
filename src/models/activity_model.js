@@ -224,149 +224,6 @@ module.exports = ({ cooler }) => {
             }
           }
 
-          if (type === 'tribe') {
-            const baseId = tip.id;
-            const baseTitle = (tip.content && tip.content.title) || '';
-            const isAnonymous = tip.content && typeof tip.content.isAnonymous === 'boolean' ? tip.content.isAnonymous : false;
-            if (isAnonymous) continue;
-
-            const uniq = (xs) => Array.from(new Set((Array.isArray(xs) ? xs : []).filter(x => typeof x === 'string' && x.trim().length)));
-            const toSet = (xs) => new Set(uniq(xs));
-            const excerpt2 = (s, max = 220) => {
-              const t = String(s || '').replace(/\s+/g, ' ').trim();
-              return t.length > max ? t.slice(0, max - 1) + '…' : t;
-            };
-            const feedMap = (feed) => {
-              const m = new Map();
-              for (const it of (Array.isArray(feed) ? feed : [])) {
-                if (!it || typeof it !== 'object') continue;
-                const id = typeof it.id === 'string' || typeof it.id === 'number' ? String(it.id) : '';
-                if (!id) continue;
-                m.set(id, it);
-              }
-              return m;
-            };
-
-            const sorted = arr
-              .filter(a => a.type === 'tribe' && a.content && typeof a.content === 'object')
-              .sort((a, b) => (a.ts || 0) - (b.ts || 0));
-
-            let prev = null;
-
-            for (const ev of sorted) {
-              if (!prev) { prev = ev; continue; }
-
-              const prevMembers = toSet(prev.content.members);
-              const curMembers = toSet(ev.content.members);
-              const added = Array.from(curMembers).filter(x => !prevMembers.has(x));
-              const removed = Array.from(prevMembers).filter(x => !curMembers.has(x));
-
-              for (const member of added) {
-                const overlayId = `${ev.id}:tribeJoin:${member}`;
-                idToAction.set(overlayId, {
-                  id: overlayId,
-                  author: member,
-                  ts: ev.ts,
-                  type: 'tribeJoin',
-                  content: { type: 'tribeJoin', tribeId: baseId, tribeTitle: baseTitle, isAnonymous, member }
-                });
-                idToTipId.set(overlayId, overlayId);
-              }
-
-              for (const member of removed) {
-                const overlayId = `${ev.id}:tribeLeave:${member}`;
-                idToAction.set(overlayId, {
-                  id: overlayId,
-                  author: member,
-                  ts: ev.ts,
-                  type: 'tribeLeave',
-                  content: { type: 'tribeLeave', tribeId: baseId, tribeTitle: baseTitle, isAnonymous, member }
-                });
-                idToTipId.set(overlayId, overlayId);
-              }
-
-              const prevFeed = feedMap(prev.content.feed);
-              const curFeed = feedMap(ev.content.feed);
-
-              for (const [fid, item] of curFeed.entries()) {
-                if (prevFeed.has(fid)) continue;
-                const feedAuthor = (item && typeof item.author === 'string' && item.author.trim().length) ? item.author : ev.author;
-                const overlayId = `${ev.id}:tribeFeedPost:${fid}:${feedAuthor}`;
-                idToAction.set(overlayId, {
-                  id: overlayId,
-                  author: feedAuthor,
-                  ts: ev.ts,
-                  type: 'tribeFeedPost',
-                  content: {
-                    type: 'tribeFeedPost',
-                    tribeId: baseId,
-                    tribeTitle: baseTitle,
-                    isAnonymous,
-                    feedId: fid,
-                    date: item.date || ev.ts,
-                    text: excerpt2(item.message || '')
-                  }
-                });
-                idToTipId.set(overlayId, overlayId);
-              }
-
-              for (const [fid, curItem] of curFeed.entries()) {
-                const prevItem = prevFeed.get(fid);
-                if (!prevItem) continue;
-
-                const pInh = toSet(prevItem.refeeds_inhabitants);
-                const cInh = toSet(curItem.refeeds_inhabitants);
-                const newInh = Array.from(cInh).filter(x => !pInh.has(x));
-
-                const curRefeeds = Number(curItem.refeeds || 0);
-                const prevRefeeds = Number(prevItem.refeeds || 0);
-
-                const postText = excerpt2(curItem.message || '');
-
-                if (newInh.length) {
-                  for (const who of newInh) {
-                    const overlayId = `${ev.id}:tribeFeedRefeed:${fid}:${who}`;
-                    idToAction.set(overlayId, {
-                      id: overlayId,
-                      author: who,
-                      ts: ev.ts,
-                      type: 'tribeFeedRefeed',
-                      content: {
-                        type: 'tribeFeedRefeed',
-                        tribeId: baseId,
-                        tribeTitle: baseTitle,
-                        isAnonymous,
-                        feedId: fid,
-                        text: postText
-                      }
-                    });
-                    idToTipId.set(overlayId, overlayId);
-                  }
-                } else if (curRefeeds > prevRefeeds && ev.author) {
-                  const who = ev.author;
-                  const overlayId = `${ev.id}:tribeFeedRefeed:${fid}:${who}`;
-                  idToAction.set(overlayId, {
-                    id: overlayId,
-                    author: who,
-                    ts: ev.ts,
-                    type: 'tribeFeedRefeed',
-                    content: {
-                      type: 'tribeFeedRefeed',
-                      tribeId: baseId,
-                      tribeTitle: baseTitle,
-                      isAnonymous,
-                      feedId: fid,
-                      text: postText
-                    }
-                  });
-                  idToTipId.set(overlayId, overlayId);
-                }
-              }
-
-              prev = ev;
-            }
-          }
-
           continue;
         }
 
@@ -494,9 +351,19 @@ module.exports = ({ cooler }) => {
 
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
 
-      const tribeInternalTypes = new Set(['tribeLeave', 'tribeFeedPost', 'tribeFeedRefeed', 'tribe-content']);
-      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'feed-action']);
-      const isAllowedTribeActivity = (a) => !tribeInternalTypes.has(a.type);
+      const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
+      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'feed-action', 'pubBalance']);
+      const isAllowedTribeActivity = (a) => {
+        if (tribeInternalTypes.has(a.type)) return false;
+        const c = a.content || {};
+        if (c.tribeId) return false;
+        if (a.type === 'tribe') {
+          if (c.isAnonymous === true) return false;
+          const isInitial = !c.replaces;
+          if (!isInitial) return false;
+        }
+        return true;
+      };
       const isVisible = (a) => {
         if (hiddenTypes.has(a.type)) return false;
         if (a.type === 'pad' && (a.content || {}).status !== 'OPEN') return false;
@@ -511,7 +378,7 @@ module.exports = ({ cooler }) => {
       if (filter === 'mine') out = deduped.filter(a => a.author === userId && isAllowedTribeActivity(a) && isVisible(a));
       else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff && isAllowedTribeActivity(a) && isVisible(a)) }
       else if (filter === 'all') out = deduped.filter(a => isAllowedTribeActivity(a) && isVisible(a));
-      else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim');
+      else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim' || a.type === 'ubiClaim' || a.type === 'ubiclaimresult');
       else if (filter === 'karma') out = deduped.filter(a => a.type === 'karmaScore');
       else if (filter === 'tribe') out = deduped.filter(a => a.type === 'tribe' || String(a.type || '').startsWith('tribe'));
       else if (filter === 'spread') out = deduped.filter(a => a.type === 'spread');

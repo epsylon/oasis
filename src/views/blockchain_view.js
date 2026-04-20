@@ -271,7 +271,13 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
           ),
           div({ class:'block-row block-row--content' },
             div({ class:'block-content-preview' },
-              pre({ class:'json-content' }, JSON.stringify(block.content,null,2))
+              block.content && typeof block.content.encryptedPayload === 'string'
+                ? div({ class: 'encrypted-payload-box' },
+                    p({ class: 'encrypted-label' }, `[${i18n.bxEncrypted || 'ENCRYPTED'}]`),
+                    p({ class: 'encrypted-hex-label' }, i18n.bxEncryptedHexLabel || 'Ciphertext (preview)'),
+                    pre({ class: 'json-content' }, String(block.content.encryptedPayload).slice(0, 128) + (String(block.content.encryptedPayload).length > 128 ? '…' : ''))
+                  )
+                : pre({ class:'json-content' }, JSON.stringify(block.content,null,2))
             )
           )
         );

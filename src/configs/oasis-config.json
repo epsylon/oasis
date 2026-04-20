@@ -54,9 +54,7 @@
     "fee": "5"
   },
   "walletPub": {
-    "url": "",
-    "user": "",
-    "pass": ""
+    "pubId": ""
   },
   "ai": {
     "prompt": "Provide an informative and precise response."
@@ -66,5 +64,6 @@
   },
   "homePage": "activity",
   "language": "en",
-  "pubId": ""
+  "wish": "whole",
+  "pmVisibility": "whole"
 }

@@ -169,18 +169,20 @@ function isValidEcoinAddress(addr) {
 function getWalletCfg(kind) {
   const cfg = getConfig() || {};
   if (kind === "pub") {
-    return cfg.walletPub || cfg.pubWallet || (cfg.pub && cfg.pub.wallet) || null;
+    if (!isPubNode()) return null;
+    return cfg.wallet || null;
   }
   return cfg.wallet || null;
 }
 
 function isPubNode() {
-  const cfg = getWalletCfg("pub");
-  return !!(cfg && cfg.url);
+  const pubId = (getConfig() || {}).walletPub?.pubId || "";
+  const myId = config?.keys?.id || "";
+  return !!pubId && !!myId && pubId === myId;
 }
 
 function getConfiguredPubId() {
-  return (getConfig() || {}).pubId || "";
+  return (getConfig() || {}).walletPub?.pubId || "";
 }
 
 function resolveUserId(maybeId) {
@@ -228,7 +230,7 @@ module.exports = ({ services } = {}) => {
     if (!ssb) return [];
     return new Promise((resolve, reject) =>
       pull(
-        ssb.createLogStream({ limit: getLogLimit() }),
+        ssb.createLogStream({ limit: getLogLimit(), reverse: true }),
         pull.collect((err, arr) => err ? reject(err) : resolve(arr))
       )
     );
@@ -236,8 +238,8 @@ module.exports = ({ services } = {}) => {
 
   async function getWalletFromSSB(userId) {
     const msgs = await scanLogStream();
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const v = msgs[i].value || {};
+    for (const m of msgs) {
+      const v = m.value || {};
       const c = v.content || {};
       if (v.author === userId && c && c.type === "wallet" && c.coin === "ECO" && typeof c.address === "string") {
         return c.address;
@@ -249,8 +251,8 @@ module.exports = ({ services } = {}) => {
   async function scanAllWalletsSSB() {
     const latest = {};
     const msgs = await scanLogStream();
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const v = msgs[i].value || {};
+    for (const m of msgs) {
+      const v = m.value || {};
       const c = v.content || {};
       if (c && c.type === "wallet" && c.coin === "ECO" && typeof c.address === "string") {
         if (!latest[v.author]) latest[v.author] = c.address;
@@ -725,8 +727,26 @@ async function getLastPublishedTimestamp(userId) {
     const amount = Number(Math.max(1, Math.min(pv.pool * userW / totalW, capUser)).toFixed(6));
     const ssb = await openSsb();
     if (!ssb || !ssb.publish) throw new Error("ssb_unavailable");
-    const content = { type: "ubiClaim", pubId, amount, epochId, claimedAt: new Date().toISOString() };
-    await new Promise((resolve, reject) => ssb.publish(content, (err, res) => err ? reject(err) : resolve(res)));
+    const now = new Date().toISOString();
+    const transferContent = {
+      type: "transfer",
+      from: pubId,
+      to: uid,
+      concept: `UBI ${epochId} ${uid}`,
+      amount: String(amount),
+      createdAt: now,
+      updatedAt: now,
+      deadline: null,
+      confirmedBy: [pubId],
+      status: "UNCONFIRMED",
+      tags: ["UBI", "PENDING"],
+      opinions: {},
+      opinions_inhabitants: []
+    };
+    const transferRes = await new Promise((resolve, reject) => ssb.publish(transferContent, (err, res) => err ? reject(err) : resolve(res)));
+    const transferId = transferRes?.key || "";
+    const claimContent = { type: "ubiClaim", pubId, amount, epochId, claimedAt: now, transferId };
+    await new Promise((resolve, reject) => ssb.publish(claimContent, (err, res) => err ? reject(err) : resolve(res)));
     return { status: "claimed_pending", amount, epochId };
   }
 
@@ -749,8 +769,8 @@ async function getLastPublishedTimestamp(userId) {
     const pubId = getConfiguredPubId();
     if (!pubId) return 0;
     const msgs = await scanLogStream();
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const v = msgs[i].value || {};
+    for (const m of msgs) {
+      const v = m.value || {};
       const c = v.content || {};
       if (v.author === pubId && c && c.type === "pubBalance" && c.coin === "ECO") {
         return Number(c.balance) || 0;
@@ -850,6 +870,9 @@ async function getLastPublishedTimestamp(userId) {
     const addresses = await listAddressesMerged();
     const alreadyClaimed = await hasClaimedThisMonth(uid);
     const pubId = getConfiguredPubId();
+    const userAddress = await getUserAddress(uid);
+    const userWalletCfg = getWalletCfg("user") || {};
+    const hasValidWallet = !!(userAddress && isValidEcoinAddress(userAddress) && userWalletCfg.url);
     const summary = {
       userBalance,
       pubBalance,
@@ -860,7 +883,8 @@ async function getLastPublishedTimestamp(userId) {
       futureUBI,
       ubiAvailability: pubBalance > 0 ? "OK" : "NO_FUNDS",
       alreadyClaimed,
-      pubId
+      pubId,
+      hasValidWallet
     };
     const exchange = await calculateEcoinValue();
     return { summary, allocations, epochs, rules: DEFAULT_RULES, addresses, exchange };
@@ -888,69 +912,58 @@ async function getLastPublishedTimestamp(userId) {
     }));
   }
 
+  let genesisTimeCache = null;
+
+  async function getAvgBlockSeconds(blocks) {
+    if (!blocks || blocks < 2) return 0;
+    try {
+      if (!genesisTimeCache) {
+        const h1 = await rpcCall("getblockhash", [1]);
+        if (!h1) return 0;
+        const b1 = await rpcCall("getblock", [h1]);
+        genesisTimeCache = b1?.time || null;
+        if (!genesisTimeCache) return 0;
+      }
+      const hCur = await rpcCall("getblockhash", [blocks]);
+      if (!hCur) return 0;
+      const bCur = await rpcCall("getblock", [hCur]);
+      const curTime = bCur?.time || 0;
+      if (!curTime) return 0;
+      const elapsed = curTime - genesisTimeCache;
+      return elapsed > 0 ? elapsed / (blocks - 1) : 0;
+    } catch (_) { return 0; }
+  }
+
   async function calculateEcoinValue() {
-    let isSynced = false;
-    let circulatingSupply = 0;
-    try {
-      circulatingSupply = await getCirculatingSupply();
-      isSynced = circulatingSupply > 0;
-    } catch (error) {
-      circulatingSupply = 0;
-      isSynced = false;
-    }
     const totalSupply = 25500000;
-    const ecoValuePerHour = await calculateEcoValuePerHour(circulatingSupply);
-    const ecoInHours = calculateEcoinHours(circulatingSupply, ecoValuePerHour);
-    const inflationFactor = await calculateInflationFactor(circulatingSupply, totalSupply);
+    let circulatingSupply = 0;
+    let blocks = 0;
+    let blockValueEco = 0;
+    let isSynced = false;
+    try {
+      const info = await rpcCall("getinfo", []);
+      circulatingSupply = info?.moneysupply || 0;
+      blocks = info?.blocks || 0;
+      isSynced = circulatingSupply > 0;
+      const mining = await rpcCall("getmininginfo", []);
+      blockValueEco = (mining?.blockvalue || 0) / 1e8;
+    } catch (_) {}
+    const avgSec = await getAvgBlockSeconds(blocks);
+    const ecoValuePerHour = avgSec > 0 ? (3600 / avgSec) * blockValueEco : 0;
+    const maturity = totalSupply > 0 ? circulatingSupply / totalSupply : 0;
+    const ecoTimeMs = maturity * 3600 * 1000;
+    const annualIssuance = ecoValuePerHour * 24 * 365;
+    const inflationFactor = circulatingSupply > 0 ? (annualIssuance / circulatingSupply) * 100 : 0;
+    const inflationMonthly = inflationFactor / 12;
     return {
-      ecoValue: ecoValuePerHour,
-      ecoInHours: Number(ecoInHours.toFixed(2)),
-      totalSupply: totalSupply,
-      inflationFactor: inflationFactor ? Number(inflationFactor.toFixed(2)) : 0,
+      ecoValue: Number(ecoValuePerHour.toFixed(6)),
+      ecoTimeMs: Number(ecoTimeMs.toFixed(3)),
+      totalSupply,
+      inflationFactor: Number(inflationFactor.toFixed(2)),
+      inflationMonthly: Number(inflationMonthly.toFixed(2)),
       currentSupply: circulatingSupply,
-      isSynced: isSynced
+      isSynced
     };
-  }
-
-  async function calculateEcoValuePerHour(circulatingSupply) {
-    const issuanceRate = await getIssuanceRate();
-    const inflation = await calculateInflationFactor(circulatingSupply, 25500000);
-    const ecoValuePerHour = (circulatingSupply / 100000) * (1 + inflation / 100);
-    return ecoValuePerHour;
-  }
-
-  function calculateEcoinHours(circulatingSupply, ecoValuePerHour) {
-    const ecoInHours = circulatingSupply / ecoValuePerHour;
-    return ecoInHours;
-  }
-
-  async function calculateInflationFactor(circulatingSupply, totalSupply) {
-    const issuanceRate = await getIssuanceRate();
-    if (circulatingSupply > 0) {
-      const inflationRate = (issuanceRate / circulatingSupply) * 100;
-      return inflationRate;
-    }
-    return 0;
-  }
-
-  async function getIssuanceRate() {
-    try {
-      const result = await rpcCall("getmininginfo", []);
-      const blockValue = result?.blockvalue || 0;
-      const blocks = result?.blocks || 0;
-      return (blockValue / 1e8) * blocks;
-    } catch (error) {
-      return 0.02;
-    }
-  }
-
-  async function getCirculatingSupply() {
-    try {
-      const result = await rpcCall("getinfo", []);
-      return result?.moneysupply || 0;
-    } catch (error) {
-      return 0;
-    }
   }
 
   async function getBankingData(userId) {
@@ -1072,13 +1085,13 @@ async function getLastPublishedTimestamp(userId) {
           type: "transfer",
           from: config.keys.id,
           to: claimantId,
-          concept: `UBI ${claimEpoch}`,
+          concept: `UBI ${claimEpoch} ${claimantId}`,
           amount: String(amount),
           createdAt: now,
           updatedAt: now,
-          deadline: new Date(Date.now() + 30 * 86400000).toISOString(),
-          confirmedBy: [claimantId],
-          status: "CLOSED",
+          deadline: null,
+          confirmedBy: [config.keys.id],
+          status: "UNCONFIRMED",
           tags: ["UBI"],
           opinions: {},
           opinions_inhabitants: [],

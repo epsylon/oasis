@@ -65,7 +65,9 @@ module.exports = ({ cooler }) => {
       const author = decrypted?.value?.author;
       const originalRecps = Array.isArray(content?.to) ? content.to : [];
       if (!content || !author) throw new Error("Malformed message.");
-      if (author !== userId) throw new Error("Not the author.");
+      const isAuthor = author === userId;
+      const isRecipient = originalRecps.includes(userId);
+      if (!isAuthor && !isRecipient) throw new Error("Not authorized.");
       if (content.type === 'tombstone') throw new Error("Message already deleted.");
       const tombstone = {
         type: 'tombstone',
@@ -73,7 +75,9 @@ module.exports = ({ cooler }) => {
         deletedAt: new Date().toISOString(),
         private: true
       };
-      const tombstoneRecps = uniqueRecps([userId, author, ...originalRecps]);
+      const tombstoneRecps = isAuthor
+        ? uniqueRecps([userId, author, ...originalRecps])
+        : uniqueRecps([userId]);
       const publishAsync = util.promisify(ssbClient.private.publish);
       return publishAsync(tombstone, tombstoneRecps);
     },

@@ -43,11 +43,23 @@ const fmtDate = (timestamp) => {
     return moment(timestamp).format('YYYY-MM-DD HH:mm:ss');
 };
 
+const fmtEcoTime = (ms) => {
+  if (!ms || ms <= 0) return `0 ${i18n.bankUnitMs || 'ms'}`;
+  if (ms < 1000) return `${Number(ms).toFixed(3)} ${i18n.bankUnitMs || 'ms'}`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(2)} ${i18n.bankUnitSeconds || 'seconds'}`;
+  const m = s / 60;
+  if (m < 60) return `${m.toFixed(2)} ${i18n.bankUnitMinutes || 'minutes'}`;
+  const h = m / 60;
+  if (h < 24) return `${h.toFixed(2)} ${i18n.bankHoursOfWork || 'hours'}`;
+  return `${(h / 24).toFixed(2)} ${i18n.bankUnitDays || 'days'}`;
+};
+
 const renderExchange = (ex) => {
   if (!ex) return div(p(i18n.bankExchangeNoData));
   const syncStatus = ex.isSynced ? i18n.bankingSyncStatusSynced : i18n.bankingSyncStatusOutdated;
   const syncStatusClass = ex.isSynced ? 'synced' : 'outdated';
-  const ecoInHours = ex.isSynced ? ex.ecoInHours : 0;
+  const ecoTimeLabel = ex.isSynced ? fmtEcoTime(ex.ecoTimeMs) : fmtEcoTime(0);
   return div(
     div({ class: "bank-summary" },
       table({ class: "bank-info-table" },
@@ -58,8 +70,9 @@ const renderExchange = (ex) => {
           kvRow(i18n.bankExchangeCurrentValue, `${fmtIndex(ex.ecoValue)} ECO`),
           kvRow(i18n.bankCurrentSupply, `${Number(ex.currentSupply || 0).toFixed(6)} ECO`),
           kvRow(i18n.bankTotalSupply, `${Number(ex.totalSupply || 0).toFixed(6)} ECO`),
-          kvRow(i18n.bankEcoinHours, `${ecoInHours} ${i18n.bankHoursOfWork}`),
-          kvRow(i18n.bankInflation, `${ex.inflationFactor.toFixed(2)}%`)
+          kvRow(i18n.bankEcoinHours, ecoTimeLabel),
+          kvRow(i18n.bankInflation, `${ex.inflationFactor.toFixed(2)}%`),
+          kvRow(i18n.bankInflationMonthly, `${Number(ex.inflationMonthly || 0).toFixed(2)}%`)
         )
       )
     )
@@ -92,13 +105,12 @@ const renderOverviewSummaryTable = (s, rules) => {
   );
 };
 
-const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId) => {
-  if (alreadyClaimed) {
-    return div({ class: "bank-claim-ubi" }, p(i18n.bankAlreadyClaimedThisMonth));
-  }
-  if (!pubId && !isPub) {
-    return div({ class: "bank-claim-ubi" }, p(i18n.bankNoPubConfigured));
-  }
+const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId, hasValidWallet, pubBalance, ubiAvailability) => {
+  if (alreadyClaimed) return "";
+  if (!pubId && !isPub) return "";
+  if (!isPub && !hasValidWallet) return "";
+  if (Number(pubBalance || 0) <= 0) return "";
+  if (ubiAvailability !== "OK") return "";
   if (!pendingAllocation && !isPub) {
     return div({ class: "bank-claim-ubi" },
       div({ class: "bank-claim-card" },
@@ -108,7 +120,7 @@ const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId) =>
       )
     );
   }
-  if (!pendingAllocation) return div({ class: "bank-claim-ubi" }, p(i18n.bankNoPendingUBI));
+  if (!pendingAllocation) return "";
   return div({ class: "bank-claim-ubi" },
     div({ class: "bank-claim-card" },
       p(`${i18n.bankUbiThisMonth}: `, span({ class: "accent" }, `${Number(pendingAllocation.amount || 0).toFixed(6)} ECO`)),
@@ -312,7 +324,7 @@ const renderBankingView = (data, filter, userId, isPub) =>
       filter === "overview"
         ? div(
             renderOverviewSummaryTable(data.summary || {}, data.rules),
-            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId),
+            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId, (data.summary || {}).hasValidWallet, (data.summary || {}).pubBalance, (data.summary || {}).ubiAvailability),
             allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
           )
         : filter === "exchange"

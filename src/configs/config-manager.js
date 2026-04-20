@@ -58,9 +58,7 @@ if (!fs.existsSync(configFilePath)) {
       "fee": "5"
     },
     "walletPub": {
-      "url": "",
-      "user": "",
-      "pass": ""
+      "pubId": ""
     },
     "ai": {
       "prompt": "Provide an informative and precise response."
@@ -70,14 +68,18 @@ if (!fs.existsSync(configFilePath)) {
     },
     "homePage": "activity",
     "language": "en",
-    "pubId": ""
+    "wish": "whole",
+    "pmVisibility": "whole"
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
 }
 
 const getConfig = () => {
   const configData = fs.readFileSync(configFilePath);
-  return JSON.parse(configData);
+  const cfg = JSON.parse(configData);
+  if (cfg.wish !== 'whole' && cfg.wish !== 'mutuals') cfg.wish = 'whole';
+  if (cfg.pmVisibility !== 'whole' && cfg.pmVisibility !== 'mutuals') cfg.pmVisibility = 'whole';
+  return cfg;
 };
 
 const saveConfig = (newConfig) => {
