@@ -4,7 +4,7 @@ const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
   votes: i18n.typeVotes, vote: i18n.typeVote, recent: i18n.recent, all: i18n.all,
-  mine: i18n.mine, tombstone: i18n.typeTombstone, pixelia: i18n.typePixelia,
+  mine: i18n.mine, tombstone: i18n.typeTombstone, logs: i18n.typeLog || 'LOGS', pixelia: i18n.typePixelia,
   curriculum: i18n.typeCurriculum, document: i18n.typeDocument, bookmark: i18n.typeBookmark,
   feed: i18n.typeFeed, event: i18n.typeEvent, task: i18n.typeTask, report: i18n.typeReport,
   image: i18n.typeImage, audio: i18n.typeAudio, video: i18n.typeVideo, post: i18n.typePost,
@@ -17,7 +17,7 @@ const FILTER_LABELS = {
   calendar: i18n.typeCalendar || 'CALENDAR', torrent: i18n.typeTorrent
 };
 
-const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone'];
+const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone', 'logs'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
 const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
@@ -64,6 +64,7 @@ const filterBlocks = (blocks, filter, userId) => {
     return blocks.filter(b => cset.has(b.type));
   }
   if (filter === 'shop') return blocks.filter(b => b.type === 'shop' || b.type === 'shopProduct');
+  if (filter === 'logs') return blocks.filter(b => b.type === 'log' && b.author === userId);
   return blocks.filter(b => b.type === filter);
 };
 
@@ -130,6 +131,7 @@ const getViewDetailsAction = (type, block) => {
     case 'pad': return `/pads/${encodeURIComponent(block.id)}`;
     case 'chat': return `/chats/${encodeURIComponent(block.id)}`;
     case 'gameScore': return `/games?filter=scoring`;
+    case 'log': return `/logs/view/${encodeURIComponent(block.id)}`;
     default: return null;
   }
 };

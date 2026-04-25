@@ -20,12 +20,15 @@ canvas { display: block; flex: 1; align-self: stretch; min-height: 0; width: 100
 #controls { color: #888; font-size: 13px; text-align: center; margin-bottom: 4px; }
 #scoreSubmit { text-align: center; margin: 6px; }
 #scoreSubmit button { background: #1a3a1a; border: 1px solid #FFA500; color: #FFA500; padding: 6px 16px; cursor: pointer; font-family: monospace; font-size: 14px; }
+#btn-giveup { margin-left: auto; background: #3a1a1a; border: 1px solid #f44; color: #f44; padding: 4px 12px; cursor: pointer; font-family: monospace; font-size: 13px; }
+#btn-giveup:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>
 </head>
 <body>
 <div id="topbar">
   <a href="/games" target="_top">&#8592; Back to Games</a>
   <span style="color:#FFA500;font-weight:bold">LABYRINTH</span>
+  <button id="btn-giveup" disabled>Give Up</button>
 </div>
 <div id="ui">
   <span>LEVEL: <b id="levelEl">1</b></span>
@@ -115,6 +118,7 @@ function startLevel() {
   document.getElementById('movesEl').textContent = maxMoves;
   document.getElementById('msg').textContent = `Level ${level} — Reach the exit!`;
   gameState = 'play';
+  document.getElementById('btn-giveup').disabled = false;
 }
 
 function tryMove(dx, dy) {
@@ -136,20 +140,22 @@ function tryMove(dx, dy) {
     gameState = 'transit';
     setTimeout(() => { level++; startLevel(); }, 1000);
   } else if (moves >= maxMoves) {
-    endGame();
+    endGame('moves');
   }
 }
 
-function endGame() {
+function endGame(reason) {
   gameState = 'over';
   if (best < 0 || total > best) {
     best = total;
     localStorage.setItem('labyrinth_best', best);
     document.getElementById('bestEl').textContent = best;
   }
-  document.getElementById('msg').textContent = `Out of moves! Score: ${total}. SPACE = new game`;
+  const head = reason === 'giveup' ? `Gave up at level ${level}.` : 'Out of moves!';
+  document.getElementById('msg').textContent = `${head} Score: ${total}. SPACE = new game`;
   document.getElementById('scoreInput').value = total;
   document.getElementById('scoreSubmit').style.display = 'block';
+  document.getElementById('btn-giveup').disabled = true;
 }
 
 function newGame() {
@@ -173,6 +179,7 @@ document.getElementById('btn-up').addEventListener('click', () => { dpadStart();
 document.getElementById('btn-down').addEventListener('click', () => { dpadStart(); tryMove(0, 1); });
 document.getElementById('btn-left').addEventListener('click', () => { dpadStart(); tryMove(-1, 0); });
 document.getElementById('btn-right').addEventListener('click', () => { dpadStart(); tryMove(1, 0); });
+document.getElementById('btn-giveup').addEventListener('click', () => { if (gameState === 'play') endGame('giveup'); });
 
 if (best >= 0) document.getElementById('bestEl').textContent = best;
 

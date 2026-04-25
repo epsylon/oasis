@@ -1497,7 +1497,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
         )
       ),
       h2({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${tribe.members.length}`),
-      !tribe.parentTribeId ? div({ class: 'tribe-side-subtribes' },
+      (!tribe.parentTribeId && ((tribe.inviteMode === 'open' || tribe.author === userId) || subTribes.length > 0)) ? div({ class: 'tribe-side-subtribes' },
         (tribe.inviteMode === 'open' || tribe.author === userId)
           ? form({ method: 'GET', action: `/tribe/${encodeURIComponent(tribe.id)}` },
               input({ type: 'hidden', name: 'section', value: 'subtribes' }),

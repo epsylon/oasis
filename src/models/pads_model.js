@@ -15,7 +15,7 @@ const INVITE_SALT = "SolarNET.HuB-pads"
 const INVITE_BYTES = 16
 const MEMBER_COLORS = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6","#1abc9c","#e67e22","#e91e63","#00bcd4","#8bc34a"]
 
-module.exports = ({ cooler, cipherModel }) => {
+module.exports = ({ cooler, cipherModel, tribeCrypto, tribesModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
@@ -50,6 +50,40 @@ module.exports = ({ cooler, cipherModel }) => {
       decipher.setAuthTag(authTag)
       return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8")
     } catch (_) { return "" }
+  }
+
+  const tryDecryptField = (encrypted, keyHex) => {
+    const key = Buffer.from(keyHex, "hex")
+    const iv = Buffer.from(encrypted.slice(0, 24), "hex")
+    const authTag = Buffer.from(encrypted.slice(24, 56), "hex")
+    const ciphertext = Buffer.from(encrypted.slice(56), "hex")
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv)
+    decipher.setAuthTag(authTag)
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8")
+  }
+
+  const getTribeKeysFor = async (tribeId) => {
+    if (!tribeCrypto || !tribesModel || !tribeId) return []
+    try {
+      const rootId = await tribesModel.getRootId(tribeId)
+      const keys = tribeCrypto.getKeys(rootId) || []
+      return keys
+    } catch (_) { return [] }
+  }
+
+  const decryptWithKeys = (c, keys) => {
+    if (!c.title || !keys.length) return null
+    for (const k of keys) {
+      try {
+        const title = tryDecryptField(c.title, k)
+        let deadline = ""
+        let tagsRaw = ""
+        try { deadline = c.deadline ? tryDecryptField(c.deadline, k) : "" } catch (_) {}
+        try { tagsRaw = c.tags ? tryDecryptField(c.tags, k) : "" } catch (_) {}
+        return { title: safeText(title), deadline, tags: normalizeTags(tagsRaw) }
+      } catch (_) {}
+    }
+    return null
   }
 
   const encryptForInvite = (padKeyHex, code) => {
@@ -96,7 +130,14 @@ module.exports = ({ cooler, cipherModel }) => {
     return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot }
   }
 
-  const decryptPadFields = (c, rootId) => {
+  const decryptPadFields = (c, rootId, tribeKeys) => {
+    if (c.encrypted !== true) {
+      return { title: safeText(c.title), deadline: c.deadline ? String(c.deadline) : "", tags: normalizeTags(c.tags) }
+    }
+    if (c.tribeId && Array.isArray(tribeKeys) && tribeKeys.length) {
+      const viaTribe = decryptWithKeys(c, tribeKeys)
+      if (viaTribe) return viaTribe
+    }
     const keyHex = getPadKey(rootId)
     if (!keyHex) return { title: "", deadline: "", tags: [] }
     const title = c.title ? decryptField(c.title, keyHex) : ""
@@ -106,10 +147,10 @@ module.exports = ({ cooler, cipherModel }) => {
     return { title, deadline, tags }
   }
 
-  const buildPad = (node, rootId) => {
+  const buildPad = (node, rootId, tribeKeys) => {
     const c = node.c || {}
     if (c.type !== "pad") return null
-    const { title, deadline, tags } = decryptPadFields(c, rootId)
+    const { title, deadline, tags } = decryptPadFields(c, rootId, tribeKeys)
     return {
       key: node.key,
       rootId,
@@ -135,8 +176,9 @@ module.exports = ({ cooler, cipherModel }) => {
   return {
     type: "pad",
 
-    decryptContent(content, rootId) {
-      return decryptPadFields(content, rootId)
+    async decryptContent(content, rootId) {
+      const tKeys = content && content.tribeId ? await getTribeKeysFor(content.tribeId) : []
+      return decryptPadFields(content, rootId, tKeys)
     },
 
     async resolveRootId(id) {
@@ -165,23 +207,22 @@ module.exports = ({ cooler, cipherModel }) => {
       const ssbClient = await openSsb()
       const now = new Date().toISOString()
       const validStatus = ["OPEN", "INVITE-ONLY"].includes(String(status).toUpperCase()) ? String(status).toUpperCase() : "OPEN"
-      const keyHex = crypto.randomBytes(32).toString("hex")
 
-      const encrypt = (text) => {
-        const key = Buffer.from(keyHex, "hex")
-        const iv = crypto.randomBytes(12)
-        const cipher = crypto.createCipheriv("aes-256-gcm", key, iv)
-        const enc = Buffer.concat([cipher.update(text, "utf8"), cipher.final()])
-        const authTag = cipher.getAuthTag()
-        return iv.toString("hex") + authTag.toString("hex") + enc.toString("hex")
+      let keyHex = null
+      let usesTribeKey = false
+      if (tribeId) {
+        const tKeys = await getTribeKeysFor(tribeId)
+        if (tKeys.length) { keyHex = tKeys[0]; usesTribeKey = true }
       }
+      if (!keyHex) keyHex = crypto.randomBytes(32).toString("hex")
+      const enc = (text) => encryptField(text, keyHex)
 
       const content = {
         type: "pad",
-        title: encrypt(safeText(title)),
+        title: enc(safeText(title)),
         status: validStatus,
-        deadline: deadline ? encrypt(String(deadline)) : "",
-        tags: encrypt(normalizeTags(tagsRaw).join(",")),
+        deadline: deadline ? enc(String(deadline)) : "",
+        tags: enc(normalizeTags(tagsRaw).join(",")),
         author: ssbClient.id,
         members: [ssbClient.id],
         invites: [],
@@ -194,7 +235,7 @@ module.exports = ({ cooler, cipherModel }) => {
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, msg) => {
           if (err) return reject(err)
-          setPadKey(msg.key, keyHex)
+          if (!usesTribeKey) setPadKey(msg.key, keyHex)
           resolve(msg)
         })
       })
@@ -205,13 +246,19 @@ module.exports = ({ cooler, cipherModel }) => {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const rootId = await this.resolveRootId(id)
-      const keyHex = getPadKey(rootId)
 
-      return new Promise((resolve, reject) => {
-        ssbClient.get(tipId, (err, item) => {
+      return new Promise(async (resolve, reject) => {
+        ssbClient.get(tipId, async (err, item) => {
           if (err || !item?.content) return reject(new Error("Pad not found"))
           if (item.content.author !== userId) return reject(new Error("Not the author"))
           const c = item.content
+          let keyHex = null
+          let usesTribeKey = false
+          if (c.tribeId) {
+            const tKeys = await getTribeKeysFor(c.tribeId)
+            if (tKeys.length) { keyHex = tKeys[0]; usesTribeKey = true }
+          }
+          if (!keyHex) keyHex = getPadKey(rootId)
           const enc = (text) => keyHex ? encryptField(text, keyHex) : text
           const updated = {
             ...c,
@@ -227,7 +274,7 @@ module.exports = ({ cooler, cipherModel }) => {
             if (e1) return reject(e1)
             ssbClient.publish(updated, (e2, res) => {
               if (e2) return reject(e2)
-              if (keyHex) setPadKey(res.key, keyHex)
+              if (keyHex && !usesTribeKey) setPadKey(res.key, keyHex)
               resolve(res)
             })
           })
@@ -240,12 +287,18 @@ module.exports = ({ cooler, cipherModel }) => {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const rootId = await this.resolveRootId(id)
-      const keyHex = getPadKey(rootId)
-      return new Promise((resolve, reject) => {
-        ssbClient.get(tipId, (err, item) => {
+      return new Promise(async (resolve, reject) => {
+        ssbClient.get(tipId, async (err, item) => {
           if (err || !item?.content) return reject(new Error("Pad not found"))
           if (item.content.author !== userId) return reject(new Error("Not the author"))
           const c = item.content
+          let keyHex = null
+          let usesTribeKey = false
+          if (c.tribeId) {
+            const tKeys = await getTribeKeysFor(c.tribeId)
+            if (tKeys.length) { keyHex = tKeys[0]; usesTribeKey = true }
+          }
+          if (!keyHex) keyHex = getPadKey(rootId)
           const updated = {
             ...c,
             status: "CLOSED",
@@ -257,7 +310,7 @@ module.exports = ({ cooler, cipherModel }) => {
             if (e1) return reject(e1)
             ssbClient.publish(updated, (e2, res) => {
               if (e2) return reject(e2)
-              if (keyHex) setPadKey(res.key, keyHex)
+              if (keyHex && !usesTribeKey) setPadKey(res.key, keyHex)
               resolve(res)
             })
           })
@@ -282,8 +335,10 @@ module.exports = ({ cooler, cipherModel }) => {
             if (e1) return reject(e1)
             ssbClient.publish(updated, (e2, res) => {
               if (e2) return reject(e2)
-              const keyHex = getPadKey(rootId)
-              if (keyHex) setPadKey(res.key, keyHex)
+              if (!c.tribeId) {
+                const keyHex = getPadKey(rootId)
+                if (keyHex) setPadKey(res.key, keyHex)
+              }
               resolve(res)
             })
           })
@@ -316,7 +371,8 @@ module.exports = ({ cooler, cipherModel }) => {
       if (!node || node.c.type !== "pad") return null
       let root = tip
       while (idx.parent.has(root)) root = idx.parent.get(root)
-      const pad = buildPad(node, root)
+      const tKeys = node.c.tribeId ? await getTribeKeysFor(node.c.tribeId) : []
+      const pad = buildPad(node, root, tKeys)
       if (!pad) return null
       pad.isClosed = isClosed(pad)
       return pad
@@ -327,12 +383,20 @@ module.exports = ({ cooler, cipherModel }) => {
       const uid = viewerId || ssbClient.id
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
+      const tribeKeyCache = new Map()
       const items = []
       for (const [rootId, tipId] of idx.tipByRoot.entries()) {
         if (idx.tomb.has(tipId)) continue
         const node = idx.nodes.get(tipId)
         if (!node || node.c.type !== "pad") continue
-        const pad = buildPad(node, rootId)
+        let tKeys = []
+        if (node.c.tribeId) {
+          if (!tribeKeyCache.has(node.c.tribeId)) {
+            tribeKeyCache.set(node.c.tribeId, await getTribeKeysFor(node.c.tribeId))
+          }
+          tKeys = tribeKeyCache.get(node.c.tribeId)
+        }
+        const pad = buildPad(node, rootId, tKeys)
         if (!pad) continue
         pad.isClosed = isClosed(pad)
         items.push(pad)
@@ -408,7 +472,13 @@ module.exports = ({ cooler, cipherModel }) => {
     async addEntry(padId, text) {
       const ssbClient = await openSsb()
       const rootId = await this.resolveRootId(padId)
-      const keyHex = getPadKey(rootId)
+      const pad = await this.getPadById(rootId)
+      let keyHex = null
+      if (pad && pad.tribeId) {
+        const tKeys = await getTribeKeysFor(pad.tribeId)
+        if (tKeys.length) keyHex = tKeys[0]
+      }
+      if (!keyHex) keyHex = getPadKey(rootId)
       const now = new Date().toISOString()
       const encText = keyHex ? encryptField(safeText(text), keyHex) : safeText(text)
       const content = {
@@ -417,7 +487,8 @@ module.exports = ({ cooler, cipherModel }) => {
         text: encText,
         author: ssbClient.id,
         createdAt: now,
-        encrypted: !!keyHex
+        encrypted: !!keyHex,
+        ...(pad && pad.tribeId ? { tribeId: pad.tribeId } : {})
       }
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
@@ -427,14 +498,27 @@ module.exports = ({ cooler, cipherModel }) => {
     async getEntries(padRootId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const keyHex = getPadKey(padRootId)
+      const pad = await this.getPadById(padRootId)
+      const padKey = getPadKey(padRootId)
+      let tribeKeys = []
+      if (pad && pad.tribeId) {
+        tribeKeys = await getTribeKeysFor(pad.tribeId)
+      }
       const entries = []
       for (const m of messages) {
         const v = m.value || {}
         const c = v.content
         if (!c || c.type !== "padEntry") continue
         if (c.padId !== padRootId) continue
-        const text = (keyHex && c.encrypted) ? decryptField(c.text, keyHex) : (c.text || "")
+        let text = c.text || ""
+        if (c.encrypted && c.text) {
+          let decoded = ""
+          for (const k of tribeKeys) {
+            try { decoded = tryDecryptField(c.text, k); break } catch (_) {}
+          }
+          if (!decoded && padKey) decoded = decryptField(c.text, padKey)
+          text = decoded
+        }
         entries.push({
           key: m.key,
           author: c.author || v.author,

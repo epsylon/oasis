@@ -69,7 +69,8 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'votes': return `/votes/${encodeURIComponent(contentId)}`;
       case 'transfer': return `/transfers/${encodeURIComponent(contentId)}`;
       case 'tribe': return `/tribe/${encodeURIComponent(contentId)}`;
-      case 'curriculum': return `/inhabitant/${encodeURIComponent(contentId)}`;
+      case 'about': return content && (content.about || content.author) ? `/inhabitant/${encodeURIComponent(content.about || content.author)}` : '#';
+      case 'curriculum': return content && content.author ? `/inhabitant/${encodeURIComponent(content.author)}` : '#';
       case 'image': return `/images/${encodeURIComponent(contentId)}`;
       case 'audio': return `/audios/${encodeURIComponent(contentId)}`;
       case 'video': return `/videos/${encodeURIComponent(contentId)}`;

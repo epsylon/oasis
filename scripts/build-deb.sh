@@ -2,7 +2,7 @@
 
 set -e
 
-VERSION="0.6.9"
+VERSION="0.7.4"
 PKG_NAME="oasis"
 ARCH=$(dpkg --print-architecture)
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -50,8 +50,9 @@ cp -r "${SRC_DIR}/src/models/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/models/"
 cp -r "${SRC_DIR}/src/client" "${DEB_ROOT}${INSTALL_DIR}/src/"
 find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name "*.py" -delete 2>/dev/null
 find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name ".ruff_cache" -type d -exec rm -rf {} + 2>/dev/null || true
-cp -r "${SRC_DIR}/src/configs/oasis-config.json" "${DEB_ROOT}${INSTALL_DIR}/src/configs/"
-cp -r "${SRC_DIR}/src/configs/shared-state.js" "${DEB_ROOT}${INSTALL_DIR}/src/configs/" 2>/dev/null || true
+for f in oasis-config.json server-config.json snh-invite-code.json config-manager.js shared-state.js; do
+    cp "${SRC_DIR}/src/configs/${f}" "${DEB_ROOT}${INSTALL_DIR}/src/configs/"
+done
 cp -r "${SRC_DIR}/scripts" "${DEB_ROOT}${INSTALL_DIR}/"
 cp "${SRC_DIR}/oasis.sh" "${DEB_ROOT}${INSTALL_DIR}/"
 cp "${SRC_DIR}/LICENSE" "${DEB_ROOT}${INSTALL_DIR}/"

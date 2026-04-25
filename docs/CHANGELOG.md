@@ -13,6 +13,17 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.7.4 - 2026-04-25
+
+### Added
+
+- Logs module: create, manage and share records about your experiences (Logs plugin).
+
+### Fixed
+
+- Tribes strict mode ACLs (Tribes plugin).
+- Labyrinth game scoring (Games plugin).
+
 ## v0.7.3 - 2026-04-20
 
 ### Added

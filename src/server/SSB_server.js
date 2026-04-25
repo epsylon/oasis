@@ -91,7 +91,14 @@ if (argv[0] === 'start') {
   }
 
   const { printMetadata, colors } = require('./ssb_metadata');
-  printMetadata('OASIS Server Only', colors.cyan);
+  printMetadata('OASIS Server Only', colors.cyan, null);
+
+  setTimeout(async () => {
+    try {
+      const bankingModel = require('../models/banking_model.js')({});
+      await bankingModel.ensureSelfAddressPublished();
+    } catch (_) {}
+  }, 5000);
 
 }
 

@@ -92,7 +92,6 @@ const renderOverviewSummaryTable = (s, rules) => {
     table({ class: "bank-info-table" },
       tbody(
         kvRow(i18n.bankUserBalance, `${Number(s.userBalance || 0).toFixed(6)} ECO`),
-        kvRow(i18n.bankPubBalance, `${Number(s.pubBalance || 0).toFixed(6)} ECO`),
         kvRow(i18n.bankUbiAvailability, span({ class: availClass }, availLabel)),
         s.pubId ? kvRow(i18n.pubIdLabel, a({ href: `/author/${encodeURIComponent(s.pubId)}`, class: "user-link" }, s.pubId)) : null,
         kvRow(i18n.bankEpoch, String(s.epochId || "-")),
@@ -105,12 +104,11 @@ const renderOverviewSummaryTable = (s, rules) => {
   );
 };
 
-const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId, hasValidWallet, pubBalance, ubiAvailability) => {
+const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId, hasValidWallet, ubiAvailability) => {
   if (alreadyClaimed) return "";
   if (!pubId && !isPub) return "";
   if (!isPub && !hasValidWallet) return "";
-  if (Number(pubBalance || 0) <= 0) return "";
-  if (ubiAvailability !== "OK") return "";
+  if (!isPub && ubiAvailability !== "OK") return "";
   if (!pendingAllocation && !isPub) {
     return div({ class: "bank-claim-ubi" },
       div({ class: "bank-claim-card" },
@@ -324,7 +322,7 @@ const renderBankingView = (data, filter, userId, isPub) =>
       filter === "overview"
         ? div(
             renderOverviewSummaryTable(data.summary || {}, data.rules),
-            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId, (data.summary || {}).hasValidWallet, (data.summary || {}).pubBalance, (data.summary || {}).ubiAvailability),
+            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId, (data.summary || {}).hasValidWallet, (data.summary || {}).ubiAvailability),
             allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
           )
         : filter === "exchange"

@@ -25,6 +25,7 @@ const modulesView = () => {
     { name: 'jobs', label: i18n.modulesJobsLabel, description: i18n.modulesJobsDescription },
     { name: 'legacy', label: i18n.modulesLegacyLabel, description: i18n.modulesLegacyDescription },
     { name: 'latest', label: i18n.modulesLatestLabel, description: i18n.modulesLatestDescription },
+    { name: 'logs', label: i18n.modulesLogsLabel, description: i18n.modulesLogsDescription },
     { name: 'maps', label: i18n.modulesMapLabel, description: i18n.modulesMapDescription },
     { name: 'market', label: i18n.modulesMarketLabel, description: i18n.modulesMarketDescription },
     { name: 'multiverse', label: i18n.modulesMultiverseLabel, description: i18n.modulesMultiverseDescription },
@@ -80,8 +81,8 @@ const modulesView = () => {
 
   const PRESETS = {
     minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
-    social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
+    social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
+    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
     full: modules.map(m => m.name)
   };
 

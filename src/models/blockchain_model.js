@@ -117,10 +117,18 @@ module.exports = ({ cooler }) => {
 
       const nameByFeedId = new Map();
 
+      const showLogs = (filter === 'logs' || filter === 'LOGS');
+      const me = userId || config.keys.id;
       for (const msg of results) {
         const k = msg.key;
-        const c = msg.value?.content;
+        let c = msg.value?.content;
         const author = msg.value?.author;
+        if (showLogs && typeof c === 'string' && author === me) {
+          try {
+            const dec = ssbClient.private.unbox({ key: k, value: msg.value, timestamp: msg.timestamp || msg.value?.timestamp || 0 });
+            c = dec?.value?.content;
+          } catch { c = null; }
+        }
         if (!c?.type) continue;
 
         if (c.type === 'about') {
@@ -198,6 +206,9 @@ module.exports = ({ cooler }) => {
         const me = userId || config.keys.id;
         filtered = filtered.filter(b => b && b.author === me);
       }
+      if (filter === 'LOGS' || filter === 'logs') {
+        filtered = filtered.filter(b => b && b.type === 'log' && b.author === me);
+      }
       if (filter === 'PARLIAMENT' || filter === 'parliament') {
         const pset = new Set(['parliamentTerm','parliamentProposal','parliamentLaw','parliamentCandidature','parliamentRevocation']);
         filtered = filtered.filter(b => b && pset.has(b.type));
@@ -241,7 +252,7 @@ module.exports = ({ cooler }) => {
       return filtered.filter(Boolean);
     },
 
-    async getBlockById(id) {
+    async getBlockById(id, userId) {
       const ssbClient = await openSsb();
       const results = await new Promise((resolve, reject) =>
         pull(
@@ -250,14 +261,21 @@ module.exports = ({ cooler }) => {
         )
       );
 
+      const me = userId || config.keys.id;
       const tombstoned = new Set();
       const idToBlock = new Map();
       const referencedAsReplaces = new Set();
 
       for (const msg of results) {
         const k = msg.key;
-        const c = msg.value?.content;
+        let c = msg.value?.content;
         const author = msg.value?.author;
+        if (typeof c === 'string' && author === me) {
+          try {
+            const dec = ssbClient.private.unbox({ key: k, value: msg.value, timestamp: msg.timestamp || msg.value?.timestamp || 0 });
+            c = dec?.value?.content;
+          } catch { c = null; }
+        }
         if (!c?.type) continue;
         if (c.type === 'tombstone' && c.target) {
           tombstoned.add(c.target);

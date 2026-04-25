@@ -713,18 +713,12 @@ async function getLastPublishedTimestamp(userId) {
     if (!pubId) throw new Error("no_pub_configured");
     const alreadyClaimed = await hasClaimedThisMonth(uid);
     if (alreadyClaimed) throw new Error("already_claimed");
-    const pubBalance = await getPubBalanceFromSSB();
-    if (pubBalance <= 0) throw new Error("no_funds");
-    const pv = computePoolVars(pubBalance, DEFAULT_RULES);
-    const addresses = await listAddressesMerged();
-    const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address));
     const karmaScore = await getUserEngagementScore(uid);
     const wMin = DEFAULT_RULES.caps.w_min;
     const wMax = DEFAULT_RULES.caps.w_max;
     const capUser = DEFAULT_RULES.caps.cap_user_epoch;
     const userW = clamp(1 + karmaScore / 100, wMin, wMax);
-    const totalW = eligible.reduce((acc, a) => acc + clamp(1 + 0 / 100, wMin, wMax), 0) || 1;
-    const amount = Number(Math.max(1, Math.min(pv.pool * userW / totalW, capUser)).toFixed(6));
+    const amount = Number(Math.max(1, Math.min(capUser * (userW / wMax), capUser)).toFixed(6));
     const ssb = await openSsb();
     if (!ssb || !ssb.publish) throw new Error("ssb_unavailable");
     const now = new Date().toISOString();
@@ -763,30 +757,6 @@ async function getLastPublishedTimestamp(userId) {
       if (txid) all[idx].txid = txid;
       writeJson(TRANSFERS_PATH, all);
     }
-  }
-
-  async function getPubBalanceFromSSB() {
-    const pubId = getConfiguredPubId();
-    if (!pubId) return 0;
-    const msgs = await scanLogStream();
-    for (const m of msgs) {
-      const v = m.value || {};
-      const c = v.content || {};
-      if (v.author === pubId && c && c.type === "pubBalance" && c.coin === "ECO") {
-        return Number(c.balance) || 0;
-      }
-    }
-    return 0;
-  }
-
-  async function publishPubBalance() {
-    if (!isPubNode()) return;
-    const balance = await safeGetBalance("pub");
-    const ssb = await openSsb();
-    if (!ssb || !ssb.publish) return;
-    const content = { type: "pubBalance", balance, coin: "ECO", timestamp: Date.now() };
-    await new Promise((resolve, reject) => ssb.publish(content, (err, res) => err ? reject(err) : resolve(res)));
-    return balance;
   }
 
   async function hasClaimedThisMonth(userId) {
@@ -843,19 +813,51 @@ async function getLastPublishedTimestamp(userId) {
     return out;
   }
 
+  async function publishPubAvailability() {
+    if (!isPubNode()) return;
+    const balance = await safeGetBalance("pub");
+    const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user || 1);
+    const available = Number(balance) >= floor;
+    const ssb = await openSsb();
+    if (!ssb || !ssb.publish) return;
+    const content = { type: "pubAvailability", available, coin: "ECO", timestamp: Date.now() };
+    await new Promise((resolve, reject) => ssb.publish(content, (err, res) => err ? reject(err) : resolve(res)));
+    return available;
+  }
+
+  async function getPubAvailabilityFromSSB() {
+    const pubId = getConfiguredPubId();
+    if (!pubId) return false;
+    const msgs = await scanLogStream();
+    let latest = null;
+    for (const m of msgs) {
+      const v = m.value || {};
+      const c = v.content || {};
+      if (v.author === pubId && c && c.type === "pubAvailability" && c.coin === "ECO") {
+        if (!latest || (Number(c.timestamp) || 0) > (Number(latest.timestamp) || 0)) latest = c;
+      }
+    }
+    return !!(latest && latest.available);
+  }
+
   async function listBanking(filter = "overview", userId) {
     const uid = resolveUserId(userId);
     const epochId = epochIdNow();
-    let pubBalance, allocations;
+    let pubBalance = 0;
+    let ubiAvailable = false;
+    let allocations;
     if (isPubNode()) {
       pubBalance = await safeGetBalance("pub");
+      const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user || 1);
+      ubiAvailable = Number(pubBalance) >= floor;
+      try { await publishPubAvailability(); } catch (_) {}
       const all = await transfersRepo.listByTag("UBI");
       allocations = all.map(t => ({
         id: t.id, concept: t.concept, from: t.from, to: t.to, amount: t.amount, status: t.status,
         createdAt: t.createdAt || t.deadline || new Date().toISOString(), txid: t.txid
       }));
     } else {
-      pubBalance = await getPubBalanceFromSSB();
+      ubiAvailable = await getPubAvailabilityFromSSB();
       allocations = await getUbiAllocationsFromSSB();
     }
     const userBalance = await safeGetBalance("user");
@@ -875,16 +877,15 @@ async function getLastPublishedTimestamp(userId) {
     const hasValidWallet = !!(userAddress && isValidEcoinAddress(userAddress) && userWalletCfg.url);
     const summary = {
       userBalance,
-      pubBalance,
       epochId,
       pool: poolForEpoch,
       weightsSum: computed?.epoch?.weightsSum || 0,
       userEngagementScore: engagementScore,
       futureUBI,
-      ubiAvailability: pubBalance > 0 ? "OK" : "NO_FUNDS",
       alreadyClaimed,
       pubId,
-      hasValidWallet
+      hasValidWallet,
+      ubiAvailability: ubiAvailable ? "OK" : "NO_FUNDS"
     };
     const exchange = await calculateEcoinValue();
     return { summary, allocations, epochs, rules: DEFAULT_RULES, addresses, exchange };
@@ -971,7 +972,7 @@ async function getLastPublishedTimestamp(userId) {
     const karmaScore = await getUserEngagementScore(userId);
     let estimatedUBI = 0;
     try {
-      const pubBal = isPubNode() ? await safeGetBalance("pub") : await getPubBalanceFromSSB();
+      const pubBal = isPubNode() ? await safeGetBalance("pub") : 0;
       const pv = computePoolVars(pubBal, DEFAULT_RULES);
       const pool = pv.pool || 0;
       const addresses = await listAddressesMerged();
@@ -1112,8 +1113,8 @@ async function getLastPublishedTimestamp(userId) {
     publishUbiAllocation,
     publishUbiClaim,
     publishUbiClaimResult,
-    publishPubBalance,
-    getPubBalanceFromSSB,
+    publishPubAvailability,
+    getPubAvailabilityFromSSB,
     hasClaimedThisMonth,
     getUbiClaimHistory,
     claimUBI,

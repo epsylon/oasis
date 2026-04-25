@@ -41,6 +41,7 @@ if (!fs.existsSync(configFilePath)) {
       "agendaMod": "on",
       "aiMod": "on",
       "forumMod": "on",
+      "gamesMod": "on",
       "jobsMod": "on",
       "shopsMod": "on",
       "projectsMod": "on",
@@ -48,7 +49,9 @@ if (!fs.existsSync(configFilePath)) {
       "parliamentMod": "on",
       "courtsMod": "on",
       "favoritesMod": "on",
+      "logsMod": "on",
       "mapsMod": "on",
+      "chatsMod": "on",
       "torrentsMod": "on"
     },
     "wallet": {

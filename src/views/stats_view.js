@@ -217,6 +217,12 @@ exports.statsView = (stats, filter) => {
           )
         ),
         div({ style: headerStyle },
+          h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' }, i18n.statsLogsTitle || 'Logs'),
+          ul({ style: 'list-style-type:none; padding:0; margin:0;' },
+            li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsLogsEntries || 'Entries'}: `, span({ style: 'color:#888;' }, String(stats?.logsCount || 0)))
+          )
+        ),
+        div({ style: headerStyle },
           h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' }, i18n.statsAITraining),
           ul({ style: 'list-style-type:none; padding:0; margin:0;' },
             li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsAIExchanges}: `, span({ style: 'color:#888;' }, String(C(stats, 'aiExchange') || 0)))

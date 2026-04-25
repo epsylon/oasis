@@ -262,7 +262,6 @@ const ssbConfig = require('../server/ssb_config');
 const tribeCrypto = require('../models/tribe_crypto')(ssbConfig.path);
 const reportsModel = require('../models/reports_model')({ cooler, isPublic: config.public });
 const transfersModel = require('../models/transfers_model')({ cooler, isPublic: config.public });
-const padsModel = require('../models/pads_model')({ cooler, cipherModel });
 const calendarsModel = require('../models/calendars_model')({ cooler, pmModel });
 const cvModel = require('../models/cv_model')({ cooler, isPublic: config.public });
 const inhabitantsModel = require('../models/inhabitants_model')({ cooler, isPublic: config.public });
@@ -276,6 +275,7 @@ const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config
 const trendingModel = require('../models/trending_model')({ cooler, isPublic: config.public });
 const statsModel = require('../models/stats_model')({ cooler, isPublic: config.public });
 const tribesModel = require('../models/tribes_model')({ cooler, isPublic: config.public, tribeCrypto });
+const padsModel = require('../models/pads_model')({ cooler, cipherModel, tribeCrypto, tribesModel });
 const tagsModel = require('../models/tags_model')({ cooler, isPublic: config.public, padsModel, tribesModel });
 const tribesContentModel = require('../models/tribes_content_model')({ cooler, isPublic: config.public, tribeCrypto, tribesModel });
 const searchModel = require('../models/search_model')({ cooler, isPublic: config.public, padsModel });
@@ -286,18 +286,13 @@ const forumModel = require('../models/forum_model')({ cooler, isPublic: config.p
 const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic: config.public });
 const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public, tribeCrypto });
 const shopsModel = require('../models/shops_model')({ cooler, isPublic: config.public, tribeCrypto });
-const chatsModel = require('../models/chats_model')({ cooler, tribeCrypto });
+const chatsModel = require('../models/chats_model')({ cooler, tribeCrypto, tribesModel });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
 const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public });
 const gamesModel = require('../models/games_model')({ cooler });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
-let pubBalanceTimer = null;
-if (bankingModel.isPubNode()) {
-  const tick = () => { bankingModel.publishPubBalance().catch(() => {}); };
-  setTimeout(tick, 30 * 1000);
-  pubBalanceTimer = setInterval(tick, 24 * 60 * 60 * 1000);
-}
 const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel });
+const logsModel = require("../models/logs_model")({ cooler });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const { renderGovernance: renderTribeGovernance } = require('../views/tribes_view');
 const viewerFilters = require('../models/viewer_filters');
@@ -453,7 +448,15 @@ const applyListFilters = async (items, ctx, opts = {}) => {
   return out;
 };
 const courtsModel = require('../models/courts_model')({ cooler, services: { votes: votesModel, inhabitants: inhabitantsModel, tribes: tribesModel, banking: bankingModel }, tribeCrypto });
-tribesModel.processIncomingKeys().catch(err => {
+tribesModel.processIncomingKeys().then(async () => {
+  try {
+    const viewerId = getViewerId();
+    const mine = (await tribesModel.listAll()).filter(t => t.author === viewerId);
+    for (const t of mine) {
+      await tribesModel.ensureTribeKeyDistribution(t.id).catch(() => {});
+    }
+  } catch (_) {}
+}).catch(err => {
   if (config.debug) console.error('tribe-keys scan error:', err.message);
 });
 courtsModel.processIncomingCourtsKeys().catch(err => {
@@ -862,6 +865,8 @@ const { calendarsView, singleCalendarView } = require("../views/calendars_view")
 const { projectsView, singleProjectView } = require("../views/projects_view")
 const { renderBankingView, renderSingleAllocationView, renderEpochView } = require("../views/banking_views")
 const { favoritesView } = require("../views/favorites_view");
+const { logsView } = require("../views/logs_view");
+const { buildLogsPdf } = require("./logsPdf");
 const { parliamentView } = require("../views/parliament_view");
 const { courtsView, courtsCaseView } = require('../views/courts_view');
 let sharp;
@@ -931,6 +936,7 @@ router
       myAddress: myAddress || null,
       totalAddresses: Array.isArray(addrRows) ? addrRows.length : 0
     };
+    try { stats.logsCount = await logsModel.countLogs(); } catch { stats.logsCount = 0; }
     const totalMB = parseSizeMB(stats.statsBlobsSize) + parseSizeMB(stats.statsBlockchainSize);
     const hcT = parseFloat((totalMB * 0.0002 * 475).toFixed(2));
     const inhabitants = stats.usersKPIs?.totalInhabitants || stats.inhabitants || 1;
@@ -1018,7 +1024,7 @@ router
     let filter = query.filter || 'recent';
     if (searchActive && String(filter).toLowerCase() === 'recent') filter = 'all';
     const blockId = ctx.params.id;
-    const block = await blockchainModel.getBlockById(blockId);
+    const block = await blockchainModel.getBlockById(blockId, userId);
     const viewMode = query.view || 'block';
     let restricted = false;
     if (block) {
@@ -1568,6 +1574,7 @@ router
   .get('/tribe/:tribeId', async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
     await tribesModel.processIncomingKeys().catch(() => {});
+    await tribesModel.ensureTribeKeyDistribution(ctx.params.tribeId).catch(() => {});
     const listByTribeAllChain = async (tribeId, contentType) => {
       const chainIds = await tribesModel.getChainIds(tribeId).catch(() => [tribeId]);
       const results = await Promise.all(chainIds.map(id => tribesContentModel.listByTribe(id, contentType).catch(() => [])));
@@ -1740,7 +1747,7 @@ router
       if (action.type === 'pad') {
         const c = action.value?.content || action.content || {};
         const rootId = action.id || action.key || '';
-        const decrypted = padsModel.decryptContent(c, rootId);
+        const decrypted = await padsModel.decryptContent(c, rootId);
         if (decrypted.title) {
           if (action.value?.content) { action.value.content.title = decrypted.title; action.value.content.deadline = decrypted.deadline; }
           else if (action.content) { action.content.title = decrypted.title; action.content.deadline = decrypted.deadline; }
@@ -2195,13 +2202,15 @@ router
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '' } = ctx.query;
     const uid = getViewerId();
-    const chat = await chatsModel.getChatById(ctx.params.chatId);
+    let chat = await chatsModel.getChatById(ctx.params.chatId);
     if (!chat) { ctx.redirect('/chats'); return; }
     let parentTribe = null;
     if (chat.tribeId) {
       try {
         parentTribe = await tribesModel.getTribeById(chat.tribeId);
         if (!parentTribe.members.includes(uid)) { ctx.body = tribeAccessDeniedView(parentTribe); return; }
+        await tribesModel.processIncomingKeys().catch(() => {});
+        chat = await chatsModel.getChatById(ctx.params.chatId);
       } catch { ctx.redirect('/tribes'); return; }
     }
     if (String(chat.status || '').toUpperCase() === 'INVITE-ONLY' && chat.author !== uid) {
@@ -2228,21 +2237,22 @@ router
     const tribeId = ctx.query.tribeId || "";
     const pads = await padsModel.listAll({ filter, viewerId: uid });
     const fav = await mediaFavorites.getFavoriteSet('pads');
-    const myTribeIds = await getUserTribeIds(uid);
-    let enriched = pads.filter(p => !p.tribeId || myTribeIds.has(p.tribeId)).map(p => ({ ...p, isFavorite: fav.has(String(p.rootId)) }));
+    let enriched = pads.filter(p => !p.tribeId).map(p => ({ ...p, isFavorite: fav.has(String(p.rootId)) }));
     enriched = await applyListFilters(enriched, ctx);
     ctx.body = await padsView(enriched, filter, null, { q, ...(tribeId ? { tribeId } : {}) });
   })
   .get("/pads/:padId", async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
     const uid = getViewerId();
-    const pad = await padsModel.getPadById(ctx.params.padId);
+    let pad = await padsModel.getPadById(ctx.params.padId);
     if (!pad) { ctx.redirect('/pads'); return; }
     let parentTribe = null;
     if (pad.tribeId) {
       try {
         parentTribe = await tribesModel.getTribeById(pad.tribeId);
         if (!parentTribe.members.includes(uid)) { ctx.body = tribeAccessDeniedView(parentTribe); return; }
+        await tribesModel.processIncomingKeys().catch(() => {});
+        pad = await padsModel.getPadById(ctx.params.padId);
       } catch { ctx.redirect('/tribes'); return; }
     }
     if (String(pad.status || '').toUpperCase() === 'INVITE-ONLY' && pad.author !== uid) {
@@ -2342,12 +2352,9 @@ router
     const q = (query.q || '').trim();
     const msg = (query.msg || '').trim();
     await bankingModel.ensureSelfAddressPublished();
-    if (bankingModel.isPubNode()) {
-      try { await bankingModel.publishPubBalance(); } catch (_) {}
-      if (filter === 'overview') {
-        try { await bankingModel.executeEpoch({}); } catch (_) {}
-        try { await bankingModel.processPendingClaims(); } catch (_) {}
-      }
+    if (bankingModel.isPubNode() && filter === 'overview') {
+      try { await bankingModel.executeEpoch({}); } catch (_) {}
+      try { await bankingModel.processPendingClaims(); } catch (_) {}
     }
     const data = await bankingModel.listBanking(filter, userId);
     data.isPub = bankingModel.isPubNode();
@@ -2389,6 +2396,81 @@ router
   .get("/favorites", async (ctx) => {
     const filter = qf(ctx), data = await favoritesModel.listAll({ filter });
     ctx.body = await favoritesView(data.items, filter, data.counts);
+  })
+  .get("/logs", async (ctx) => {
+    if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
+    const view = String(ctx.query.view || 'list');
+    const aiModOn = logsModel.isAImodOn();
+    if (view === 'create') {
+      const mode = ctx.query.mode === 'ai' ? 'ai' : 'manual';
+      ctx.body = logsView([], 'today', mode, { view: 'create', aiModOn });
+      return;
+    }
+    if (view === 'edit') {
+      const id = String(ctx.query.id || '');
+      const entry = id ? await logsModel.getLogById(id) : null;
+      if (!entry) { ctx.redirect('/logs'); return; }
+      ctx.body = logsView([], 'today', entry.mode, { view: 'edit', aiModOn, entry });
+      return;
+    }
+    const filter = qf(ctx, 'today');
+    const q = String(ctx.query.q || '').trim().toLowerCase();
+    const typeQ = String(ctx.query.type || '').trim().toLowerCase();
+    const dateQ = String(ctx.query.date || '').trim();
+    let items = await logsModel.listLogs(filter);
+    if (q) items = items.filter(i => String(i.text || '').toLowerCase().includes(q) || String(i.label || '').toLowerCase().includes(q));
+    if (typeQ === 'ai' || typeQ === 'manual') items = items.filter(i => (i.mode === 'ai' ? 'ai' : 'manual') === typeQ);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateQ)) {
+      const start = new Date(dateQ + 'T00:00:00').getTime();
+      const end = start + 24 * 60 * 60 * 1000;
+      items = items.filter(i => i.ts >= start && i.ts < end);
+    }
+    ctx.body = logsView(items, filter, null, { view: 'list', aiModOn, search: { q: ctx.query.q || '', type: typeQ, date: dateQ } });
+  })
+  .get("/logs/view/:id", async (ctx) => {
+    if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
+    const entry = await logsModel.getLogById(ctx.params.id);
+    if (!entry) { ctx.redirect('/logs'); return; }
+    const aiModOn = logsModel.isAImodOn();
+    ctx.body = logsView([], 'today', entry.mode, { view: 'detail', aiModOn, entry });
+  })
+  .post("/logs/create", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const mode = b.mode === 'ai' ? 'ai' : 'manual';
+    try {
+      if (mode === 'ai') { startAI(); await logsModel.createAI(); }
+      else await logsModel.createManual(b.label || '', b.text || '');
+    } catch (_) {}
+    ctx.redirect('/logs');
+  })
+  .post("/logs/edit/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    try { await logsModel.updateLog(ctx.params.id, { label: b.label || '', text: b.text || '' }); } catch (_) {}
+    ctx.redirect('/logs');
+  })
+  .post("/logs/delete/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
+    try { await logsModel.deleteLog(ctx.params.id); } catch (_) {}
+    ctx.redirect('/logs');
+  })
+  .get("/logs/export", async (ctx) => {
+    if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
+    const items = await logsModel.listLogs('always');
+    const pdf = await buildLogsPdf(items, getViewerId());
+    ctx.set('Content-Type', 'application/pdf');
+    ctx.set('Content-Disposition', `attachment; filename="oasis-logs-${Date.now()}.pdf"`);
+    ctx.body = pdf;
+  })
+  .get("/logs/export/:id", async (ctx) => {
+    if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
+    const entry = await logsModel.getLogById(ctx.params.id);
+    if (!entry) { ctx.redirect('/logs'); return; }
+    const pdf = await buildLogsPdf([entry], getViewerId());
+    ctx.set('Content-Type', 'application/pdf');
+    ctx.set('Content-Disposition', `attachment; filename="oasis-log-${Date.now()}.pdf"`);
+    ctx.body = pdf;
   })
   .get('/cipher', async (ctx) => {
     if (!checkMod(ctx, 'cipherMod')) { ctx.redirect('/modules'); return; }
@@ -3800,6 +3882,7 @@ router
     const b = ctx.request.body;
     const tribeId = b.tribeId || null;
     const imageBlob = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : null;
+    if (tribeId) await tribesModel.ensureTribeKeyDistribution(tribeId).catch(() => {});
     await chatsModel.createChat(stripDangerousTags(b.title), stripDangerousTags(b.description), imageBlob, b.category, b.status, b.tags, tribeId);
     ctx.redirect(tribeId ? `/tribe/${encodeURIComponent(tribeId)}?section=chats` : safeReturnTo(ctx, '/chats?filter=mine', ['/chats']));
   })
@@ -3874,6 +3957,7 @@ router
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
     const tribeId = b.tribeId || null;
+    if (tribeId) await tribesModel.ensureTribeKeyDistribution(tribeId).catch(() => {});
     const msg = await padsModel.createPad(
       stripDangerousTags(b.title || ""),
       b.status || "OPEN",
@@ -4355,11 +4439,11 @@ router
   })
   .post("/settings/rebuild", async ctx => { meta.rebuild(); ctx.redirect("/settings"); })
   .post("/modules/preset", koaBody(), async (ctx) => {
-    const ALL_MODULES = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
+    const ALL_MODULES = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
     const PRESETS = {
       minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
-      social: ['agenda', 'audios', 'bookmarks', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-      economy: ['agenda', 'audios', 'bookmarks', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'multiverse', 'opinions', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
+      social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
+      economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
       full: ALL_MODULES
     };
     const preset = String(ctx.request.body.preset || '');
@@ -4371,7 +4455,7 @@ router
     ctx.redirect('/modules');
   })
   .post("/save-modules", koaBody(), async (ctx) => {
-    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
+    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
     const cfg = getConfig();
     modules.forEach(mod => cfg.modules[`${mod}Mod`] = ctx.request.body[`${mod}Form`] === 'on' ? 'on' : 'off');
     saveConfig(cfg);
@@ -4496,6 +4580,6 @@ const middleware = [
   routes,
 ];
 const app = http({ host, port, middleware, allowHost: config.allowHost });
-app._close = () => { nameWarmup.close(); cooler.close(); if (pubBalanceTimer) clearInterval(pubBalanceTimer); };
+app._close = () => { nameWarmup.close(); cooler.close(); };
 module.exports = app;
 if (config.open === true) open(url);

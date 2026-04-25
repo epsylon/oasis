@@ -352,7 +352,7 @@ module.exports = ({ cooler }) => {
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
 
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
-      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'feed-action', 'pubBalance']);
+      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log']);
       const isAllowedTribeActivity = (a) => {
         if (tribeInternalTypes.has(a.type)) return false;
         const c = a.content || {};

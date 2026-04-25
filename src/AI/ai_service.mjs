@@ -3,7 +3,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import express from '../server/node_modules/express/index.js';
 import cors from '../server/node_modules/cors/lib/index.js';
-import { getLlama, LlamaChatSession } from '../server/node_modules/node-llama-cpp/dist/index.js';
+import { getLlama, LlamaChatSession, LlamaCompletion } from '../server/node_modules/node-llama-cpp/dist/index.js';
 
 let getConfig, buildAIContext;
 try {
@@ -23,6 +23,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let llamaInstance, model, context, session;
+let rawContext, rawCompletion;
 let ready = false;
 let lastError = null;
 
@@ -39,9 +40,22 @@ async function initModel() {
   ready = true;
 }
 
+async function initRaw() {
+  if (rawCompletion) return;
+  if (!model) await initModel();
+  rawContext = await model.createContext();
+  rawCompletion = new LlamaCompletion({ contextSequence: rawContext.getSequence() });
+}
+
 app.post('/ai', async (req, res) => {
   try {
-    const userInput = String(req.body.input || '').trim();
+    const sanitize = (s) => String(s || '').replace(/[<>"'`]/g, '').replace(/\b(ignore|disregard|forget|system|instruction|prompt)\b/gi, '[$1]').trim();
+    const userInput = sanitize(String(req.body.input || ''));
+    if (req.body.raw === true) {
+      await initRaw();
+      const answer = await rawCompletion.generateCompletion(userInput, { maxTokens: 120 });
+      return res.json({ answer: String(answer || '').trim(), snippets: [] });
+    }
     await initModel();
 
     let userContext = '';
@@ -49,6 +63,7 @@ app.post('/ai', async (req, res) => {
     try {
       userContext = await (buildAIContext ? buildAIContext(120) : '');
       if (userContext) {
+        userContext = userContext.split('\n').map(l => sanitize(l)).join('\n');
         snippets = userContext.split('\n').slice(0, 50);
       }
     } catch {}
@@ -58,9 +73,9 @@ app.post('/ai', async (req, res) => {
     const userPrompt = [baseContext, config.ai?.prompt?.trim() || 'Provide an informative and precise response.'].join('\n');
 
     const prompt = [
-      userContext ? `User Data:\n${userContext}` : '',
-      `Query: "${userInput}"`,
-      userPrompt
+      userPrompt,
+      userContext ? `--- USER DATA START ---\n${userContext}\n--- USER DATA END ---` : '',
+      `--- QUERY START ---\n${userInput}\n--- QUERY END ---`
     ].filter(Boolean).join('\n\n');
     const answer = await session.prompt(prompt);
     res.json({ answer: String(answer || '').trim(), snippets });

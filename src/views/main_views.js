@@ -704,6 +704,20 @@ const renderFavoritesLink = () => {
     : "";
 };
 
+const renderLogsLink = () => {
+  const logsMod = getConfig().modules.logsMod === "on";
+  return logsMod
+    ? [
+        navLink({
+          href: "/logs",
+          emoji: "ꗯ",
+          text: i18n.logsTitle || "Logs",
+          class: "logs-link enabled"
+        })
+      ]
+    : "";
+};
+
 const renderAILink = () => {
   const aiMod = getConfig().modules.aiMod === "on";
   return aiMod
@@ -864,6 +878,7 @@ const template = (titlePrefix, ...elements) => {
                 }),
                 renderAgendaLink(),
                 renderFavoritesLink(),
+                renderLogsLink(),
                 renderWalletLink(),
                 navLink({
                   href: "/modules",
@@ -1722,10 +1737,11 @@ exports.authorView = ({
           ),
           span({ class: "ubi-line" }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`))
         ),
-        div({ class: "eco-wallet" },
-          p(`${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `,
-            a({ href: '/wallet' }, ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!'))
-        )
+        (ecoAddress || relationship.me)
+          ? div({ class: "eco-wallet" },
+              p(`${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `,
+                a({ href: '/wallet' }, ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!')))
+          : null
       )
     ),
     description !== "" ? article({ innerHTML: sanitizeHtml(markdown(description)) }) : null,

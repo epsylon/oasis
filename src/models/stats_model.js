@@ -37,7 +37,7 @@ module.exports = ({ cooler }) => {
     'bookmark','event','task','votes','report','feed','project',
     'image','torrent','audio','video','document','transfer','post','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
-    'pad','padEntry','gameScore','calendar','calendarDate','calendarNote',
+    'pad','padEntry','gameScore','calendar','calendarDate','calendarNote','log',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];

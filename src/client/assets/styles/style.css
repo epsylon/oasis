@@ -5026,3 +5026,34 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .torrent-table th{background:#1a1a1a;color:#FFA500;font-weight:bold}
 .torrent-download{margin:12px 0}
 .torrent-download .filter-btn{border:none}
+
+.logs-table{width:100%;border-collapse:collapse;margin-top:12px}
+.logs-table th,.logs-table td{padding:8px 12px;text-align:left;vertical-align:middle;border-bottom:1px solid #222}
+.logs-col-actions{vertical-align:middle;text-align:center;white-space:nowrap;background:transparent}
+.logs-col-actions form{margin:0;display:inline-block}
+.logs-col-actions .filter-btn{min-width:110px}
+.logs-table th{background:#1a1a1a;color:#FFA500;font-weight:bold}
+.logs-col-date{white-space:nowrap;text-align:center;font-family:monospace;background:transparent}
+.logs-date-day{color:#FFA500;font-weight:bold;font-size:0.9rem}
+.logs-date-time{color:#ddd;font-size:0.85rem}
+.logs-col-log{max-width:560px;vertical-align:middle;background:transparent;padding:8px 12px}
+.logs-col-log>*{background:transparent;border:0;padding:0;margin:0}
+.logs-entry-label{color:#FFA500;font-weight:bold;margin-bottom:4px !important;background:transparent;border:0}
+.logs-entry-meta{color:#888;font-size:0.85rem;margin-bottom:6px}
+.logs-entry-mode{color:#FFA500;font-weight:bold}
+.logs-entry-text{white-space:pre-wrap;word-break:break-word;color:#ddd;background:transparent;border:0;padding:0;margin:0;display:block}
+.logs-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.logs-toolbar-inline{display:inline-flex;gap:10px;margin:0}
+.logs-mode-form{margin:12px 0}
+.logs-mode-group{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.logs-ai-disabled{color:#e74c3c;font-style:italic;margin:8px 0}
+.logs-col-type{white-space:nowrap;text-align:center;font-family:monospace;background:transparent}
+.logs-type-text{font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;font-family:monospace;font-size:0.85rem}
+.logs-type-ai{color:#00b4ff}
+.logs-type-manual{color:#FFA500}
+.logs-toolbar-wrap{display:flex;flex-direction:column;gap:12px;margin:12px 0}
+.logs-search{margin:0}
+.logs-detail{padding:16px}
+.logs-detail-header{color:#aaa;font-family:monospace;margin-bottom:12px;word-break:break-all}
+.logs-detail-text{white-space:pre-wrap;word-break:break-word;color:#ddd;margin:12px 0}
+.logs-detail-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}

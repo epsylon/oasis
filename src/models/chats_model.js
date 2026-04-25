@@ -14,9 +14,22 @@ const normalizeTags = (raw) => {
 const INVITE_CODE_BYTES = 16
 const VALID_STATUS = ["OPEN", "INVITE-ONLY", "CLOSED"]
 
-module.exports = ({ cooler, tribeCrypto }) => {
+module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
+
+  const getTribeKeysFor = async (tribeId) => {
+    if (!tribeCrypto || !tribesModel || !tribeId) return []
+    try {
+      const rootId = await tribesModel.getRootId(tribeId)
+      return tribeCrypto.getKeys(rootId) || []
+    } catch (_) { return [] }
+  }
+
+  const getTribeFirstKeyFor = async (tribeId) => {
+    const ks = await getTribeKeysFor(tribeId)
+    return ks.length ? ks[0] : null
+  }
 
   const readAll = async (ssbClient) =>
     new Promise((resolve, reject) =>
@@ -90,14 +103,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
     }
   }
 
-  const buildMessage = (node, chatRootId) => {
+  const buildMessage = (node, chatRootId, tribeKeys = []) => {
     const c = node.c || {}
     if (c.type !== "chatMessage") return null
 
     let text = c.text || ""
     if (tribeCrypto && c.encryptedText) {
-      const keys = tribeCrypto.getKeys(chatRootId)
-      for (const keyHex of keys) {
+      const candidateKeys = [...tribeKeys, ...tribeCrypto.getKeys(chatRootId)]
+      for (const keyHex of candidateKeys) {
         try {
           text = tribeCrypto.decryptWithKey(c.encryptedText, keyHex)
           break
@@ -170,11 +183,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
         ...(tribeId ? { tribeId } : {})
       }
 
-      if (tribeCrypto) {
+      if (tribeCrypto && !tribeId) {
         const chatKey = tribeCrypto.generateTribeKey()
         const result = await new Promise((resolve, reject) => {
-          const plainContent = Object.assign({}, content)
-          ssbClient.publish(plainContent, (err, msg) => err ? reject(err) : resolve(msg))
+          ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
         })
         tribeCrypto.setKey(result.key, chatKey, 1)
         return result
@@ -470,9 +482,12 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (image) content.image = image
 
       if (tribeCrypto) {
-        const chatKey = tribeCrypto.getKey(chat.rootId)
-        if (chatKey) {
-          content.encryptedText = tribeCrypto.encryptWithKey(safeText(text), chatKey)
+        let encKey = null
+        if (chat.tribeId) encKey = await getTribeFirstKeyFor(chat.tribeId)
+        if (!encKey) encKey = tribeCrypto.getKey(chat.rootId)
+        if (encKey) {
+          content.encryptedText = tribeCrypto.encryptWithKey(safeText(text), encKey)
+          if (chat.tribeId) content.tribeId = chat.tribeId
         } else {
           content.text = safeText(text)
         }
@@ -490,10 +505,16 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
 
+      let tribeId = null
+      const tipId = idx.tipByRoot.get(chatRootId) || chatRootId
+      const chatNode = idx.nodes.get(tipId) || idx.nodes.get(chatRootId)
+      if (chatNode?.c?.tribeId) tribeId = chatNode.c.tribeId
+      const tribeKeys = tribeId ? await getTribeKeysFor(tribeId) : []
+
       const result = []
       for (const [k, node] of idx.msgNodes.entries()) {
         if (node.c.chatId !== chatRootId) continue
-        const msg = buildMessage(node, chatRootId)
+        const msg = buildMessage(node, chatRootId, tribeKeys)
         if (msg) result.push(msg)
       }
 

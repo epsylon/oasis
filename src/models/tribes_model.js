@@ -187,9 +187,56 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const oldMembers = tribe.members || [];
       await this.updateTribeById(tribeId, { members });
       const removed = oldMembers.filter(m => !members.includes(m));
+      const added = members.filter(m => !oldMembers.includes(m));
       if (removed.length > 0) {
         await this.rotateTribeKey(tribeId, members);
+      } else if (added.length > 0) {
+        await this.distributeTribeKey(tribeId, added);
       }
+    },
+
+    async distributeTribeKey(tribeId, toMembers) {
+      if (!tribeCrypto) return;
+      const ssb = await openSsb();
+      const ssbKeys = require('../server/node_modules/ssb-keys');
+      const rootId = await this.getRootId(tribeId);
+      const currentKey = tribeCrypto.getKey(rootId);
+      if (!currentKey) return;
+      const gen = tribeCrypto.getGen(rootId);
+      const memberKeys = {};
+      for (const memberId of toMembers) {
+        try { memberKeys[memberId] = tribeCrypto.boxKeyForMember(currentKey, memberId, ssbKeys); } catch (_) {}
+      }
+      if (!Object.keys(memberKeys).length) return;
+      await new Promise((resolve, reject) => {
+        ssb.publish({ type: 'tribe-keys', tribeId: rootId, generation: gen, memberKeys }, (err, res) => err ? reject(err) : resolve(res));
+      });
+    },
+
+    async ensureTribeKeyDistribution(tribeId) {
+      if (!tribeCrypto) return;
+      const ssb = await openSsb();
+      const userId = ssb.id;
+      const tribe = await this.getTribeById(tribeId).catch(() => null);
+      if (!tribe || tribe.author !== userId) return;
+      const rootId = await this.getRootId(tribeId);
+      const currentKey = tribeCrypto.getKey(rootId);
+      if (!currentKey) return;
+      const gen = tribeCrypto.getGen(rootId);
+      const msgs = await new Promise((resolve, reject) => {
+        pull(ssb.createLogStream({ limit: logLimit }), pull.collect((err, m) => err ? reject(err) : resolve(m)));
+      });
+      const distributed = new Set();
+      for (const m of msgs) {
+        const c = m.value?.content;
+        if (!c || c.type !== 'tribe-keys') continue;
+        if (c.tribeId !== rootId) continue;
+        if ((c.generation || 0) < gen) continue;
+        for (const mid of Object.keys(c.memberKeys || {})) distributed.add(mid);
+      }
+      const members = Array.isArray(tribe.members) ? tribe.members : [];
+      const missing = members.filter(m => m !== userId && !distributed.has(m));
+      if (missing.length > 0) await this.distributeTribeKey(tribeId, missing);
     },
 
     async publishUpdatedTribe(tribeId, updatedTribe) {

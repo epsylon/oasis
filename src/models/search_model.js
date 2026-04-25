@@ -282,10 +282,14 @@ module.exports = ({ cooler, padsModel }) => {
         const c = msg?.value?.content;
         if (c?.type === 'pad') {
           const rootId = c.replaces ? msg.key : msg.key;
-          const decrypted = padsModel.decryptContent(c, rootId);
-          c.title = decrypted.title || c.title;
-          c.deadline = decrypted.deadline || c.deadline;
-          c.tags = decrypted.tags.length ? decrypted.tags : c.tags;
+          try {
+            const decrypted = await padsModel.decryptContent(c, rootId);
+            if (decrypted && typeof decrypted === 'object') {
+              if (decrypted.title) c.title = decrypted.title;
+              if (decrypted.deadline) c.deadline = decrypted.deadline;
+              if (Array.isArray(decrypted.tags) && decrypted.tags.length) c.tags = decrypted.tags;
+            }
+          } catch (_) {}
         }
       }
     }
