@@ -202,7 +202,7 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
 
 exports.singlePadView = async (pad, entries, params) => {
   const isAuthor = String(pad.author) === String(userId)
-  const isMember = pad.members.includes(userId)
+  const isMember = pad.members.includes(userId) || (!!pad.tribeId && !!pad.isTribeMember)
   const padClosed = pad.isClosed
   const returnTo = `/pads/${encodeURIComponent(pad.rootId)}`
   const shareUrl = `/pads/${encodeURIComponent(pad.rootId)}`
@@ -231,7 +231,7 @@ exports.singlePadView = async (pad, entries, params) => {
       isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-label" }, i18n.padDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, pad.deadline ? moment(pad.deadline).format("YYYY-MM-DD HH:mm") : "\u2014"))
     ),
     isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions" },
-      isAuthor
+      isAuthor && pad.status === "INVITE-ONLY"
         ? form({ method: "POST", action: `/pads/generate-invite/${encodeURIComponent(pad.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn" }, i18n.padGenerateCode || "Generate Code")
           )
@@ -271,7 +271,7 @@ exports.singlePadView = async (pad, entries, params) => {
           )
         )
       : null,
-    !isRestrictedInviteOnly && (!isAuthor && (pad.status === "OPEN" || isMember) && !padClosed)
+    !isRestrictedInviteOnly && !isAuthor && !isMember && pad.status === "OPEN" && !padClosed
       ? form({ method: "POST", action: `/pads/join/${encodeURIComponent(pad.rootId)}` },
           button({ type: "submit", class: "create-button" }, i18n.padStartEditing || "START EDITING!")
         )

@@ -3642,17 +3642,6 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   font-style: italic;
 }
 
-.tribe-card-subtribes {
-  border: 1px solid #555;
-  border-radius: 4px;
-  padding: 8px;
-  margin: 6px 0;
-  background: #1e1f23;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 .tribe-card-members {
   border: none;
   border-radius: 4px;
@@ -4152,43 +4141,6 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 
 .tribe-feed-compose .tribe-feed-send {
   align-self: flex-end;
-}
-
-.tribe-parent-box {
-  margin-bottom: 12px;
-  text-align: center;
-}
-
-.tribe-parent-box h2 {
-  margin: 0 0 8px 0;
-}
-
-.tribe-parent-link {
-  display: block;
-}
-
-.tribe-parent-image {
-  width: 100%;
-  max-width: 200px;
-  border-radius: 8px;
-  border: 2px solid #444;
-}
-
-.tribe-card-parent {
-  padding: 8px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tribe-parent-card-link {
-  color: #FFA500;
-  font-weight: bold;
-  text-decoration: none;
-}
-
-.tribe-parent-card-link:hover {
-  text-decoration: underline;
 }
 
 .comment-submit-btn {
@@ -5057,3 +5009,45 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .logs-detail-header{color:#aaa;font-family:monospace;margin-bottom:12px;word-break:break-all}
 .logs-detail-text{white-space:pre-wrap;word-break:break-word;color:#ddd;margin:12px 0}
 .logs-detail-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.no-border{border:none}
+.tribe-card-padded{padding:12px 16px}
+.tribe-content-list-spaced{display:flex;flex-direction:column;gap:16px}
+.tribe-banner{padding:12px 16px;margin-bottom:16px;text-align:center}
+.bold{font-weight:bold}
+.inline-form{display:inline}
+.bd-type-post{border-color:#3498db}.bd-type-post .block-diagram-ruler{border-bottom-color:#3498db}
+.bd-type-vote,.bd-type-votes,.bd-type-pixelia,.bd-type-parliamentTerm,.bd-type-parliamentProposal,.bd-type-parliamentLaw,.bd-type-parliamentCandidature,.bd-type-parliamentRevocation{border-color:#9b59b6}
+.bd-type-vote .block-diagram-ruler,.bd-type-votes .block-diagram-ruler,.bd-type-pixelia .block-diagram-ruler,.bd-type-parliamentTerm .block-diagram-ruler,.bd-type-parliamentProposal .block-diagram-ruler,.bd-type-parliamentLaw .block-diagram-ruler,.bd-type-parliamentCandidature .block-diagram-ruler,.bd-type-parliamentRevocation .block-diagram-ruler{border-bottom-color:#9b59b6}
+.bd-type-about,.bd-type-forum,.bd-type-curriculum{border-color:#1abc9c}
+.bd-type-about .block-diagram-ruler,.bd-type-forum .block-diagram-ruler,.bd-type-curriculum .block-diagram-ruler{border-bottom-color:#1abc9c}
+.bd-type-contact{border-color:#16a085}.bd-type-contact .block-diagram-ruler{border-bottom-color:#16a085}
+.bd-type-pub,.bd-type-project,.bd-type-pad,.bd-type-map,.bd-type-mapMarker{border-color:#2ecc71}
+.bd-type-pub .block-diagram-ruler,.bd-type-project .block-diagram-ruler,.bd-type-pad .block-diagram-ruler,.bd-type-map .block-diagram-ruler,.bd-type-mapMarker .block-diagram-ruler{border-bottom-color:#2ecc71}
+.bd-type-tribe,.bd-type-market,.bd-type-shop,.bd-type-shopProduct{border-color:#e67e22}
+.bd-type-tribe .block-diagram-ruler,.bd-type-market .block-diagram-ruler,.bd-type-shop .block-diagram-ruler,.bd-type-shopProduct .block-diagram-ruler{border-bottom-color:#e67e22}
+.bd-type-event,.bd-type-transfer,.bd-type-calendar{border-color:#e74c3c}
+.bd-type-event .block-diagram-ruler,.bd-type-transfer .block-diagram-ruler,.bd-type-calendar .block-diagram-ruler{border-bottom-color:#e74c3c}
+.bd-type-task,.bd-type-banking,.bd-type-bankWallet,.bd-type-bankClaim,.bd-type-gameScore{border-color:#f39c12}
+.bd-type-task .block-diagram-ruler,.bd-type-banking .block-diagram-ruler,.bd-type-bankWallet .block-diagram-ruler,.bd-type-bankClaim .block-diagram-ruler,.bd-type-gameScore .block-diagram-ruler{border-bottom-color:#f39c12}
+.bd-type-report,.bd-type-courtsCase,.bd-type-courtsEvidence,.bd-type-courtsAnswer,.bd-type-courtsVerdict,.bd-type-courtsSettlement,.bd-type-courtsNomination{border-color:#c0392b}
+.bd-type-report .block-diagram-ruler,.bd-type-courtsCase .block-diagram-ruler,.bd-type-courtsEvidence .block-diagram-ruler,.bd-type-courtsAnswer .block-diagram-ruler,.bd-type-courtsVerdict .block-diagram-ruler,.bd-type-courtsSettlement .block-diagram-ruler,.bd-type-courtsNomination .block-diagram-ruler{border-bottom-color:#c0392b}
+.bd-type-image,.bd-type-job,.bd-type-aiExchange,.bd-type-chat{border-color:#3498db}
+.bd-type-image .block-diagram-ruler,.bd-type-job .block-diagram-ruler,.bd-type-aiExchange .block-diagram-ruler,.bd-type-chat .block-diagram-ruler{border-bottom-color:#3498db}
+.bd-type-audio{border-color:#8e44ad}.bd-type-audio .block-diagram-ruler{border-bottom-color:#8e44ad}
+.bd-type-video{border-color:#d35400}.bd-type-video .block-diagram-ruler{border-bottom-color:#d35400}
+.bd-type-document{border-color:#27ae60}.bd-type-document .block-diagram-ruler{border-bottom-color:#27ae60}
+.bd-type-bookmark{border-color:#f1c40f}.bd-type-bookmark .block-diagram-ruler{border-bottom-color:#f1c40f}
+.bd-type-feed,.bd-type-tombstone{border-color:#95a5a6}
+.bd-type-feed .block-diagram-ruler,.bd-type-tombstone .block-diagram-ruler{border-bottom-color:#95a5a6}
+.stats-link{color:#007bff;text-decoration:none}
+.stats-link-break{color:#007bff;text-decoration:none;word-break:break-all}
+.stats-muted-555{color:#555}
+.stats-muted-888{color:#888}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;margin-bottom:24px}
+.stats-section-h{font-size:18px;color:#555;margin:8px 0;font-weight:600}
+.stats-list-reset{list-style-type:none;padding:0;margin:0}
+.stats-mb-16{margin-bottom:16px}
+.stats-w-100{width:100%}
+.stats-table{width:100%;border-collapse:collapse}
+.stats-table-mt8{width:100%;border-collapse:collapse;margin-top:8px}
+.stats-h-row{font-size:18px;color:#555;margin:8px 0}

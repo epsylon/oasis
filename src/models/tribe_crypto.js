@@ -6,8 +6,15 @@ const SENSITIVE_FIELDS = [
   'title', 'description', 'location', 'price', 'salary', 'options', 'votes',
   'category', 'tags', 'image', 'url', 'attendees', 'assignees', 'deadline',
   'goal', 'funded', 'refeeds', 'refeeds_inhabitants', 'opinions',
-  'opinions_inhabitants', 'parentId', 'status', 'priority', 'date', 'mediaType'
+  'opinions_inhabitants', 'status', 'priority', 'date', 'mediaType'
 ];
+
+const ENVELOPE_PRESERVE = new Set([
+  'type', 'tribeId', 'contentType', 'replaces', 'target', 'author',
+  'createdAt', 'updatedAt', 'encryptedPayload',
+  'mapId', 'calendarId', 'dateId', 'padId', 'roomId', 'parentId',
+  '_decrypted', '_undecryptable'
+]);
 
 const INVITE_SALT = 'SolarNET.HuB';
 
@@ -26,7 +33,9 @@ module.exports = (configPath) => {
   };
 
   const saveKeyring = () => {
-    fs.writeFileSync(keyringPath, JSON.stringify(keyring, null, 2), 'utf8');
+    const tmp = keyringPath + '.tmp.' + process.pid + '.' + Date.now();
+    fs.writeFileSync(tmp, JSON.stringify(keyring, null, 2), 'utf8');
+    fs.renameSync(tmp, keyringPath);
   };
 
   const generateTribeKey = () => crypto.randomBytes(32).toString('hex');
@@ -89,6 +98,23 @@ module.exports = (configPath) => {
     return decryptWithKey(encryptedKey, derived.toString('hex'));
   };
 
+  const encryptChainForInvite = (ancestryRootIds, inviteCode) => {
+    const chain = ancestryRootIds.map(rootId => ({ rootId, key: getKey(rootId), gen: getGen(rootId) }));
+    if (chain.some(e => !e.key)) return null;
+    const derived = crypto.scryptSync(inviteCode, INVITE_SALT, 32);
+    return encryptWithKey(JSON.stringify(chain), derived.toString('hex'));
+  };
+
+  const decryptChainFromInvite = (encryptedPayload, inviteCode) => {
+    const derived = crypto.scryptSync(inviteCode, INVITE_SALT, 32);
+    try {
+      const json = decryptWithKey(encryptedPayload, derived.toString('hex'));
+      const parsed = JSON.parse(json);
+      if (Array.isArray(parsed) && parsed.every(e => e && e.rootId && e.key)) return parsed;
+    } catch (_) {}
+    return null;
+  };
+
   const encryptChain = (plaintext, keyChain) => {
     let data = plaintext;
     for (const keyHex of keyChain) {
@@ -106,18 +132,25 @@ module.exports = (configPath) => {
     return data;
   };
 
-  const encryptContent = (content, keyChain) => {
+  const encryptContent = (content, keyChain, customFields) => {
     const payload = {};
-    for (const field of SENSITIVE_FIELDS) {
-      if (content[field] !== undefined) {
-        payload[field] = content[field];
+    if (customFields) {
+      for (const [k, v] of Object.entries(content)) {
+        if (ENVELOPE_PRESERVE.has(k)) continue;
+        payload[k] = v;
+      }
+    } else {
+      for (const field of SENSITIVE_FIELDS) {
+        if (content[field] !== undefined) payload[field] = content[field];
       }
     }
     const plaintext = JSON.stringify(payload);
     const encryptedPayload = encryptChain(plaintext, keyChain);
     const result = {};
     for (const [k, v] of Object.entries(content)) {
-      if (!SENSITIVE_FIELDS.includes(k)) result[k] = v;
+      if (customFields ? ENVELOPE_PRESERVE.has(k) : !SENSITIVE_FIELDS.includes(k)) {
+        result[k] = v;
+      }
     }
     result.encryptedPayload = encryptedPayload;
     return result;
@@ -137,7 +170,7 @@ module.exports = (configPath) => {
         continue;
       }
     }
-    return { ...content, encrypted: true };
+    return { ...content, _undecryptable: true };
   };
 
   const boxKeyForMember = (tribeKeyHex, memberFeedId, ssbKeys) => {
@@ -165,17 +198,85 @@ module.exports = (configPath) => {
     return sets;
   };
 
+  const resolveKeyChain = async (tribeId, tribesModel) => {
+    if (!tribeId || !tribesModel) return null;
+    let ancestryIds;
+    try { ancestryIds = await tribesModel.getAncestryChain(tribeId); } catch (_) { return null; }
+    if (!Array.isArray(ancestryIds) || !ancestryIds.length) return null;
+    const chain = [];
+    for (const rootId of ancestryIds) {
+      const key = getKey(rootId);
+      if (!key) return null;
+      chain.push(key);
+    }
+    return chain.length ? chain : null;
+  };
+
+  const resolveKeyChainSets = async (tribeId, tribesModel) => {
+    if (!tribeId || !tribesModel) return null;
+    let ancestryIds;
+    try { ancestryIds = await tribesModel.getAncestryChain(tribeId); } catch (_) { return null; }
+    if (!Array.isArray(ancestryIds) || !ancestryIds.length) return null;
+    return buildKeyChainSets(ancestryIds);
+  };
+
+  const encryptForTribe = async (content, tribeId, tribesModel) => {
+    const chain = await resolveKeyChain(tribeId, tribesModel);
+    if (!chain) throw new Error('Missing tribe key chain — cannot encrypt content for this tribe');
+    return encryptContent(content, chain, true);
+  };
+
+  const decryptFromTribe = async (content, tribesModel) => {
+    if (!content || !content.encryptedPayload) return content;
+    const tid = content.tribeId;
+    if (!tid) return content;
+    const sets = await resolveKeyChainSets(tid, tribesModel);
+    if (!sets || !sets.length) return { ...content, _undecryptable: true };
+    return decryptContent(content, sets);
+  };
+
+  const createHelpers = (tribesModel) => ({
+    async encryptIfTribe(content) {
+      if (!content.tribeId || !tribesModel) return content;
+      return await encryptForTribe(content, content.tribeId, tribesModel);
+    },
+    async decryptIfTribe(content) {
+      if (!content || !content.encryptedPayload || !tribesModel) return content;
+      return await decryptFromTribe(content, tribesModel);
+    },
+    assertReadable(decrypted, what) {
+      if (decrypted && decrypted._undecryptable) throw new Error(`${what} is tribe-encrypted and cannot be decrypted with available keys`);
+    },
+    async decryptIndexNodes(idx) {
+      if (!tribesModel) return;
+      for (const [k, n] of idx.nodes.entries()) {
+        if (!n.c || !n.c.encryptedPayload) continue;
+        const dec = await decryptFromTribe(n.c, tribesModel);
+        if (dec && !dec._undecryptable) {
+          idx.nodes.set(k, { ...n, c: { ...dec, _decrypted: true } });
+        } else {
+          idx.nodes.set(k, { ...n, c: { ...n.c, _decrypted: false } });
+        }
+      }
+    }
+  });
+
   loadKeyring();
 
   return {
     SENSITIVE_FIELDS,
+    ENVELOPE_PRESERVE,
     loadKeyring, saveKeyring,
     generateTribeKey, getKey, getKeys, getGen, setKey, addNewKey,
     encryptWithKey, decryptWithKey,
     encryptForInvite, decryptFromInvite,
+    encryptChainForInvite, decryptChainFromInvite,
     encryptChain, decryptChain,
     encryptContent, decryptContent,
     boxKeyForMember, unboxKeyFromMember,
     buildKeyChainSets,
+    resolveKeyChain, resolveKeyChainSets,
+    encryptForTribe, decryptFromTribe,
+    createHelpers,
   };
 };

@@ -205,6 +205,7 @@ const renderTorrentTable = (torrents, filter, params = {}) => {
 
 const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
   const returnTo = safeText(params.returnTo) || buildReturnTo("all", params);
+  const tribeId = safeText(params.tribeId || "");
   return div(
     { class: "div-center audio-form" },
     form(
@@ -214,6 +215,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
         enctype: "multipart/form-data"
       },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
+      tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       span(i18n.torrentFileLabel),
       br(),
       input({ type: "file", name: "torrent", accept: ".torrent", required: filter !== "edit" }),

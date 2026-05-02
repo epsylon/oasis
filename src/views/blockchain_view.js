@@ -83,6 +83,7 @@ const generateFilterButtons = (filters, currentFilter, action, search = {}) =>
   );
 
 const getViewDetailsAction = (type, block) => {
+  if (block && block.content && typeof block.content.encryptedPayload === 'string') return null;
   switch (type) {
     case 'votes': return `/votes/${encodeURIComponent(block.id)}`;
     case 'transfer': return `/transfers/${encodeURIComponent(block.id)}`;
@@ -132,6 +133,10 @@ const getViewDetailsAction = (type, block) => {
     case 'chat': return `/chats/${encodeURIComponent(block.id)}`;
     case 'gameScore': return `/games?filter=scoring`;
     case 'log': return `/logs/view/${encodeURIComponent(block.id)}`;
+    case 'calendarDate':
+    case 'calendarNote': return block.content?.calendarId ? `/calendars/${encodeURIComponent(block.content.calendarId)}` : `/calendars`;
+    case 'padEntry': return block.content?.padId ? `/pads/${encodeURIComponent(block.content.padId)}` : `/pads`;
+    case 'chatMessage': return block.content?.roomId ? `/chats/${encodeURIComponent(block.content.roomId)}` : `/chats`;
     default: return null;
   }
 };
@@ -173,9 +178,10 @@ const renderBlockDiagram = (blocks, qs) => {
       ].filter(Boolean).join(' | ') || '—';
 
       const datagramQs = qs ? `${qs}&view=datagram` : '?view=datagram';
+      const typeClass = `bd-type-${String(block.type || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
       return a({ href: `/blockexplorer/block/${encodeURIComponent(block.id)}${datagramQs}`, class: 'block-diagram-link' },
-        div({ class: 'block-diagram', style: `border-color:${color};` },
-          div({ class: 'block-diagram-ruler', style: `border-bottom-color:${color};` },
+        div({ class: `block-diagram ${typeClass}` },
+          div({ class: 'block-diagram-ruler' },
             span('0'), span('4'), span('8'), span('16'), span('24'), span('31')
           ),
           div({ class: 'block-diagram-grid' },

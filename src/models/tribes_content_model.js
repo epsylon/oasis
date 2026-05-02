@@ -13,23 +13,11 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
   const TYPE = 'tribe-content';
 
-  const resolveKeyChain = async (tribeId) => {
-    if (!tribeCrypto || !tribesModel) return null;
-    const ancestryIds = await tribesModel.getAncestryChain(tribeId);
-    const chain = [];
-    for (const rootId of ancestryIds) {
-      const key = tribeCrypto.getKey(rootId);
-      if (!key) return null;
-      chain.push(key);
-    }
-    return chain;
-  };
+  const resolveKeyChain = async (tribeId) =>
+    (tribeCrypto && tribesModel) ? tribeCrypto.resolveKeyChain(tribeId, tribesModel) : null;
 
-  const resolveKeyChainSets = async (tribeId) => {
-    if (!tribeCrypto || !tribesModel) return null;
-    const ancestryIds = await tribesModel.getAncestryChain(tribeId);
-    return tribeCrypto.buildKeyChainSets(ancestryIds);
-  };
+  const resolveKeyChainSets = async (tribeId) =>
+    (tribeCrypto && tribesModel) ? tribeCrypto.resolveKeyChainSets(tribeId, tribesModel) : null;
 
   const publish = async (content) => {
     const ssbClient = await openSsb();
@@ -52,16 +40,24 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const tombstoned = new Set();
     const replaced = new Map();
     const items = new Map();
+    const authorByKey = new Map();
+    const tombRequests = [];
 
     for (const m of msgs) {
       const c = m.value?.content;
       if (!c) continue;
-      if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue; }
+      if (c.type === 'tombstone' && c.target) { tombRequests.push({ target: c.target, author: m.value?.author }); continue; }
       if (c.type !== TYPE) continue;
+      authorByKey.set(m.key, m.value?.author);
       if (tribeId && c.tribeId !== tribeId) continue;
       if (contentType && c.contentType !== contentType) continue;
       if (c.replaces) replaced.set(c.replaces, m.key);
       items.set(m.key, { id: m.key, ...c, _ts: m.value?.timestamp });
+    }
+
+    for (const t of tombRequests) {
+      const targetAuthor = authorByKey.get(t.target);
+      if (targetAuthor && t.author === targetAuthor) tombstoned.add(t.target);
     }
 
     for (const id of tombstoned) items.delete(id);
@@ -74,9 +70,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         if (!result[i].encryptedPayload) continue;
         const tid = result[i].tribeId;
         if (!keyChainCache.has(tid)) {
-          keyChainCache.set(tid, tribeCrypto.buildKeyChainSets(
-            await tribesModel.getAncestryChain(tid)
-          ));
+          const sets = await tribeCrypto.resolveKeyChainSets(tid, tribesModel);
+          keyChainCache.set(tid, sets || []);
         }
         result[i] = tribeCrypto.decryptContent(result[i], keyChainCache.get(tid));
       }
@@ -145,6 +140,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     async update(contentId, data, existing) {
       if (!existing) existing = await this.getById(contentId);
       if (!existing) throw new Error('Content not found');
+      if (existing._undecryptable) throw new Error('Content is tribe-encrypted and cannot be decrypted with available keys');
       if (data.status && !VALID_STATUSES.includes(data.status)) {
         throw new Error('Invalid status. Must be OPEN, CLOSED, or IN-PROGRESS');
       }
@@ -208,14 +204,21 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const tombstoned = new Set();
       const replaced = new Map();
       const items = new Map();
+      const authorByKey = new Map();
+      const tombRequests = [];
 
       for (const m of msgs) {
         const c = m.value?.content;
         if (!c) continue;
-        if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue; }
+        if (c.type === 'tombstone' && c.target) { tombRequests.push({ target: c.target, author: m.value?.author }); continue; }
         if (c.type !== TYPE) continue;
+        authorByKey.set(m.key, m.value?.author);
         if (c.replaces) replaced.set(c.replaces, m.key);
         items.set(m.key, { id: m.key, ...c, _ts: m.value?.timestamp });
+      }
+      for (const t of tombRequests) {
+        const targetAuthor = authorByKey.get(t.target);
+        if (targetAuthor && t.author === targetAuthor) tombstoned.add(t.target);
       }
 
       let latestId = contentId;
@@ -223,10 +226,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (tombstoned.has(latestId)) return null;
       const item = items.get(latestId) || null;
       if (!item || !item.encryptedPayload || !tribeCrypto || !tribesModel) return item;
-      const keyChainSets = tribeCrypto.buildKeyChainSets(
-        await tribesModel.getAncestryChain(item.tribeId)
-      );
-      return tribeCrypto.decryptContent(item, keyChainSets);
+      const keyChainSets = await tribeCrypto.resolveKeyChainSets(item.tribeId, tribesModel);
+      return tribeCrypto.decryptContent(item, keyChainSets || []);
     },
 
     async listByTribe(tribeId, contentType, filter) {

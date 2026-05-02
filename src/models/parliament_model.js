@@ -444,7 +444,10 @@ module.exports = ({ cooler, services = {} }) => {
     const isTribe = term.powerType === 'tribe';
     let members = 1;
     if (isTribe && term.powerId) {
-      const tribe = services.tribes ? await services.tribes.getTribeById(term.powerId) : null;
+      let tribe = null;
+      if (services.tribes) {
+        try { tribe = await services.tribes.getTribeById(term.powerId); } catch {}
+      }
       members = tribe && Array.isArray(tribe.members) ? tribe.members.length : 0;
     }
     const pol = await summarizePoliciesForTerm({ ...term });
@@ -1067,7 +1070,7 @@ module.exports = ({ cooler, services = {} }) => {
     if (latestAny && !isExpiredTerm(latestAny)) return latestAny;
 
     if (latestAny && isExpiredTerm(latestAny)) {
-      try { await enactApprovedChanges(latestAny); } catch {}
+      try { await enactApprovedChanges(latestAny); } catch (e) { console.error('enactApprovedChanges failed:', e); }
     }
 
     const open = await listCandidaturesOpen();
@@ -1183,7 +1186,10 @@ module.exports = ({ cooler, services = {} }) => {
     if (String(term.method || '').toUpperCase() === 'ANARCHY') return true;
     if (term.powerType === 'inhabitant') return term.powerId === userId;
     if (term.powerType === 'tribe') {
-      const tribe = services.tribes ? await services.tribes.getTribeById(term.powerId) : null;
+      let tribe = null;
+      if (services.tribes) {
+        try { tribe = await services.tribes.getTribeById(term.powerId); } catch {}
+      }
       const members = ensureArray(tribe?.members);
       return members.includes(userId);
     }
@@ -1201,6 +1207,13 @@ module.exports = ({ cooler, services = {} }) => {
   };
 
   const tribeListByType = async (type, tribeId) => {
+    let chainIds;
+    try {
+      chainIds = services.tribes && services.tribes.getChainIds
+        ? await services.tribes.getChainIds(tribeId)
+        : [tribeId];
+    } catch (_) { chainIds = [tribeId]; }
+    const tribeIdSet = new Set(Array.isArray(chainIds) && chainIds.length ? chainIds : [tribeId]);
     const msgs = await tribeReadLog();
     const tomb = new Set();
     const replaced = new Set();
@@ -1209,7 +1222,7 @@ module.exports = ({ cooler, services = {} }) => {
       const c = m.value?.content; if (!c) continue;
       if (c.type === 'tombstone' && c.target) { tomb.add(c.target); continue; }
       if (c.type !== type) continue;
-      if (c.tribeId !== tribeId) continue;
+      if (!tribeIdSet.has(c.tribeId)) continue;
       if (c.replaces) replaced.add(c.replaces);
       items.set(m.key, { ...c, id: m.key, _ts: m.value?.timestamp || 0 });
     }
@@ -1225,6 +1238,77 @@ module.exports = ({ cooler, services = {} }) => {
     terms.sort((a, b) => String(b.startAt).localeCompare(String(a.startAt)));
     return terms[0] || null;
   };
+
+  const tribeElectionInFlight = new Map();
+
+  async function tribePublishInitialTerm(tribeId) {
+    if (!tribeId) throw new Error('Missing tribeId');
+    await openSsb();
+    const existing = await tribeListByType('tribeParliamentTerm', tribeId);
+    if (existing.length > 0) return existing[0];
+    const startAt = moment().toISOString();
+    const endAt = moment(startAt).add(TERM_DAYS, 'days').toISOString();
+    const term = {
+      type: 'tribeParliamentTerm',
+      tribeId,
+      method: 'ANARCHY',
+      leaderId: null,
+      winnerVotes: 0,
+      totalVotes: 0,
+      startAt,
+      endAt,
+      createdBy: userId,
+      createdAt: nowISO()
+    };
+    return await publishMsg(term);
+  }
+
+  async function tribeResolveElectionImpl(tribeId) {
+    const latest = await tribeGetCurrentTerm(tribeId);
+    if (latest && !isExpiredTerm(latest)) return latest;
+    const opens = (await tribeListCandidatures(tribeId)).filter(c => (c.status || 'OPEN') === 'OPEN');
+    let chosen = null, totalVotes = 0, winnerVotes = 0;
+    if (opens.length) {
+      opens.sort((a, b) => Number(b.votes || 0) - Number(a.votes || 0) || new Date(a.createdAt) - new Date(b.createdAt));
+      chosen = opens[0];
+      totalVotes = opens.reduce((s, c) => s + Number(c.votes || 0), 0);
+      winnerVotes = Number(chosen.votes || 0);
+      if (winnerVotes <= 0) chosen = null;
+    }
+    const startAt = moment().toISOString();
+    const endAt = moment(startAt).add(TERM_DAYS, 'days').toISOString();
+    const term = {
+      type: 'tribeParliamentTerm',
+      tribeId,
+      method: chosen ? String(chosen.method || 'DEMOCRACY').toUpperCase() : 'ANARCHY',
+      leaderId: chosen ? chosen.candidateId : null,
+      winnerVotes,
+      totalVotes,
+      startAt,
+      endAt,
+      createdBy: userId,
+      createdAt: nowISO()
+    };
+    const res = await publishMsg(term);
+    for (const c of opens) {
+      try { await publishMsg({ type: 'tombstone', target: c.id, deletedAt: nowISO(), author: userId }); } catch {}
+    }
+    return res;
+  }
+
+  async function tribeResolveElection(tribeId) {
+    if (tribeElectionInFlight.has(tribeId)) return tribeElectionInFlight.get(tribeId);
+    const p = tribeResolveElectionImpl(tribeId).catch(e => { console.error('tribeResolveElection failed:', e); return null; }).finally(() => tribeElectionInFlight.delete(tribeId));
+    tribeElectionInFlight.set(tribeId, p);
+    return p;
+  }
+
+  async function tribeEnsureTerm(tribeId) {
+    const cur = await tribeGetCurrentTerm(tribeId);
+    if (cur && !isExpiredTerm(cur)) return cur;
+    if (!cur) return await tribePublishInitialTerm(tribeId);
+    return await tribeResolveElection(tribeId);
+  }
 
   const tribeListCandidatures = (tribeId) => tribeListByType('tribeParliamentCandidature', tribeId);
   const tribeListRules = (tribeId) => tribeListByType('tribeParliamentRule', tribeId);
@@ -1285,11 +1369,18 @@ module.exports = ({ cooler, services = {} }) => {
   };
 
   const tribeHasCandidatureInGlobalCycle = async (tribeId, globalTermStart) => {
+    let chainIds;
+    try {
+      chainIds = services.tribes && services.tribes.getChainIds
+        ? await services.tribes.getChainIds(tribeId)
+        : [tribeId];
+    } catch (_) { chainIds = [tribeId]; }
+    const tribeIdSet = new Set(Array.isArray(chainIds) && chainIds.length ? chainIds : [tribeId]);
     const msgs = await tribeReadLog();
     const cutoff = globalTermStart ? new Date(globalTermStart) : new Date(Date.now() - TERM_DAYS * 86400000);
     return msgs.some(m => {
       const c = m.value?.content; if (!c) return false;
-      return c.type === 'parliamentCandidature' && c.targetType === 'tribe' && c.targetId === tribeId && (c.status || 'OPEN') === 'OPEN' && new Date(c.createdAt) >= cutoff;
+      return c.type === 'parliamentCandidature' && c.targetType === 'tribe' && tribeIdSet.has(c.targetId) && (c.status || 'OPEN') === 'OPEN' && new Date(c.createdAt) >= cutoff;
     });
   };
 
@@ -1326,7 +1417,10 @@ module.exports = ({ cooler, services = {} }) => {
       voteTribeCandidature: tribeVoteCandidature,
       publishTribeRule: tribePublishRule,
       deleteTribeRule: tribeDeleteRule,
-      hasCandidatureInGlobalCycle: tribeHasCandidatureInGlobalCycle
+      hasCandidatureInGlobalCycle: tribeHasCandidatureInGlobalCycle,
+      publishInitialTerm: tribePublishInitialTerm,
+      resolveElection: tribeResolveElection,
+      ensureTerm: tribeEnsureTerm
     }
   };
 };

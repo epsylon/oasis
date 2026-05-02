@@ -213,7 +213,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   const q = safeText(params.q || "")
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q })
   const isAuthor = String(chat.author) === String(userId)
-  const isMember = safeArr(chat.members).includes(userId)
+  const isMember = safeArr(chat.members).includes(userId) || (!!chat.tribeId && !!chat.isTribeMember)
   const fullShareUrl = `/chats/${encodeURIComponent(chat.key)}`
   const isRestrictedInviteOnly = !isMember && !isAuthor && chat.status === "INVITE-ONLY"
 
@@ -250,7 +250,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
       ) : null
     ),
     isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions" },
-      isAuthor
+      isAuthor && chat.status === "INVITE-ONLY"
         ? form({ method: "POST", action: `/chats/generate-invite` },
             input({ type: "hidden", name: "chatId", value: chat.key }),
             input({ type: "hidden", name: "returnTo", value: returnTo }),

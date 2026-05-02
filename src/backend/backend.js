@@ -61,7 +61,7 @@ const ensureTerm = async () => {
 let sweepInFlight = null;
 const runSweepOnce = async () => {
   if (sweepInFlight) return sweepInFlight;
-  sweepInFlight = parliamentModel.sweepProposals().catch(() => {}).finally(() => { sweepInFlight = null; });
+  sweepInFlight = parliamentModel.sweepProposals().catch(e => console.error('sweepProposals failed:', e)).finally(() => { sweepInFlight = null; });
   return sweepInFlight;
 };
 
@@ -260,21 +260,21 @@ const tasksModel = require('../models/tasks_model')({ cooler, isPublic: config.p
 const votesModel = require('../models/votes_model')({ cooler, isPublic: config.public });
 const ssbConfig = require('../server/ssb_config');
 const tribeCrypto = require('../models/tribe_crypto')(ssbConfig.path);
+const tribesModel = require('../models/tribes_model')({ cooler, isPublic: config.public, tribeCrypto });
 const reportsModel = require('../models/reports_model')({ cooler, isPublic: config.public });
 const transfersModel = require('../models/transfers_model')({ cooler, isPublic: config.public });
-const calendarsModel = require('../models/calendars_model')({ cooler, pmModel });
+const calendarsModel = require('../models/calendars_model')({ cooler, pmModel, tribeCrypto, tribesModel });
 const cvModel = require('../models/cv_model')({ cooler, isPublic: config.public });
 const inhabitantsModel = require('../models/inhabitants_model')({ cooler, isPublic: config.public });
 const feedModel = require('../models/feed_model')({ cooler, isPublic: config.public });
 const imagesModel = require("../models/images_model")({ cooler, isPublic: config.public });
 const audiosModel = require("../models/audios_model")({ cooler, isPublic: config.public });
-const torrentsModel = require("../models/torrents_model")({ cooler, isPublic: config.public });
+const torrentsModel = require("../models/torrents_model")({ cooler, isPublic: config.public, tribeCrypto, tribesModel });
 const videosModel = require("../models/videos_model")({ cooler, isPublic: config.public });
 const documentsModel = require("../models/documents_model")({ cooler, isPublic: config.public });
 const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config.public });
 const trendingModel = require('../models/trending_model')({ cooler, isPublic: config.public });
 const statsModel = require('../models/stats_model')({ cooler, isPublic: config.public });
-const tribesModel = require('../models/tribes_model')({ cooler, isPublic: config.public, tribeCrypto });
 const padsModel = require('../models/pads_model')({ cooler, cipherModel, tribeCrypto, tribesModel });
 const tagsModel = require('../models/tags_model')({ cooler, isPublic: config.public, padsModel, tribesModel });
 const tribesContentModel = require('../models/tribes_content_model')({ cooler, isPublic: config.public, tribeCrypto, tribesModel });
@@ -288,7 +288,7 @@ const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.pub
 const shopsModel = require('../models/shops_model')({ cooler, isPublic: config.public, tribeCrypto });
 const chatsModel = require('../models/chats_model')({ cooler, tribeCrypto, tribesModel });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
-const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public });
+const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public, tribeCrypto, tribesModel });
 const gamesModel = require('../models/games_model')({ cooler });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
 const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel });
@@ -1163,7 +1163,7 @@ router
     let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
     const myTribeIds = await getUserTribeIds(uid);
-    enriched = enriched.filter(x => !x.tribeId || myTribeIds.has(x.tribeId));
+    enriched = enriched.filter(x => !x.tribeId);
     enriched = await applyListFilters(enriched, ctx);
     try {
       ctx.body = await mapsView(enriched, filter, null, { q, lat, lng, zoom, title, description, markerLabel, tags, mapType, ...(tribeId ? { tribeId } : {}) });
@@ -1174,7 +1174,10 @@ router
   })
   .get("/maps/edit/:id", async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
-    const mapItem = await mapsModel.getMapById(ctx.params.id, getViewerId());
+    let mapItem;
+    try { mapItem = await mapsModel.getMapById(ctx.params.id, getViewerId()); } catch (_) { ctx.redirect('/maps?filter=all'); return; }
+    if (!mapItem) { ctx.redirect('/maps?filter=all'); return; }
+    if (mapItem.author !== getViewerId()) { ctx.redirect(`/maps/${encodeURIComponent(mapItem.key)}`); return; }
     const fav = await mediaFavorites.getFavoriteSet('maps');
     ctx.body = await mapsView([{ ...mapItem, isFavorite: fav.has(String(mapItem.rootId || mapItem.key)) }], 'edit', mapItem.key, { returnTo: ctx.query.returnTo || '' });
   })
@@ -1182,7 +1185,14 @@ router
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
     const { mapId } = ctx.params; const { filter = 'all', q = '', zoom = '0', mkLat = '', mkLng = '', label: mkMarkerLabel = '' } = ctx.query;
     const uid = getViewerId();
-    const mapItem = await mapsModel.getMapById(mapId, uid);
+    let mapItem;
+    try {
+      mapItem = await mapsModel.getMapById(mapId, uid);
+    } catch (e) {
+      ctx.redirect('/maps?filter=all');
+      return;
+    }
+    if (!mapItem) { ctx.redirect('/maps?filter=all'); return; }
     const fav = await mediaFavorites.getFavoriteSet('maps');
     let tribeMembers = [];
     let parentTribe = null;
@@ -1225,13 +1235,13 @@ router
   })
   .get("/torrents", async (ctx) => {
     if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
-    const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
+    const { filter = 'all', q = '', sort = 'recent', tribeId = '' } = ctx.query;
     const items = await torrentsModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort, viewerId: getViewerId() });
     const fav = await mediaFavorites.getFavoriteSet('torrents');
-    let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
+    let enriched = items.filter(x => !x.tribeId).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
     enriched = await applyListFilters(enriched, ctx);
-    ctx.body = await torrentsView(enriched, filter, null, { q, sort });
+    ctx.body = await torrentsView(enriched, filter, null, { q, sort, ...(tribeId ? { tribeId } : {}) });
   })
   .get("/torrents/edit/:id", async (ctx) => {
     if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
@@ -1575,6 +1585,7 @@ router
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
     await tribesModel.processIncomingKeys().catch(() => {});
     await tribesModel.ensureTribeKeyDistribution(ctx.params.tribeId).catch(() => {});
+    await tribesModel.ensureFollowTribeMembers(ctx.params.tribeId).catch(() => {});
     const listByTribeAllChain = async (tribeId, contentType) => {
       const chainIds = await tribesModel.getChainIds(tribeId).catch(() => [tribeId]);
       const results = await Promise.all(chainIds.map(id => tribesContentModel.listByTribe(id, contentType).catch(() => [])));
@@ -1615,18 +1626,22 @@ router
         const stItems = await listByTribeAllChain(st.id, null).catch(() => []);
         subContent.push(...stItems.map(item => ({ ...item, tribeName: st.title })));
       }
-      const [allPadsRaw, allChatsRaw, allCalsRaw, allMapsRaw] = await Promise.all([
+      const [allPadsRaw, allChatsRaw, allCalsRaw, allMapsRaw, allTorrentsRaw, tribeChain] = await Promise.all([
         padsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
         chatsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
         calendarsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
-        mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => [])
+        mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => []),
+        torrentsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
       ]);
+      const tribeChainSet = new Set(tribeChain);
       const toStandalone = (type, url) => (item) => ({ contentType: type, id: item.rootId || item.key, title: item.title || '', author: item.author, createdAt: item.createdAt, directUrl: url(item) });
       const standaloneItems = [
-        ...allPadsRaw.filter(p => p.tribeId === tribe.id).map(toStandalone('pad', p => `/pads/${encodeURIComponent(p.rootId)}`)),
-        ...allChatsRaw.filter(c => c.tribeId === tribe.id).map(toStandalone('chat', c => `/chats/${encodeURIComponent(c.rootId || c.key)}`)),
-        ...allCalsRaw.filter(c => c.tribeId === tribe.id).map(toStandalone('calendar', c => `/calendars/${encodeURIComponent(c.rootId)}`)),
-        ...allMapsRaw.filter(m => m.tribeId === tribe.id).map(toStandalone('map', m => `/maps/${encodeURIComponent(m.key || m.id)}`))
+        ...allPadsRaw.filter(p => tribeChainSet.has(p.tribeId)).map(toStandalone('pad', p => `/pads/${encodeURIComponent(p.rootId)}`)),
+        ...allChatsRaw.filter(c => tribeChainSet.has(c.tribeId)).map(toStandalone('chat', c => `/chats/${encodeURIComponent(c.rootId || c.key)}`)),
+        ...allCalsRaw.filter(c => tribeChainSet.has(c.tribeId)).map(toStandalone('calendar', c => `/calendars/${encodeURIComponent(c.rootId)}`)),
+        ...allMapsRaw.filter(m => tribeChainSet.has(m.tribeId)).map(toStandalone('map', m => `/maps/${encodeURIComponent(m.key || m.id)}`)),
+        ...allTorrentsRaw.filter(t => tribeChainSet.has(t.tribeId)).map(toStandalone('torrent', t => `/torrents/${encodeURIComponent(t.rootId || t.key)}`))
       ];
       const combined = [...allContent, ...subContent, ...standaloneItems];
       const allInhabitants = await inhabitantsModel.listInhabitants({ filter: 'all', includeInactive: true });
@@ -1647,10 +1662,29 @@ router
       sectionData = { items, period };
     } else if (section === 'tags') {
       const allContent = await listByTribeAllChain(tribe.id, null);
+      const [allPadsT, allChatsT, allCalsT, allMapsT, allTorrentsT, subTribesT, tribeChainT] = await Promise.all([
+        padsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        chatsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        calendarsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => []),
+        torrentsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        tribesModel.listSubTribes(tribe.id).catch(() => []),
+        tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
+      ]);
+      const tribeChainSetT = new Set(tribeChainT);
+      const standaloneTagged = [
+        ...allPadsT.filter(p => tribeChainSetT.has(p.tribeId)).map(p => ({ ...p, contentType: 'pad', id: p.rootId || p.key })),
+        ...allChatsT.filter(c => tribeChainSetT.has(c.tribeId)).map(c => ({ ...c, contentType: 'chat', id: c.rootId || c.key })),
+        ...allCalsT.filter(c => tribeChainSetT.has(c.tribeId)).map(c => ({ ...c, contentType: 'calendar', id: c.rootId || c.key })),
+        ...allMapsT.filter(m => tribeChainSetT.has(m.tribeId)).map(m => ({ ...m, contentType: 'map', id: m.rootId || m.key })),
+        ...allTorrentsT.filter(t => tribeChainSetT.has(t.tribeId)).map(t => ({ ...t, contentType: 'torrent', id: t.rootId || t.key })),
+        ...subTribesT.map(st => ({ ...st, contentType: 'tribe', tags: Array.isArray(st.tags) ? st.tags : [], title: st.title, description: st.description, author: st.author, createdAt: st.createdAt }))
+      ];
+      const allTaggable = [...allContent, ...standaloneTagged];
       const tagMap = new Map();
-      for (const item of allContent) {
+      for (const item of allTaggable) {
         for (const tag of (item.tags || []).filter(Boolean)) {
-          const lower = tag.toLowerCase().trim();
+          const lower = String(tag).toLowerCase().trim();
           if (!lower) continue;
           if (!tagMap.has(lower)) tagMap.set(lower, { tag: lower, count: 0, items: [] });
           const entry = tagMap.get(lower);
@@ -1661,17 +1695,56 @@ router
       const selectedTag = (ctx.query.tag || '').toLowerCase().trim();
       sectionData = { tags: [...tagMap.values()].sort((a, b) => b.count - a.count), selectedTag, filteredItems: selectedTag && tagMap.has(selectedTag) ? tagMap.get(selectedTag).items : [] };
     } else if (section === 'maps') {
-      const allMaps = await mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => []);
-      sectionData = allMaps.filter(m => m.tribeId === tribe.id);
+      const [allMaps, tribeChain] = await Promise.all([
+        mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => []),
+        tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
+      ]);
+      const tribeChainSet = new Set(tribeChain);
+      sectionData = allMaps.filter(m => tribeChainSet.has(m.tribeId));
     } else if (section === 'pads') {
-      const allPads = await padsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []);
-      sectionData = allPads.filter(p => p.tribeId === tribe.id);
+      const [allPads, tribeChain] = await Promise.all([
+        padsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
+      ]);
+      const tribeChainSet = new Set(tribeChain);
+      sectionData = allPads.filter(p => tribeChainSet.has(p.tribeId));
     } else if (section === 'chats') {
-      const allChats = await chatsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []);
-      sectionData = allChats.filter(c => c.tribeId === tribe.id);
+      const [allChats, tribeChain] = await Promise.all([
+        chatsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
+      ]);
+      const tribeChainSet = new Set(tribeChain);
+      sectionData = allChats.filter(c => tribeChainSet.has(c.tribeId));
     } else if (section === 'calendars') {
-      const allCals = await calendarsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []);
-      sectionData = allCals.filter(c => c.tribeId === tribe.id);
+      const [allCals, tribeChain] = await Promise.all([
+        calendarsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
+      ]);
+      const tribeChainSet = new Set(tribeChain);
+      sectionData = allCals.filter(c => tribeChainSet.has(c.tribeId));
+    } else if (section === 'torrents') {
+      const [allTorrents, tribeChain] = await Promise.all([
+        torrentsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
+      ]);
+      const tribeChainSet = new Set(tribeChain);
+      const standaloneTorrents = allTorrents.filter(t => tribeChainSet.has(t.tribeId));
+      const mediaTorrents = (await listByTribeAllChain(tribe.id, 'media').catch(() => []))
+        .filter(m => m.mediaType === 'torrent')
+        .map(m => ({
+          key: m.id,
+          rootId: m.id,
+          title: m.title || '',
+          description: m.description || '',
+          url: m.image || '',
+          tags: Array.isArray(m.tags) ? m.tags : [],
+          author: m.author,
+          createdAt: m.createdAt,
+          updatedAt: m.updatedAt,
+          tribeId: m.tribeId,
+          _isMedia: true
+        }));
+      sectionData = [...standaloneTorrents, ...mediaTorrents].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     } else if (section === 'search') {
       const sq = (ctx.query.q || '').trim().toLowerCase();
       let results = [];
@@ -1698,9 +1771,11 @@ router
       const feed = await listByTribeAllChain(tribe.id, 'feed').catch(() => []);
       sectionData = { events, tasks, feed };
     } else if (section === 'governance') {
+      if (tribe.parentTribeId) { ctx.redirect(`/tribe/${encodeURIComponent(tribe.id)}?section=activity`); return; }
       const gf = String(ctx.query.filter || 'government');
       const isCreator = tribe.author === uid;
       const isMember = Array.isArray(tribe.members) && tribe.members.includes(uid);
+      if (isCreator) { try { await parliamentModel.tribe.ensureTerm(tribe.id); } catch (_) {} }
       const [term, candidatures, rules, globalTermBase] = await Promise.all([
         parliamentModel.tribe.getCurrentTerm(tribe.id).catch(() => null),
         parliamentModel.tribe.listCandidatures(tribe.id).catch(() => []),
@@ -2187,7 +2262,7 @@ router
     const items = await chatsModel.listAll({ filter: modelFilter, q, viewerId });
     const fav = await mediaFavorites.getFavoriteSet('chats');
     const myTribeIds = await getUserTribeIds(viewerId);
-    const enriched = items.filter(x => !x.tribeId || myTribeIds.has(x.tribeId)).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
+    const enriched = items.filter(x => !x.tribeId).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     let finalList = filter === "favorites" ? enriched.filter(x => x.isFavorite) : enriched;
     finalList = await applyListFilters(finalList, ctx);
     ctx.body = await chatsView(finalList, filter, null, { q });
@@ -2213,13 +2288,10 @@ router
         chat = await chatsModel.getChatById(ctx.params.chatId);
       } catch { ctx.redirect('/tribes'); return; }
     }
-    if (String(chat.status || '').toUpperCase() === 'INVITE-ONLY' && chat.author !== uid) {
-      const invited = Array.isArray(chat.invites) && chat.invites.includes(uid);
-      if (!invited) { ctx.body = inviteRequiredView('chat', parentTribe); return; }
-    }
     const fav = await mediaFavorites.getFavoriteSet('chats');
     const messages = await chatsModel.listMessages(chat.rootId || chat.key);
-    ctx.body = await singleChatView({ ...chat, isFavorite: fav.has(String(chat.rootId || chat.key)) }, filter, messages, { q, returnTo: safeReturnTo(ctx, `/chats?filter=${encodeURIComponent(filter)}`, ['/chats']) });
+    const isTribeMember = !!parentTribe;
+    ctx.body = await singleChatView({ ...chat, isFavorite: fav.has(String(chat.rootId || chat.key)), isTribeMember }, filter, messages, { q, returnTo: safeReturnTo(ctx, `/chats?filter=${encodeURIComponent(filter)}`, ['/chats']) });
   })
   .get("/pads", async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
@@ -2255,10 +2327,6 @@ router
         pad = await padsModel.getPadById(ctx.params.padId);
       } catch { ctx.redirect('/tribes'); return; }
     }
-    if (String(pad.status || '').toUpperCase() === 'INVITE-ONLY' && pad.author !== uid) {
-      const invited = Array.isArray(pad.invites) && pad.invites.includes(uid);
-      if (!invited) { ctx.body = inviteRequiredView('pad', parentTribe); return; }
-    }
     const fav = await mediaFavorites.getFavoriteSet('pads');
     const entries = await padsModel.getEntries(pad.rootId);
     const versionKey = ctx.query.version || null;
@@ -2266,7 +2334,8 @@ router
       ? (entries.find(e => e.key === versionKey) || entries[parseInt(versionKey)] || null)
       : null;
     const baseUrl = `${ctx.protocol}://${ctx.host}`;
-    ctx.body = await singlePadView({ ...pad, isFavorite: fav.has(String(pad.rootId)) }, entries, { baseUrl, selectedVersion });
+    const isTribeMember = !!parentTribe;
+    ctx.body = await singlePadView({ ...pad, isFavorite: fav.has(String(pad.rootId)), isTribeMember }, entries, { baseUrl, selectedVersion });
   })
   .get("/calendars", async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
@@ -2286,7 +2355,7 @@ router
     const calendars = await calendarsModel.listAll({ filter: modelFilter, viewerId: uid });
     const fav = await mediaFavorites.getFavoriteSet('calendars');
     const myTribeIds = await getUserTribeIds(uid);
-    const enriched = calendars.filter(c => !c.tribeId || myTribeIds.has(c.tribeId)).map(c => ({ ...c, isFavorite: fav.has(String(c.rootId)) }));
+    const enriched = calendars.filter(c => !c.tribeId).map(c => ({ ...c, isFavorite: fav.has(String(c.rootId)) }));
     let finalList = filter === "favorites" ? enriched.filter(c => c.isFavorite) : enriched;
     finalList = await applyListFilters(finalList, ctx);
     ctx.body = await calendarsView(finalList, filter, null, { q, ...(tribeId ? { tribeId } : {}) });
@@ -3047,6 +3116,10 @@ router
   .post("/maps/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
+    if (b.tribeId) {
+      const t = await tribesModel.getTribeById(b.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     const imageId = extractBlobId(await handleBlobUpload(ctx, 'image')) || "";
     const newMap = await mapsModel.createMap(b.lat, b.lng, stripDangerousTags(b.description), b.mapType, b.tags, stripDangerousTags(b.title), b.tribeId || null, stripDangerousTags(b.markerLabel), imageId);
     const redir = b.tribeId ? `/tribe/${encodeURIComponent(b.tribeId)}?section=maps` : safeReturnTo(ctx, '/maps?filter=all', ['/maps']);
@@ -3054,6 +3127,11 @@ router
   })
   .post("/maps/update/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
+    const target = await mapsModel.getMapById(ctx.params.id, getViewerId()).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     const b = ctx.request.body;
     const imageId = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) || "" : "";
     await mapsModel.updateMapById(ctx.params.id, b.lat, b.lng, stripDangerousTags(b.description), b.mapType, b.tags, stripDangerousTags(b.title), imageId || undefined);
@@ -3061,6 +3139,11 @@ router
   })
   .post("/maps/delete/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
+    const target = await mapsModel.getMapById(ctx.params.id, getViewerId()).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     await mapsModel.deleteMapById(ctx.params.id);
     ctx.redirect(safeReturnTo(ctx, '/maps?filter=mine', ['/maps']));
   })
@@ -3090,21 +3173,45 @@ router
   .post("/audios/:audioId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'audios', 'audioId'))
   .post("/torrents/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
+    const { tags, title, description, tribeId } = ctx.request.body;
+    const cleanTribeId = tribeId ? String(tribeId).trim() : null;
+    if (cleanTribeId) {
+      const t = await tribesModel.getTribeById(cleanTribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     const blob = await handleBlobUpload(ctx, 'torrent');
     const fileSize = ctx.request.files?.torrent?.size || 0;
-    const { tags, title, description } = ctx.request.body;
-    await torrentsModel.createTorrent(blob, stripDangerousTags(tags), stripDangerousTags(title), stripDangerousTags(description), fileSize);
-    ctx.redirect(safeReturnTo(ctx, '/torrents?filter=all', ['/torrents']));
+    await torrentsModel.createTorrent(blob, stripDangerousTags(tags), stripDangerousTags(title), stripDangerousTags(description), fileSize, cleanTribeId);
+    ctx.redirect(cleanTribeId ? `/tribe/${encodeURIComponent(cleanTribeId)}?section=torrents` : safeReturnTo(ctx, '/torrents?filter=all', ['/torrents']));
   })
   .post("/torrents/update/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
+    const target = await torrentsModel.getTorrentById(ctx.params.id, getViewerId()).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     const { tags, title, description } = ctx.request.body;
     const blob = ctx.request.files?.torrent ? await handleBlobUpload(ctx, 'torrent') : null;
     await torrentsModel.updateTorrentById(ctx.params.id, blob, stripDangerousTags(tags), stripDangerousTags(title), stripDangerousTags(description));
     ctx.redirect(safeReturnTo(ctx, '/torrents?filter=mine', ['/torrents']));
   })
-  .post("/torrents/delete/:id", koaBody(), async ctx => deleteAction(ctx, 'torrents'))
-  .post("/torrents/opinions/:torrentId/:category", koaBody(), async ctx => opinionAction(ctx, 'torrents', 'torrentId'))
+  .post("/torrents/delete/:id", koaBody(), async ctx => {
+    const target = await torrentsModel.getTorrentById(ctx.params.id, getViewerId()).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
+    return deleteAction(ctx, 'torrents');
+  })
+  .post("/torrents/opinions/:torrentId/:category", koaBody(), async ctx => {
+    const target = await torrentsModel.getTorrentById(ctx.params.torrentId, getViewerId()).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
+    return opinionAction(ctx, 'torrents', 'torrentId');
+  })
   .post("/torrents/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'torrents', 'add'))
   .post("/torrents/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'torrents', 'remove'))
   .post("/torrents/:torrentId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'torrents', 'torrentId'))
@@ -3161,7 +3268,8 @@ router
     if (tooLong(ctx, b.title, MAX_TITLE_LENGTH, 'Title') || tooLong(ctx, b.description, MAX_TEXT_LENGTH, 'Description')) return;
     if (!['strict', 'open'].includes(b.inviteMode)) { ctx.redirect('/tribes'); return; }
     const image = await handleBlobUpload(ctx, 'image');
-    await tribesModel.createTribe(stripDangerousTags(b.title), stripDangerousTags(b.description), image, stripDangerousTags(b.location), b.tags, b.isLARP === 'true', b.isAnonymous === 'true', b.inviteMode, null, 'OPEN', stripDangerousTags(b.mapUrl));
+    const tribeRes = await tribesModel.createTribe(stripDangerousTags(b.title), stripDangerousTags(b.description), image, stripDangerousTags(b.location), b.tags, b.isLARP === 'true', b.isAnonymous === 'true', b.inviteMode, null, 'OPEN', stripDangerousTags(b.mapUrl));
+    try { if (tribeRes?.key) await parliamentModel.tribe.publishInitialTerm(tribeRes.key); } catch (e) { console.error('publishInitialTerm failed:', e); }
     ctx.redirect('/tribes');
   })
   .post('/tribe/:id/subtribes/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
@@ -3176,9 +3284,8 @@ router
     if (tooLong(ctx, b.title, MAX_TITLE_LENGTH, 'Title') || tooLong(ctx, b.description, MAX_TEXT_LENGTH, 'Description')) return;
     const image = await handleBlobUpload(ctx, 'image');
     const parentEffective = await tribesModel.getEffectiveStatus(ctx.params.id).catch(() => ({ isPrivate: false }));
-    const requestedAnonymous = b.isAnonymous === 'true';
-    const effectiveAnonymous = parentEffective.isPrivate ? true : requestedAnonymous;
-    await tribesModel.createTribe(stripDangerousTags(b.title), stripDangerousTags(b.description), image, stripDangerousTags(b.location), b.tags, b.isLARP === 'true', effectiveAnonymous, b.inviteMode || 'open', ctx.params.id, 'OPEN', stripDangerousTags(b.mapUrl));
+    const effectiveAnonymous = !!(parentEffective.isPrivate || parentTribe.isAnonymous);
+    await tribesModel.createTribe(stripDangerousTags(b.title), stripDangerousTags(b.description), image, stripDangerousTags(b.location), b.tags, false, effectiveAnonymous, b.inviteMode || 'open', ctx.params.id, 'OPEN', stripDangerousTags(b.mapUrl));
     ctx.redirect(`/tribe/${encodeURIComponent(ctx.params.id)}?section=subtribes`);
   })
   .post('/tribes/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
@@ -3189,7 +3296,16 @@ router
     if (tooLong(ctx, b.title, MAX_TITLE_LENGTH, 'Title') || tooLong(ctx, b.description, MAX_TEXT_LENGTH, 'Description')) return;
     if (b.inviteMode && !['strict', 'open'].includes(b.inviteMode)) { ctx.redirect('/tribes'); return; }
     const tags = b.tags ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
-    await tribesModel.updateTribeById(ctx.params.id, { title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), image: await handleBlobUpload(ctx, 'image'), location: stripDangerousTags(b.location), tags, isLARP: b.isLARP === 'true', isAnonymous: b.isAnonymous === 'true', inviteMode: b.inviteMode || tribe.inviteMode, status: b.status || tribe.status || 'OPEN' });
+    const isSub = !!tribe.parentTribeId;
+    const updateFields = { title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), image: await handleBlobUpload(ctx, 'image'), location: stripDangerousTags(b.location), tags, inviteMode: b.inviteMode || tribe.inviteMode, status: b.status || tribe.status || 'OPEN' };
+    if (isSub) {
+      updateFields.isLARP = false;
+      updateFields.isAnonymous = !!tribe.isAnonymous;
+    } else {
+      updateFields.isLARP = b.isLARP === 'true';
+      updateFields.isAnonymous = b.isAnonymous === 'true';
+    }
+    await tribesModel.updateTribeById(ctx.params.id, updateFields);
     ctx.redirect('/tribes?filter=mine');
   })
   .post('/tribes/delete/:id', async ctx => {
@@ -3513,6 +3629,7 @@ router
     const uid = getViewerId();
     const tribe = await tribesModel.getTribeById(tribeId).catch(() => null);
     if (!tribe) ctx.throw(404, 'Tribe not found');
+    if (tribe.parentTribeId) ctx.throw(400, 'Sub-tribes have no governance');
     const isCreator = tribe.author === uid;
     const isMember = Array.isArray(tribe.members) && tribe.members.includes(uid);
     if (!isCreator && !isMember) ctx.throw(403, 'Not a tribe member');
@@ -3520,7 +3637,8 @@ router
     const already = await parliamentModel.tribe.hasCandidatureInGlobalCycle(tribeId, globalTerm?.startAt).catch(() => false);
     if (already) ctx.throw(400, 'This tribe already has an open candidature in the current global parliament cycle.');
     const term = await parliamentModel.tribe.getCurrentTerm(tribeId).catch(() => null);
-    const method = (term?.method && String(term.method).toUpperCase()) || 'DEMOCRACY';
+    const rawMethod = (term?.method && String(term.method).toUpperCase()) || 'DEMOCRACY';
+    const method = rawMethod === 'ANARCHY' ? 'DEMOCRACY' : rawMethod;
     await parliamentModel.proposeCandidature({ candidateId: tribeId, method }).catch(e => ctx.throw(400, String(e?.message || e)));
     ctx.redirect('/parliament?filter=candidatures');
   })
@@ -3529,6 +3647,7 @@ router
     const uid = getViewerId();
     const tribe = await tribesModel.getTribeById(tribeId).catch(() => null);
     if (!tribe) ctx.throw(404, 'Tribe not found');
+    if (tribe.parentTribeId) ctx.throw(400, 'Sub-tribes have no governance');
     const isCreator = tribe.author === uid;
     const isMember = Array.isArray(tribe.members) && tribe.members.includes(uid);
     if (!isCreator && !isMember) ctx.throw(403, 'Not a tribe member');
@@ -3544,6 +3663,7 @@ router
     const uid = getViewerId();
     const tribe = await tribesModel.getTribeById(tribeId).catch(() => null);
     if (!tribe) ctx.throw(404, 'Tribe not found');
+    if (tribe.parentTribeId) ctx.throw(400, 'Sub-tribes have no governance');
     const isCreator = tribe.author === uid;
     const isMember = Array.isArray(tribe.members) && tribe.members.includes(uid);
     if (!isCreator && !isMember) ctx.throw(403, 'Not a tribe member');
@@ -3557,6 +3677,7 @@ router
     const uid = getViewerId();
     const tribe = await tribesModel.getTribeById(tribeId).catch(() => null);
     if (!tribe) ctx.throw(404, 'Tribe not found');
+    if (tribe.parentTribeId) ctx.throw(400, 'Sub-tribes have no governance');
     if (tribe.author !== uid) ctx.throw(403, 'Only tribe creator can add rules');
     const b = ctx.request.body || {};
     await parliamentModel.tribe.publishTribeRule({ tribeId, title: stripDangerousTags(String(b.title || '')), body: stripDangerousTags(String(b.body || '')) }).catch(e => ctx.throw(400, String(e?.message || e)));
@@ -3567,6 +3688,7 @@ router
     const uid = getViewerId();
     const tribe = await tribesModel.getTribeById(tribeId).catch(() => null);
     if (!tribe) ctx.throw(404, 'Tribe not found');
+    if (tribe.parentTribeId) ctx.throw(400, 'Sub-tribes have no governance');
     if (tribe.author !== uid) ctx.throw(403, 'Only tribe creator can delete rules');
     const ruleId = String(ctx.request.body?.ruleId || '').trim();
     if (!ruleId) ctx.throw(400, 'Missing ruleId');
@@ -3881,8 +4003,12 @@ router
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
     const tribeId = b.tribeId || null;
+    if (tribeId) {
+      const t = await tribesModel.getTribeById(tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+      await tribesModel.ensureTribeKeyDistribution(tribeId).catch(() => {});
+    }
     const imageBlob = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : null;
-    if (tribeId) await tribesModel.ensureTribeKeyDistribution(tribeId).catch(() => {});
     await chatsModel.createChat(stripDangerousTags(b.title), stripDangerousTags(b.description), imageBlob, b.category, b.status, b.tags, tribeId);
     ctx.redirect(tribeId ? `/tribe/${encodeURIComponent(tribeId)}?section=chats` : safeReturnTo(ctx, '/chats?filter=mine', ['/chats']));
   })
@@ -3923,6 +4049,19 @@ router
   })
   .post("/chats/join/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const uid = getViewerId();
+    const chat = await chatsModel.getChatById(ctx.params.id);
+    if (!chat) { ctx.status = 404; ctx.body = "Chat not found"; return; }
+    if (chat.status === "CLOSED") { ctx.status = 403; ctx.body = "Chat is closed"; return; }
+    if (chat.status === "INVITE-ONLY" && !chat.members.includes(uid) && chat.author !== uid) { ctx.status = 403; ctx.body = "Invite-only chat"; return; }
+    if (chat.tribeId) {
+      try {
+        const t = await tribesModel.getTribeById(chat.tribeId);
+        if (!t.members.includes(uid)) { ctx.status = 403; ctx.body = "Forbidden"; return; }
+      } catch { ctx.status = 403; ctx.body = "Forbidden"; return; }
+      ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(ctx.params.id)}`, ['/chats']));
+      return;
+    }
     try {
       await chatsModel.joinChat(ctx.params.id);
     } catch (_) {}
@@ -3957,7 +4096,11 @@ router
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
     const tribeId = b.tribeId || null;
-    if (tribeId) await tribesModel.ensureTribeKeyDistribution(tribeId).catch(() => {});
+    if (tribeId) {
+      const t = await tribesModel.getTribeById(tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+      await tribesModel.ensureTribeKeyDistribution(tribeId).catch(() => {});
+    }
     const msg = await padsModel.createPad(
       stripDangerousTags(b.title || ""),
       b.status || "OPEN",
@@ -4006,6 +4149,18 @@ router
   .post("/pads/join/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
     const uid = getViewerId();
+    const pad = await padsModel.getPadById(ctx.params.id);
+    if (!pad) { ctx.status = 404; ctx.body = "Pad not found"; return; }
+    if (pad.isClosed || pad.status === "CLOSED") { ctx.status = 403; ctx.body = "Pad is closed"; return; }
+    if (pad.status === "INVITE-ONLY" && !pad.members.includes(uid) && pad.author !== uid) { ctx.status = 403; ctx.body = "Invite-only pad"; return; }
+    if (pad.tribeId) {
+      try {
+        const t = await tribesModel.getTribeById(pad.tribeId);
+        if (!t.members.includes(uid)) { ctx.status = 403; ctx.body = "Forbidden"; return; }
+      } catch { ctx.status = 403; ctx.body = "Forbidden"; return; }
+      ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
+      return;
+    }
     await padsModel.addMemberToPad(ctx.params.id, uid);
     ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
   })
@@ -4030,6 +4185,10 @@ router
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
     const tribeId = b.tribeId || null;
+    if (tribeId) {
+      const t = await tribesModel.getTribeById(tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     const intervalWeekly  = [].concat(b.intervalWeekly).includes("1");
     const intervalMonthly = [].concat(b.intervalMonthly).includes("1");
     const intervalYearly  = [].concat(b.intervalYearly).includes("1");
@@ -4053,6 +4212,11 @@ router
   })
   .post("/calendars/update/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const target = await calendarsModel.getCalendarById(ctx.params.id).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     const b = ctx.request.body || {};
     try {
       await calendarsModel.updateCalendarById(ctx.params.id, {
@@ -4066,16 +4230,31 @@ router
   })
   .post("/calendars/delete/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const target = await calendarsModel.getCalendarById(ctx.params.id).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     try { await calendarsModel.deleteCalendarById(ctx.params.id); } catch (_) {}
     ctx.redirect('/calendars');
   })
   .post("/calendars/join/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const target = await calendarsModel.getCalendarById(ctx.params.id).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     try { await calendarsModel.joinCalendar(ctx.params.id); } catch (_) {}
     ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/calendars/leave/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
+    const target = await calendarsModel.getCalendarById(ctx.params.id).catch(() => null);
+    if (target && target.tribeId) {
+      const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    }
     try { await calendarsModel.leaveCalendar(ctx.params.id); } catch (_) {}
     ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
   })
@@ -4128,12 +4307,26 @@ router
   .post("/calendars/delete-note/:noteId", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
     const calendarId = (ctx.request.body || {}).calendarId || "";
+    if (calendarId) {
+      const target = await calendarsModel.getCalendarById(calendarId).catch(() => null);
+      if (target && target.tribeId) {
+        const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+        if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+      }
+    }
     try { await calendarsModel.deleteNote(ctx.params.noteId); } catch (_) {}
     ctx.redirect(calendarId ? `/calendars/${encodeURIComponent(calendarId)}` : '/calendars');
   })
   .post("/calendars/delete-date/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
     const calendarId = (ctx.request.body || {}).calendarId || "";
+    if (calendarId) {
+      const target = await calendarsModel.getCalendarById(calendarId).catch(() => null);
+      if (target && target.tribeId) {
+        const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
+        if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+      }
+    }
     try { await calendarsModel.deleteDate(ctx.params.id, calendarId); } catch (_) {}
     ctx.redirect(calendarId ? `/calendars/${encodeURIComponent(calendarId)}` : '/calendars');
   })
@@ -4580,6 +4773,23 @@ const middleware = [
   routes,
 ];
 const app = http({ host, port, middleware, allowHost: config.allowHost });
-app._close = () => { nameWarmup.close(); cooler.close(); };
+
+let pubEngineTimer = null;
+async function runPubEngineTick() {
+  if (!bankingModel.isPubNode()) return;
+  try { await bankingModel.executeEpoch({}); } catch (_) {}
+  try { await bankingModel.processPendingClaims(); } catch (_) {}
+  try { await bankingModel.publishPubAvailability(); } catch (_) {}
+}
+if (bankingModel.isPubNode()) {
+  setTimeout(() => { runPubEngineTick(); }, 15000);
+  pubEngineTimer = setInterval(runPubEngineTick, 30 * 60 * 1000);
+}
+
+app._close = () => {
+  if (pubEngineTimer) clearInterval(pubEngineTimer);
+  nameWarmup.close();
+  cooler.close();
+};
 module.exports = app;
 if (config.open === true) open(url);

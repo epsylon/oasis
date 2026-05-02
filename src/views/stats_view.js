@@ -95,7 +95,7 @@ exports.statsView = (stats, filter) => {
         h2(title),
         p(description)
       ),
-      div({ class: 'mode-buttons', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;margin-bottom:24px;' },
+      div({ class: 'mode-buttons stats-grid' },
         modes.map(m =>
           form({ method: 'GET', action: '/stats' },
             input({ type: 'hidden', name: 'filter', value: m }),
@@ -105,15 +105,15 @@ exports.statsView = (stats, filter) => {
       ),
       section(
         div({ style: headerStyle },
-          h3({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsCreatedAt}: `, span({ style: 'color:#888;' }, stats.createdAt)),
-          h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' },
-            a({ class: "user-link", href: `/author/${encodeURIComponent(stats.id)}`, style: 'color:#007bff; text-decoration:none;' }, stats.id)
+          h3({ class: 'stats-h-row' }, `${i18n.statsCreatedAt}: `, span({ class: 'stats-muted-888' }, stats.createdAt)),
+          h3({ class: 'stats-section-h' },
+            a({ class: "user-link", href: `/author/${encodeURIComponent(stats.id)}`, class: 'stats-link' }, stats.id)
           ),
-          div({ style: 'margin-bottom:16px;' },
-            ul({ style: 'list-style-type:none; padding:0; margin:0;' },
-              li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsBlobsSize}: `, span({ style: 'color:#888;' }, stats.statsBlobsSize)),
-              li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsBlockchainSize}: `, span({ style: 'color:#888;' }, stats.statsBlockchainSize)),
-              li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, strong(`${i18n.statsSize}: `, span({ style: 'color:#888;' }, span({ style: 'color:#555;' }, stats.folderSize))))
+          div({ class: 'stats-mb-16' },
+            ul({ class: 'stats-list-reset' },
+              li({ class: 'stats-h-row' }, `${i18n.statsBlobsSize}: `, span({ class: 'stats-muted-888' }, stats.statsBlobsSize)),
+              li({ class: 'stats-h-row' }, `${i18n.statsBlockchainSize}: `, span({ class: 'stats-muted-888' }, stats.statsBlockchainSize)),
+              li({ class: 'stats-h-row' }, strong(`${i18n.statsSize}: `, span({ class: 'stats-muted-888' }, span({ class: 'stats-muted-555' }, stats.folderSize))))
             )
           )
         ),
@@ -157,7 +157,7 @@ exports.statsView = (stats, filter) => {
                   span(`${networkCO2} g CO₂`)
                 ),
                 div({ class: 'carbon-bar-track' },
-                  div({ class: 'carbon-bar-fill carbon-bar-network', style: 'width:100%;' })
+                  div({ class: 'carbon-bar-fill carbon-bar-network stats-w-100' })
                 ),
                 p({ class: 'carbon-bar-note' }, strong(`${pct}%`), ` ${i18n.statsCarbonOfNetwork || 'of network total'}`),
                 p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
@@ -182,7 +182,7 @@ exports.statsView = (stats, filter) => {
                   span(`${networkCO2} g CO₂`)
                 ),
                 div({ class: 'carbon-bar-track' },
-                  div({ class: 'carbon-bar-fill carbon-bar-network', style: 'width:100%;' })
+                  div({ class: 'carbon-bar-fill carbon-bar-network stats-w-100' })
                 ),
                 p({ class: 'carbon-bar-note' }, strong(`${tombPct}%`), ` ${i18n.statsCarbonOfNetwork || 'of network total'} (${tombCount} tombstones × ~${avgTombBytes} bytes)`),
                 p({ class: 'carbon-bar-formula' }, 'Based on estimated tombstone message size ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
@@ -202,7 +202,7 @@ exports.statsView = (stats, filter) => {
                 span(`${maxAnnualCO2} g CO₂`)
               ),
               div({ class: 'carbon-bar-track' },
-                div({ class: 'carbon-bar-fill carbon-bar-max', style: 'width:100%;' })
+                div({ class: 'carbon-bar-fill carbon-bar-max stats-w-100' })
               ),
               p({ class: 'carbon-bar-note' }, strong(`${pct}%`), ` ${i18n.statsCarbonOfEstMax || 'of estimated max capacity'}`),
               p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
@@ -210,22 +210,22 @@ exports.statsView = (stats, filter) => {
           })()
         ),
         div({ style: headerStyle },
-          h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' }, i18n.statsBankingTitle),
-          ul({ style: 'list-style-type:none; padding:0; margin:0;' },
-            li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsEcoWalletLabel}: `, a({ href: '/wallet', style: 'color:#007bff; text-decoration:none; word-break:break-all;' }, stats?.banking?.myAddress || i18n.statsEcoWalletNotConfigured)),
-            li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsTotalEcoAddresses}: `, span({ style: 'color:#888;' }, String(stats?.banking?.totalAddresses || 0)))
+          h3({ class: 'stats-section-h' }, i18n.statsBankingTitle),
+          ul({ class: 'stats-list-reset' },
+            li({ class: 'stats-h-row' }, `${i18n.statsEcoWalletLabel}: `, a({ href: '/wallet', class: 'stats-link-break' }, stats?.banking?.myAddress || i18n.statsEcoWalletNotConfigured)),
+            li({ class: 'stats-h-row' }, `${i18n.statsTotalEcoAddresses}: `, span({ class: 'stats-muted-888' }, String(stats?.banking?.totalAddresses || 0)))
           )
         ),
         div({ style: headerStyle },
-          h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' }, i18n.statsLogsTitle || 'Logs'),
-          ul({ style: 'list-style-type:none; padding:0; margin:0;' },
-            li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsLogsEntries || 'Entries'}: `, span({ style: 'color:#888;' }, String(stats?.logsCount || 0)))
+          h3({ class: 'stats-section-h' }, i18n.statsLogsTitle || 'Logs'),
+          ul({ class: 'stats-list-reset' },
+            li({ class: 'stats-h-row' }, `${i18n.statsLogsEntries || 'Entries'}: `, span({ class: 'stats-muted-888' }, String(stats?.logsCount || 0)))
           )
         ),
         div({ style: headerStyle },
-          h3({ style: 'font-size:18px; color:#555; margin:8px 0; font-weight:600;' }, i18n.statsAITraining),
-          ul({ style: 'list-style-type:none; padding:0; margin:0;' },
-            li({ style: 'font-size:18px; color:#555; margin:8px 0;' }, `${i18n.statsAIExchanges}: `, span({ style: 'color:#888;' }, String(C(stats, 'aiExchange') || 0)))
+          h3({ class: 'stats-section-h' }, i18n.statsAITraining),
+          ul({ class: 'stats-list-reset' },
+            li({ class: 'stats-h-row' }, `${i18n.statsAIExchanges}: `, span({ class: 'stats-muted-888' }, String(C(stats, 'aiExchange') || 0)))
           )
         ),
         div({ style: headerStyle }, h3(`${i18n.statsPUBs}: ${String(stats.pubsCount || 0)}`)),
@@ -233,7 +233,7 @@ exports.statsView = (stats, filter) => {
           ? div({ class: 'stats-container' }, [
               div({ style: blockStyle },
                 h2(i18n.statsActivity7d),
-                table({ style: 'width:100%; border-collapse: collapse;' },
+                table({ class: 'stats-table' },
                   tr(th(i18n.day), th(i18n.messages)),
                   ...(Array.isArray(stats.activity?.daily7) ? stats.activity.daily7 : []).map(row => tr(td(row.day), td(String(row.count))))
                 ),
@@ -242,7 +242,7 @@ exports.statsView = (stats, filter) => {
               ),
               div({ style: blockStyle },
                 h2(`${i18n.statsDiscoveredTribes}: ${stats.allTribesPublic.length}`),
-                table({ style: 'width:100%; border-collapse: collapse; margin-top: 8px;' },
+                table({ class: 'stats-table-mt8' },
                   ...stats.allTribesPublic.map(t => tr(td(a({ href: `/tribe/${encodeURIComponent(t.id)}`, class: 'tribe-link' }, t.name))))
                 )
               ),
@@ -317,7 +317,7 @@ exports.statsView = (stats, filter) => {
             ? div({ class: 'stats-container' }, [
                 div({ style: blockStyle },
                   h2(i18n.statsActivity7d),
-                  table({ style: 'width:100%; border-collapse: collapse;' },
+                  table({ class: 'stats-table' },
                     tr(th(i18n.day), th(i18n.messages)),
                     ...(Array.isArray(stats.activity?.daily7) ? stats.activity.daily7 : []).map(row => tr(td(row.day), td(String(row.count))))
                   ),
@@ -326,14 +326,14 @@ exports.statsView = (stats, filter) => {
                 ),
                 div({ style: blockStyle },
                   h2(`${i18n.statsDiscoveredTribes}: ${stats.memberTribesDetailed.length}`),
-                  table({ style: 'width:100%; border-collapse: collapse; margin-top: 8px;' },
+                  table({ class: 'stats-table-mt8' },
                     ...stats.memberTribesDetailed.map(t => tr(td(a({ href: `/tribe/${encodeURIComponent(t.id)}`, class: 'tribe-link' }, t.name))))
                   )
                 ),
                 Array.isArray(stats.myPrivateTribesDetailed) && stats.myPrivateTribesDetailed.length
                   ? div({ style: blockStyle },
                       h2(`${i18n.statsPrivateDiscoveredTribes}: ${stats.myPrivateTribesDetailed.length}`),
-                      table({ style: 'width:100%; border-collapse: collapse; margin-top: 8px;' },
+                      table({ class: 'stats-table-mt8' },
                         ...stats.myPrivateTribesDetailed.map(tp => tr(td(a({ href: `/tribe/${encodeURIComponent(tp.id)}`, class: 'tribe-link' }, tp.name))))
                       )
                     )

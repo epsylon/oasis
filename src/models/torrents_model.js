@@ -23,7 +23,7 @@ const parseBlobId = (blobMarkdown) => {
 const voteSum = (opinions = {}) =>
   Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb;
 
   const openSsb = async () => {
@@ -31,14 +31,20 @@ module.exports = ({ cooler }) => {
     return ssb;
   };
 
+  const tribeHelpers = tribeCrypto ? tribeCrypto.createHelpers(tribesModel) : null;
+  const encryptIfTribe = tribeHelpers ? tribeHelpers.encryptIfTribe : async (c) => c;
+  const decryptIfTribe = tribeHelpers ? tribeHelpers.decryptIfTribe : async (c) => c;
+  const assertReadable = tribeHelpers ? tribeHelpers.assertReadable : () => {};
+  const decryptIndexNodes = tribeHelpers ? tribeHelpers.decryptIndexNodes : async () => {};
+
   const getAllMessages = async (ssbClient) =>
     new Promise((resolve, reject) => {
       pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs))));
     });
 
   const getMsg = async (ssbClient, key) =>
-    new Promise((resolve, reject) => {
-      ssbClient.get(key, (err, msg) => (err ? reject(err) : resolve(msg)));
+    new Promise((resolve) => {
+      ssbClient.get(key, (err, msg) => (err ? resolve(null) : resolve(msg)));
     });
 
   const buildIndex = (messages) => {
@@ -46,6 +52,8 @@ module.exports = ({ cooler }) => {
     const nodes = new Map();
     const parent = new Map();
     const child = new Map();
+    const authorByKey = new Map();
+    const tombRequests = [];
 
     for (const m of messages) {
       const k = m.key;
@@ -54,7 +62,7 @@ module.exports = ({ cooler }) => {
       if (!c) continue;
 
       if (c.type === "tombstone" && c.target) {
-        tomb.add(c.target);
+        tombRequests.push({ target: c.target, author: v.author });
         continue;
       }
 
@@ -62,6 +70,7 @@ module.exports = ({ cooler }) => {
 
       const ts = v.timestamp || m.timestamp || 0;
       nodes.set(k, { key: k, ts, c });
+      authorByKey.set(k, v.author);
 
       if (c.replaces) {
         parent.set(k, c.replaces);
@@ -81,6 +90,11 @@ module.exports = ({ cooler }) => {
       return cur;
     };
 
+    for (const t of tombRequests) {
+      const targetAuthor = authorByKey.get(t.target);
+      if (targetAuthor && t.author === targetAuthor) tomb.add(t.target);
+    }
+
     const roots = new Set();
     for (const id of nodes.keys()) roots.add(rootOf(id));
 
@@ -95,23 +109,27 @@ module.exports = ({ cooler }) => {
 
   const buildTorrent = (node, rootId, viewerId) => {
     const c = node.c || {};
+    const undec = c.encryptedPayload && c._decrypted === false;
     const voters = safeArr(c.opinions_inhabitants);
     return {
       key: node.key,
       rootId,
-      url: c.url,
+      url: undec ? "" : c.url,
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       tags: safeArr(c.tags),
       author: c.author,
-      title: c.title || "",
-      description: c.description || "",
+      title: undec ? "" : (c.title || ""),
+      description: undec ? "" : (c.description || ""),
       size: c.size || 0,
       opinions: c.opinions || {},
       opinions_inhabitants: voters,
-      hasVoted: viewerId ? voters.includes(viewerId) : false
+      hasVoted: viewerId ? voters.includes(viewerId) : false,
+      tribeId: c.tribeId || null,
+      encrypted: !!undec
     };
   };
+
 
   return {
     type: "torrent",
@@ -141,13 +159,13 @@ module.exports = ({ cooler }) => {
       return root;
     },
 
-    async createTorrent(blobMarkdown, tagsRaw, title, description, size) {
+    async createTorrent(blobMarkdown, tagsRaw, title, description, size, tribeId) {
       const ssbClient = await openSsb();
       const blobId = parseBlobId(blobMarkdown);
       const tags = normalizeTags(tagsRaw) || [];
       const now = new Date().toISOString();
 
-      const content = {
+      let content = {
         type: "torrent",
         url: blobId,
         createdAt: now,
@@ -158,8 +176,11 @@ module.exports = ({ cooler }) => {
         description: description || "",
         size: Number(size) || 0,
         opinions: {},
-        opinions_inhabitants: []
+        opinions_inhabitants: [],
+        ...(tribeId ? { tribeId } : {})
       };
+
+      content = await encryptIfTribe(content);
 
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)));
@@ -173,30 +194,39 @@ module.exports = ({ cooler }) => {
       const oldMsg = await getMsg(ssbClient, tipId);
 
       if (!oldMsg || oldMsg.content?.type !== "torrent") throw new Error("Torrent not found");
-      if (Object.keys(oldMsg.content.opinions || {}).length > 0) throw new Error("Cannot edit torrent after it has received opinions.");
-      if (oldMsg.content.author !== userId) throw new Error("Not the author");
+      const oldDec = await decryptIfTribe(oldMsg.content);
+      assertReadable(oldDec, "Torrent");
+      if (Object.keys(oldDec.opinions || oldMsg.content.opinions || {}).length > 0) throw new Error("Cannot edit torrent after it has received opinions.");
+      if ((oldDec.author || oldMsg.content.author) !== userId) throw new Error("Not the author");
 
-      const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldMsg.content.tags);
+      const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldDec.tags);
       const blobId = blobMarkdown ? parseBlobId(blobMarkdown) : null;
       const now = new Date().toISOString();
 
-      const updated = {
-        ...oldMsg.content,
+      let updated = {
+        type: "torrent",
         replaces: tipId,
-        url: blobId || oldMsg.content.url,
+        url: blobId || oldDec.url,
         tags,
-        title: title !== undefined ? title || "" : oldMsg.content.title || "",
-        description: description !== undefined ? description || "" : oldMsg.content.description || "",
-        createdAt: oldMsg.content.createdAt,
+        title: title !== undefined ? title || "" : oldDec.title || "",
+        description: description !== undefined ? description || "" : oldDec.description || "",
+        size: oldDec.size || 0,
+        opinions: oldDec.opinions || {},
+        opinions_inhabitants: oldDec.opinions_inhabitants || [],
+        author: oldDec.author || userId,
+        ...(oldMsg.content.tribeId ? { tribeId: oldMsg.content.tribeId } : {}),
+        createdAt: oldDec.createdAt,
         updatedAt: now
       };
 
+      updated = await encryptIfTribe(updated);
+
+      const result = await new Promise((resolve, reject) => {
+        ssbClient.publish(updated, (err, res) => (err ? reject(err) : resolve(res)));
+      });
       const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };
       await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
-
-      return new Promise((resolve, reject) => {
-        ssbClient.publish(updated, (err, result) => (err ? reject(err) : resolve(result)));
-      });
+      return result;
     },
 
     async deleteTorrentById(id) {
@@ -206,7 +236,8 @@ module.exports = ({ cooler }) => {
       const msg = await getMsg(ssbClient, tipId);
 
       if (!msg || msg.content?.type !== "torrent") throw new Error("Torrent not found");
-      if (msg.content.author !== userId) throw new Error("Not the author");
+      const dec = await decryptIfTribe(msg.content);
+      if ((dec.author || msg.content.author) !== userId) throw new Error("Not the author");
 
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId };
 
@@ -226,6 +257,7 @@ module.exports = ({ cooler }) => {
 
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(messages);
+      await decryptIndexNodes(idx);
 
       const items = [];
       for (const [rootId, tipId] of idx.tipByRoot.entries()) {
@@ -270,6 +302,7 @@ module.exports = ({ cooler }) => {
       const viewer = viewerId || ssbClient.id;
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(messages);
+      await decryptIndexNodes(idx);
 
       let tip = id;
       while (idx.forward.has(tip)) tip = idx.forward.get(tip);
@@ -283,7 +316,12 @@ module.exports = ({ cooler }) => {
 
       const msg = await getMsg(ssbClient, tip);
       if (!msg || msg.content?.type !== "torrent") throw new Error("Torrent not found");
-      return buildTorrent({ key: tip, ts: msg.timestamp || 0, c: msg.content }, root, viewer);
+      let c = msg.content;
+      if (c.encryptedPayload && tribeCrypto && tribesModel) {
+        const dec = await tribeCrypto.decryptFromTribe(c, tribesModel);
+        c = dec && !dec._undecryptable ? { ...dec, _decrypted: true } : { ...c, _decrypted: false };
+      }
+      return buildTorrent({ key: tip, ts: msg.timestamp || 0, c }, root, viewer);
     },
 
     async createOpinion(id, category) {
@@ -297,27 +335,39 @@ module.exports = ({ cooler }) => {
 
       if (!msg || msg.content?.type !== "torrent") throw new Error("Torrent not found");
 
-      const voters = safeArr(msg.content.opinions_inhabitants);
+      const oldDec = await decryptIfTribe(msg.content);
+      assertReadable(oldDec, "Torrent");
+      const voters = safeArr(oldDec.opinions_inhabitants || msg.content.opinions_inhabitants);
       if (voters.includes(userId)) throw new Error("Already voted");
 
       const now = new Date().toISOString();
-      const updated = {
-        ...msg.content,
+      let updated = {
+        type: "torrent",
         replaces: tipId,
+        url: oldDec.url,
+        tags: oldDec.tags || [],
+        title: oldDec.title || "",
+        description: oldDec.description || "",
+        size: oldDec.size || 0,
         opinions: {
-          ...msg.content.opinions,
-          [category]: (msg.content.opinions?.[category] || 0) + 1
+          ...(oldDec.opinions || {}),
+          [category]: ((oldDec.opinions || {})[category] || 0) + 1
         },
         opinions_inhabitants: voters.concat(userId),
+        author: oldDec.author,
+        ...(msg.content.tribeId ? { tribeId: msg.content.tribeId } : {}),
+        createdAt: oldDec.createdAt,
         updatedAt: now
       };
 
+      updated = await encryptIfTribe(updated);
+
+      const result = await new Promise((resolve, reject) => {
+        ssbClient.publish(updated, (err, res) => (err ? reject(err) : resolve(res)));
+      });
       const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };
       await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
-
-      return new Promise((resolve, reject) => {
-        ssbClient.publish(updated, (err, result) => (err ? reject(err) : resolve(result)));
-      });
+      return result;
     }
   };
 };

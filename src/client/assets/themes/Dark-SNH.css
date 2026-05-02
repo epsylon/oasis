@@ -343,7 +343,6 @@ a.user-link:focus {
 .tribe-info-label { color: #ffa300 !important; background: #1e1f23 !important; }
 .tribe-info-value { color: #FFD700 !important; background: #1e1f23 !important; }
 .tribe-info-empty { color: #9aa3b2 !important; }
-.tribe-card-subtribes { border-color: #444 !important; background: #1e1f23 !important; }
 .tribe-card-members { border-color: #444 !important; background: #1e1f23 !important; }
 .tribe-members-count { color: #ffa300 !important; }
 .tribe-card-actions { border-color: #444 !important; background: #1e1f23 !important; }
@@ -355,5 +354,3 @@ a.user-link:focus {
 .tribe-subtribe-link:hover { background: #333 !important; }
 .tribe-parent-image { border-color: #ffa300 !important; }
 .tribe-parent-box { background: #1e1f23 !important; }
-.tribe-card-parent { background: #1e1f23 !important; border-color: #444 !important; }
-.tribe-parent-card-link { color: #ffa300 !important; }

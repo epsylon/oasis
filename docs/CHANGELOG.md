@@ -13,6 +13,21 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.7.5 - 2026-05-01
+
+### Added
+                                                                                                                                              
+- Lists tags with counts and filters items (Tribes plugin).
+- Sub-tribe invite carries full ancestry key chain (Tribes plugin).
+                                                                                                                                                                                                   
+### Changed
+
+- More layers of privacy/encryption applied to sensitive content at different places (Core plugin).
+
+### Fixed
+
+- Governance cycles and general parliament proposals (Tribes plugin).
+
 ## v0.7.4 - 2026-04-25
 
 ### Added

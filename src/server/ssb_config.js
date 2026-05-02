@@ -14,7 +14,6 @@ const cliArgs = ~i ? argv.slice(0, i) : argv;
 let config = Config('ssb', minimist(conf));
 config = { ...config, ...configData };
 
-// Set blob size limit to 50MB
 const megabyte = Math.pow(2, 20);
 config.blobs = config.blobs || {};
 config.blobs.max = 50 * megabyte;

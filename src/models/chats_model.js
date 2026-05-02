@@ -42,19 +42,28 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const parent = new Map()
     const child = new Map()
     const msgNodes = new Map()
+    const authorByKey = new Map()
+    const tombRequests = []
 
     for (const m of messages) {
       const k = m.key
       const v = m.value || {}
       const c = v.content
       if (!c) continue
-      if (c.type === "tombstone" && c.target) { tomb.add(c.target); continue }
+      if (c.type === "tombstone" && c.target) { tombRequests.push({ target: c.target, author: v.author }); continue }
       if (c.type === "chat") {
         nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
+        authorByKey.set(k, v.author)
         if (c.replaces) { parent.set(k, c.replaces); child.set(c.replaces, k) }
       } else if (c.type === "chatMessage") {
         msgNodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
+        authorByKey.set(k, v.author)
       }
+    }
+
+    for (const t of tombRequests) {
+      const targetAuthor = authorByKey.get(t.target)
+      if (targetAuthor && t.author === targetAuthor) tomb.add(t.target)
     }
 
     const rootOf = (id) => { let cur = id; while (parent.has(cur)) cur = parent.get(cur); return cur }
