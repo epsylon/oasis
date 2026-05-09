@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, textarea, label, input, br, img, a, select, option } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink} = require('./main_views');
 const { renderUrl } = require('../backend/renderUrl');
 
 const generateCVBox = (label, content, className) => {
@@ -156,7 +156,7 @@ exports.cvView = async (cv) => {
                 })
               : null,
             cv.name ? h2(`${cv.name}`) : null,
-            cv.contact ? p(a({ class: "user-link", href: `/author/${encodeURIComponent(cv.contact)}` }, cv.contact)) : null,
+            cv.contact ? p(userLink(cv.contact)) : null,
             cv.description ? p(...renderUrl(`${cv.description}`)) : null,
             (cv.personalSkills && cv.personalSkills.length)
               ? div(

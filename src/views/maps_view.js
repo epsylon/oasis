@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, label, br, a, span, textar
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderMapWithPins, renderZoomedMapWithPins, getViewportBounds, latLngToPx, pxToLatLng, MAP_W, MAP_H, getMaxTileZoom } = require("../maps/map_renderer");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
@@ -313,7 +313,7 @@ const renderMarkersList = (markers, mapObj) => {
           span({ class: "map-marker-dot" }, "ꔌ"),
           span({ class: "map-marker-coords" }, `${(typeof mk.lat === 'number' ? mk.lat : 0).toFixed(4)}, ${(typeof mk.lng === 'number' ? mk.lng : 0).toFixed(4)}`),
           span({ class: "map-marker-meta" },
-            a({ href: `/author/${encodeURIComponent(mk.author)}`, class: "user-link" }, mk.author),
+            userLink(mk.author),
             ` · ${moment(mk.createdAt).fromNow()}`))
     ])));
 };
@@ -351,7 +351,7 @@ const renderMapCard = (mapObj, filter, params = {}) => {
       p({ class: "card-footer" },
         span({ class: "date-link" }, moment(mapObj.createdAt).fromNow()),
         span(" · "),
-        a({ href: `/author/${encodeURIComponent(mapObj.author)}`, class: "user-link" }, mapObj.author))));
+        userLink(mapObj.author))));
 };
 
 const renderMapList = (maps, filter, params = {}) =>
@@ -433,7 +433,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
         br(),
         p({ class: "card-footer" },
           span({ class: "date-link" }, `${moment(mapObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(mapObj.author)}`, class: "user-link" }, mapObj.author),
+          userLink(mapObj.author),
           mapObj.updatedAt && mapObj.updatedAt !== mapObj.createdAt
             ? span({ class: "votations-comment-date" }, ` · ${i18n.mapUpdatedAt}: ${moment(mapObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`)
             : null),

@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
 const moment = require('../server/node_modules/moment');
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink } = require('./main_views');
 
 const fmt = (d) => moment(d).format('YYYY-MM-DD HH:mm:ss');
 
@@ -341,21 +341,8 @@ const shortId = (id) => {
   return `${s.slice(0, 6)}…${s.slice(-4)}`;
 };
 
-const UserLinkCompact = (id) =>
-  id
-    ? a(
-        { class: 'user-link', href: `/author/${encodeURIComponent(id)}` },
-        shortId(id)
-      )
-    : span('');
-
-const UserLinkFull = (id) =>
-  id
-    ? a(
-        { class: 'user-link', href: `/author/${encodeURIComponent(id)}` },
-        id
-      )
-    : span('');
+const UserLinkCompact = (id) => id ? userLink(id) : span('');
+const UserLinkFull = (id) => id ? userLink(id) : span('');
 
 const renderRichTextNodes = (raw) => {
   const text = String(raw || '');
@@ -438,20 +425,14 @@ const CaseCard = (c) => {
   const mediatorLinksAccuser = mediatorsAccuser.map((mId, idx) =>
     span(
       { class: 'mediator' },
-      a(
-        { class: 'user-link', href: `/author/${encodeURIComponent(mId)}` },
-        shortId(mId)
-      ),
+      userLink(mId),
       idx < mediatorsAccuser.length - 1 ? span(', ') : null
     )
   );
   const mediatorLinksRespondent = mediatorsRespondent.map((mId, idx) =>
     span(
       { class: 'mediator' },
-      a(
-        { class: 'user-link', href: `/author/${encodeURIComponent(mId)}` },
-        shortId(mId)
-      ),
+      userLink(mId),
       idx < mediatorsRespondent.length - 1 ? span(', ') : null
     )
   );
@@ -637,10 +618,7 @@ const MyCaseCard = (c) => {
   const mediatorLinksAccuser = mediatorsAccuser.map((mId, idx) =>
     span(
       {},
-      a(
-        { class: 'user-link', href: `/author/${encodeURIComponent(mId)}` },
-        mId
-      ),
+      userLink(mId),
       idx < mediatorsAccuser.length - 1 ? span(', ') : null
     )
   );
@@ -648,10 +626,7 @@ const MyCaseCard = (c) => {
   const mediatorLinksRespondent = mediatorsRespondent.map((mId, idx) =>
     span(
       {},
-      a(
-        { class: 'user-link', href: `/author/${encodeURIComponent(mId)}` },
-        mId
-      ),
+      userLink(mId),
       idx < mediatorsRespondent.length - 1 ? span(', ') : null
     )
   );
@@ -945,12 +920,7 @@ const NominationsTable = (nominations = [], currentUserId = '') => {
       currentUserId &&
       String(n.judgeId || '') === String(currentUserId || '');
     return tr(
-      td(
-        a(
-          { class: 'user-link', href: `/author/${encodeURIComponent(n.judgeId)}` },
-          n.judgeId
-        )
-      ),
+      td(userLink(n.judgeId)),
       td(String(n.supports || 0)),
       td(fmt(n.createdAt)),
       td(
@@ -1081,20 +1051,14 @@ const CaseDetailsBlock = (c) => {
   const mediatorLinksAccuser = mediatorsAccuser.map((mId, idx) =>
     span(
       { class: 'mediator' },
-      a(
-        { class: 'user-link', href: `/author/${encodeURIComponent(mId)}` },
-        shortId(mId)
-      ),
+      userLink(mId),
       idx < mediatorsAccuser.length - 1 ? span(', ') : null
     )
   );
   const mediatorLinksRespondent = mediatorsRespondent.map((mId, idx) =>
     span(
       { class: 'mediator' },
-      a(
-        { class: 'user-link', href: `/author/${encodeURIComponent(mId)}` },
-        shortId(mId)
-      ),
+      userLink(mId),
       idx < mediatorsRespondent.length - 1 ? span(', ') : null
     )
   );

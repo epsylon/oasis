@@ -48,8 +48,31 @@ const manifestFile = path.join(config.path, 'manifest.json');
 let server;
 const argv = process.argv.slice(2);
 
+const isLockError = (err) => {
+  if (!err) return false;
+  if (err.name === 'OpenError') return true;
+  const msg = String(err.message || '');
+  return /Resource temporarily unavailable/i.test(msg) && /\.ssb\/.*LOCK/i.test(msg);
+};
+
+const handleFatal = (err) => {
+  if (isLockError(err)) {
+    console.log('');
+    console.log('Another Oasis instance is already running on this device. Close the other instance (or kill the process) and try again.');
+    console.log('');
+    process.exit(1);
+  }
+  throw err;
+};
+
+process.on('uncaughtException', handleFatal);
+
 if (argv[0] === 'start') {
-  server = Server(config);
+  try {
+    server = Server(config);
+  } catch (err) {
+    handleFatal(err);
+  }
   fs.writeFileSync(manifestFile, JSON.stringify(server.getManifest(), null, 2));
 
   const { cmdAliases } = require('../client/cli-cmd-aliases');

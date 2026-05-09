@@ -1,4 +1,4 @@
-const { form, button, div, h2, p, section, input, span, table, thead, tbody, tr, td, th, ul, li, a, br, label } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, span, table, thead, tbody, tr, td, th, ul, li, a, br, label, img } = require("../server/node_modules/hyperaxe");
 const QRCode = require('../server/node_modules/qrcode');
 const { template, i18n } = require('./main_views');
 
@@ -70,12 +70,12 @@ exports.walletHistoryView = async (balance, transactions, address) => {
 };
 
 exports.walletReceiveView = async (balance, address) => {
-    const qrImage = await QRCode.toString(address || '', { type: 'svg' });
+    const qrDataUrl = await QRCode.toDataURL(address || '', { type: 'image/png', width: 320, margin: 1 });
     return walletViewRender(
         balance,
         address,
         h2(i18n.walletReceiveTitle),
-        div({ class: 'div-center qr-code', innerHTML: qrImage })
+        div({ class: 'div-center qr-code' }, img({ src: qrDataUrl, alt: 'QR', class: 'wallet-qr-img' }))
     );
 };
 

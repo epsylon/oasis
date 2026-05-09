@@ -319,17 +319,17 @@ module.exports = ({ cooler }) => {
 
     const allTribesPublic = tribeDedupNodes
       .filter(n => n.content?.isAnonymous === false)
-      .map(n => ({ id: n.key, name: n.content.name || n.content.title || n.key }));
+      .map(n => ({ id: findRoot('tribe', n.key), name: n.content.name || n.content.title || n.key }));
 
     const allTribes = allTribesPublic.map(t => t.name);
 
     const memberTribesDetailed = tribeDedupNodes
       .filter(n => Array.isArray(n.content?.members) && n.content.members.includes(userId))
-      .map(n => ({ id: n.key, name: n.content.name || n.content.title || n.key }));
+      .map(n => ({ id: findRoot('tribe', n.key), name: n.content.name || n.content.title || n.key }));
 
     const myPrivateTribesDetailed = tribeDedupNodes
       .filter(n => n.content?.isAnonymous !== false && Array.isArray(n.content?.members) && n.content.members.includes(userId))
-      .map(n => ({ id: n.key, name: n.content.name || n.content.title || n.key }));
+      .map(n => ({ id: findRoot('tribe', n.key), name: n.content.name || n.content.title || n.key }));
 
     const content = {};
     const opinions = {};
@@ -446,6 +446,40 @@ module.exports = ({ cooler }) => {
       .slice(0, 5)
       .map(([id, count]) => ({ id, count }));
 
+    const tagCount = new Map();
+    for (const t of types) {
+      for (const v of Array.from(tipOf[t].values())) {
+        const tags = v.content && Array.isArray(v.content.tags) ? v.content.tags : [];
+        for (const tg of tags) {
+          const key = String(tg || '').trim();
+          if (!key) continue;
+          tagCount.set(key, (tagCount.get(key) || 0) + 1);
+        }
+      }
+    }
+    const topTags = Array.from(tagCount.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([tag, count]) => ({ tag, count }));
+
+    const totalTypeCount = types.reduce((s, t) => s + (Array.from(tipOf[t].values()).length || 0), 0);
+    const topTypeBlacklist = new Set(['shopProduct','chatMessage','padEntry','calendarDate','calendarNote','log']);
+    const topTypes = types
+      .filter(t => !topTypeBlacklist.has(t))
+      .map(t => ({ type: t, count: Array.from(tipOf[t].values()).length || 0 }))
+      .filter(o => o.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    const myMsgsAll = allMsgs.filter(m => m.value.author === userId);
+    const myShare = allMsgs.length ? (myMsgsAll.length / allMsgs.length) * 100 : 0;
+    const avgMsgsPerInhabitant = inhabitants ? allMsgs.length / inhabitants : 0;
+    const tombstoneRatio = allMsgs.length ? (allMsgs.filter(m => m.value.content.type === 'tombstone').length / allMsgs.length) * 100 : 0;
+
+    const totalsTs = allMsgs.map(m => m.value.timestamp || 0).filter(Boolean).sort((a, b) => a - b);
+    const networkSpanDays = totalsTs.length >= 2 ? (totalsTs[totalsTs.length - 1] - totalsTs[0]) / 86400000 : 0;
+    const networkMsgsPerDay = networkSpanDays > 0 ? (allMsgs.length / networkSpanDays) : 0;
+
     const addrMap = readAddrMap();
     const myAddress = addrMap[userId] || null;
     const banking = {
@@ -507,8 +541,19 @@ module.exports = ({ cooler }) => {
       },
       tombstoneKPIs: {
         networkTombstoneCount: allMsgs.filter(m => m.value.content.type === 'tombstone').length,
-        ratio: allMsgs.length ? (allMsgs.filter(m => m.value.content.type === 'tombstone').length / allMsgs.length) * 100 : 0
+        ratio: tombstoneRatio
       },
+      networkKPIs: {
+        totalMsgs: allMsgs.length,
+        myMsgs: myMsgsAll.length,
+        myShare,
+        avgMsgsPerInhabitant,
+        networkSpanDays,
+        networkMsgsPerDay
+      },
+      topTags,
+      topTypes,
+      totalTypeCount,
       banking
     };
 

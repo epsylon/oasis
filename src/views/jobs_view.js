@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, userLink} = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -268,7 +268,7 @@ const renderJobList = (jobs, filter, params = {}) => {
           p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(job.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(job.author)}`, class: "user-link" }, job.author),
+            userLink(job.author),
             renderUpdatedLabel(job.createdAt, job.updatedAt)
           )
         )
@@ -388,7 +388,7 @@ const renderCVList = (inhabitants) =>
             div(
               { class: "inhabitant-details" },
               user.description ? p(...renderUrl(user.description)) : null,
-              p(a({ class: "user-link", href: `/author/${encodeURIComponent(user.id)}` }, user.id)),
+              p(userLink(user.id)),
               div(
                 { class: "cv-actions" },
                 form({ method: "GET", action: `/inhabitant/${encodeURIComponent(user.id)}` }, button({ type: "submit", class: "filter-btn" }, i18n.inhabitantviewDetails)),
@@ -481,7 +481,10 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
 }
 
 const renderJobCommentsSection = (jobId, returnTo, comments = []) => {
-  const list = safeArr(comments)
+  const list = safeArr(comments).filter(c => {
+    const t = c && c.value && c.value.content && c.value.content.text
+    return t && String(t).trim()
+  })
   const commentsCount = list.length
 
   return div(
@@ -582,7 +585,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
         p(
           { class: "card-footer" },
           span({ class: "date-link" }, `${moment(job.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(job.author)}`, class: "user-link" }, job.author),
+          userLink(job.author),
           renderUpdatedLabel(job.createdAt, job.updatedAt)
         )
       ),

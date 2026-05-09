@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, userLink} = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 
@@ -226,7 +226,7 @@ exports.singlePadView = async (pad, entries, params) => {
     ),
     table({ class: "tribe-info-table" },
       tr(td({ class: "tribe-info-label" }, i18n.padCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(pad.createdAt).format("YYYY-MM-DD"))),
-      isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-value", colspan: "4" }, a({ href: `/author/${encodeURIComponent(pad.author)}`, class: "user-link" }, pad.author))),
+      isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-value", colspan: "4" }, userLink(pad.author))),
       tr(td({ class: "tribe-info-label" }, i18n.padStatusLabel || "Status"), td({ class: "tribe-info-value", colspan: "3" }, renderStatus(pad.status, padClosed))),
       isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-label" }, i18n.padDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, pad.deadline ? moment(pad.deadline).format("YYYY-MM-DD HH:mm") : "\u2014"))
     ),
@@ -296,15 +296,16 @@ exports.singlePadView = async (pad, entries, params) => {
       )
     : p(i18n.padNoEntries || "No entries yet.")
 
-  const versionList = entries.length > 0
+  const visibleEntries = entries.filter(e => e.text && String(e.text).trim())
+  const versionList = visibleEntries.length > 0
     ? div({ class: "pad-version-list" },
         h4(i18n.padVersionHistory || "Version History"),
-        ...entries.slice().reverse().map((e, idx) =>
+        ...visibleEntries.slice().reverse().map((e, idx) =>
           div({ class: "pad-version-item" },
             span({ class: "pad-version-date" }, moment(e.createdAt).format("YYYY-MM-DD HH:mm")),
             span({ class: "pad-version-author" },
               span({ class: "pad-author-swatch " + memberColorClass(pad.members, e.author) }),
-              a({ href: `/author/${encodeURIComponent(e.author)}`, class: "user-link" }, "@" + e.author.slice(1, 9) + "\u2026")
+              userLink(e.author)
             ),
             a({ href: `/pads/${encodeURIComponent(pad.rootId)}?version=${encodeURIComponent(e.key || idx)}`, class: "pad-version-link" }, i18n.padVersionView || "View")
           )

@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, userLink} = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -142,7 +142,7 @@ const renderFollowers = (project) => {
   return div(
     { class: "followers-block" },
     h2(i18n.projectFollowersTitle),
-    ul(show.map((uid) => li(a({ href: `/author/${encodeURIComponent(uid)}`, class: "user-link" }, uid)))),
+    ul(show.map((uid) => li(userLink(uid)))),
     followers.length > show.length ? p(`+${followers.length - show.length} ${i18n.projectMore}`) : null
   )
 }
@@ -171,7 +171,7 @@ const renderBackers = (project, filter) => {
             ...backers.slice(0, 8).map((b) =>
               tr(
                 td(b.at ? moment(b.at).format("YYYY/MM/DD HH:mm") : ""),
-                td(a({ href: `/author/${encodeURIComponent(b.userId)}`, class: "user-link" }, b.userId)),
+                td(userLink(b.userId)),
                 td(`${b.amount} ECO`)
               )
             )
@@ -285,7 +285,7 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
                 ),
                 safeText(b.description) ? p(...renderUrl(b.description)) : null,
                 renderCardField(i18n.projectBountyStatus + ":", statusText),
-                b.claimedBy ? renderCardField(i18n.projectBountyClaimedBy + ":", a({ href: `/author/${encodeURIComponent(b.claimedBy)}`, class: "user-link" }, b.claimedBy)) : null,
+                b.claimedBy ? renderCardField(i18n.projectBountyClaimedBy + ":", userLink(b.claimedBy)) : null,
                 !editable && !b.done && !b.claimedBy && project.author !== userId
                   ? form(
                       { method: "POST", action: `/projects/bounties/claim/${encodeURIComponent(project.id)}/${globalIndex}` },
@@ -344,7 +344,7 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
               ),
               safeText(b.description) ? p(...renderUrl(b.description)) : null,
               renderCardField(i18n.projectBountyStatus + ":", statusText),
-              b.claimedBy ? renderCardField(i18n.projectBountyClaimedBy + ":", a({ href: `/author/${encodeURIComponent(b.claimedBy)}`, class: "user-link" }, b.claimedBy)) : null,
+              b.claimedBy ? renderCardField(i18n.projectBountyClaimedBy + ":", userLink(b.claimedBy)) : null,
               !editable && !b.done && !b.claimedBy && project.author !== userId
                 ? form(
                     { method: "POST", action: `/projects/bounties/claim/${encodeURIComponent(project.id)}/${globalIndex}` },
@@ -588,7 +588,7 @@ const renderProjectList = (projects, filter) => {
           div(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(pr.author)}`, class: "user-link" }, pr.author)
+            userLink(pr.author)
           )
         )
       })
@@ -745,7 +745,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
         div(
           { class: "card-footer" },
           span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(pr.author)}`, class: "user-link" }, pr.author)
+          userLink(pr.author)
         )
       ),
       div(
@@ -760,23 +760,29 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
           button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
         )
       ),
-      comments && comments.length
+      (() => {
+        const visibleComments = (comments || []).filter(c => {
+          const t = c && c.value && c.value.content && c.value.content.text
+          return t && String(t).trim()
+        })
+        return visibleComments.length
         ? div(
             { class: "comments-list" },
-            comments.map((c) => {
+            visibleComments.map((c) => {
               const author = c?.value?.author || ""
               const ts = c?.value?.timestamp || c?.timestamp
               const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : ""
               const relDate = ts ? moment(ts).fromNow() : ""
               return div(
                 { class: "comment-card" },
-                div({ class: "comment-header" }, a({ href: `/author/${encodeURIComponent(author)}`, class: "user-link" }, author)),
+                div({ class: "comment-header" }, userLink(author)),
                 div({ class: "comment-date" }, span({ title: absDate }, relDate)),
                 div({ class: "comment-body" }, ...renderUrl(c?.value?.content?.text || ""))
               )
             })
           )
        : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
+      })()
     )
   )
 }

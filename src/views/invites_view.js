@@ -62,12 +62,17 @@ const invitesView = ({ invitesEnabled }) => {
 
   const hasError = (pubItem) => pubItem && (pubItem.error || (typeof pubItem.failure === 'number' && pubItem.failure > 0));
 
+  const sanitizeError = (err) => {
+    if (!err) return i18n.genericError || 'Unknown error';
+    const firstLine = String(err).split('\n')[0].replace(/^Error:\s*/, '').trim();
+    return firstLine || (i18n.genericError || 'Unknown error');
+  };
+
   const unreachableLabel = i18n.currentlyUnreachable || i18n.currentlyUnrecheable || 'ERROR!';
 
   const pubTableHeader = () => tr(
     td({ class: 'card-label' }, 'PUB'),
     td({ class: 'card-label' }, i18n.invitesPort || 'Port'),
-    td({ class: 'card-label' }, i18n.inhabitants),
     td({ class: 'card-label' }, 'Key'),
     td({ class: 'card-label' }, '')
   );
@@ -75,12 +80,11 @@ const invitesView = ({ invitesEnabled }) => {
   const activePubs = filteredPubs.filter(pubItem => !hasError(pubItem));
   const unreachablePubs = pubs.filter(hasError);
 
-  const renderPubTable = (items, actionFn) => table({ class: 'block-info-table' },
+  const renderPubTable = (items, actionFn) => table({ class: 'block-info-table invites-pubs-table' },
     pubTableHeader(),
     items.map(pubItem => tr(
       td(pubItem.host || '—'),
       td(String(pubItem.port || 8008)),
-      td(String(pubItem.announcers || 0)),
       td(a({ href: encodePubLink(pubItem.key), class: 'user-link' }, pubItem.key)),
       td(actionFn(pubItem))
     ))
@@ -156,7 +160,7 @@ const invitesView = ({ invitesEnabled }) => {
           ? renderPubTable(unreachablePubs, pubItem =>
               div({ class: 'error-box' },
                 p({ class: 'error-title' }, i18n.errorDetails),
-                p({ class: 'error-pre' }, String(pubItem.error || i18n.genericError))
+                p({ class: 'error-pre' }, sanitizeError(pubItem.error))
               )
             )
           : p(i18n.invitesNoUnreachablePubs)

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
 const opinionCategories = require("../backend/opinion_categories");
@@ -193,7 +193,7 @@ const renderFeedCard = (feed) => {
                 p(
                     { class: "card-footer" },
                     span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),
-                    a({ href: `/author/${encodeURIComponent(authorId)}`, class: "user-link" }, `${authorId}`),
+                    userLink(authorId),
                     content._textEdited ? span({ class: "edited-badge" }, ` · ${i18n.edited || "edited"}`) : null
                 )
             )
@@ -361,7 +361,7 @@ exports.singleFeedView = (feed, comments = []) => {
             p(
               { class: "card-footer" },
               span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),
-              a({ href: `/author/${encodeURIComponent(authorId)}`, class: "user-link" }, authorId),
+              userLink(authorId),
               content._textEdited ? span({ class: "edited-badge" }, ` · ${i18n.edited || "edited"}`) : null
             )
           )

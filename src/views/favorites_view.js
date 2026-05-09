@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, a, span, img } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require("../backend/renderUrl");
 
@@ -90,7 +90,7 @@ const renderFavoriteCard = (item, filter) => {
     p(
       { class: "card-footer" },
       absDate ? span({ class: "date-link" }, `${absDate} ${i18n.performed} `) : "",
-      item.author ? a({ href: `/author/${encodeURIComponent(item.author)}`, class: "user-link" }, `${item.author}`) : ""
+      item.author ? userLink(item.author) : ""
     )
   );
 };

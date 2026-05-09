@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span} = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink} = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -193,7 +193,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
     p(
       { class: 'card-footer' },
       span({ class: 'date-link' }, `${created} ${i18n.performed} `),
-      a({ href: `/author/${encodeURIComponent(item.value.author)}`, class: 'user-link' }, item.value.author)
+      userLink(item.value.author)
     ),
     (() => {
       const ops = c.opinions || {};

@@ -23,7 +23,7 @@ const cli = (presets, defaultConfigFile) =>
     })
     .options("offline", {
       describe:
-        "Don't try to connect to scuttlebutt peers or pubs. This can be changed on the 'settings' page while Oasis is running.",
+        "Don't try to connect to Oasis peers or pubs. This can be changed on the 'settings' page while Oasis is running.",
       default: _.get(presets, "offline", false),
       type: "boolean",
     })
@@ -53,31 +53,6 @@ const cli = (presets, defaultConfigFile) =>
       describe: "Use verbose output for debugging",
       default: _.get(presets, "debug", false),
       type: "boolean",
-    })
-    .options("theme", {
-      describe: "The theme to use, if a theme hasn't been set in the cookies",
-      default: _.get(presets, "theme", "classic-light"),
-      type: "string",
-    })
-    .options("wallet-url", {
-      describe: "The URL of the remote ECOin wallet",
-      default: _.get(presets, "walletUrl", "http://localhost:7474"),
-      type: "string",
-    })
-    .options("wallet-user", {
-      describe: "The username of the remote ECOin wallet",
-      default: _.get(presets, "walletUser", "ecoinrpc"),
-      type: "string",
-    })
-    .options("wallet-pass", {
-      describe: "The password of the remote ECOin wallet",
-      default: _.get(presets, "walletPass", "ecoinrpc"),
-      type: "string",
-    })
-    .options("wallet-fee", {
-      describe: "The fee to pay for ECOin transactions",
-      default: _.get(presets, "walletFee", "0.01"),
-      type: "string",
     })
     .epilog(`The defaults can be configured in ${defaultConfigFile}.`).argv;
 

@@ -7,6 +7,7 @@ const modulesView = () => {
   const modules = [
     { name: 'agenda', label: i18n.modulesAgendaLabel, description: i18n.modulesAgendaDescription },
     { name: 'ai', label: i18n.modulesAILabel, description: i18n.modulesAIDescription },
+    { name: 'aiNav', label: i18n.modulesAINavLabel, description: i18n.modulesAINavDescription },
     { name: 'audios', label: i18n.modulesAudiosLabel, description: i18n.modulesAudiosDescription },
     { name: 'banking', label: i18n.modulesBankingLabel, description: i18n.modulesBankingDescription },
     { name: 'bookmarks', label: i18n.modulesBookmarksLabel, description: i18n.modulesBookmarksDescription },
@@ -20,6 +21,7 @@ const modulesView = () => {
     { name: 'feed', label: i18n.modulesFeedLabel, description: i18n.modulesFeedDescription },
     { name: 'forum', label: i18n.modulesForumLabel, description: i18n.modulesForumDescription },
     { name: 'games', label: i18n.modulesGamesLabel, description: i18n.modulesGamesDescription },
+    { name: 'graphos', label: i18n.modulesGraphosLabel, description: i18n.modulesGraphosDescription },
     { name: 'images', label: i18n.modulesImagesLabel, description: i18n.modulesImagesDescription },
     { name: 'invites', label: i18n.modulesInvitesLabel, description: i18n.modulesInvitesDescription },
     { name: 'jobs', label: i18n.modulesJobsLabel, description: i18n.modulesJobsDescription },

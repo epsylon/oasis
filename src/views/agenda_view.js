@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, img, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink} = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
@@ -36,7 +36,7 @@ const renderAgendaItem = (item, userId, filter) => {
   const commonFields = [
     p({ class: 'card-footer' },
       span({ class: 'date-link' }, `${item.createdAt ? moment(item.createdAt).format('YYYY/MM/DD HH:mm:ss') : ''} ${i18n.performed} `),
-      author ? a({ href: `/author/${encodeURIComponent(author)}`, class: 'user-link' }, `${author}`) : ''
+      author ? userLink(author) : ''
     )
   ];
 
@@ -67,7 +67,7 @@ const renderAgendaItem = (item, userId, filter) => {
       const maxBid = bids.length ? Math.max(...bids) : 0;
       details.push(renderCardField(i18n.marketItemHighestBid + ":", `${maxBid} ECO`));
     }
-    const seller = author ? p(a({ class: "user-link", href: `/author/${encodeURIComponent(author)}` }, author)) : '';
+    const seller = author ? p(userLink(author)) : '';
     details.push(br(), div({ class: 'members-list' }, i18n.marketItemSeller + ': ', seller));
   }
 
@@ -80,7 +80,7 @@ const renderAgendaItem = (item, userId, filter) => {
       renderCardField(i18n.agendaMembersCount + ":", Array.isArray(item.members) ? item.members.length : 0),
       br()
     ];
-    const membersList = Array.isArray(item.members) ? item.members.map(member => p(a({ class: "user-link", href: `/author/${encodeURIComponent(member)}` }, member))) : [];
+    const membersList = Array.isArray(item.members) ? item.members.map(member => p(userLink(member))) : [];
     details.push(div({ class: 'members-list' }, `${i18n.agendaMembersLabel}:`, membersList));
   }
 
@@ -128,7 +128,7 @@ const renderAgendaItem = (item, userId, filter) => {
       renderCardField(i18n.agendaTransferDeadline + ":", item.deadline ? fmt(item.deadline) : ''),
       br()
     ];
-    const membersList = item.to ? p(a({ class: "user-link", href: `/author/${encodeURIComponent(item.to)}` }, item.to)) : '';
+    const membersList = item.to ? p(userLink(item.to)) : '';
     details.push(div({ class: 'members-list' }, i18n.to + ': ', membersList));
   }
   
@@ -160,7 +160,7 @@ const renderAgendaItem = (item, userId, filter) => {
               : []));
 
     const subsInterleaved = subs
-      .map((id, i) => [i > 0 ? ', ' : '', a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)])
+      .map((id, i) => [i > 0 ? ', ' : '', userLink(id)])
       .flat();
 
     details = [

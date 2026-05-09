@@ -16,7 +16,7 @@ const {
   option
 } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
@@ -100,7 +100,10 @@ const renderAudioOwnerActions = (filter, audioObj, params = {}) => {
 };
 
 const renderAudioCommentsSection = (audioId, comments = [], returnTo = null) => {
-  const list = safeArr(comments);
+  const list = safeArr(comments).filter(c => {
+    const t = c && c.value && c.value.content && c.value.content.text;
+    return t && String(t).trim();
+  });
   const commentsCount = list.length;
 
   return div(
@@ -221,7 +224,7 @@ const renderAudioList = (audios, filter, params = {}) => {
             return p(
               { class: "card-footer" },
               span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              a({ href: `/author/${encodeURIComponent(audioObj.author)}`, class: "user-link" }, `${audioObj.author}`),
+              userLink(audioObj.author),
               showUpdated
                 ? span(
                     { class: "votations-comment-date" },
@@ -416,7 +419,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
           return p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(audioObj.author)}`, class: "user-link" }, `${audioObj.author}`),
+            userLink(audioObj.author),
             showUpdated
               ? span(
                   { class: "votations-comment-date" },

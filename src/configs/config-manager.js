@@ -40,6 +40,7 @@ if (!fs.existsSync(configFilePath)) {
       "pixeliaMod": "on",
       "agendaMod": "on",
       "aiMod": "on",
+      "aiNavMod": "on",
       "forumMod": "on",
       "gamesMod": "on",
       "jobsMod": "on",
@@ -52,7 +53,8 @@ if (!fs.existsSync(configFilePath)) {
       "logsMod": "on",
       "mapsMod": "on",
       "chatsMod": "on",
-      "torrentsMod": "on"
+      "torrentsMod": "on",
+      "graphosMod": "on"
     },
     "wallet": {
       "url": "http://localhost:7474",

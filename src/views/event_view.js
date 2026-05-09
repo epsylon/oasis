@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -163,10 +163,15 @@ const renderEventCommentsSection = (eventId, comments = [], currentFilter = "all
         button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
       )
     ),
-    comments && comments.length
+    (() => {
+      const visibleComments = (comments || []).filter(c => {
+        const t = c && c.value && c.value.content && c.value.content.text;
+        return t && String(t).trim();
+      });
+      return visibleComments.length
       ? div(
           { class: "comments-list" },
-          comments.map((c) => {
+          visibleComments.map((c) => {
             const author = c.value && c.value.author ? c.value.author : "";
             const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
@@ -192,7 +197,8 @@ const renderEventCommentsSection = (eventId, comments = [], currentFilter = "all
             );
           })
         )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
+      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet);
+    })()
   );
 };
 
@@ -235,7 +241,7 @@ const renderEventItem = (e, filter) => {
     p(
       { class: "card-footer" },
       span({ class: "date-link" }, `${moment(e.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-      a({ href: `/author/${encodeURIComponent(e.organizer)}`, class: "user-link" }, `${e.organizer}`)
+      userLink(e.organizer)
     )
   );
 };
@@ -472,7 +478,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
             attendees.length
               ? attendees
                   .filter(Boolean)
-                  .map((id, i) => [i > 0 ? ", " : "", a({ class: "user-link", href: `/author/${encodeURIComponent(id)}` }, id)])
+                  .map((id, i) => [i > 0 ? ", " : "", userLink(id)])
                   .flat()
               : i18n.noAttendees
           )
@@ -481,7 +487,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
         p(
           { class: "card-footer" },
           span({ class: "date-link" }, `${moment(event.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(event.organizer)}`, class: "user-link" }, `${event.organizer}`)
+          userLink(event.organizer)
         )
       ),
       renderEventCommentsSection(event.id, comments, currentFilter)

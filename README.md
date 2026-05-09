@@ -65,6 +65,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
 
  + Agenda: Module to manage all your assigned items.
  + AI: Module to talk with a LLM called '42'.
+ + AINav: Module for natural-language queries about the network's content.
  + Audios: Module to discover and manage audios.
  + Banking: Module to determine the real value of ECOIN and distribute a UBI using the common treasury.
  + BlockExplorer: Module to navigate the blockchain.
@@ -80,6 +81,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Forums: Module to discover and manage forums.
  + Games: Module to play and share your scores in various mini-games.	
  + Governance: Module to discover and manage votes.	
+ + Graphos: Module to explore the network as an interactive map of peers.
  + Images: Module to discover and manage images.
  + Invites: Module to manage and apply invite codes.
  + Jobs: Module to discover and manage jobs.	

@@ -14,6 +14,7 @@ const fs = require('fs/promises');
 const os = require('os');
 
 const ssbRef = require("../server/node_modules/ssb-ref");
+const nameCache = require('../backend/nameCache');
 
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -300,12 +301,16 @@ models.about = {
     if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
       return "Redacted";
     }
-    return (
-      (await getAbout({
-        key: "name",
-        feedId,
-      })) || feedId.slice(1, 1 + 8)
-    );
+    const resolved = await getAbout({ key: "name", feedId });
+    if (resolved) nameCache.set(feedId, resolved, Date.now());
+    return resolved || feedId.slice(1, 1 + 8);
+  },
+  nameSync: (feedId) => {
+    if (!feedId) return null;
+    const cached = nameCache.get(feedId);
+    if (cached) return cached;
+    const local = feeds_to_name[feedId];
+    return local && local.name ? local.name : null;
   },
   named: (name) => {
     let found = [];
@@ -394,9 +399,11 @@ models.about = {
           if (typeof currentEntry == "undefined") {
             dirty = true;
             feeds_to_name[feed] = newEntry;
+            nameCache.set(feed, name, ts);
           } else if (currentEntry.ts < ts) {
             dirty = true;
             feeds_to_name[feed] = newEntry;
+            nameCache.set(feed, name, ts);
           }
         }, (err) => {
           console.error(err);
@@ -598,14 +605,97 @@ models.meta = {
           pull.take(1),
           pull.collect((err, [entries]) => {
             if (err) return reject(err);
-            resolve(entries);
+            resolve(entries || []);
           })
         );
       });
     },
     connectedPeers: async () => {
-      const peers = await models.meta.peers();
-      return peers.filter(([_, data]) => data.state === "connected");
+      const ssb = await cooler.open();
+      const connEntries = await models.meta.peers();
+      const seen = new Set();
+      const result = [];
+
+      const lookupAddr = (key) => {
+        for (const [addr, data] of connEntries) {
+          if (data && data.key === key) return addr;
+        }
+        return null;
+      };
+
+      const lookupConnData = (key) => {
+        for (const [, data] of connEntries) {
+          if (data && data.key === key) return data;
+        }
+        return null;
+      };
+
+      try {
+        const livePeers = ssb && ssb.peers && typeof ssb.peers === "object" ? ssb.peers : {};
+        for (const rawKey of Object.keys(livePeers)) {
+          if (!rawKey || rawKey === ssb.id) continue;
+          const rpcs = livePeers[rawKey];
+          if (!Array.isArray(rpcs) || rpcs.length === 0) continue;
+          const key = canonicalizePubId(rawKey);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const existing = lookupConnData(key) || {};
+          const addr = (rpcs[0] && rpcs[0].stream && rpcs[0].stream.address) || lookupAddr(key) || `live:${key}`;
+          result.push([addr, { ...existing, key, state: "connected", source: "rpc" }]);
+        }
+      } catch {}
+
+      for (const [addr, data] of connEntries) {
+        if (!data || data.state !== "connected" || !data.key || seen.has(data.key)) continue;
+        seen.add(data.key);
+        result.push([addr, data]);
+      }
+
+      try {
+        const gp = ssb.gossip && typeof ssb.gossip.peers === "function" ? ssb.gossip.peers() : [];
+        const RECENT_MS = 30 * 60 * 1000;
+        const now = Date.now();
+        for (const p of (gp || [])) {
+          if (!p || !p.key) continue;
+          const key = canonicalizePubId(p.key);
+          if (seen.has(key)) continue;
+          const isConnected = p.state === "connected";
+          const recentlyConnected =
+            !isConnected &&
+            (p.failure === 0 || p.failure === undefined || p.failure === null) &&
+            typeof p.stateChange === "number" &&
+            (now - p.stateChange) < RECENT_MS;
+          if (!isConnected && !recentlyConnected) continue;
+          let addr = p.address;
+          if (!addr && p.host && p.port) {
+            const core = String(p.key).replace(/^@/, "").replace(/\.ed25519$/, "");
+            addr = `net:${p.host}:${p.port}~shs:${core}`;
+          }
+          if (!addr) continue;
+          seen.add(key);
+          result.push([addr, { ...p, key, state: "connected", source: isConnected ? "gossip" : "recent" }]);
+        }
+      } catch {}
+
+      try {
+        const myId = ssb.id;
+        const status = ssb.ebt && typeof ssb.ebt.peerStatus === "function" ? ssb.ebt.peerStatus(myId) : null;
+        const ebtPeers = (status && status.peers) ? Object.keys(status.peers) : [];
+        for (const rawKey of ebtPeers) {
+          if (!rawKey) continue;
+          const key = canonicalizePubId(rawKey);
+          if (seen.has(key)) continue;
+          let addr = lookupAddr(key);
+          if (!addr) {
+            const core = String(key).replace(/^@/, "").replace(/\.ed25519$/, "");
+            addr = `ebt:${core}`;
+          }
+          seen.add(key);
+          result.push([addr, { key, state: "connected", source: "ebt" }]);
+        }
+      } catch {}
+
+      return result;
     },
     onlinePeers: async () => {
       const entries = await models.meta.connectedPeers();
@@ -632,15 +722,13 @@ models.meta = {
         }
       }
       const connectedEntries = await models.meta.connectedPeers();
-      const onlineKeys = new Set(connectedEntries.map(([remote]) => {
-        const m = /~shs:([^=]+)=/.exec(remote);
-        if (!m) return null;
-        let core = m[1].replace(/-/g, '+').replace(/_/g, '/');
-        if (!core.endsWith('=')) core += '=';
-        return `@${core}.ed25519`;
-      }).filter(Boolean));
-      const discoveredPeers = allDbPeers.filter(([, d]) => !onlineKeys.has(d.key));
-      const discoveredIds = new Set(allDbPeers.map(([, d]) => d.key));
+      const onlineKeys = new Set(
+        connectedEntries
+          .map(([, d]) => d && d.key ? canonicalizePubId(d.key) : null)
+          .filter(Boolean)
+      );
+      const discoveredPeers = allDbPeers.filter(([, d]) => !onlineKeys.has(canonicalizePubId(d.key)));
+      const discoveredIds = new Set(allDbPeers.map(([, d]) => canonicalizePubId(d.key)));
       const ebtList = await loadPeersFromEbt();
       const ebtMap = new Map(ebtList.map(e => [e.pub, e.users]));
       const unknownPeers = [];

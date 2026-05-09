@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -160,7 +160,7 @@ const renderImageList = (images, filter, params = {}) => {
             return p(
               { class: "card-footer" },
               span({ class: "date-link" }, `${moment(imgObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              a({ href: `/author/${encodeURIComponent(imgObj.author)}`, class: "user-link" }, `${imgObj.author}`),
+              userLink(imgObj.author),
               showUpdated
                 ? span(
                     { class: "votations-comment-date" },
@@ -255,7 +255,10 @@ const renderLightbox = (images) =>
   });
 
 const renderImageCommentsSection = (imageKey, comments = [], returnTo = null) => {
-  const list = safeArr(comments);
+  const list = safeArr(comments).filter(c => {
+    const t = c && c.value && c.value.content && c.value.content.text;
+    return t && String(t).trim();
+  });
   const commentsCount = list.length;
 
   return div(
@@ -475,7 +478,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
           return p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(imageObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(imageObj.author)}`, class: "user-link" }, `${imageObj.author}`),
+            userLink(imageObj.author),
             showUpdated
               ? span(
                   { class: "votations-comment-date" },

@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
 const moment = require("../server/node_modules/moment");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink} = require('./main_views');
 
 const TERM_DAYS = 60;
 
@@ -131,7 +131,7 @@ const GovernmentCard = (g, meta) => {
   const actorLink =
     g.powerType === 'tribe'
       ? a({ class: 'user-link', href: `/tribe/${encodeURIComponent(g.powerId)}` }, g.powerTitle || g.powerId)
-      : a({ class: 'user-link', href: `/author/${encodeURIComponent(g.powerId)}` }, g.powerTitle || g.powerId);
+      : userLink(g.powerId, g.powerTitle);
   const actorBio = meta && meta.bio ? meta.bio : '';
   const memberIds = Array.isArray(g.membersList) ? g.membersList : (Array.isArray(g.members) ? g.members : []);
   const membersRow =
@@ -143,7 +143,7 @@ const GovernmentCard = (g, meta) => {
             div(
               span({ class: 'card-label' }, (i18n.parliamentMembers + ': ').toUpperCase()),
               memberIds && memberIds.length
-                ? ul({ class: 'parliament-members-list' }, ...memberIds.map(id => li(a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id))))
+                ? ul({ class: 'parliament-members-list' }, ...memberIds.map(id => li(userLink(id))))
                 : span({ class: 'card-value' }, String(g.members || 0))
             )
           )
@@ -247,7 +247,7 @@ const CandidatureStats = (cands, govCard, leaderMeta) => {
   const winLbl = (i18n.parliamentWinningCandidature || i18n.parliamentCurrentLeader || 'WINNING CANDIDATURE').toUpperCase();
   const idLink = leader
     ? (leader.targetType === 'inhabitant'
-        ? a({ class: 'user-link', href: `/author/${encodeURIComponent(leader.targetId)}` }, leader.targetId)
+        ? userLink(leader.targetId)
         : a({ class: 'tag-link', href: `/tribe/${encodeURIComponent(leader.targetId)}?` }, leader.targetTitle || leader.targetId))
     : null;
   return div(
@@ -287,7 +287,7 @@ const CandidaturesTable = (candidatures) => {
   const rows = (candidatures || []).map(c => {
     const idLink =
       c.targetType === 'inhabitant'
-        ? p(a({ class: 'user-link break-all', href: `/author/${encodeURIComponent(c.targetId)}` }, c.targetId))
+        ? p(userLink(c.targetId))
         : p(a({ class: 'tag-link', href: `/tribe/${encodeURIComponent(c.targetId)}?` }, c.targetTitle || c.targetId));
     return tr(
       td(idLink),
@@ -349,7 +349,7 @@ const ProposalsList = (proposals) => {
       div(
         { class: 'card-field' },
         span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '),
-        span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(pItem.proposer)}` }, pItem.proposer))
+        span({ class: 'card-value' }, userLink(pItem.proposer))
       ),
       div(
         { class: 'card-field' },
@@ -419,7 +419,7 @@ const FutureLawsList = (rows) => {
       br(),
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentGovMethod.toUpperCase() + ': '), span({ class: 'card-value' }, pItem.method)),
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '), span({ class: 'card-value' }, fmt(pItem.createdAt))),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(pItem.proposer)}` }, pItem.proposer))),
+      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, userLink(pItem.proposer))),
       h2(pItem.title || ''),
       p(pItem.description || '')
     )
@@ -480,7 +480,7 @@ const RevocationsList = (revocations) => {
         span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '),
         span(
           { class: 'card-value' },
-          a({ class: 'user-link', href: `/author/${encodeURIComponent(pItem.proposer)}` }, pItem.proposer)
+          userLink(pItem.proposer)
         )
       ),
       div(
@@ -551,7 +551,7 @@ const FutureRevocationsList = (rows) => {
       br(),
       pItem.method ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentGovMethod.toUpperCase() + ': '), span({ class: 'card-value' }, pItem.method)) : null,
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '), span({ class: 'card-value' }, fmt(pItem.createdAt))),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(pItem.proposer)}` }, pItem.proposer))),
+      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, userLink(pItem.proposer))),
       h2(pItem.title || pItem.lawTitle || ''),
       p(pItem.reasons || '')
     )
@@ -605,7 +605,7 @@ const LawsList = (laws) => {
       br(),
       div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod + ': ').toUpperCase()), span({ class: 'card-value' }, l.method)),
       div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawEnacted + ': ').toUpperCase()), span({ class: 'card-value' }, fmt(l.enactedAt))),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(l.proposer)}` }, l.proposer))),
+      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, userLink(l.proposer))),
       h2(l.question || ''),
       p(l.description || ''),
       showMetricsFlag ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesNeeded + ': ').toUpperCase()), span({ class: 'card-value' }, String(needed))) : null,
@@ -666,7 +666,7 @@ const HistoricalList = (rows, metasByKey = {}) => {
         span({ class: 'card-value' },
           g.powerType === 'tribe'
             ? a({ class: 'user-link', href: `/tribe/${encodeURIComponent(g.powerId)}` }, g.powerTitle || g.powerId)
-            : a({ class: 'user-link', href: `/author/${encodeURIComponent(g.powerId)}` }, g.powerTitle || g.powerId)
+            : userLink(g.powerId, g.powerTitle)
         )
       ) : null,
       (g.method !== 'ANARCHY')
@@ -785,7 +785,7 @@ const LeadersList = (leaders, metas = {}, candidatures = []) => {
     const avatar = meta.avatarUrl ? img({ src: meta.avatarUrl, alt: '', class: 'leader-table__avatar' }) : null;
     const link = l.powerType === 'tribe'
       ? a({ class: 'user-link', href: `/tribe/${encodeURIComponent(l.powerId)}` }, l.powerTitle || l.powerId)
-      : a({ class: 'user-link', href: `/author/${encodeURIComponent(l.powerId)}` }, l.powerTitle || l.powerId);
+      : userLink(l.powerId, l.powerTitle);
     const leaderCell = div({ class: 'leader-cell' }, avatar, link);
     return tr(
       td(leaderCell),

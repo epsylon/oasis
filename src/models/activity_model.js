@@ -1,6 +1,29 @@
 const pull = require('../server/node_modules/pull-stream');
+const ssbRef = require('../server/node_modules/ssb-ref');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+
+const safeFeedId = (v) => {
+  if (typeof v === 'string' && ssbRef.isFeed(v)) return v;
+  if (v && typeof v === 'object' && typeof v.link === 'string' && ssbRef.isFeed(v.link)) return v.link;
+  return null;
+};
+
+const isContentSane = (c) => {
+  if (!c || typeof c !== 'object') return false;
+  if (c.type === 'contact') return !!safeFeedId(c.contact);
+  if (c.type === 'about') {
+    if (c.about === undefined) return true;
+    if (typeof c.about === 'string' && ssbRef.isFeed(c.about)) return true;
+    return false;
+  }
+  if (c.type === 'pub') {
+    const addr = c.address;
+    if (!addr || typeof addr !== 'object') return false;
+    return typeof addr.key === 'string' && ssbRef.isFeed(addr.key);
+  }
+  return true;
+};
 
 const N = s => String(s || '').toUpperCase().replace(/\s+/g, '_');
 const ORDER_MARKET = ['FOR_SALE','OPEN','RESERVED','CLOSED','SOLD'];
@@ -74,8 +97,10 @@ module.exports = ({ cooler }) => {
         const c = v?.content;
         if (!c?.type) continue;
         if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue }
+        if (!isContentSane(c)) continue;
         const ts = v?.timestamp || Number(c?.timestamp || 0) || (c?.updatedAt ? Date.parse(c.updatedAt) : 0) || 0;
-        idToAction.set(k, { id: k, author: v?.author, ts, type: inferType(c), content: c });
+        const normalized = c.type === 'contact' ? { ...c, contact: safeFeedId(c.contact) } : c;
+        idToAction.set(k, { id: k, author: v?.author, ts, type: inferType(c), content: normalized });
         rawById.set(k, msg);
         if (c.replaces) parentOf.set(k, c.replaces);
       }

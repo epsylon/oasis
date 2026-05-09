@@ -3,7 +3,7 @@ const {
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
@@ -100,6 +100,7 @@ const renderForumForm = () =>
 const renderThread = (nodes, level = 0, forumId) => {
   if (!Array.isArray(nodes)) return [];
   return [...nodes]
+    .filter(m => (m && m.text && String(m.text).trim()) || (m && Array.isArray(m.children) && m.children.length))
     .sort((a, b) =>
       wilsonScore(b.positiveVotes, b.negativeVotes)
       - wilsonScore(a.positiveVotes, a.negativeVotes)
@@ -117,11 +118,7 @@ const renderThread = (nodes, level = 0, forumId) => {
         div({ class: 'comment-header' },
           span({ class: 'date-link' },
             `${moment(m.timestamp).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
-          a({
-            href: `/author/${encodeURIComponent(m.author)}`,
-            class: 'user-link',
-            style: 'margin-left:12px;'
-          }, m.author),
+          userLink(m.author),
           div({ class: 'comment-votes' },
             span({ class: 'votes-count' }, `▲: ${m.positiveVotes || 0}`),
             span({ class: 'votes-count', style: 'margin-left:12px;' },
@@ -164,10 +161,13 @@ const renderThread = (nodes, level = 0, forumId) => {
     });
 };
 
-const renderForumList = (forums, currentFilter) =>
-  div({ class: 'forum-list' },
-    Array.isArray(forums) && forums.length
-      ? forums.map(f =>
+const renderForumList = (forums, currentFilter) => {
+  const visibleForums = (Array.isArray(forums) ? forums : []).filter(f =>
+    (f && f.title && String(f.title).trim()) || (f && f.text && String(f.text).trim())
+  )
+  return div({ class: 'forum-list' },
+    visibleForums.length
+      ? visibleForums.map(f =>
         div({ class: 'forum-card' },
           div({ class: 'forum-score-col' },
             renderVotes(f.key, f.score, f.key)
@@ -203,11 +203,7 @@ const renderForumList = (forums, currentFilter) =>
             div({ class: 'forum-footer' },
               span({ class: 'date-link' },
                 `${moment(f.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
-              a({
-                href: `/author/${encodeURIComponent(f.author)}`,
-                class: 'user-link',
-                style: 'margin-left:12px;'
-              }, f.author)
+              userLink(f.author)
             ),
             currentFilter === 'mine' && f.author === userId
               ? div({ class: 'forum-owner-actions' },
@@ -226,6 +222,7 @@ const renderForumList = (forums, currentFilter) =>
       )
       : p(i18n.noForums)
   );
+}
 
 exports.forumView = async (forums, currentFilter) => {
   const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
@@ -312,11 +309,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
           div({ class: 'forum-footer' },
             span({ class: 'date-link' },
               `${moment(forum.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
-            a({
-              href: `/author/${encodeURIComponent(forum.author)}`,
-              class: 'user-link',
-              style: 'margin-left:12px;'
-            }, forum.author)
+            userLink(forum.author)
           ),
 	  div({
 	    class: 'forum-body',

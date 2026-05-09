@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 
@@ -162,10 +162,15 @@ const renderTaskCommentsSection = (taskId, comments = [], currentFilter = "all")
         button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
       )
     ),
-    comments && comments.length
+    (() => {
+      const visibleComments = (comments || []).filter(c => {
+        const t = c && c.value && c.value.content && c.value.content.text;
+        return t && String(t).trim();
+      });
+      return visibleComments.length
       ? div(
           { class: "comments-list" },
-          comments.map((c) => {
+          visibleComments.map((c) => {
             const author = c.value && c.value.author ? c.value.author : "";
             const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
@@ -191,7 +196,8 @@ const renderTaskCommentsSection = (taskId, comments = [], currentFilter = "all")
             );
           })
         )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
+      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet);
+    })()
   );
 };
 
@@ -221,7 +227,7 @@ const renderTaskItem = (task, filter) => {
       span(
         { class: "card-value" },
         assignees.length
-          ? assignees.map((id, i) => [i > 0 ? ", " : "", a({ class: "user-link", href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
+          ? assignees.map((id, i) => [i > 0 ? ", " : "", userLink(id)]).flat()
           : i18n.noAssignees
       )
     ),
@@ -242,7 +248,7 @@ const renderTaskItem = (task, filter) => {
     p(
       { class: "card-footer" },
       span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-      a({ href: `/author/${encodeURIComponent(task.author)}`, class: "user-link" }, `${task.author}`)
+      userLink(task.author)
     )
   );
 };
@@ -447,7 +453,7 @@ exports.singleTaskView = async (task, filter, comments = []) => {
           span(
             { class: "card-value" },
             assignees.length
-              ? assignees.map((id, i) => [i > 0 ? ", " : "", a({ class: "user-link", href: `/author/${encodeURIComponent(id)}` }, id)]).flat()
+              ? assignees.map((id, i) => [i > 0 ? ", " : "", userLink(id)]).flat()
               : i18n.noAssignees
           )
         ),
@@ -455,7 +461,7 @@ exports.singleTaskView = async (task, filter, comments = []) => {
         p(
           { class: "card-footer" },
           span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(task.author)}`, class: "user-link" }, `${task.author}`)
+          userLink(task.author)
         )
       ),
       renderTaskCommentsSection(task.id, comments, currentFilter)

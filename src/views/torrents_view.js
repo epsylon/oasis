@@ -19,7 +19,7 @@ const {
   td
 } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -180,7 +180,7 @@ const renderTorrentTable = (torrents, filter, params = {}) => {
     torrents.map((t) =>
       tr(
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
-        td(a({ href: `/author/${encodeURIComponent(t.author)}`, class: "user-link" }, t.author)),
+        td(userLink(t.author)),
         td(t.title || ""),
         td(formatSize(t.size)),
         td(
@@ -375,7 +375,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
           return p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(torrentObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(torrentObj.author)}`, class: "user-link" }, `${torrentObj.author}`),
+            userLink(torrentObj.author),
             showUpdated
               ? span(
                   { class: "votations-comment-date" },

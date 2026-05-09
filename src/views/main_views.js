@@ -27,6 +27,40 @@ const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3
 const lodash = require("../server/node_modules/lodash");
 const markdown = require("./markdown");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
+const nameCache = require('../backend/nameCache');
+
+const userLinkLabel = (feedId, knownName) => {
+  const id = String(feedId || '');
+  if (!id) return '';
+  const name = (knownName && String(knownName).trim()) || nameCache.get(id);
+  if (name && name.length) return '@' + name;
+  return id;
+};
+
+const userLink = (feedId, knownName) => {
+  if (!feedId) return null;
+  return a({ class: 'user-link', href: `/author/${encodeURIComponent(feedId)}` }, userLinkLabel(feedId, knownName));
+};
+
+exports.userLink = userLink;
+exports.userLinkLabel = userLinkLabel;
+
+const errorView = ({ title, message, backHref }) => {
+  const heading = title || i18n.errorPageTitle || 'Error';
+  return exports.template(
+    heading,
+    section(
+      div({ class: 'tags-header' },
+        h2(heading),
+        message ? p({ class: 'error-page-message' }, String(message)) : null,
+        div({ class: 'error-page-actions' },
+          a({ href: backHref || '/', class: 'filter-btn' }, i18n.goBack || 'Go back')
+        )
+      )
+    )
+  );
+};
+exports.errorView = errorView;
 
 const i18nBase = require("../client/assets/translations/i18n");
 let selectedLanguage = "en";
@@ -135,8 +169,7 @@ const navLink = ({ href, emoji, text, current, class: extraClass }) =>
           .join(" ")
       },
       span({ class: "emoji" }, emoji),
-      nbsp,
-      text
+      span({ class: "nav-text" }, text)
     )
   );
 
@@ -168,8 +201,7 @@ const navGroup = ({ id, emoji, title, defaultOpen = false }, ...items) => {
     label(
       { for: `oasis-nav-group-${id}`, class: "oasis-nav-header" },
       span({ class: "emoji" }, emoji),
-      nbsp,
-      title,
+      span({ class: "nav-text" }, title),
       span({ class: "oasis-nav-arrow" }, "▾")
     ),
     ul({ class: "oasis-nav-list" }, ...active)
@@ -293,6 +325,21 @@ const renderCipherLink = () => {
         emoji: "ꗄ",
         text: i18n.cipher,
         class: "cipher-link enabled"
+      })
+    ];
+  }
+  return "";
+};
+
+const renderGraphosLink = () => {
+  const graphosMod = getConfig().modules.graphosMod === "on";
+  if (graphosMod) {
+    return [
+      navLink({
+        href: "/graphos",
+        emoji: "ꔯ",
+        text: i18n.graphos,
+        class: "graphos-link enabled"
       })
     ];
   }
@@ -832,6 +879,25 @@ const template = (titlePrefix, ...elements) => {
             )
           )
         ),
+        (() => {
+          const aiNavOn = getConfig().modules.aiNavMod === 'on';
+          if (!aiNavOn) return null;
+          return div(
+            { class: "top-bar-center" },
+            form(
+              { method: 'POST', action: '/ai/ask', class: 'ai-ask-form' },
+              input({
+                type: 'text',
+                name: 'q',
+                class: 'ai-ask-input',
+                placeholder: i18n.aiNavPlaceholder || 'Where do you want to go?',
+                autocomplete: 'off',
+                maxlength: '300'
+              }),
+              button({ type: 'submit', class: 'ai-ask-btn' }, '➤')
+            )
+          );
+        })(),
         div(
           { class: "top-bar-right" },
           nav(
@@ -944,17 +1010,24 @@ const template = (titlePrefix, ...elements) => {
                 },
                 renderAILink(),
                 navLink({
-                  href: "/stats",
-                  emoji: "ꕷ",
-                  text: i18n.statistics
-                }),
-                navLink({
                   href: "/blockexplorer",
                   emoji: "ꖸ",
                   text: i18n.blockchain
                 }),
                 renderCipherLink(),
-                renderLegacyLink()
+                renderGraphosLink(),
+                renderInvitesLink(),
+                renderLegacyLink(),
+                navLink({
+                  href: "/peers",
+                  emoji: "⧖",
+                  text: i18n.peers
+                }),
+                navLink({
+                  href: "/stats",
+                  emoji: "ꕷ",
+                  text: i18n.statistics
+                })
               )
             )
           )
@@ -980,13 +1053,7 @@ const template = (titlePrefix, ...elements) => {
                 renderPadsLink(),
                 renderForumLink(),
                 renderMapsLink(),
-                renderChatsLink(),
-                renderInvitesLink(),
-                navLink({
-                  href: "/peers",
-                  emoji: "⧖",
-                  text: i18n.peers
-                })
+                renderChatsLink()
               ),
               navGroup(
                 {
@@ -1724,7 +1791,7 @@ exports.authorView = ({
         h1({ class: "name" }, name),
       ),
       pre({ class: "md-mention", innerHTML: sanitizeHtml(markdownMention) }),
-      p(a({ class: "user-link", href: `/author/${encodeURIComponent(feedId)}` }, feedId)),
+      p(userLink(feedId, name)),
       div({ class: "profile-metrics" },
         ...lastActivityBadge({ lastActivityBucket: bucket }, true),
         div({ class: "inhabitant-karma-ubi" },
@@ -1991,7 +2058,7 @@ const renderMessage = (msg) => {
       badge,
       ...renderUrl(mentionsText || '[No content]')
     ),
-    p(a({ class: 'user-link', href: `/author/${encodeURIComponent(authorId)}` }, authorName)),
+    p(userLink(authorId, authorName)),
     p(`${i18n.createdAtLabel || 'Created at'}: ${createdAt}`),
     visitUrl
       ? form({ method: 'GET', action: visitUrl },
@@ -2081,8 +2148,7 @@ exports.privateView = async (messagesInput, filter) => {
   const isSent = m => (m?.value?.author === userId) || (m?.value?.content?.from === userId)
   const isToUser = m => Array.isArray(m?.value?.content?.to) && m.value.content.to.includes(userId)
 
-  const linkAuthor = (id) =>
-    a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)
+  const linkAuthor = (id) => userLink(id)
 
   const hrefFor = {
     job: (id) => `/jobs/${encodeURIComponent(id)}`,
@@ -2199,7 +2265,7 @@ exports.privateView = async (messagesInput, filter) => {
     }
     flushQuote()
     return parts.join('<br>')
-      .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g, (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${match}</a>`)
+      .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g, (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${userLinkLabel(id)}</a>`)
       .replace(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="job-link" href="${hrefFor.job(id)}">${match}</a>`)
       .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`)
       .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`)
@@ -2275,7 +2341,7 @@ exports.privateView = async (messagesInput, filter) => {
       h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotProjects} · ${titleH}`),
       p(
         i18n.pmInhabitantWithId, ' ',
-        a({ class: 'user-link', href: `/author/${encodeURIComponent(from)}` }, from),
+        userLink(from),
         ' ',
         isFollow ? (i18n.pmHasFollowedYourProject || 'has followed your project') : (i18n.pmHasUnfollowedYourProject || 'has unfollowed your project'),
         ' ',
@@ -2623,9 +2689,11 @@ const markdownMentionsToHtml = (markdownText) => {
 
   const unescapeBlob = (b) => b.replace(/&amp;/g, '&')
 
+  const escAttr = (s) => String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+
   const withImages = withBr.replace(
     /!\[([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
-    (_m, alt, blob) => `<img src="/blob/${encodeURIComponent(unescapeBlob(blob))}" alt="${alt}" class="post-image">`
+    (_m, alt, blob) => `<img src="/blob/${encodeURIComponent(unescapeBlob(blob))}" alt="${escAttr(alt)}" class="post-image">`
   )
 
   const withVideos = withImages.replace(
@@ -2640,7 +2708,7 @@ const markdownMentionsToHtml = (markdownText) => {
 
   const withPdfs = withAudios.replace(
     /\[pdf:([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
-    (_m, name, blob) => `<a class="post-pdf" href="/blob/${encodeURIComponent(unescapeBlob(blob))}" target="_blank">${name || i18n.pdfFallbackLabel || 'PDF'}</a>`
+    (_m, name, blob) => `<a class="post-pdf" href="/blob/${encodeURIComponent(unescapeBlob(blob))}" target="_blank">${escapeHtml(name || i18n.pdfFallbackLabel || 'PDF')}</a>`
   )
 
   const withMentions = withPdfs.replace(
@@ -2648,13 +2716,13 @@ const markdownMentionsToHtml = (markdownText) => {
     (_m, label, feed) => {
       const href = authorHref(feed)
       const shown = `@${String(label || "").replace(/^@+/, "")}`
-      return `<a class="mention" href="${href}">${escapeHtml(shown)}</a>`
+      return `<a class="mention" href="${escAttr(href)}">${escapeHtml(shown)}</a>`
     }
   )
 
   const withLinks = withMentions.replace(
-    /(https?:\/\/[^\s<]+)/g,
-    (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`
+    /(https?:\/\/[^\s"'<>]+)/g,
+    (u) => `<a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer">${escAttr(u)}</a>`
   )
 
   return withLinks
@@ -2722,7 +2790,7 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
             { class: "mention-relationship-details" },
             span(
               { class: "mentions-listing" },
-              a({ class: "user-link", href: authorHref(feed) }, `@${stripAt(feed)}`)
+              userLink(feed)
             )
           )
         )

@@ -1,5 +1,9 @@
 node_modules/
-*.gguf
-.update_required
 packages/
+*.gguf
+*.onnx
+*.tar.gz
+src/AI/embeddings/
+src/AI/.cache/
+.update_required
 cache/

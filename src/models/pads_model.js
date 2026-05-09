@@ -20,16 +20,41 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, tribesModel }) => {
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
   let keyringPath = null
-  const getKeyring = () => {
+  let migratedToTribeCrypto = false
+  const getLegacyKeyringPath = () => {
     if (!keyringPath) {
       const ssbConfig = require("../server/node_modules/ssb-config/inject")()
       keyringPath = path.join(ssbConfig.path, "pad-keys.json")
     }
-    try { return JSON.parse(fs.readFileSync(keyringPath, "utf8")) } catch (e) { return {} }
+    return keyringPath
   }
-  const saveKeyring = (kr) => fs.writeFileSync(keyringPath, JSON.stringify(kr, null, 2), "utf8")
-  const getPadKey = (rootId) => { const kr = getKeyring(); return kr[rootId] || null }
-  const setPadKey = (rootId, keyHex) => { const kr = getKeyring(); kr[rootId] = keyHex; saveKeyring(kr) }
+  const migrateLegacyKeyring = () => {
+    if (migratedToTribeCrypto || !tribeCrypto) { migratedToTribeCrypto = true; return }
+    migratedToTribeCrypto = true
+    try {
+      const p = getLegacyKeyringPath()
+      if (!fs.existsSync(p)) return
+      const legacy = JSON.parse(fs.readFileSync(p, "utf8")) || {}
+      for (const [rootId, keyHex] of Object.entries(legacy)) {
+        if (rootId && keyHex && !tribeCrypto.getKey(rootId)) {
+          tribeCrypto.setKey(rootId, keyHex, 1)
+        }
+      }
+    } catch (_) {}
+  }
+  const getPadKey = (rootId) => {
+    migrateLegacyKeyring()
+    if (tribeCrypto) return tribeCrypto.getKey(rootId) || null
+    try { return JSON.parse(fs.readFileSync(getLegacyKeyringPath(), "utf8"))[rootId] || null } catch (_) { return null }
+  }
+  const setPadKey = (rootId, keyHex) => {
+    migrateLegacyKeyring()
+    if (tribeCrypto) { tribeCrypto.setKey(rootId, keyHex, 1); return }
+    let kr = {}
+    try { kr = JSON.parse(fs.readFileSync(getLegacyKeyringPath(), "utf8")) } catch (_) {}
+    kr[rootId] = keyHex
+    fs.writeFileSync(getLegacyKeyringPath(), JSON.stringify(kr, null, 2), "utf8")
+  }
 
   const encryptField = (text, keyHex) => {
     const key = Buffer.from(keyHex, "hex")
@@ -225,6 +250,13 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, tribesModel }) => {
       if (!keyHex) keyHex = crypto.randomBytes(32).toString("hex")
       const enc = (text) => encryptField(text, keyHex)
 
+      const initialInvites = []
+      if (validStatus === "OPEN" && !usesTribeKey) {
+        const pubCode = crypto.randomBytes(INVITE_BYTES).toString("hex")
+        const ek = encryptForInvite(keyHex, pubCode)
+        initialInvites.push({ code: pubCode, ek, gen: 1, public: true })
+      }
+
       const content = {
         type: "pad",
         title: enc(safeText(title)),
@@ -233,17 +265,28 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, tribesModel }) => {
         tags: enc(normalizeTags(tagsRaw).join(",")),
         author: ssbClient.id,
         members: [ssbClient.id],
-        invites: [],
+        invites: initialInvites,
         createdAt: now,
         updatedAt: now,
         encrypted: true,
         ...(tribeId ? { tribeId } : {})
       }
 
+      const userId = ssbClient.id
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, msg) => {
           if (err) return reject(err)
-          if (!usesTribeKey) setPadKey(msg.key, keyHex)
+          if (!usesTribeKey) {
+            setPadKey(msg.key, keyHex)
+            if (tribeCrypto) {
+              try {
+                const ssbKeys = require("../server/node_modules/ssb-keys")
+                const boxedKey = tribeCrypto.boxKeyForMember(keyHex, userId, ssbKeys)
+                ssbClient.publish({ type: "tribe-keys", tribeId: msg.key, generation: 1, memberKeys: { [userId]: boxedKey } }, () => resolve(msg))
+                return
+              } catch (_) {}
+            }
+          }
           resolve(msg)
         })
       })
@@ -452,13 +495,31 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, tribesModel }) => {
       }
       if (!matchedPad) throw new Error("Invalid or expired invite code")
       if (matchedPad.members.includes(userId)) throw new Error("Already a member")
+      let padKey = null
+      let resolvedRootId = null
       if (typeof matchedInvite === "object" && matchedInvite.ek) {
-        const padKey = decryptFromInvite(matchedInvite.ek, code)
-        const rootId = await this.resolveRootId(matchedPad.rootId)
-        setPadKey(rootId, padKey)
+        padKey = decryptFromInvite(matchedInvite.ek, code)
+        resolvedRootId = await this.resolveRootId(matchedPad.rootId)
+        setPadKey(resolvedRootId, padKey)
       }
       await this.addMemberToPad(matchedPad.rootId, userId)
-      const invites = matchedPad.invites.filter(inv => {
+      if (tribeCrypto && padKey && resolvedRootId) {
+        try {
+          const ssbKeys = require("../server/node_modules/ssb-keys")
+          const memberKeys = {}
+          try { memberKeys[userId] = tribeCrypto.boxKeyForMember(padKey, userId, ssbKeys) } catch (_) {}
+          if (matchedPad.author && matchedPad.author !== userId) {
+            try { memberKeys[matchedPad.author] = tribeCrypto.boxKeyForMember(padKey, matchedPad.author, ssbKeys) } catch (_) {}
+          }
+          if (Object.keys(memberKeys).length) {
+            await new Promise((resolve) => {
+              ssbClient.publish({ type: "tribe-keys", tribeId: resolvedRootId, generation: 1, memberKeys }, () => resolve())
+            })
+          }
+        } catch (_) {}
+      }
+      const isPublicInvite = typeof matchedInvite === "object" && matchedInvite.public === true
+      const invites = isPublicInvite ? matchedPad.invites : matchedPad.invites.filter(inv => {
         if (typeof inv === "string") return inv !== code
         return inv.code !== code
       })

@@ -440,6 +440,12 @@ a.user-link:focus {
   color: #9B1C96 !important;
 }
 
+.stats-kpi-label { color: #B86ADE !important; }
+.stats-kpi-value { color: #FFEEDB !important; }
+.carbon-bar-note, .carbon-bar-formula { color: #FFEEDB !important; }
+.graphos-node-label { fill: #FFEEDB !important; }
+.graphos-node-label-me { fill: #ffa500 !important; }
+.graphos-legend { color: #FFEEDB !important; }
 /* Blockexplorer */
 .blockchain-view { background-color: #2D0B47 !important; color: #FFEEDB !important; }
 .block { background: #3C1360 !important; border: 1px solid #B86ADE !important; }

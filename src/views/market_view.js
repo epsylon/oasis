@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, userLink} = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -138,10 +138,15 @@ const renderMarketCommentsSection = (itemId, returnTo, comments = []) => {
         button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
       )
     ),
-    comments && comments.length
+    (() => {
+      const visibleComments = (comments || []).filter(c => {
+        const t = c && c.value && c.value.content && c.value.content.text
+        return t && String(t).trim()
+      })
+      return visibleComments.length
       ? div(
           { class: "comments-list" },
-          comments.map((c) => {
+          visibleComments.map((c) => {
             const author = c.value && c.value.author ? c.value.author : ""
             const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : ""
@@ -166,6 +171,7 @@ const renderMarketCommentsSection = (itemId, returnTo, comments = []) => {
           })
         )
       : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
+    })()
   )
 }
 
@@ -678,7 +684,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         renderCardField(`${i18n.marketItemIncludesShipping}:`, `${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
         renderMapEmbedWithZoom(params.mapData, item.mapUrl, `/market/${encodeURIComponent(item.id)}`, params.zoom),
         item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, `${moment(item.deadline).format("YYYY/MM/DD HH:mm:ss")}`) : null,
-        renderCardFieldRich(`${i18n.marketItemSeller}:`, [a({ class: "user-link", href: `/author/${encodeURIComponent(item.seller)}` }, item.seller)])
+        renderCardFieldRich(`${i18n.marketItemSeller}:`, [userLink(item.seller)])
       ),
       item.item_type === "auction"
         ? div(

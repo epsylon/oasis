@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
 const { renderMapLocationUrl, renderMapLocationGrid, renderMapLocationVisitLabel } = require("./maps_view");
@@ -368,7 +368,7 @@ const renderFeedTribeView = async (feedItems, tribe, query = {}, filter) => {
 		    : null
 		),
               div({ class: 'feed-main' },
-                p(`${new Date(m.createdAt).toLocaleString()} — `, a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
+                p(`${new Date(m.createdAt).toLocaleString()} — `, userLink(m.author)),
                 br,
                 p(...renderUrl(m.description))
               )
@@ -538,7 +538,7 @@ const renderTribeActivitySection = (tribe, sectionData) => {
         ),
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, `${date} ${i18n.performed || ''} `),
-          a({ href: `/author/${encodeURIComponent(item.author)}`, class: 'user-link' }, item.authorName || item.author)
+          userLink(item.author, item.authorName)
         )
       );
     })
@@ -569,7 +569,7 @@ const renderTribeTrendingSection = (tribe, sectionData, query) => {
           item.refeeds ? span(`${i18n.tribeActivityRefeed}: ${item.refeeds}`) : null,
           Array.isArray(item.attendees) && item.attendees.length ? span(`${i18n.tribeEventAttendees}: ${item.attendees.length}`) : null
         ),
-        p({ class: 'tribe-meta-label' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(item.author)}` }, item.author))
+        p({ class: 'tribe-meta-label' }, userLink(item.author))
       ); })
   );
 };
@@ -612,7 +612,7 @@ const renderTribeTagsSection = (tribe, sectionData, query) => {
           ),
           p({ class: 'card-footer' },
             span({ class: 'date-link' }, new Date(item.createdAt).toLocaleString()),
-            a({ class: 'user-link', href: `/author/${encodeURIComponent(item.author)}` }, item.author)
+            userLink(item.author)
           )
         ))
     ) : null
@@ -647,7 +647,7 @@ const renderTribeSearchSection = (tribe, sectionData, query) => {
           ),
           p({ class: 'card-footer' },
             span({ class: 'date-link' }, new Date(item.createdAt).toLocaleDateString()),
-            a({ class: 'user-link', href: `/author/${encodeURIComponent(item.author)}` }, item.author)
+            userLink(item.author)
           )
         ))
     ) : null
@@ -668,7 +668,7 @@ const renderOverviewSection = (tribe, query, sectionData) => {
       recentFeed.length === 0 ? p(i18n.tribeFeedEmpty) :
         recentFeed.map(m =>
           div({ class: 'feed-item' },
-            p(`${new Date(m.createdAt).toLocaleString()} — `, a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)),
+            p(`${new Date(m.createdAt).toLocaleString()} — `, userLink(m.author)),
             p(...renderUrl(m.description))
           )
         )
@@ -704,7 +704,7 @@ const renderOverviewSection = (tribe, query, sectionData) => {
       h2(i18n.tribeSectionInhabitants),
       p(`${i18n.tribeMembersCount}: ${tribe.members.length}`),
       tribe.members.slice(0, 6).map(m =>
-        a({ class: 'user-link', href: `/author/${encodeURIComponent(m)}` }, m),
+        userLink(m),
       )
     )
   );
@@ -1003,7 +1003,7 @@ const renderForumSection = (tribe, items, query) => {
           ),
           div({ class: 'forum-footer' },
             span({ class: 'date-link' }, `${new Date(thread.createdAt).toLocaleString()} ${i18n.performed || ''}`),
-            a({ href: `/author/${encodeURIComponent(thread.author)}`, class: 'user-link' }, thread.author)
+            userLink(thread.author)
           ),
           div({ class: 'forum-body' }, ...renderUrl(thread.description || '')),
           div({ class: 'forum-meta' },
@@ -1024,7 +1024,7 @@ const renderForumSection = (tribe, items, query) => {
             div({ class: `forum-comment${idx === 0 ? ' highlighted-reply' : ''}` },
               div({ class: 'comment-header' },
                 span({ class: 'date-link' }, `${new Date(r.createdAt).toLocaleString()} ${i18n.performed || ''}`),
-                a({ href: `/author/${encodeURIComponent(r.author)}`, class: 'user-link' }, r.author),
+                userLink(r.author),
                 div({ class: 'comment-votes' },
                   span({ class: 'forum-positive-votes' }, `▲: ${r.refeeds || 0}`)
                 )
@@ -1100,7 +1100,7 @@ const renderForumSection = (tribe, items, query) => {
               ),
               div({ class: 'forum-footer' },
                 span({ class: 'date-link' }, `${new Date(t.createdAt).toLocaleString()} ${i18n.performed || ''}`),
-                a({ href: `/author/${encodeURIComponent(t.author)}`, class: 'user-link' }, t.author)
+                userLink(t.author)
               ),
               t.author === userId ? div({ class: 'forum-owner-actions' },
                 form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(t.id)}`, class: 'forum-delete-form' },
@@ -1171,7 +1171,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
 
   const mediaFooter = (m) => [
     p({ class: 'tribe-media-date' }, span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString())),
-    p({ class: 'tribe-media-author' }, a({ href: `/author/${encodeURIComponent(m.author)}`, class: 'user-link' }, m.author)),
+    p({ class: 'tribe-media-author' }, userLink(m.author)),
     m.author === userId ? form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(m.id)}` },
       button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeContentDelete)
     ) : null
@@ -1330,7 +1330,7 @@ const renderTribeMapsSection = (tribe, maps) => {
         ),
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
-          a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)
+          userLink(m.author)
         )
       )
     )
@@ -1369,7 +1369,7 @@ const renderTribeTorrentsSection = (tribe, torrents) => {
         ),
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
-          a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)
+          userLink(m.author)
         )
       );
     })
@@ -1400,7 +1400,7 @@ const renderTribePadsSection = (tribe, pads) => {
         ),
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
-          a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)
+          userLink(m.author)
         )
       )
     )
@@ -1432,7 +1432,7 @@ const renderTribeChatsSection = (tribe, chats) => {
         ),
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
-          a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)
+          userLink(m.author)
         )
       )
     )
@@ -1467,7 +1467,7 @@ const renderTribeCalendarsSection = (tribe, calendars) => {
         ),
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
-          a({ class: 'user-link', href: `/author/${encodeURIComponent(m.author)}` }, m.author)
+          userLink(m.author)
         )
       )
     )
@@ -1545,7 +1545,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           td({ class: 'tribe-info-value', colspan: '3' }, new Date(tribe.createdAt).toLocaleString())
         ),
         tr(
-          td({ class: 'tribe-info-value', colspan: '4' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(tribe.author)}` }, tribe.author))
+          td({ class: 'tribe-info-value', colspan: '4' }, userLink(tribe.author))
         ),
         tribe.location ? tr(
           td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
@@ -1553,7 +1553,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
         ) : null,
         tr(
           td({ class: 'tribe-info-label' }, i18n.tribeStatusLabel || 'STATUS'),
-          td({ class: 'tribe-info-value', colspan: '3' }, String(statusI18n()[tribe.status] || i18n.tribeStatusOpen).toUpperCase())
+          td({ class: 'tribe-info-value', colspan: '3' }, String(tribe.isAnonymous ? i18n.tribePrivate : i18n.tribePublic).toUpperCase())
         ),
         tr(
           td({ class: 'tribe-info-label' }, i18n.tribeModeLabel || 'MODE'),
@@ -1729,7 +1729,7 @@ const governmentCard = (tribe, term, leaders) => {
     !isAnarchy && leaderId
       ? div({ class: 'tribe-leader-block' },
           h3(i18n.tribeGovLeader || 'LEADER'),
-          a({ href: `/author/${encodeURIComponent(leaderId)}`, class: 'user-link' }, leaderId)
+          userLink(leaderId)
         )
       : null
   );
@@ -1759,7 +1759,7 @@ const candidaturesBlock = (tribe, candidatures, alreadyPublishedThisGlobalCycle)
       : ul({}, list.map(c =>
           li({},
             c.candidateId
-              ? a({ href: `/author/${encodeURIComponent(c.candidateId)}`, class: 'user-link' }, c.candidateId)
+              ? userLink(c.candidateId)
               : '?',
             ` — ${c.method || 'DEMOCRACY'} — ${c.votes || 0} ${i18n.votes || 'votes'}`,
             ' ',
@@ -1817,7 +1817,7 @@ const renderGovernance = (tribe, data) => {
     h3(i18n.tribeGovLeader || 'LEADERS'),
     (!Array.isArray(leaders) || leaders.length === 0)
       ? p(i18n.tribeGovernanceNoLeaders || 'No leaders elected yet.')
-      : ul({}, leaders.map(l => li({}, a({ href: `/author/${encodeURIComponent(l)}`, class: 'user-link' }, l))))
+      : ul({}, leaders.map(l => li({}, userLink(l))))
   );
   else body = div({ class: 'card' },
     h3(i18n[`tribeGovFilter${f.charAt(0).toUpperCase()}${f.slice(1)}`] || i18n[`tribeGov${f.charAt(0).toUpperCase()}${f.slice(1)}`] || f.toUpperCase()),

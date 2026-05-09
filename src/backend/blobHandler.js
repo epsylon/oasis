@@ -220,6 +220,15 @@ const serveBlob = async function (ctx) {
     if (head.includes('announce') || head.includes('8:announce') || head.includes('4:info')) mime = 'application/x-bittorrent';
   }
 
+  if (mime === 'application/octet-stream' || mime === 'text/plain' || mime === 'application/xml' || mime === 'text/xml') {
+    let head = buffer.slice(0, 512).toString('utf8');
+    if (head.charCodeAt(0) === 0xFEFF) head = head.slice(1);
+    const trimmed = head.replace(/^\s+/, '').toLowerCase();
+    if (trimmed.startsWith('<?xml') || trimmed.startsWith('<svg')) {
+      if (trimmed.includes('<svg')) mime = 'image/svg+xml';
+    }
+  }
+
   const isSvg = mime === 'image/svg+xml';
   const qName = ctx.query.name ? String(ctx.query.name).replace(/["\r\n\\]/g, '').trim() : '';
   const safeRaw = String(raw).replace(/["\r\n\\]/g, '');

@@ -394,6 +394,17 @@ a.user-link:focus {
   background: #ccc !important;
 }
 
+.stats-kpi-label { color: #2D2D2D !important; }
+.stats-kpi-value { color: #007BFF !important; }
+.carbon-bar-note, .carbon-bar-formula { color: #007BFF !important; }
+.graphos-node-label { fill: #2C2C2C !important; }
+.graphos-node-label-me { fill: #cc7700 !important; }
+.graphos-legend { color: #2C2C2C !important; }
+.graphos-edge { stroke: #BBB !important; }
+.graphos-edge-discovered { stroke: #b8860b !important; }
+.graphos-edge-unknown { stroke: #999 !important; }
+.graphos-node-circle-discovered { fill: #ffd700 !important; stroke: #b8860b !important; }
+.graphos-legend-dot.graphos-node-circle-discovered { background: #ffd700 !important; border-color: #b8860b !important; }
 /* Blockexplorer */
 .blockchain-view { background-color: #F4F4F4 !important; color: #2C2C2C !important; }
 .block { background: #FFFFFF !important; box-shadow: 0 2px 12px rgba(0,0,0,0.06) !important; }

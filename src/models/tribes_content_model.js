@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const tribeLogLimit = Math.max(logLimit, 100000);
 
 const VALID_CONTENT_TYPES = ['event', 'task', 'report', 'votation', 'forum', 'forum-reply', 'market', 'job', 'project', 'media', 'feed', 'pixelia'];
 const categories = require('../backend/opinion_categories');
@@ -30,7 +31,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const ssbClient = await openSsb();
     return new Promise((resolve, reject) =>
       pull(
-        ssbClient.createLogStream({ limit: logLimit }),
+        ssbClient.createLogStream({ limit: tribeLogLimit }),
         pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
       )
     );

@@ -713,35 +713,12 @@ async function getLastPublishedTimestamp(userId) {
     if (!pubId) throw new Error("no_pub_configured");
     const alreadyClaimed = await hasClaimedThisMonth(uid);
     if (alreadyClaimed) throw new Error("already_claimed");
-    const karmaScore = await getUserEngagementScore(uid);
-    const wMin = DEFAULT_RULES.caps.w_min;
-    const wMax = DEFAULT_RULES.caps.w_max;
-    const capUser = DEFAULT_RULES.caps.cap_user_epoch;
-    const userW = clamp(1 + karmaScore / 100, wMin, wMax);
-    const amount = Number(Math.max(1, Math.min(capUser * (userW / wMax), capUser)).toFixed(6));
     const ssb = await openSsb();
     if (!ssb || !ssb.publish) throw new Error("ssb_unavailable");
     const now = new Date().toISOString();
-    const transferContent = {
-      type: "transfer",
-      from: pubId,
-      to: uid,
-      concept: `UBI ${epochId} ${uid}`,
-      amount: String(amount),
-      createdAt: now,
-      updatedAt: now,
-      deadline: null,
-      confirmedBy: [pubId],
-      status: "UNCONFIRMED",
-      tags: ["UBI", "PENDING"],
-      opinions: {},
-      opinions_inhabitants: []
-    };
-    const transferRes = await new Promise((resolve, reject) => ssb.publish(transferContent, (err, res) => err ? reject(err) : resolve(res)));
-    const transferId = transferRes?.key || "";
-    const claimContent = { type: "ubiClaim", pubId, amount, epochId, claimedAt: now, transferId };
+    const claimContent = { type: "ubiClaim", pubId, epochId, claimedAt: now };
     await new Promise((resolve, reject) => ssb.publish(claimContent, (err, res) => err ? reject(err) : resolve(res)));
-    return { status: "claimed_pending", amount, epochId };
+    return { status: "claimed_pending", epochId };
   }
 
   async function updateAllocationStatus(allocationId, status, txid) {

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink} = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { renderUrl } = require('../backend/renderUrl');
@@ -215,11 +215,11 @@ const renderContentHtml = (content, key) => {
           ),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.from + ':'),
-            span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(content.from)}`, target: "_blank" }, content.from))
+            span({ class: 'card-value' }, userLink(content.from))
           ),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.to + ':'),
-            span({ class: 'card-value' }, a({ class: 'user-link', href: `/author/${encodeURIComponent(content.to)}`, target: "_blank" }, content.to))
+            span({ class: 'card-value' }, userLink(content.to))
           ),
           h2({ class: 'card-field' },
             span({ class: 'card-label' }, `${i18n.transfersConfirmations}: `),
@@ -273,7 +273,7 @@ exports.opinionsView = (items, filter) => {
         contentHtml,
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, `${created} ${i18n.performed} `),
-          a({ href: `/author/${encodeURIComponent(item.value.author)}`, class: 'user-link' }, item.value.author)
+          userLink(item.value.author)
         ),
         (() => {
           const entries = voteEntries.filter(([, v]) => v > 0);

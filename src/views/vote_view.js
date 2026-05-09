@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const opinionCategories = require("../backend/opinion_categories");
@@ -230,7 +230,7 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, mode, activeFilter)
     p(
       { class: "card-footer" },
       span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-      a({ href: `/author/${encodeURIComponent(v.createdBy)}`, class: "user-link" }, `${v.createdBy}`)
+      userLink(v.createdBy)
     ),
     renderOpinionsBar(v, returnTo)
   );

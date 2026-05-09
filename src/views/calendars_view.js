@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, userLink} = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 
@@ -165,6 +165,17 @@ const renderMonthGrid = (year, month, datesMap, calendarId) => {
   return div({ class: "calendar-grid" }, ...headerCells, ...cells)
 }
 
+exports.renderCalendarInvitePage = (code) => {
+  const pageContent = div({ class: "invite-page" },
+    h2(i18n.tribeInviteCodeText, code),
+    form({ method: "GET", action: "/calendars" },
+      input({ type: "hidden", name: "filter", value: "all" }),
+      button({ type: "submit", class: "filter-btn" }, i18n.walletBack)
+    )
+  )
+  return template(i18n.calendarGenerateInvite || "Invite", section(pageContent))
+}
+
 exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
   const q = (params && params.q) || ""
   const showForm = filter === "create" || filter === "edit" || !!calendarToEdit
@@ -241,7 +252,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     ),
     table({ class: "tribe-info-table" },
       tr(td({ class: "tribe-info-label" }, i18n.calendarCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.createdAt).format("YYYY-MM-DD"))),
-      tr(td({ class: "tribe-info-value", colspan: "4" }, a({ href: `/author/${encodeURIComponent(calendar.author)}`, class: "user-link" }, calendar.author))),
+      tr(td({ class: "tribe-info-value", colspan: "4" }, userLink(calendar.author))),
       tr(td({ class: "tribe-info-label" }, i18n.calendarStatusLabel || "Status"), td({ class: "tribe-info-value", colspan: "3" }, renderStatus(calendar))),
       calendar.deadline ? tr(td({ class: "tribe-info-label" }, i18n.calendarDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.deadline).format("YYYY-MM-DD HH:mm"))) : null
     ),
@@ -254,6 +265,11 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
             button({ type: "submit", class: "tribe-action-btn" }, i18n.calendarUpdate || "Update")
           )
         : null,
+      isAuthor && calendar.status !== "OPEN"
+        ? form({ method: "POST", action: `/calendars/generate-invite/${encodeURIComponent(calendar.rootId)}` },
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.calendarGenerateInvite || "Generate invite")
+          )
+        : null,
       isAuthor
         ? form({ method: "POST", action: `/calendars/delete/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.calendarDelete || "Delete")
@@ -262,9 +278,15 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
       !isAuthor
         ? a({ href: `/pm?to=${encodeURIComponent(calendar.author)}`, class: "tribe-action-btn" }, "PM")
         : null,
-      !isAuthor && !isParticipant
+      !isAuthor && !isParticipant && calendar.status === "OPEN"
         ? form({ method: "POST", action: `/calendars/join/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "create-button" }, i18n.calendarJoin || "Join Calendar")
+          )
+        : null,
+      !isAuthor && !isParticipant && calendar.status !== "OPEN"
+        ? form({ method: "POST", action: "/calendars/join-code" },
+            input({ type: "text", name: "code", placeholder: i18n.calendarInviteCodePlaceholder || "Enter invite code..." }),
+            button({ type: "submit", class: "filter-btn" }, i18n.calendarValidateInvite || "Validate code")
           )
         : null,
       !isAuthor && isParticipant
@@ -333,9 +355,11 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
                 div({ class: "calendar-date-item-header" },
                   `${moment(d.date).format("YYYY-MM-DD HH:mm")}${d.label ? " \u2014 " + d.label : ""}`
                 ),
-                notes.length === 0
-                  ? p({ class: "no-content" }, i18n.calendarNoNotes || "No notes.")
-                  : div(null, ...notes.map(n => {
+                (() => {
+                  const visibleNotes = notes.filter(n => n.text && String(n.text).trim())
+                  return visibleNotes.length === 0
+                    ? p({ class: "no-content" }, i18n.calendarNoNotes || "No notes.")
+                    : div(null, ...visibleNotes.map(n => {
                       const isSelf = String(n.author) === String(userId)
                       const dateStr = moment(n.createdAt).format("YYYY/MM/DD HH:mm")
                       const shortId = n.author ? "@" + n.author.slice(1, 9) + "\u2026" : "?"
@@ -348,13 +372,14 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
                           : null,
                         div({ class: "chat-message-meta" },
                           span({ class: "chat-message-sender" },
-                            a({ href: `/author/${encodeURIComponent(n.author)}`, class: "user-link" }, shortId)
+                            userLink(n.author)
                           ),
                           span({ class: "chat-message-date" }, ` [ ${dateStr} ]`)
                         ),
                         span({ class: "chat-message-text" }, ...renderNoteText(n.text || ""))
                       )
                     }))
+                })()
               )
             }))
       )

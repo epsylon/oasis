@@ -17,7 +17,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -116,7 +116,10 @@ const renderVideoOwnerActions = (filter, videoObj, params = {}) => {
 };
 
 const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => {
-  const list = safeArr(comments);
+  const list = safeArr(comments).filter(c => {
+    const t = c && c.value && c.value.content && c.value.content.text;
+    return t && String(t).trim();
+  });
   const commentsCount = list.length;
 
   return div(
@@ -231,7 +234,7 @@ const renderVideoList = (videos, filter, params = {}) => {
             return p(
               { class: "card-footer" },
               span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              a({ href: `/author/${encodeURIComponent(videoObj.author)}`, class: "user-link" }, `${videoObj.author}`),
+              userLink(videoObj.author),
               showUpdated
                 ? span(
                     { class: "votations-comment-date" },
@@ -423,7 +426,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
           return p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(videoObj.author)}`, class: "user-link" }, `${videoObj.author}`),
+            userLink(videoObj.author),
             showUpdated
               ? span(
                   { class: "votations-comment-date" },

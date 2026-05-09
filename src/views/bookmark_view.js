@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option } =
   require("../server/node_modules/hyperaxe");
 
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -59,7 +59,10 @@ const renderBookmarkActions = (filter, bookmark, params = {}) => {
 };
 
 const renderBookmarkCommentsSection = (bookmarkId, rootId, comments = [], returnTo = null) => {
-  const list = safeArr(comments);
+  const list = safeArr(comments).filter(c => {
+    const t = c && c.value && c.value.content && c.value.content.text;
+    return t && String(t).trim();
+  });
   const commentsCount = list.length;
 
   return div(
@@ -220,7 +223,7 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
             return p(
               { class: "card-footer" },
               span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              a({ href: `/author/${encodeURIComponent(bookmark.author)}`, class: "user-link" }, `${bookmark.author}`),
+              userLink(bookmark.author),
               showUpdated
                 ? span(
                     { class: "votations-comment-date" },
@@ -453,7 +456,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
           return p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(bookmark.author)}`, class: "user-link" }, `${bookmark.author}`),
+            userLink(bookmark.author),
             showUpdated
               ? span(
                   { class: "votations-comment-date" },

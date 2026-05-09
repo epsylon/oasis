@@ -730,3 +730,28 @@ h3 { font-size: 1em !important; }
 .snh-invite-code {
   color: #FFA500 !important;
 }
+
+.stats-kpi-label {
+  color: #ffa300 !important;
+}
+
+.stats-kpi-value {
+  color: #FFD700 !important;
+}
+
+.carbon-bar-note,
+.carbon-bar-formula {
+  color: #FFD700 !important;
+}
+
+.graphos-node-label {
+  fill: #ddd !important;
+}
+
+.graphos-node-label-me {
+  fill: #ffa500 !important;
+}
+
+.graphos-legend {
+  color: #ddd !important;
+}

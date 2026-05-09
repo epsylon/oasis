@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, userLink} = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -131,9 +131,7 @@ const renderMessage = (msg, chatAuthor) => {
   const isSelf = String(msg.author) === String(userId)
   const dateStr = moment(msg.createdAt).format("YYYY/MM/DD HH:mm")
   const shortId = msg.author ? "@" + msg.author.slice(1, 9) + "\u2026" : "?"
-  const authorLink = msg.author
-    ? a({ href: `/author/${encodeURIComponent(msg.author)}`, class: "user-link" }, shortId)
-    : span("?")
+  const authorLink = msg.author ? userLink(msg.author) : span("?")
 
   const imageNode = msg.image ? renderMediaBlob(msg.image, null, { class: "chat-message-image" }) : null
 
@@ -237,7 +235,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
       ),
       isRestrictedInviteOnly ? null : tr(
         td({ class: "tribe-info-value", colspan: "4" },
-          a({ href: `/author/${encodeURIComponent(chat.author)}`, class: "user-link" }, chat.author)
+          userLink(chat.author)
         )
       ),
       tr(
@@ -328,9 +326,12 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         )
       : null,
     div({ class: "chat-messages-list" },
-      msgList.length
-        ? msgList.map(msg => renderMessage(msg, chat.author))
-        : p({ class: "chat-no-messages" }, i18n.chatNoMessages)
+      (() => {
+        const visible = msgList.filter(msg => (msg.text && String(msg.text).trim()) || msg.image)
+        return visible.length
+          ? visible.map(msg => renderMessage(msg, chat.author))
+          : p({ class: "chat-no-messages" }, i18n.chatNoMessages)
+      })()
     )
   )
 

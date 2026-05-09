@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, userLink} = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -327,7 +327,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         td({ class: "tribe-info-value", colspan: "3" }, new Date(shop.createdAt).toLocaleString())
       ),
       tr(
-        td({ class: "tribe-info-value", colspan: "4" }, a({ class: "user-link", href: `/author/${encodeURIComponent(shop.author)}` }, shop.author))
+        td({ class: "tribe-info-value", colspan: "4" }, userLink(shop.author))
       ),
       shop.location ? tr(
         td({ class: "tribe-info-label" }, i18n.shopLocation),
@@ -458,7 +458,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
         p({ class: "card-footer" },
           span({ class: "date-link" }, moment(product.createdAt).format("YYYY-MM-DD HH:mm")),
           " ",
-          a({ href: `/author/${encodeURIComponent(product.author)}`, class: "user-link" }, product.author)
+          userLink(product.author)
         ),
         !isAuthor && safeArr(product.buyers).includes(userId) && !safeArr(product.opinions_inhabitants).includes(userId)
           ? div({ class: "voting-buttons transfer-voting-buttons" },

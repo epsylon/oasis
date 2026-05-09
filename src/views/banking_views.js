@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, span, pre, table, thead, tbody, tr, td, th, br } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require("../views/main_views");
+const { template, i18n, userLink } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
@@ -93,7 +93,7 @@ const renderOverviewSummaryTable = (s, rules) => {
       tbody(
         kvRow(i18n.bankUserBalance, `${Number(s.userBalance || 0).toFixed(6)} ECO`),
         kvRow(i18n.bankUbiAvailability, span({ class: availClass }, availLabel)),
-        s.pubId ? kvRow(i18n.pubIdLabel, a({ href: `/author/${encodeURIComponent(s.pubId)}`, class: "user-link" }, s.pubId)) : null,
+        s.pubId ? kvRow(i18n.pubIdLabel, userLink(s.pubId)) : null,
         kvRow(i18n.bankEpoch, String(s.epochId || "-")),
         kvRow(i18n.bankPool, `${pool.toFixed(6)} ECO`),
         kvRow(i18n.bankWeightsSum, String(W.toFixed(6))),
@@ -160,8 +160,8 @@ const allocationsTable = (rows = [], userId) =>
             tr(
               td(new Date(r.createdAt).toLocaleString()),
               td(r.concept || ""),
-              td(a({ href: `/author/${encodeURIComponent(r.from)}`, class: "user-link" }, r.from)),
-              td(a({ href: `/author/${encodeURIComponent(r.to)}`, class: "user-link" }, r.to)),
+              td(userLink(r.from)),
+              td(userLink(r.to)),
               td(String(Number(r.amount || 0).toFixed(6))),
               td(r.status),
               td(
@@ -217,6 +217,7 @@ const flashText = (key) => {
   if (key === "already_claimed") return i18n.bankAlreadyClaimedThisMonth;
   if (key === "no_pub_configured") return i18n.bankNoPubConfigured;
   if (key === "no_funds") return i18n.bankUbiAvailableNo;
+  if (key === "forbidden") return i18n.bankAddressForbidden;
   return "";
 };
 
@@ -291,7 +292,7 @@ const renderAddresses = (data, userId) => {
               tbody(
                 ...rows.map(r =>
                   tr(
-                    td(a({ href: `/author/${encodeURIComponent(r.id)}`, class: "user-link" }, r.id)),
+                    td(userLink(r.id)),
                     td(r.address),
                     td(r.source === "local" ? i18n.bankLocal : i18n.bankFromOasis),
 		td(

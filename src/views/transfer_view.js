@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, br, span, label, select, option, progress } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, userLink} = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const opinionCategories = require("../backend/opinion_categories")
@@ -188,7 +188,7 @@ const generateTransferCard = (transfer, filter, params = {}) => {
       p(
         { class: "card-footer" },
         span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
-        a({ href: `/author/${encodeURIComponent(transfer.from)}`, class: "user-link" }, `${transfer.from}`),
+        userLink(transfer.from),
         renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
       )
     )
@@ -397,8 +397,8 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
         div(
           { class: "card-section transfer" },
           topbar ? topbar : null,
-          renderCardField(`${i18n.transfersFrom}:`, a({ class: "user-link", href: `/author/${encodeURIComponent(transfer.from)}` }, transfer.from)),
-          renderCardField(`${i18n.transfersTo}:`, a({ class: "user-link", href: `/author/${encodeURIComponent(transfer.to)}` }, transfer.to)),
+          renderCardField(`${i18n.transfersFrom}:`, userLink(transfer.from)),
+          renderCardField(`${i18n.transfersTo}:`, userLink(transfer.to)),
           br,
           div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`)),
           renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
@@ -420,7 +420,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(transfer.from)}`, class: "user-link" }, `${transfer.from}`),
+            userLink(transfer.from),
             renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
           ),
           div(

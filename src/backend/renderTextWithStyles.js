@@ -81,15 +81,16 @@ function renderTextWithStyles(text) {
       `<a href="/author/${encodeURIComponent('@' + id)}" class="mention" target="_blank">@${id}</a>`
     )
 
+  const escAttr = (s) => String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   html = html
     .replace(/#(\w+)/g, (_, tag) =>
-      `<a href="/hashtag/${encodeURIComponent(tag)}" class="styled-link" target="_blank">#${tag}</a>`
+      `<a href="/hashtag/${encodeURIComponent(tag)}" class="styled-link" target="_blank">#${escAttr(tag)}</a>`
     )
-    .replace(/(https?:\/\/[^\s]+)/g, url =>
-      `<a href="${url}" target="_blank" class="styled-link">${url}</a>`
+    .replace(/(https?:\/\/[^\s"'<>]+)/g, url =>
+      `<a href="${escAttr(url)}" target="_blank" class="styled-link">${escAttr(url)}</a>`
     )
     .replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, email =>
-      `<a href="mailto:${email}" class="styled-link">${email}</a>`
+      `<a href="mailto:${escAttr(email)}" class="styled-link">${escAttr(email)}</a>`
     )
 
   const lines = html.split('\n')

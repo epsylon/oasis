@@ -1,5 +1,5 @@
 const { div, h2, p, section, form, input, label, select, option, button, table, tr, td, hr, ul, li, a, br } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink} = require('./main_views');
 
 exports.pixeliaView = (pixelArt, errorMessage) => {
   const title = i18n.pixeliaTitle;
@@ -81,7 +81,7 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
           h2(i18n.contributorsTitle),
           ul(
             ...contributors.map(author =>
-              li(a({ class: 'user-link', href: `/author/${encodeURIComponent(author)}` }, author))
+              li(userLink(author))
             )
           )
         ) : null 

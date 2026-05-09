@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, form, input, button, a, img, table, tr, td, th, span, iframe } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink} = require('./main_views');
 const moment = require("../server/node_modules/moment");
 
 const getGames = () => [
@@ -44,7 +44,7 @@ const renderHallOfFame = (hall) => {
           ...hall[game.id].map((entry, idx) =>
             tr(
               td(String(idx + 1)),
-              td(a({ href: `/author/${encodeURIComponent(entry.author)}`, class: 'user-link' }, entry.author)),
+              td(userLink(entry.author)),
               td({ class: idx === 0 ? 'score-first' : '' }, String(entry.score)),
               td(entry.ts ? moment(entry.ts).format('YYYY-MM-DD') : '\u2014')
             )
@@ -124,7 +124,7 @@ exports.gamesView = (filter = 'all', hall = null) => {
               p({ class: 'game-card-desc game-desc-yellow' }, game.desc()),
               topScore
                 ? p({ class: 'game-top-score' },
-                    a({ href: `/author/${encodeURIComponent(topScore.author)}`, class: 'user-link' }, topScore.author),
+                    userLink(topScore.author),
                     span({ class: 'game-new-record-label' }, ' - ' + (i18n.gamesNewRecord || 'New Record') + ': '),
                     String(topScore.score)
                   )

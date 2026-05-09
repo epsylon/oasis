@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const crypto = require('crypto');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const tribeLogLimit = Math.max(logLimit, 100000);
 
 const INVITE_CODE_BYTES = 16;
 const VALID_INVITE_MODES = ['strict', 'open'];
@@ -57,7 +58,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const client = await openSsb();
     return new Promise((resolve, reject) => {
       pull(
-        client.createLogStream({ limit: logLimit }),
+        client.createLogStream({ limit: tribeLogLimit }),
         pull.collect((err, msgs) => {
           if (err) return reject(err);
           const tombstones = new Map();
@@ -88,6 +89,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
           let progress = true;
           while (progress) {
             progress = false;
+            const candidatesByReplaces = new Map();
             for (const [k, entry] of tribeMsgs.entries()) {
               if (tribes.has(k)) continue;
               const replaces = entry.content.replaces;
@@ -106,10 +108,25 @@ module.exports = ({ cooler, tribeCrypto }) => {
                 if (!validInvitesDelta(parentEntry.content.invites, entry.content.invites, entry.author, rootAuthor)) continue;
                 if (!structuralFieldsEqual(parentEntry.content, entry.content)) continue;
               }
-              parent.set(k, replaces);
-              child.set(replaces, k);
-              tribes.set(k, entry);
-              rootByTip.set(k, root);
+              if (!candidatesByReplaces.has(replaces)) candidatesByReplaces.set(replaces, []);
+              candidatesByReplaces.get(replaces).push({ k, entry, isRootAuthor, root });
+            }
+            for (const [replaces, candidates] of candidatesByReplaces.entries()) {
+              if (child.has(replaces)) continue;
+              let winner = candidates[0];
+              for (let i = 1; i < candidates.length; i++) {
+                const c = candidates[i];
+                if (c.isRootAuthor && !winner.isRootAuthor) { winner = c; continue; }
+                if (winner.isRootAuthor && !c.isRootAuthor) continue;
+                const wt = winner.entry._ts || 0;
+                const ct = c.entry._ts || 0;
+                if (ct < wt) winner = c;
+                else if (ct === wt && c.k < winner.k) winner = c;
+              }
+              parent.set(winner.k, replaces);
+              child.set(replaces, winner.k);
+              tribes.set(winner.k, winner.entry);
+              rootByTip.set(winner.k, winner.root);
               progress = true;
             }
           }
@@ -129,7 +146,25 @@ module.exports = ({ cooler, tribeCrypto }) => {
             const tip = tipOf(root);
             tipByRoot.set(root, tip);
           }
-          tribeIndex = { tribes, tombstoned, parent, child, tipByRoot, rootByTip };
+          const effectivelyTombstoned = new Set(tombstoned);
+          let cascadeProgress = true;
+          while (cascadeProgress) {
+            cascadeProgress = false;
+            for (const k of tribes.keys()) {
+              if (effectivelyTombstoned.has(k)) continue;
+              const root = rootOf(k);
+              if (effectivelyTombstoned.has(root)) { effectivelyTombstoned.add(k); cascadeProgress = true; continue; }
+              const entry = tribes.get(k);
+              const pid = entry?.content?.parentTribeId;
+              if (!pid) continue;
+              const parentRoot = rootOf(pid);
+              if (effectivelyTombstoned.has(parentRoot) || effectivelyTombstoned.has(pid)) {
+                effectivelyTombstoned.add(k);
+                cascadeProgress = true;
+              }
+            }
+          }
+          tribeIndex = { tribes, tombstoned, effectivelyTombstoned, parent, child, tipByRoot, rootByTip };
           tribeIndexTs = Date.now();
           resolve(tribeIndex);
         })
@@ -196,8 +231,16 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (tribeCrypto) {
         const ancestryIds = await this.getAncestryChain(tribeId).catch(() => null);
         if (Array.isArray(ancestryIds) && ancestryIds.length) {
-          const ekChain = tribeCrypto.encryptChainForInvite(ancestryIds, code);
-          if (ekChain) invite = { code, ekChain, gen: tribeCrypto.getGen(ancestryIds[0]) };
+          const salt = tribeCrypto.generateInviteSalt();
+          const ekChain = tribeCrypto.encryptChainForInvite(ancestryIds, code, salt);
+          if (ekChain) {
+            invite = {
+              codeHash: tribeCrypto.hashInviteCode(code, salt),
+              ekChain,
+              salt,
+              gen: tribeCrypto.getGen(ancestryIds[0])
+            };
+          }
         }
       }
       const invites = Array.isArray(tribe.invites) ? [...tribe.invites, invite] : [invite];
@@ -234,10 +277,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       for (const t of tribes) {
         if (!t.invites) continue;
         for (const inv of t.invites) {
-          if (typeof inv === 'string' && inv === code) {
-            matchedTribe = t; matchedInvite = inv; break;
-          }
-          if (typeof inv === 'object' && inv.code === code) {
+          if (tribeCrypto ? tribeCrypto.inviteMatchesCode(inv, code) : (inv === code || (inv && inv.code === code))) {
             matchedTribe = t; matchedInvite = inv; break;
           }
         }
@@ -251,16 +291,23 @@ module.exports = ({ cooler, tribeCrypto }) => {
       let storedGen = 1;
       let storedRootId = null;
       if (tribeCrypto && typeof matchedInvite === 'object') {
+        const salt = matchedInvite.salt;
         if (matchedInvite.ekChain) {
-          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code);
+          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code, salt);
           if (Array.isArray(chain) && chain.length) {
-            for (const entry of chain) tribeCrypto.setKey(entry.rootId, entry.key, entry.gen || 1);
+            for (const entry of chain) {
+              if (Array.isArray(entry.keys) && entry.keys.length) {
+                tribeCrypto.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
+              } else if (entry.key) {
+                tribeCrypto.setKey(entry.rootId, entry.key, entry.gen || 1);
+              }
+            }
             storedRootId = chain[0].rootId;
             storedTribeKey = chain[0].key;
             storedGen = chain[0].gen || 1;
           }
         } else if (matchedInvite.ek) {
-          storedTribeKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code);
+          storedTribeKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code, salt);
           storedRootId = await this.getRootId(matchedTribe.id);
           storedGen = matchedInvite.gen || 1;
           tribeCrypto.setKey(storedRootId, storedTribeKey, storedGen);
@@ -268,8 +315,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       }
       const members = [...matchedTribe.members, userId];
       const invites = matchedTribe.invites.filter(inv => {
+        if (tribeCrypto) return !tribeCrypto.inviteMatchesCode(inv, code);
         if (typeof inv === 'string') return inv !== code;
-        return inv.code !== code;
+        return inv && inv.code !== code;
       });
       await this.updateTribeById(matchedTribe.id, { members, invites });
       if (tribeCrypto && storedTribeKey && storedRootId) {
@@ -313,14 +361,18 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const rootId = await this.getRootId(tribeId);
       const currentKey = tribeCrypto.getKey(rootId);
       if (!currentKey) return;
+      const allKeys = tribeCrypto.getKeys(rootId);
       const gen = tribeCrypto.getGen(rootId);
+      const payload = JSON.stringify({ keys: allKeys, gen });
       const memberKeys = {};
+      const memberKeysFull = {};
       for (const memberId of toMembers) {
         try { memberKeys[memberId] = tribeCrypto.boxKeyForMember(currentKey, memberId, ssbKeys); } catch (_) {}
+        try { memberKeysFull[memberId] = tribeCrypto.boxKeyForMember(payload, memberId, ssbKeys); } catch (_) {}
       }
-      if (!Object.keys(memberKeys).length) return;
+      if (!Object.keys(memberKeys).length && !Object.keys(memberKeysFull).length) return;
       await new Promise((resolve, reject) => {
-        ssb.publish({ type: 'tribe-keys', tribeId: rootId, generation: gen, memberKeys }, (err, res) => err ? reject(err) : resolve(res));
+        ssb.publish({ type: 'tribe-keys', tribeId: rootId, generation: gen, memberKeys, memberKeysFull }, (err, res) => err ? reject(err) : resolve(res));
       });
       await this.ensureFollowTribeMembers(tribeId).catch(() => {});
     },
@@ -336,7 +388,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!currentKey) return;
       const gen = tribeCrypto.getGen(rootId);
       const msgs = await new Promise((resolve, reject) => {
-        pull(ssb.createLogStream({ limit: logLimit }), pull.collect((err, m) => err ? reject(err) : resolve(m)));
+        pull(ssb.createLogStream({ limit: tribeLogLimit }), pull.collect((err, m) => err ? reject(err) : resolve(m)));
       });
       const distributed = new Set();
       for (const m of msgs) {
@@ -381,10 +433,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async getTribeById(tribeId) {
-      const { tribes, tombstoned, child } = await buildTribeIndex();
+      const { tribes, tombstoned, effectivelyTombstoned, child } = await buildTribeIndex();
       let latestId = tribeId;
       while (child.has(latestId)) latestId = child.get(latestId);
-      if (tombstoned.has(latestId)) throw new Error('Tribe not found');
+      if (tombstoned.has(latestId) || effectivelyTombstoned.has(latestId)) throw new Error('Tribe not found');
       const tribe = tribes.get(latestId);
       if (!tribe) throw new Error('Tribe not found');
       return {
@@ -409,7 +461,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async listAll() {
-      const { tribes, tombstoned, tipByRoot, rootByTip } = await buildTribeIndex();
+      const { tribes, tombstoned, effectivelyTombstoned, tipByRoot, rootByTip } = await buildTribeIndex();
       const resolveParent = (pid) => {
         if (!pid) return null;
         const root = rootByTip.get(pid) || pid;
@@ -418,6 +470,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const items = [];
       for (const [root, tip] of tipByRoot) {
         if (tombstoned.has(root) || tombstoned.has(tip)) continue;
+        if (effectivelyTombstoned.has(root) || effectivelyTombstoned.has(tip)) continue;
         const entry = tribes.get(tip);
         if (!entry) continue;
         const c = entry.content;
@@ -488,31 +541,38 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!oldKey) return;
       const newKey = tribeCrypto.generateTribeKey();
       const newGen = tribeCrypto.addNewKey(rootId, newKey);
+      const allKeys = tribeCrypto.getKeys(rootId);
+      const fullPayload = JSON.stringify({ keys: allKeys, gen: newGen });
       const memberKeys = {};
+      const memberKeysFull = {};
       for (const memberId of remainingMembers) {
-        memberKeys[memberId] = tribeCrypto.boxKeyForMember(newKey, memberId, ssbKeys);
+        try { memberKeys[memberId] = tribeCrypto.boxKeyForMember(newKey, memberId, ssbKeys); } catch (_) {}
+        try { memberKeysFull[memberId] = tribeCrypto.boxKeyForMember(fullPayload, memberId, ssbKeys); } catch (_) {}
       }
       const entries = Object.entries(memberKeys);
       const BATCH_SIZE = 20;
       for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-        const batch = Object.fromEntries(entries.slice(i, i + BATCH_SIZE));
+        const batchSingle = Object.fromEntries(entries.slice(i, i + BATCH_SIZE));
+        const batchFull = {};
+        for (const id of Object.keys(batchSingle)) {
+          if (memberKeysFull[id]) batchFull[id] = memberKeysFull[id];
+        }
         await new Promise((resolve, reject) => {
-          ssb.publish({ type: 'tribe-keys', tribeId: rootId, generation: newGen, memberKeys: batch },
+          ssb.publish({ type: 'tribe-keys', tribeId: rootId, generation: newGen, memberKeys: batchSingle, memberKeysFull: batchFull },
             (err, res) => err ? reject(err) : resolve(res));
         });
       }
       const tribe = await this.getTribeById(tribeId);
       if (Array.isArray(tribe.invites) && tribe.invites.length > 0) {
-        const ancestryIds = await this.getAncestryChain(tribeId).catch(() => [rootId]);
-        const updatedInvites = tribe.invites.map(inv => {
-          if (typeof inv === 'object' && inv.code) {
-            const ekChain = tribeCrypto.encryptChainForInvite(ancestryIds, inv.code);
-            if (ekChain) return { code: inv.code, ekChain, gen: newGen };
-            return { code: inv.code, ek: tribeCrypto.encryptForInvite(newKey, inv.code), gen: newGen };
-          }
-          return inv;
+        const survivingInvites = tribe.invites.map(inv => {
+          if (typeof inv === 'string') return inv;
+          if (!inv || typeof inv !== 'object') return inv;
+          const next = { ...inv, gen: newGen };
+          delete next.ekChain;
+          delete next.ek;
+          return next;
         });
-        await this.updateTribeInvites(tribeId, updatedInvites);
+        await this.updateTribeInvites(tribeId, survivingInvites);
       }
     },
 
@@ -523,20 +583,38 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const config = require('../server/ssb_config');
       const msgs = await new Promise((resolve, reject) => {
         pull(
-          ssb.createLogStream({ limit: logLimit }),
+          ssb.createLogStream({ limit: tribeLogLimit }),
           pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
         );
       });
+      const byTribe = new Map();
       for (const m of msgs) {
         const c = m.value?.content;
-        if (!c || c.type !== 'tribe-keys') continue;
-        const myEntry = c.memberKeys && c.memberKeys[ssb.id];
-        if (!myEntry) continue;
-        const currentGen = tribeCrypto.getGen(c.tribeId);
-        if (c.generation <= currentGen) continue;
-        const newKey = tribeCrypto.unboxKeyFromMember(myEntry, config.keys, ssbKeys);
-        if (newKey) {
-          tribeCrypto.addNewKey(c.tribeId, newKey);
+        if (!c || c.type !== 'tribe-keys' || !c.tribeId) continue;
+        const fullEntry = c.memberKeysFull && c.memberKeysFull[ssb.id];
+        const singleEntry = c.memberKeys && c.memberKeys[ssb.id];
+        if (!fullEntry && !singleEntry) continue;
+        const list = byTribe.get(c.tribeId) || [];
+        list.push({ generation: c.generation || 0, fullEntry, singleEntry });
+        byTribe.set(c.tribeId, list);
+      }
+      for (const [tribeId, entries] of byTribe.entries()) {
+        entries.sort((a, b) => b.generation - a.generation);
+        const top = entries[0];
+        const knownGen = tribeCrypto.getGen(tribeId);
+        if (top.fullEntry) {
+          try {
+            const text = tribeCrypto.unboxKeyFromMember(top.fullEntry, config.keys, ssbKeys);
+            const parsed = text ? JSON.parse(text) : null;
+            if (parsed && Array.isArray(parsed.keys) && parsed.keys.length) {
+              tribeCrypto.mergeKeys(tribeId, parsed.keys, parsed.gen || top.generation || knownGen);
+              continue;
+            }
+          } catch (_) {}
+        }
+        if (top.singleEntry && top.generation > knownGen) {
+          const newKey = tribeCrypto.unboxKeyFromMember(top.singleEntry, config.keys, ssbKeys);
+          if (newKey) tribeCrypto.addNewKey(tribeId, newKey);
         }
       }
     },
@@ -555,7 +633,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const myFollows = new Map();
       await new Promise((resolve, reject) => {
         pull(
-          ssb.createLogStream({ limit: logLimit }),
+          ssb.createLogStream({ limit: tribeLogLimit }),
           pull.collect((err, msgs) => {
             if (err) return reject(err);
             for (const m of msgs) {
@@ -629,12 +707,19 @@ module.exports = ({ cooler, tribeCrypto }) => {
       tribeIndex = null;
     },
 
-    async listSubTribes(parentId) {
+    async listSubTribes(parentId, userId) {
       const idx = await buildTribeIndex();
       const rootOf = (id) => { let cur = id; while (idx.parent.has(cur)) cur = idx.parent.get(cur); return cur; };
       const parentRoot = rootOf(parentId);
       const all = await this.listAll();
-      return all.filter(t => t.parentTribeId && rootOf(t.parentTribeId) === parentRoot);
+      const subs = all.filter(t => t.parentTribeId && rootOf(t.parentTribeId) === parentRoot);
+      if (!userId) return subs;
+      const out = [];
+      for (const sub of subs) {
+        const ok = await this.canAccessTribe(userId, sub.id).catch(() => false);
+        if (ok) out.push(sub);
+      }
+      return out;
     },
 
     async isTribeMember(userId, tribeId) {
@@ -654,6 +739,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       try {
         const tribe = await this.getTribeById(tribeId);
         if (!tribe) return false;
+        if (tribe.parentTribeId) {
+          const parentOk = await this.canAccessTribe(userId, tribe.parentTribeId).catch(() => false);
+          if (!parentOk) return false;
+        }
         if (tribe.author === userId) return true;
         if (Array.isArray(tribe.members) && tribe.members.includes(userId)) return true;
         const effective = await this.getEffectiveStatus(tribeId);

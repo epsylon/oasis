@@ -13,6 +13,44 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.7.6 - 2026-05-09
+
+### Added
+
+- Graphos: interactive network map (Graphos plugin).
+- PUB systemd service unit (Documentation).
+- NameAuthor resolver (Core plugin).
+- Error page handlering (Core plugin).
+- Smart navigation prompt (AI plugin).
+
+### Changed
+
+- Advanced statistics dashboard (Core plugin).
+- Online peer detection (Core plugin).
+- Peers table: clickable keys and clearer columns (Core plugin).
+- Invites table layout (Invites plugin).
+- Menu reorganization: invites and peers moved to Tools (Core plugin).
+- CLI launcher: gui/server/help modes and argument forwarding (Core plugin).
+- PUB deployment guide rewritten for `sh oasis.sh server` (Documentation).
+- Tribe creator auto-follows new members at startup (Tribes plugin).
+- Blockexplorer decrypts encrypted tribe content transparently (Core plugin).
+- Standalone chat content is encrypted end-to-end (Chats plugin).
+- Standalone calendars (and their dates and notes) are encrypted end-to-end (Calendars plugin).
+- Calendar invite UI: author can generate codes; non-participants can validate a code (Calendars plugin).
+- Standalone maps (OPEN and CLOSED) are encrypted end-to-end (Maps plugin).
+- Blockexplorer attempts transparent decryption for any encrypted block (Core plugin).
+- Oasis flume LOCK stacktrace (Core plugin).
+
+### Fixed
+
+- Calendar chain removing (Calendars plugin).
+- Hide stack traces in unreachable pub errors (Invites plugin).
+- Tribe deletion now cascades to sub-tribes and their content (Tribes plugin).
+- Sub-tribe access requires parent membership (Tribes plugin).
+- Concurrent tribe updates now resolve deterministically (creator wins, then oldest member) (Tribes plugin).
+- Standalone chats, pads, maps and calendars require membership for direct URL access (Core plugin).
+- Maps CLOSED enforcement now applies to standalone maps (Maps plugin).
+
 ## v0.7.5 - 2026-05-01
 
 ### Added

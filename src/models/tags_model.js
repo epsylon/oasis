@@ -130,23 +130,23 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
 
       for (const oldId of replacesMap.keys()) latestByKey.delete(oldId);
 
-      const anonTribeIds = new Set();
+      const viewerId = ssbClient.id;
+      const viewerVisibleTribeIds = new Set();
       if (tribesModel) {
-        const allTribes = await tribesModel.listAll().catch(() => []);
-        for (const tribe of allTribes) {
-          if (tribe.isAnonymous === true) anonTribeIds.add(tribe.id);
-        }
+        const visibleTribes = await tribesModel.listTribesForViewer(viewerId).catch(() => []);
+        for (const tribe of visibleTribes) viewerVisibleTribeIds.add(tribe.id);
       }
 
       let filtered = Array.from(latestByKey.values()).filter(msg => {
         const c = msg?.value?.content;
         if (!c || c.type === 'tombstone') return false;
         if (tombstoned.has(msg.key)) return false;
+        if (c.encryptedPayload) return false;
         if (!Array.isArray(c.tags) || !c.tags.filter(Boolean).length) return false;
-        if (c.tribeId && anonTribeIds.has(c.tribeId)) return false;
+        if (c.tribeId && !viewerVisibleTribeIds.has(c.tribeId)) return false;
         if (c.type === 'event' && c.isPublic === 'private') return false;
         if (c.type === 'task' && String(c.isPublic).toUpperCase() === 'PRIVATE') return false;
-        if ((c.type === 'chat' || c.type === 'pad') && c.status === 'INVITE-ONLY') return false;
+        if ((c.type === 'chat' || c.type === 'pad' || c.type === 'map' || c.type === 'calendar') && c.status === 'INVITE-ONLY' && c.author !== viewerId && !(Array.isArray(c.members) && c.members.includes(viewerId))) return false;
         if (c.type === 'shop' && c.visibility === 'CLOSED') return false;
         return true;
       });

@@ -1,82 +1,75 @@
 # Oasis PUB Deployment Guide
 
-This guide will walk you through the process of deploying an **Oasis PUB** on your server. 
+This guide walks you through deploying an **Oasis PUB** on a VPS using the Oasis launcher (`sh oasis.sh server`). A PUB needs a static, publicly-reachable IP address and an open TCP port (default `8008`).
 
 ---
 
-A PUB server needs a static, publicly-reachable IP address.
+## 1) Prepare the server
 
-By default it uses port 8008, so make sure to expose that port (or whatever port you configure) to the internet.
+Install the basics:
 
-## 1) Install NodeJS (LTS v18.20.8 for SSB-Server compatibility)
+```
+sudo apt-get update
+sudo apt-get install -y git curl build-essential
+```
 
-   sudo apt-get install git curl
-   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-   source ~/.bashrc
-   nvm install 18
-   nvm use 18
-   nvm alias default 18
+Install Node.js (Oasis is tested on Node 22; older LTS versions also work for server-only mode):
 
-## 2) Create a `~/.ssb/config` file and the `oasis-pub-server.sh` launch script
+```
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc
+nvm install 22
+nvm use 22
+nvm alias default 22
+```
 
-Before running the server, create a config file that enables needed plugins and network options.
+## 2) Clone Oasis
 
-   mkdir -p ~/.ssb
-   nano ~/.ssb/config
+```
+cd ~
+git clone https://code.03c8.net/krakenslab/oasis oasis
+cd oasis
+```
 
-Paste this:
+## 3) Install dependencies
 
+The `install.sh` script installs Node deps and applies the bundled patches. **You can skip the AI model download** — a PUB does not need it.
+
+```
+bash install.sh
+```
+
+If the AI model download fails or you skipped it, that's fine. The PUB will run without it.
+
+## 4) Configure the PUB
+
+Edit `src/configs/server-config.json`:
+
+```json
 {
-  "logging": {
-    "level": "info"
-  },
-  "caps": {
-    "shs": "zTmidAb7t+tKi7W93FIHbOvlbd936x6G/vm8e8Td//A="
-  },
+  "logging": { "level": "info" },
+  "caps": { "shs": "zTmidAb7t+tKi7W93FIHbOvlbd936x6G/vm8e8Td//A=" },
   "pub": true,
   "local": false,
-  "friends": {
-    "dunbar": 150,
-    "hops": 3
-  },
+  "friends": { "dunbar": 150, "hops": 3 },
   "gossip": {
     "connections": 50,
-    "seed": false,
-    "global": false
+    "friends": true,
+    "seed": true,
+    "global": true
   },
   "connections": {
     "incoming": {
       "net": [
-        {
-          "port": 8008,
-          "scope": "public",
-          "transform": "shs",
-          "external": "{your-hostname}"
-        },
-        {
-          "port": 8008,
-          "host": "localhost",
-          "scope": "device",
-          "transform": "shs"
-        }
+        { "port": 8008, "scope": "public", "transform": "shs", "external": "{your-hostname}" },
+        { "port": 8008, "host": "localhost", "scope": "device", "transform": "shs" }
       ],
       "unix": [
-        {
-          "scope": [
-            "device",
-            "local",
-            "private"
-          ],
-          "transform": "noauth"
-        }
+        { "scope": ["device", "local", "private"], "transform": "noauth" }
       ]
     },
     "outgoing": {
-      "net": [
-        {
-          "transform": "shs"
-        }
-      ]
+      "net": [{ "transform": "shs" }]
     }
   },
   "replicationScheduler": {
@@ -90,124 +83,141 @@ Paste this:
     ]
   }
 }
+```
 
-Be sure to replace {your-hostname} with your server’s domain or IP.
+Replace `{your-hostname}` with your VPS public hostname or IP.
 
-## 3) Install ssb-server and plugins locally
+## 5) Launch the PUB (server-only)
 
-   npm -g install ssb-server
+In server-only mode Oasis runs **only the SSB sbot**, not the web GUI or AI service.
 
-   cd ~/.ssb
-   npm init -y
+Using `tmux` (simple):
 
-   npm install ssb-ebt ssb-conn ssb-replication-scheduler ssb-blobs ssb-friends ssb-logging
-   
-   npm audit fix
-   
-## 4) Create the launch script and some patches
+```
+tmux new -s oasis-pub
+cd ~/oasis
+sh oasis.sh server
+# detach: Ctrl-b, then d
+```
 
-Save the following script at: ~/oasis-pub/patch-ssb-ref.js 
-   
-   const fs = require('fs');
-   const path = require('path');
+Using `systemd` (recommended for production). The repo ships a ready-to-use unit file at `docs/PUB/oasis-pub.service`. Copy it, edit the `YOUR_USER` placeholders (and the `node` path if you installed Node via `nvm`), then enable it:
 
-   const ssbRefPath = path.resolve(__dirname, 'node_modules/ssb-ref/index.js'); // Adjust as needed
+```
+sudo cp ~/oasis/docs/PUB/oasis-pub.service /etc/systemd/system/oasis-pub.service
+sudo nano /etc/systemd/system/oasis-pub.service     # replace YOUR_USER, adjust PATH/ExecStart for nvm if needed
+sudo systemctl daemon-reload
+sudo systemctl enable --now oasis-pub
+sudo journalctl -u oasis-pub -f
+```
 
-   if (fs.existsSync(ssbRefPath)) {
-     const data = fs.readFileSync(ssbRefPath, 'utf8');
-     const patchedData = data.replace(
-       'exports.parseAddress = deprecate(\'ssb-ref.parseAddress\', parseAddress)',
-       'exports.parseAddress = parseAddress'
-     );
+Tip — if you used `nvm` to install Node:
 
-     if (data !== patchedData) {
-       fs.writeFileSync(ssbRefPath, patchedData);
-       console.log('[OASIS] [PATCH] Patched ssb-ref to remove deprecated usage of parseAddress');
-     }
-   }
+```
+which node                                          # e.g. /home/YOUR_USER/.nvm/versions/node/v22.0.0/bin/node
+```
 
-And make it executable:
+Then in the unit file uncomment the `Environment=PATH=...` line that points at that nvm bin dir, or replace `ExecStart` with the absolute node path on `src/server/SSB_server.js start`.
 
-   chmod +x ~/oasis-pub/patch-ssb-ref.js 
+Data is written to `~/.ssb/`.
 
-Finally, save the following script at: ~/oasis-pub/oasis-pub-server.sh.
-    
-  #!/bin/bash
-  export NODE_OPTIONS="--no-deprecation"
+## 6) Get your PUB ID
 
-  cd ~/oasis-pub
-  node patch-ssb-ref.js
-  ssb-server start
-   
-And make it executable:
+For administrative actions (creating invites, publishing the PUB profile, announcing) you need the SSB CLI. Install `ssb-server` globally on the same machine:
 
-   chmod +x ~/oasis-pub/oasis-pub-server.sh
+```
+npm install -g ssb-server
+```
 
-## 5) Run the server script
+Then, from the PUB user's shell:
 
-Use a session-manager such as screen or tmux to create a detachable session. Start the session and run the script:
+```
+ssb-server whoami
+```
 
-   ~/oasis-pub/oasis-pub-server.sh
+Example response:
 
-Then, detach the session.
+```
+{ "id": "@mGrevRCSX4E5dLgmflWBc50Qkn/1RXUAtDaGHOJ8xB4=.ed25519" }
+```
 
-## 6) Create the Pub's profile
+> The CLI talks to the running sbot via the unix socket at `~/.ssb/socket`, so this works as long as `oasis.sh server` is running.
 
-It's a good idea to give your PUB a name, by publishing one on its feed. 
+## 7) Set the PUB profile name
 
-To do this, first get the PUB's ID, with: 
+Give your PUB a human-readable name:
 
-   cd ~/oasis-pub 
-   ssb-server whoami
-   
-   {
-     "id": "@mGrevRCSX4E5dLgmflWBc50Qkn/1RXUAtDaGHOJ8xB4=.ed25519"
-   }
+```
+ssb-server publish --type about --about {pub-id} --name "{pub-name}"
+```
 
-Then, publish a name with the following command:
+## 8) Create invite codes
 
-   ssb-server publish --type about --about {pub-id} --name {name}
+```
+ssb-server invite.create 1
+```
 
-## 7) Create Invites
+The number is how many times the code can be redeemed. For an open PUB you might use a large number:
 
-For a last step, you should create invite codes, which you can send to other inhabitants to let them join the PUB. 
+```
+ssb-server invite.create 500
+```
 
-The command to create an invite code is:
+Distribute these codes to people who should join the PUB.
 
-   cd ~/oasis-pub 
-   ssb-server invite.create 1
+## 9) Announce the PUB
 
-This may now be given out to friends, to command your PUB to follow them. 
+So clients can discover the PUB by its hostname, publish a `pub` message:
 
-If you want to let a single code be used more than once, you can provide a number larger than 1.
+```
+ssb-server publish --type pub --address.key {pub-id} --address.host {your-hostname} --address.port 8008
+```
 
-   cd ~/oasis-pub 
-   ssb-server invite.create 500
+Example for `solarnethub.com`:
 
-## 8) Announce your PUB
+```
+ssb-server publish --type pub \
+  --address.key @mGrevRCSX4E5dLgmflWBc50Qkn/1RXUAtDaGHOJ8xB4=.ed25519 \
+  --address.host solarnethub.com \
+  --address.port 8008
+```
 
-To announce your PUB, publish this message:
+## 10) Follow another PUB (federation)
 
-   cd ~/oasis-pub 
-   ssb-server publish --type pub --address.key {pub-id} --address.host {name} --address.port {number}
-   
-For example, to announce `solarnethub.com` PUB: "La Plaza":
+Federate with other PUBs in the same Oasis network so they replicate each other:
 
-   ssb-server publish --type pub --address.key @mGrevRCSX4E5dLgmflWBc50Qkn/1RXUAtDaGHOJ8xB4=.ed25519 --address.host solarnethub.com --address.port 8008
-    
-## 9) Following another PUB
+```
+ssb-server publish --type contact --contact {other-pub-id} --following
+```
 
-To follow another PUB's feed, publish this other message:
+Example, federating with `solarnethub.com`:
 
-   cd ~/oasis-pub 
-   ssb-server publish --type contact --contact {pub-id-to-follow} --following
-    
-For example, to follow `solarnethub.com` PUB: "La Plaza":
+```
+ssb-server publish --type contact \
+  --contact "@mGrevRCSX4E5dLgmflWBc50Qkn/1RXUAtDaGHOJ8xB4=.ed25519" \
+  --following
+```
 
-   cd ~/oasis-pub 
-   ssb-server publish --type contact --contact "@mGrevRCSX4E5dLgmflWBc50Qkn/1RXUAtDaGHOJ8xB4=.ed25519" --following
+## 11) Health checks
 
-## 10) Join the Oasis PUB Network
+While the PUB is running, useful inspection commands:
 
-To help your PUB discover other Oasis-connected peers and speed up replication, we’ve included the Oasis seed PUB at `solarnethub.com` in your config file.
+```
+ssb-server status                 # peer / replication overview
+ssb-server gossip.peers           # cold-storage peer list with state
+ls -la ~/.ssb/                    # confirm flume/, blobs/, gossip.json, conn.json exist
+sudo journalctl -u oasis-pub -f   # tail service logs
+```
 
+## 12) Disabling the AI module (only relevant if also running the GUI)
+
+`sh oasis.sh server` does **not** load the GUI or AI service, so `oasis-config.json` is ignored in server-only mode. Only `server-config.json` matters.
+
+If you also run the GUI on the same VPS (`sh oasis.sh` without `server`), set `aiMod` to `off` in `src/configs/oasis-config.json` to skip the AI model:
+
+```
+sed -i 's/"aiMod": *"on"/"aiMod": "off"/' src/configs/oasis-config.json
+```
+
+## 13) Joining the Oasis network
+
+The default seed PUB at `solarnethub.com` is included in `autofollow.suggestions` above. As soon as your PUB connects to it (or to any peer that knows about it), gossip propagates the rest of the network's pub list.

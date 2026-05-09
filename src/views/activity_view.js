@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require('../backend/renderUrl');
 const { getConfig } = require("../configs/config-manager.js");
@@ -308,9 +308,6 @@ function renderActionCards(actions, userId, allActions) {
 
   const cards = items.map(action => {
     const date = action.ts ? new Date(action.ts).toLocaleString() : "";
-    const userLink = action.author
-      ? a({ href: `/author/${encodeURIComponent(action.author)}` }, action.author)
-      : 'unknown';
     const type = action.type || 'unknown';
     let skip = false;
     let headerText;
@@ -443,11 +440,11 @@ function renderActionCards(actions, userId, allActions) {
         div({ class: 'card-section banking-ubi' },
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankUbiInhabitant + ':'),
-            span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(inhabitantId)}`, class: 'user-link' }, inhabitantId))
+            span({ class: 'card-value' }, userLink(inhabitantId))
           ),
           pubId ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankUbiPub + ':'),
-            span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(pubId)}`, class: 'user-link' }, pubId))
+            span({ class: 'card-value' }, userLink(pubId))
           ) : "",
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankUbiClaimedAmount + ':'),
@@ -536,7 +533,7 @@ function renderActionCards(actions, userId, allActions) {
       const { author, name, description, photo, personalSkills, oasisSkills, educationalSkills, languages, professionalSkills, status, preferences, createdAt, updatedAt} = content;
       cardBody.push(
         div({ class: 'card-section curriculum' },
-          h2(a({ href: `/author/${encodeURIComponent(author)}`, class: "user-link" }, `@`, name)),
+          h2(userLink(author, name)),
           div(
             { class: 'card-fields-container' },
             createdAt ?
@@ -706,7 +703,7 @@ function renderActionCards(actions, userId, allActions) {
           typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
           price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
           br(),
-          organizer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.organizer || 'Organizer') + ': '), a({ class: "user-link", href: `/author/${encodeURIComponent(organizer)}` }, organizer)) : "",
+          organizer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.organizer || 'Organizer') + ': '), userLink(organizer)) : "",
           Array.isArray(attendees) ? h2({ class: 'card-label' }, (i18n.attendees || 'Attendees') + ': ' + attendees.length) : ""
         )
       );
@@ -730,7 +727,7 @@ function renderActionCards(actions, userId, allActions) {
         const addList = Array.isArray(added) ? added : [];
         const remList = Array.isArray(removed) ? removed : [];
         const renderUserList = (ids) =>
-            ids.map((id, i) => [i > 0 ? ', ' : '', a({ class: 'user-link', href: `/author/${encodeURIComponent(id)}` }, id)]).flat();
+            ids.map((id, i) => [i > 0 ? ', ' : '', userLink(id)]).flat();
         cardBody.push(
             div({ class: 'card-section task' },
                 div({ class: 'card-field' },
@@ -810,7 +807,7 @@ function renderActionCards(actions, userId, allActions) {
                 { class: 'reply-context', style: 'border-left:3px solid #666;padding-left:10px;margin-bottom:8px;opacity:0.85;' },
                 span({ style: 'font-size:0.85em;' },
                   a({ href: ctxHref, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
-                  parentAuthor ? span(' ', a({ href: `/author/${encodeURIComponent(parentAuthor)}`, class: 'user-link', style: 'font-weight:bold;' }, parentName)) : ''
+                  parentAuthor ? span(' ', userLink(parentAuthor, parentName)) : ''
                 ),
                 parentText ? p({ class: 'post-text reply-context-text post-text-pre', style: 'font-size:0.85em;max-height:80px;overflow:hidden;margin-top:4px;' }, ...renderUrlPreserveNewlines(parentText)) : ''
               )
@@ -861,7 +858,7 @@ function renderActionCards(actions, userId, allActions) {
 			),
 			div({ class: 'card-footer thread-reply-footer' },
 			    span({ class: 'date-link' }, rDate),
-			    a({ href: `/author/${encodeURIComponent(r.author)}`, class: 'user-link' }, `${r.author}`),
+			    userLink(r.author),
 			    form({ method: 'GET', action: commentHref, class: 'inline-form' },
 				button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
 			    )
@@ -872,7 +869,7 @@ function renderActionCards(actions, userId, allActions) {
         ),
         p({ class: 'card-footer' },
             span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
+            userLink(action.author)
         )
         );
     }
@@ -904,7 +901,7 @@ function renderActionCards(actions, userId, allActions) {
               { class: 'reply-context', style: 'border-left:3px solid #666;padding-left:10px;margin-bottom:8px;opacity:0.85;' },
               span({ style: 'font-size:0.85em;' },
                 a({ href: `/forum/${encodeURIComponent(hrefKey)}`, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
-                parentAuthor ? span(' ', a({ href: `/author/${encodeURIComponent(parentAuthor)}`, class: 'user-link', style: 'font-weight:bold;' }, parentName)) : ''
+                parentAuthor ? span(' ', userLink(parentAuthor, parentName)) : ''
               ),
               parentTitle ? p({ class: 'post-text reply-context-text', style: 'font-size:0.85em;max-height:60px;overflow:hidden;margin-top:4px;font-weight:bold;color:#4fc3f7;' }, parentTitle) : ''
             ),
@@ -957,7 +954,7 @@ function renderActionCards(actions, userId, allActions) {
       spreadOriginalAuthor
         ? div({ class: 'card-field' },
             span({ class: 'card-label' }, (i18n.spreadBy || 'By') + ': '),
-            span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(spreadOriginalAuthor)}`, class: 'user-link' }, spreadOriginalAuthor))
+            span({ class: 'card-value' }, userLink(spreadOriginalAuthor))
           )
         : '',
       value
@@ -990,7 +987,7 @@ function renderActionCards(actions, userId, allActions) {
       const { about, name, image } = content;
       cardBody.push(
         div({ class: 'card-section about' },
-          h2(a({ href: `/author/${encodeURIComponent(about)}`, class: "user-link" }, `@`, name)),
+          h2(userLink(about, name)),
           image
             ? img({ src: `/blob/${encodeURIComponent(image)}`, alt: name, class: 'activity-avatar' })
             : img({ src: '/assets/images/default-avatar.png', alt: name, class: 'activity-avatar' })
@@ -1001,7 +998,10 @@ function renderActionCards(actions, userId, allActions) {
     if (type === 'contact') {
       const { contact } = content || {};
       const aId = action.author || '';
-      const bId = contact || '';
+      const bId = typeof contact === 'string'
+        ? contact
+        : (contact && typeof contact === 'object' && typeof contact.link === 'string' ? contact.link : '');
+      if (!bId) { skip = true; return null; }
       const pa = getProfile(aId);
       const pb = getProfile(bId);
       const srcA = pa.image ? `/blob/${encodeURIComponent(pa.image)}` : '/assets/images/default-avatar.png';
@@ -1029,7 +1029,7 @@ function renderActionCards(actions, userId, allActions) {
       cardBody.push(
         div({ class: 'card-section pub activity-pub' },
           br(),
-          a({ href: `/author/${encodeURIComponent(pr.id)}`, class: 'user-link' }, pr.name || pr.id),
+          userLink(pr.id, pr.name),
           br(),
           img({ src, alt: pr.name || pr.id, class: 'activity-avatar' })
         )
@@ -1201,8 +1201,9 @@ function renderActionCards(actions, userId, allActions) {
               ? (i18n.unfollowing || 'UNFOLLOWING')
               : 'ACTION';
 
+        const actorId = activity.activityActor || '';
         const msgHtml = tmpl
-          .replace('%OASIS%', `<a class="user-link" href="/author/${encodeURIComponent(activity.activityActor || '')}">${activity.activityActor || ''}</a>`)
+          .replace('%OASIS%', `<a class="user-link" href="/author/${encodeURIComponent(actorId)}">${userLinkLabel(actorId)}</a>`)
           .replace('%PROJECT%', `<a class="user-link" href="/projects/${encodeURIComponent(action.tipId || action.id)}">${title || ''}</a>`)
           .replace('%ACTION%', `<strong>${actionWord}</strong>`);
 
@@ -1218,7 +1219,7 @@ function renderActionCards(actions, userId, allActions) {
           ),
           p({ class: 'card-footer' },
             span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
+            userLink(action.author)
           )
         );
       }
@@ -1356,7 +1357,7 @@ function renderActionCards(actions, userId, allActions) {
       const { targetType, targetId, targetTitle, method, votes, proposer } = content;
       const link = targetType === 'tribe'
         ? a({ href: `/tribe/${encodeURIComponent(targetId)}`, class: 'user-link' }, targetTitle || targetId)
-        : a({ href: `/author/${encodeURIComponent(targetId)}`, class: 'user-link' }, targetId);
+        : userLink(targetId);
 
       const methodUpper = String(
         i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
@@ -1381,7 +1382,7 @@ function renderActionCards(actions, userId, allActions) {
           ? a({ href: `/tribe/${encodeURIComponent(powerId)}`, class: 'user-link' }, powerTitle || powerId)
           : powerTypeNorm === 'none' || !powerTypeNorm
             ? a({ href: `/parliament?filter=government`, class: 'user-link' }, (i18n.parliamentAnarchy || 'ANARCHY'))
-            : a({ href: `/author/${encodeURIComponent(powerId)}`, class: 'user-link' }, powerTitle || powerId);
+            : userLink(powerId, powerTitle);
 
       const methodUpper = String(
         i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
@@ -1449,7 +1450,7 @@ function renderActionCards(actions, userId, allActions) {
           question ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawQuestion || 'Question') + ':'), span({ class: 'card-value' }, question)) : '',
           description ? p({ style: 'margin:.4rem 0' }, description) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
-          proposer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawProposer || 'Proposer') + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(proposer)}`, class: 'user-link' }, proposer))) : '',
+          proposer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawProposer || 'Proposer') + ':'), span({ class: 'card-value' }, userLink(proposer))) : '',
           enactedAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawEnacted || 'Enacted at') + ':'), span({ class: 'card-value' }, new Date(enactedAt).toLocaleString())) : '',
           (total || yes) ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawVotes || 'Votes') + ':'), span({ class: 'card-value' }, `${yes}/${total}`)) : ''
         )
@@ -1467,7 +1468,7 @@ function renderActionCards(actions, userId, allActions) {
             answerBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThAnswerBy + ':'), span({ class: 'card-value' }, new Date(answerBy).toLocaleString())) : '',
             evidenceBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThEvidenceBy + ':'), span({ class: 'card-value' }, new Date(evidenceBy).toLocaleString())) : '',
             decisionBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThDecisionBy + ':'), span({ class: 'card-value' }, new Date(decisionBy).toLocaleString())) : '',
-            accuser ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsAccuser + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(accuser)}`, class: 'user-link' }, accuser))) : '',
+            accuser ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsAccuser + ':'), span({ class: 'card-value' }, userLink(accuser))) : '',
             typeof needed !== 'undefined' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsVotesNeeded + ':'), span({ class: 'card-value' }, String(needed))) : '',
             (typeof yes !== 'undefined' || typeof total !== 'undefined') ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsVotesSlashTotal + ':'), span({ class: 'card-value' }, `${Number(yes || 0)}/${Number(total || 0)}`)) : '',
             voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsOpenVote + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : ''
@@ -1477,7 +1478,7 @@ function renderActionCards(actions, userId, allActions) {
         const { judgeId } = content;
         cardBody.push(
           div({ class: 'card-section courts' },
-            judgeId ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsJudge + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(judgeId)}`, class: 'user-link' }, judgeId))) : ''
+            judgeId ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsJudge + ':'), span({ class: 'card-value' }, userLink(judgeId))) : ''
           )
         );
       } else {
@@ -1536,7 +1537,7 @@ function renderActionCards(actions, userId, allActions) {
       div({ class: 'card-body' }, ...cardBody),
       p({ class: 'card-footer' },
         span({ class: 'date-link' }, `${date} ${i18n.performed} `),
-        a({ href: `/author/${encodeURIComponent(action.author)}`, class: 'user-link' }, `${action.author}`)
+        userLink(action.author)
       )
     );
   });

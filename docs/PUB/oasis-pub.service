@@ -1,0 +1,26 @@
+[Unit]
+Description=Oasis PUB
+Documentation=https://wiki.solarnethub.com/socialnet/snh-pub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/oasis
+ExecStart=/bin/sh /home/YOUR_USER/oasis/oasis.sh server
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oasis-pub
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/YOUR_USER/.ssb /home/YOUR_USER/oasis
+
+[Install]
+WantedBy=multi-user.target

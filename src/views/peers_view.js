@@ -23,10 +23,10 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers }) => {
     const { name, users, key } = peer;
     const peerUrl = `/author/${encodeURIComponent(key)}`;
     const filteredUsers = (users || []).filter(u => u.id !== key);
-    const userCount = filteredUsers.length || peer.announcers || 0;
+    const userCount = filteredUsers.length;
     return tr(
       td(a({ href: peerUrl, class: "user-link" }, name || key.slice(0, 20) + '…')),
-      td(span({ style: 'word-break:break-all;font-size:12px;color:#888;' }, key)),
+      td(a({ href: peerUrl, class: 'user-link peer-key' }, key)),
       td(String(userCount))
     );
   };
@@ -35,19 +35,9 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers }) => {
   const dedupDiscovered = deduplicatePeers(discoveredPeers);
   const dedupUnknown = deduplicatePeers(unknownPeers);
 
-  const countPeers = (list) => {
-    let usersTotal = 0;
-    for (const item of list) {
-      const peerKey = item[1].key;
-      const users = (item[1].users || []).filter(u => u.id !== peerKey);
-      usersTotal += users.length || item[1].announcers || 0;
-    }
-    return list.length + usersTotal;
-  };
-
-  const onlineCount = countPeers(dedupOnline);
-  const discoveredCount = countPeers(dedupDiscovered);
-  const unknownCount = countPeers(dedupUnknown);
+  const onlineCount = dedupOnline.length;
+  const discoveredCount = dedupDiscovered.length;
+  const unknownCount = dedupUnknown.length;
 
   const renderPeerTable = (peers) => {
     if (peers.length === 0) return p(i18n.noConnections || i18n.noDiscovered);
@@ -55,7 +45,7 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers }) => {
       tr(
         td({ class: 'card-label' }, i18n.peerHost || 'Pub'),
         td({ class: 'card-label' }, 'Key'),
-        td({ class: 'card-label' }, i18n.inhabitants || 'Inhabitants')
+        td({ class: 'card-label' }, i18n.peersReplicatedFeeds || 'Replicated feeds')
       ),
       ...peers.map(renderPeerRow)
     );

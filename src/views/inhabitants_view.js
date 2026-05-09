@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, br, span, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink} = require('./main_views');
 const { renderUrl } = require('../backend/renderUrl');
 const { getConfig } = require('../configs/config-manager');
 
@@ -90,14 +90,7 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
       br(),
       ...lastActivityBadge(user, isMe),
       div({ class: 'inhabitant-karma-ubi' },
-        span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0))),
-        span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth}: `, strong(`${Number(user.estimatedUBI || 0).toFixed(6)} ECO`)),
-        span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed}: `,
-          user.lastClaimedDate
-            ? a({ href: '/transfers?filter=ubi', class: 'user-link' }, new Date(user.lastClaimedDate).toLocaleDateString())
-            : strong(i18n.bankUbiNeverClaimed)
-        ),
-        span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(user.totalClaimed || 0).toFixed(6)} ECO`))
+        span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0)))
       )
     ),
     div({ class: 'inhabitant-details' },
@@ -113,7 +106,7 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
         ? p(`${i18n.mutualFollowers}: ${user.mutualCount}`) : null,
       filter === 'blocked' && user.isBlocked
         ? p(i18n.blockedLabel) : null,
-      p(a({ class: 'user-link', href: `/author/${encodeURIComponent(user.id)}` }, user.id)),
+      p(userLink(user.id)),
       user.ecoAddress
         ? div({ class: "eco-wallet" },
             p(`${i18n.bankWalletConnected}: `, strong(user.ecoAddress))
@@ -272,9 +265,6 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
   const isMe = id && id === currentUserId;
   const title = i18n.inhabitantProfileTitle || i18n.inhabitantviewDetails;
   const karmaScore = typeof safe.karmaScore === 'number' ? safe.karmaScore : 0;
-  const estimatedUBI = Number(safe.estimatedUBI || 0);
-  const lastClaimedDate = safe.lastClaimedDate || null;
-  const totalClaimed = Number(safe.totalClaimed || 0);
 
   const providedBucket = typeof safe.lastActivityBucket === 'string' ? safe.lastActivityBucket : null;
   const dotClass = providedBucket === 'green' ? 'green' : providedBucket === 'orange' ? 'orange' : 'red';
@@ -305,14 +295,7 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
           h2(name || 'Anonymous'),
           ...lastActivityBadge({ lastActivityBucket: dotClass, deviceSource: safe.deviceSource }, isMe),
           div({ class: 'inhabitant-karma-ubi' },
-            span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore))),
-            span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth}: `, strong(`${estimatedUBI.toFixed(6)} ECO`)),
-            span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed}: `,
-              lastClaimedDate
-                ? a({ href: '/transfers?filter=ubi', class: 'user-link' }, new Date(lastClaimedDate).toLocaleDateString())
-                : strong(i18n.bankUbiNeverClaimed)
-            ),
-            span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed}: `, strong(`${totalClaimed.toFixed(6)} ECO`))
+            span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore)))
           ),
           (!isMe && (id || viewedId))
             ? form(

@@ -13,10 +13,12 @@ const ENVELOPE_PRESERVE = new Set([
   'type', 'tribeId', 'contentType', 'replaces', 'target', 'author',
   'createdAt', 'updatedAt', 'encryptedPayload',
   'mapId', 'calendarId', 'dateId', 'padId', 'roomId', 'parentId',
+  'members', 'invites', 'participants',
   '_decrypted', '_undecryptable'
 ]);
 
-const INVITE_SALT = 'SolarNET.HuB';
+const INVITE_SALT_LEGACY = 'SolarNET.HuB';
+const INVITE_SCRYPT = { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 
 module.exports = (configPath) => {
   const keyringPath = path.join(configPath, 'tribe-keys.json');
@@ -25,6 +27,7 @@ module.exports = (configPath) => {
   const loadKeyring = () => {
     try {
       keyring = JSON.parse(fs.readFileSync(keyringPath, 'utf8'));
+      try { fs.chmodSync(keyringPath, 0o600); } catch (_) {}
     } catch (e) {
       if (e.code !== 'ENOENT') throw e;
       keyring = {};
@@ -34,8 +37,9 @@ module.exports = (configPath) => {
 
   const saveKeyring = () => {
     const tmp = keyringPath + '.tmp.' + process.pid + '.' + Date.now();
-    fs.writeFileSync(tmp, JSON.stringify(keyring, null, 2), 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify(keyring, null, 2), { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmp, keyringPath);
+    try { fs.chmodSync(keyringPath, 0o600); } catch (_) {}
   };
 
   const generateTribeKey = () => crypto.randomBytes(32).toString('hex');
@@ -60,8 +64,30 @@ module.exports = (configPath) => {
     saveKeyring();
   };
 
+  const setKeys = (tribeRootId, keysHex, topGen) => {
+    if (!Array.isArray(keysHex) || !keysHex.length) return;
+    const seen = new Set();
+    const dedup = [];
+    for (const k of keysHex) { if (k && !seen.has(k)) { seen.add(k); dedup.push(k); } }
+    keyring[tribeRootId] = { keys: dedup, gen: topGen || dedup.length };
+    saveKeyring();
+  };
+
+  const mergeKeys = (tribeRootId, incomingKeys, topGen) => {
+    const entry = keyring[tribeRootId] || { keys: [], gen: 0 };
+    const seen = new Set(entry.keys);
+    const merged = [...entry.keys];
+    for (const k of incomingKeys) {
+      if (k && !seen.has(k)) { seen.add(k); merged.push(k); }
+    }
+    keyring[tribeRootId] = { keys: merged, gen: Math.max(entry.gen || 0, topGen || merged.length) };
+    saveKeyring();
+    return keyring[tribeRootId].gen;
+  };
+
   const addNewKey = (tribeRootId, newKeyHex) => {
     const entry = keyring[tribeRootId] || { keys: [], gen: 0 };
+    if (entry.keys.includes(newKeyHex)) return entry.gen;
     entry.keys.unshift(newKeyHex);
     entry.gen = (entry.gen || 0) + 1;
     keyring[tribeRootId] = entry;
@@ -69,65 +95,110 @@ module.exports = (configPath) => {
     return entry.gen;
   };
 
-  const encryptWithKey = (plaintext, keyHex) => {
+  const canonicalAad = (envelope) => {
+    if (!envelope) return null;
+    const fields = ['type', 'tribeId', 'contentType', 'replaces', 'author', 'createdAt'];
+    const obj = {};
+    for (const f of fields) if (envelope[f] !== undefined && envelope[f] !== null) obj[f] = envelope[f];
+    return Buffer.from(JSON.stringify(obj), 'utf8');
+  };
+
+  const encryptWithKey = (plaintext, keyHex, aad) => {
     const key = Buffer.from(keyHex, 'hex');
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    if (aad) cipher.setAAD(aad);
     const enc = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
     const authTag = cipher.getAuthTag();
     return iv.toString('hex') + authTag.toString('hex') + enc.toString('hex');
   };
 
-  const decryptWithKey = (encrypted, keyHex) => {
+  const decryptWithKey = (encrypted, keyHex, aad) => {
     const key = Buffer.from(keyHex, 'hex');
     const iv = Buffer.from(encrypted.slice(0, 24), 'hex');
     const authTag = Buffer.from(encrypted.slice(24, 56), 'hex');
     const ciphertext = Buffer.from(encrypted.slice(56), 'hex');
     const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    if (aad) decipher.setAAD(aad);
     decipher.setAuthTag(authTag);
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
   };
 
-  const encryptForInvite = (tribeKeyHex, inviteCode) => {
-    const derived = crypto.scryptSync(inviteCode, INVITE_SALT, 32);
+  const generateInviteSalt = () => crypto.randomBytes(16).toString('hex');
+
+  const deriveInviteKey = (inviteCode, salt) => {
+    if (salt === undefined || salt === null || salt === '') {
+      return crypto.scryptSync(inviteCode, INVITE_SALT_LEGACY, 32);
+    }
+    return crypto.scryptSync(inviteCode, salt, 32, INVITE_SCRYPT);
+  };
+
+  const hashInviteCode = (inviteCode, salt) => {
+    const s = salt === undefined || salt === null || salt === '' ? INVITE_SALT_LEGACY : salt;
+    return crypto.createHmac('sha256', s).update(String(inviteCode), 'utf8').digest('hex');
+  };
+
+  const encryptForInvite = (tribeKeyHex, inviteCode, salt) => {
+    const derived = deriveInviteKey(inviteCode, salt);
     return encryptWithKey(tribeKeyHex, derived.toString('hex'));
   };
 
-  const decryptFromInvite = (encryptedKey, inviteCode) => {
-    const derived = crypto.scryptSync(inviteCode, INVITE_SALT, 32);
+  const decryptFromInvite = (encryptedKey, inviteCode, salt) => {
+    const derived = deriveInviteKey(inviteCode, salt);
     return decryptWithKey(encryptedKey, derived.toString('hex'));
   };
 
-  const encryptChainForInvite = (ancestryRootIds, inviteCode) => {
-    const chain = ancestryRootIds.map(rootId => ({ rootId, key: getKey(rootId), gen: getGen(rootId) }));
-    if (chain.some(e => !e.key)) return null;
-    const derived = crypto.scryptSync(inviteCode, INVITE_SALT, 32);
+  const encryptChainForInvite = (ancestryRootIds, inviteCode, salt) => {
+    const chain = ancestryRootIds.map(rootId => ({
+      rootId,
+      key: getKey(rootId),
+      keys: getKeys(rootId),
+      gen: getGen(rootId)
+    }));
+    if (chain.some(e => !e.key || !Array.isArray(e.keys) || !e.keys.length)) return null;
+    const derived = deriveInviteKey(inviteCode, salt);
     return encryptWithKey(JSON.stringify(chain), derived.toString('hex'));
   };
 
-  const decryptChainFromInvite = (encryptedPayload, inviteCode) => {
-    const derived = crypto.scryptSync(inviteCode, INVITE_SALT, 32);
+  const decryptChainFromInvite = (encryptedPayload, inviteCode, salt) => {
+    const derived = deriveInviteKey(inviteCode, salt);
     try {
       const json = decryptWithKey(encryptedPayload, derived.toString('hex'));
       const parsed = JSON.parse(json);
-      if (Array.isArray(parsed) && parsed.every(e => e && e.rootId && e.key)) return parsed;
+      if (Array.isArray(parsed) && parsed.every(e => e && e.rootId && (e.key || (Array.isArray(e.keys) && e.keys.length)))) {
+        return parsed.map(e => ({
+          rootId: e.rootId,
+          key: e.key || (Array.isArray(e.keys) ? e.keys[0] : null),
+          keys: Array.isArray(e.keys) && e.keys.length ? e.keys : (e.key ? [e.key] : []),
+          gen: e.gen || 1
+        }));
+      }
     } catch (_) {}
     return null;
   };
 
-  const encryptChain = (plaintext, keyChain) => {
+  const inviteMatchesCode = (inv, code) => {
+    if (typeof inv === 'string') return inv === code;
+    if (!inv || typeof inv !== 'object') return false;
+    if (inv.codeHash) return inv.codeHash === hashInviteCode(code, inv.salt);
+    if (inv.code) return inv.code === code;
+    return false;
+  };
+
+  const encryptChain = (plaintext, keyChain, aad) => {
     let data = plaintext;
-    for (const keyHex of keyChain) {
-      data = encryptWithKey(data, keyHex);
+    const last = keyChain.length - 1;
+    for (let i = 0; i < keyChain.length; i++) {
+      data = encryptWithKey(data, keyChain[i], i === last ? aad : undefined);
     }
     return data;
   };
 
-  const decryptChain = (encrypted, keyChain) => {
+  const decryptChain = (encrypted, keyChain, aad) => {
     const reversed = [...keyChain].reverse();
     let data = encrypted;
-    for (const keyHex of reversed) {
-      data = decryptWithKey(data, keyHex);
+    for (let i = 0; i < reversed.length; i++) {
+      data = decryptWithKey(data, reversed[i], i === 0 ? aad : undefined);
     }
     return data;
   };
@@ -145,20 +216,32 @@ module.exports = (configPath) => {
       }
     }
     const plaintext = JSON.stringify(payload);
-    const encryptedPayload = encryptChain(plaintext, keyChain);
     const result = {};
     for (const [k, v] of Object.entries(content)) {
       if (customFields ? ENVELOPE_PRESERVE.has(k) : !SENSITIVE_FIELDS.includes(k)) {
         result[k] = v;
       }
     }
+    const aad = canonicalAad(result);
+    const encryptedPayload = encryptChain(plaintext, keyChain, aad);
     result.encryptedPayload = encryptedPayload;
     return result;
   };
 
   const decryptContent = (content, keyChainSets) => {
     if (!content.encryptedPayload) return content;
+    const envelope = { ...content };
+    delete envelope.encryptedPayload;
+    const aad = canonicalAad(envelope);
     for (const keyChain of keyChainSets) {
+      try {
+        const plaintext = decryptChain(content.encryptedPayload, keyChain, aad);
+        const payload = JSON.parse(plaintext);
+        const result = { ...content };
+        delete result.encryptedPayload;
+        Object.assign(result, payload);
+        return result;
+      } catch (e) {}
       try {
         const plaintext = decryptChain(content.encryptedPayload, keyChain);
         const payload = JSON.parse(plaintext);
@@ -229,10 +312,31 @@ module.exports = (configPath) => {
   const decryptFromTribe = async (content, tribesModel) => {
     if (!content || !content.encryptedPayload) return content;
     const tid = content.tribeId;
-    if (!tid) return content;
-    const sets = await resolveKeyChainSets(tid, tribesModel);
-    if (!sets || !sets.length) return { ...content, _undecryptable: true };
-    return decryptContent(content, sets);
+    if (tid) {
+      let sets = null;
+      try { sets = await resolveKeyChainSets(tid, tribesModel); } catch (_) {}
+      if (sets && sets.length) {
+        const r = decryptContent(content, sets);
+        if (r && !r._undecryptable) return r;
+      }
+      const directKeys = getKeys(tid);
+      if (directKeys && directKeys.length) {
+        const r = decryptContent(content, directKeys.map(k => [k]));
+        if (r && !r._undecryptable) return r;
+      }
+    }
+    const candidateRoots = [
+      content.calendarId, content.chatId, content.padId,
+      content.mapId, content.roomId, content.parentId, content.dateId
+    ].filter(Boolean);
+    for (const rid of candidateRoots) {
+      const keys = getKeys(rid);
+      if (keys && keys.length) {
+        const r = decryptContent(content, keys.map(k => [k]));
+        if (r && !r._undecryptable) return r;
+      }
+    }
+    return { ...content, _undecryptable: true };
   };
 
   const createHelpers = (tribesModel) => ({
@@ -267,10 +371,11 @@ module.exports = (configPath) => {
     SENSITIVE_FIELDS,
     ENVELOPE_PRESERVE,
     loadKeyring, saveKeyring,
-    generateTribeKey, getKey, getKeys, getGen, setKey, addNewKey,
+    generateTribeKey, getKey, getKeys, getGen, setKey, setKeys, mergeKeys, addNewKey,
     encryptWithKey, decryptWithKey,
     encryptForInvite, decryptFromInvite,
     encryptChainForInvite, decryptChainFromInvite,
+    generateInviteSalt, hashInviteCode, inviteMatchesCode,
     encryptChain, decryptChain,
     encryptContent, decryptContent,
     boxKeyForMember, unboxKeyFromMember,

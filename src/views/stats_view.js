@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, ul, li, a, h3, span, strong, table, tr, td, th } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink } = require('./main_views');
 
 Object.assign(i18n, {
   statsChat: "Chats",
@@ -25,6 +25,11 @@ Object.assign(i18n, {
 
 const C = (stats, t) => Number((stats && stats.content && stats.content[t]) || 0);
 const O = (stats, t) => Number((stats && stats.opinions && stats.opinions[t]) || 0);
+
+const wClass = (pct) => {
+  const n = Math.max(0, Math.min(100, Math.round((pct || 0) / 5) * 5));
+  return `stats-w-${n}`;
+};
 
 exports.statsView = (stats, filter) => {
   const title = i18n.statsTitle;
@@ -86,8 +91,369 @@ exports.statsView = (stats, filter) => {
   };
   const totalContent = types.filter(t => t !== 'karmaScore').reduce((sum, t) => sum + C(stats, t), 0);
   const totalOpinions = types.reduce((sum, t) => sum + O(stats, t), 0);
-  const blockStyle = 'padding:16px;border:1px solid #ddd;border-radius:8px;margin-bottom:24px;';
-  const headerStyle = 'background-color:#f8f9fa; padding:24px; border-radius:8px; border:1px solid #e0e0e0; box-shadow:0 2px 8px rgba(0,0,0,0.1);';
+
+  const fmtNum = (n) => {
+    if (typeof n !== 'number' || !isFinite(n)) return '0';
+    if (Math.abs(n) >= 100) return n.toFixed(0);
+    if (Math.abs(n) >= 10) return n.toFixed(1);
+    return n.toFixed(2);
+  };
+
+  const kpi = (label, value) => div({ class: 'stats-kpi' },
+    div({ class: 'stats-kpi-label' }, label),
+    div({ class: 'stats-kpi-value' }, String(value))
+  );
+
+  const kpiBar = (label, value, pct) => {
+    const n = Math.max(0, Math.min(100, Number(pct) || 0));
+    return div({ class: 'stats-kpi' },
+      div({ class: 'stats-kpi-label' }, label),
+      div({ class: 'stats-kpi-value' }, String(value)),
+      n > 0
+        ? div({ class: 'stats-bar-track stats-kpi-bar' },
+            div({ class: `stats-bar-fill ${wClass(n)}` })
+          )
+        : null
+    );
+  };
+
+  const kpiGrid = (...tiles) => div({ class: 'stats-grid' }, tiles.filter(Boolean));
+
+  const renderTopList = (items, getName, getCount, max) => {
+    if (!items || !items.length) return p({ class: 'no-content' }, i18n.no_results || 'No data');
+    const m = Math.max(1, max || items[0] && getCount(items[0]) || 1);
+    return ul({ class: 'stats-toplist' },
+      ...items.map(it => {
+        const cnt = getCount(it);
+        const pct = (cnt / m) * 100;
+        return li(
+          span({ class: 'stats-toplist-name' }, getName(it)),
+          div({ class: 'stats-bar-track' },
+            div({ class: `stats-bar-fill ${wClass(pct)}` })
+          ),
+          span({ class: 'stats-toplist-num' }, String(cnt))
+        );
+      })
+    );
+  };
+
+  const carbonChart = (() => {
+    const parseSize = (s) => {
+      if (!s) return 0;
+      const m = String(s).match(/([\d.]+)\s*(GB|MB|KB|B)/i);
+      if (!m) return 0;
+      const v = parseFloat(m[1]);
+      const u = m[2].toUpperCase();
+      if (u === 'GB') return v * 1024;
+      if (u === 'MB') return v;
+      if (u === 'KB') return v / 1024;
+      return v / (1024 * 1024);
+    };
+    const blobsMB = parseSize(stats.statsBlobsSize);
+    const chainMB = parseSize(stats.statsBlockchainSize);
+    const totalMB = blobsMB + chainMB;
+    const kWhPerMB = 0.0002;
+    const gCO2PerKWh = 475;
+    const networkCO2 = parseFloat((totalMB * kWhPerMB * gCO2PerKWh).toFixed(2));
+    const inhabitants = stats.usersKPIs?.totalInhabitants || stats.inhabitants || 1;
+    const userCO2 = parseFloat((networkCO2 / Math.max(1, inhabitants)).toFixed(2));
+    const maxAnnualCO2 = 500;
+
+    if (filter === 'MINE') {
+      const pct = networkCO2 > 0 ? Math.min(100, (userCO2 / networkCO2) * 100) : 0;
+      return div({ class: 'carbon-chart' },
+        div({ class: 'carbon-bar-label' },
+          span(i18n.statsCarbonUser || 'Your footprint'),
+          span(`${userCO2} g CO₂`)
+        ),
+        div({ class: 'carbon-bar-track' },
+          div({ class: `carbon-bar-fill carbon-bar-mine ${wClass(pct)}` })
+        ),
+        div({ class: 'carbon-bar-label' },
+          span(i18n.statsCarbonNetwork || 'Network total'),
+          span(`${networkCO2} g CO₂`)
+        ),
+        div({ class: 'carbon-bar-track' },
+          div({ class: 'carbon-bar-fill carbon-bar-network stats-w-100' })
+        ),
+        p({ class: 'carbon-bar-note' }, strong(`${pct.toFixed(1)}%`), ` ${i18n.statsCarbonOfNetwork || 'of network total'}`),
+        p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
+      );
+    }
+    if (filter === 'TOMBSTONE') {
+      const tombCount = stats.tombstoneKPIs?.networkTombstoneCount || 0;
+      const avgTombBytes = 500;
+      const tombMB = (tombCount * avgTombBytes) / (1024 * 1024);
+      const tombCO2 = parseFloat((tombMB * kWhPerMB * gCO2PerKWh).toFixed(4));
+      const tombPct = networkCO2 > 0 ? Math.min(100, (tombCO2 / networkCO2) * 100) : 0;
+      return div({ class: 'carbon-chart' },
+        div({ class: 'carbon-bar-label' },
+          span(i18n.statsCarbonTombstone || 'Tombstoning footprint'),
+          span(`${tombCO2} g CO₂`)
+        ),
+        div({ class: 'carbon-bar-track' },
+          div({ class: `carbon-bar-fill carbon-bar-mine ${wClass(tombPct)}` })
+        ),
+        div({ class: 'carbon-bar-label' },
+          span(i18n.statsCarbonNetwork || 'Network total'),
+          span(`${networkCO2} g CO₂`)
+        ),
+        div({ class: 'carbon-bar-track' },
+          div({ class: 'carbon-bar-fill carbon-bar-network stats-w-100' })
+        ),
+        p({ class: 'carbon-bar-note' }, strong(`${tombPct.toFixed(1)}%`), ` ${i18n.statsCarbonOfNetwork || 'of network total'} (${tombCount} tombstones × ~${avgTombBytes} bytes)`),
+        p({ class: 'carbon-bar-formula' }, 'Based on estimated tombstone message size ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
+      );
+    }
+    const pct = Math.min(100, (networkCO2 / maxAnnualCO2) * 100);
+    return div({ class: 'carbon-chart' },
+      div({ class: 'carbon-bar-label' },
+        span(i18n.statsCarbonNetwork || 'Network footprint'),
+        span(`${networkCO2} g CO₂`)
+      ),
+      div({ class: 'carbon-bar-track' },
+        div({ class: `carbon-bar-fill carbon-bar-network ${wClass(pct)}` })
+      ),
+      div({ class: 'carbon-bar-label' },
+        span(i18n.statsCarbonMaxAnnual || 'Annual max estimate'),
+        span(`${maxAnnualCO2} g CO₂`)
+      ),
+      div({ class: 'carbon-bar-track' },
+        div({ class: 'carbon-bar-fill carbon-bar-max stats-w-100' })
+      ),
+      p({ class: 'carbon-bar-note' }, strong(`${pct.toFixed(1)}%`), ` ${i18n.statsCarbonOfEstMax || 'of estimated max capacity'}`),
+      p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
+    );
+  })();
+
+  const headerCard = div({ class: 'stats-card' },
+    table({ class: 'block-info-table' },
+      tr(td({ class: 'card-label' }, i18n.statsCreatedAt), td({ class: 'card-value' }, stats.createdAt)),
+      tr(td({ class: 'card-label' }, 'ID'), td({ class: 'card-value' }, userLink(stats.id))),
+      tr(td({ class: 'card-label' }, i18n.statsBlobsSize), td({ class: 'card-value' }, stats.statsBlobsSize)),
+      tr(td({ class: 'card-label' }, i18n.statsBlockchainSize), td({ class: 'card-value' }, stats.statsBlockchainSize)),
+      tr(td({ class: 'card-label' }, i18n.statsSize), td({ class: 'card-value' }, stats.folderSize))
+    )
+  );
+
+  const totalInhabitants = stats.usersKPIs?.totalInhabitants || stats.inhabitants || 0;
+  const networkKPIs = stats.networkKPIs || {};
+
+  const topStrip = div({ class: 'stats-block' },
+    kpiGrid(
+      kpi(i18n.bankingUserEngagementScore, C(stats, 'karmaScore')),
+      kpi(i18n.statsUsersTitle, totalInhabitants),
+      kpi(i18n.statsTotalMsgs || 'Total messages', networkKPIs.totalMsgs || 0),
+      kpi(i18n.statsLogsTitle || 'Logs', stats?.logsCount || 0),
+      kpi(i18n.statsAITraining, C(stats, 'aiExchange') || 0),
+      kpi(i18n.statsPUBs, stats.pubsCount || 0)
+    )
+  );
+
+  const carbonCard = div({ class: 'stats-card' },
+    h3({ class: 'stats-section-h' }, i18n.statsCarbonFootprintTitle || 'Carbon Footprint'),
+    carbonChart
+  );
+
+  const bankingCard = div({ class: 'stats-card' },
+    h3({ class: 'stats-section-h' }, i18n.statsBankingTitle),
+    table({ class: 'block-info-table' },
+      tr(td({ class: 'card-label' }, i18n.statsEcoWalletLabel), td({ class: 'card-value' }, a({ href: '/wallet', class: 'stats-link-break' }, stats?.banking?.myAddress || i18n.statsEcoWalletNotConfigured))),
+      tr(td({ class: 'card-label' }, i18n.statsTotalEcoAddresses), td({ class: 'card-value' }, String(stats?.banking?.totalAddresses || 0)))
+    )
+  );
+
+  const networkBlock = div({ class: 'stats-block' },
+    h2(i18n.statsNetworkKPIsTitle || 'Network KPIs'),
+    kpiGrid(
+      filter === 'MINE'
+        ? kpi(i18n.statsMyShare || 'Your share of the network', `${fmtNum(networkKPIs.myShare || 0)}%`)
+        : null,
+      kpi(i18n.statsAvgPerInhabitant || 'Avg per inhabitant', fmtNum(networkKPIs.avgMsgsPerInhabitant || 0)),
+      kpi(i18n.statsMsgsPerDay || 'Messages/day (lifetime)', fmtNum(networkKPIs.networkMsgsPerDay || 0)),
+      kpi(i18n.statsNetworkSpan || 'Network span', `${fmtNum(networkKPIs.networkSpanDays || 0)} d`),
+      kpi(i18n.statsTombstoneRatioLabel || 'Tombstone ratio', `${fmtNum(stats.tombstoneKPIs?.ratio || 0)}%`)
+    )
+  );
+
+  const activityBlock = (() => {
+    const rows = Array.isArray(stats.activity?.daily7) ? stats.activity.daily7 : [];
+    const max = Math.max(1, ...rows.map(r => Number(r.count) || 0));
+    return div({ class: 'stats-block' },
+      h2(i18n.statsActivity7d),
+      rows.length
+        ? ul({ class: 'stats-toplist' },
+            ...rows.map(row => {
+              const cnt = Number(row.count) || 0;
+              const pct = (cnt / max) * 100;
+              return li(
+                span({ class: 'stats-toplist-name' }, row.day),
+                div({ class: 'stats-bar-track' },
+                  div({ class: `stats-bar-fill ${wClass(pct)}` })
+                ),
+                span({ class: 'stats-toplist-num' }, String(cnt))
+              );
+            })
+          )
+        : p({ class: 'no-content' }, i18n.no_results || 'No data'),
+      div({ class: 'stats-activity-totals' },
+        span(`${i18n.statsActivity7dTotal}: `, strong(String(stats.activity?.daily7Total || 0))),
+        span(`${i18n.statsActivity30dTotal}: `, strong(String(stats.activity?.daily30Total || 0)))
+      )
+    );
+  })();
+
+  const topTypes = Array.isArray(stats.topTypes) ? stats.topTypes : [];
+  const topTypesBlock = topTypes.length ? div({ class: 'stats-block' },
+    h2(i18n.statsTopTypesTitle || 'Top Content Types'),
+    renderTopList(
+      topTypes,
+      it => labels[it.type] || it.type,
+      it => it.count,
+      topTypes[0] ? topTypes[0].count : 1
+    )
+  ) : null;
+
+  const topTags = Array.isArray(stats.topTags) ? stats.topTags : [];
+  const topTagsBlock = topTags.length ? div({ class: 'stats-block' },
+    h2(i18n.statsTopTagsTitle || 'Top Tags'),
+    div({ class: 'stats-mb-16' },
+      topTags.map(t => a({ class: 'stats-pill', href: `/search?query=%23${encodeURIComponent(t.tag)}` }, `#${t.tag} (${t.count})`))
+    )
+  ) : null;
+
+  const marketBlock = div({ class: 'stats-block' },
+    h2(i18n.statsMarketTitle),
+    kpiGrid(
+      kpi(i18n.statsMarketTotal, stats.marketKPIs?.total || 0),
+      kpi(i18n.statsMarketForSale, stats.marketKPIs?.forSale || 0),
+      kpi(i18n.statsMarketReserved, stats.marketKPIs?.reserved || 0),
+      kpi(i18n.statsMarketClosed, stats.marketKPIs?.closed || 0),
+      kpi(i18n.statsMarketSold, stats.marketKPIs?.sold || 0)
+    )
+  );
+
+  const projectsBlock = div({ class: 'stats-block' },
+    h2(i18n.statsProjectsTitle),
+    kpiGrid(
+      kpi(i18n.statsProjectsTotal, stats.projectsKPIs?.total || 0),
+      kpi(i18n.statsProjectsActive, stats.projectsKPIs?.active || 0),
+      kpi(i18n.statsProjectsCompleted, stats.projectsKPIs?.completed || 0),
+      kpi(i18n.statsProjectsPaused, stats.projectsKPIs?.paused || 0),
+      kpi(i18n.statsProjectsCancelled, stats.projectsKPIs?.cancelled || 0),
+      kpi(i18n.statsProjectsGoalTotal, `${stats.projectsKPIs?.ecoGoalTotal || 0} ECO`),
+      kpi(i18n.statsProjectsPledgedTotal, `${stats.projectsKPIs?.ecoPledgedTotal || 0} ECO`)
+    )
+  );
+
+  const allTribesPublic = Array.isArray(stats.allTribesPublic) ? stats.allTribesPublic : [];
+  const memberTribesDetailed = Array.isArray(stats.memberTribesDetailed) ? stats.memberTribesDetailed : [];
+  const myPrivateTribesDetailed = Array.isArray(stats.myPrivateTribesDetailed) ? stats.myPrivateTribesDetailed : [];
+
+  const buildContentTiles = () => {
+    const tiles = [];
+    types.filter(t => t !== 'karmaScore' && t !== 'shopProduct' && t !== 'padEntry' && t !== 'chatMessage' && t !== 'calendarDate' && t !== 'calendarNote').forEach(t => {
+      const cnt = C(stats, t);
+      if (cnt <= 0) return;
+      tiles.push(kpi(labels[t], cnt));
+      if (t === 'shop') tiles.push(kpi(labels.shopProduct, C(stats, 'shopProduct')));
+      else if (t === 'pad') tiles.push(kpi(labels.padEntry, C(stats, 'padEntry')));
+      else if (t === 'chat') tiles.push(kpi(labels.chatMessage, C(stats, 'chatMessage')));
+      else if (t === 'calendar') {
+        tiles.push(kpi(labels.calendarDate, C(stats, 'calendarDate')));
+        tiles.push(kpi(labels.calendarNote, C(stats, 'calendarNote')));
+      } else if (t === 'tribe') {
+        tiles.push(kpi(i18n.statsPublic, stats.tribePublicCount || 0));
+        tiles.push(kpi(i18n.statsPrivate, stats.tribePrivateCount || 0));
+      }
+    });
+    return tiles;
+  };
+
+  const buildOpinionTiles = () =>
+    types.map(t => O(stats, t) > 0 ? kpi(labels[t], O(stats, t)) : null).filter(Boolean);
+
+  const tribeListBlock = (label, list) => div({ class: 'stats-block' },
+    h2(`${label}: ${list.length}`),
+    list.length
+      ? table({ class: 'stats-table-mt8' },
+          ...list.map(t => tr(td(a({ href: `/tribe/${encodeURIComponent(t.id)}`, class: 'tribe-link' }, t.name))))
+        )
+      : p({ class: 'no-content' }, i18n.no_results || 'No data')
+  );
+
+  const allMode = filter === 'ALL'
+    ? div({ class: 'stats-container' }, [
+        networkBlock,
+        activityBlock,
+        topTypesBlock,
+        topTagsBlock,
+        div({ class: 'stats-block' },
+          h2(i18n.statsNetworkContent),
+          kpiGrid(
+            kpi(i18n.statsDiscoveredTribes, allTribesPublic.length),
+            kpi(i18n.statsPrivateDiscoveredTribes, stats.tribePrivateCount || 0),
+            kpi(i18n.statsDiscoveredForum, C(stats, 'forum')),
+            kpi(i18n.statsDiscoveredTransfer, C(stats, 'transfer'))
+          )
+        ),
+        tribeListBlock(i18n.statsDiscoveredTribes, allTribesPublic),
+        marketBlock,
+        projectsBlock,
+        div({ class: 'stats-block' },
+          h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
+          kpiGrid(...buildOpinionTiles())
+        ),
+        div({ class: 'stats-block' },
+          h2(`${i18n.statsNetworkContent}: ${totalContent}`),
+          kpiGrid(...buildContentTiles())
+        )
+      ])
+    : null;
+
+  const mineMode = filter === 'MINE'
+    ? div({ class: 'stats-container' }, [
+        networkBlock,
+        activityBlock,
+        topTypesBlock,
+        topTagsBlock,
+        div({ class: 'stats-block' },
+          h2(i18n.statsYourContent || i18n.statsNetworkContent),
+          kpiGrid(
+            kpi(i18n.statsDiscoveredTribes, memberTribesDetailed.length),
+            kpi(i18n.statsPrivateDiscoveredTribes, myPrivateTribesDetailed.length),
+            kpi(i18n.statsYourForum, C(stats, 'forum')),
+            kpi(i18n.statsYourTransfer, C(stats, 'transfer'))
+          )
+        ),
+        tribeListBlock(i18n.statsDiscoveredTribes, memberTribesDetailed),
+        myPrivateTribesDetailed.length
+          ? tribeListBlock(i18n.statsPrivateDiscoveredTribes, myPrivateTribesDetailed)
+          : null,
+        marketBlock,
+        projectsBlock,
+        div({ class: 'stats-block' },
+          h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),
+          kpiGrid(...buildOpinionTiles())
+        ),
+        div({ class: 'stats-block' },
+          h2(`${i18n.statsYourContent}: ${totalContent}`),
+          kpiGrid(...buildContentTiles())
+        )
+      ])
+    : null;
+
+  const tombMode = filter === 'TOMBSTONE'
+    ? div({ class: 'stats-container' }, [
+        div({ class: 'stats-block' },
+          kpiGrid(
+            kpi(i18n.TOMBSTONEButton, stats.userTombstoneCount || 0),
+            kpi(i18n.statsTombstoneRatio, `${(stats.tombstoneKPIs?.ratio || 0).toFixed(2)}%`)
+          )
+        )
+      ])
+    : null;
+
   return template(
     title,
     section(
@@ -95,7 +461,7 @@ exports.statsView = (stats, filter) => {
         h2(title),
         p(description)
       ),
-      div({ class: 'mode-buttons stats-grid' },
+      div({ class: 'mode-buttons stats-mode-row' },
         modes.map(m =>
           form({ method: 'GET', action: '/stats' },
             input({ type: 'hidden', name: 'filter', value: m }),
@@ -104,311 +470,14 @@ exports.statsView = (stats, filter) => {
         )
       ),
       section(
-        div({ style: headerStyle },
-          h3({ class: 'stats-h-row' }, `${i18n.statsCreatedAt}: `, span({ class: 'stats-muted-888' }, stats.createdAt)),
-          h3({ class: 'stats-section-h' },
-            a({ class: "user-link", href: `/author/${encodeURIComponent(stats.id)}`, class: 'stats-link' }, stats.id)
-          ),
-          div({ class: 'stats-mb-16' },
-            ul({ class: 'stats-list-reset' },
-              li({ class: 'stats-h-row' }, `${i18n.statsBlobsSize}: `, span({ class: 'stats-muted-888' }, stats.statsBlobsSize)),
-              li({ class: 'stats-h-row' }, `${i18n.statsBlockchainSize}: `, span({ class: 'stats-muted-888' }, stats.statsBlockchainSize)),
-              li({ class: 'stats-h-row' }, strong(`${i18n.statsSize}: `, span({ class: 'stats-muted-888' }, span({ class: 'stats-muted-555' }, stats.folderSize))))
-            )
-          )
-        ),
-        div({ class: "stats-karma-block" }, h3(`${i18n.bankingUserEngagementScore}: ${C(stats, 'karmaScore')}`)),
-        div({ style: headerStyle },
-          h3(i18n.statsCarbonFootprintTitle || 'Carbon Footprint'),
-          (() => {
-            const parseSize = (s) => {
-              if (!s) return 0;
-              const m = String(s).match(/([\d.]+)\s*(GB|MB|KB|B)/i);
-              if (!m) return 0;
-              const v = parseFloat(m[1]);
-              const u = m[2].toUpperCase();
-              if (u === 'GB') return v * 1024;
-              if (u === 'MB') return v;
-              if (u === 'KB') return v / 1024;
-              return v / (1024 * 1024);
-            };
-            const blobsMB = parseSize(stats.statsBlobsSize);
-            const chainMB = parseSize(stats.statsBlockchainSize);
-            const totalMB = blobsMB + chainMB;
-            const kWhPerMB = 0.0002;
-            const gCO2PerKWh = 475;
-            const networkCO2 = parseFloat((totalMB * kWhPerMB * gCO2PerKWh).toFixed(2));
-            const inhabitants = stats.usersKPIs?.totalInhabitants || stats.inhabitants || 1;
-            const userCO2 = parseFloat((networkCO2 / Math.max(1, inhabitants)).toFixed(2));
-            const maxAnnualCO2 = 500;
-
-            if (filter === 'MINE') {
-              const pct = networkCO2 > 0 ? Math.min(100, (userCO2 / networkCO2) * 100).toFixed(1) : '0.0';
-              return div({ class: 'carbon-chart' },
-                div({ class: 'carbon-bar-label' },
-                  span(i18n.statsCarbonUser || 'Your footprint'),
-                  span(`${userCO2} g CO₂`)
-                ),
-                div({ class: 'carbon-bar-track' },
-                  div({ class: 'carbon-bar-fill carbon-bar-mine', style: `width:${pct}%;` })
-                ),
-                div({ class: 'carbon-bar-label' },
-                  span(i18n.statsCarbonNetwork || 'Network total'),
-                  span(`${networkCO2} g CO₂`)
-                ),
-                div({ class: 'carbon-bar-track' },
-                  div({ class: 'carbon-bar-fill carbon-bar-network stats-w-100' })
-                ),
-                p({ class: 'carbon-bar-note' }, strong(`${pct}%`), ` ${i18n.statsCarbonOfNetwork || 'of network total'}`),
-                p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
-              );
-            }
-            if (filter === 'TOMBSTONE') {
-              const tombCount = stats.tombstoneKPIs?.networkTombstoneCount || 0;
-              const avgTombBytes = 500;
-              const tombMB = (tombCount * avgTombBytes) / (1024 * 1024);
-              const tombCO2 = parseFloat((tombMB * kWhPerMB * gCO2PerKWh).toFixed(4));
-              const tombPct = networkCO2 > 0 ? Math.min(100, (tombCO2 / networkCO2) * 100).toFixed(1) : '0.0';
-              return div({ class: 'carbon-chart' },
-                div({ class: 'carbon-bar-label' },
-                  span(i18n.statsCarbonTombstone || 'Tombstoning footprint'),
-                  span(`${tombCO2} g CO₂`)
-                ),
-                div({ class: 'carbon-bar-track' },
-                  div({ class: 'carbon-bar-fill carbon-bar-mine', style: `width:${tombPct}%;` })
-                ),
-                div({ class: 'carbon-bar-label' },
-                  span(i18n.statsCarbonNetwork || 'Network total'),
-                  span(`${networkCO2} g CO₂`)
-                ),
-                div({ class: 'carbon-bar-track' },
-                  div({ class: 'carbon-bar-fill carbon-bar-network stats-w-100' })
-                ),
-                p({ class: 'carbon-bar-note' }, strong(`${tombPct}%`), ` ${i18n.statsCarbonOfNetwork || 'of network total'} (${tombCount} tombstones × ~${avgTombBytes} bytes)`),
-                p({ class: 'carbon-bar-formula' }, 'Based on estimated tombstone message size ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
-              );
-            }
-            const pct = Math.min(100, (networkCO2 / maxAnnualCO2) * 100).toFixed(1);
-            return div({ class: 'carbon-chart' },
-              div({ class: 'carbon-bar-label' },
-                span(i18n.statsCarbonNetwork || 'Network footprint'),
-                span(`${networkCO2} g CO₂`)
-              ),
-              div({ class: 'carbon-bar-track' },
-                div({ class: 'carbon-bar-fill carbon-bar-network', style: `width:${pct}%;` })
-              ),
-              div({ class: 'carbon-bar-label' },
-                span(i18n.statsCarbonMaxAnnual || 'Annual max estimate'),
-                span(`${maxAnnualCO2} g CO₂`)
-              ),
-              div({ class: 'carbon-bar-track' },
-                div({ class: 'carbon-bar-fill carbon-bar-max stats-w-100' })
-              ),
-              p({ class: 'carbon-bar-note' }, strong(`${pct}%`), ` ${i18n.statsCarbonOfEstMax || 'of estimated max capacity'}`),
-              p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
-            );
-          })()
-        ),
-        div({ style: headerStyle },
-          h3({ class: 'stats-section-h' }, i18n.statsBankingTitle),
-          ul({ class: 'stats-list-reset' },
-            li({ class: 'stats-h-row' }, `${i18n.statsEcoWalletLabel}: `, a({ href: '/wallet', class: 'stats-link-break' }, stats?.banking?.myAddress || i18n.statsEcoWalletNotConfigured)),
-            li({ class: 'stats-h-row' }, `${i18n.statsTotalEcoAddresses}: `, span({ class: 'stats-muted-888' }, String(stats?.banking?.totalAddresses || 0)))
-          )
-        ),
-        div({ style: headerStyle },
-          h3({ class: 'stats-section-h' }, i18n.statsLogsTitle || 'Logs'),
-          ul({ class: 'stats-list-reset' },
-            li({ class: 'stats-h-row' }, `${i18n.statsLogsEntries || 'Entries'}: `, span({ class: 'stats-muted-888' }, String(stats?.logsCount || 0)))
-          )
-        ),
-        div({ style: headerStyle },
-          h3({ class: 'stats-section-h' }, i18n.statsAITraining),
-          ul({ class: 'stats-list-reset' },
-            li({ class: 'stats-h-row' }, `${i18n.statsAIExchanges}: `, span({ class: 'stats-muted-888' }, String(C(stats, 'aiExchange') || 0)))
-          )
-        ),
-        div({ style: headerStyle }, h3(`${i18n.statsPUBs}: ${String(stats.pubsCount || 0)}`)),
-        filter === 'ALL'
-          ? div({ class: 'stats-container' }, [
-              div({ style: blockStyle },
-                h2(i18n.statsActivity7d),
-                table({ class: 'stats-table' },
-                  tr(th(i18n.day), th(i18n.messages)),
-                  ...(Array.isArray(stats.activity?.daily7) ? stats.activity.daily7 : []).map(row => tr(td(row.day), td(String(row.count))))
-                ),
-                p(`${i18n.statsActivity7dTotal}: ${stats.activity?.daily7Total || 0}`),
-                p(`${i18n.statsActivity30dTotal}: ${stats.activity?.daily30Total || 0}`)
-              ),
-              div({ style: blockStyle },
-                h2(`${i18n.statsDiscoveredTribes}: ${stats.allTribesPublic.length}`),
-                table({ class: 'stats-table-mt8' },
-                  ...stats.allTribesPublic.map(t => tr(td(a({ href: `/tribe/${encodeURIComponent(t.id)}`, class: 'tribe-link' }, t.name))))
-                )
-              ),
-              div({ style: blockStyle },
-                h2(`${i18n.statsPrivateDiscoveredTribes}: ${stats.tribePrivateCount || 0}`)
-              ),
-              div({ style: blockStyle }, h2(`${i18n.statsUsersTitle}: ${stats.usersKPIs?.totalInhabitants || stats.inhabitants || 0}`)),
-              div({ style: blockStyle }, h2(`${i18n.statsDiscoveredForum}: ${C(stats, 'forum')}`)),
-              div({ style: blockStyle }, h2(`${i18n.statsDiscoveredTransfer}: ${C(stats, 'transfer')}`)),
-              div({ style: blockStyle },
-                h2(i18n.statsMarketTitle),
-                ul([
-                  li(`${i18n.statsMarketTotal}: ${stats.marketKPIs?.total || 0}`),
-                  li(`${i18n.statsMarketForSale}: ${stats.marketKPIs?.forSale || 0}`),
-                  li(`${i18n.statsMarketReserved}: ${stats.marketKPIs?.reserved || 0}`),
-                  li(`${i18n.statsMarketClosed}: ${stats.marketKPIs?.closed || 0}`),
-                  li(`${i18n.statsMarketSold}: ${stats.marketKPIs?.sold || 0}`),
-                  li(`${i18n.statsMarketRevenue}: ${((stats.marketKPIs?.revenueECO || 0)).toFixed(6)} ECO`),
-                  li(`${i18n.statsMarketAvgSoldPrice}: ${((stats.marketKPIs?.avgSoldPrice || 0)).toFixed(6)} ECO`)
-                ])
-              ),
-              div({ style: blockStyle },
-                h2(i18n.statsProjectsTitle),
-                ul([
-                  li(`${i18n.statsProjectsTotal}: ${stats.projectsKPIs?.total || 0}`),
-                  li(`${i18n.statsProjectsActive}: ${stats.projectsKPIs?.active || 0}`),
-                  li(`${i18n.statsProjectsCompleted}: ${stats.projectsKPIs?.completed || 0}`),
-                  li(`${i18n.statsProjectsPaused}: ${stats.projectsKPIs?.paused || 0}`),
-                  li(`${i18n.statsProjectsCancelled}: ${stats.projectsKPIs?.cancelled || 0}`),
-                  li(`${i18n.statsProjectsGoalTotal}: ${(stats.projectsKPIs?.ecoGoalTotal || 0)} ECO`),
-                  li(`${i18n.statsProjectsPledgedTotal}: ${(stats.projectsKPIs?.ecoPledgedTotal || 0)} ECO`),
-                  li(`${i18n.statsProjectsSuccessRate}: ${((stats.projectsKPIs?.successRate || 0)).toFixed(1)}%`),
-                  li(`${i18n.statsProjectsAvgProgress}: ${((stats.projectsKPIs?.avgProgress || 0)).toFixed(1)}%`),
-                  li(`${i18n.statsProjectsMedianProgress}: ${((stats.projectsKPIs?.medianProgress || 0)).toFixed(1)}%`),
-                  li(`${i18n.statsProjectsActiveFundingAvg}: ${((stats.projectsKPIs?.activeFundingAvg || 0)).toFixed(1)}%`)
-                ])
-              ),
-              div({ style: blockStyle },
-                h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
-                ul(types.map(t => O(stats, t) > 0 ? li(`${labels[t]}: ${O(stats, t)}`) : null).filter(Boolean))
-              ),
-              div({ style: blockStyle },
-                h2(`${i18n.statsNetworkContent}: ${totalContent}`),
-                ul(
-                  types.filter(t => t !== 'karmaScore' && t !== 'shopProduct' && t !== 'padEntry' && t !== 'chatMessage').map(t => {
-                    if (C(stats, t) <= 0) return null;
-                    if (t === 'shop') return li(
-                      span(`${labels[t]}: ${C(stats, t)}`),
-                      ul([li(`${labels.shopProduct}: ${C(stats, 'shopProduct')}`)])
-                    );
-                    if (t === 'pad') return li(
-                      span(`${labels[t]}: ${C(stats, t)}`),
-                      ul([li(`${labels.padEntry}: ${C(stats, 'padEntry')}`)])
-                    );
-                    if (t === 'chat') return li(
-                      span(`${labels[t]}: ${C(stats, t)}`),
-                      ul([li(`${labels.chatMessage}: ${C(stats, 'chatMessage')}`)])
-                    );
-                    if (t !== 'tribe') return li(`${labels[t]}: ${C(stats, t)}`);
-                    return li(
-                      span(`${labels[t]}: ${C(stats, t)}`),
-                      ul([
-                        li(`${i18n.statsPublic}: ${stats.tribePublicCount || 0}`),
-                        li(`${i18n.statsPrivate}: ${stats.tribePrivateCount || 0}`)
-                      ])
-                    );
-                  }).filter(Boolean)
-                )
-              )
-            ])
-          : filter === 'MINE'
-            ? div({ class: 'stats-container' }, [
-                div({ style: blockStyle },
-                  h2(i18n.statsActivity7d),
-                  table({ class: 'stats-table' },
-                    tr(th(i18n.day), th(i18n.messages)),
-                    ...(Array.isArray(stats.activity?.daily7) ? stats.activity.daily7 : []).map(row => tr(td(row.day), td(String(row.count))))
-                  ),
-                  p(`${i18n.statsActivity7dTotal}: ${stats.activity?.daily7Total || 0}`),
-                  p(`${i18n.statsActivity30dTotal}: ${stats.activity?.daily30Total || 0}`)
-                ),
-                div({ style: blockStyle },
-                  h2(`${i18n.statsDiscoveredTribes}: ${stats.memberTribesDetailed.length}`),
-                  table({ class: 'stats-table-mt8' },
-                    ...stats.memberTribesDetailed.map(t => tr(td(a({ href: `/tribe/${encodeURIComponent(t.id)}`, class: 'tribe-link' }, t.name))))
-                  )
-                ),
-                Array.isArray(stats.myPrivateTribesDetailed) && stats.myPrivateTribesDetailed.length
-                  ? div({ style: blockStyle },
-                      h2(`${i18n.statsPrivateDiscoveredTribes}: ${stats.myPrivateTribesDetailed.length}`),
-                      table({ class: 'stats-table-mt8' },
-                        ...stats.myPrivateTribesDetailed.map(tp => tr(td(a({ href: `/tribe/${encodeURIComponent(tp.id)}`, class: 'tribe-link' }, tp.name))))
-                      )
-                    )
-                  : null,
-                div({ style: blockStyle }, h2(`${i18n.statsYourForum}: ${C(stats, 'forum')}`)),
-                div({ style: blockStyle }, h2(`${i18n.statsYourTransfer}: ${C(stats, 'transfer')}`)),
-                div({ style: blockStyle },
-                  h2(i18n.statsMarketTitle),
-                  ul([
-                    li(`${i18n.statsMarketTotal}: ${stats.marketKPIs?.total || 0}`),
-                    li(`${i18n.statsMarketForSale}: ${stats.marketKPIs?.forSale || 0}`),
-                    li(`${i18n.statsMarketReserved}: ${stats.marketKPIs?.reserved || 0}`),
-                    li(`${i18n.statsMarketClosed}: ${stats.marketKPIs?.closed || 0}`),
-                    li(`${i18n.statsMarketSold}: ${stats.marketKPIs?.sold || 0}`),
-                    li(`${i18n.statsMarketRevenue}: ${((stats.marketKPIs?.revenueECO || 0)).toFixed(6)} ECO`),
-                    li(`${i18n.statsMarketAvgSoldPrice}: ${((stats.marketKPIs?.avgSoldPrice || 0)).toFixed(6)} ECO`)
-                  ])
-                ),
-                div({ style: blockStyle },
-                  h2(i18n.statsProjectsTitle),
-                  ul([
-                    li(`${i18n.statsProjectsTotal}: ${stats.projectsKPIs?.total || 0}`),
-                    li(`${i18n.statsProjectsActive}: ${stats.projectsKPIs?.active || 0}`),
-                    li(`${i18n.statsProjectsCompleted}: ${stats.projectsKPIs?.completed || 0}`),
-                    li(`${i18n.statsProjectsPaused}: ${stats.projectsKPIs?.paused || 0}`),
-                    li(`${i18n.statsProjectsCancelled}: ${stats.projectsKPIs?.cancelled || 0}`),
-                    li(`${i18n.statsProjectsGoalTotal}: ${(stats.projectsKPIs?.ecoGoalTotal || 0)} ECO`),
-                    li(`${i18n.statsProjectsPledgedTotal}: ${(stats.projectsKPIs?.ecoPledgedTotal || 0)} ECO`),
-                    li(`${i18n.statsProjectsSuccessRate}: ${((stats.projectsKPIs?.successRate || 0)).toFixed(1)}%`),
-                    li(`${i18n.statsProjectsAvgProgress}: ${((stats.projectsKPIs?.avgProgress || 0)).toFixed(1)}%`),
-                    li(`${i18n.statsProjectsMedianProgress}: ${((stats.projectsKPIs?.medianProgress || 0)).toFixed(1)}%`),
-                    li(`${i18n.statsProjectsActiveFundingAvg}: ${((stats.projectsKPIs?.activeFundingAvg || 0)).toFixed(1)}%`)
-                  ])
-                ),
-                div({ style: blockStyle },
-                  h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),
-                  ul(types.map(t => O(stats, t) > 0 ? li(`${labels[t]}: ${O(stats, t)}`) : null).filter(Boolean))
-                ),
-                div({ style: blockStyle },
-                  h2(`${i18n.statsYourContent}: ${totalContent}`),
-                  ul(
-                    types.filter(t => t !== 'karmaScore' && t !== 'shopProduct').map(t => {
-                      if (C(stats, t) <= 0) return null;
-                      if (t === 'shop') return li(
-                        span(`${labels[t]}: ${C(stats, t)}`),
-                        ul([li(`${labels.shopProduct}: ${C(stats, 'shopProduct')}`)])
-                      );
-                      if (t !== 'tribe') return li(`${labels[t]}: ${C(stats, t)}`);
-                      return li(
-                        span(`${labels[t]}: ${C(stats, t)}`),
-                        ul([
-                          li(`${i18n.statsPublic}: ${stats.tribePublicCount || 0}`),
-                          li(`${i18n.statsPrivate}: ${stats.tribePrivateCount || 0}`),
-                          ...(Array.isArray(stats.myPrivateTribesDetailed) && stats.myPrivateTribesDetailed.length
-                            ? [
-                                li(i18n.statsPrivateDiscoveredTribes),
-                                ...stats.myPrivateTribesDetailed.map(tp =>
-                                  li(a({ href: `/tribe/${encodeURIComponent(tp.id)}`, class: 'tribe-link' }, tp.name))
-                                )
-                              ]
-                            : [])
-                        ])
-                      );
-                    }).filter(Boolean)
-                  )
-                )
-              ])
-            : div({ class: 'stats-container' }, [
-                div({ style: blockStyle },
-                  h2(`${i18n.TOMBSTONEButton}: ${stats.userTombstoneCount}`),
-                  h2(`${i18n.statsTombstoneRatio.toUpperCase()}: ${((stats.tombstoneKPIs?.ratio || 0)).toFixed(2)}%`)
-                )
-              ])
+        topStrip,
+        headerCard,
+        bankingCard,
+        carbonCard,
+        allMode,
+        mineMode,
+        tombMode
       )
     )
   );
 };
-

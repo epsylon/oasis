@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require("../backend/renderUrl");
@@ -215,10 +215,15 @@ const renderReportCommentsSection = (reportId, comments = []) => {
         button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
       )
     ),
-    comments && comments.length
+    (() => {
+      const visibleComments = (comments || []).filter(c => {
+        const t = c && c.value && c.value.content && c.value.content.text;
+        return t && String(t).trim();
+      });
+      return visibleComments.length
       ? div(
           { class: "comments-list" },
-          comments.map((c) => {
+          visibleComments.map((c) => {
             const author = c.value && c.value.author ? c.value.author : "";
             const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
@@ -244,7 +249,8 @@ const renderReportCommentsSection = (reportId, comments = []) => {
             );
           })
         )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
+      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet);
+    })()
   );
 };
 
@@ -404,7 +410,7 @@ const renderReportCard = (report, userId, currentFilter = "all") => {
     p(
       { class: "card-footer" },
       span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
-      a({ class: "user-link", href: `/author/${encodeURIComponent(report.author)}` }, report.author)
+      userLink(report.author)
     )
   );
 };
@@ -659,7 +665,7 @@ exports.singleReportView = async (report, filter, comments = []) => {
         p(
           { class: "card-footer" },
           span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
-          a({ class: "user-link", href: `/author/${encodeURIComponent(report.author)}` }, report.author)
+          userLink(report.author)
         )
       ),
       renderReportCommentsSection(report.id, comments)

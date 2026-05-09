@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n } = require("./main_views");
+const { template, i18n, userLink} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 const opinionCategories = require("../backend/opinion_categories");
@@ -74,7 +74,10 @@ const renderDocumentActions = (filter, doc, params = {}) => {
 };
 
 const renderDocumentCommentsSection = (documentKey, rootId, comments = [], returnTo = null) => {
-  const list = safeArr(comments);
+  const list = safeArr(comments).filter(c => {
+    const t = c && c.value && c.value.content && c.value.content.text;
+    return t && String(t).trim();
+  });
   const commentsCount = list.length;
 
   return div(
@@ -203,7 +206,7 @@ const renderDocumentList = (documents, filter, params = {}) => {
             return p(
               { class: "card-footer" },
               span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              a({ href: `/author/${encodeURIComponent(doc.author)}`, class: "user-link" }, `${doc.author}`),
+              userLink(doc.author),
               showUpdated
                 ? span(
                     { class: "votations-comment-date" },
@@ -408,7 +411,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
           return p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            a({ href: `/author/${encodeURIComponent(doc.author)}`, class: "user-link" }, `${doc.author}`),
+            userLink(doc.author),
             showUpdated
               ? span(
                   { class: "votations-comment-date" },

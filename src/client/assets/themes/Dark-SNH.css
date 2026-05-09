@@ -312,6 +312,12 @@ a.user-link:focus {
 }
 
 /* Blockexplorer */
+.stats-kpi-label { color: #ffa300 !important; }
+.stats-kpi-value { color: #FFD700 !important; }
+.carbon-bar-note, .carbon-bar-formula { color: #FFD700 !important; }
+.graphos-node-label { fill: #ddd !important; }
+.graphos-node-label-me { fill: #ffa500 !important; }
+.graphos-legend { color: #ddd !important; }
 .blockchain-view { background-color: #191b20 !important; color: #FFD700 !important; }
 .block { background: #23242a !important; }
 .block:hover { box-shadow: 0 8px 32px rgba(35,40,50,0.18) !important; }
