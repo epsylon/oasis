@@ -29,9 +29,32 @@ const listPubsFromEbt = () => {
   }
 };
 
-module.exports = ({ cooler }) => {
+const HIDDEN_ENVELOPE_TYPES = new Set([
+  'tribe-keys-distrib',
+  'tribe-invite-msg',
+  'tribe-invite-tombstone'
+]);
+
+module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
+
+  const buildAccessibleTribeIds = async () => {
+    const set = new Set();
+    if (!tribesModel) return set;
+    try {
+      const list = await tribesModel.listAll();
+      for (const t of list) {
+        if (!t || !t.id) continue;
+        set.add(t.id);
+        try {
+          const chain = await tribesModel.getChainIds(t.id);
+          for (const cid of chain) set.add(cid);
+        } catch (_) {}
+      }
+    } catch (_) {}
+    return set;
+  };
 
   const types = [
     'bookmark','event','task','votes','report','feed','project',
@@ -43,12 +66,15 @@ module.exports = ({ cooler }) => {
   ];
 
   const getFolderSize = (folderPath) => {
-    const files = fs.readdirSync(folderPath);
+    let files;
+    try { files = fs.readdirSync(folderPath); } catch (_) { return 0; }
     let totalSize = 0;
     for (const file of files) {
       const filePath = `${folderPath}/${file}`;
-      const st = fs.statSync(filePath);
-      totalSize += st.isDirectory() ? getFolderSize(filePath) : st.size;
+      try {
+        const st = fs.statSync(filePath);
+        totalSize += st.isDirectory() ? getFolderSize(filePath) : st.size;
+      } catch (_) {}
     }
     return totalSize;
   };
@@ -258,10 +284,16 @@ module.exports = ({ cooler }) => {
       );
     });
 
-    const allMsgs = messages.filter(m => m.value?.content);
+    const allMsgs = messages.filter(m => {
+      const c = m.value && m.value.content;
+      if (!c) return false;
+      if (typeof c === 'string' && c.endsWith('.box')) return false;
+      if (c.type && HIDDEN_ENVELOPE_TYPES.has(c.type)) return false;
+      return true;
+    });
     const tombTargets = new Set(
       allMsgs
-        .filter(m => m.value.content.type === 'tombstone' && m.value.content.target)
+        .filter(m => m.value.content && m.value.content.type === 'tombstone' && m.value.content.target)
         .map(m => m.value.content.target)
     );
 
@@ -274,10 +306,26 @@ module.exports = ({ cooler }) => {
       parentOf[t] = new Map();
     }
 
+    const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+    const accessibleTribeIds = await buildAccessibleTribeIds();
     for (const m of scopedMsgs) {
       const k = m.key;
-      const c = m.value.content;
-      theType = c.type;
+      let c = m.value.content;
+      if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
+        const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+        if (!r || !r.body) continue;
+        const inner = r.body;
+        if (inner.k === 'tribe') {
+          c = { ...inner, type: 'tribe' };
+        } else if (inner.k === 'tribe-content' && inner.contentType) {
+          c = { ...inner, type: inner.contentType };
+        } else {
+          continue;
+        }
+      } else if (c && c.tribeId && !accessibleTribeIds.has(c.tribeId)) {
+        continue;
+      }
+      let theType = c.type;
       if (!types.includes(theType)) continue;
       byType[theType].set(k, { key: k, ts: m.value.timestamp, content: c, author: m.value.author });
       if (c.replaces) parentOf[theType].set(k, c.replaces);

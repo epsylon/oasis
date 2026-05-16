@@ -17,7 +17,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -179,7 +179,7 @@ const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => 
   );
 };
 
-const renderVideoList = (videos, filter, params = {}) => {
+const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
   return videos.length
@@ -317,7 +317,15 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.videoDescription)),
+      div({ class: "tags-header" },
+        h2(title),
+        p(i18n.videoDescription),
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetVideos);
+          return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+        })()
+      ),
       div(
         { class: "filters" },
         form(
@@ -414,6 +422,11 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
         title ? h2(title) : null,
         renderVideoPlayer(videoObj),
         safeText(videoObj.description) ? p(...renderUrl(videoObj.description)) : null,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetVideos);
+          return div({ class: 'shop-title-row' }, renderReachChip(isClearnet, i18n));
+        })(),
         renderTags(videoObj.tags),
         br(),
         renderMapLocationVisitLabel(videoObj.mapUrl),
@@ -435,6 +448,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
               : null
           );
         })(),
+        div({ class: "spread-row" }, renderSpreadButton(videoObj.key, params.spreads)),
         div(
           { class: "voting-buttons" },
           opinionCategories.map((category) =>

@@ -180,7 +180,7 @@ const renderAgendaItem = (item, userId, filter) => {
 
     const subscribed = subs.includes(userId);
     if (!subscribed && String(item.status).toUpperCase() !== 'CLOSED' && item.author !== userId) {
-      actionButton = form({ method: 'GET', action: `/jobs/subscribe/${encodeURIComponent(item.id)}` },
+      actionButton = form({ method: 'POST', action: `/jobs/subscribe/${encodeURIComponent(item.id)}` },
         button({ type: 'submit', class: 'subscribe-btn' }, i18n.jobSubscribeButton)
       );
     }
@@ -213,6 +213,12 @@ exports.agendaView = async (data, filter) => {
         form({ method: 'GET', action: '/agenda' },
           button({ type: 'submit', name: 'filter', value: 'all', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterAll} (${counts.all})`),
+          button({ type: 'submit', name: 'filter', value: 'today', class: filter === 'today' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterToday || 'TODAY'} (${counts.today || 0})`),
+          button({ type: 'submit', name: 'filter', value: 'upcoming', class: filter === 'upcoming' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterUpcoming || 'UPCOMING'} (${counts.upcoming || 0})`),
+          button({ type: 'submit', name: 'filter', value: 'overdue', class: filter === 'overdue' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterOverdue || 'OVERDUE'} (${counts.overdue || 0})`),
           button({ type: 'submit', name: 'filter', value: 'open', class: filter === 'open' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterOpen} (${counts.open})`),
           button({ type: 'submit', name: 'filter', value: 'closed', class: filter === 'closed' ? 'filter-btn active' : 'filter-btn' },

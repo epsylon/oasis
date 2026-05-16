@@ -13,6 +13,48 @@ All notable changes to this project will be documented in this file.
 ### Security
 -->
 
+## v0.7.7 - 2026-05-16
+
+### Added
+
+- Proxy to Clearnet (Core plugin).
+- Lifetime model: content decay (Core plugin).
+- Suggested candidates section on job detail (Jobs plugin).
+- LAN peer discovery and feed replication (Core plugin).
+- AI navigator response page that always renders suggestions (AI plugin).
+- Carbon footprint per block shown in /blockexplorer (Blockchain plugin).
+- QR codes beside inhabitant name in /inhabitants, CV, jobs candidatures and activity cards (Core plugin).
+- OasisID in footer linked to /profile (Core plugin).
+- New Peers section in /invites with Direct Connect form (host, port, public key) (Invites plugin).
+- Smart Contract PDF export from transfer detail (Transfers plugin).
+- Melody module: generate and download personal melodies (Melody plugin).
+- Calendar dates surfaced as agenda items and overdue task reminders sent as PMs (Agenda plugin).
+- Today, Upcoming and Overdue filters on /agenda (Agenda plugin).
+- Two-column tribe-style layout on /profile and /author with module-driven Public Content (Core plugin).
+- Avatar Content toggles in /profile/edit to pick which modules appear on the avatar (Core plugin).
+
+### Changed
+
+- Unified card aesthetic across all modules: border, rounded corners, background, padding (Core plugin).
+- Stats dashboard restructured with tables sorted by count and consistent color scheme (Core plugin).
+- Market list simplified to shop-style cards with photo, kind, title and price (Market plugin).
+- Banking ECOin chart sorted and hidden when data is outdated (Banking plugin).
+- Logs Export button shown only when there are logs to export (Logs plugin).
+- Project detail and list views trimmed of empty rows and redundant summaries (Projects plugin).
+- Publishing posts immediately invalidates the activity feed cache (Core plugin).
+- First-contact flag file (Core plugin).
+- LAN router now stages discovered peers and lets the replication scheduler decide (Core plugin).
+- `oasis.sh --help` clarifies GUI options and forwarded flags (Core plugin).
+
+### Fixed
+
+- Agenda subscribe button used GET on a POST-only route (Jobs plugin).
+- LAN-discovered peers now appear in /peers Discovered and Connections (Core plugin).
+- /peers staged-peers list drained from the pull-stream source instead of being treated as an array (Core plugin).
+- Avatar Content pills now toggle off visually when unchecked (Core plugin).
+- Smart Contract PDF route no longer shadowed by the `/transfers/:id` wildcard (Transfers plugin).
+- Slow profile load and `NS_ERROR_NOT_AVAILABLE` caused by long blob waits (Core plugin).
+
 ## v0.7.6 - 2026-05-09
 
 ### Added

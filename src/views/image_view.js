@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -106,7 +106,7 @@ const renderImageOwnerActions = (filter, imgObj, params = {}) => {
   return items;
 };
 
-const renderImageList = (images, filter, params = {}) => {
+const renderImageList = exports.renderImageList = (images, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   return images.length
     ? images.map((imgObj) => {
@@ -348,7 +348,15 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.imageDescription)),
+      div({ class: "tags-header" },
+        h2(title),
+        p(i18n.imageDescription),
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetImages);
+          return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+        })()
+      ),
       div(
         { class: "filters" },
         form(
@@ -466,6 +474,11 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
             )
           : p(i18n.imageNoFile),
         safeText(imageObj.description) ? p(...renderUrl(imageObj.description)) : null,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetImages);
+          return div({ class: 'shop-title-row' }, renderReachChip(isClearnet, i18n));
+        })(),
         renderTags(imageObj.tags),
         br(),
         renderMapLocationVisitLabel(imageObj.mapUrl),
@@ -487,6 +500,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
               : null
           );
         })(),
+        div({ class: "spread-row" }, renderSpreadButton(imageObj.key, params.spreads)),
         div(
           { class: "voting-buttons" },
           opinionCategories.map((category) =>

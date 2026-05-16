@@ -38,6 +38,7 @@ if (!fs.existsSync(configFilePath)) {
       "transfersMod": "on",
       "feedMod": "on",
       "pixeliaMod": "on",
+      "melodyMod": "on",
       "agendaMod": "on",
       "aiMod": "on",
       "aiNavMod": "on",
@@ -82,7 +83,7 @@ if (!fs.existsSync(configFilePath)) {
 const getConfig = () => {
   const configData = fs.readFileSync(configFilePath);
   const cfg = JSON.parse(configData);
-  if (cfg.wish !== 'whole' && cfg.wish !== 'mutuals') cfg.wish = 'whole';
+  if (!['whole', 'mutuals', 'only-lan'].includes(cfg.wish)) cfg.wish = 'whole';
   if (cfg.pmVisibility !== 'whole' && cfg.pmVisibility !== 'mutuals') cfg.pmVisibility = 'whole';
   return cfg;
 };

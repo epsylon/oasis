@@ -455,6 +455,15 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: itemEdit?.mapUrl || "" }),
               br(),
               br(),
+              label(i18n.visibilityLabel || "Visibility"),
+              br(),
+              select(
+                { name: "visibility" },
+                option({ value: "PUBLIC", selected: (itemEdit?.visibility || "PUBLIC") === "PUBLIC" }, i18n.visibilityPublic || "Public"),
+                option({ value: "HIDDEN", selected: itemEdit?.visibility === "HIDDEN" }, i18n.visibilityHidden || "Hidden")
+              ),
+              br(),
+              br(),
               label(i18n.marketItemPrice),
               br(),
               input({ type: "number", name: "price", id: "price", value: (itemEdit && itemEdit.price) || "", required: true, step: "0.000001", min: "0.000001" }),
@@ -525,86 +534,25 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                           : null
                       ].filter(Boolean)
 
-                  const actionNodes = Array.isArray(actionNodesRaw) ? actionNodesRaw.filter(Boolean) : []
-                  return div(
-                    { class: "market-item" },
-                    div(
-                      { class: "market-card left-col" },
-                      div(
-                        { class: "market-owner-actions-inline" },
-                        form(
-                          { method: "GET", action: `/market/${encodeURIComponent(item.id)}` },
-                          input({ type: "hidden", name: "returnTo", value: returnTo }),
-                          input({ type: "hidden", name: "filter", value: filter || "all" }),
-                          input({ type: "hidden", name: "q", value: q }),
-                          input({ type: "hidden", name: "minPrice", value: String(minPrice ?? "") }),
-                          input({ type: "hidden", name: "maxPrice", value: String(maxPrice ?? "") }),
-                          input({ type: "hidden", name: "sort", value: sort }),
-                          button({ class: "filter-btn", type: "submit" }, i18n.viewDetails)
-                        ),
-                        renderPmButton(item.seller),
-                        myBid ? span({ class: "chip chip-you" }, i18n.marketMyBidBadge) : null
+                  return div({ class: "tribe-card market-tribe-card" },
+                    div({ class: "tribe-card-image-wrapper" },
+                      a({ href: `/market/${encodeURIComponent(item.id)}` },
+                        renderMediaBlob(item.image, '/assets/images/default-market.png', { class: 'tribe-card-hero-image' })
                       ),
-                      h2({ class: "market-card type" }, `${i18n.marketItemType}: ${String(item.item_type || "").toUpperCase()}`),
-                      h2(item.title),
-                      item.shopId && item.shopTitle
-                        ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.marketShopLabel || "Shop"}:`), span({ class: "card-value" }, a({ href: `/shops/${encodeURIComponent(item.shopId)}`, class: "user-link" }, item.shopTitle)))
-                        : null,
-                      renderCardField(`${i18n.marketItemStatus}:`, item.status),
-                      renderCountdownField(item),
-                      item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, moment(item.deadline).format("YYYY/MM/DD HH:mm:ss")) : null,
-                      br(),
-                      br(),
-                      div(
-                        { class: "market-card image" },
-                        renderMediaBlob(item.image, "/assets/images/default-market.png")
-                      ),
-                      p(...renderUrl(item.description))
+                      form({ method: 'GET', action: `/market/${encodeURIComponent(item.id)}`, class: 'tribe-visit-btn-wrapper' },
+                        input({ type: "hidden", name: "returnTo", value: returnTo }),
+                        input({ type: "hidden", name: "filter", value: filter || "all" }),
+                        input({ type: "hidden", name: "q", value: q }),
+                        input({ type: "hidden", name: "minPrice", value: String(minPrice ?? "") }),
+                        input({ type: "hidden", name: "maxPrice", value: String(maxPrice ?? "") }),
+                        input({ type: "hidden", name: "sort", value: sort }),
+                        button({ type: 'submit', class: 'filter-btn' }, String(i18n.marketVisitItem || 'VISIT ITEM').toUpperCase())
+                      )
                     ),
-                    div(
-                      { class: "market-card right-col" },
-                      div({ class: "market-card price" }, renderCardField(`${i18n.marketItemPrice}:`, `${item.price} ECO`)),
-                      renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
-                      renderCardField(`${i18n.marketItemIncludesShipping}:`, item.includesShipping ? i18n.YESLabel : i18n.NOLabel),
-                      renderMapLocationVisitLabel(item.mapUrl),
-                      br(),
-                      renderStockBar(item.stock, maxStock),
-                      item.item_type === "auction" && parsedBids.length > 0
-                        ? div(
-                            { class: "auction-info" },
-                            p({ class: "auction-bid-text" }, i18n.marketAuctionBids),
-                            table(
-                              { class: "auction-bid-table" },
-                              tr(th(i18n.marketAuctionBidTime), th(i18n.marketAuctionUser), th(i18n.marketAuctionBidAmount)),
-                              parsedBids.map((bid) =>
-                                tr(
-                                  td(moment(bid.time).format("YYYY-MM-DD HH:mm:ss")),
-                                  td(a({ href: `/author/${encodeURIComponent(bid.bidder)}` }, bid.bidder)),
-                                  td(`${parseFloat(bid.amount).toFixed(6)} ECO`)
-                                )
-                              )
-                            )
-                          )
-                        : null,
-                      br(),
-                      br(),
-                      div(
-                        { class: "card-comments-summary" },
-                        span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-                        span({ class: "card-value" }, String(item.commentCount || 0)),
-                        br(),
-                        br(),
-                        form(
-                          { method: "GET", action: `/market/${encodeURIComponent(item.id)}` },
-                          input({ type: "hidden", name: "returnTo", value: returnTo }),
-                          input({ type: "hidden", name: "filter", value: filter || "all" }),
-                          input({ type: "hidden", name: "q", value: q }),
-                          input({ type: "hidden", name: "minPrice", value: String(minPrice ?? "") }),
-                          input({ type: "hidden", name: "maxPrice", value: String(maxPrice ?? "") }),
-                          input({ type: "hidden", name: "sort", value: sort }),
-                          button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-                        )
-                      ),
+                    div({ class: "tribe-card-body" },
+                      span({ class: "market-card-kind" }, String(item.item_type || "").toUpperCase()),
+                      h2({ class: "tribe-card-title" }, a({ href: `/market/${encodeURIComponent(item.id)}` }, item.title)),
+                      div({ class: "market-card-price" }, `${item.price} ECO`)
                     )
                   )
                 })
@@ -684,7 +632,26 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         renderCardField(`${i18n.marketItemIncludesShipping}:`, `${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
         renderMapEmbedWithZoom(params.mapData, item.mapUrl, `/market/${encodeURIComponent(item.id)}`, params.zoom),
         item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, `${moment(item.deadline).format("YYYY/MM/DD HH:mm:ss")}`) : null,
-        renderCardFieldRich(`${i18n.marketItemSeller}:`, [userLink(item.seller)])
+        renderCardFieldRich(`${i18n.marketItemSeller}:`, [userLink(item.seller)]),
+        String(item.seller) === String(userId)
+          ? (() => {
+              const vis = (item.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC';
+              const next = vis === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC';
+              return div({ class: "card-field" },
+                span({ class: "card-label" }, `${i18n.visibilityLabel || 'Visibility'}: `),
+                span({ class: vis === 'PUBLIC' ? 'visibility-public' : 'visibility-hidden' },
+                  vis === 'PUBLIC' ? (i18n.visibilityPublic || 'Public') : (i18n.visibilityHidden || 'Hidden')
+                ),
+                " ",
+                form({ method: "POST", action: `/market/visibility/${encodeURIComponent(item.id)}`, class: "inline-form" },
+                  input({ type: "hidden", name: "visibility", value: next }),
+                  button({ type: "submit", class: "filter-btn" },
+                    next === 'PUBLIC' ? (i18n.visibilityMakePublic || 'Make public') : (i18n.visibilityMakeHidden || 'Make hidden')
+                  )
+                )
+              );
+            })()
+          : null
       ),
       item.item_type === "auction"
         ? div(

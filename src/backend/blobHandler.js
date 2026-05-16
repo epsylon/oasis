@@ -126,7 +126,7 @@ const handleBlobUpload = async function (ctx, fileFieldName) {
   return `\n[${blob.name}](${blob.id})`;
 };
 
-function waitForBlob(ssbClient, blobId, timeoutMs = 60000) {
+function waitForBlob(ssbClient, blobId, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     let done = false;
 
@@ -183,7 +183,7 @@ const serveBlob = async function (ctx) {
   const ssbClient = await cooler.open();
 
   try {
-    await waitForBlob(ssbClient, blobId, 60000);
+    await waitForBlob(ssbClient, blobId, 8000);
   } catch (err) {
     ctx.status = 504;
     ctx.body = 'Blob not available';

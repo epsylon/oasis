@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 const opinionCategories = require("../backend/opinion_categories");
@@ -141,7 +141,7 @@ const renderDocumentCommentsSection = (documentKey, rootId, comments = [], retur
   );
 };
 
-const renderDocumentList = (documents, filter, params = {}) => {
+const renderDocumentList = exports.renderDocumentList = (documents, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
   return documents.length
@@ -282,7 +282,15 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
   const tpl = template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.documentDescription)),
+      div({ class: "tags-header" },
+        h2(title),
+        p(i18n.documentDescription),
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetDocuments);
+          return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+        })()
+      ),
       div(
         { class: "filters" },
         form(
@@ -401,6 +409,11 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
           ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
           : p(i18n.documentNoFile),
         safeText(doc.description) ? p(...renderUrl(doc.description)) : null,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetDocuments);
+          return div({ class: 'shop-title-row' }, renderReachChip(isClearnet, i18n));
+        })(),
         renderTags(doc.tags),
         br(),
         (() => {
@@ -420,6 +433,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
               : null
           );
         })(),
+        div({ class: "spread-row" }, renderSpreadButton(doc.key, params.spreads)),
         div(
           { class: "voting-buttons" },
           opinionCategories.map((category) =>

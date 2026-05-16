@@ -297,6 +297,39 @@ models.about = {
     });
     return result === true;
   },
+  visibilityPrefs: async (feedId) => {
+    const result = await getAbout({ key: "visibilityPrefs", feedId });
+    if (!result || typeof result !== 'object') return null;
+    return {
+      activity: result.activity === true,
+      device:   result.device   === true,
+      karma:    result.karma !== false,
+      ubi:      result.ubi      === true,
+      wallet:   result.wallet   === true,
+      ecoTax:   result.ecoTax   !== false,
+      clearnet: result.clearnet === true,
+      clearnetShops:     result.clearnetShops     === true,
+      clearnetJobs:      result.clearnetJobs      === true,
+      clearnetEvents:    result.clearnetEvents    === true,
+      clearnetProjects:  result.clearnetProjects  === true,
+      clearnetPosts:     result.clearnetPosts     === true,
+      clearnetAudios:    result.clearnetAudios    === true,
+      clearnetVideos:    result.clearnetVideos    === true,
+      clearnetImages:    result.clearnetImages    === true,
+      clearnetDocuments: result.clearnetDocuments === true,
+      clearnetTorrents:  result.clearnetTorrents  === true,
+      profileShops:      result.profileShops      === true,
+      profileJobs:       result.profileJobs       === true,
+      profileEvents:     result.profileEvents     === true,
+      profileProjects:   result.profileProjects   === true,
+      profilePosts:      result.profilePosts      === true,
+      profileAudios:     result.profileAudios     === true,
+      profileVideos:     result.profileVideos     === true,
+      profileImages:     result.profileImages     === true,
+      profileDocuments:  result.profileDocuments  === true,
+      profileTorrents:   result.profileTorrents   === true
+    };
+  },
   name: async (feedId) => {
     if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
       return "Redacted";
@@ -362,7 +395,7 @@ models.about = {
     const abortable = pullAbortable();
     let intervals = [];
     cooler.open().then((ssb) => {
-      console.time("Warmup-time");
+      const _warmupStart = Date.now();
       pull(
         ssb.query.read({
           live: true,
@@ -382,7 +415,9 @@ models.about = {
         abortable,
         pull.filter((msg) => {
           if (msg.sync && msg.sync === true) {
-            console.timeEnd("Warmup-time");
+            const _elapsed = Date.now() - _warmupStart;
+            const _fmt = _elapsed >= 1000 ? `${(_elapsed/1000).toFixed(2)}s` : `${_elapsed}ms`;
+            console.log(`- Warmup-time: ${_fmt}`);
             transposeLookupTable();
             intervals.push(setInterval(transposeLookupTable, 1000 * 60)); 
             return false;
@@ -714,7 +749,44 @@ models.meta = {
           }
         }
       } catch {}
-      const allDbPeers = await enrichEntries(snapshot);
+      let stagedEntries = [];
+      try {
+        if (ssb.conn && typeof ssb.conn.stagedPeers === 'function') {
+          stagedEntries = await new Promise((resolve) => {
+            try {
+              pull(
+                ssb.conn.stagedPeers(),
+                pull.take(1),
+                pull.collect((err, results) => {
+                  if (err || !results || !results[0]) return resolve([]);
+                  resolve(Array.isArray(results[0]) ? results[0] : []);
+                })
+              );
+            } catch (_) { resolve([]); }
+          });
+        }
+      } catch {}
+      const dbKeys = new Set(
+        snapshot
+          .map(([, d]) => d && d.key ? canonicalizePubId(d.key) : null)
+          .filter(Boolean)
+      );
+      const mergedSnapshot = snapshot.slice();
+      for (const entry of stagedEntries) {
+        const data = Array.isArray(entry) ? entry[1] : entry;
+        const addr = Array.isArray(entry) ? entry[0] : null;
+        if (!data || !data.key) continue;
+        const ck = canonicalizePubId(data.key);
+        if (dbKeys.has(ck)) continue;
+        let host = data.host, port = data.port;
+        if ((!host || !port) && addr) {
+          const m = String(addr).match(/^net:([^:]+):(\d+)/);
+          if (m) { host = host || m[1]; port = port || Number(m[2]); }
+        }
+        mergedSnapshot.push([addr, { key: data.key, host, port, source: data.type || 'staged', verified: data.verified }]);
+        dbKeys.add(ck);
+      }
+      const allDbPeers = await enrichEntries(mergedSnapshot);
       for (const [, peerData] of allDbPeers) {
         if ((!peerData.announcers || peerData.announcers === 0) && gossipMap.has(peerData.key)) {
           const gossipEntry = gossipMap.get(peerData.key);
@@ -1795,8 +1867,43 @@ const post = {
         });
       });
     },
-    publishProfileEdit: async ({ name, description, image }) => {
+    publishProfileEdit: async ({ name, description, image, visibilityPrefs }) => {
       const ssb = await cooler.open();
+      const normalizePrefs = (raw) => {
+        const r = raw || {};
+        return {
+          activity: r.activity === true,
+          device:   r.device   === true,
+          karma:    r.karma !== false,
+          ubi:      r.ubi      === true,
+          wallet:   r.wallet   === true,
+          ecoTax:   r.ecoTax   !== false,
+          clearnet: r.clearnet === true,
+          clearnetShops:     r.clearnetShops     === true,
+          clearnetJobs:      r.clearnetJobs      === true,
+          clearnetEvents:    r.clearnetEvents    === true,
+          clearnetProjects:  r.clearnetProjects  === true,
+          clearnetPosts:     r.clearnetPosts     === true,
+          clearnetAudios:    r.clearnetAudios    === true,
+          clearnetVideos:    r.clearnetVideos    === true,
+          clearnetImages:    r.clearnetImages    === true,
+          clearnetDocuments: r.clearnetDocuments === true,
+          clearnetTorrents:  r.clearnetTorrents  === true,
+          profileShops:      r.profileShops      === true,
+          profileJobs:       r.profileJobs       === true,
+          profileEvents:     r.profileEvents     === true,
+          profileProjects:   r.profileProjects   === true,
+          profilePosts:      r.profilePosts      === true,
+          profileAudios:     r.profileAudios     === true,
+          profileVideos:     r.profileVideos     === true,
+          profileImages:     r.profileImages     === true,
+          profileDocuments:  r.profileDocuments  === true,
+          profileTorrents:   r.profileTorrents   === true
+        };
+      };
+      const prefs = visibilityPrefs ? normalizePrefs(visibilityPrefs) : undefined;
+      const baseFields = { type: "about", about: ssb.id, name, description };
+      if (prefs) baseFields.visibilityPrefs = prefs;
       if (image && image.length > 0) {
         const megabyte = Math.pow(2, 20);
         const maxSize = 50 * megabyte;
@@ -1810,13 +1917,7 @@ const post = {
               if (err) {
                 reject(err);
               } else {
-                const content = {
-                  type: "about",
-                  about: ssb.id,
-                  name,
-                  description,
-                  image: blobId,
-                };
+                const content = { ...baseFields, image: blobId };
                 ssb.publish(content, (err, msg) => {
                   if (err) reject(err);
                   else resolve(msg);
@@ -1826,9 +1927,8 @@ const post = {
           );
         });
       } else {
-        const body = { type: "about", about: ssb.id, name, description };
         return new Promise((resolve, reject) => {
-          ssb.publish(body, (err, msg) => {
+          ssb.publish(baseFields, (err, msg) => {
             if (err) reject(err);
             else resolve(msg);
           });
@@ -2025,5 +2125,133 @@ models.vote = {
       });
   },
 };
+
+models.lifetime = (() => {
+  const FRESH_GREEN_DAYS = 14;
+  const FRESH_ORANGE_DAYS = 182.5;
+  const norm = (t) => (t && t < 1e12 ? t * 1000 : t || 0);
+  const bucketOf = (ts) => {
+    if (!ts) return { bucket: 'red', range: '≥6m' };
+    const days = Math.max(0, Date.now() - ts) / 86400000;
+    if (days < FRESH_GREEN_DAYS) return { bucket: 'green', range: '<2w' };
+    if (days < FRESH_ORANGE_DAYS) return { bucket: 'orange', range: '2w–6m' };
+    return { bucket: 'red', range: '≥6m' };
+  };
+  const lastAuthorTs = async (feedId) => {
+    if (!feedId) return null;
+    const ssbClient = await cooler.open();
+    return new Promise((resolve) => {
+      try {
+        pull(
+          ssbClient.createUserStream({ id: feedId, reverse: true }),
+          pull.filter(m => m && m.value && m.value.content && m.value.content.type !== 'tombstone'),
+          pull.take(1),
+          pull.collect((err, arr) => {
+            if (err || !arr || !arr.length) return resolve(null);
+            const m = arr[0];
+            resolve(norm((m.value && m.value.timestamp) || m.timestamp) || null);
+          })
+        );
+      } catch (_) { resolve(null); }
+    });
+  };
+  const lastBacklinkTs = async (msgKey) => {
+    if (!msgKey) return null;
+    const ssbClient = await cooler.open();
+    return new Promise((resolve) => {
+      try {
+        pull(
+          ssbClient.backlinks.read({ query: [{ $filter: { dest: msgKey } }], index: 'DTA', reverse: true, limit: 1 }),
+          pull.collect((err, arr) => {
+            if (err || !arr || !arr.length) return resolve(null);
+            const m = arr[0];
+            resolve(norm((m.value && m.value.timestamp) || m.timestamp) || null);
+          })
+        );
+      } catch (_) { resolve(null); }
+    });
+  };
+  return {
+    bucket: bucketOf,
+    lastAuthorTs,
+    lastBacklinkTs,
+    async forContent({ key, author, createdAt } = {}) {
+      const [authorTs, interactionTs] = await Promise.all([
+        author ? lastAuthorTs(author) : null,
+        key ? lastBacklinkTs(key) : null
+      ]);
+      const createdTs = createdAt ? new Date(createdAt).getTime() : null;
+      const candidates = [authorTs, interactionTs, createdTs].filter(x => typeof x === 'number' && x > 0);
+      const lastTs = candidates.length ? Math.max(...candidates) : null;
+      const { bucket, range } = bucketOf(lastTs);
+      return { bucket, range, lastTs, authorTs, interactionTs, createdTs };
+    },
+    async enrichAndFilter(items, opts = {}) {
+      const { includeDead = false, getKey = (x) => x.id || x.key, getAuthor = (x) => x.author, getCreatedAt = (x) => x.createdAt } = opts;
+      const authorCache = new Map();
+      const out = [];
+      for (const item of items) {
+        const author = getAuthor(item);
+        let authorTs;
+        if (author && authorCache.has(author)) {
+          authorTs = authorCache.get(author);
+        } else {
+          authorTs = author ? await lastAuthorTs(author) : null;
+          if (author) authorCache.set(author, authorTs);
+        }
+        const key = getKey(item);
+        const interactionTs = key ? await lastBacklinkTs(key) : null;
+        const createdAt = getCreatedAt(item);
+        const createdTs = createdAt ? new Date(createdAt).getTime() : null;
+        const candidates = [authorTs, interactionTs, createdTs].filter(x => typeof x === 'number' && x > 0);
+        const lastTs = candidates.length ? Math.max(...candidates) : null;
+        const { bucket, range } = bucketOf(lastTs);
+        if (!includeDead && bucket === 'red') continue;
+        out.push({ ...item, lifetime: { bucket, range, lastTs, authorTs, interactionTs, createdTs } });
+      }
+      return out;
+    }
+  };
+})();
+
+models.spreads = {
+  /**
+   * Returns { count, voters: [{ key, name }], alreadySpread } for a given msgKey.
+   * A "spread" is a vote with value=1 referencing msgKey AND with msgKey in branch.
+   */
+  forMessage: async (msgKey) => {
+    if (!msgKey || typeof msgKey !== 'string') return { count: 0, voters: [], alreadySpread: false };
+    const ssb = await cooler.open();
+    const myId = ssb.id;
+    return new Promise((resolve) => {
+      pull(
+        ssb.backlinks.read({
+          query: [{ $filter: { dest: msgKey, value: { content: { type: 'vote' } } } }],
+          index: 'DTA',
+          meta: true
+        }),
+        pull.filter(ref => {
+          if (!ref || !ref.value || !ref.value.content) return false;
+          const c = ref.value.content;
+          if (!c.vote || c.vote.link !== msgKey || Number(c.vote.value) !== 1) return false;
+          const br = Array.isArray(c.branch) ? c.branch : (typeof c.branch === 'string' ? [c.branch] : []);
+          return br.includes(msgKey);
+        }),
+        pull.collect(async (err, refs) => {
+          if (err) return resolve({ count: 0, voters: [], alreadySpread: false });
+          const byAuthor = new Map();
+          for (const r of refs) byAuthor.set(r.value.author, true);
+          const authors = Array.from(byAuthor.keys());
+          const voters = await Promise.all(authors.map(async (k) => ({
+            key: k,
+            name: await models.about.name(k).catch(() => k.slice(1, 9))
+          })));
+          resolve({ count: voters.length, voters, alreadySpread: authors.includes(myId) });
+        })
+      );
+    });
+  }
+};
+
 return models;
 };

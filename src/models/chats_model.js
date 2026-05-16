@@ -14,9 +14,18 @@ const normalizeTags = (raw) => {
 const INVITE_CODE_BYTES = 16
 const VALID_STATUS = ["OPEN", "INVITE-ONLY", "CLOSED"]
 
-module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
+module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
+
+  const ownCrypto = chatCrypto || tribeCrypto
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null
+  const lookupKeys = (rid) => {
+    const a = (ownCrypto && ownCrypto.getKeys(rid)) || []
+    if (a.length) return a
+    return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
+  }
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
 
   const getTribeKeysFor = async (tribeId) => {
     if (!tribeCrypto || !tribesModel || !tribeId) return []
@@ -79,7 +88,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
   const resolveKeyChainSets = (chatRootId) => {
     if (!tribeCrypto) return []
-    const keys = tribeCrypto.getKeys(chatRootId)
+    const keys = lookupKeys(chatRootId)
     return keys.map(k => [k])
   }
 
@@ -118,7 +127,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
     let text = c.text || ""
     if (tribeCrypto && c.encryptedText) {
-      const candidateKeys = [...tribeKeys, ...tribeCrypto.getKeys(chatRootId)]
+      const candidateKeys = [...tribeKeys, ...lookupKeys(chatRootId)]
       for (const keyHex of candidateKeys) {
         try {
           text = tribeCrypto.decryptWithKey(c.encryptedText, keyHex)
@@ -214,7 +223,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         })
       }
 
-      const chatKey = tribeCrypto.generateTribeKey()
+      const chatKey = ownCrypto.generateTribeKey()
       if (st === "OPEN") {
         const code = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex")
         const ek = tribeCrypto.encryptForInvite(chatKey, code)
@@ -224,7 +233,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const result = await new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
       })
-      tribeCrypto.setKey(result.key, chatKey, 1)
+      ownCrypto.setKey(result.key, chatKey, 1)
       try {
         const ssbKeys = require("../server/node_modules/ssb-keys")
         const boxedKey = tribeCrypto.boxKeyForMember(chatKey, userId, ssbKeys)
@@ -285,7 +294,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
             if (chain.length) updated = tribeCrypto.encryptContent(updated, chain, true)
           } catch (_) {}
         } else {
-          const chatKey = tribeCrypto.getKey(rootId)
+          const chatKey = lookupKey(rootId)
           if (chatKey) updated = tribeCrypto.encryptContent(updated, [chatKey], true)
         }
       }
@@ -423,12 +432,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (tribeCrypto) {
         const ekChain = tribeCrypto.encryptChainForInvite([chat.rootId], code)
         if (ekChain) {
-          invite = { code, ekChain, gen: tribeCrypto.getGen(chat.rootId) }
+          invite = { code, ekChain, gen: lookupGen(chat.rootId) }
         } else {
-          const chatKey = tribeCrypto.getKey(chat.rootId)
+          const chatKey = lookupKey(chat.rootId)
           if (chatKey) {
             const ek = tribeCrypto.encryptForInvite(chatKey, code)
-            invite = { code, ek, gen: tribeCrypto.getGen(chat.rootId) }
+            invite = { code, ek, gen: lookupGen(chat.rootId) }
           }
         }
       }
@@ -484,7 +493,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
           }
         } else if (matchedInvite.ek) {
           chatKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code)
-          tribeCrypto.setKey(matchedChat.rootId, chatKey, matchedInvite.gen || 1)
+          ownCrypto.setKey(matchedChat.rootId, chatKey, matchedInvite.gen || 1)
         }
       }
 
@@ -507,7 +516,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
           }
           if (Object.keys(memberKeys).length) {
             await new Promise((resolve) => {
-              ssbClient.publish({ type: "tribe-keys", tribeId: matchedChat.rootId, generation: tribeCrypto.getGen(matchedChat.rootId) || 1, memberKeys }, () => resolve())
+              ssbClient.publish({ type: "tribe-keys", tribeId: matchedChat.rootId, generation: lookupGen(matchedChat.rootId) || 1, memberKeys }, () => resolve())
             })
           }
         } catch (_) {}
@@ -575,7 +584,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (tribeCrypto) {
         let encKey = null
         if (chat.tribeId) encKey = await getTribeFirstKeyFor(chat.tribeId)
-        if (!encKey) encKey = tribeCrypto.getKey(chat.rootId)
+        if (!encKey) encKey = lookupKey(chat.rootId)
         if (encKey) {
           content.encryptedText = tribeCrypto.encryptWithKey(safeText(text), encKey)
           if (chat.tribeId) content.tribeId = chat.tribeId

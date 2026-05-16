@@ -32,9 +32,18 @@ const expandRecurrence = (firstDate, deadline, weekly, monthly, yearly) => {
   return out.sort((a, b) => a.getTime() - b.getTime())
 }
 
-module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
+module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
+
+  const ownCrypto = calendarCrypto || tribeCrypto
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null
+  const lookupKeys = (rid) => {
+    const a = (ownCrypto && ownCrypto.getKeys(rid)) || []
+    if (a.length) return a
+    return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
+  }
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
 
   const readAll = async (ssbClient) =>
     new Promise((resolve, reject) =>
@@ -48,7 +57,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
 
   const encryptStandalone = (content, rootId) => {
     if (!tribeCrypto || !rootId) return content
-    const key = tribeCrypto.getKey(rootId)
+    const key = lookupKey(rootId)
     if (!key) return content
     return tribeCrypto.encryptContent(content, [key], true)
   }
@@ -56,7 +65,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
   const decryptCalendarRoot = (content, rootId) => {
     if (!content || !content.encryptedPayload) return content
     if (!tribeCrypto) return content
-    const keys = tribeCrypto.getKeys(rootId)
+    const keys = lookupKeys(rootId)
     if (!keys || !keys.length) return { ...content, _undecryptable: true }
     return tribeCrypto.decryptContent(content, keys.map(k => [k]))
   }
@@ -204,7 +213,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
       if (tribeId) {
         content = await encryptIfTribe(plainContent)
       } else if (tribeCrypto) {
-        calKey = tribeCrypto.generateTribeKey()
+        calKey = ownCrypto.generateTribeKey()
         content = tribeCrypto.encryptContent(plainContent, [calKey], true)
       }
 
@@ -215,7 +224,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
       const calendarId = calMsg.key
 
       if (calKey && tribeCrypto) {
-        tribeCrypto.setKey(calendarId, calKey, 1)
+        ownCrypto.setKey(calendarId, calKey, 1)
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys")
           const boxedKey = tribeCrypto.boxKeyForMember(calKey, userId, ssbKeys)
@@ -515,10 +524,19 @@ module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
         if (!c || c.type !== "calendarDate") continue
         if (c.calendarId !== rootId) continue
         let dec = c
-        if (c.encryptedPayload && tribeCrypto && tribesModel) {
-          const r = await tribeCrypto.decryptFromTribe(c, tribesModel)
-          dec = r && !r._undecryptable ? r : c
-          if (r && r._undecryptable) continue
+        if (c.encryptedPayload && tribeCrypto) {
+          if (c.tribeId && tribesModel) {
+            const r = await tribeCrypto.decryptFromTribe(c, tribesModel)
+            dec = r && !r._undecryptable ? r : c
+            if (r && r._undecryptable) continue
+          } else {
+            const keys = lookupKeys(c.calendarId)
+            if (keys && keys.length) {
+              const r = tribeCrypto.decryptContent(c, keys.map(k => [k]))
+              dec = r && !r._undecryptable ? r : c
+              if (r && r._undecryptable) continue
+            }
+          }
         }
         const baseEntry = {
           key: m.key,
@@ -781,7 +799,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
       let invite = code
       if (tribeCrypto && !cal.tribeId) {
         const ekChain = tribeCrypto.encryptChainForInvite([cal.rootId], code)
-        if (ekChain) invite = { code, ekChain, gen: tribeCrypto.getGen(cal.rootId) }
+        if (ekChain) invite = { code, ekChain, gen: lookupGen(cal.rootId) }
       }
       const tipId = await this.resolveCurrentId(calendarId)
       const item = await new Promise((resolve, reject) => ssbClient.get(tipId, (e, it) => e ? reject(e) : resolve(it)))
@@ -843,7 +861,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
           }
         } else if (matchedInvite.ek) {
           calKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code)
-          tribeCrypto.setKey(matched.rootId, calKey, matchedInvite.gen || 1)
+          ownCrypto.setKey(matched.rootId, calKey, matchedInvite.gen || 1)
         }
       }
       const tipId = await this.resolveCurrentId(matched.rootId)
@@ -887,7 +905,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, tribesModel }) => {
           }
           if (Object.keys(memberKeys).length) {
             await new Promise((resolve) => {
-              ssbClient.publish({ type: "tribe-keys", tribeId: matched.rootId, generation: tribeCrypto.getGen(matched.rootId) || 1, memberKeys }, () => resolve())
+              ssbClient.publish({ type: "tribe-keys", tribeId: matched.rootId, generation: lookupGen(matched.rootId) || 1, memberKeys }, () => resolve())
             })
           }
         } catch (_) {}

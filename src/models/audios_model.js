@@ -241,6 +241,8 @@ module.exports = ({ cooler }) => {
       else if (filter === "recent") list = list.filter((a) => new Date(a.createdAt).getTime() >= now - 86400000);
       else if (filter === "top") {
         list = list.slice().sort((a, b) => voteSum(b.opinions) - voteSum(a.opinions) || new Date(b.createdAt) - new Date(a.createdAt));
+      } else if (filter === "blockchain") {
+        list = list.filter((a) => safeArr(a.tags).some((t) => String(t).toLowerCase() === "blockchain"));
       }
 
       if (q) {

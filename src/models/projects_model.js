@@ -181,7 +181,8 @@ module.exports = ({ cooler }) => {
         author: ssbClient.id,
         createdAt: new Date().toISOString(),
         updatedAt: null,
-        mapUrl: String(data.mapUrl || "").trim()
+        mapUrl: String(data.mapUrl || "").trim(),
+        clearnetPublic: data.clearnetPublic === true || data.clearnetPublic === 'true' || data.clearnetPublic === 'on'
       }
 
       return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))
@@ -242,7 +243,8 @@ module.exports = ({ cooler }) => {
         bounties,
         deadline,
         progress: patch.progress === undefined ? current.progress : clampPercent(patch.progress),
-        status: patch.status === undefined ? current.status : String(patch.status || "").toUpperCase()
+        status: patch.status === undefined ? current.status : String(patch.status || "").toUpperCase(),
+        clearnetPublic: patch.clearnetPublic === undefined ? !!current.clearnetPublic : (patch.clearnetPublic === true || patch.clearnetPublic === 'true' || patch.clearnetPublic === 'on')
       }
 
       return publishReplace(ssbClient, current.id, updated)

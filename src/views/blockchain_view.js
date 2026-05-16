@@ -25,6 +25,17 @@ const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audi
 
 const SEARCH_FIELDS = ['author','id','from','to'];
 
+const formatCarbon = (bytes) => {
+  const n = Number(bytes) || 0;
+  if (!n) return '0 µg CO₂';
+  const grams = (n / (1024 * 1024)) * 0.095;
+  if (grams >= 1) return `${grams.toFixed(2)} g CO₂`;
+  const mg = grams * 1000;
+  if (mg >= 1) return `${mg.toFixed(2)} mg CO₂`;
+  const ug = mg * 1000;
+  return `${ug.toFixed(2)} µg CO₂`;
+};
+
 const hiddenSearchInputs = (search) =>
   SEARCH_FIELDS.map(k => {
     const v = String(search?.[k] ?? '').trim();
@@ -66,6 +77,69 @@ const filterBlocks = (blocks, filter, userId) => {
   if (filter === 'shop') return blocks.filter(b => b.type === 'shop' || b.type === 'shopProduct');
   if (filter === 'logs') return blocks.filter(b => b.type === 'log' && b.author === userId);
   return blocks.filter(b => b.type === filter);
+};
+
+const computeStats = (blocks) => {
+  const arr = Array.isArray(blocks) ? blocks : [];
+  const byType = new Map();
+  const byAuthor = new Map();
+  for (const b of arr) {
+    if (!b || !b.type) continue;
+    byType.set(b.type, (byType.get(b.type) || 0) + 1);
+    if (b.author) byAuthor.set(b.author, (byAuthor.get(b.author) || 0) + 1);
+  }
+  const typeBreakdown = Array.from(byType.entries())
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count);
+  const topAuthors = Array.from(byAuthor.entries())
+    .map(([author, count]) => ({ author, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+  return { total: arr.length, typeBreakdown, topAuthors };
+};
+
+const renderStatsPanel = (stats, currentFilter, search) => {
+  if (!stats || stats.total === 0) return null;
+  const topTypes = stats.typeBreakdown.slice(0, 10);
+  return div({ class: 'blockchain-stats' },
+    div({ class: 'tags-header' },
+      h3(`${i18n.blockchainStatsTitle || 'Stats'} (${stats.total})`)
+    ),
+    topTypes.length
+      ? div({ class: 'blockchain-stats-types' },
+          h3({ class: 'blockchain-stats-subtitle' }, i18n.blockchainStatsTypeBreakdown || 'Type breakdown'),
+          div({ class: 'mode-buttons-cols' },
+            topTypes.map(({ type, count }) =>
+              form({ method: 'GET', action: '/blockexplorer' },
+                input({ type: 'hidden', name: 'filter', value: type }),
+                ...hiddenSearchInputs(search),
+                button({
+                  type: 'submit',
+                  class: currentFilter === type ? 'filter-btn active' : 'filter-btn'
+                }, `${(FILTER_LABELS[type] || type).toUpperCase()} (${count})`)
+              )
+            )
+          )
+        )
+      : null,
+    stats.topAuthors.length
+      ? div({ class: 'blockchain-stats-authors' },
+          h3({ class: 'blockchain-stats-subtitle' }, i18n.blockchainStatsTopAuthors || 'Top authors'),
+          table({ class: 'block-info-table' },
+            tr(
+              td({ class: 'card-label' }, i18n.blockchainBlockAuthor),
+              td({ class: 'card-label' }, i18n.blockchainStatsCount || 'Blocks')
+            ),
+            ...stats.topAuthors.map(({ author, count }) =>
+              tr(
+                td(a({ href: `/blockexplorer?filter=all&author=${encodeURIComponent(author)}`, class: 'user-link block-author' }, author)),
+                td(String(count))
+              )
+            )
+          )
+        )
+      : null
+  );
 };
 
 const generateFilterButtons = (filters, currentFilter, action, search = {}) =>
@@ -273,6 +347,10 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
               span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
               span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
             ),
+            div({ class: 'block-row block-row--meta' },
+              span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockCarbon || 'Carbon footprint'}:`),
+              span({ class: 'blockchain-card-value' }, formatCarbon(block.size))
+            ),
             div({ class: 'block-row block-row--meta block-row--meta-spaced' },
               a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author)
             )
@@ -413,7 +491,8 @@ const renderBlockchainView = (blocks, filter, userId, search = {}) => {
                     tr(td({ class:'card-label' }, i18n.blockchainBlockTimestamp), td({ class:'card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ'))),
                     tr(td({ class:'card-label' }, i18n.blockchainBlockID),        td({ class:'card-value' }, block.id)),
                     tr(td({ class:'card-label' }, i18n.blockchainBlockType),      td({ class:'card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())),
-                    tr(td({ class:'card-label' }, i18n.blockchainBlockAuthor),    td({ class:'card-value' }, a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author)))
+                    tr(td({ class:'card-label' }, i18n.blockchainBlockAuthor),    td({ class:'card-value' }, a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author))),
+                    tr(td({ class:'card-label' }, i18n.blockchainBlockCarbon || 'Carbon footprint'), td({ class:'card-value' }, formatCarbon(block.size)))
                   )
                 )
               )
@@ -422,5 +501,5 @@ const renderBlockchainView = (blocks, filter, userId, search = {}) => {
   );
 };
 
-module.exports = { renderBlockchainView, renderSingleBlockView };
+module.exports = { renderBlockchainView, renderSingleBlockView, computeStats };
 

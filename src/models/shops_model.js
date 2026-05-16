@@ -72,6 +72,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       location: c.location || "",
       tags: safeArr(c.tags),
       visibility: c.visibility || "OPEN",
+      clearnetPublic: !!c.clearnetPublic,
       author: c.author || node.author,
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
@@ -139,7 +140,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       return tip
     },
 
-    async createShop(title, shortDescription, description, image, url, location, tagsRaw, visibility, mapUrl) {
+    async createShop(title, shortDescription, description, image, url, location, tagsRaw, visibility, mapUrl, clearnetPublic) {
       const ssbClient = await openSsb()
       const blobId = image ? String(image).trim() || null : null
       const tags = normalizeTags(tagsRaw)
@@ -156,6 +157,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         location: safeText(location),
         tags,
         visibility: vis,
+        clearnetPublic: clearnetPublic === true || clearnetPublic === 'true' || clearnetPublic === 'on',
         mapUrl: safeText(mapUrl),
         author: ssbClient.id,
         createdAt: now,
@@ -190,6 +192,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
             location: data.location !== undefined ? safeText(data.location) : c.location,
             tags: data.tags !== undefined ? normalizeTags(data.tags) : c.tags,
             visibility: data.visibility !== undefined ? (String(data.visibility).toUpperCase() === "CLOSED" ? "CLOSED" : "OPEN") : c.visibility,
+            clearnetPublic: data.clearnetPublic !== undefined ? (data.clearnetPublic === true || data.clearnetPublic === 'true' || data.clearnetPublic === 'on') : !!c.clearnetPublic,
             updatedAt: new Date().toISOString(),
             replaces: tipId
           }
@@ -479,6 +482,85 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
       await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => e ? rej(e) : res()))
       return new Promise((res, rej) => ssbClient.publish(updated, (e, m) => e ? rej(e) : res(m)))
+    },
+
+    async createPurchaseOrder(productId, deliveryDetails = {}) {
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
+
+      let tip = productId
+      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      if (idx.tomb.has(tip)) throw new Error("Product not found")
+      const tipId = tip
+
+      let rootId = tipId
+      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
+
+      const node = idx.nodes.get(tipId)
+      if (!node) throw new Error("Product not found")
+      const c = node.c
+      const shopOwner = c.author
+      if (shopOwner === userId) throw new Error("Cannot buy your own product")
+
+      const content = {
+        type: "shop-purchase",
+        productId: rootId,
+        productTipId: tipId,
+        shopId: c.shopId || "",
+        title: String(c.title || ""),
+        price: c.price || "",
+        deliveryAddress: String(deliveryDetails.deliveryAddress || ""),
+        contact: String(deliveryDetails.contact || ""),
+        notes: String(deliveryDetails.notes || ""),
+        createdAt: new Date().toISOString()
+      }
+
+      const recps = [userId, shopOwner]
+      return new Promise((res, rej) => ssbClient.private.publish(content, recps, (e, m) => e ? rej(e) : res(m)))
+    },
+
+    async listMyPurchases() {
+      const ssbClient = await openSsb()
+      const me = ssbClient.id
+      const messages = await readAll(ssbClient)
+      const out = []
+      for (const m of messages) {
+        if (typeof m.value?.content !== "string") continue
+        try {
+          const dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
+          if (!dec?.value?.content) continue
+          const dc = dec.value.content
+          if (dc.type !== "shop-purchase") continue
+          if (dec.value.author !== me) continue
+          out.push({ id: m.key, ...dc, buyer: dec.value.author, ts: dec.value.timestamp || m.timestamp || 0 })
+        } catch (_) {}
+      }
+      return out.sort((a, b) => b.ts - a.ts)
+    },
+
+    async listShopOrders(shopRootId) {
+      const ssbClient = await openSsb()
+      const me = ssbClient.id
+      const shop = await this.getShopById(shopRootId).catch(() => null)
+      if (!shop) throw new Error("Shop not found")
+      if (shop.author !== me) throw new Error("Not the shop owner")
+
+      const messages = await readAll(ssbClient)
+      const out = []
+      for (const m of messages) {
+        if (typeof m.value?.content !== "string") continue
+        try {
+          const dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
+          if (!dec?.value?.content) continue
+          const dc = dec.value.content
+          if (dc.type !== "shop-purchase") continue
+          if (dc.shopId !== shopRootId) continue
+          out.push({ id: m.key, ...dc, buyer: dec.value.author, ts: dec.value.timestamp || m.timestamp || 0 })
+        } catch (_) {}
+      }
+      return out.sort((a, b) => b.ts - a.ts)
     },
 
     async createOpinion(id, category) {

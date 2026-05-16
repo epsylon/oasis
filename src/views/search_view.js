@@ -1,4 +1,4 @@
-const { form, button, div, h2, p, section, input, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink} = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
@@ -22,6 +22,7 @@ const rewriteHashtagLinks = (html) => {
 
 const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, resultCount = "10" }) => {
   const searchInput = input({
+    id: "search_query",
     name: "query",
     required: false,
     type: "search",
@@ -58,10 +59,10 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       class: "input-select",
       style: "position:relative; z-index:10;margin-left:10px;"
     },
-    option({ value: "100", selected: resultCount === "100" }, "100"),
-    option({ value: "50", selected: resultCount === "50" }, "50"),
-    option({ value: "10", selected: resultCount === "10" }, "10"),
-    option({ value: "all", selected: resultCount === "all" }, i18n.allTypesLabel)
+    option({ value: "100", selected: resultCount === "100" ? "selected" : undefined }, "100"),
+    option({ value: "50", selected: resultCount === "50" ? "selected" : undefined }, "50"),
+    option({ value: "10", selected: resultCount === "10" ? "selected" : undefined }, "10"),
+    option({ value: "all", selected: resultCount === "all" ? "selected" : undefined }, i18n.allTypesLabel)
   );
 
   const getViewDetailsActionForSearch = (type, contentId, content) => {
@@ -607,11 +608,33 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       ),
       form(
         { action: "/search", method: "POST", class: "search-form" },
-        div({ class: "search-bar" },
-          filterSelect,
-          resultsPerPageSelect,
-          searchInput,
-          br(), br(),
+        div({ class: "search-filters-row" },
+          table({ class: "search-filters-table" },
+            tr(
+              td({ class: 'card-label' }, label({ for: "search_from" }, i18n.searchFromLabel || "From")),
+              td(input({ id: "search_from", type: "datetime-local", name: "from" }))
+            ),
+            tr(
+              td({ class: 'card-label' }, label({ for: "search_to" }, i18n.searchToLabel || "To")),
+              td(input({ id: "search_to", type: "datetime-local", name: "to" }))
+            ),
+            tr(
+              td({ class: 'card-label' }, label({ for: "search_inhabitant" }, "Oasis ID")),
+              td(input({ id: "search_inhabitant", type: "text", name: "inhabitant", placeholder: "@...=.ed25519", pattern: "@[A-Za-z0-9+/_\\-]{43}=\\.ed25519", maxlength: 56, class: "search-oasis-id" }))
+            )
+          ),
+          table({ class: "search-filters-table" },
+            tr(
+              td({ class: 'card-label' }, label({ for: "search_query" }, i18n.searchQueryLabel || "Query")),
+              td(searchInput)
+            ),
+            tr(
+              td({ class: 'card-label' }, label({ for: "results-per-page" }, i18n.searchPerPageLabel || "Results per page")),
+              td(resultsPerPageSelect)
+            )
+          )
+        ),
+        div({ class: "search-submit-row" },
           button({ type: "submit" }, i18n.searchSubmit)
         )
       )

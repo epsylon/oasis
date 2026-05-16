@@ -101,7 +101,10 @@ const renderLightbox = (sortedTribes) => {
 
 exports.renderInvitePage = (inviteCode) => {
   const pageContent = div({ class: 'invite-page' },
-    h2(i18n.tribeInviteCodeText, inviteCode),
+    h2(i18n.tribeInviteCodeText.replace(/:\s*$/, '')),
+    p(i18n.tribeInviteCodeHint || 'Share this code with someone you want to invite. They can join via /invites → Tribes.'),
+    input({ type: 'text', value: inviteCode, readonly: 'readonly', class: 'tribe-invite-code-input' }),
+    br(),
     form({ method: "GET", action: `/tribes` },
       button({ type: "submit", class: "filter-btn" }, i18n.walletBack)
     ),
@@ -1545,7 +1548,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           td({ class: 'tribe-info-value', colspan: '3' }, new Date(tribe.createdAt).toLocaleString())
         ),
         tr(
-          td({ class: 'tribe-info-value', colspan: '4' }, userLink(tribe.author))
+          td({ class: 'tribe-info-value tribe-author-cell', colspan: '4' }, userLink(tribe.author))
         ),
         tribe.location ? tr(
           td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),

@@ -45,6 +45,7 @@ module.exports = ({ cooler }) => {
         location: data.location || 'UNKNOWN',
         status: data.status || 'LOOKING FOR WORK',
         preferences: data.preferences || 'REMOTE WORKING',
+        visibility: String(data.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC',
         createdAt: new Date().toISOString()
       };
       return new Promise((resolve, reject) => {
@@ -97,6 +98,9 @@ module.exports = ({ cooler }) => {
         location: data.location || 'UNKNOWN',
         status: data.status || 'LOOKING FOR WORK',
         preferences: data.preferences || 'REMOTE WORKING',
+        visibility: data.visibility !== undefined
+          ? (String(data.visibility).toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC')
+          : (old.content.visibility || 'PUBLIC'),
         createdAt: old.content.createdAt,
         updatedAt: new Date().toISOString()
       };
@@ -163,7 +167,10 @@ module.exports = ({ cooler }) => {
             }
 
             const latest = cvMsgs[0];
-            resolve({ id: latest.key, ...latest.value.content });
+            const c = latest.value.content;
+            const visibility = String(c.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC';
+            if (visibility === 'HIDDEN' && authorId !== userId) return resolve(null);
+            resolve({ id: latest.key, ...c, visibility });
           })
         );
       });

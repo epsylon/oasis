@@ -6,6 +6,15 @@ const { getConfig } = require('../configs/config-manager');
 const DEFAULT_HASH_ENC = "%260000000000000000000000000000000000000000000%3D.sha256";
 const DEFAULT_HASH_PATH_RE = /\/image\/\d+\/%260000000000000000000000000000000000000000000%3D\.sha256$/;
 
+const formatCarbonValue = (g) => {
+  const n = Number(g) || 0;
+  if (!n) return '0 µg CO₂';
+  if (n >= 1) return `${n.toFixed(2)} g CO₂`;
+  const mg = n * 1000;
+  if (mg >= 1) return `${mg.toFixed(2)} mg CO₂`;
+  return `${(mg * 1000).toFixed(2)} µg CO₂`;
+};
+
 function isDefaultImageId(v){
   if (!v) return true;
   if (typeof v === 'string') {
@@ -81,6 +90,37 @@ const lightboxId = (id) => 'inhabitant_' + String(id || 'unknown').replace(/[^a-
 
 const renderInhabitantCard = (user, filter, currentUserId) => {
   const isMe = user.id === currentUserId;
+  const raw = user.visibilityPrefs || {};
+  const prefs = {
+    activity: raw.activity === true,
+    device:   raw.device   === true,
+    karma:    raw.karma !== false,
+    ubi:      raw.ubi      === true,
+    wallet:   raw.wallet   === true,
+    ecoTax:   raw.ecoTax   !== false
+  };
+  const dot = user.lastActivityBucket;
+  const activityChip = prefs.activity && dot
+    ? span({ class: 'inhabitant-last-activity' },
+        `${i18n.inhabitantActivityLevel}: `,
+        span({ class: `activity-dot ${dot}` }, '●'))
+    : null;
+  let deviceChip = null;
+  if (prefs.device) {
+    const src = isMe
+      ? (getConfig().themes.current === 'OasisKIT' ? 'KIT' : (getConfig().themes.current === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP')
+      : user.deviceSource;
+    if (src) {
+      const upper = String(src).toUpperCase();
+      const deviceClass = upper === 'KIT' ? 'device-kit' : upper === 'MOBILE' ? 'device-mobile' : 'device-desktop';
+      deviceChip = span({ class: 'inhabitant-last-activity' },
+        `${i18n.deviceLabel || 'Device'}: `,
+        span({ class: deviceClass }, src));
+    }
+  }
+  const activityGroup = (activityChip || deviceChip)
+    ? div({ class: 'inhabitant-activity-group' }, activityChip, deviceChip)
+    : null;
   return div({ class: 'inhabitant-card' },
     div({ class: 'inhabitant-left' },
       a(
@@ -88,32 +128,15 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
          img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo, 256), alt: user.name || 'Anonymous' })
       ),
       br(),
-      ...lastActivityBadge(user, isMe),
-      div({ class: 'inhabitant-karma-ubi' },
-        span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0)))
-      )
-    ),
-    div({ class: 'inhabitant-details' },
-      h2(user.name || 'Anonymous'),
-      user.description ? p(...renderUrl(user.description)) : null,
-      filter === 'MATCHSKILLS' && user.commonSkills?.length
-        ? div({ class: 'matchskills' },
-            p(`${i18n.commonSkills}: ${user.commonSkills.join(', ')}`),
-            p(`${i18n.matchScore}: ${Math.round(user.matchScore * 100)}%`)
+      activityGroup,
+      (prefs.karma || prefs.ubi || prefs.wallet || prefs.ecoTax)
+        ? div({ class: 'inhabitant-karma-ubi' },
+            prefs.ecoTax ? span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(user.carbonGrams))) : null,
+            prefs.karma ? span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0))) : null,
+            prefs.ubi ? span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(user.estimatedUBI || 0).toFixed(6)} ECO`)) : null,
+            prefs.wallet ? span({ class: 'ubi-line' }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, strong(user.ecoAddress || (i18n.statsEcoWalletNotConfigured || 'Not configured!'))) : null
           )
         : null,
-      filter === 'SUGGESTED' && user.mutualCount
-        ? p(`${i18n.mutualFollowers}: ${user.mutualCount}`) : null,
-      filter === 'blocked' && user.isBlocked
-        ? p(i18n.blockedLabel) : null,
-      p(userLink(user.id)),
-      user.ecoAddress
-        ? div({ class: "eco-wallet" },
-            p(`${i18n.bankWalletConnected}: `, strong(user.ecoAddress))
-          )
-        : div({ class: "eco-wallet" },
-            p(i18n.ecoWalletNotConfigured || "ECOin Wallet not configured")
-          ),
       div(
         { class: 'cv-actions' },
         !isMe
@@ -130,6 +153,53 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
             )
           : null
       )
+    ),
+    div({ class: 'inhabitant-details' },
+      h2(user.name || 'Anonymous'),
+      user.description ? p(...renderUrl(user.description)) : null,
+      filter === 'MATCHSKILLS' && user.commonSkills?.length
+        ? div({ class: 'matchskills' },
+            p(`${i18n.commonSkills}: ${user.commonSkills.join(', ')}`),
+            p(`${i18n.matchScore}: ${Math.round((user.matchScore || 0) * 100)}%`)
+          )
+        : null,
+      filter === 'SUGGESTED'
+        ? div({ class: 'suggested-meta' },
+            user.followsYou ? span({ class: 'suggested-badge' }, i18n.suggestedFollowsYou || 'Follows you') : null,
+            user.commonSkills?.length
+              ? p(`${i18n.commonSkills || 'Common skills'}: ${user.commonSkills.join(', ')}`)
+              : null,
+            user.mutualCount ? p(`${i18n.mutualFollowers}: ${user.mutualCount}`) : null
+          )
+        : null,
+      filter === 'blocked' && user.isBlocked
+        ? p(i18n.blockedLabel) : null,
+      p(userLink(user.id)),
+      !isMe ? (() => {
+        const rel = user.relationship || {}
+        const blockedBoth = rel.blocking && rel.blockedBy
+        const mutual = rel.following && rel.followsMe
+        const supportAction = rel.following ? 'unfollow' : (rel.blocking ? 'unblock' : 'follow')
+        return div({ class: 'relationship-status inhabitant-relationship' },
+          blockedBoth
+            ? span({ class: 'status blocked' }, i18n.relationshipMutualBlock)
+            : [
+                rel.blocking ? span({ class: 'status blocked' }, i18n.relationshipBlocking) : null,
+                rel.blockedBy ? span({ class: 'status blocked-by' }, i18n.relationshipBlockedBy) : null,
+                mutual
+                  ? span({ class: 'status mutual' }, i18n.relationshipMutuals)
+                  : [
+                      span({ class: 'status supporting' }, rel.following ? i18n.relationshipFollowing : i18n.relationshipNone),
+                      span({ class: 'status supported-by' }, rel.followsMe ? i18n.relationshipTheyFollow : i18n.relationshipNotFollowing)
+                    ]
+              ],
+          div({ class: 'relationship-actions' },
+            form({ method: 'POST', action: `/${supportAction}/${encodeURIComponent(user.id)}` },
+              button({ type: 'submit', class: 'btn' }, i18n[supportAction])
+            )
+          )
+        )
+      })() : null
     )
   );
 };
@@ -178,11 +248,12 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
                : filter === 'blocked'     ? i18n.blockedSectionTitle
                : filter === 'GALLERY'     ? i18n.gallerySectionTitle
                : filter === 'TOP KARMA'    ? i18n.topkarmaSectionTitle
+               : filter === 'TOP ECO'      ? (i18n.topecoSectionTitle || 'Top Eco')
                : filter === 'TOP ACTIVITY' ? i18n.topactivitySectionTitle
                : i18n.allInhabitants;
 
   const showCVFilters = filter === 'CVs' || filter === 'MATCHSKILLS';
-  const filters = ['all', 'TOP ACTIVITY', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'];
+  const filters = ['all', 'TOP ACTIVITY', 'TOP KARMA', 'TOP ECO', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'];
 
   return template(
     title,
@@ -265,6 +336,20 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
   const isMe = id && id === currentUserId;
   const title = i18n.inhabitantProfileTitle || i18n.inhabitantviewDetails;
   const karmaScore = typeof safe.karmaScore === 'number' ? safe.karmaScore : 0;
+  const estimatedUBI = typeof safe.estimatedUBI === 'number' ? safe.estimatedUBI : 0;
+  const lastClaimedDate = safe.lastClaimedDate || null;
+  const totalClaimed = typeof safe.totalClaimed === 'number' ? safe.totalClaimed : 0;
+  const ecoAddress = typeof safe.ecoAddress === 'string' ? safe.ecoAddress : null;
+  const rawPrefs = safe.visibilityPrefs || {};
+  const prefs = {
+    activity: rawPrefs.activity === true,
+    device:   rawPrefs.device   === true,
+    karma:    rawPrefs.karma !== false,
+    ubi:      rawPrefs.ubi      === true,
+    wallet:   rawPrefs.wallet   === true,
+    ecoTax:   rawPrefs.ecoTax   !== false
+  };
+  const carbonGrams = typeof safe.carbonGrams === 'number' ? safe.carbonGrams : 0;
 
   const providedBucket = typeof safe.lastActivityBucket === 'string' ? safe.lastActivityBucket : null;
   const dotClass = providedBucket === 'green' ? 'green' : providedBucket === 'orange' ? 'orange' : 'red';
@@ -287,16 +372,49 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
         p(i18n.discoverPeople)
       ),
       div({ class: 'mode-buttons' },
-        ...generateFilterButtons(['all', 'TOP ACTIVITY', 'TOP KARMA', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'], 'all')
+        ...generateFilterButtons(['all', 'TOP ACTIVITY', 'TOP KARMA', 'TOP ECO', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'], 'all')
       ),
       div({ class: 'inhabitant-card' },
         div({ class: 'inhabitant-left' },
           img({ class: 'inhabitant-photo-details', src: image, alt: name || 'Anonymous' }),
           h2(name || 'Anonymous'),
-          ...lastActivityBadge({ lastActivityBucket: dotClass, deviceSource: safe.deviceSource }, isMe),
-          div({ class: 'inhabitant-karma-ubi' },
-            span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore)))
-          ),
+          (() => {
+            const activityChip = prefs.activity
+              ? span({ class: 'inhabitant-last-activity' },
+                  `${i18n.inhabitantActivityLevel}: `,
+                  span({ class: `activity-dot ${dotClass}` }, '●'))
+              : null;
+            let deviceChip = null;
+            if (prefs.device) {
+              const src = isMe
+                ? (getConfig().themes.current === 'OasisKIT' ? 'KIT' : (getConfig().themes.current === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP')
+                : safe.deviceSource;
+              if (src) {
+                const upper = String(src).toUpperCase();
+                const deviceClass = upper === 'KIT' ? 'device-kit' : upper === 'MOBILE' ? 'device-mobile' : 'device-desktop';
+                deviceChip = span({ class: 'inhabitant-last-activity' },
+                  `${i18n.deviceLabel || 'Device'}: `,
+                  span({ class: deviceClass }, src));
+              }
+            }
+            return (activityChip || deviceChip)
+              ? div({ class: 'inhabitant-activity-group' }, activityChip, deviceChip)
+              : null;
+          })(),
+          (prefs.karma || prefs.ubi || prefs.ecoTax)
+            ? div({ class: 'inhabitant-karma-ubi' },
+                prefs.ecoTax ? span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))) : null,
+                prefs.karma ? span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore))) : null,
+                prefs.ubi ? span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)) : null,
+                prefs.ubi ? span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed || 'Last claimed'}: `, lastClaimedDate ? new Date(lastClaimedDate).toLocaleDateString() : strong(i18n.bankUbiNeverClaimed || 'Never claimed')) : null,
+                prefs.ubi ? span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed || 'Total claimed'}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)) : null
+              )
+            : null,
+          (prefs.wallet && ecoAddress)
+            ? div({ class: 'eco-wallet' },
+                p(`${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, a({ href: '/wallet' }, ecoAddress))
+              )
+            : null,
           (!isMe && (id || viewedId))
             ? form(
                 { method: 'GET', action: '/pm' },

@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option } =
   require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -465,6 +465,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
               : null
           );
         })(),
+        div({ class: "spread-row" }, renderSpreadButton(bookmark.id, params.spreads)),
         div(
           { class: "voting-buttons" },
           opinionCategories.map((category) =>

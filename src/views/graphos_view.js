@@ -68,7 +68,8 @@ const buildGraphSvg = (me, peers) => {
   const meName = escText(me.name);
   const center = `<a href="${meHref}" class="graphos-node-link">`
     + `<g class="graphos-node graphos-node-me">`
-    + `<title>${meName} (you)</title>`
+    + `<title>${meName} (you, online)</title>`
+    + `<circle cx="${cx}" cy="${cy}" r="${(meR + 5).toFixed(2)}" class="graphos-node-circle graphos-node-circle-online graphos-me-online-ring" />`
     + `<circle cx="${cx}" cy="${cy}" r="${meR}" class="graphos-node-circle graphos-node-circle-me" />`
     + `<text x="${cx}" y="${meLabelY}" text-anchor="middle" class="graphos-node-label graphos-node-label-me">${meName}</text>`
     + `</g></a>`;

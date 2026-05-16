@@ -532,55 +532,58 @@ h3 { font-size: 1em !important; }
   gap: 4px !important;
 }
 
-.mode-buttons {
+.mode-buttons,
+.mode-buttons-cols,
+.mode-buttons-row,
+.filter-group,
+.activity-filter-grid,
+.activity-sub-filter,
+.filters .ui-toolbar {
   display: flex !important;
-  flex-direction: column !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
   width: 100% !important;
-  gap: 8px !important;
-  grid-template-columns: 1fr !important;
-}
-
-.mode-buttons-cols {
-  display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
-  gap: 8px !important;
-}
-
-.mode-buttons-row {
-  display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
-  gap: 8px !important;
+  gap: 6px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  padding-bottom: 6px !important;
+  scroll-snap-type: x proximity !important;
+  -webkit-overflow-scrolling: touch !important;
+  grid-template-columns: none !important;
 }
 
 .mode-buttons .column,
-.mode-buttons > div {
+.mode-buttons > div,
+.activity-filter-col {
   display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  width: auto !important;
   gap: 6px !important;
-  grid-template-columns: 1fr !important;
+  flex: 0 0 auto !important;
 }
 
-.mode-buttons form {
-  width: 100% !important;
+.mode-buttons form,
+.filter-group form,
+.activity-filter-col form {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  scroll-snap-align: start !important;
 }
 
 .mode-buttons .filter-btn,
-.mode-buttons button {
-  width: 100% !important;
-}
-
-.filter-group {
-  display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
-  gap: 6px !important;
-}
-
-.filter-group form {
-  width: 100% !important;
+.mode-buttons button,
+.filter-group .filter-btn,
+.filter-group button,
+.activity-filter-grid .filter-btn,
+.activity-filter-grid button,
+.activity-sub-filter .filter-btn,
+.filters .filter-btn,
+.filters button {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+  min-width: 0 !important;
 }
 
 .inhabitant-card {

@@ -10,6 +10,16 @@ const SSB = require('ssb-db');
 const config = require('./ssb_config');
 const { printMetadata } = require('./ssb_metadata');
 
+(() => {
+  const realErr = console.error;
+  const SHS_NOISE = /shs\.server: client hello invalid|they dailed a wrong number|client hello invalid/i;
+  console.error = function (...args) {
+    if (args.length >= 2 && args[0] === 'server error, from' && typeof args[1] === 'string' && args[1].includes('~shs:')) return;
+    if (args.length >= 1 && args[0] && typeof args[0].message === 'string' && SHS_NOISE.test(args[0].message)) return;
+    return realErr.apply(console, args);
+  };
+})();
+
 require('ssb-plugins').loadUserPlugins(SecretStack({ caps }), config);
 
 const Server = SecretStack({ caps })
@@ -19,7 +29,6 @@ const Server = SecretStack({ caps })
   .use(require('ssb-ebt'))
   .use(require('ssb-friends'))
   .use(require('ssb-blobs'))
-  .use(require('ssb-lan'))
   .use(require('ssb-meme'))
   .use(require('ssb-plugins'))
   .use(require('ssb-conn'))
@@ -39,7 +48,12 @@ const Server = SecretStack({ caps })
   .use(require('ssb-links'))
   .use(require('ssb-tangle'))
   .use(require('ssb-query'));
-  
+
+if (!config.pub) {
+  Server.use(require('ssb-lan'));
+  Server.use(require('./lanRouter'));
+}
+
 if (config.autofollow?.enabled !== false) {
   Server.use(require('ssb-autofollow'));
 }
@@ -115,6 +129,23 @@ if (argv[0] === 'start') {
 
   const { printMetadata, colors } = require('./ssb_metadata');
   printMetadata('OASIS Server Only', colors.cyan, null);
+
+  setTimeout(() => {
+    try {
+      const pull = require('pull-stream');
+      const stream = server.conn && server.conn.hub && server.conn.hub().listen && server.conn.hub().listen();
+      if (!stream) return;
+      pull(stream, pull.drain((ev) => {
+        if (!ev || !ev.type) return;
+        const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        if (ev.type === 'connected') {
+          console.log(`[${ts}] CONNECTED    ${ev.address || ''}`);
+        } else if (ev.type === 'disconnected') {
+          console.log(`[${ts}] DISCONNECTED ${ev.address || ''}`);
+        }
+      }, () => {}));
+    } catch (_) {}
+  }, 1000);
 
   setTimeout(async () => {
     try {

@@ -1,5 +1,5 @@
-const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers }) => {
-  const { form, button, div, h2, p, section, a, hr, input, label, br, span, table, tr, td } = require("../server/node_modules/hyperaxe");
+const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [] }) => {
+  const { form, button, div, h2, p, section, a, hr, input, label, br, span, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
   const { template, i18n } = require('./main_views');
 
   const startButton = form({ action: "/settings/conn/start", method: "post" }, button({ type: "submit" }, i18n.startNetworking));
@@ -16,6 +16,16 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers }) => {
       seen.add(key);
       return true;
     });
+  };
+
+  const sourceLabel = (src) => {
+    const s = String(src || '').toLowerCase();
+    if (s === 'rpc') return i18n.peerSourceRpc || 'RPC';
+    if (s === 'gossip') return i18n.peerSourceGossip || 'Gossip';
+    if (s === 'ebt') return i18n.peerSourceEbt || 'EBT';
+    if (s === 'recent') return i18n.peerSourceRecent || 'Recent';
+    if (s === 'lan') return i18n.peerSourceLan || 'LAN';
+    return null;
   };
 
   const renderPeerRow = (peerData) => {
@@ -39,8 +49,8 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers }) => {
   const discoveredCount = dedupDiscovered.length;
   const unknownCount = dedupUnknown.length;
 
-  const renderPeerTable = (peers) => {
-    if (peers.length === 0) return p(i18n.noConnections || i18n.noDiscovered);
+  const renderPeerTable = (peers, emptyKey) => {
+    if (peers.length === 0) return p(i18n[emptyKey] || i18n.noConnections);
     return table({ class: 'block-info-table' },
       tr(
         td({ class: 'card-label' }, i18n.peerHost || 'Pub'),
@@ -51,6 +61,60 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers }) => {
     );
   };
 
+  const technicalRows = (technicalPeers || []).map(tp => {
+    const k = tp.key || '';
+    const connected = tp.state === 'connected';
+    const action = connected ? 'disconnect' : 'connect';
+    const btnLabel = connected ? (i18n.peerDisconnect || 'Disconnect') : (i18n.peerConnect || 'Connect');
+    return tr(
+      td(a({ href: `/author/${encodeURIComponent(k)}`, class: 'user-link peer-key' }, k ? k.slice(0, 20) + '…' : '—')),
+      td(String(tp.host || '—')),
+      td(String(tp.port || '—')),
+      td(String(tp.state || tp.source || '—')),
+      td(String(tp.stateChange ? new Date(tp.stateChange).toISOString().slice(0, 16).replace('T', ' ') : '—')),
+      td(
+        form({ method: "POST", action: `/peers/${action}`, class: "inline-form" },
+          input({ type: "hidden", name: "key", value: k }),
+          input({ type: "hidden", name: "host", value: String(tp.host || '') }),
+          input({ type: "hidden", name: "port", value: String(tp.port || 8008) }),
+          button({ type: "submit", class: "filter-btn" }, btnLabel)
+        )
+      )
+    );
+  });
+  const refreshButton = form({ action: "/peers/refresh", method: "post" }, button({ type: "submit" }, i18n.peerRefresh || 'Refresh'));
+  const pruneButton = form({ action: "/peers/prune", method: "post" }, button({ type: "submit" }, i18n.peerPruneIdle || 'Remove idle'));
+  const exportButton = form({ action: "/peers/export", method: "get" }, button({ type: "submit" }, i18n.peerExport || 'Export'));
+  const importForm = form(
+    { action: "/peers/import", method: "post", enctype: "multipart/form-data", class: "peers-import-form" },
+    label({ class: 'peers-import-label' }, i18n.peerImportTitle || 'Import peer list'),
+    br(),
+    textarea({ name: "peerList", rows: "4", placeholder: i18n.peerImportPlaceholder || 'Paste one multiserver address per line…' }),
+    br(),
+    input({ type: "file", name: "peerFile", accept: ".txt,text/plain" }),
+    br(),
+    button({ type: "submit", class: "filter-btn" }, i18n.peerImport || 'Import')
+  );
+
+  const peersTechnicalBlock = div({ class: 'tags-header peers-technical-block' },
+    h2(i18n.peerConnectionsTitle || 'Connections'),
+    div({ class: "conn-actions peers-conn-actions" }, refreshButton, pruneButton, exportButton),
+    technicalPeers.length
+      ? table({ class: 'block-info-table' },
+          tr(
+            td({ class: 'card-label' }, 'Key'),
+            td({ class: 'card-label' }, 'Host'),
+            td({ class: 'card-label' }, i18n.peerPort || 'Port'),
+            td({ class: 'card-label' }, 'State'),
+            td({ class: 'card-label' }, 'Last change'),
+            td({ class: 'card-label' }, '')
+          ),
+          ...technicalRows
+        )
+      : p(i18n.peersTechnicalEmpty || 'No peers registered yet.'),
+    importForm
+  );
+
   return template(
     i18n.peers,
     section(
@@ -59,31 +123,20 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers }) => {
         p(i18n.peerConnectionsIntro)
       ),
       div({ class: "conn-actions" }, ...connButtons),
-      div({ class: 'tags-header', style: 'margin-top:16px;' },
-        h2(i18n.directConnect),
-        p(i18n.directConnectDescription),
-        form({ action: "/peers/connect", method: "post" },
-          label({ for: "peer_host" }, i18n.peerHost), br(),
-          input({ type: "text", id: "peer_host", name: "host", required: true, placeholder: "192.168.1.100", pattern: "(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|[a-zA-Z0-9]([a-zA-Z0-9\\-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]*[a-zA-Z0-9])?)*)", title: i18n.peerHostValidation || "Valid IPv4 (e.g. 192.168.1.100) or hostname (e.g. pub.example.com)", maxlength: 253 }), br(),
-          label({ for: "peer_port" }, i18n.peerPort), br(),
-          input({ type: "number", id: "peer_port", name: "port", placeholder: "8008", value: "8008", min: 1, max: 65535, required: true, title: i18n.peerPortValidation || "Port 1-65535" }), br(), br(),
-          label({ for: "peer_key" }, i18n.peerPublicKey), br(),
-          input({ type: "text", id: "peer_key", name: "key", required: true, placeholder: "@...=.ed25519", pattern: "@[A-Za-z0-9+/_\\-]{43}=\\.ed25519", title: i18n.peerKeyValidation || "SSB ed25519 public key (@<44 chars base64>=.ed25519)", maxlength: 56 }), br(), br(),
-          button({ type: "submit" }, i18n.connectAndFollow)
-        )
-      ),
-      hr(),
-      div({ class: "peers-list" },
-        h2(`${i18n.online} (${onlineCount})`),
-        renderPeerTable(dedupOnline),
-        hr(),
-        h2(`${i18n.discovered} (${discoveredCount})`),
-        renderPeerTable(dedupDiscovered),
-        hr(),
-        h2(`${i18n.unknown} (${unknownCount})`),
-        renderPeerTable(dedupUnknown),
-        p(i18n.connectionActionIntro)
-      )
+      (onlineCount + discoveredCount + unknownCount) > 0
+        ? div({ class: "peers-list" },
+            div({ class: "tags-header" }, h2(`${i18n.online} (${onlineCount})`)),
+            renderPeerTable(dedupOnline, 'noConnections'),
+            hr(),
+            div({ class: "tags-header" }, h2(`${i18n.discovered} (${discoveredCount})`)),
+            renderPeerTable(dedupDiscovered, 'noDiscovered'),
+            hr(),
+            div({ class: "tags-header" }, h2(`${i18n.unknown} (${unknownCount})`)),
+            renderPeerTable(dedupUnknown, 'noUnknownPeers')
+          )
+        : null,
+      peersTechnicalBlock,
+      p(i18n.connectionActionIntro)
     )
   );
 };

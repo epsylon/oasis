@@ -3,7 +3,7 @@ const {
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
@@ -326,7 +326,8 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
               `${i18n.forumParticipants.toUpperCase()}: ${forum.participants?.length || 1}`),
             span({ class: 'forum-messages' },
               `${i18n.forumMessages.toUpperCase()}: ${messagesData.total}`)
-          )
+          ),
+          div({ class: 'spread-row' }, renderSpreadButton(forum.key))
         )
       ),
       div({

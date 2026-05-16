@@ -16,7 +16,7 @@ const {
   option
 } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
@@ -163,7 +163,7 @@ const renderAudioCommentsSection = (audioId, comments = [], returnTo = null) => 
   );
 };
 
-const renderAudioList = (audios, filter, params = {}) => {
+const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
   return audios.length
@@ -306,7 +306,15 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.audioDescription)),
+      div({ class: "tags-header" },
+        h2(title),
+        p(i18n.audioDescription),
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetAudios);
+          return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+        })()
+      ),
       div(
         { class: "filters" },
         form(
@@ -317,6 +325,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
           button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterMine),
           button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterRecent),
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterTop),
+          button({ type: "submit", name: "filter", value: "blockchain", class: filter === "blockchain" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterBlockchain || "BLOCKCHAIN"),
           button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             i18n.audioFilterFavorites
@@ -394,6 +403,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
           button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterMine),
           button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterRecent),
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterTop),
+          button({ type: "submit", name: "filter", value: "blockchain", class: filter === "blockchain" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterBlockchain || "BLOCKCHAIN"),
           button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             i18n.audioFilterFavorites
@@ -407,6 +417,11 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
         title ? h2(title) : null,
         renderAudioPlayer(audioObj),
         safeText(audioObj.description) ? p(...renderUrl(audioObj.description)) : null,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetAudios);
+          return div({ class: 'shop-title-row' }, renderReachChip(isClearnet, i18n));
+        })(),
         renderTags(audioObj.tags),
         br(),
         renderMapLocationVisitLabel(audioObj.mapUrl),
@@ -428,6 +443,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
               : null
           );
         })(),
+        div({ class: "spread-row" }, renderSpreadButton(audioObj.key, params.spreads)),
         div(
           { class: "voting-buttons" },
           opinionCategories.map((category) =>

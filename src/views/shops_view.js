@@ -5,6 +5,7 @@ const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const opinionCategories = require("../backend/opinion_categories")
+const { renderReachChip, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml } = require("./clearnet_view")
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -61,7 +62,7 @@ const renderFavoriteToggle = (shop, returnTo) =>
     button({ type: "submit", class: "filter-btn" }, shop.isFavorite ? i18n.shopRemoveFavorite : i18n.shopAddFavorite)
   )
 
-const renderShopCard = (shop, filter, params = {}) => {
+const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params)
   const isAuthor = String(shop.author) === String(userId)
 
@@ -130,9 +131,7 @@ const renderProductCard = (product, shopId, returnTo) => {
       (() => {
         const actions = [];
         if (!isAuthor && stock > 0) {
-          actions.push(form({ method: "POST", action: `/shops/product/buy/${encodeURIComponent(product.key)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: "buy-btn" }, i18n.marketActionsBuy || i18n.shopBuy)));
+          actions.push(a({ href: productUrl, class: "buy-btn" }, i18n.marketActionsBuy || i18n.shopBuy));
         }
         actions.push(form({ method: "POST", action: product.isFavorite ? `/shops/favorites/remove/${encodeURIComponent(product.key)}` : `/shops/favorites/add/${encodeURIComponent(product.key)}` },
           returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
@@ -263,7 +262,14 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
 
   const isForm = filter === "create" || filter === "edit"
 
-  const header = div({ class: "tags-header" }, h2(title), p(i18n.shopDescription))
+  const viewerClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetShops)
+  const header = [
+    div({ class: "tags-header" },
+      h2(title),
+      p(i18n.shopDescription)
+    ),
+    div({ class: "shop-title-row" }, renderReachChip(viewerClearnet, i18n))
+  ]
 
   const searchBar = div({ class: "filters" },
     form({ method: "GET", action: "/shops" },
@@ -283,7 +289,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
 
   return template(
     title,
-    section(header),
+    section(...header),
     section(renderModeButtons(filter)),
     !isForm ? section(searchBar) : null,
     section(
@@ -311,8 +317,12 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
   const isAuthor = String(shop.author) === String(userId)
   const fullShareUrl = `/shops/${encodeURIComponent(shop.key)}`
 
+  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetShops && shop.visibility !== 'CLOSED');
   const shopSide = div({ class: "tribe-side" },
-    h2(shop.title || i18n.shopUntitled),
+    div({ class: "shop-title-row" },
+      h2(shop.title || i18n.shopUntitled),
+      renderReachChip(isClearnet, i18n)
+    ),
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
     div({ class: "shop-share" },
       span({ class: "tribe-info-label" }, `${i18n.shopShareUrl}: `),
@@ -352,6 +362,11 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       isAuthor
         ? form({ method: "GET", action: `/shops/edit/${encodeURIComponent(shop.key)}` },
             button({ type: "submit", class: "tribe-action-btn" }, i18n.shopUpdate)
+          )
+        : null,
+      isAuthor
+        ? form({ method: "GET", action: `/shops/${encodeURIComponent(shop.key)}/orders` },
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.shopOrdersTitle || "Orders")
           )
         : null,
       isAuthor
@@ -449,8 +464,24 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
           progress({ class: "confirmations-progress stock-progress", value: Math.min(stock, 100), max: 100 })
         ),
         !isAuthor && stock > 0
-          ? form({ method: "POST", action: `/shops/product/buy/${encodeURIComponent(product.key)}` },
+          ? form({ method: "POST", action: `/shops/product/buy/${encodeURIComponent(product.key)}`, class: "shop-buy-form" },
               input({ type: "hidden", name: "returnTo", value: returnTo }),
+              p({ class: "shop-buy-form-note" }, i18n.shopBuyEncryptedNote || "Your delivery details are sent encrypted only to the shop owner."),
+              label(i18n.shopBuyDeliveryAddress || "Delivery address"),
+              br(),
+              textarea({ name: "deliveryAddress", required: true, rows: 3, placeholder: i18n.shopBuyDeliveryAddressPlaceholder || "" }),
+              br(),
+              br(),
+              label(i18n.shopBuyContact || "Contact"),
+              br(),
+              input({ type: "text", name: "contact", placeholder: i18n.shopBuyContactPlaceholder || "email, phone, etc." }),
+              br(),
+              br(),
+              label(i18n.shopBuyNotes || "Notes"),
+              br(),
+              textarea({ name: "notes", rows: 2, placeholder: i18n.shopBuyNotesPlaceholder || "" }),
+              br(),
+              br(),
               button({ type: "submit", class: "buy-btn" }, i18n.marketActionsBuy || i18n.shopBuy)
             )
           : null,
@@ -486,3 +517,88 @@ exports.editProductView = async (product, shopId, params = {}) => {
     )
   )
 }
+
+exports.shopOrdersView = async (shop, orders) => {
+  const title = `${i18n.shopOrdersTitle || "Orders"}: ${shop.title || ""}`
+  const rows = (orders || []).map(o => div({ class: "shop-order-card card-section" },
+    div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderProduct || "Product"}:`), span({ class: "card-value" }, String(o.title || o.productId || ""))),
+    div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderPrice || "Price"}:`), span({ class: "card-value" }, `${Number(o.price || 0).toFixed(6)} ECO`)),
+    div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderBuyer || "Buyer"}:`), userLink(o.buyer)),
+    div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyDeliveryAddress || "Delivery address"}:`), span({ class: "card-value" }, String(o.deliveryAddress || ""))),
+    o.contact ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyContact || "Contact"}:`), span({ class: "card-value" }, String(o.contact))) : null,
+    o.notes ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyNotes || "Notes"}:`), span({ class: "card-value" }, String(o.notes))) : null,
+    p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.createdAt || o.ts).format("YYYY-MM-DD HH:mm")))
+  ))
+  return template(
+    title,
+    section(
+      div({ class: "tags-header" }, h2(title), p(i18n.shopOrdersDescription || "Encrypted purchase orders received by this shop.")),
+      a({ href: `/shops/${encodeURIComponent(shop.key || shop.id || "")}`, class: "filter-btn" }, i18n.goBack || "Go back")
+    ),
+    section(
+      rows.length ? div({ class: "shop-orders-list" }, ...rows) : p(i18n.shopOrdersEmpty || "No orders yet.")
+    )
+  )
+}
+
+exports.clearnetShopView = async (shop, products = []) => {
+  const fmtPrice = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(6) : '0.000000';
+  };
+  const productCards = (products || []).filter(p => Number(p.stock) > 0 || p.featured).map(prod => {
+    const pImg = cnBlobUrl(prod.image);
+    return `<article class="cn-product">
+      ${pImg ? `<img class="cn-product-img" src="${pImg}" alt="" loading="lazy"/>` : ''}
+      <h3 class="cn-product-title">${cnEscapeHtml(prod.title || '')}</h3>
+      ${prod.description ? `<p class="cn-product-desc">${cnEscapeHtml(prod.description)}</p>` : ''}
+      <p class="cn-product-price">${fmtPrice(prod.price)} ECO</p>
+      ${Number(prod.stock) > 0 ? `<p class="cn-product-stock">Stock: ${prod.stock}</p>` : ''}
+    </article>`;
+  }).join('\n');
+  const shopBlobUrl = cnBlobUrl(shop.image);
+  const shopImg = shopBlobUrl ? `<img class="cn-shop-img" src="${shopBlobUrl}" alt="${cnEscapeHtml(shop.title || '')}"/>` : '';
+  const desc = cnEscapeHtml(shop.shortDescription || shop.description || '');
+  const extraCss = `
+.cn-hero{display:flex;gap:24px;margin-bottom:24px;flex-wrap:wrap;align-items:flex-start}
+.cn-shop-img{display:block;max-width:280px;width:100%;border:3px solid var(--fg);border-radius:8px;background:#000}
+.cn-hero-body{flex:1 1 320px;min-width:0}
+.cn-shop-title{color:var(--fg);margin:0 0 12px 0;font-size:32px;font-weight:700;letter-spacing:0.3px}
+.cn-shop-desc{color:var(--fg-soft);margin:0 0 16px 0;font-size:15px;white-space:pre-wrap}
+.cn-shop-meta{display:flex;gap:12px;flex-wrap:wrap;background:var(--bg-sub);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--fg-soft)}
+.cn-shop-meta-item{display:inline-flex;align-items:center;gap:6px}
+.cn-products{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+.cn-product{background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:16px;transition:border-color .15s ease}
+.cn-product:hover{border-color:var(--fg)}
+.cn-product-img{width:100%;height:180px;object-fit:cover;border-radius:6px;margin-bottom:10px;background:#000;border:1px solid var(--border)}
+.cn-product-title{color:var(--fg);font-size:16px;margin:0 0 8px 0;font-weight:600}
+.cn-product-desc{color:var(--fg-soft);font-size:13px;margin:0 0 10px 0;line-height:1.4}
+.cn-product-price{color:var(--fg);background:var(--bg-sub);border:1px solid var(--fg);display:inline-block;padding:4px 10px;border-radius:4px;font-weight:bold;margin:0;font-size:14px}
+.cn-product-stock{color:var(--fg-dim);font-size:12px;margin:8px 0 0 0;text-transform:uppercase;letter-spacing:1px}
+.cn-empty{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:32px;text-align:center;color:var(--fg-dim)}
+`;
+  const body = `
+  <div class="cn-hero">
+    ${shopImg}
+    <div class="cn-hero-body">
+      <h1 class="cn-shop-title">${cnEscapeHtml(shop.title || '')}</h1>
+      ${desc ? `<p class="cn-shop-desc">${desc}</p>` : ''}
+      <div class="cn-shop-meta">
+        ${shop.createdAt ? `<span class="cn-shop-meta-item">📅 ${new Date(shop.createdAt).toISOString().slice(0,10)}</span>` : ''}
+        ${shop.location ? `<span class="cn-shop-meta-item">📍 ${cnEscapeHtml(shop.location)}</span>` : ''}
+      </div>
+    </div>
+  </div>
+  <h2 class="cn-section">Products</h2>
+  ${productCards ? `<div class="cn-products">${productCards}</div>` : '<div class="cn-empty">No products available.</div>'}
+`;
+  return renderClearnetPage({
+    title: `${shop.title || 'Shop'} — Oasis`,
+    ogTitle: shop.title || 'Oasis',
+    ogDescription: shop.shortDescription || shop.description || '',
+    ogImage: shopBlobUrl,
+    extraCss,
+    body,
+    hubFeedId: shop.author || null
+  });
+};

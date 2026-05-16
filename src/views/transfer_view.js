@@ -19,6 +19,26 @@ const fmtAmount = (v) => {
   return Number.isFinite(n) ? n.toFixed(6) : String(v ?? "")
 }
 
+const categoryOf = (t) => {
+  const c = String(t?.category || "ECONOMIC").toUpperCase()
+  return ["ECONOMIC", "TIME", "TRUST"].includes(c) ? c : "ECONOMIC"
+}
+
+const fmtAmountWithUnit = (transfer) => {
+  const amt = fmtAmount(transfer.amount)
+  const cat = categoryOf(transfer)
+  const unit = cat === "TIME" ? (i18n.transfersUnitHours || "h")
+             : cat === "TRUST" ? (i18n.transfersUnitTrust || "trust")
+             : (i18n.transfersUnitEco || "ECO")
+  return `${amt} ${unit}`
+}
+
+const categoryLabel = (cat) => (
+  cat === "TIME" ? (i18n.transfersCategoryTime || "Time") :
+  cat === "TRUST" ? (i18n.transfersCategoryTrust || "Trust") :
+  (i18n.transfersCategoryEconomic || "Economic")
+)
+
 const buildReturnTo = (filter, params = {}) => {
   const f = safeText(filter || "all")
   const q = safeText(params.q || "")
@@ -55,6 +75,26 @@ const renderCardField = (labelText, valueNode) =>
     span({ class: "card-label" }, labelText),
     span({ class: "card-value" }, valueNode)
   )
+
+const formatBlockSize = (bytes) => {
+  const n = Number(bytes || 0)
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(2)} KB`
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`
+}
+
+const renderBlockInfoCard = (block) => {
+  if (!block || !block.id) return null
+  return div(
+    { class: "transfer-item transfer-block-card" },
+    div(
+      { class: "card-section transfer" },
+      renderCardField(`${i18n.blockchainBlockID || "Block ID"}:`,
+        a({ href: `/blockexplorer/block/${encodeURIComponent(block.id)}`, class: "user-link" }, block.id)
+      )
+    )
+  )
+}
 
 const renderConfirmationsBar = (confirmedCount, required) => {
   const req = Math.max(1, Number(required || 2))
@@ -171,10 +211,11 @@ const generateTransferCard = (transfer, filter, params = {}) => {
       { class: "card-section transfer" },
       topbar ? topbar : null,
       renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
+      renderCardField(`${i18n.transfersCategory || "Category"}:`, categoryLabel(categoryOf(transfer))),
       isUbi ? null : renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
       renderCardField(`${i18n.transfersStatus}:`, i18n[statusKey(transfer.status)] || String(transfer.status || "")),
       br,
-      div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`)),
+      categoryOf(transfer) === "TRUST" ? null : div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, fmtAmountWithUnit(transfer))),
       renderConfirmationsBar(confirmedCount, required),
       showConfirm
         ? form(
@@ -208,6 +249,9 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
     normalizedFilter === "discarded"   ? i18n.transfersDiscardedSectionTitle :
     normalizedFilter === "create"      ? i18n.transfersCreateSectionTitle :
     normalizedFilter === "edit"        ? i18n.transfersUpdateSectionTitle :
+    normalizedFilter === "economic"    ? (i18n.transfersEconomicSectionTitle || (i18n.transfersCategoryEconomic + " " + i18n.transfersTitle)) :
+    normalizedFilter === "time"        ? (i18n.transfersTimeSectionTitle || (i18n.transfersCategoryTime + " " + i18n.transfersTitle)) :
+    normalizedFilter === "trust"       ? (i18n.transfersTrustSectionTitle || (i18n.transfersCategoryTrust + " " + i18n.transfersTitle)) :
                                         i18n.transfersAllSectionTitle
 
   const q = safeText(params.q || "")
@@ -227,6 +271,9 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
     normalizedFilter === "unconfirmed" ? list.filter(t => String(t.status || "").toUpperCase() === "UNCONFIRMED") :
     normalizedFilter === "closed"      ? list.filter(t => String(t.status || "").toUpperCase() === "CLOSED") :
     normalizedFilter === "discarded"   ? list.filter(t => String(t.status || "").toUpperCase() === "DISCARDED") :
+    normalizedFilter === "economic"    ? list.filter(t => categoryOf(t) === "ECONOMIC") :
+    normalizedFilter === "time"        ? list.filter(t => categoryOf(t) === "TIME") :
+    normalizedFilter === "trust"       ? list.filter(t => categoryOf(t) === "TRUST") :
     normalizedFilter === "market"      ? list :
                                         list
 
@@ -255,6 +302,16 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
   const isForm = normalizedFilter === "create" || normalizedFilter === "edit"
   const transferToEdit = normalizedFilter === "edit" ? (list.find(t => t.id === transferId) || {}) : {}
   const returnToForForm = buildReturnTo("all", {})
+  const validCategories = ["ECONOMIC", "TIME", "TRUST"]
+  const paramCategoryRaw = safeText(params.category || "").toUpperCase()
+  const selectedCategory =
+    transferToEdit.category && validCategories.includes(transferToEdit.category)
+      ? transferToEdit.category
+      : (validCategories.includes(paramCategoryRaw) ? paramCategoryRaw : "ECONOMIC")
+  const amountUnitLabel =
+    selectedCategory === "TIME" ? (i18n.transfersUnitHours || "h") :
+    selectedCategory === "TRUST" ? (i18n.transfersUnitTrust || "trust") :
+    (i18n.transfersUnitEco || "ECO")
 
   return template(
     title,
@@ -271,6 +328,9 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterAll),
           button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterMine),
           button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterUBI),
+          button({ type: "submit", name: "filter", value: "economic", class: normalizedFilter === "economic" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterEconomic || (i18n.transfersCategoryEconomic || "ECONOMIC")),
+          button({ type: "submit", name: "filter", value: "time", class: normalizedFilter === "time" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTime || (i18n.transfersCategoryTime || "TIME")),
+          button({ type: "submit", name: "filter", value: "trust", class: normalizedFilter === "trust" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTrust || (i18n.transfersCategoryTrust || "TRUST")),
           button({ type: "submit", name: "filter", value: "market", class: normalizedFilter === "market" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterMarket),
           button({ type: "submit", name: "filter", value: "pending", class: normalizedFilter === "pending" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterPending),
           button({ type: "submit", name: "filter", value: "unconfirmed", class: normalizedFilter === "unconfirmed" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterUnconfirmed),
@@ -285,9 +345,27 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
       isForm
         ? div(
             { class: "transfer-form" },
+            normalizedFilter === "create"
+              ? form(
+                  { method: "GET", action: "/transfers", class: "transfer-category-picker" },
+                  input({ type: "hidden", name: "filter", value: "create" }),
+                  label(i18n.transfersCategory || "Category"),
+                  br(),
+                  select(
+                    { name: "category", class: "transfer-category-select" },
+                    option({ value: "ECONOMIC", selected: selectedCategory === "ECONOMIC" ? "selected" : undefined }, i18n.transfersCategoryEconomic || "Economic"),
+                    option({ value: "TIME", selected: selectedCategory === "TIME" ? "selected" : undefined }, i18n.transfersCategoryTime || "Time"),
+                    option({ value: "TRUST", selected: selectedCategory === "TRUST" ? "selected" : undefined }, i18n.transfersCategoryTrust || "Trust")
+                  ),
+                  " ",
+                  button({ type: "submit", class: "filter-btn" }, i18n.transfersCategoryApply || "Apply"),
+                  br(), br()
+                )
+              : null,
             form(
               { action: normalizedFilter === "edit" ? `/transfers/update/${encodeURIComponent(transferId)}` : "/transfers/create", method: "POST" },
               input({ type: "hidden", name: "returnTo", value: returnToForForm }),
+              normalizedFilter === "create" ? input({ type: "hidden", name: "category", value: selectedCategory }) : null,
               label(i18n.transfersToUser),
               br(),
               input({ type: "text", name: "to", required: true, pattern: "^@[A-Za-z0-9+/]+={0,2}\\.ed25519$", title: i18n.transfersToUserValidation, value: transferToEdit.to || "" }),
@@ -296,11 +374,27 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
               br(),
               input({ type: "text", name: "concept", required: true, value: transferToEdit.concept || "" }),
               br(),
-              label(i18n.transfersAmount),
-              br(),
-              input({ type: "number", name: "amount", step: "0.000001", required: true, min: "0.000001", value: transferToEdit.amount || "" }),
-              br(),
-              br(),
+              normalizedFilter === "edit"
+                ? [
+                    label(i18n.transfersCategory || "Category"),
+                    br(),
+                    select(
+                      { name: "category", required: true },
+                      option({ value: "ECONOMIC", selected: selectedCategory === "ECONOMIC" ? "selected" : undefined }, i18n.transfersCategoryEconomic || "Economic"),
+                      option({ value: "TIME", selected: selectedCategory === "TIME" ? "selected" : undefined }, i18n.transfersCategoryTime || "Time"),
+                      option({ value: "TRUST", selected: selectedCategory === "TRUST" ? "selected" : undefined }, i18n.transfersCategoryTrust || "Trust")
+                    ),
+                    br(), br()
+                  ]
+                : null,
+              selectedCategory === "TRUST"
+                ? input({ type: "hidden", name: "amount", value: "1" })
+                : [
+                    label(`${i18n.transfersAmount} (${amountUnitLabel})`),
+                    br(),
+                    input({ type: "number", name: "amount", step: "0.000001", required: true, min: "0.000001", value: transferToEdit.amount || "" }),
+                    br(), br()
+                  ],
               label(i18n.transfersDeadline),
               br(),
               input({ type: "datetime-local", name: "deadline", required: true, min: moment().format("YYYY-MM-DDTHH:mm"), value: transferToEdit.deadline ? moment(transferToEdit.deadline).format("YYYY-MM-DDTHH:mm") : "" }),
@@ -330,9 +424,9 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
                   ),
                   select(
                     { name: "sort", class: "filter-box__select" },
-                    option({ value: "recent", selected: sort === "recent" }, i18n.transfersSortRecent),
-                    option({ value: "amount", selected: sort === "amount" }, i18n.transfersSortAmount),
-                    option({ value: "deadline", selected: sort === "deadline" }, i18n.transfersSortDeadline)
+                    option({ value: "recent", selected: sort === "recent" ? "selected" : undefined }, i18n.transfersSortRecent),
+                    option({ value: "amount", selected: sort === "amount" ? "selected" : undefined }, i18n.transfersSortAmount),
+                    option({ value: "deadline", selected: sort === "deadline" ? "selected" : undefined }, i18n.transfersSortDeadline)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.transfersSearchButton)
                 )
@@ -383,6 +477,9 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterAll),
           button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterMine),
           button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterUBI),
+          button({ type: "submit", name: "filter", value: "economic", class: normalizedFilter === "economic" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterEconomic || (i18n.transfersCategoryEconomic || "ECONOMIC")),
+          button({ type: "submit", name: "filter", value: "time", class: normalizedFilter === "time" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTime || (i18n.transfersCategoryTime || "TIME")),
+          button({ type: "submit", name: "filter", value: "trust", class: normalizedFilter === "trust" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTrust || (i18n.transfersCategoryTrust || "TRUST")),
           button({ type: "submit", name: "filter", value: "market", class: normalizedFilter === "market" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterMarket),
           button({ type: "submit", name: "filter", value: "pending", class: normalizedFilter === "pending" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterPending),
           button({ type: "submit", name: "filter", value: "unconfirmed", class: normalizedFilter === "unconfirmed" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterUnconfirmed),
@@ -392,6 +489,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.transfersCreateButton)
         )
       ),
+      renderBlockInfoCard(params.block),
       div(
         { class: "transfer-item" },
         div(
@@ -400,7 +498,8 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           renderCardField(`${i18n.transfersFrom}:`, userLink(transfer.from)),
           renderCardField(`${i18n.transfersTo}:`, userLink(transfer.to)),
           br,
-          div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, `${fmtAmount(transfer.amount)} ECO`)),
+          categoryOf(transfer) === "TRUST" ? null : div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, fmtAmountWithUnit(transfer))),
+          renderCardField(`${i18n.transfersCategory || "Category"}:`, categoryLabel(categoryOf(transfer))),
           renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
           isUbi ? null : renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
           renderCardField(`${i18n.transfersStatus}:`, i18n[statusKey(transfer.status)] || String(transfer.status || "")),
@@ -417,6 +516,11 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
             : null,
           tagsNode ? tagsNode : null,
           tagsNode ? br() : null,
+          form(
+            { method: "GET", action: `/transfers/contract/${encodeURIComponent(transfer.id)}`, class: "transfer-contract-form" },
+            button({ type: "submit", class: "filter-btn" }, i18n.transfersExportContract || 'Create Contract')
+          ),
+          br(),
           p(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),

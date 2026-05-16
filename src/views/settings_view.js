@@ -155,7 +155,8 @@ const settingsView = ({ version, aiPrompt }) => {
           { action: "/settings/wish", method: "POST" },
           select({ name: "wish" },
             option({ value: "whole", selected: currentWish === "whole" ? true : undefined }, i18n.settingsWishWhole),
-            option({ value: "mutuals", selected: currentWish === "mutuals" ? true : undefined }, i18n.settingsWishMutuals)
+            option({ value: "mutuals", selected: currentWish === "mutuals" ? true : undefined }, i18n.settingsWishMutuals),
+            option({ value: "only-lan", selected: currentWish === "only-lan" ? true : undefined }, i18n.settingsWishOnlyLan || "Only LAN")
           ), br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
         )

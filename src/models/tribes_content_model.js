@@ -12,48 +12,64 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const TYPE = 'tribe-content';
-
-  const resolveKeyChain = async (tribeId) =>
-    (tribeCrypto && tribesModel) ? tribeCrypto.resolveKeyChain(tribeId, tribesModel) : null;
-
-  const resolveKeyChainSets = async (tribeId) =>
-    (tribeCrypto && tribesModel) ? tribeCrypto.resolveKeyChainSets(tribeId, tribesModel) : null;
-
-  const publish = async (content) => {
-    const ssbClient = await openSsb();
-    return new Promise((resolve, reject) =>
-      ssbClient.publish(content, (err, result) => err ? reject(err) : resolve(result))
-    );
-  };
-
   const readLog = async () => {
-    const ssbClient = await openSsb();
+    const client = await openSsb();
     return new Promise((resolve, reject) =>
       pull(
-        ssbClient.createLogStream({ limit: tribeLogLimit }),
+        client.createLogStream({ limit: tribeLogLimit }),
         pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
       )
     );
   };
 
-  const buildIndex = async (msgs, tribeId, contentType) => {
-    const tombstoned = new Set();
-    const replaced = new Map();
+  const fingerprintsForRoot = (rootId) => {
+    const fps = new Set();
+    for (const k of tribeCrypto.getKeys(rootId)) fps.add(tribeCrypto.fingerprint(k));
+    return fps;
+  };
+
+  const wrapAndPublishContent = async (rootId, body) => {
+    const client = await openSsb();
+    const key = tribeCrypto.getKey(rootId);
+    if (!key) throw new Error('Missing tribe key for ' + rootId);
+    const envelope = tribeCrypto.wrapMsg(body, key);
+    return new Promise((resolve, reject) =>
+      client.publish(envelope, (err, r) => err ? reject(err) : resolve(r))
+    );
+  };
+
+  const decodeContentMsgs = async (msgs, opts) => {
+    const fpIdx = tribeCrypto.buildFingerprintIndex();
+    const targetRootId = opts && opts.rootId ? opts.rootId : null;
+    const allowedFps = targetRootId ? fingerprintsForRoot(targetRootId) : null;
+
     const items = new Map();
+    const replacedBy = new Map();
+    const tombstoned = new Set();
     const authorByKey = new Map();
     const tombRequests = [];
 
     for (const m of msgs) {
-      const c = m.value?.content;
+      const c = m.value && m.value.content;
       if (!c) continue;
-      if (c.type === 'tombstone' && c.target) { tombRequests.push({ target: c.target, author: m.value?.author }); continue; }
-      if (c.type !== TYPE) continue;
-      authorByKey.set(m.key, m.value?.author);
-      if (tribeId && c.tribeId !== tribeId) continue;
-      if (contentType && c.contentType !== contentType) continue;
-      if (c.replaces) replaced.set(c.replaces, m.key);
-      items.set(m.key, { id: m.key, ...c, _ts: m.value?.timestamp });
+      if (!tribeCrypto.isTribeMsg(c)) continue;
+      if (allowedFps && !allowedFps.has(c.fp)) continue;
+
+      const r = tribeCrypto.unwrapMsg(c, fpIdx);
+      if (!r || !r.body) continue;
+      const b = r.body;
+
+      if (b.k === 'tombstone') {
+        tombRequests.push({ target: b.target, author: m.value.author, rootId: r.rootId });
+        continue;
+      }
+      if (b.k !== 'tribe-content') continue;
+      if (targetRootId && b.rootId !== targetRootId) continue;
+      if (opts && opts.contentType && b.contentType !== opts.contentType) continue;
+
+      authorByKey.set(m.key, m.value.author);
+      if (b.replaces) replacedBy.set(b.replaces, m.key);
+      items.set(m.key, { id: m.key, ...b, _ts: m.value.timestamp });
     }
 
     for (const t of tombRequests) {
@@ -61,47 +77,23 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (targetAuthor && t.author === targetAuthor) tombstoned.add(t.target);
     }
 
-    for (const id of tombstoned) items.delete(id);
-    for (const oldId of replaced.keys()) items.delete(oldId);
-
-    const result = [...items.values()];
-    if (tribeCrypto && tribesModel) {
-      const keyChainCache = new Map();
-      for (let i = 0; i < result.length; i++) {
-        if (!result[i].encryptedPayload) continue;
-        const tid = result[i].tribeId;
-        if (!keyChainCache.has(tid)) {
-          const sets = await tribeCrypto.resolveKeyChainSets(tid, tribesModel);
-          keyChainCache.set(tid, sets || []);
-        }
-        result[i] = tribeCrypto.decryptContent(result[i], keyChainCache.get(tid));
-      }
-    }
-
-    return result.sort((a, b) => {
-      const ta = Date.parse(a.updatedAt || a.createdAt) || a._ts || 0;
-      const tb = Date.parse(b.updatedAt || b.createdAt) || b._ts || 0;
-      return tb - ta;
-    });
+    return { items, replacedBy, tombstoned };
   };
 
   return {
     async create(tribeId, contentType, data) {
-      if (!VALID_CONTENT_TYPES.includes(contentType)) {
-        throw new Error('Invalid content type');
-      }
-      if (data.status && !VALID_STATUSES.includes(data.status)) {
-        throw new Error('Invalid status. Must be OPEN, CLOSED, or IN-PROGRESS');
-      }
-      if (data.priority && !VALID_PRIORITIES.includes(data.priority)) {
-        throw new Error('Invalid priority. Must be LOW, MEDIUM, HIGH, or CRITICAL');
-      }
-      const ssbClient = await openSsb();
+      if (!VALID_CONTENT_TYPES.includes(contentType)) throw new Error('Invalid content type');
+      if (data.status && !VALID_STATUSES.includes(data.status)) throw new Error('Invalid status. Must be OPEN, CLOSED, or IN-PROGRESS');
+      if (data.priority && !VALID_PRIORITIES.includes(data.priority)) throw new Error('Invalid priority. Must be LOW, MEDIUM, HIGH, or CRITICAL');
+
+      const client = await openSsb();
+      const rootId = await tribesModel.getRootId(tribeId);
       const now = new Date().toISOString();
-      const content = {
-        type: TYPE,
-        tribeId,
+      const body = {
+        k: 'tribe-content',
+        rootId,
         contentType,
+        replaces: null,
         title: data.title || '',
         description: data.description || '',
         status: data.status || 'OPEN',
@@ -127,33 +119,26 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         refeeds_inhabitants: data.refeeds_inhabitants || [],
         opinions: data.opinions || {},
         opinions_inhabitants: data.opinions_inhabitants || [],
-        author: ssbClient.id,
+        author: client.id,
         createdAt: now,
-        updatedAt: now,
+        updatedAt: now
       };
-      const keyChain = await resolveKeyChain(tribeId);
-      if (keyChain && keyChain.length > 0) {
-        return publish(tribeCrypto.encryptContent(content, keyChain));
-      }
-      return publish(content);
+      return wrapAndPublishContent(rootId, body);
     },
 
     async update(contentId, data, existing) {
       if (!existing) existing = await this.getById(contentId);
       if (!existing) throw new Error('Content not found');
-      if (existing._undecryptable) throw new Error('Content is tribe-encrypted and cannot be decrypted with available keys');
-      if (data.status && !VALID_STATUSES.includes(data.status)) {
-        throw new Error('Invalid status. Must be OPEN, CLOSED, or IN-PROGRESS');
-      }
-      if (data.priority && !VALID_PRIORITIES.includes(data.priority)) {
-        throw new Error('Invalid priority. Must be LOW, MEDIUM, HIGH, or CRITICAL');
-      }
+      if (data.status && !VALID_STATUSES.includes(data.status)) throw new Error('Invalid status. Must be OPEN, CLOSED, or IN-PROGRESS');
+      if (data.priority && !VALID_PRIORITIES.includes(data.priority)) throw new Error('Invalid priority. Must be LOW, MEDIUM, HIGH, or CRITICAL');
+
+      const rootId = existing.rootId || (await tribesModel.getRootId(existing.tribeId || existing.rootId));
       const now = new Date().toISOString();
-      const updated = {
-        type: TYPE,
-        replaces: contentId,
-        tribeId: existing.tribeId,
+      const body = {
+        k: 'tribe-content',
+        rootId,
         contentType: existing.contentType,
+        replaces: contentId,
         title: data.title !== undefined ? data.title : existing.title,
         description: data.description !== undefined ? data.description : existing.description,
         status: data.status !== undefined ? data.status : existing.status,
@@ -181,70 +166,57 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         opinions_inhabitants: data.opinions_inhabitants !== undefined ? data.opinions_inhabitants : existing.opinions_inhabitants,
         author: existing.author,
         createdAt: existing.createdAt,
-        updatedAt: now,
+        updatedAt: now
       };
-      const keyChain = await resolveKeyChain(existing.tribeId);
-      if (keyChain && keyChain.length > 0) {
-        return publish(tribeCrypto.encryptContent(updated, keyChain));
-      }
-      return publish(updated);
+      return wrapAndPublishContent(rootId, body);
     },
 
     async deleteById(contentId) {
-      const ssbClient = await openSsb();
-      return publish({
-        type: 'tombstone',
+      const existing = await this.getById(contentId);
+      if (!existing) throw new Error('Content not found');
+      const rootId = existing.rootId || (await tribesModel.getRootId(existing.tribeId || existing.rootId));
+      const client = await openSsb();
+      const body = {
+        k: 'tombstone',
+        rootId,
         target: contentId,
-        deletedAt: new Date().toISOString(),
-        author: ssbClient.id,
-      });
+        author: client.id,
+        deletedAt: new Date().toISOString()
+      };
+      return wrapAndPublishContent(rootId, body);
     },
 
     async getById(contentId) {
       const msgs = await readLog();
-      const tombstoned = new Set();
-      const replaced = new Map();
-      const items = new Map();
-      const authorByKey = new Map();
-      const tombRequests = [];
-
-      for (const m of msgs) {
-        const c = m.value?.content;
-        if (!c) continue;
-        if (c.type === 'tombstone' && c.target) { tombRequests.push({ target: c.target, author: m.value?.author }); continue; }
-        if (c.type !== TYPE) continue;
-        authorByKey.set(m.key, m.value?.author);
-        if (c.replaces) replaced.set(c.replaces, m.key);
-        items.set(m.key, { id: m.key, ...c, _ts: m.value?.timestamp });
-      }
-      for (const t of tombRequests) {
-        const targetAuthor = authorByKey.get(t.target);
-        if (targetAuthor && t.author === targetAuthor) tombstoned.add(t.target);
-      }
-
+      const { items, replacedBy, tombstoned } = await decodeContentMsgs(msgs, {});
       let latestId = contentId;
-      while (replaced.has(latestId)) latestId = replaced.get(latestId);
+      while (replacedBy.has(latestId)) latestId = replacedBy.get(latestId);
       if (tombstoned.has(latestId)) return null;
-      const item = items.get(latestId) || null;
-      if (!item || !item.encryptedPayload || !tribeCrypto || !tribesModel) return item;
-      const keyChainSets = await tribeCrypto.resolveKeyChainSets(item.tribeId, tribesModel);
-      return tribeCrypto.decryptContent(item, keyChainSets || []);
+      return items.get(latestId) || null;
     },
 
     async listByTribe(tribeId, contentType, filter) {
+      const rootId = await tribesModel.getRootId(tribeId).catch(() => tribeId);
       const msgs = await readLog();
-      let items = await buildIndex(msgs, tribeId, contentType);
+      const { items, replacedBy, tombstoned } = await decodeContentMsgs(msgs, { rootId, contentType });
+      for (const id of tombstoned) items.delete(id);
+      for (const oldId of replacedBy.keys()) items.delete(oldId);
 
-      if (filter === 'open') items = items.filter(i => i.status === 'OPEN');
-      if (filter === 'closed') items = items.filter(i => i.status === 'CLOSED');
-      if (filter === 'in-progress') items = items.filter(i => i.status === 'IN-PROGRESS');
+      let result = [...items.values()];
+      if (filter === 'open') result = result.filter(i => i.status === 'OPEN');
+      else if (filter === 'closed') result = result.filter(i => i.status === 'CLOSED');
+      else if (filter === 'in-progress') result = result.filter(i => i.status === 'IN-PROGRESS');
 
-      return items;
+      return result.sort((a, b) => {
+        const ta = Date.parse(a.updatedAt || a.createdAt) || a._ts || 0;
+        const tb = Date.parse(b.updatedAt || b.createdAt) || b._ts || 0;
+        return tb - ta;
+      });
     },
 
     async toggleAttendee(contentId) {
-      const ssbClient = await openSsb();
-      const userId = ssbClient.id;
+      const client = await openSsb();
+      const userId = client.id;
       const item = await this.getById(contentId);
       if (!item) throw new Error('Content not found');
       const attendees = Array.isArray(item.attendees) ? [...item.attendees] : [];
@@ -255,8 +227,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     },
 
     async toggleAssignee(contentId) {
-      const ssbClient = await openSsb();
-      const userId = ssbClient.id;
+      const client = await openSsb();
+      const userId = client.id;
       const item = await this.getById(contentId);
       if (!item) throw new Error('Content not found');
       const assignees = Array.isArray(item.assignees) ? [...item.assignees] : [];
@@ -267,15 +239,13 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     },
 
     async updateStatus(contentId, status) {
-      if (!VALID_STATUSES.includes(status)) {
-        throw new Error('Invalid status. Must be OPEN, CLOSED, or IN-PROGRESS');
-      }
+      if (!VALID_STATUSES.includes(status)) throw new Error('Invalid status. Must be OPEN, CLOSED, or IN-PROGRESS');
       return this.update(contentId, { status });
     },
 
     async castVote(votationId, optionIndex) {
-      const ssbClient = await openSsb();
-      const userId = ssbClient.id;
+      const client = await openSsb();
+      const userId = client.id;
       const item = await this.getById(votationId);
       if (!item) throw new Error('Votation not found');
       if (item.status === 'CLOSED') throw new Error('Votation is closed');
@@ -295,8 +265,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     },
 
     async toggleRefeed(contentId) {
-      const ssbClient = await openSsb();
-      const userId = ssbClient.id;
+      const client = await openSsb();
+      const userId = client.id;
       const item = await this.getById(contentId);
       if (!item) throw new Error('Content not found');
       const inhabitants = Array.isArray(item.refeeds_inhabitants) ? [...item.refeeds_inhabitants] : [];
@@ -307,8 +277,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
     async castOpinion(contentId, category) {
       if (!categories.includes(category)) throw new Error('Invalid opinion category');
-      const ssbClient = await openSsb();
-      const userId = ssbClient.id;
+      const client = await openSsb();
+      const userId = client.id;
       const item = await this.getById(contentId);
       if (!item) throw new Error('Content not found');
       const inhabitants = Array.isArray(item.opinions_inhabitants) ? [...item.opinions_inhabitants] : [];
@@ -320,17 +290,16 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
     async getThread(forumId) {
       const msgs = await readLog();
-      const allItems = buildIndex(msgs, null, null);
-      const parent = allItems.find(i => i.id === forumId);
+      const { items, replacedBy, tombstoned } = await decodeContentMsgs(msgs, {});
+      for (const id of tombstoned) items.delete(id);
+      for (const oldId of replacedBy.keys()) items.delete(oldId);
+      const all = [...items.values()];
+      const parent = all.find(i => i.id === forumId);
       if (!parent) return { parent: null, replies: [] };
-      const replies = allItems
+      const replies = all
         .filter(i => i.parentId === forumId && i.contentType === 'forum-reply')
-        .sort((a, b) => {
-          const ta = Date.parse(a.createdAt) || 0;
-          const tb = Date.parse(b.createdAt) || 0;
-          return ta - tb;
-        });
+        .sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
       return { parent, replies };
-    },
+    }
   };
 };

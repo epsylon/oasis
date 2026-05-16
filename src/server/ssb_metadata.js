@@ -6,7 +6,14 @@ const config = require('./ssb_config');
 const updater = require('../backend/updater.js');
 
 let printed = false;
-let checkedForUpdate = false; 
+let checkedForUpdate = false;
+let pendingClearnetModules = null;
+let clearnetReady = false;
+
+function setClearnetModules(modules) {
+  pendingClearnetModules = Array.isArray(modules) ? modules : [];
+  clearnetReady = true;
+}
 
 function getModules() {
   const nodeModulesPath = path.resolve(__dirname, 'node_modules');
@@ -37,6 +44,19 @@ async function checkForUpdate() {
   await updater.getRemoteVersion();
 }
 
+function waitForClearnet(timeoutMs = 25000) {
+  return new Promise((resolve) => {
+    if (clearnetReady) return resolve(pendingClearnetModules || []);
+    const started = Date.now();
+    const tick = () => {
+      if (clearnetReady) return resolve(pendingClearnetModules || []);
+      if (Date.now() - started >= timeoutMs) return resolve(null);
+      setTimeout(tick, 250);
+    };
+    tick();
+  });
+}
+
 async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, httpHost = 'localhost', offline = false, isPublic = false) {
   if (printed) return;
   printed = true;
@@ -65,7 +85,13 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
     list && list.some(i => !i.internal && i.family === 'IPv4')
   );
   console.log(`- Protocol (port): ${ssbPort}`);
-  console.log(`- LAN broadcasting (UDP): ${localDiscovery ? 'enabled' : 'disabled'}`);
+  console.log(`- LAN Broadcasting (UDP): ${localDiscovery ? 'enabled' : 'disabled'}`);
+  const clearnetModules = await waitForClearnet();
+  if (clearnetModules && clearnetModules.length > 0) {
+    console.log(`- Internet Broadcasting (Clearnet): ${clearnetModules.join(', ')}`);
+  } else {
+    console.log(`- Internet Broadcasting (Clearnet): disabled`);
+  }
   console.log(`- Replication (hops): ${hops}`);
   console.log(`- Mode: ${isOnline ? 'online' : 'offline'}`);
   console.log("");
@@ -80,5 +106,6 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
 
 module.exports = {
   printMetadata,
+  setClearnetModules,
   colors
 };

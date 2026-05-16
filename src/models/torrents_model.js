@@ -36,6 +36,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   const decryptIfTribe = tribeHelpers ? tribeHelpers.decryptIfTribe : async (c) => c;
   const assertReadable = tribeHelpers ? tribeHelpers.assertReadable : () => {};
   const decryptIndexNodes = tribeHelpers ? tribeHelpers.decryptIndexNodes : async () => {};
+  const unwrapForIndex = (msgs) => tribeHelpers ? tribeHelpers.unwrapMessagesForKind(msgs, 'torrent') : msgs;
+  const tombFor = async (target, tribeId, author) => tribeHelpers ? tribeHelpers.encryptTombstone(target, tribeId, author) : { type: 'tombstone', target, deletedAt: new Date().toISOString(), author };
 
   const getAllMessages = async (ssbClient) =>
     new Promise((resolve, reject) => {
@@ -137,7 +139,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     async resolveCurrentId(id) {
       const ssbClient = await openSsb();
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(messages);
+      const idx = buildIndex(unwrapForIndex(messages));
 
       let tip = id;
       while (idx.forward.has(tip)) tip = idx.forward.get(tip);
@@ -148,7 +150,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     async resolveRootId(id) {
       const ssbClient = await openSsb();
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(messages);
+      const idx = buildIndex(unwrapForIndex(messages));
 
       let tip = id;
       while (idx.forward.has(tip)) tip = idx.forward.get(tip);
@@ -193,10 +195,11 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const tipId = await this.resolveCurrentId(id);
       const oldMsg = await getMsg(ssbClient, tipId);
 
-      if (!oldMsg || oldMsg.content?.type !== "torrent") throw new Error("Torrent not found");
+      if (!oldMsg) throw new Error("Torrent not found");
       const oldDec = await decryptIfTribe(oldMsg.content);
+      if (!oldDec || oldDec.type !== "torrent") throw new Error("Torrent not found");
       assertReadable(oldDec, "Torrent");
-      if (Object.keys(oldDec.opinions || oldMsg.content.opinions || {}).length > 0) throw new Error("Cannot edit torrent after it has received opinions.");
+      if (Object.keys(oldDec.opinions || {}).length > 0) throw new Error("Cannot edit torrent after it has received opinions.");
       if ((oldDec.author || oldMsg.content.author) !== userId) throw new Error("Not the author");
 
       const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldDec.tags);
@@ -224,7 +227,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const result = await new Promise((resolve, reject) => {
         ssbClient.publish(updated, (err, res) => (err ? reject(err) : resolve(res)));
       });
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };
+      const tombstone = await tombFor(tipId, oldDec.tribeId || oldMsg.content.tribeId, userId);
       await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
       return result;
     },
@@ -235,11 +238,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const tipId = await this.resolveCurrentId(id);
       const msg = await getMsg(ssbClient, tipId);
 
-      if (!msg || msg.content?.type !== "torrent") throw new Error("Torrent not found");
+      if (!msg) throw new Error("Torrent not found");
       const dec = await decryptIfTribe(msg.content);
+      if (!dec || dec.type !== "torrent") throw new Error("Torrent not found");
       if ((dec.author || msg.content.author) !== userId) throw new Error("Not the author");
 
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId };
+      const tombstone = await tombFor(tipId, dec.tribeId || msg.content.tribeId, userId);
 
       return new Promise((resolve, reject) => {
         ssbClient.publish(tombstone, (err, res) => (err ? reject(err) : resolve(res)));
@@ -256,7 +260,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const viewerId = opts.viewerId || ssbClient.id;
 
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(messages);
+      const idx = buildIndex(unwrapForIndex(messages));
       await decryptIndexNodes(idx);
 
       const items = [];
@@ -301,7 +305,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const ssbClient = await openSsb();
       const viewer = viewerId || ssbClient.id;
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(messages);
+      const idx = buildIndex(unwrapForIndex(messages));
       await decryptIndexNodes(idx);
 
       let tip = id;
@@ -315,12 +319,13 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (node) return buildTorrent(node, root, viewer);
 
       const msg = await getMsg(ssbClient, tip);
-      if (!msg || msg.content?.type !== "torrent") throw new Error("Torrent not found");
+      if (!msg) throw new Error("Torrent not found");
       let c = msg.content;
-      if (c.encryptedPayload && tribeCrypto && tribesModel) {
+      if (tribeCrypto && (c?.encryptedPayload || tribeCrypto.isTribeMsg(c)) && tribesModel) {
         const dec = await tribeCrypto.decryptFromTribe(c, tribesModel);
         c = dec && !dec._undecryptable ? { ...dec, _decrypted: true } : { ...c, _decrypted: false };
       }
+      if (!c || c.type !== "torrent") throw new Error("Torrent not found");
       return buildTorrent({ key: tip, ts: msg.timestamp || 0, c }, root, viewer);
     },
 
@@ -333,11 +338,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const tipId = await this.resolveCurrentId(id);
       const msg = await getMsg(ssbClient, tipId);
 
-      if (!msg || msg.content?.type !== "torrent") throw new Error("Torrent not found");
+      if (!msg) throw new Error("Torrent not found");
 
       const oldDec = await decryptIfTribe(msg.content);
+      if (!oldDec || oldDec.type !== "torrent") throw new Error("Torrent not found");
       assertReadable(oldDec, "Torrent");
-      const voters = safeArr(oldDec.opinions_inhabitants || msg.content.opinions_inhabitants);
+      const voters = safeArr(oldDec.opinions_inhabitants);
       if (voters.includes(userId)) throw new Error("Already voted");
 
       const now = new Date().toISOString();
@@ -365,7 +371,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const result = await new Promise((resolve, reject) => {
         ssbClient.publish(updated, (err, res) => (err ? reject(err) : resolve(res)));
       });
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };
+      const tombstone = await tombFor(tipId, oldDec.tribeId || msg.content.tribeId, userId);
       await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
       return result;
     }

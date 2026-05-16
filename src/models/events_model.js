@@ -1,14 +1,12 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
-const { config } = require('../server/SSB_server.js');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
-
-const userId = config.keys.id;
 
 module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
+  const me = async () => (await openSsb()).id;
 
   const uniq = (arr) => Array.from(new Set((Array.isArray(arr) ? arr : []).filter(x => typeof x === 'string' && x.trim().length)));
 
@@ -40,8 +38,9 @@ module.exports = ({ cooler }) => {
   return {
     type: 'event',
 
-    async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic, mapUrl = "") {
+    async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic, mapUrl = "", clearnetPublic = false) {
       const ssbClient = await openSsb();
+      const userId = await me();
 
       const formattedDate = normalizeDate(date);
       if (moment(formattedDate).isBefore(moment().startOf('minute'))) throw new Error("Cannot create an event in the past");
@@ -68,7 +67,8 @@ module.exports = ({ cooler }) => {
         organizer: userId,
         status: 'OPEN',
         isPublic: normalizePrivacy(isPublic),
-        mapUrl: String(mapUrl || "").trim()
+        mapUrl: String(mapUrl || "").trim(),
+        clearnetPublic: clearnetPublic === true || clearnetPublic === 'true' || clearnetPublic === 'on'
       };
 
       return new Promise((resolve, reject) => {
@@ -78,6 +78,7 @@ module.exports = ({ cooler }) => {
 
     async toggleAttendee(eventId) {
       const ssbClient = await openSsb();
+      const userId = await me();
       const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, ev) => err || !ev || !ev.content ? rej(new Error("Error retrieving event")) : res(ev)));
       const c = ev.content;
 
@@ -103,6 +104,7 @@ module.exports = ({ cooler }) => {
 
     async deleteEventById(eventId) {
       const ssbClient = await openSsb();
+      const userId = await me();
       const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, ev) => err || !ev || !ev.content ? rej(new Error("Error retrieving event")) : res(ev)));
       if (ev.content.organizer !== userId) throw new Error("Only the organizer can delete this event");
       const tombstone = { type: 'tombstone', target: eventId, deletedAt: new Date().toISOString(), author: userId };
@@ -133,12 +135,14 @@ module.exports = ({ cooler }) => {
         organizer: c.organizer || '',
         status,
         isPublic: normalizePrivacy(c.isPublic),
-        mapUrl: c.mapUrl || ""
+        mapUrl: c.mapUrl || "",
+        clearnetPublic: !!c.clearnetPublic
       };
     },
 
     async updateEventById(eventId, updatedData) {
       const ssbClient = await openSsb();
+      const userId = await me();
       const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, ev) => err || !ev || !ev.content ? rej(new Error("Error retrieving event")) : res(ev)));
       if (ev.content.organizer !== userId) throw new Error("Only the organizer can update this event");
 
@@ -168,6 +172,7 @@ module.exports = ({ cooler }) => {
         url: updatedData.url ?? c.url,
         tags,
         isPublic: updatedData.isPublic !== undefined ? normalizePrivacy(updatedData.isPublic) : normalizePrivacy(c.isPublic),
+        clearnetPublic: updatedData.clearnetPublic !== undefined ? (updatedData.clearnetPublic === true || updatedData.clearnetPublic === 'true' || updatedData.clearnetPublic === 'on') : !!c.clearnetPublic,
         attendees: uniq(Array.isArray(c.attendees) ? c.attendees : []),
         updatedAt: new Date().toISOString(),
         replaces: eventId
@@ -180,6 +185,7 @@ module.exports = ({ cooler }) => {
 
     async listAll(author = null, filter = 'all') {
       const ssbClient = await openSsb();
+      const userId = await me();
       return new Promise((resolve, reject) => {
         pull(
           ssbClient.createLogStream({ limit: logLimit }),

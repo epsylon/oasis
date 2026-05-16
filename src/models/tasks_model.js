@@ -3,7 +3,7 @@ const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, pmModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -210,6 +210,60 @@ module.exports = ({ cooler }) => {
           })
         );
       });
+    },
+
+    async checkDueReminders() {
+      if (!pmModel) return;
+      const ssbClient = await openSsb();
+      const messages = await new Promise((resolve, reject) =>
+        pull(ssbClient.createLogStream({ limit: logLimit }),
+          pull.collect((err, rows) => err ? reject(err) : resolve(rows)))
+      );
+      const now = Date.now();
+      const sent = new Set();
+      const tombstoned = new Set();
+      const replaced = new Set();
+      const tasks = new Map();
+      for (const m of messages) {
+        const c = m.value && m.value.content;
+        if (!c) continue;
+        if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue; }
+        if (c.type === 'taskReminderSent' && c.target) { sent.add(c.target); continue; }
+        if (c.type === 'task') {
+          if (c.replaces) replaced.add(c.replaces);
+          tasks.set(m.key, { id: m.key, ...c });
+        }
+      }
+      tombstoned.forEach(id => tasks.delete(id));
+      replaced.forEach(id => tasks.delete(id));
+      const publishMarker = (target) => new Promise((resolve, reject) => {
+        ssbClient.publish({ type: 'taskReminderSent', target, sentAt: new Date().toISOString() }, err => err ? reject(err) : resolve());
+      });
+      for (const t of tasks.values()) {
+        if (sent.has(t.id)) continue;
+        const status = String(t.status || '').toUpperCase();
+        if (status !== 'OPEN') continue;
+        const endTime = t.endTime || t.deadline;
+        if (!endTime) continue;
+        const endTs = new Date(endTime).getTime();
+        if (!endTs || endTs > now) continue;
+        const assignees = Array.isArray(t.assignees) ? t.assignees.filter(a => typeof a === 'string' && a.length > 0) : [];
+        if (assignees.length === 0) continue;
+        const subject = `Task Reminder: ${t.title || 'Task'}`;
+        const text =
+          `Task: ${t.title || ''}\n` +
+          (t.description ? `Description: ${t.description}\n` : '') +
+          `Deadline: ${endTime}\n` +
+          (t.priority ? `Priority: ${t.priority}\n` : '') +
+          `\nVisit Task: /tasks/${t.id}`;
+        try {
+          const chunkSize = 6;
+          for (let i = 0; i < assignees.length; i += chunkSize) {
+            await pmModel.sendMessage(assignees.slice(i, i + chunkSize), subject, text);
+          }
+          await publishMarker(t.id);
+        } catch (_) {}
+      }
     }
   };
 };

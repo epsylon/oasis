@@ -55,11 +55,94 @@ const fmtEcoTime = (ms) => {
   return `${(h / 24).toFixed(2)} ${i18n.bankUnitDays || 'days'}`;
 };
 
-const renderExchange = (ex) => {
+const escAttr = (s) => String(s)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const buildEcoValueChartSvg = (history, labels) => {
+  const arr = Array.isArray(history) ? history.slice(-120) : [];
+  const W = 720, H = 320;
+  const padL = 56, padR = 16, padT = 16, padB = 70;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  if (arr.length < 2) {
+    return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" class="bank-eco-chart-svg" preserveAspectRatio="xMidYMid meet">`
+      + `<rect x="0" y="0" width="${W}" height="${H}" class="bank-eco-chart-bg" />`
+      + `<text x="${W/2}" y="${H/2}" text-anchor="middle" class="bank-eco-chart-empty">${escAttr(labels.empty || 'Not enough samples yet')}</text>`
+      + `</svg>`;
+  }
+  const values = arr.map(s => Number(s.ecoValue || 0));
+  const supplies = arr.map(s => Number(s.currentSupply || 0));
+  const inflations = arr.map(s => Number(s.inflationFactor || 0));
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const rangeV = maxV - minV || 1;
+  const minS = Math.min(...supplies);
+  const maxS = Math.max(...supplies);
+  const rangeS = maxS - minS || 1;
+  const minI = Math.min(...inflations);
+  const maxI = Math.max(...inflations);
+  const rangeI = maxI - minI || 1;
+  const stepX = arr.length > 1 ? plotW / (arr.length - 1) : plotW;
+  const xy = (i, v, minR, rangeR) => {
+    const x = padL + i * stepX;
+    const y = padT + plotH - ((v - minR) / rangeR) * plotH;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  };
+  const pointsValue = values.map((v, i) => xy(i, v, minV, rangeV)).join(' ');
+  const pointsSupply = supplies.map((v, i) => xy(i, v, minS, rangeS)).join(' ');
+  const pointsInfl = inflations.map((v, i) => xy(i, v, minI, rangeI)).join(' ');
+  const tsStart = moment(arr[0].ts).format('YYYY-MM-DD HH:mm');
+  const tsEnd = moment(arr[arr.length - 1].ts).format('YYYY-MM-DD HH:mm');
+  const tsMid = moment(arr[Math.floor(arr.length / 2)].ts).format('YYYY-MM-DD HH:mm');
+  const yTicks = 4;
+  const grid = [];
+  for (let i = 0; i <= yTicks; i++) {
+    const y = padT + (plotH / yTicks) * i;
+    grid.push(`<line x1="${padL}" x2="${W - padR}" y1="${y.toFixed(2)}" y2="${y.toFixed(2)}" class="bank-eco-chart-grid" />`);
+    const val = maxV - (rangeV / yTicks) * i;
+    grid.push(`<text x="${padL - 6}" y="${(y + 4).toFixed(2)}" text-anchor="end" class="bank-eco-chart-axis">${val.toFixed(4)}</text>`);
+  }
+  const xLabelY = padT + plotH + 16;
+  const xLabels = `<text x="${padL}" y="${xLabelY}" text-anchor="start" class="bank-eco-chart-axis">${escAttr(tsStart)}</text>`
+    + `<text x="${(padL + plotW/2).toFixed(2)}" y="${xLabelY}" text-anchor="middle" class="bank-eco-chart-axis">${escAttr(tsMid)}</text>`
+    + `<text x="${W - padR}" y="${xLabelY}" text-anchor="end" class="bank-eco-chart-axis">${escAttr(tsEnd)}</text>`;
+  const legendY = padT + plotH + 44;
+  const legendBaseX = padL;
+  const legend = `<g class="bank-eco-chart-legend">`
+    + `<rect x="${legendBaseX}" y="${(legendY - 7).toFixed(2)}" width="14" height="3" class="bank-eco-chart-line-value-legend" />`
+    + `<text x="${(legendBaseX + 18).toFixed(2)}" y="${legendY}" class="bank-eco-chart-legend-text">${escAttr(labels.value || 'Value')}</text>`
+    + `<rect x="${(legendBaseX + 170).toFixed(2)}" y="${(legendY - 7).toFixed(2)}" width="14" height="3" class="bank-eco-chart-line-supply-legend" />`
+    + `<text x="${(legendBaseX + 188).toFixed(2)}" y="${legendY}" class="bank-eco-chart-legend-text">${escAttr(labels.supply || 'Supply')}</text>`
+    + `<rect x="${(legendBaseX + 320).toFixed(2)}" y="${(legendY - 7).toFixed(2)}" width="14" height="3" class="bank-eco-chart-line-inflation-legend" />`
+    + `<text x="${(legendBaseX + 338).toFixed(2)}" y="${legendY}" class="bank-eco-chart-legend-text">${escAttr(labels.inflation || 'Inflation')}</text>`
+    + `</g>`;
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" class="bank-eco-chart-svg" preserveAspectRatio="xMidYMid meet">`
+    + `<rect x="0" y="0" width="${W}" height="${H}" class="bank-eco-chart-bg" />`
+    + grid.join('')
+    + `<polyline points="${pointsSupply}" class="bank-eco-chart-line-supply" />`
+    + `<polyline points="${pointsInfl}" class="bank-eco-chart-line-inflation" />`
+    + `<polyline points="${pointsValue}" class="bank-eco-chart-line-value" />`
+    + xLabels
+    + legend
+    + `</svg>`;
+};
+
+const renderExchange = (ex, history) => {
   if (!ex) return div(p(i18n.bankExchangeNoData));
   const syncStatus = ex.isSynced ? i18n.bankingSyncStatusSynced : i18n.bankingSyncStatusOutdated;
   const syncStatusClass = ex.isSynced ? 'synced' : 'outdated';
   const ecoTimeLabel = ex.isSynced ? fmtEcoTime(ex.ecoTimeMs) : fmtEcoTime(0);
+  const chartLabels = {
+    value: i18n.bankExchangeChartValue || 'Value (ECO/h)',
+    supply: i18n.bankExchangeChartSupply || 'Supply',
+    inflation: i18n.bankExchangeChartInflation || 'Inflation %',
+    empty: i18n.bankExchangeChartEmpty || 'Not enough samples yet — revisit later'
+  };
+  const hasEnoughSamples = Array.isArray(history) && history.length >= 2 && ex.isSynced;
   return div(
     div({ class: "bank-summary" },
       table({ class: "bank-info-table" },
@@ -75,7 +158,13 @@ const renderExchange = (ex) => {
           kvRow(i18n.bankInflationMonthly, `${Number(ex.inflationMonthly || 0).toFixed(2)}%`)
         )
       )
-    )
+    ),
+    hasEnoughSamples
+      ? div({ class: "bank-eco-chart-block" },
+          h2({ class: "bank-eco-chart-title" }, i18n.bankExchangeChartTitle || 'ECOin value over time'),
+          div({ class: "bank-eco-chart-canvas", innerHTML: buildEcoValueChartSvg(history, chartLabels) })
+        )
+      : null
   );
 };
 
@@ -327,7 +416,7 @@ const renderBankingView = (data, filter, userId, isPub) =>
             allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId)
           )
         : filter === "exchange"
-        ? renderExchange(data.exchange)
+        ? renderExchange(data.exchange, data.exchangeHistory)
         : filter === "epochs"
         ? renderEpochList(data.epochs || [])
         : filter === "rules"

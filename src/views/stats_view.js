@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, input, ul, li, a, h3, span, strong, table, tr, td, th } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, input, ul, li, a, h3, span, strong, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink } = require('./main_views');
 
 Object.assign(i18n, {
@@ -99,10 +99,22 @@ exports.statsView = (stats, filter) => {
     return n.toFixed(2);
   };
 
-  const kpi = (label, value) => div({ class: 'stats-kpi' },
-    div({ class: 'stats-kpi-label' }, label),
-    div({ class: 'stats-kpi-value' }, String(value))
-  );
+  const isZero = (value) => {
+    if (value === 0 || value === '0') return true;
+    const s = String(value == null ? '' : value).trim();
+    if (!s) return true;
+    const n = parseFloat(s);
+    if (!Number.isFinite(n)) return false;
+    return n === 0;
+  };
+
+  const kpi = (label, value) => {
+    if (isZero(value)) return null;
+    return div({ class: 'stats-kpi' },
+      div({ class: 'stats-kpi-label' }, label),
+      div({ class: 'stats-kpi-value' }, String(value))
+    );
+  };
 
   const kpiBar = (label, value, pct) => {
     const n = Math.max(0, Math.min(100, Number(pct) || 0));
@@ -256,15 +268,12 @@ exports.statsView = (stats, filter) => {
   );
 
   const bankingCard = div({ class: 'stats-card' },
-    h3({ class: 'stats-section-h' }, i18n.statsBankingTitle),
     table({ class: 'block-info-table' },
-      tr(td({ class: 'card-label' }, i18n.statsEcoWalletLabel), td({ class: 'card-value' }, a({ href: '/wallet', class: 'stats-link-break' }, stats?.banking?.myAddress || i18n.statsEcoWalletNotConfigured))),
-      tr(td({ class: 'card-label' }, i18n.statsTotalEcoAddresses), td({ class: 'card-value' }, String(stats?.banking?.totalAddresses || 0)))
+      tr(td({ class: 'card-label' }, i18n.statsEcoWalletLabel), td({ class: 'card-value' }, a({ href: '/wallet', class: 'stats-link-break' }, stats?.banking?.myAddress || i18n.statsEcoWalletNotConfigured)))
     )
   );
 
   const networkBlock = div({ class: 'stats-block' },
-    h2(i18n.statsNetworkKPIsTitle || 'Network KPIs'),
     kpiGrid(
       filter === 'MINE'
         ? kpi(i18n.statsMyShare || 'Your share of the network', `${fmtNum(networkKPIs.myShare || 0)}%`)
@@ -322,52 +331,63 @@ exports.statsView = (stats, filter) => {
     )
   ) : null;
 
-  const marketBlock = div({ class: 'stats-block' },
-    h2(i18n.statsMarketTitle),
-    kpiGrid(
-      kpi(i18n.statsMarketTotal, stats.marketKPIs?.total || 0),
-      kpi(i18n.statsMarketForSale, stats.marketKPIs?.forSale || 0),
-      kpi(i18n.statsMarketReserved, stats.marketKPIs?.reserved || 0),
-      kpi(i18n.statsMarketClosed, stats.marketKPIs?.closed || 0),
-      kpi(i18n.statsMarketSold, stats.marketKPIs?.sold || 0)
-    )
-  );
+  const marketTiles = [
+    kpi(i18n.statsMarketTotal, stats.marketKPIs?.total || 0),
+    kpi(i18n.statsMarketForSale, stats.marketKPIs?.forSale || 0),
+    kpi(i18n.statsMarketReserved, stats.marketKPIs?.reserved || 0),
+    kpi(i18n.statsMarketClosed, stats.marketKPIs?.closed || 0),
+    kpi(i18n.statsMarketSold, stats.marketKPIs?.sold || 0)
+  ].filter(Boolean);
+  const marketBlock = marketTiles.length
+    ? div({ class: 'stats-block' }, h2(i18n.statsMarketTitle), kpiGrid(...marketTiles))
+    : null;
 
-  const projectsBlock = div({ class: 'stats-block' },
-    h2(i18n.statsProjectsTitle),
-    kpiGrid(
-      kpi(i18n.statsProjectsTotal, stats.projectsKPIs?.total || 0),
-      kpi(i18n.statsProjectsActive, stats.projectsKPIs?.active || 0),
-      kpi(i18n.statsProjectsCompleted, stats.projectsKPIs?.completed || 0),
-      kpi(i18n.statsProjectsPaused, stats.projectsKPIs?.paused || 0),
-      kpi(i18n.statsProjectsCancelled, stats.projectsKPIs?.cancelled || 0),
-      kpi(i18n.statsProjectsGoalTotal, `${stats.projectsKPIs?.ecoGoalTotal || 0} ECO`),
-      kpi(i18n.statsProjectsPledgedTotal, `${stats.projectsKPIs?.ecoPledgedTotal || 0} ECO`)
-    )
-  );
+  const projectsTiles = [
+    kpi(i18n.statsProjectsTotal, stats.projectsKPIs?.total || 0),
+    kpi(i18n.statsProjectsActive, stats.projectsKPIs?.active || 0),
+    kpi(i18n.statsProjectsCompleted, stats.projectsKPIs?.completed || 0),
+    kpi(i18n.statsProjectsPaused, stats.projectsKPIs?.paused || 0),
+    kpi(i18n.statsProjectsCancelled, stats.projectsKPIs?.cancelled || 0),
+    kpi(i18n.statsProjectsGoalTotal, `${stats.projectsKPIs?.ecoGoalTotal || 0} ECO`),
+    kpi(i18n.statsProjectsPledgedTotal, `${stats.projectsKPIs?.ecoPledgedTotal || 0} ECO`)
+  ].filter(Boolean);
+  const projectsBlock = projectsTiles.length
+    ? div({ class: 'stats-block' }, h2(i18n.statsProjectsTitle), kpiGrid(...projectsTiles))
+    : null;
 
   const allTribesPublic = Array.isArray(stats.allTribesPublic) ? stats.allTribesPublic : [];
   const memberTribesDetailed = Array.isArray(stats.memberTribesDetailed) ? stats.memberTribesDetailed : [];
   const myPrivateTribesDetailed = Array.isArray(stats.myPrivateTribesDetailed) ? stats.myPrivateTribesDetailed : [];
 
-  const buildContentTiles = () => {
-    const tiles = [];
+  const buildContentRows = () => {
+    const rows = [];
     types.filter(t => t !== 'karmaScore' && t !== 'shopProduct' && t !== 'padEntry' && t !== 'chatMessage' && t !== 'calendarDate' && t !== 'calendarNote').forEach(t => {
       const cnt = C(stats, t);
       if (cnt <= 0) return;
-      tiles.push(kpi(labels[t], cnt));
-      if (t === 'shop') tiles.push(kpi(labels.shopProduct, C(stats, 'shopProduct')));
-      else if (t === 'pad') tiles.push(kpi(labels.padEntry, C(stats, 'padEntry')));
-      else if (t === 'chat') tiles.push(kpi(labels.chatMessage, C(stats, 'chatMessage')));
+      rows.push([labels[t], cnt]);
+      if (t === 'shop') rows.push([labels.shopProduct, C(stats, 'shopProduct')]);
+      else if (t === 'pad') rows.push([labels.padEntry, C(stats, 'padEntry')]);
+      else if (t === 'chat') rows.push([labels.chatMessage, C(stats, 'chatMessage')]);
       else if (t === 'calendar') {
-        tiles.push(kpi(labels.calendarDate, C(stats, 'calendarDate')));
-        tiles.push(kpi(labels.calendarNote, C(stats, 'calendarNote')));
+        rows.push([labels.calendarDate, C(stats, 'calendarDate')]);
+        rows.push([labels.calendarNote, C(stats, 'calendarNote')]);
       } else if (t === 'tribe') {
-        tiles.push(kpi(i18n.statsPublic, stats.tribePublicCount || 0));
-        tiles.push(kpi(i18n.statsPrivate, stats.tribePrivateCount || 0));
+        rows.push([i18n.statsPublic, stats.tribePublicCount || 0]);
+        rows.push([i18n.statsPrivate, stats.tribePrivateCount || 0]);
       }
     });
-    return tiles;
+    return rows;
+  };
+  const buildContentTable = () => {
+    const rows = buildContentRows().slice().sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
+    if (!rows.length) return p({ class: 'no-content' }, i18n.no_results || 'No data');
+    return table({ class: 'tag-table' },
+      thead(tr(
+        th(i18n.statsContentTypeColumn || 'Type'),
+        th(i18n.statsContentCountColumn || 'Count')
+      )),
+      tbody(...rows.map(([label, count]) => tr(td(label), td(String(count)))))
+    );
   };
 
   const buildOpinionTiles = () =>
@@ -386,28 +406,18 @@ exports.statsView = (stats, filter) => {
     ? div({ class: 'stats-container' }, [
         networkBlock,
         activityBlock,
-        topTypesBlock,
-        topTagsBlock,
-        div({ class: 'stats-block' },
-          h2(i18n.statsNetworkContent),
-          kpiGrid(
-            kpi(i18n.statsDiscoveredTribes, allTribesPublic.length),
-            kpi(i18n.statsPrivateDiscoveredTribes, stats.tribePrivateCount || 0),
-            kpi(i18n.statsDiscoveredForum, C(stats, 'forum')),
-            kpi(i18n.statsDiscoveredTransfer, C(stats, 'transfer'))
-          )
-        ),
-        tribeListBlock(i18n.statsDiscoveredTribes, allTribesPublic),
-        marketBlock,
-        projectsBlock,
-        div({ class: 'stats-block' },
-          h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
-          kpiGrid(...buildOpinionTiles())
-        ),
-        div({ class: 'stats-block' },
-          h2(`${i18n.statsNetworkContent}: ${totalContent}`),
-          kpiGrid(...buildContentTiles())
-        )
+        totalOpinions > 0
+          ? div({ class: 'stats-block' },
+              h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
+              kpiGrid(...buildOpinionTiles())
+            )
+          : null,
+        totalContent > 0
+          ? div({ class: 'stats-block' },
+              h2(`${i18n.statsNetworkContent}: ${totalContent}`),
+              buildContentTable()
+            )
+          : null
       ])
     : null;
 
@@ -415,31 +425,18 @@ exports.statsView = (stats, filter) => {
     ? div({ class: 'stats-container' }, [
         networkBlock,
         activityBlock,
-        topTypesBlock,
-        topTagsBlock,
-        div({ class: 'stats-block' },
-          h2(i18n.statsYourContent || i18n.statsNetworkContent),
-          kpiGrid(
-            kpi(i18n.statsDiscoveredTribes, memberTribesDetailed.length),
-            kpi(i18n.statsPrivateDiscoveredTribes, myPrivateTribesDetailed.length),
-            kpi(i18n.statsYourForum, C(stats, 'forum')),
-            kpi(i18n.statsYourTransfer, C(stats, 'transfer'))
-          )
-        ),
-        tribeListBlock(i18n.statsDiscoveredTribes, memberTribesDetailed),
-        myPrivateTribesDetailed.length
-          ? tribeListBlock(i18n.statsPrivateDiscoveredTribes, myPrivateTribesDetailed)
+        totalOpinions > 0
+          ? div({ class: 'stats-block' },
+              h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),
+              kpiGrid(...buildOpinionTiles())
+            )
           : null,
-        marketBlock,
-        projectsBlock,
-        div({ class: 'stats-block' },
-          h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),
-          kpiGrid(...buildOpinionTiles())
-        ),
-        div({ class: 'stats-block' },
-          h2(`${i18n.statsYourContent}: ${totalContent}`),
-          kpiGrid(...buildContentTiles())
-        )
+        totalContent > 0
+          ? div({ class: 'stats-block' },
+              h2(`${i18n.statsYourContent}: ${totalContent}`),
+              buildContentTable()
+            )
+          : null
       ])
     : null;
 
@@ -473,7 +470,6 @@ exports.statsView = (stats, filter) => {
         topStrip,
         headerCard,
         bankingCard,
-        carbonCard,
         allMode,
         mineMode,
         tombMode

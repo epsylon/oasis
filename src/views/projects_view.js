@@ -365,6 +365,7 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
       )
     : null
 
+  if (blocks.length === 0 && !unassignedBlock) return null
   return div({ class: "milestones-bounties" }, ...blocks, unassignedBlock)
 }
 
@@ -466,7 +467,7 @@ const renderProjectTopbar = (project, filter, opts) => {
   return nodes.length ? div({ class: isSingle ? "bookmark-topbar project-topbar-single" : "bookmark-topbar" }, ...nodes) : null
 }
 
-const renderProjectList = (projects, filter) => {
+const renderProjectList = exports.renderProjectList = (projects, filter) => {
   const list = safeArr(projects)
   const returnTo = buildReturnTo(filter)
 
@@ -497,7 +498,6 @@ const renderProjectList = (projects, filter) => {
           br(),
           div({ class: "project-goal-highlight" }, renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`)),
           div({ class: "project-goal-highlight" }, renderCardField(i18n.projectFollowers + ":", String(followersCount(pr)))),
-          renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
           renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100),
             pr.mapUrl ? div({ class: "project-maploc" },
             span({ class: "card-label" }, (i18n.mapLocationTitle || "Map Location") + ":"),
@@ -578,14 +578,6 @@ const renderProjectList = (projects, filter) => {
               )
             : null,
           div(
-            { class: "card-comments-summary" },
-            span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-            span({ class: "card-value" }, String(pr.commentCount || 0)),
-            br(),
-            br(),
-            form({ method: "GET", action: `/projects/${encodeURIComponent(pr.id)}` }, button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton))
-          ),
-          div(
             { class: "card-footer" },
             span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
             userLink(pr.author)
@@ -665,15 +657,21 @@ const renderProjectForm = (project, mode) => {
   )
 }
 
-exports.projectsView = async (projectsOrForm, filter) => {
+exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
   const f = String(filter || "ALL").toUpperCase()
   const filterObj = FILTERS.find((x) => x.key === f) || FILTERS[0]
   const sectionTitle = i18n[filterObj.title] || i18n.projectAllTitle
+  const { renderReachChip: renderReachChipProjects } = require('./clearnet_view');
+  const viewerClearnetProjects = !!(params.viewerPrefs && params.viewerPrefs.clearnetProjects);
 
   return template(
     i18n.projectsTitle,
     section(
-      div({ class: "tags-header" }, h2(sectionTitle), p(i18n.projectsDescription)),
+      div({ class: "tags-header" },
+        h2(sectionTitle),
+        p(i18n.projectsDescription),
+        div({ class: "shop-title-row" }, renderReachChipProjects(viewerClearnetProjects, i18n))
+      ),
       div(
         { class: "filters" },
         form(
@@ -730,12 +728,12 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
         !isAuthor && safeArr(pr.followers).includes(userId) ? p({ class: "hint" }, i18n.projectYouFollowHint) : null,
         h2(pr.title),
         safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
+        safeText(pr.description) ? br() : null,
         pr.image ? renderMediaBlob(pr.image) : null,
         renderMapEmbedWithZoom(params.mapData, pr.mapUrl, `/projects/${encodeURIComponent(pr.id || pr.key)}`, params.zoom),
         div({ class: "project-goal-highlight" }, renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`)),
         renderBackers(pr, f),
         renderCardField(i18n.projectStatus + ":", i18n["projectStatus" + statusUpper] || statusUpper),
-        br(),
         renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
         renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100),
         renderBudget(pr),
@@ -786,4 +784,66 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     )
   )
 }
+
+exports.clearnetProjectView = async (project) => {
+  const { escapeHtml: esc, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
+  const pr = project || {};
+  const title = esc(pr.title || 'Project');
+  const desc = esc(pr.description || '');
+  const goal = Math.max(0, toNum(pr.goal) || 0);
+  const pledged = Math.max(0, toNum(pr.pledged) || 0);
+  const fundingPct = goal > 0 ? Math.min(100, Math.round((pledged / goal) * 100)) : 0;
+  const status = String(pr.status || 'ACTIVE').toUpperCase();
+  const projectImg = cnBlob(pr.image);
+  const deadline = pr.deadline ? new Date(pr.deadline).toISOString().slice(0, 10) : '';
+  const milestones = Array.isArray(pr.milestones) ? pr.milestones.slice(0, 10) : [];
+  const milestonesBlock = milestones.length
+    ? `<div class="cn-prj-section"><h2>Milestones</h2><ol class="cn-prj-ms">${milestones.map(m => `<li>${esc(m.title || '')}${m.targetPercent ? ` <span class="cn-prj-pct">— ${m.targetPercent}%</span>` : ''}</li>`).join('')}</ol></div>`
+    : '';
+  const extraCss = `
+.cn-prj-title{color:var(--fg);margin:0 0 12px 0;font-size:32px;font-weight:700}
+.cn-prj-status{display:inline-block;background:var(--bg-sub);border:1px solid var(--fg);color:var(--fg);padding:6px 12px;border-radius:6px;font-weight:600;text-transform:uppercase;letter-spacing:1px;font-size:12px;margin-bottom:16px}
+.cn-prj-img{display:block;max-width:100%;border:1px solid var(--border);border-radius:8px;margin-bottom:20px}
+.cn-prj-funding{background:var(--bg-sub);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:20px}
+.cn-prj-funding-label{color:var(--fg-dim);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.cn-prj-funding-amount{color:var(--fg);font-size:18px;font-weight:700;margin-bottom:8px}
+.cn-prj-bar{height:8px;background:#000;border-radius:4px;overflow:hidden}
+.cn-prj-bar-fill{height:100%;background:var(--fg);border-radius:4px}
+.cn-prj-section{margin-top:24px}
+.cn-prj-section h2{color:var(--fg);font-size:18px;text-transform:uppercase;letter-spacing:2px;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.cn-prj-section p{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;font-size:15px;margin:0}
+.cn-prj-ms{padding-left:22px;margin:0;color:var(--fg-soft);line-height:1.7}
+.cn-prj-pct{color:var(--fg-dim);font-size:13px}
+.cn-prj-deadline{color:var(--fg-dim);font-size:13px;margin-top:8px}
+.cn-prj-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.cn-prj-date,.cn-prj-idmeta{background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:13px;color:var(--fg-soft)}
+.cn-prj-idmeta{font-family:monospace;font-size:11px;word-break:break-all}
+`;
+  const body = `
+  <h1 class="cn-prj-title">${title}</h1>
+  <div class="cn-prj-meta">
+    <span class="cn-prj-status">${esc(status)}</span>
+    ${pr.createdAt ? `<span class="cn-prj-date">📅 ${esc(new Date(pr.createdAt).toISOString().slice(0,10))}</span>` : ''}
+  </div>
+  ${projectImg ? `<img class="cn-prj-img" src="${projectImg}" alt="${title}"/>` : ''}
+  ${goal > 0 ? `
+  <div class="cn-prj-funding">
+    <div class="cn-prj-funding-label">Funding</div>
+    <div class="cn-prj-funding-amount">${pledged.toFixed(2)} / ${goal.toFixed(2)} ECO · ${fundingPct}%</div>
+    <div class="cn-prj-bar"><div class="cn-prj-bar-fill" style="width:${fundingPct}%"></div></div>
+    ${deadline ? `<div class="cn-prj-deadline">Deadline: ${deadline}</div>` : ''}
+  </div>` : ''}
+  ${desc ? `<div class="cn-prj-section"><h2>Description</h2><p>${desc}</p></div>` : ''}
+  ${milestonesBlock}
+`;
+  return renderClearnetPage({
+    title: `${pr.title || 'Project'} — Oasis`,
+    ogTitle: pr.title || 'Project',
+    ogDescription: pr.description || '',
+    ogImage: projectImg,
+    extraCss,
+    body,
+    hubFeedId: pr.author || null
+  });
+};
 

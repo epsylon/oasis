@@ -18,7 +18,7 @@ function writeAgendaConfig(cfg) {
   fs.writeFileSync(agendaConfigPath, JSON.stringify(cfg, null, 2));
 }
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, calendarsModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -162,9 +162,31 @@ module.exports = ({ cooler }) => {
       const reports = reportsAll.filter(c => c.author === userId || (Array.isArray(c.confirmations) && c.confirmations.includes(userId))).map(r => ({ ...r, type: 'report' }));
       const jobs = jobsAll.filter(c => c.author === userId || (Array.isArray(c.subscribers) && c.subscribers.includes(userId))).map(j => ({ ...j, type: 'job', title: j.title }));
       const projects = projectsAll.map(p => ({ ...p, type: 'project' }));
-      const calendars = calendarsAll
-        .filter(c => c.author === userId || (Array.isArray(c.participants) && c.participants.includes(userId)))
-        .map(c => ({ ...c, type: 'calendar' }));
+      const myCalendars = calendarsAll
+        .filter(c => c.author === userId || (Array.isArray(c.participants) && c.participants.includes(userId)));
+      const calendars = myCalendars.map(c => ({ ...c, type: 'calendar' }));
+      const calendarDates = [];
+      if (calendarsModel && typeof calendarsModel.getDatesForCalendar === 'function') {
+        for (const cal of myCalendars) {
+          try {
+            const dates = await calendarsModel.getDatesForCalendar(cal.id || cal.key);
+            for (const d of (dates || [])) {
+              calendarDates.push({
+                type: 'calendarDate',
+                id: d.key || d.id,
+                title: d.label || cal.title || 'Calendar date',
+                calendarTitle: cal.title || '',
+                calendarId: cal.id || cal.key,
+                date: d.date || d.createdAt,
+                label: d.label || '',
+                author: cal.author,
+                createdAt: d.createdAt || cal.createdAt,
+                status: 'OPEN'
+              });
+            }
+          } catch (_) {}
+        }
+      }
 
       let combined = [
         ...tasks,
@@ -175,7 +197,8 @@ module.exports = ({ cooler }) => {
         ...reports,
         ...jobs,
         ...projects,
-        ...calendars
+        ...calendars,
+        ...calendarDates
       ];
 
       let filtered;
@@ -193,18 +216,45 @@ module.exports = ({ cooler }) => {
         else if (filter === 'closed') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'CLOSED');
         else if (filter === 'jobs') filtered = filtered.filter(i => i.type === 'job');
         else if (filter === 'projects') filtered = filtered.filter(i => i.type === 'project');
-        else if (filter === 'calendars') filtered = filtered.filter(i => i.type === 'calendar');
+        else if (filter === 'calendars') filtered = filtered.filter(i => i.type === 'calendar' || i.type === 'calendarDate');
+        else if (filter === 'today') {
+          const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+          filtered = filtered.filter(i => {
+            const d = new Date(i.date || i.startTime || i.deadline || 0).getTime();
+            return d >= startOfDay.getTime() && d <= endOfDay.getTime();
+          });
+        }
+        else if (filter === 'upcoming') {
+          const now = Date.now();
+          filtered = filtered.filter(i => {
+            const d = new Date(i.date || i.startTime || i.deadline || 0).getTime();
+            return d > now;
+          });
+        }
+        else if (filter === 'overdue') {
+          const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+          filtered = filtered.filter(i => {
+            const d = new Date(i.date || i.startTime || i.deadline || 0).getTime();
+            const open = String(i.status || 'OPEN').toUpperCase() === 'OPEN';
+            return d > 0 && d < startOfDay.getTime() && open;
+          });
+        }
       }
 
       filtered.sort((a, b) => {
-        const dateA = a.startTime || a.date || a.deadline || a.createdAt || 0;
-        const dateB = b.startTime || b.date || b.deadline || b.createdAt || 0;
+        const dateA = a.date || a.startTime || a.deadline || a.createdAt || 0;
+        const dateB = b.date || b.startTime || b.deadline || b.createdAt || 0;
         return new Date(dateA) - new Date(dateB);
       });
 
       const mainItems = combined.filter(i => !discardedItems.includes(i.id));
       const discarded = combined.filter(i => discardedItems.includes(i.id));
 
+      const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
+      const now = Date.now();
+      const itemTs = (i) => new Date(i.date || i.startTime || i.deadline || 0).getTime();
       return {
         items: filtered,
         counts: {
@@ -219,7 +269,10 @@ module.exports = ({ cooler }) => {
           reports: mainItems.filter(i => i.type === 'report').length,
           jobs: mainItems.filter(i => i.type === 'job').length,
           projects: mainItems.filter(i => i.type === 'project').length,
-          calendars: mainItems.filter(i => i.type === 'calendar').length,
+          calendars: mainItems.filter(i => i.type === 'calendar' || i.type === 'calendarDate').length,
+          today: mainItems.filter(i => { const d = itemTs(i); return d >= startOfDay.getTime() && d <= endOfDay.getTime(); }).length,
+          upcoming: mainItems.filter(i => itemTs(i) > now).length,
+          overdue: mainItems.filter(i => { const d = itemTs(i); return d > 0 && d < startOfDay.getTime() && String(i.status || 'OPEN').toUpperCase() === 'OPEN'; }).length,
           discarded: discarded.length
         }
       };

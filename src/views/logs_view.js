@@ -18,7 +18,7 @@ const filterLabel = (f) => {
   return map[f] || f.toUpperCase();
 };
 
-const renderFilterBar = (current) =>
+const renderFilterBar = (current, hasItems = false) =>
   div({ class: "logs-toolbar" },
     form({ method: "GET", action: "/logs", class: "logs-toolbar-inline" },
       FILTERS.map(f =>
@@ -32,9 +32,11 @@ const renderFilterBar = (current) =>
       input({ type: "hidden", name: "view", value: "create" }),
       button({ type: "submit", class: "create-button" }, i18n.logsCreate || 'Create Log')
     ),
-    form({ method: "GET", action: "/logs/export", class: "logs-toolbar-inline" },
-      button({ type: "submit", class: "create-button" }, i18n.logsExport || 'Export Logs')
-    )
+    hasItems
+      ? form({ method: "GET", action: "/logs/export", class: "logs-toolbar-inline" },
+          button({ type: "submit", class: "create-button" }, i18n.logsExport || 'Export Logs')
+        )
+      : null
   );
 
 const renderSearchBox = (current, search) => {
@@ -63,9 +65,9 @@ const renderSearchBox = (current, search) => {
   );
 };
 
-const renderToolbar = (current, search) =>
+const renderToolbar = (current, search, hasItems) =>
   div({ class: "logs-toolbar-wrap" },
-    renderFilterBar(current),
+    renderFilterBar(current, hasItems),
     renderSearchBox(current, search)
   );
 
@@ -211,12 +213,13 @@ exports.logsView = (items, filter, mode, opts = {}) => {
   const description = i18n.logsDescription || 'Record your experience in the network.';
   const view = opts.view || 'list';
   const aiModOn = !!opts.aiModOn;
+  const hasItems = Array.isArray(items) && items.length > 0;
 
   if (view === 'create') {
     const h = i18n.logsCreateTitle || 'Create Log';
     const body = section(
       div({ class: "tags-header" }, h2(h), p(description)),
-      renderFilterBar(filter),
+      renderFilterBar(filter, hasItems),
       renderCreateForm(mode, aiModOn)
     );
     return template(h, body);
@@ -239,7 +242,7 @@ exports.logsView = (items, filter, mode, opts = {}) => {
   }
   const body = section(
     div({ class: "tags-header" }, h2(listTitle), p(description)),
-    renderToolbar(filter, opts.search || {}),
+    renderToolbar(filter, opts.search || {}, hasItems),
     div({ class: "logs-list" }, renderTable(items))
   );
   return template(listTitle, body);

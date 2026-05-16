@@ -15,9 +15,18 @@ const INVITE_SALT = "SolarNET.HuB-pads"
 const INVITE_BYTES = 16
 const MEMBER_COLORS = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6","#1abc9c","#e67e22","#e91e63","#00bcd4","#8bc34a"]
 
-module.exports = ({ cooler, cipherModel, tribeCrypto, tribesModel }) => {
+module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
+
+  const ownCrypto = padCrypto || tribeCrypto
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null
+  const lookupKeys = (rid) => {
+    const a = (ownCrypto && ownCrypto.getKeys(rid)) || []
+    if (a.length) return a
+    return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
+  }
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
 
   let keyringPath = null
   let migratedToTribeCrypto = false
@@ -29,27 +38,27 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, tribesModel }) => {
     return keyringPath
   }
   const migrateLegacyKeyring = () => {
-    if (migratedToTribeCrypto || !tribeCrypto) { migratedToTribeCrypto = true; return }
+    if (migratedToTribeCrypto || !ownCrypto) { migratedToTribeCrypto = true; return }
     migratedToTribeCrypto = true
     try {
       const p = getLegacyKeyringPath()
       if (!fs.existsSync(p)) return
       const legacy = JSON.parse(fs.readFileSync(p, "utf8")) || {}
       for (const [rootId, keyHex] of Object.entries(legacy)) {
-        if (rootId && keyHex && !tribeCrypto.getKey(rootId)) {
-          tribeCrypto.setKey(rootId, keyHex, 1)
+        if (rootId && keyHex && !ownCrypto.getKey(rootId)) {
+          ownCrypto.setKey(rootId, keyHex, 1)
         }
       }
     } catch (_) {}
   }
   const getPadKey = (rootId) => {
     migrateLegacyKeyring()
-    if (tribeCrypto) return tribeCrypto.getKey(rootId) || null
+    if (ownCrypto) return lookupKey(rootId)
     try { return JSON.parse(fs.readFileSync(getLegacyKeyringPath(), "utf8"))[rootId] || null } catch (_) { return null }
   }
   const setPadKey = (rootId, keyHex) => {
     migrateLegacyKeyring()
-    if (tribeCrypto) { tribeCrypto.setKey(rootId, keyHex, 1); return }
+    if (ownCrypto) { ownCrypto.setKey(rootId, keyHex, 1); return }
     let kr = {}
     try { kr = JSON.parse(fs.readFileSync(getLegacyKeyringPath(), "utf8")) } catch (_) {}
     kr[rootId] = keyHex

@@ -202,7 +202,7 @@ const renderEventCommentsSection = (eventId, comments = [], currentFilter = "all
   );
 };
 
-const renderEventItem = (e, filter) => {
+const renderEventItem = exports.renderEventItem = (e, filter) => {
   const currentFilter = filter || "all";
   const attendees = safeArray(e.attendees);
   const commentCount = typeof e.commentCount === "number" ? e.commentCount : 0;
@@ -246,9 +246,11 @@ const renderEventItem = (e, filter) => {
   );
 };
 
-exports.eventView = async (events, filter, eventId, returnTo) => {
+exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   const list = Array.isArray(events) ? events : [events];
   const currentFilter = filter || "all";
+  const { renderReachChip: renderReachChipEvents } = require('./clearnet_view');
+  const viewerClearnetEvents = !!(params.viewerPrefs && params.viewerPrefs.clearnetEvents);
 
   const title =
     currentFilter === "mine" ? i18n.eventMineSectionTitle :
@@ -297,7 +299,11 @@ exports.eventView = async (events, filter, eventId, returnTo) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(i18n.eventsTitle), p(i18n.eventsDescription)),
+      div({ class: "tags-header" },
+        h2(i18n.eventsTitle),
+        p(i18n.eventsDescription),
+        div({ class: "shop-title-row" }, renderReachChipEvents(viewerClearnetEvents, i18n))
+      ),
       div(
         { class: "filters" },
         form(
@@ -453,7 +459,14 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       div(
         { class: "card card-section event" },
         topbar ? topbar : null,
-        renderCardField(i18n.eventTitleLabel + ":", event.title),
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetEvents && normalizeEventStatus(event.status) !== 'CLOSED' && normalizePrivacy(event.isPublic) === 'public');
+          return div({ class: "shop-title-row" },
+            renderCardField(i18n.eventTitleLabel + ":", event.title),
+            renderReachChip(isClearnet, i18n)
+          );
+        })(),
         renderCardField(i18n.eventDescriptionLabel + ":", ""),
         p(...renderUrl(event.description)),
         renderCardField(i18n.eventDateLabel + ":", event.date ? moment(event.date).format("YYYY/MM/DD HH:mm:ss") : ""),
@@ -493,5 +506,42 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       renderEventCommentsSection(event.id, comments, currentFilter)
     )
   );
+};
+
+exports.clearnetEventView = async (event) => {
+  const { escapeHtml: esc, renderClearnetPage } = require('./clearnet_view');
+  const title = esc(event.title || 'Event');
+  const desc = esc(event.description || '');
+  const dateStr = event.date ? esc(moment(event.date).format("YYYY-MM-DD HH:mm")) : '';
+  const loc = esc(event.location || '');
+  const price = parseFloat(event.price || 0);
+  const priceStr = price > 0 ? `${price.toFixed(2)} ECO` : '';
+  const urlHref = safeExternalHref(event.url);
+  const extraCss = `
+.cn-event-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700}
+.cn-event-meta{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.cn-event-meta-item{background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;padding:8px 14px;font-size:14px;color:var(--fg-soft);display:inline-flex;align-items:center;gap:6px}
+.cn-event-meta-id{font-family:monospace;font-size:11px;word-break:break-all;max-width:100%}
+.cn-event-desc{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;font-size:15px;margin:0 0 20px 0}
+.cn-event-link{display:inline-block;margin-top:12px;background:var(--bg-sub);border:1px solid var(--fg);color:var(--fg);padding:8px 16px;border-radius:6px;font-weight:600}
+`;
+  const body = `
+  <h1 class="cn-event-title">${title}</h1>
+  <div class="cn-event-meta">
+    ${dateStr ? `<span class="cn-event-meta-item">📅 ${dateStr}</span>` : ''}
+    ${loc ? `<span class="cn-event-meta-item">📍 ${loc}</span>` : ''}
+    ${priceStr ? `<span class="cn-event-meta-item">💰 ${priceStr}</span>` : ''}
+  </div>
+  ${desc ? `<p class="cn-event-desc">${desc}</p>` : ''}
+  ${urlHref ? `<a class="cn-event-link" href="${esc(urlHref)}" target="_blank" rel="noopener noreferrer">More info →</a>` : ''}
+`;
+  return renderClearnetPage({
+    title: `${event.title || 'Event'} — Oasis`,
+    ogTitle: event.title || 'Event',
+    ogDescription: event.description || '',
+    extraCss,
+    body,
+    hubFeedId: event.organizer || null
+  });
 };
 

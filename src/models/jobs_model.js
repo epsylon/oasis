@@ -142,6 +142,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const salaryN = toNum(c.salary)
     const salary = Number.isFinite(salaryN) ? salaryN.toFixed(6) : "0.000000"
 
+    const hoursOfferedN = toNum(c.hoursOffered)
+    const hoursRequestedN = toNum(c.hoursRequested)
     return {
       id: node.key,
       rootId,
@@ -155,6 +157,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       location: c.location,
       vacants,
       salary,
+      hoursOffered: Number.isFinite(hoursOfferedN) ? hoursOfferedN : 0,
+      hoursRequested: Number.isFinite(hoursRequestedN) ? hoursRequestedN : 0,
+      exchangeSkill: String(c.exchangeSkill || ""),
       image: blobId,
       author: c.author,
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
@@ -162,7 +167,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       status: c.status || "OPEN",
       tags: Array.isArray(c.tags) ? c.tags : normalizeTags(c.tags),
       subscribers: Array.isArray(visibleSubs) ? visibleSubs : [],
-      mapUrl: c.mapUrl || ""
+      mapUrl: c.mapUrl || "",
+      visibility: String(c.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC",
+      clearnetPublic: !!c.clearnetPublic
     }
   }
 
@@ -173,7 +180,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
 
       const job_type = String(jobData.job_type || "").toLowerCase()
-      if (!["freelancer", "employee"].includes(job_type)) throw new Error("Invalid job type")
+      if (!["freelancer", "employee", "exchange"].includes(job_type)) throw new Error("Invalid job type")
 
       const title = String(jobData.title || "").trim()
       const description = String(jobData.description || "").trim()
@@ -195,6 +202,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
       const tags = normalizeTags(jobData.tags)
 
+      const hoursOfferedN = toNum(jobData.hoursOffered)
+      const hoursRequestedN = toNum(jobData.hoursRequested)
       const content = {
         type: "job",
         job_type,
@@ -207,13 +216,18 @@ module.exports = ({ cooler, tribeCrypto }) => {
         location,
         vacants,
         salary,
+        hoursOffered: Number.isFinite(hoursOfferedN) && hoursOfferedN > 0 ? hoursOfferedN : 0,
+        hoursRequested: Number.isFinite(hoursRequestedN) && hoursRequestedN > 0 ? hoursRequestedN : 0,
+        exchangeSkill: String(jobData.exchangeSkill || "").trim(),
         image: blobId,
         tags,
         author: ssbClient.id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         status: "OPEN",
-        mapUrl: String(jobData.mapUrl || "").trim()
+        mapUrl: String(jobData.mapUrl || "").trim(),
+        visibility: String(jobData.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC",
+        clearnetPublic: jobData.clearnetPublic === true || jobData.clearnetPublic === 'true' || jobData.clearnetPublic === 'on'
       }
 
       return new Promise((res, rej) => ssbClient.publish(content, (e, m) => {
@@ -268,7 +282,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
       if (jobData.job_type !== undefined) {
         const jt = String(jobData.job_type || "").toLowerCase()
-        if (!["freelancer", "employee"].includes(jt)) throw new Error("Invalid job type")
+        if (!["freelancer", "employee", "exchange"].includes(jt)) throw new Error("Invalid job type")
         patch.job_type = jt
       }
 
@@ -311,6 +325,18 @@ module.exports = ({ cooler, tribeCrypto }) => {
         patch.salary = s.toFixed(6)
       }
 
+      if (jobData.hoursOffered !== undefined) {
+        const h = toNum(jobData.hoursOffered)
+        if (!Number.isFinite(h) || h < 0) throw new Error("Invalid hoursOffered")
+        patch.hoursOffered = h
+      }
+      if (jobData.hoursRequested !== undefined) {
+        const h = toNum(jobData.hoursRequested)
+        if (!Number.isFinite(h) || h < 0) throw new Error("Invalid hoursRequested")
+        patch.hoursRequested = h
+      }
+      if (jobData.exchangeSkill !== undefined) patch.exchangeSkill = String(jobData.exchangeSkill || "").trim()
+
       if (jobData.tags !== undefined) patch.tags = normalizeTags(jobData.tags)
 
       if (jobData.image !== undefined) {
@@ -324,6 +350,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (!["OPEN", "CLOSED"].includes(s)) throw new Error("Invalid status")
         patch.status = s
       }
+
+      if (jobData.visibility !== undefined) {
+        patch.visibility = String(jobData.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
+      }
+      if (jobData.clearnetPublic !== undefined) {
+        patch.clearnetPublic = jobData.clearnetPublic === true || jobData.clearnetPublic === 'true' || jobData.clearnetPublic === 'on'
+      }
+      if (jobData.mapUrl !== undefined) patch.mapUrl = String(jobData.mapUrl || "").trim()
 
       const next = {
         ...existingContent,
@@ -375,6 +409,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!job) throw new Error("Job not found")
       if (job.author === uid) throw new Error("Cannot subscribe to your own job")
       if (String(job.status || "").toUpperCase() !== "OPEN") throw new Error("Job is closed")
+      if (Array.isArray(job.subscribers) && job.subscribers.includes(uid)) return { alreadySubscribed: true }
 
       const rootId = job.rootId || (await this.resolveRootId(id))
 
@@ -397,6 +432,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const job = await this.getJobById(id)
       if (!job) throw new Error("Job not found")
       if (job.author === uid) throw new Error("Cannot unsubscribe from your own job")
+      if (Array.isArray(job.subscribers) && !job.subscribers.includes(uid)) return { notSubscribed: true }
 
       const rootId = job.rootId || (await this.resolveRootId(id))
 
@@ -426,7 +462,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (!node) continue
         const subsSet = idx.subsByJob.get(rootId) || new Set()
         const subs = Array.from(subsSet)
-        jobs.push(buildJobObject(node, rootId, subs))
+        const job = buildJobObject(node, rootId, subs)
+        if (job.visibility === "HIDDEN" && job.author !== viewer) continue
+        jobs.push(job)
       }
 
       const F = String(filter || "ALL").toUpperCase()
@@ -437,6 +475,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       else if (F === "PRESENCIAL") list = list.filter((j) => String(j.location || "").toUpperCase() === "PRESENCIAL")
       else if (F === "FREELANCER") list = list.filter((j) => String(j.job_type || "").toUpperCase() === "FREELANCER")
       else if (F === "EMPLOYEE") list = list.filter((j) => String(j.job_type || "").toUpperCase() === "EMPLOYEE")
+      else if (F === "EXCHANGE") list = list.filter((j) => String(j.job_type || "").toUpperCase() === "EXCHANGE")
       else if (F === "OPEN") list = list.filter((j) => String(j.status || "").toUpperCase() === "OPEN")
       else if (F === "CLOSED") list = list.filter((j) => String(j.status || "").toUpperCase() === "CLOSED")
       else if (F === "RECENT") list = list.filter((j) => moment(j.createdAt).isAfter(moment().subtract(24, "hours")))
@@ -469,7 +508,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
     async getJobById(id, viewerId = null) {
       const ssbClient = await openSsb()
-      void viewerId
+      const viewer = viewerId || ssbClient.id
 
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages, ssbClient)
@@ -481,6 +520,11 @@ module.exports = ({ cooler, tribeCrypto }) => {
       let rootId = tipId
       while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
 
+      const gate = (job) => {
+        if (job.visibility === "HIDDEN" && job.author !== viewer) throw new Error("Job not found")
+        return job
+      }
+
       const node = idx.jobNodes.get(tipId)
       if (!node) {
         const msg = await new Promise((r, j) => ssbClient.get(tipId, (e, m) => e ? j(e) : r(m)))
@@ -488,12 +532,12 @@ module.exports = ({ cooler, tribeCrypto }) => {
         const tmpNode = { key: tipId, ts: msg.timestamp || 0, c: msg.content, author: msg.author }
         const subsSet = idx.subsByJob.get(rootId) || new Set()
         const subs = Array.from(subsSet)
-        return buildJobObject(tmpNode, rootId, subs)
+        return gate(buildJobObject(tmpNode, rootId, subs))
       }
 
       const subsSet = idx.subsByJob.get(rootId) || new Set()
       const subs = Array.from(subsSet)
-      return buildJobObject(node, rootId, subs)
+      return gate(buildJobObject(node, rootId, subs))
     },
 
     async getJobTipId(id) {

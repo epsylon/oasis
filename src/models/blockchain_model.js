@@ -1,14 +1,40 @@
 const pull = require('../server/node_modules/pull-stream');
-const { config } = require('../server/SSB_server.js');
+const config = require('../server/ssb_config');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb;
 
   const openSsb = async () => {
     if (!ssb) ssb = await cooler.open();
     return ssb;
+  };
+
+  const HIDDEN_ENVELOPE_TYPES = new Set([
+    'tribe-keys-distrib',
+    'tribe-invite-msg',
+    'tribe-invite-tombstone'
+  ]);
+
+  const isHiddenBoxedContent = (rawContent) =>
+    typeof rawContent === 'string' && rawContent.endsWith('.box');
+
+  const buildAccessibleTribeIds = async () => {
+    const set = new Set();
+    if (!tribesModel) return set;
+    try {
+      const list = await tribesModel.listAll();
+      for (const t of list) {
+        if (!t || !t.id) continue;
+        set.add(t.id);
+        try {
+          const chain = await tribesModel.getChainIds(t.id);
+          for (const cid of chain) set.add(cid);
+        } catch (_) {}
+      }
+    } catch (_) {}
+    return set;
   };
 
   const hasBlob = async (ssbClient, url) =>
@@ -119,10 +145,13 @@ module.exports = ({ cooler }) => {
 
       const showLogs = (filter === 'logs' || filter === 'LOGS');
       const me = userId || config.keys.id;
+      const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+      const accessibleTribeIds = await buildAccessibleTribeIds();
       for (const msg of results) {
         const k = msg.key;
         let c = msg.value?.content;
         const author = msg.value?.author;
+        if (isHiddenBoxedContent(c)) continue;
         if (showLogs && typeof c === 'string' && author === me) {
           try {
             const dec = ssbClient.private.unbox({ key: k, value: msg.value, timestamp: msg.timestamp || msg.value?.timestamp || 0 });
@@ -130,6 +159,16 @@ module.exports = ({ cooler }) => {
           } catch { c = null; }
         }
         if (!c?.type) continue;
+        if (HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
+        if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
+          const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+          if (!r || !r.body) continue;
+          const inner = r.body;
+          const innerType = inner.k === 'tribe' ? 'tribe' : (inner.k === 'tribe-content' ? `tribe-content:${inner.contentType || ''}` : inner.k || 'tribe-msg');
+          c = { type: innerType, _decrypted: true, _rootId: r.rootId, ...inner };
+        } else if (c.tribeId && !accessibleTribeIds.has(c.tribeId)) {
+          continue;
+        }
 
         if (c.type === 'about') {
           const aboutId = String(c.about || author || '').trim();
@@ -139,11 +178,11 @@ module.exports = ({ cooler }) => {
 
         if (c.type === 'tombstone' && c.target) {
           tombstoned.add(c.target);
-          idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
+          idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
           continue;
         }
         if (c.replaces) referencedAsReplaces.add(c.replaces);
-        idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
+        idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
       }
 
       const tipBlocks = [];
@@ -265,11 +304,14 @@ module.exports = ({ cooler }) => {
       const tombstoned = new Set();
       const idToBlock = new Map();
       const referencedAsReplaces = new Set();
+      const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+      const accessibleTribeIds = await buildAccessibleTribeIds();
 
       for (const msg of results) {
         const k = msg.key;
         let c = msg.value?.content;
         const author = msg.value?.author;
+        if (isHiddenBoxedContent(c)) continue;
         if (typeof c === 'string' && author === me) {
           try {
             const dec = ssbClient.private.unbox({ key: k, value: msg.value, timestamp: msg.timestamp || msg.value?.timestamp || 0 });
@@ -277,13 +319,23 @@ module.exports = ({ cooler }) => {
           } catch { c = null; }
         }
         if (!c?.type) continue;
+        if (HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
+        if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
+          const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+          if (!r || !r.body) continue;
+          const inner = r.body;
+          const innerType = inner.k === 'tribe' ? 'tribe' : (inner.k === 'tribe-content' ? `tribe-content:${inner.contentType || ''}` : inner.k || 'tribe-msg');
+          c = { type: innerType, _decrypted: true, _rootId: r.rootId, ...inner };
+        } else if (c.tribeId && !accessibleTribeIds.has(c.tribeId)) {
+          continue;
+        }
         if (c.type === 'tombstone' && c.target) {
           tombstoned.add(c.target);
-          idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
+          idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
           continue;
         }
         if (c.replaces) referencedAsReplaces.add(c.replaces);
-        idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c });
+        idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
       }
 
       const tipBlocks = [];

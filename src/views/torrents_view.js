@@ -19,7 +19,7 @@ const {
   td
 } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -162,7 +162,7 @@ const formatSize = (bytes) => {
   return (n / (1024 * 1024)).toFixed(1) + " MB";
 };
 
-const renderTorrentTable = (torrents, filter, params = {}) => {
+const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
   if (!torrents.length) return p(params.q ? i18n.torrentNoMatch : i18n.noTorrents);
@@ -269,7 +269,15 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.torrentsDescription)),
+      div({ class: "tags-header" },
+        h2(title),
+        p(i18n.torrentsDescription),
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetTorrents);
+          return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+        })()
+      ),
       div(
         { class: "filters" },
         form(
@@ -360,6 +368,11 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
         topbar,
         title ? h2(title) : null,
         safeText(torrentObj.description) ? p(...renderUrl(torrentObj.description)) : null,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetTorrents);
+          return div({ class: 'shop-title-row' }, renderReachChip(isClearnet, i18n));
+        })(),
         torrentObj.url && torrentObj.url.startsWith("&")
           ? div({ class: "torrent-download" },
               a({ href: `/blob/${encodeURIComponent(torrentObj.url)}?name=${encodeURIComponent((torrentObj.title || 'download').replace(/\.torrent$/i, '') + '.torrent')}` , class: "filter-btn" }, i18n.torrentDownloadButton || "DOWNLOAD IT!")
@@ -384,6 +397,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
               : null
           );
         })(),
+        div({ class: "spread-row" }, renderSpreadButton(torrentObj.key, params.spreads)),
         div(
           { class: "voting-buttons" },
           opinionCategories.map((category) =>

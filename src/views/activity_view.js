@@ -213,6 +213,7 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
   return out;
 }
 
+exports.renderActionCards = renderActionCards;
 function renderActionCards(actions, userId, allActions) {
   const all = Array.isArray(allActions) ? allActions : actions;
   const byIdAll = new Map();
@@ -1702,6 +1703,32 @@ exports.activityView = (actions, filter, userId, q = '') => {
     });
   }
 
+  const MODULE_SUB_FILTERS = {
+    audio:   { url: '/audios',     filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
+    video:   { url: '/videos',     filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
+    image:   { url: '/images',     filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
+    document:{ url: '/documents',  filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
+    bookmark:{ url: '/bookmarks',  filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
+    torrent: { url: '/torrents',   filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
+    map:     { url: '/maps',       filters: ['all', 'mine', 'recent'] },
+    forum:   { url: '/forum',      filters: ['all', 'mine', 'recent', 'top'] },
+    event:   { url: '/events',     filters: ['all', 'mine', 'recent', 'top'] },
+    task:    { url: '/tasks',      filters: ['all', 'mine', 'assigned', 'open', 'closed'] },
+    votes:   { url: '/votes',      filters: ['all', 'mine', 'recent', 'top'] },
+    transfer:{ url: '/transfers',  filters: ['all', 'mine', 'pending', 'unconfirmed', 'closed'] },
+    market:  { url: '/market',     filters: ['all', 'mine', 'exchange', 'auctions', 'for sale', 'sold'] },
+    shop:    { url: '/shops',      filters: ['all', 'mine', 'recent'] },
+    job:     { url: '/jobs',       filters: ['ALL', 'MINE', 'REMOTE', 'PRESENCIAL', 'OPEN', 'CLOSED'] },
+    project: { url: '/projects',   filters: ['all', 'mine', 'active', 'completed'] },
+    chat:    { url: '/chats',      filters: ['all', 'mine'] },
+    pad:     { url: '/pads',       filters: ['all', 'mine'] },
+    calendar:{ url: '/calendars',  filters: ['all', 'mine'] },
+    report:  { url: '/reports',    filters: ['all', 'mine', 'recent'] },
+    curriculum:{ url: '/cv',       filters: ['view', 'edit'] }
+  };
+
+  const sub = MODULE_SUB_FILTERS[filter];
+
   let html = template(
     title,
     section(
@@ -1728,6 +1755,11 @@ exports.activityView = (actions, filter, userId, q = '') => {
           )
         )
       ),
+      sub
+        ? div({ class: 'activity-sub-filter' },
+            sub.filters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'filter-btn' }, String(f).toUpperCase()))
+          )
+        : null,
     section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, actions))
     )
   );

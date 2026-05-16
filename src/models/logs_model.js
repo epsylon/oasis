@@ -1,17 +1,9 @@
 const pull = require('../server/node_modules/pull-stream');
 const util = require('../server/node_modules/util');
 const axios = require('../server/node_modules/axios');
-const fs = require('fs');
-const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
-const CYCLE_PATH = path.join(__dirname, '..', 'configs', 'blockchain-cycle.json');
-
-const readCycle = () => {
-  try { return JSON.parse(fs.readFileSync(CYCLE_PATH, 'utf8')).cycle || 0; }
-  catch { return 0; }
-};
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
@@ -174,7 +166,6 @@ module.exports = ({ cooler }) => {
       text: String(text || '').slice(0, 8000),
       label: String(label || '').slice(0, 200),
       mode: mode === 'ai' ? 'ai' : 'manual',
-      cycle: readCycle(),
       createdAt: new Date().toISOString(),
       timestamp: Date.now(),
       private: true
@@ -184,7 +175,7 @@ module.exports = ({ cooler }) => {
     return publishAsync(content, [userId]);
   }
 
-  async function republishLog({ replaces, text, label, mode, cycle, createdAt }) {
+  async function republishLog({ replaces, text, label, mode, createdAt }) {
     const ssbClient = await openSsb();
     const content = {
       type: 'log',
@@ -192,7 +183,6 @@ module.exports = ({ cooler }) => {
       text: String(text || '').slice(0, 8000),
       label: String(label || '').slice(0, 200),
       mode: mode === 'ai' ? 'ai' : 'manual',
-      cycle: cycle || readCycle(),
       createdAt: createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       timestamp: Date.now(),
@@ -307,7 +297,6 @@ module.exports = ({ cooler }) => {
         key: dec.key || keyIn,
         author: v.author,
         ts: v.timestamp || tsIn,
-        cycle: c.cycle || 0,
         createdAt: c.createdAt || new Date(v.timestamp || tsIn).toISOString(),
         text: String(c.text || ''),
         label: String(c.label || ''),
@@ -342,7 +331,6 @@ module.exports = ({ cooler }) => {
       text: text !== undefined ? text : current.text,
       label: label !== undefined ? label : current.label,
       mode: mode || current.mode,
-      cycle: current.cycle,
       createdAt: current.createdAt
     });
     return { status: 'ok' };

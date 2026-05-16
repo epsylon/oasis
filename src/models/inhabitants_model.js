@@ -130,7 +130,7 @@ module.exports = ({ cooler }) => {
         return filterInactive(users);
       }
 
-      if (filter === 'all' || filter === 'TOP KARMA' || filter === 'TOP ACTIVITY') {
+      if (filter === 'all' || filter === 'TOP KARMA' || filter === 'TOP ACTIVITY' || filter === 'TOP ECO') {
         let users = await listAllBase(ssbClient);
         if (filter !== 'TOP ACTIVITY') {
           users = filterInactive(users);
@@ -143,12 +143,34 @@ module.exports = ({ cooler }) => {
             (u.id || '').toLowerCase().includes(q)
           );
         }
+        const bytesByAuthor = await new Promise((res) => {
+          pull(
+            ssbClient.createLogStream({ limit: logLimit }),
+            pull.collect((err, msgs) => {
+              if (err || !Array.isArray(msgs)) return res({});
+              const acc = {};
+              for (const m of msgs) {
+                const author = m && m.value && m.value.author;
+                if (!author) continue;
+                try { acc[author] = (acc[author] || 0) + Buffer.byteLength(JSON.stringify(m.value), 'utf8'); } catch (_) {}
+              }
+              res(acc);
+            })
+          );
+        });
         const withMetrics = await Promise.all(users.map(async u => {
           const karmaScore = await getLastKarmaScore(u.id);
-          return { ...u, karmaScore };
+          const bytes = (bytesByAuthor && bytesByAuthor[u.id]) || 0;
+          const carbonGrams = (bytes / (1024 * 1024)) * 0.095;
+          if (filter === 'TOP ECO') {
+            const ecoScore = karmaScore / Math.max(0.01, carbonGrams);
+            return { ...u, karmaScore, carbonGrams, ecoScore };
+          }
+          return { ...u, karmaScore, carbonGrams };
         }));
         if (filter === 'TOP KARMA') return withMetrics.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0));
         if (filter === 'TOP ACTIVITY') return withMetrics.sort((a, b) => (b.lastActivityTs || 0) - (a.lastActivityTs || 0));
+        if (filter === 'TOP ECO') return withMetrics.sort((a, b) => (b.ecoScore || 0) - (a.ecoScore || 0));
         return withMetrics;
       }
 
@@ -176,23 +198,60 @@ module.exports = ({ cooler }) => {
       if (filter === 'SUGGESTED') {
         const base = await listAllBase(ssbClient);
         const active = filterInactive(base);
+        const cvRecords = await new Promise((res) => {
+          pull(
+            ssbClient.createLogStream({ limit: logLimit, reverse: true }),
+            pull.filter(msg => msg && msg.value && msg.value.content && msg.value.content.type === 'curriculum'),
+            pull.collect((err, msgs) => err ? res([]) : res(msgs))
+          );
+        });
+        const cvByAuthor = new Map();
+        for (const r of cvRecords) {
+          const c = r.value && r.value.content;
+          if (c && c.author && !cvByAuthor.has(c.author)) cvByAuthor.set(c.author, c);
+        }
+        const extractSkills = (cv) => cv ? [
+          ...(cv.personalSkills || []),
+          ...(cv.oasisSkills || []),
+          ...(cv.educationalSkills || []),
+          ...(cv.professionalSkills || [])
+        ].map(s => String(s || '').toLowerCase()).filter(Boolean) : [];
+        const mecv = await this.getCVByUserId().catch(() => null);
+        const mySkills = extractSkills(mecv);
         const rels = await Promise.all(
           active.map(async u => {
             if (u.id === userId) return null;
             const rel = await friend.getRelationship(u.id).catch(() => ({}));
             const n = normalizeRel(rel);
+            if (n.iFollow || n.blocking || n.blockedBy) return null;
             const karmaScore = await getLastKarmaScore(u.id);
-            return { user: u, rel: n, karmaScore };
+            const theirSkills = extractSkills(cvByAuthor.get(u.id));
+            const commonSkills = mySkills.length && theirSkills.length
+              ? Array.from(new Set(mySkills.filter(s => theirSkills.includes(s))))
+              : [];
+            const followsMeBonus = n.followsMe ? 20 : 0;
+            const karmaBonus = Math.min(20, Math.log10(1 + Math.max(0, karmaScore)) * 5);
+            const skillBonus = commonSkills.length * 4;
+            const activityBonus = u.lastActivityBucket === 'green' ? 5 : (u.lastActivityBucket === 'orange' ? 2 : 0);
+            const suggestionScore = followsMeBonus + karmaBonus + skillBonus + activityBonus;
+            return { user: u, rel: n, karmaScore, commonSkills, suggestionScore };
           })
         );
-        const candidates = rels.filter(Boolean).filter(x => !x.rel.iFollow && !x.rel.blocking && !x.rel.blockedBy);
+        const candidates = rels.filter(Boolean).filter(x => x.suggestionScore > 0);
         const enriched = candidates.map(x => ({
           ...x.user,
           karmaScore: x.karmaScore,
-          mutualCount: x.rel.followsMe ? 1 : 0
+          followsYou: x.rel.followsMe,
+          commonSkills: x.commonSkills,
+          mutualCount: x.rel.followsMe ? 1 : 0,
+          suggestionScore: x.suggestionScore
         }));
         const unique = Array.from(new Map(enriched.map(u => [u.id, u])).values());
-        return unique.sort((a, b) => (b.karmaScore || 0) - (a.karmaScore || 0) || (b.lastActivityTs || 0) - (a.lastActivityTs || 0));
+        return unique.sort((a, b) =>
+          (b.suggestionScore || 0) - (a.suggestionScore || 0) ||
+          (b.karmaScore || 0) - (a.karmaScore || 0) ||
+          (b.lastActivityTs || 0) - (a.lastActivityTs || 0)
+        );
       }
 
       if (filter === 'CVs' || filter === 'MATCHSKILLS') {
@@ -242,27 +301,40 @@ module.exports = ({ cooler }) => {
             const lastActivityTs = await getLastActivityTimestamp(c.author);
             const { bucket, range } = bucketLastActivity(lastActivityTs);
             const norm = this._normalizeCurriculum(c, photo);
-            return { ...norm, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
+            const karmaScore = await getLastKarmaScore(c.author).catch(() => 0);
+            return { ...norm, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range, karmaScore };
           }));
           base = filterInactive(base);
           const mecv = await this.getCVByUserId();
-          const userSkills = mecv
-            ? [
-                ...(mecv.personalSkills || []),
-                ...(mecv.oasisSkills || []),
-                ...(mecv.educationalSkills || []),
-                ...(mecv.professionalSkills || [])
-              ].map(s => (s || '').toLowerCase())
-            : [];
+          const userSkills = Array.from(new Set(
+            (mecv
+              ? [
+                  ...(mecv.personalSkills || []),
+                  ...(mecv.oasisSkills || []),
+                  ...(mecv.educationalSkills || []),
+                  ...(mecv.professionalSkills || [])
+                ]
+              : []).map(s => String(s || '').toLowerCase()).filter(Boolean)
+          ));
           if (!userSkills.length) return [];
+          const userSet = new Set(userSkills);
           const matches = base.map(c => {
             if (c.id === userId) return null;
-            const common = c.skills.map(s => (s || '').toLowerCase()).filter(s => userSkills.includes(s));
+            const theirSkillsRaw = (c.skills || []).map(s => String(s || '').toLowerCase()).filter(Boolean);
+            const theirSet = new Set(theirSkillsRaw);
+            const common = Array.from(theirSet).filter(s => userSet.has(s));
             if (!common.length) return null;
-            const matchScore = common.length / userSkills.length;
-            return { ...c, commonSkills: common, matchScore };
+            const unionSize = userSet.size + theirSet.size - common.length;
+            const matchScore = unionSize > 0 ? common.length / unionSize : 0;
+            const matchCoverage = userSet.size > 0 ? common.length / userSet.size : 0;
+            return { ...c, commonSkills: common, matchScore, matchCoverage };
           }).filter(Boolean);
-          return matches.sort((a, b) => b.matchScore - a.matchScore);
+          return matches.sort((a, b) =>
+            (b.matchScore - a.matchScore) ||
+            (b.commonSkills.length - a.commonSkills.length) ||
+            ((b.karmaScore || 0) - (a.karmaScore || 0)) ||
+            ((b.lastActivityTs || 0) - (a.lastActivityTs || 0))
+          );
         }
       }
 
@@ -342,6 +414,105 @@ module.exports = ({ cooler }) => {
         );
       });
       return records.length ? records[records.length - 1].value.content : null;
+    },
+
+    async getCandidatesForJob(job, viewerId = null) {
+      if (!job || typeof job !== 'object') return [];
+      const ssbClient = await openSsb();
+      const tokenize = (s) => String(s || '')
+        .toLowerCase()
+        .split(/[^a-z0-9áéíóúñü+#./-]+/i)
+        .map(t => t.trim())
+        .filter(t => t && t.length >= 2);
+      const stop = new Set(['the','a','an','and','or','of','to','in','for','on','with','is','are','be','as','at','by','from','that','this','it','we','you','our','your','un','una','el','la','los','las','de','del','en','con','para','por','y','o','un','una','que','se','su','sus','al','etc']);
+      const keywords = new Set();
+      const addAll = (arr) => arr.forEach(t => { if (!stop.has(t)) keywords.add(t); });
+      if (Array.isArray(job.tags)) job.tags.forEach(t => { const k = String(t || '').toLowerCase().trim(); if (k) keywords.add(k); });
+      addAll(tokenize(job.title));
+      addAll(tokenize(job.description));
+      addAll(tokenize(job.requirements));
+      if (keywords.size === 0) return [];
+
+      const records = await new Promise((res, rej) => {
+        pull(
+          ssbClient.createLogStream({ limit: logLimit, reverse: true }),
+          pull.filter(msg =>
+            msg.value?.content?.type === 'curriculum' &&
+            msg.value?.content?.type !== 'tombstone'
+          ),
+          pull.collect((err, msgs) => err ? rej(err) : res(msgs))
+        );
+      });
+      let cvs = records.map(r => r.value.content);
+      cvs = Array.from(new Map(cvs.map(u => [u.author, u])).values());
+      cvs = cvs.filter(c => String(c.visibility || 'PUBLIC').toUpperCase() !== 'HIDDEN');
+
+      const jobAuthor = job.author || null;
+      const out = await Promise.all(cvs.map(async c => {
+        if (!c.author) return null;
+        if (jobAuthor && c.author === jobAuthor) return null;
+        const cvSkills = [
+          ...(c.personalSkills || []),
+          ...(c.oasisSkills || []),
+          ...(c.educationalSkills || []),
+          ...(c.professionalSkills || [])
+        ].map(s => String(s || '').toLowerCase()).filter(Boolean);
+        const common = Array.from(new Set(cvSkills.filter(s => keywords.has(s))));
+        if (common.length === 0) return null;
+        if (viewerId && c.author !== viewerId) {
+          try {
+            const rel = await friend.getRelationship(c.author);
+            if (rel && (rel.blocking || rel.blockedBy)) return null;
+          } catch (_) {}
+        }
+        const authorTs = await getLastActivityTimestamp(c.author);
+        let interactionTs = null;
+        try {
+          const cvId = c.id || c.key || null;
+          if (cvId) {
+            const ssbClient = await openSsb();
+            interactionTs = await new Promise((resolve) => {
+              try {
+                pull(
+                  ssbClient.backlinks.read({ query: [{ $filter: { dest: cvId } }], index: 'DTA', reverse: true, limit: 1 }),
+                  pull.collect((err, arr) => {
+                    if (err || !arr || !arr.length) return resolve(null);
+                    const m = arr[0];
+                    const raw = (m.value && m.value.timestamp) || m.timestamp;
+                    resolve(raw && raw < 1e12 ? raw * 1000 : raw || null);
+                  })
+                );
+              } catch (_) { resolve(null); }
+            });
+          }
+        } catch (_) {}
+        const lastActivityTs = Math.max(authorTs || 0, interactionTs || 0) || null;
+        const { bucket, range } = bucketLastActivity(lastActivityTs);
+        if (bucket === 'red') return null;
+        const photo = await fetchUserImageUrl(c.author, 256);
+        const matchScore = common.length / keywords.size;
+        return {
+          id: c.author,
+          name: c.name || 'Anonymous',
+          description: c.description || '',
+          photo,
+          location: c.location || '',
+          status: c.status || '',
+          preferences: c.preferences || '',
+          languages: typeof c.languages === 'string'
+            ? c.languages.split(',').map(x => x.trim()).filter(Boolean)
+            : Array.isArray(c.languages) ? c.languages : [],
+          commonSkills: common,
+          matchScore,
+          lastActivityTs,
+          lastActivityBucket: bucket,
+          lastActivityRange: range
+        };
+      }));
+      return out.filter(Boolean).sort((a, b) => {
+        if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+        return (b.lastActivityTs || 0) - (a.lastActivityTs || 0);
+      }).slice(0, 20);
     },
 
     async getPhotoUrlByUserId(id, size = 256) {

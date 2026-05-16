@@ -55,9 +55,36 @@ function inferType(c = {}) {
   return c.type || '';
 }
 
-module.exports = ({ cooler }) => {
+const HIDDEN_ENVELOPE_TYPES = new Set([
+  'tribe-keys-distrib',
+  'tribe-invite-msg',
+  'tribe-invite-tombstone'
+]);
+
+module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb };
+
+  let _feedCache = null;
+  let _feedCacheInflight = null;
+  const FEED_CACHE_MS = 15 * 1000;
+
+  const buildAccessibleTribeIds = async () => {
+    const set = new Set();
+    if (!tribesModel) return set;
+    try {
+      const list = await tribesModel.listAll();
+      for (const t of list) {
+        if (!t || !t.id) continue;
+        set.add(t.id);
+        try {
+          const chain = await tribesModel.getChainIds(t.id);
+          for (const cid of chain) set.add(cid);
+        } catch (_) {}
+      }
+    } catch (_) {}
+    return set;
+  };
   const hasBlob = async (ssbClient, url) => new Promise(resolve => ssbClient.blobs.has(url, (err, has) => resolve(!err && has)));
   const getMsg = async (ssbClient, key) => new Promise(resolve => ssbClient.get(key, (err, msg) => resolve(err ? null : msg)));
   const normNL = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -75,7 +102,19 @@ module.exports = ({ cooler }) => {
   };
 
   return {
+    invalidateCache() {
+      _feedCache = null;
+      _feedCacheInflight = null;
+    },
     async listFeed(filter = 'all') {
+      const cacheKey = filter || 'all';
+      const now = Date.now();
+      if (!_feedCache) _feedCache = new Map();
+      const entry = _feedCache.get(cacheKey);
+      if (entry && now - entry.ts < FEED_CACHE_MS) return entry.value;
+      if (!_feedCacheInflight) _feedCacheInflight = new Map();
+      if (_feedCacheInflight.has(cacheKey)) return _feedCacheInflight.get(cacheKey);
+      const promise = (async () => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
@@ -90,12 +129,26 @@ module.exports = ({ cooler }) => {
       const parentOf = new Map();
       const idToAction = new Map();
       const rawById = new Map();
+      const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+      const accessibleTribeIds = await buildAccessibleTribeIds();
 
       for (const msg of results) {
         const k = msg.key;
         const v = msg.value;
-        const c = v?.content;
-        if (!c?.type) continue;
+        let c = v?.content;
+        if (!c) continue;
+        if (typeof c === 'string' && c.endsWith('.box')) continue;
+        if (c.type && HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
+        if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
+          const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+          if (!r || !r.body) continue;
+          const inner = r.body;
+          if (inner.k !== 'tribe' || inner.op !== 'create') continue;
+          c = { ...inner, type: 'tribe', _decrypted: true, _rootId: r.rootId };
+        } else if (c.tribeId && !accessibleTribeIds.has(c.tribeId)) {
+          continue;
+        }
+        if (!c.type) continue;
         if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue }
         if (!isContentSane(c)) continue;
         const ts = v?.timestamp || Number(c?.timestamp || 0) || (c?.updatedAt ? Date.parse(c.updatedAt) : 0) || 0;
@@ -377,15 +430,15 @@ module.exports = ({ cooler }) => {
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
 
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
-      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log']);
+      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log']);
       const isAllowedTribeActivity = (a) => {
         if (tribeInternalTypes.has(a.type)) return false;
         const c = a.content || {};
         if (c.tribeId) return false;
         if (a.type === 'tribe') {
-          if (c.isAnonymous === true) return false;
           const isInitial = !c.replaces;
           if (!isInitial) return false;
+          if (c.isAnonymous === true && !c._decrypted) return false;
         }
         return true;
       };
@@ -426,6 +479,15 @@ module.exports = ({ cooler }) => {
 
       out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
       return out;
+      })();
+      _feedCacheInflight.set(cacheKey, promise);
+      try {
+        const value = await promise;
+        _feedCache.set(cacheKey, { value, ts: Date.now() });
+        return value;
+      } finally {
+        _feedCacheInflight.delete(cacheKey);
+      }
     }
   };
 };

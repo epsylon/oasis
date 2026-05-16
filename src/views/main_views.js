@@ -8,6 +8,7 @@ const debug = require("../server/node_modules/debug")("oasis");
 const highlightJs = require("../server/node_modules/highlight.js");
 const prettyMs = require("../server/node_modules/pretty-ms");
 const moment = require('../server/node_modules/moment');
+const QRCode = require('../server/node_modules/qrcode');
 const { renderUrl } = require('../backend/renderUrl');
 const ssbClientGUI = require("../client/gui");
 const config = require("../server/ssb_config");
@@ -62,6 +63,64 @@ const errorView = ({ title, message, backHref }) => {
 };
 exports.errorView = errorView;
 
+const renderSpreadButton = (msgKey, opts = {}) => {
+  if (!msgKey || typeof msgKey !== 'string') return null;
+  const voters = Array.isArray(opts.voters) ? opts.voters : [];
+  const count = typeof opts.count === 'number' ? opts.count : voters.length;
+  const alreadySpread = opts.alreadySpread === true;
+  const maxNames = 16;
+  const maxLen = 16;
+  const tooltipNames = voters.slice(0, maxNames)
+    .map(v => (v && typeof v === 'object' ? (v.name || v.key || '') : String(v || '')))
+    .filter(Boolean)
+    .map(n => n.slice(0, maxLen))
+    .join(', ');
+  const extra = count > maxNames ? ` +${count - maxNames} ${i18n.spreadMore || 'more'}` : '';
+  const tooltip = count > 0 ? `${tooltipNames}${extra}` : (i18n.spreadHint || 'Spread this to your followers (replicates via your feed).');
+  return form(
+    { method: 'POST', action: `/spread/${encodeURIComponent(msgKey)}`, class: 'spread-form' },
+    button(
+      { type: 'submit', class: alreadySpread ? 'spread-btn spread-btn-on' : 'spread-btn', title: tooltip },
+      `🔁 ${count}`
+    )
+  );
+};
+exports.renderSpreadButton = renderSpreadButton;
+
+const aiNavResultsView = ({ query, results }) => {
+  const title = i18n.aiNavResultsTitle || 'AI navigation results';
+  const safeQuery = String(query || '').trim();
+  const safeResults = Array.isArray(results) ? results : [];
+  const fmtScore = (s) => {
+    const n = Number(s);
+    return Number.isFinite(n) ? n.toFixed(2) : '—';
+  };
+  const splitTerms = (desc) => String(desc || '')
+    .split(/[,;]/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  return exports.template(
+    title,
+    section(
+      div({ class: 'tags-header' },
+        h2(title),
+        safeQuery ? p({ class: 'ai-nav-query' }, `${i18n.aiNavQueryLabel || 'Query'}: "${safeQuery}"`) : null
+      ),
+      safeResults.length
+        ? div({ class: 'ai-nav-results' },
+            safeResults.map(r => div({ class: 'ai-nav-result-card card-section' },
+              div({ class: 'card-field' },
+                span({ class: 'card-label' }, `${(i18n.aiNavResultMatch || 'Match').toUpperCase()}: ${fmtScore(r.score)}`),
+                span({ class: 'card-value' }, a({ href: r.path, class: 'filter-btn' }, r.path))
+              )
+            ))
+          )
+        : p(i18n.aiNavResultsEmpty || 'No matching routes. Try /search instead.')
+    )
+  );
+};
+exports.aiNavResultsView = aiNavResultsView;
+
 const i18nBase = require("../client/assets/translations/i18n");
 let selectedLanguage = "en";
 let i18n = {};
@@ -108,15 +167,14 @@ const renderFooter = () => {
   const pkgName = pkg?.name || "@krakenslab/oasis";
   const pkgVersion = pkg?.version || "?";
 
-  let blockchainCycle = {};
-  try {
-    blockchainCycle = JSON.parse(fs.readFileSync(path.join(__dirname, "../configs/blockchain-cycle.json"), "utf8"));
-  } catch (_) {}
-  const cycleVal = blockchainCycle.cycle || "?";
-  const cycleUrl = blockchainCycle.url || "https://laplaza.solarnethub.com";
-
   const hcT = sharedState.getCarbonHcT();
   const hcH = sharedState.getCarbonHcH();
+
+  const peersOnline = sharedState.getOnlinePeerCount ? sharedState.getOnlinePeerCount() : null;
+  const inboxUnread = sharedState.getInboxUnreadCount ? sharedState.getInboxUnreadCount() : null;
+  const lastSyncTs = sharedState.getLastSyncTs ? sharedState.getLastSyncTs() : null;
+  const lastSyncLabel = lastSyncTs ? moment(lastSyncTs).fromNow() : '–';
+  const lastActivity = sharedState.getLastActivity ? sharedState.getLastActivity() : null;
 
   return div(
     { class: "oasis-footer" },
@@ -130,6 +188,21 @@ const renderFooter = () => {
           alt: "Oasis"
         })
       ),
+      (() => {
+        const myId = (config.keys && config.keys.id) ? config.keys.id : '';
+        if (!myId) return null;
+        return [
+          br(),
+          a({ href: "/profile" }, span(myId))
+        ];
+      })(),
+      br(),
+      span({ class: "oasis-footer-carbon" },
+        span("HcT: "),
+        a({ href: "/stats?filter=ALL" }, hcT != null ? String(hcT) : '–'),
+        span(" | HcH: "),
+        a({ href: "/stats?filter=MINE" }, hcH != null ? String(hcH) : '–')
+      ),
       br(),
       a(
         { href: "https://code.03c8.net/krakenslab/oasis", target: "_blank", rel: "noreferrer noopener" },
@@ -138,23 +211,14 @@ const renderFooter = () => {
       span("["),
          span({ class: "oasis-footer-version" }, pkgVersion),
       span("]"),
-      span({ class: "oasis-footer-sep" }, " - "),
+      br(),
+      span(`${i18n.footerLicenseLabel || 'License'}: `),
       a(
         { href: "https://www.gnu.org/licenses/gpl-3.0.html", target: "_blank", rel: "noreferrer noopener" },
         i18n.footerLicense
       ),
       span({ class: "oasis-footer-sep" }, " - "),
-      span({ class: "oasis-footer-year" }, year),
-      br(),
-      span("BLOCKCHAIN CYCLE: "),
-      a({ href: cycleUrl, target: "_blank", rel: "noreferrer noopener" }, String(cycleVal)),
-      br(),
-      span({ class: "oasis-footer-carbon" },
-        span("HcT: "),
-        a({ href: "/stats?filter=ALL" }, hcT != null ? String(hcT) : '–'),
-        span(" | HcH: "),
-        a({ href: "/stats?filter=MINE" }, hcH != null ? String(hcH) : '–')
-      )
+      span({ class: "oasis-footer-year" }, year)
     )
   );
 };
@@ -702,6 +766,20 @@ const renderPixeliaLink = () => {
     : "";
 };
 
+const renderMelodyLink = () => {
+  const melodyMod = getConfig().modules.melodyMod === "on";
+  return melodyMod
+    ? [
+        navLink({
+          href: "/melody",
+          emoji: "♪",
+          text: i18n.melodyTitle,
+          class: "melody-link enabled"
+        })
+      ]
+    : "";
+};
+
 const renderGamesLink = () => {
   const gamesMod = getConfig().modules.gamesMod === "on";
   return gamesMod
@@ -902,8 +980,9 @@ const template = (titlePrefix, ...elements) => {
           { class: "top-bar-right" },
           nav(
             ul(
-              renderTagsLink(),
-              navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
+              navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle }),
+              renderGraphosLink(),
+              navLink({ href: "/peers", emoji: "⧖", text: i18n.peers })
             )
           )
         )
@@ -1015,14 +1094,8 @@ const template = (titlePrefix, ...elements) => {
                   text: i18n.blockchain
                 }),
                 renderCipherLink(),
-                renderGraphosLink(),
                 renderInvitesLink(),
                 renderLegacyLink(),
-                navLink({
-                  href: "/peers",
-                  emoji: "⧖",
-                  text: i18n.peers
-                }),
                 navLink({
                   href: "/stats",
                   emoji: "ꕷ",
@@ -1048,6 +1121,7 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "ꔙ",
                   text: i18n.activityTitle
                 }),
+                renderTagsLink(),
                 renderTrendingLink(),
                 renderOpinionsLink(),
                 renderPadsLink(),
@@ -1063,7 +1137,8 @@ const template = (titlePrefix, ...elements) => {
                 },
                 renderFeedLink(),
                 renderGamesLink(),
-                renderPixeliaLink()
+                renderPixeliaLink(),
+                renderMelodyLink()
               ),
               navGroup(
                 {
@@ -1686,8 +1761,41 @@ const post = ({ msg, aside = false, preview = false }) => {
     }
 };
 
-exports.editProfileView = ({ name, description }) =>
-  template(
+exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '', baseUrl = '' }) => {
+  const prefs = {
+    activity: visibilityPrefs.activity === true,
+    device:   visibilityPrefs.device   === true,
+    karma:    visibilityPrefs.karma !== false,
+    ubi:      visibilityPrefs.ubi      === true,
+    wallet:   visibilityPrefs.wallet   === true,
+    clearnetShops:     visibilityPrefs.clearnetShops     === true,
+    clearnetJobs:      visibilityPrefs.clearnetJobs      === true,
+    clearnetEvents:    visibilityPrefs.clearnetEvents    === true,
+    clearnetProjects:  visibilityPrefs.clearnetProjects  === true,
+    clearnetPosts:     visibilityPrefs.clearnetPosts     === true,
+    clearnetAudios:    visibilityPrefs.clearnetAudios    === true,
+    clearnetVideos:    visibilityPrefs.clearnetVideos    === true,
+    clearnetImages:    visibilityPrefs.clearnetImages    === true,
+    clearnetDocuments: visibilityPrefs.clearnetDocuments === true,
+    clearnetTorrents:  visibilityPrefs.clearnetTorrents  === true,
+    profileShops:      visibilityPrefs.profileShops      === true,
+    profileJobs:       visibilityPrefs.profileJobs       === true,
+    profileEvents:     visibilityPrefs.profileEvents     === true,
+    profileProjects:   visibilityPrefs.profileProjects   === true,
+    profilePosts:      visibilityPrefs.profilePosts      === true,
+    profileAudios:     visibilityPrefs.profileAudios     === true,
+    profileVideos:     visibilityPrefs.profileVideos     === true,
+    profileImages:     visibilityPrefs.profileImages     === true,
+    profileDocuments:  visibilityPrefs.profileDocuments  === true,
+    profileTorrents:   visibilityPrefs.profileTorrents   === true,
+    ecoTax:            visibilityPrefs.ecoTax            !== false
+  };
+  prefs.clearnet = prefs.clearnetShops || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents;
+  const togglePill = (key, labelText) => label({ class: "pref-pill", for: `vis_${key}` },
+    input({ type: "checkbox", name: `vis_${key}`, id: `vis_${key}`, value: "1", class: "pref-pill-input", checked: prefs[key] ? "checked" : undefined }),
+    span({ class: "pref-pill-label" }, labelText)
+  );
+  return template(
     i18n.editProfile,
     section(
       h1(i18n.editProfile),
@@ -1720,6 +1828,59 @@ exports.editProfileView = ({ name, description }) =>
             description
           )
         ),
+        br(), br(),
+        div({ class: "prefs-card" },
+          div({ class: "tags-header" },
+            h2(i18n.profileContentSectionTitle || 'Avatar Content'),
+            p({ class: "prefs-help" }, i18n.profileContentHelp || 'Choose which of your modules will be displayed on your profile.')
+          ),
+          div({ class: "pref-pill-row" },
+            togglePill('profileShops',     i18n.profileClearnetShopsLabel     || 'Shops'),
+            togglePill('profileJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'),
+            togglePill('profileEvents',    i18n.profileClearnetEventsLabel    || 'Events'),
+            togglePill('profileProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'),
+            togglePill('profilePosts',     i18n.profileClearnetPostsLabel     || 'Blogs'),
+            togglePill('profileAudios',    i18n.profileClearnetAudiosLabel    || 'Audios'),
+            togglePill('profileVideos',    i18n.profileClearnetVideosLabel    || 'Videos'),
+            togglePill('profileImages',    i18n.profileClearnetImagesLabel    || 'Images'),
+            togglePill('profileDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'),
+            togglePill('profileTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents')
+          )
+        ),
+        br(),
+        div({ class: "prefs-card" },
+          div({ class: "tags-header" },
+            h2(i18n.profileSensorsSectionTitle || 'Sensors'),
+            p({ class: "prefs-help" }, i18n.profileSensorsHelp || 'Optional metrics shown on your profile.')
+          ),
+          div({ class: "pref-pill-row" },
+            togglePill('ecoTax',   i18n.profileVisibilityEcoTax   || 'ECO Tax'),
+            togglePill('activity', i18n.profileVisibilityActivity || 'Activity Level'),
+            togglePill('device',   i18n.profileVisibilityDevice   || 'Device'),
+            togglePill('karma',    i18n.profileVisibilityKarma    || 'KARMA Scoring'),
+            togglePill('ubi',      i18n.profileVisibilityUbi      || 'UBI'),
+            togglePill('wallet',   i18n.profileVisibilityWallet   || 'ECOIN Wallet')
+          )
+        ),
+        br(),
+        div({ class: "prefs-card" },
+          div({ class: "tags-header" },
+            h2(i18n.clearnetSectionTitle || 'Clearnet'),
+            p({ class: "prefs-help" }, i18n.profileClearnetHelp || 'Modules that can be accessed from outside Oasis.')
+          ),
+          div({ class: "pref-pill-row" },
+            togglePill('clearnetShops',     i18n.profileClearnetShopsLabel     || 'Shops'),
+            togglePill('clearnetJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'),
+            togglePill('clearnetEvents',    i18n.profileClearnetEventsLabel    || 'Events'),
+            togglePill('clearnetProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'),
+            togglePill('clearnetPosts',     i18n.profileClearnetPostsLabel     || 'Blogs'),
+            togglePill('clearnetAudios',    i18n.profileClearnetAudiosLabel    || 'Audios'),
+            togglePill('clearnetVideos',    i18n.profileClearnetVideosLabel    || 'Videos'),
+            togglePill('clearnetImages',    i18n.profileClearnetImagesLabel    || 'Images'),
+            togglePill('clearnetDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'),
+            togglePill('clearnetTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents')
+          )
+        ),
         br(),
         button(
           {
@@ -1730,8 +1891,158 @@ exports.editProfileView = ({ name, description }) =>
       )
     )
   );
+};
 
-exports.authorView = ({
+exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWarning, sentAt }) => {
+  const { escapeHtml: esc, renderClearnetPage } = require('./clearnet_view');
+  const rawText = String(text || '');
+  const renderedHtml = sanitizeHtml(markdown(rawText))
+    .replace(/(["'])\/blob\//g, '$1/c/blob/');
+  const plainPreview = rawText.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<[^>]+>/g, '').slice(0, 200);
+  const authorEsc = esc(authorName || (author || '').slice(1, 9));
+  const dateStr = sentAt ? esc(new Date(sentAt).toISOString().slice(0, 10)) : '';
+  const cw = esc(contentWarning || '');
+  const firstLine = rawText.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<[^>]+>/g, '').split('\n').map(s => s.trim()).find(Boolean) || '';
+  const titleText = cw || firstLine.slice(0, 100) || 'Post';
+  const extraCss = `
+.cn-blog-meta{color:var(--fg-dim);font-size:13px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap}
+.cn-blog-cw{background:#663d00;color:#ffd700;border:1px solid #ff7300;padding:8px 14px;border-radius:6px;margin-bottom:16px;font-weight:600}
+.cn-blog-body{color:var(--fg-soft);line-height:1.7;font-size:16px;margin:0;word-wrap:break-word}
+.cn-blog-body p{margin:0 0 14px 0}
+.cn-blog-body img{max-width:100%;height:auto;border-radius:6px;border:1px solid var(--border);display:block;margin:10px 0}
+.cn-blog-body a{color:var(--fg);text-decoration:underline}
+.cn-blog-body a:hover{color:var(--accent)}
+.cn-blog-body pre,.cn-blog-body code{background:var(--bg-sub);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-family:monospace;font-size:13px}
+.cn-blog-body pre{padding:10px 14px;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
+.cn-blog-body blockquote{margin:10px 0;padding:6px 14px;border-left:3px solid var(--fg);color:var(--fg-soft);background:var(--bg-sub);border-radius:0 4px 4px 0}
+.cn-blog-body h1,.cn-blog-body h2,.cn-blog-body h3{color:var(--fg);margin:18px 0 10px 0}
+.cn-blog-body ul,.cn-blog-body ol{padding-left:24px;margin:8px 0}
+.cn-blog-body video,.cn-blog-body audio{max-width:100%;display:block;margin:10px 0}
+`;
+  const body = `
+  <div class="cn-blog-meta">
+    ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
+  </div>
+  ${cw ? `<div class="cn-blog-cw">${cw}</div>` : ''}
+  <article class="cn-blog-body">${renderedHtml}</article>
+`;
+  return renderClearnetPage({
+    title: `${esc(titleText)} — Oasis`,
+    ogTitle: titleText,
+    ogDescription: plainPreview,
+    extraCss,
+    body,
+    hubFeedId: author || null
+  });
+};
+
+exports.clearnetInhabitantView = async ({ feedId, name, description, image, prefs, items = {}, query = '', filterType = '' }) => {
+  const { blobUrl: cnBlob, escapeHtml: esc, renderClearnetPage } = require('./clearnet_view');
+  const blobAvatarUrl = cnBlob(image);
+  const avatarSrc = blobAvatarUrl || '/assets/images/default-avatar.png';
+  const qrSrc = feedId ? `/qr/${encodeURIComponent(feedId)}` : null;
+  const displayName = esc(name || 'Anonymous');
+  const desc = esc(description || '');
+  const renderHubItem = (modulePath, it) => {
+    const blob = cnBlob(it.image);
+    const title = esc(it.title || 'Untitled');
+    const snippet = esc((it.snippet || '').slice(0, 160));
+    const meta = esc(it.meta || '');
+    const kind = esc(it.kind || '');
+    return `<a class="cn-hub-card" href="/c/${modulePath}/${encodeURIComponent(it.id)}">
+      ${blob ? `<img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/>` : ''}
+      <div class="cn-hub-body">
+        ${kind ? `<div class="cn-hub-kind">${kind}</div>` : ''}
+        <div class="cn-hub-title">${title}</div>
+        ${snippet ? `<div class="cn-hub-snippet">${snippet}${(it.snippet || '').length > 160 ? '…' : ''}</div>` : ''}
+        ${meta ? `<div class="cn-hub-meta">${meta}</div>` : ''}
+      </div>
+    </a>`;
+  };
+  const moduleDef = [
+    { key: 'shops',     label: 'Shops',     kind: 'Shop',     prefKey: 'clearnetShops' },
+    { key: 'jobs',      label: 'Jobs',      kind: 'Job',      prefKey: 'clearnetJobs' },
+    { key: 'events',    label: 'Events',    kind: 'Event',    prefKey: 'clearnetEvents' },
+    { key: 'projects',  label: 'Projects',  kind: 'Project',  prefKey: 'clearnetProjects' },
+    { key: 'posts',     label: 'Blogs',     kind: 'Blog',     prefKey: 'clearnetPosts',     modulePath: 'blog' },
+    { key: 'audios',    label: 'Audios',    kind: 'Audio',    prefKey: 'clearnetAudios' },
+    { key: 'videos',    label: 'Videos',    kind: 'Video',    prefKey: 'clearnetVideos' },
+    { key: 'images',    label: 'Images',    kind: 'Image',    prefKey: 'clearnetImages' },
+    { key: 'documents', label: 'Documents', kind: 'Document', prefKey: 'clearnetDocuments' },
+    { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' }
+  ];
+  const allItems = [];
+  for (const m of moduleDef) {
+    for (const it of (items[m.key] || [])) {
+      allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: m.kind, _moduleKey: m.key });
+    }
+  }
+  const activeFilter = (filterType || '').toLowerCase();
+  const visibleItems = activeFilter
+    ? allItems.filter(it => it._moduleKey === activeFilter)
+    : allItems;
+  const totalCount = visibleItems.length;
+  const filterBase = `/c/inhabitant/${encodeURIComponent(feedId)}`;
+  const filterButtons = `<div class="cn-filter-row">
+    <a class="cn-filter-btn${activeFilter ? '' : ' active'}" href="${filterBase}">All (${allItems.length})</a>
+    ${moduleDef.filter(m => prefs && prefs[m.prefKey] && (items[m.key] || []).length).map(m => {
+      const isActive = activeFilter === m.key;
+      const count = (items[m.key] || []).length;
+      return `<a class="cn-filter-btn${isActive ? ' active' : ''}" href="${filterBase}?type=${m.key}">${esc(m.label)} (${count})</a>`;
+    }).join('')}
+  </div>`;
+  const sections = totalCount
+    ? `${filterButtons}<h2 class="cn-section">Public Content (${totalCount})</h2><div class="cn-hub-grid">${visibleItems.map(it => renderHubItem(it.modulePath, it)).join('')}</div>`
+    : (allItems.length ? `${filterButtons}<div class="cn-empty-content">No content in this category.</div>` : '');
+  const noResults = '<div class="cn-empty-content">This inhabitant has not published content to Clearnet yet.</div>';
+  const extraCss = `
+.cn-profile{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-bottom:24px}
+.cn-avatar{width:160px;height:160px;border-radius:8px;border:3px solid var(--fg);object-fit:cover;background:#000;flex:0 0 auto}
+.cn-profile-body{flex:1 1 280px;min-width:0}
+.cn-name{color:var(--fg);margin:0 0 8px 0;font-size:28px;font-weight:700}
+.cn-id{color:var(--fg-dim);font-size:12px;word-break:break-all;font-family:monospace;background:var(--bg-sub);border:1px solid var(--border);padding:6px 10px;border-radius:4px;display:inline-block;margin-bottom:14px}
+.cn-desc{color:var(--fg-soft);white-space:pre-wrap;margin:0}
+.cn-qr-col{flex:0 0 auto;display:flex;align-items:flex-start;justify-content:center}
+.cn-qr-img{width:160px;height:160px;background:#fff;padding:8px;border-radius:8px;image-rendering:pixelated}
+.cn-filter-row{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 12px 0}
+.cn-filter-btn{display:inline-block;padding:6px 14px;background:var(--bg-elev);color:var(--fg-soft);border:1px solid var(--border);border-radius:14px;font-size:13px;text-decoration:none;transition:border-color .15s ease,color .15s ease,background .15s ease}
+.cn-filter-btn:hover{border-color:var(--fg);color:var(--fg);text-decoration:none}
+.cn-filter-btn.active{background:var(--bg-sub);border-color:var(--fg);color:var(--fg);font-weight:600}
+.cn-hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:16px}
+.cn-hub-kind{color:var(--fg-dim);font-size:10px;text-transform:uppercase;letter-spacing:2px;font-weight:600}
+.cn-hub-card{display:flex;flex-direction:column;background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color .15s ease;color:var(--fg);text-decoration:none}
+.cn-hub-card:hover{border-color:var(--fg);text-decoration:none}
+.cn-hub-thumb{width:100%;height:140px;object-fit:cover;background:#000;border-bottom:1px solid var(--border)}
+.cn-hub-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.cn-hub-title{color:var(--fg);font-weight:600;font-size:15px;word-break:break-word}
+.cn-hub-snippet{color:var(--fg-soft);font-size:13px;line-height:1.4;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cn-hub-meta{color:var(--fg-dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-top:auto}
+.cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
+`;
+  const body = `
+  <div class="cn-profile">
+    <img class="cn-avatar" src="${avatarSrc}" alt="${displayName}"/>
+    <div class="cn-profile-body">
+      <h1 class="cn-name">${displayName}</h1>
+      <div class="cn-id">${esc(feedId)}</div>
+      ${desc ? `<p class="cn-desc">${desc}</p>` : ''}
+    </div>
+    ${qrSrc ? `<div class="cn-qr-col"><img class="cn-qr-img" src="${qrSrc}" alt="QR"/></div>` : ''}
+  </div>
+  ${totalCount > 0 ? sections : noResults}
+`;
+  return renderClearnetPage({
+    title: `${name || 'Inhabitant'} — Oasis`,
+    ogTitle: name || 'Oasis',
+    ogDescription: description || '',
+    ogImage: blobAvatarUrl,
+    extraCss,
+    body,
+    hubFeedId: feedId || null
+  });
+};
+
+exports.authorView = async ({
   avatarUrl,
   description,
   feedId,
@@ -1745,19 +2056,44 @@ exports.authorView = ({
   estimatedUBI = 0,
   lastClaimedDate = null,
   totalClaimed = 0,
-  lastActivityBucket
+  carbonGrams = 0,
+  lastActivityBucket,
+  visibilityPrefs = null,
+  baseUrl = '',
+  userActions = [],
+  allActions = [],
+  profileItems = null,
+  profileFilterType = ''
 }) => {
+  const isOwnProfile = !!(relationship && relationship.me);
+  const rawPrefs = visibilityPrefs || {};
+  const prefs = {
+    activity: rawPrefs.activity === true,
+    device:   rawPrefs.device   === true,
+    karma:    rawPrefs.karma !== false,
+    ubi:      rawPrefs.ubi      === true,
+    wallet:   rawPrefs.wallet   === true,
+    ecoTax:   rawPrefs.ecoTax   !== false,
+    clearnet: rawPrefs.clearnet === true
+  };
+  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents'];
+  const anySubClearnet = clearnetSubKeys.some(k => rawPrefs[k] === true);
+  prefs.clearnet = prefs.clearnet || anySubClearnet;
+  const showField = (key) => prefs[key];
+  const qrSrc = feedId ? `/qr/${encodeURIComponent(feedId)}` : null;
   const linkUrl = `/author/${encodeURIComponent(feedId)}`;
+  const { renderReachChip, renderClearnetUrlBlock } = require('./clearnet_view');
+  const reachChip = renderReachChip(!!prefs.clearnet, i18n, prefs.clearnet ? `/c/inhabitant/${encodeURIComponent(feedId)}` : null);
 
-  const mention = `[@${name}](${feedId})`;
-  const markdownMention = highlightJs.highlight(mention, { language: "markdown", ignoreIllegals: true }).value;
+  const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const markdownMention = `[@${escHtml(name)}](<strong>${escHtml(feedId)}</strong>)`;
 
   const contactForms = [];
   const addForm = ({ action }) =>
     contactForms.push(
       form(
         { action: `/${action}/${encodeURIComponent(feedId)}`, method: "post" },
-        button({ type: "submit" }, i18n[action])
+        button({ type: "submit", class: "btn" }, i18n[action])
       )
     );
 
@@ -1780,124 +2116,200 @@ exports.authorView = ({
 
   const bucket = lastActivityBucket || 'red';
 
-  const { lastActivityBadge } = require('./inhabitants_view');
+  const dotClass = bucket === 'green' ? 'green' : bucket === 'orange' ? 'orange' : bucket === 'red' ? 'red' : null;
+  const activityChip = (dotClass && showField('activity'))
+    ? span({ class: 'inhabitant-last-activity' },
+        `${i18n.inhabitantActivityLevel}: `,
+        span({ class: `activity-dot ${dotClass}` }, '●'))
+    : null;
+  const deviceSrc = (() => {
+    if (!isOwnProfile) return null;
+    const t = getConfig().themes.current;
+    return t === 'OasisKIT' ? 'KIT' : (t === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP';
+  })();
+  const deviceChip = (deviceSrc && showField('device'))
+    ? (() => {
+        const upper = String(deviceSrc).toUpperCase();
+        const deviceClass = upper === 'KIT' ? 'device-kit' : upper === 'MOBILE' ? 'device-mobile' : 'device-desktop';
+        return span({ class: 'inhabitant-last-activity' },
+          `${i18n.deviceLabel || 'Device'}: `,
+          span({ class: deviceClass }, deviceSrc));
+      })()
+    : null;
+  const activityGroup = (activityChip || deviceChip)
+    ? div({ class: 'inhabitant-activity-group' }, activityChip, deviceChip)
+    : null;
 
-  const prefix = section(
-    { class: "message" },
-    div(
-      { class: "profile" },
-      div({ class: "avatar-container" },
-        img({ class: "inhabitant-photo-details", src: avatarUrl }),
-        h1({ class: "name" }, name),
-      ),
-      pre({ class: "md-mention", innerHTML: sanitizeHtml(markdownMention) }),
-      p(userLink(feedId, name)),
-      div({ class: "profile-metrics" },
-        ...lastActivityBadge({ lastActivityBucket: bucket }, true),
-        div({ class: "inhabitant-karma-ubi" },
-          span({ class: "karma-line" }, `${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)),
-          span({ class: "ubi-line" }, `${i18n.bankUbiThisMonth}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)),
-          span({ class: "ubi-line" }, `${i18n.bankUbiLastClaimed}: `,
-            lastClaimedDate
-              ? a({ href: "/transfers?filter=ubi", class: "user-link" }, new Date(lastClaimedDate).toLocaleDateString())
-              : strong(i18n.bankUbiNeverClaimed)
-          ),
-          span({ class: "ubi-line" }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`))
-        ),
-        (ecoAddress || relationship.me)
-          ? div({ class: "eco-wallet" },
-              p(`${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `,
-                a({ href: '/wallet' }, ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!')))
-          : null
-      )
-    ),
-    description !== "" ? article({ innerHTML: sanitizeHtml(markdown(description)) }) : null,
-    footer(
-      div(
-        { class: "profile" },
-        ...contactForms.map(form => span({ class: "contact-bold" }, form)),
-        relationship.me
-          ? span({ class: "status you" }, i18n.relationshipYou)
-          : div({ class: "relationship-status" },
-              relationship.blocking && relationship.blockedBy
-                ? span({ class: "status blocked" }, i18n.relationshipMutualBlock)
+  const formatCarbonValue = (g) => {
+    const n = Number(g) || 0;
+    if (!n) return '0 µg CO₂';
+    if (n >= 1) return `${n.toFixed(2)} g CO₂`;
+    const mg = n * 1000;
+    if (mg >= 1) return `${mg.toFixed(2)} mg CO₂`;
+    return `${(mg * 1000).toFixed(2)} µg CO₂`;
+  };
+  const karmaUbiChildren = [];
+  if (showField('ecoTax')) {
+    karmaUbiChildren.push(span({ class: "karma-line eco-tax-line" }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))));
+  }
+  if (showField('karma')) {
+    karmaUbiChildren.push(span({ class: "karma-line" }, `${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)));
+  }
+  if (showField('ubi')) {
+    karmaUbiChildren.push(span({ class: "ubi-line" }, `${i18n.bankUbiThisMonth}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)));
+    karmaUbiChildren.push(span({ class: "ubi-line" }, `${i18n.bankUbiLastClaimed}: `,
+      lastClaimedDate
+        ? a({ href: "/transfers?filter=ubi", class: "user-link" }, new Date(lastClaimedDate).toLocaleDateString())
+        : strong(i18n.bankUbiNeverClaimed)));
+    karmaUbiChildren.push(span({ class: "ubi-line" }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)));
+  }
+  const sensorsItems = [];
+  if (activityChip) sensorsItems.push(activityChip);
+  if (deviceChip) sensorsItems.push(deviceChip);
+  for (const c of karmaUbiChildren) sensorsItems.push(c);
+  if (showField('wallet') && (ecoAddress || isOwnProfile)) {
+    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `,
+      a({ href: '/wallet' }, ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!')));
+  }
+  const metricsBlock = sensorsItems.length ? div({ class: "profile-sensors-box" }, ...sensorsItems) : null;
+
+  const relationshipBlock = relationship.me
+    ? span({ class: "status you" }, i18n.relationshipYou)
+    : div({ class: "relationship-status" },
+        relationship.blocking && relationship.blockedBy
+          ? span({ class: "status blocked" }, i18n.relationshipMutualBlock)
+          : [
+              relationship.blocking ? span({ class: "status blocked" }, i18n.relationshipBlocking) : null,
+              relationship.blockedBy ? span({ class: "status blocked-by" }, i18n.relationshipBlockedBy) : null,
+              relationship.following && relationship.followsMe
+                ? span({ class: "status mutual" }, i18n.relationshipMutuals)
                 : [
-                    relationship.blocking ? span({ class: "status blocked" }, i18n.relationshipBlocking) : null,
-                    relationship.blockedBy ? span({ class: "status blocked-by" }, i18n.relationshipBlockedBy) : null,
-                    relationship.following && relationship.followsMe
-                      ? span({ class: "status mutual" }, i18n.relationshipMutuals)
-                      : [
-                          span({ class: "status supporting" }, relationship.following ? i18n.relationshipFollowing : i18n.relationshipNone),
-                          span({ class: "status supported-by" }, relationship.followsMe ? i18n.relationshipTheyFollow : i18n.relationshipNotFollowing)
-                        ]
+                    span({ class: "status supporting" }, relationship.following ? i18n.relationshipFollowing : i18n.relationshipNone),
+                    span({ class: "status supported-by" }, relationship.followsMe ? i18n.relationshipTheyFollow : i18n.relationshipNotFollowing)
                   ]
-            ),
-        relationship.me ? a({ href: `/profile/edit`, class: "btn" }, nbsp, i18n.editProfile) : null,
-        a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes),
-        !relationship.me ? a({ href: `/pm?recipients=${encodeURIComponent(feedId)}`, class: "btn" }, i18n.pmCreateButton) : null
-      )
+            ],
+        contactForms.length
+          ? div({ class: "relationship-actions" }, ...contactForms)
+          : null
+      );
+
+  const sideColumn = div({ class: "tribe-side profile-side" },
+    img({ class: "inhabitant-photo-details", src: avatarUrl, alt: name }),
+    h2({ class: "profile-side-name" }, name),
+    div({ class: "profile-side-mention" },
+      a({ href: `/author/${encodeURIComponent(feedId)}` }, strong(feedId))
+    ),
+    qrSrc ? img({ src: qrSrc, alt: feedId, class: "profile-side-qr", width: "180", height: "180" }) : null,
+    description !== ""
+      ? div({ class: "profile-side-description", innerHTML: sanitizeHtml(markdown(description)) })
+      : null,
+    div({ class: "profile-side-relationship" }, relationshipBlock),
+    metricsBlock,
+    div({ class: "profile-reach" },
+      reachChip,
+      isOwnProfile && prefs.clearnet
+        ? renderClearnetUrlBlock({ baseUrl, path: `/c/inhabitant/${encodeURIComponent(feedId)}`, i18nObj: i18n })
+        : null,
+      isOwnProfile
+        ? form({ method: 'POST', action: '/profile/clearnet-toggle', class: 'profile-reach-toggle' },
+            button({ type: 'submit', class: 'btn' },
+              prefs.clearnet
+                ? (i18n.profileSwitchToOasis || 'Return to Oasis')
+                : (i18n.profileSwitchToClearnet || 'Dive into Clearnet')
+            )
+          )
+        : null
+    ),
+    div({ class: "profile-side-actions" },
+      isOwnProfile ? a({ href: `/profile/edit`, class: "btn" }, i18n.editProfile) : null,
+      a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes),
+      !isOwnProfile ? a({ href: `/pm?recipients=${encodeURIComponent(feedId)}`, class: "btn" }, i18n.pmCreateButton) : null
     )
   );
 
-  let items = messages.map((msg) => post({ msg }));
-  if (items.length === 0) {
-    if (lastPost === undefined) {
-      items.push(section(div(span(i18n.feedEmpty))));
-    } else {
-      items.push(
-        section(
-          div(
-            span(i18n.feedRangeEmpty),
-            a({ href: `${linkUrl}` }, i18n.seeFullFeed)
+  let mainColumnContent = [];
+
+  if (Array.isArray(allActions) && allActions.length) {
+    const keyToTypes = {
+      shops:     new Set(['shop', 'shopProduct']),
+      jobs:      new Set(['job']),
+      events:    new Set(['event']),
+      projects:  new Set(['project']),
+      posts:     new Set(['post']),
+      audios:    new Set(['audio']),
+      videos:    new Set(['video']),
+      images:    new Set(['image']),
+      documents: new Set(['document']),
+      torrents:  new Set(['torrent'])
+    };
+    const moduleDef = [
+      { key: 'shops',     label: i18n.profileClearnetShopsLabel     || 'Shops' },
+      { key: 'jobs',      label: i18n.profileClearnetJobsLabel      || 'Jobs' },
+      { key: 'events',    label: i18n.profileClearnetEventsLabel    || 'Events' },
+      { key: 'projects',  label: i18n.profileClearnetProjectsLabel  || 'Projects' },
+      { key: 'posts',     label: i18n.profileClearnetPostsLabel     || 'Blogs' },
+      { key: 'audios',    label: i18n.profileClearnetAudiosLabel    || 'Audios' },
+      { key: 'videos',    label: i18n.profileClearnetVideosLabel    || 'Videos' },
+      { key: 'images',    label: i18n.profileClearnetImagesLabel    || 'Images' },
+      { key: 'documents', label: i18n.profileClearnetDocumentsLabel || 'Documents' },
+      { key: 'torrents',  label: i18n.profileClearnetTorrentsLabel  || 'Torrents' }
+    ];
+    const enabledKeys = moduleDef.filter(m => rawPrefs[`profile${m.key.charAt(0).toUpperCase() + m.key.slice(1)}`] === true).map(m => m.key);
+    if (enabledKeys.length > 0) {
+      const allowedTypes = new Set();
+      for (const k of enabledKeys) for (const t of keyToTypes[k]) allowedTypes.add(t);
+      const authorActions = allActions.filter(a => a && a.author === feedId && allowedTypes.has(a.type));
+      const counts = {};
+      for (const k of enabledKeys) counts[k] = 0;
+      for (const a of authorActions) {
+        for (const k of enabledKeys) {
+          if (keyToTypes[k].has(a.type)) { counts[k]++; break; }
+        }
+      }
+      const totalCount = authorActions.length;
+      if (totalCount > 0) {
+        const activeFilter = (profileFilterType || '').toLowerCase();
+        const filterBase = isOwnProfile ? `/profile` : `/author/${encodeURIComponent(feedId)}`;
+        const filterRow = div({ class: "tribe-section-nav no-border" },
+          div({ class: "tribe-section-group no-border" },
+            a({ href: filterBase, class: `filter-btn${activeFilter ? '' : ' active'}` }, `${String(i18n.profileHubAll || 'All').toUpperCase()} (${totalCount})`),
+            ...moduleDef.filter(m => enabledKeys.includes(m.key) && counts[m.key] > 0).map(m => {
+              const isActive = activeFilter === m.key;
+              return a({ href: `${filterBase}?type=${encodeURIComponent(m.key)}`, class: `filter-btn${isActive ? ' active' : ''}` }, `${String(m.label).toUpperCase()} (${counts[m.key]})`);
+            })
           )
-        )
-      );
+        );
+        const visible = activeFilter && keyToTypes[activeFilter]
+          ? authorActions.filter(a => keyToTypes[activeFilter].has(a.type))
+          : authorActions;
+        visible.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        const limited = visible.slice(0, 50);
+        const { renderActionCards } = require('./activity_view');
+        mainColumnContent.push(filterRow);
+        mainColumnContent.push(div({ class: 'feed-container profile-module-section' },
+          renderActionCards(limited, feedId, allActions || limited)
+        ));
+      }
     }
-  } else {
-    const highestSeqNum = messages[0].value.sequence;
-    const lowestSeqNum = messages[messages.length - 1].value.sequence;
-
-    const newerPostsLink = a(
-      {
-        href:
-          lastPost !== undefined && highestSeqNum < lastPost.value.sequence
-            ? `${linkUrl}?gt=${highestSeqNum}`
-            : "#",
-        class:
-          lastPost !== undefined && highestSeqNum < lastPost.value.sequence
-            ? "btn"
-            : "btn disabled",
-        "aria-disabled":
-          lastPost === undefined || highestSeqNum >= lastPost.value.sequence
-      },
-      i18n.newerPosts
-    );
-
-    const olderPostsLink = a(
-      {
-        href:
-          lowestSeqNum > firstPost.value.sequence
-            ? `${linkUrl}?lt=${lowestSeqNum}`
-            : "#",
-        class:
-          lowestSeqNum > firstPost.value.sequence
-            ? "btn"
-            : "btn disabled",
-        "aria-disabled": !(lowestSeqNum > firstPost.value.sequence)
-      },
-      i18n.olderPosts
-    );
-
-    const pagination = section(
-      { class: "message" },
-      footer(div(newerPostsLink, olderPostsLink), br())
-    );
-
-    items.unshift(pagination);
-    items.push(pagination);
   }
 
-  return template(i18n.profile, prefix, items);
+  const hasMainContent = mainColumnContent.length > 0;
+  const layout = hasMainContent
+    ? section(div({ class: "tribe-details profile-layout" },
+        sideColumn,
+        div({ class: "tribe-main profile-main" }, ...mainColumnContent)
+      ))
+    : section(div({ class: "profile-layout profile-layout-single" }, sideColumn));
+
+  let html = template(i18n.profile, layout);
+  const hasDocument = Array.isArray(allActions) && allActions.some(a => a && a.author === feedId && a.type === 'document');
+  if (hasDocument) {
+    html += `
+      <script type="module" src="/js/pdf.min.mjs"></script>
+      <script src="/js/pdf-viewer.js"></script>
+    `;
+  }
+  return html;
 };
 
 exports.previewCommentView = async ({
@@ -2038,7 +2450,6 @@ exports.commentView = async (
 const renderMessage = (msg) => {
   const content = lodash.get(msg, "value.content", {});
   const authorId = msg.value.author || "Anonymous";
-  const authorName = lodash.get(msg, "value.meta.author.name") || authorId.slice(0, 10) + '...';
   const createdAt = new Date(msg.value.timestamp).toLocaleString();
   const mentionsText = content.text || '';
   const isTribe = content.type === 'tribe-content';
@@ -2052,19 +2463,27 @@ const renderMessage = (msg) => {
   const badge = isTribe && content.tribeName
     ? span({ class: 'tribe-badge' }, content.tribeName)
     : null;
+  const typeLabel = isTribe ? 'TRIBE' : 'POST';
 
-  return div({ class: "mention-item" },
-    div({ class: "mention-content" },
-      badge,
-      ...renderUrl(mentionsText || '[No content]')
+  return div({ class: 'card card-rpg mention-card' },
+    div({ class: 'card-header' },
+      h2({ class: 'card-label' }, `[${typeLabel}]`),
+      visitUrl
+        ? form({ method: 'GET', action: visitUrl, class: 'inline-form' },
+            button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails || 'View details')
+          )
+        : null
     ),
-    p(userLink(authorId, authorName)),
-    p(`${i18n.createdAtLabel || 'Created at'}: ${createdAt}`),
-    visitUrl
-      ? form({ method: 'GET', action: visitUrl },
-          button({ type: 'submit', class: 'filter-btn' }, i18n.visitContent || 'Visit')
-        )
-      : null
+    div({ class: 'card-body' },
+      div({ class: 'card-section' },
+        badge,
+        p({ class: 'post-text' }, ...renderUrl(mentionsText || '[No content]'))
+      )
+    ),
+    p({ class: 'card-footer' },
+      span({ class: 'date-link' }, `${createdAt} ${i18n.performed || ''} `),
+      userLink(authorId)
+    )
   );
 };
 
@@ -2192,8 +2611,9 @@ exports.privateView = async (messagesInput, filter) => {
   function actions({ key, replyId, subjectRaw, text }) {
     const stop = { onclick: 'event.stopPropagation()' }
     const subjectReply = /^(\s*RE:\s*)/i.test(subjectRaw || '') ? (subjectRaw || '') : `RE: ${subjectRaw || ''}`
+    const isSelf = replyId === userId
     return div({ class: 'pm-actions' },
-      form({ method: 'GET', action: '/pm', class: 'pm-action-form', ...stop },
+      isSelf ? null : form({ method: 'GET', action: '/pm', class: 'pm-action-form', ...stop },
         input({ type: 'hidden', name: 'recipients', value: replyId }),
         input({ type: 'hidden', name: 'subject', value: subjectReply }),
         input({ type: 'hidden', name: 'quote', value: text || '' }),
@@ -2270,6 +2690,8 @@ exports.privateView = async (messagesInput, filter) => {
       .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`)
       .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`)
       .replace(/\/calendars\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="calendar-link" href="/calendars/${encodeURIComponent(id)}">${match}</a>`)
+      .replace(/\/ai\/ask\?[^\s<"]+/g, (match) => `<a class="ai-ask-link" href="${match}">${match}</a>`)
+      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
       .replace(/(https?:\/\/[^\s<"]+)/g, (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`)
   }
 
@@ -2286,13 +2708,20 @@ exports.privateView = async (messagesInput, filter) => {
     if (hasInbound) for (const m of arr) inboxSet.add(m)
   }
 
+  const isReminder = m => {
+    const s = String(m?.value?.content?.subject || '')
+    return /^(Task Reminder:|Calendar Reminder:)/i.test(s)
+  }
+
   const data =
-    filter === 'sent' ? messages.filter(isSent) :
-    filter === 'inbox' ? Array.from(inboxSet) :
+    filter === 'sent' ? messages.filter(m => isSent(m) && !isReminder(m)) :
+    filter === 'reminders' ? messages.filter(isReminder) :
+    filter === 'inbox' ? Array.from(inboxSet).filter(m => !isReminder(m)) :
     messages
 
-  const inboxCount = Array.from(inboxSet).length
-  const sentCount = messages.filter(isSent).length
+  const inboxCount = Array.from(inboxSet).filter(m => !isReminder(m)).length
+  const sentCount = messages.filter(m => isSent(m) && !isReminder(m)).length
+  const reminderCount = messages.filter(isReminder).length
 
   const sorted = [...data].sort((a, b) => {
     const ta = threadId(a)
@@ -2401,6 +2830,18 @@ exports.privateView = async (messagesInput, filter) => {
         h2(i18n.private),
         p(i18n.privateDescription)
       ),
+      (() => {
+        const pmVis = getConfig().pmVisibility === 'mutuals' ? 'mutuals' : 'whole'
+        const pmVisLabel = pmVis === 'mutuals' ? i18n.settingsPmVisibilityMutuals : i18n.settingsPmVisibilityWhole
+        const pmVisIcon = pmVis === 'mutuals' ? '🤝' : '🌐'
+        return div({ class: 'pm-exposition inbox-exposition' },
+          span({ class: 'inbox-filters-label' }, i18n.inboxFiltersLabel || 'Filters:'),
+          span({ class: `pm-exposition-chip pm-exposition-${pmVis}` },
+            span({ class: 'pm-exposition-icon' }, pmVisIcon),
+            span({ class: 'pm-exposition-text' }, pmVisLabel)
+          )
+        )
+      })(),
       div({ class: 'filters' },
         form({ method: 'GET', action: '/inbox' }, [
           button({
@@ -2409,6 +2850,12 @@ exports.privateView = async (messagesInput, filter) => {
             value: 'inbox',
             class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
           }, `${i18n.privateInbox} (${inboxCount})`),
+          button({
+            type: 'submit',
+            name: 'filter',
+            value: 'reminders',
+            class: filter === 'reminders' ? 'filter-btn active' : 'filter-btn'
+          }, `${i18n.privateReminders || 'Reminders'} (${reminderCount})`),
           button({
             type: 'submit',
             name: 'filter',
@@ -2602,7 +3049,8 @@ exports.publishView = (preview, text, contentWarning) => {
                 rows: "6",
                 cols: "50",
                 placeholder: i18n.publishWarningPlaceholder,
-                class: "publish-textarea"
+                class: "publish-textarea",
+                maxlength: "8096"
               },
               text || ""
             ),

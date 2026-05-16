@@ -94,7 +94,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   return {
     type: "market",
 
-    async createItem(item_type, title, description, image, price, tagsRaw = [], item_status, deadline, includesShipping = false, stock = 0, mapUrl = "", shopOpts = {}) {
+    async createItem(item_type, title, description, image, price, tagsRaw = [], item_status, deadline, includesShipping = false, stock = 0, mapUrl = "", shopOpts = {}, visibility = "PUBLIC") {
       const ssbClient = await openSsb()
 
       const formattedDeadline = deadline ? moment(deadline, moment.ISO_8601, true) : null
@@ -134,7 +134,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
         mapUrl: String(mapUrl || "").trim(),
         shopProductId: shopOpts.shopProductId || "",
         shopId: shopOpts.shopId || "",
-        shopTitle: shopOpts.shopTitle || ""
+        shopTitle: shopOpts.shopTitle || "",
+        visibility: String(visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
       }
 
       return new Promise((resolve, reject) => {
@@ -193,6 +194,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
       if (normalized.includesShipping !== undefined) {
         normalized.includesShipping = !!normalized.includesShipping
+      }
+
+      if (normalized.visibility !== undefined) {
+        normalized.visibility = String(normalized.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
       }
 
       return new Promise((resolve, reject) => {
@@ -316,6 +321,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
         if (status === "FOR SALE" && (Number(c.stock) || 0) === 0) continue
 
+        const visibility = String(c.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
+        if (visibility === "HIDDEN" && c.seller !== userId) continue
+
         items.push({
           id: leaf,
           rootId,
@@ -327,6 +335,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
           item_type: c.item_type,
           item_status: c.item_status || "NEW",
           status,
+          visibility,
           createdAt: c.createdAt || new Date(best.ts).toISOString(),
           updatedAt: c.updatedAt,
           seller: c.seller,
@@ -385,6 +394,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
     async getItemById(itemId) {
       const ssbClient = await openSsb()
+      const userId = ssbClient.id
       const messages = await readAll(ssbClient)
 
       const tomb = new Set()
@@ -440,6 +450,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const c = best.c
       let status = D(bestS)
 
+      const visibility = String(c.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
+      if (visibility === "HIDDEN" && c.seller !== userId) return null
+
       const now = moment()
       if (c.deadline) {
         const dl = moment(c.deadline)
@@ -465,6 +478,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         item_type: c.item_type,
         item_status: c.item_status,
         status,
+        visibility,
         createdAt: c.createdAt || new Date(best.ts).toISOString(),
         updatedAt: c.updatedAt,
         seller: c.seller,

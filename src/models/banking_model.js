@@ -23,12 +23,33 @@ const STORAGE_DIR = path.join(__dirname, "..", "configs");
 const EPOCHS_PATH = path.join(STORAGE_DIR, "banking-epochs.json");
 const TRANSFERS_PATH = path.join(STORAGE_DIR, "banking-allocations.json");
 const ADDR_PATH = path.join(STORAGE_DIR, "wallet-addresses.json");
+const ECO_HISTORY_PATH = path.join(STORAGE_DIR, "banking-eco-history.json");
+const ECO_HISTORY_MAX = 500;
+const ECO_HISTORY_MIN_GAP_MS = 5 * 60 * 1000;
 
 function ensureStoreFiles() {
   if (!fs.existsSync(STORAGE_DIR)) fs.mkdirSync(STORAGE_DIR, { recursive: true });
   if (!fs.existsSync(EPOCHS_PATH)) fs.writeFileSync(EPOCHS_PATH, "[]");
   if (!fs.existsSync(TRANSFERS_PATH)) fs.writeFileSync(TRANSFERS_PATH, "[]");
   if (!fs.existsSync(ADDR_PATH)) fs.writeFileSync(ADDR_PATH, "{}");
+  if (!fs.existsSync(ECO_HISTORY_PATH)) fs.writeFileSync(ECO_HISTORY_PATH, "[]");
+}
+
+function readEcoHistory() {
+  ensureStoreFiles();
+  try { return JSON.parse(fs.readFileSync(ECO_HISTORY_PATH, "utf8")) || []; } catch (_) { return []; }
+}
+
+function appendEcoHistory(sample) {
+  ensureStoreFiles();
+  let arr = readEcoHistory();
+  if (!Array.isArray(arr)) arr = [];
+  const last = arr[arr.length - 1];
+  if (last && Number(sample.ts) - Number(last.ts) < ECO_HISTORY_MIN_GAP_MS) return arr;
+  arr.push(sample);
+  if (arr.length > ECO_HISTORY_MAX) arr = arr.slice(arr.length - ECO_HISTORY_MAX);
+  try { fs.writeFileSync(ECO_HISTORY_PATH, JSON.stringify(arr)); } catch (_) {}
+  return arr;
 }
 
 function epochIdNow() {
@@ -114,6 +135,8 @@ async function rpcCall(method, params, kind = "user") {
   if (cfg.user || cfg.pass) {
     headers.authorization = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
   }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1500);
   try {
     const res = await fetch(cfg.url, {
       method: "POST",
@@ -124,6 +147,7 @@ async function rpcCall(method, params, kind = "user") {
         method: method,
         params: params,
       }),
+      signal: controller.signal,
     });
     if (!res.ok) {
       return null;
@@ -135,6 +159,8 @@ async function rpcCall(method, params, kind = "user") {
     return data.result;
   } catch (err) {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -543,11 +569,28 @@ function scoreFromActions(actions) {
   return Math.max(0, Math.round(score));
 }
 
+async function getCarbonGramsForUser(userId) {
+  const ssb = await openSsb();
+  if (!ssb || !userId) return 0;
+  return new Promise((resolve) => {
+    let bytes = 0;
+    pull(
+      ssb.createUserStream({ id: userId }),
+      pull.drain(
+        (m) => { try { bytes += Buffer.byteLength(JSON.stringify(m && m.value), 'utf8'); } catch (_) {} },
+        () => resolve((bytes / (1024 * 1024)) * 0.095)
+      )
+    );
+  });
+}
+
 async function getUserEngagementScore(userId) {
   const ssb = await openSsb();
   const uid = resolveUserId(userId);
   const actions = await fetchUserActions(uid);
-  const karmaScore = scoreFromActions(actions);
+  const rawKarma = scoreFromActions(actions);
+  const carbonGrams = await getCarbonGramsForUser(uid).catch(() => 0);
+  const karmaScore = Math.max(0, Math.round(rawKarma - carbonGrams));
 
   const prev = await getLastKarmaScore(uid);
   const lastPublishedTimestamp = await getLastPublishedTimestamp(uid);
@@ -843,7 +886,9 @@ async function getLastPublishedTimestamp(userId) {
     try { computed = await computeEpoch({ epochId, userId: uid, rules: DEFAULT_RULES }); } catch {}
     const pv = computePoolVars(pubBalance, DEFAULT_RULES);
     const actions = await fetchUserActions(uid);
-    const engagementScore = scoreFromActions(actions);
+    const rawScore = scoreFromActions(actions);
+    const carbonGramsForScore = await getCarbonGramsForUser(uid).catch(() => 0);
+    const engagementScore = Math.max(0, Math.round(rawScore - carbonGramsForScore));
     const poolForEpoch = computed?.epoch?.pool || pv.pool || 0;
     const futureUBI = Number(((engagementScore / 100) * poolForEpoch).toFixed(6));
     const addresses = await listAddressesMerged();
@@ -865,7 +910,8 @@ async function getLastPublishedTimestamp(userId) {
       ubiAvailability: ubiAvailable ? "OK" : "NO_FUNDS"
     };
     const exchange = await calculateEcoinValue();
-    return { summary, allocations, epochs, rules: DEFAULT_RULES, addresses, exchange };
+    const exchangeHistory = readEcoHistory();
+    return { summary, allocations, epochs, rules: DEFAULT_RULES, addresses, exchange, exchangeHistory };
   }
 
   async function getAllocationById(id) {
@@ -933,7 +979,7 @@ async function getLastPublishedTimestamp(userId) {
     const annualIssuance = ecoValuePerHour * 24 * 365;
     const inflationFactor = circulatingSupply > 0 ? (annualIssuance / circulatingSupply) * 100 : 0;
     const inflationMonthly = inflationFactor / 12;
-    return {
+    const result = {
       ecoValue: Number(ecoValuePerHour.toFixed(6)),
       ecoTimeMs: Number(ecoTimeMs.toFixed(3)),
       totalSupply,
@@ -942,6 +988,18 @@ async function getLastPublishedTimestamp(userId) {
       currentSupply: circulatingSupply,
       isSynced
     };
+    if (isSynced) {
+      appendEcoHistory({
+        ts: Date.now(),
+        ecoValue: result.ecoValue,
+        currentSupply: result.currentSupply,
+        inflationFactor: result.inflationFactor,
+        blockValueEco: Number(blockValueEco.toFixed(8)),
+        avgBlockSec: Number((avgSec || 0).toFixed(2)),
+        blocks
+      });
+    }
+    return result;
   }
 
   async function getBankingData(userId) {

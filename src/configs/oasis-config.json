@@ -32,6 +32,7 @@
     "transfersMod": "on",
     "feedMod": "on",
     "pixeliaMod": "on",
+    "melodyMod": "on",
     "agendaMod": "on",
     "aiMod": "on",
     "aiNavMod": "on",
@@ -67,6 +68,6 @@
   },
   "homePage": "activity",
   "language": "en",
-  "wish": "whole",
+  "wish": "only-lan",
   "pmVisibility": "whole"
 }

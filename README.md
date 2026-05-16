@@ -90,6 +90,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Logs: Module to record (via AI assistant) your experiences.
  + Maps: Module to manage and share offline maps.
  + Market: Module to exchange goods or services.
+ + Melody: Module to generate and share the "sound" of your blockchain.
  + Multiverse: Module to receive content from other federated peers.
  + Opinions: Module to discover and vote on opinions.	
  + Pads: Module to manage collaborative encrypted text editors.

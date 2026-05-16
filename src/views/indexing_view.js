@@ -1,38 +1,41 @@
-const { html, head, title, link, meta, body, main, p, progress } = require("../server/node_modules/hyperaxe");
-const { i18n } = require('./main_views');
+const { a, br, div, h2, p, progress, section, span, strong, meta, head, html, link, title, body, main } = require("../server/node_modules/hyperaxe");
+const { template, i18n } = require('./main_views');
+const { getConfig } = require('../configs/config-manager.js');
 
 const doctypeString = '<!DOCTYPE html>';
 
-function toAttributes(attrs) {
-  return Object.entries(attrs).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(', ');
-}
-
 exports.indexingView = ({ percent }) => {
-  const message = `Oasis has only processed ${percent}% of the messages and needs to catch up. This page will refresh every 10 seconds. Thanks for your patience! ❤`;
-  const nodes = html(
-    { lang: "en" },
-    head(
-      title("Oasis"),
-      link({ rel: "icon", type: "image/svg+xml", href: "/assets/favicon.svg" }),
-      meta({ charset: "utf-8" }),
-      meta({
-        name: "description",
-        content: i18n.oasisDescription,
-      }),
-      meta({
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      }),
-      meta({ "http-equiv": "refresh", content: 10 })
-    ),
-    body(
-      main(
-        { id: "content" },
-        p(message),
-        progress({ value: percent, max: 100 })
+  let metaRefresh;
+  try {
+    const cfg = getConfig() || {};
+    const theme = cfg.themes?.current || 'Dark-SNH';
+    void theme;
+  } catch (_) {}
+
+  const pct = Math.max(0, Math.min(100, Number(percent) || 0));
+  const headingText = i18n.indexingTitle || 'Synchronizing';
+  const message = i18n.indexingMessage || 'Oasis is trying to syncronize a huge network of inhabitants. Just wait!';
+  const refreshNote = i18n.indexingRefreshNote || 'This page refreshes every 10 seconds.';
+  const editProfileLabel = i18n.indexingEditProfileLink || 'Set up my profile';
+  const welcomeLabel = i18n.indexingWelcomeLink || 'Tour of Oasis';
+
+  return template(
+    headingText,
+    section(
+      div({ class: 'tags-header' },
+        h2(`❤  ${headingText}`),
+        p(message)
+      ),
+      div({ class: 'indexing-progress-block' },
+        progress({ value: String(pct), max: '100', class: 'indexing-progress' }),
+        p({ class: 'indexing-percent' }, strong(`${pct.toFixed(1)} %`)),
+        p({ class: 'indexing-note' }, refreshNote)
+      ),
+      div({ class: 'indexing-actions' },
+        a({ href: '/profile/edit', class: 'filter-btn welcome-action-primary' }, editProfileLabel),
+        a({ href: '/welcome', class: 'filter-btn' }, welcomeLabel),
+        a({ href: '/modules', class: 'filter-btn' }, i18n.modulesTitle || 'Modules')
       )
     )
-  );
-  return doctypeString + nodes.outerHTML;
+  ).replace('</head>', '<meta http-equiv="refresh" content="10"></head>');
 };
-

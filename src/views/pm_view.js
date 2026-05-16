@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, input, textarea, br, label, pre, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, input, textarea, br, label, pre, span, strong } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { getConfig } = require('../configs/config-manager.js');
 
@@ -6,8 +6,6 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
   const title = i18n.pmSendTitle;
   const description = i18n.pmDescription;
   const textLen = (initialText || '').length;
-  const pmVis = getConfig().pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
-  const pmVisLabel = pmVis === 'mutuals' ? i18n.settingsPmVisibilityMutuals : i18n.settingsPmVisibilityWhole;
 
   return template(
     title,
@@ -19,20 +17,20 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
       section(
         div({ class: "pm-form" },
           form({ method: "POST", action: "/pm", id: "pm-form" },
-            p({ class: "pm-visibility-note" }, span({ class: "accent" }, "* "), pmVisLabel),
-            label({ for: "recipients" }, i18n.pmRecipients),
+            label({ for: "recipients" }, i18n.pmLimitsHint),
             br(),
             input({
               type: "text",
               name: "recipients",
               placeholder: i18n.pmRecipientsHint,
               required: true,
-              value: initialRecipients
+              value: initialRecipients,
+              maxlength: "511"
             }),
             br(),
             label({ for: "subject" }, i18n.pmSubject),
             br(),
-            input({ type: "text", name: "subject", placeholder: i18n.pmSubjectHint, value: initialSubject }),
+            input({ type: "text", name: "subject", placeholder: i18n.pmSubjectHint, value: initialSubject, maxlength: "150" }),
             br(),
             label({ for: "text" }, i18n.pmText),
             br(),

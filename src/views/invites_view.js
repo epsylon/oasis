@@ -1,4 +1,4 @@
-const { form, button, div, h2, h3, p, section, ul, li, a, br, hr, input, span, table, tr, td } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, ul, li, a, br, hr, input, label, span, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
 const path = require("path");
 const fs = require('fs');
 const { renderUrl } = require("../backend/renderUrl");
@@ -102,6 +102,36 @@ const invitesView = ({ invitesEnabled }) => {
       )
     ),
     section(
+      div({ class: 'invites-peers' },
+        h2(i18n.peers || 'Peers'),
+        p(i18n.directConnectDescription),
+        form({ action: '/peers/connect', method: 'post' },
+          input({ type: 'text', id: 'peer_host', name: 'host', required: true, placeholder: '192.168.1.100', pattern: '(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|[a-zA-Z0-9]([a-zA-Z0-9\\-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]*[a-zA-Z0-9])?)*)', title: i18n.peerHostValidation || 'Valid IPv4 (e.g. 192.168.1.100) or hostname (e.g. pub.example.com)', maxlength: 253 }),
+          br(),
+          label({ for: 'peer_port' }, i18n.peerPort),
+          br(),
+          input({ type: 'number', id: 'peer_port', name: 'port', placeholder: '8008', value: '8008', min: 1, max: 65535, required: true, title: i18n.peerPortValidation || 'Port 1-65535' }),
+          br(), br(),
+          label({ for: 'peer_key' }, i18n.peerPublicKey),
+          br(),
+          input({ type: 'text', id: 'peer_key', name: 'key', required: true, placeholder: '@...=.ed25519', pattern: '@[A-Za-z0-9+/_\\-]{43}=\\.ed25519', title: i18n.peerKeyValidation || 'SSB ed25519 public key (@<44 chars base64>=.ed25519)', maxlength: 56 }),
+          br(), br(),
+          button({ type: 'submit' }, i18n.connectAndFollow)
+        )
+      )
+    ),
+    section(
+      div({ class: 'invites-inhabitants' },
+        h2(i18n.invitesInhabitantsTitle || 'Inhabitants'),
+        form(
+          { action: '/invites/inhabitant/follow', method: 'post' },
+          input({ name: 'feedId', id: 'inh_oasis_id', type: 'text', placeholder: '@...=.ed25519', pattern: '@[A-Za-z0-9+/_\\-]{43}=\\.ed25519', required: true, maxlength: 56 }),
+          br(),
+          button({ type: 'submit' }, i18n.invitesInhabitantsFollow || 'Follow')
+        )
+      )
+    ),
+    section(
       div({ class: 'invites-tribes' },
         h2(i18n.invitesTribesTitle),
         form(
@@ -131,8 +161,27 @@ const invitesView = ({ invitesEnabled }) => {
             input({ type: 'hidden', name: 'invite', value: snhInvite.code }),
             button({ type: 'submit', class: 'filter-btn' }, snhInvite.code)
           )
-        ) : null,
-        hr(),
+        ) : null
+      )
+    ),
+    section(
+      div({ class: 'federations-section' },
+        h2(i18n.invitesFederationsTitle || 'Federations'),
+        div({ class: 'conn-actions invites-pubs-actions' },
+          form({ action: '/invites/refresh-pubs', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsRefresh || 'Refresh')),
+          form({ action: '/invites/clear-unreachable', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsClearUnreachable || 'Remove unreachable')),
+          form({ action: '/invites/export-pubs', method: 'get' }, button({ type: 'submit' }, i18n.invitesPubsExport || 'Export'))
+        ),
+        form(
+          { action: '/invites/import-pubs', method: 'post', enctype: 'multipart/form-data', class: 'peers-import-form' },
+          label({ class: 'peers-import-label' }, i18n.invitesPubsImportTitle || 'Import pubs'),
+          br(),
+          textarea({ name: 'peerList', rows: '4', placeholder: i18n.invitesPubsImportPlaceholder || 'Paste one multiserver address or invite code per line…' }),
+          br(),
+          input({ type: 'file', name: 'peerFile', accept: '.txt,text/plain' }),
+          br(),
+          button({ type: 'submit', class: 'filter-btn' }, i18n.invitesPubsImport || 'Import')
+        ),
         h2(`${i18n.invitesAcceptedInvites} (${activePubs.length})`),
         activePubs.length
           ? renderPubTable(activePubs, pubItem =>
