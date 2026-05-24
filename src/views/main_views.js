@@ -2324,7 +2324,8 @@ exports.authorView = async ({
     wallet:   rawPrefs.wallet   === true,
     ecoTax:   rawPrefs.ecoTax   !== false,
     larpSign: rawPrefs.larpSign === true,
-    clearnet: rawPrefs.clearnet === true
+    clearnet: rawPrefs.clearnet === true,
+    gpg:      rawPrefs.gpg      !== false
   };
   const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
   const anySubClearnet = clearnetSubKeys.some(k => rawPrefs[k] === true);

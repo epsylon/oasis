@@ -14,6 +14,7 @@ const { printMetadata } = require('./ssb_metadata');
   const realErr = console.error;
   const SHS_NOISE = /shs\.server:|they dailed a wrong number|client hello invalid|invalid challenge|wrong application cap/i;
   const EBT_NOISE = /stream ended with:\s*\d+\s+but wanted:\s*\d+/i;
+  const EBT_HANDSHAKE_NOISE = /does not support RPC ebt\./i;
   const isEbtReplicateException = (args) =>
     args.length >= 2 &&
     typeof args[0] === 'string' &&
@@ -42,6 +43,11 @@ const { printMetadata } = require('./ssb_metadata');
     if (isEbtReplicateException(args)) return;
     if (args.length >= 1 && typeof args[0] === 'string' && /rpc\.ebt\.replicate exception:.*stream ended with/i.test(args[0])) return;
     return realErr.apply(console, args);
+  };
+  const realWarn = console.warn;
+  console.warn = function (...args) {
+    if (args.length >= 1 && typeof args[0] === 'string' && EBT_HANDSHAKE_NOISE.test(args[0])) return;
+    return realWarn.apply(console, args);
   };
 })();
 
