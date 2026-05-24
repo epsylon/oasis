@@ -1,5 +1,6 @@
 "use strict";
 
+const { buildValidatedTombstoneSet } = require("./tombstone_validator");
 const debug = require("../server/node_modules/debug")("oasis");
 const { isRoot, isReply: isComment } = require("../server/node_modules/ssb-thread-schema");
 const lodash = require("../server/node_modules/lodash");
@@ -307,6 +308,8 @@ models.about = {
       ubi:      result.ubi      === true,
       wallet:   result.wallet   === true,
       ecoTax:   result.ecoTax   !== false,
+      larpSign: result.larpSign === true,
+      gpg:      result.gpg      !== false,
       clearnet: result.clearnet === true,
       clearnetShops:     result.clearnetShops     === true,
       clearnetJobs:      result.clearnetJobs      === true,
@@ -318,6 +321,7 @@ models.about = {
       clearnetImages:    result.clearnetImages    === true,
       clearnetDocuments: result.clearnetDocuments === true,
       clearnetTorrents:  result.clearnetTorrents  === true,
+      clearnetBookmarks: result.clearnetBookmarks === true,
       profileShops:      result.profileShops      === true,
       profileJobs:       result.profileJobs       === true,
       profileEvents:     result.profileEvents     === true,
@@ -327,7 +331,8 @@ models.about = {
       profileVideos:     result.profileVideos     === true,
       profileImages:     result.profileImages     === true,
       profileDocuments:  result.profileDocuments  === true,
-      profileTorrents:   result.profileTorrents   === true
+      profileTorrents:   result.profileTorrents   === true,
+      profileBookmarks:  result.profileBookmarks  === true
     };
   },
   name: async (feedId) => {
@@ -390,6 +395,20 @@ models.about = {
         feedId,
       })) || "";
     return raw;
+  },
+  gpgFingerprint: async (feedId) => {
+    if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
+      return "";
+    }
+    const raw = await getAbout({ key: "gpgFingerprint", feedId });
+    return typeof raw === "string" ? raw : "";
+  },
+  gpgBlobId: async (feedId) => {
+    if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
+      return "";
+    }
+    const raw = await getAbout({ key: "gpgBlobId", feedId });
+    return typeof raw === "string" ? raw : "";
   },
   _startNameWarmup() {
     const abortable = pullAbortable();
@@ -1867,7 +1886,7 @@ const post = {
         });
       });
     },
-    publishProfileEdit: async ({ name, description, image, visibilityPrefs }) => {
+    publishProfileEdit: async ({ name, description, image, visibilityPrefs, gpgFingerprint, gpgBlob, gpgBlobId }) => {
       const ssb = await cooler.open();
       const normalizePrefs = (raw) => {
         const r = raw || {};
@@ -1878,6 +1897,8 @@ const post = {
           ubi:      r.ubi      === true,
           wallet:   r.wallet   === true,
           ecoTax:   r.ecoTax   !== false,
+          larpSign: r.larpSign === true,
+          gpg:      r.gpg      !== false,
           clearnet: r.clearnet === true,
           clearnetShops:     r.clearnetShops     === true,
           clearnetJobs:      r.clearnetJobs      === true,
@@ -1889,6 +1910,7 @@ const post = {
           clearnetImages:    r.clearnetImages    === true,
           clearnetDocuments: r.clearnetDocuments === true,
           clearnetTorrents:  r.clearnetTorrents  === true,
+          clearnetBookmarks: r.clearnetBookmarks === true,
           profileShops:      r.profileShops      === true,
           profileJobs:       r.profileJobs       === true,
           profileEvents:     r.profileEvents     === true,
@@ -1898,12 +1920,24 @@ const post = {
           profileVideos:     r.profileVideos     === true,
           profileImages:     r.profileImages     === true,
           profileDocuments:  r.profileDocuments  === true,
-          profileTorrents:   r.profileTorrents   === true
+          profileTorrents:   r.profileTorrents   === true,
+          profileBookmarks:  r.profileBookmarks  === true
         };
       };
       const prefs = visibilityPrefs ? normalizePrefs(visibilityPrefs) : undefined;
       const baseFields = { type: "about", about: ssb.id, name, description };
       if (prefs) baseFields.visibilityPrefs = prefs;
+      if (gpgFingerprint !== undefined) baseFields.gpgFingerprint = String(gpgFingerprint || "");
+      let resolvedBlobId = gpgBlobId;
+      if (gpgBlob && gpgBlob.length > 0) {
+        resolvedBlobId = await new Promise((resolve, reject) => {
+          pull(
+            pull.values([gpgBlob]),
+            ssb.blobs.add((err, id) => err ? reject(err) : resolve(id))
+          );
+        });
+      }
+      if (resolvedBlobId !== undefined) baseFields.gpgBlobId = String(resolvedBlobId || "");
       if (image && image.length > 0) {
         const megabyte = Math.pow(2, 20);
         const maxSize = 50 * megabyte;
@@ -2074,11 +2108,7 @@ const post = {
           return null;
         }
       }).filter(Boolean);
-      const tombstoneTargets = new Set(
-        decryptedMessages
-          .filter(msg => msg.value?.content?.type === 'tombstone')
-          .map(msg => msg.value.content.target)
-      );
+      const tombstoneTargets = buildValidatedTombstoneSet(decryptedMessages);
       return decryptedMessages.filter(msg => {
         if (tombstoneTargets.has(msg.key)) return false;
           const content = msg.value?.content;
@@ -2214,42 +2244,82 @@ models.lifetime = (() => {
   };
 })();
 
+const ownSpreadsByTarget = new Map();
+const ownTombstoned = new Set();
 models.spreads = {
-  /**
-   * Returns { count, voters: [{ key, name }], alreadySpread } for a given msgKey.
-   * A "spread" is a vote with value=1 referencing msgKey AND with msgKey in branch.
-   */
+  noteOwnSpread: (target, key) => {
+    if (!target || !key) return;
+    const set = ownSpreadsByTarget.get(target) || new Set();
+    set.add(key);
+    ownSpreadsByTarget.set(target, set);
+  },
+  noteOwnTombstone: (key) => {
+    if (key) ownTombstoned.add(key);
+  },
+  getCachedActiveOwnSpreadKey: (target) => {
+    if (!target) return null;
+    const set = ownSpreadsByTarget.get(target);
+    if (!set || set.size === 0) return null;
+    for (const k of Array.from(set).reverse()) {
+      if (!ownTombstoned.has(k)) return k;
+    }
+    return null;
+  },
+  forMessages: async (keys) => {
+    const out = new Map();
+    const list = Array.isArray(keys) ? keys.filter(k => typeof k === 'string' && k.startsWith('%')) : [];
+    const results = await Promise.all(list.map(k => models.spreads.forMessage(k).catch(() => null)));
+    list.forEach((k, i) => { if (results[i]) out.set(k, results[i]); });
+    return out;
+  },
   forMessage: async (msgKey) => {
     if (!msgKey || typeof msgKey !== 'string') return { count: 0, voters: [], alreadySpread: false };
     const ssb = await cooler.open();
     const myId = ssb.id;
-    return new Promise((resolve) => {
+    const refs = await new Promise((resolve) => {
       pull(
         ssb.backlinks.read({
-          query: [{ $filter: { dest: msgKey, value: { content: { type: 'vote' } } } }],
+          query: [{ $filter: { dest: msgKey } }],
           index: 'DTA',
           meta: true
         }),
         pull.filter(ref => {
           if (!ref || !ref.value || !ref.value.content) return false;
           const c = ref.value.content;
-          if (!c.vote || c.vote.link !== msgKey || Number(c.vote.value) !== 1) return false;
-          const br = Array.isArray(c.branch) ? c.branch : (typeof c.branch === 'string' ? [c.branch] : []);
-          return br.includes(msgKey);
+          if (c.type === 'spread' && c.link === msgKey) return true;
+          if (c.type === 'vote' && c.vote && c.vote.link === msgKey && Number(c.vote.value) === 1) {
+            const br = Array.isArray(c.branch) ? c.branch : (typeof c.branch === 'string' ? [c.branch] : []);
+            return br.includes(msgKey);
+          }
+          return false;
         }),
-        pull.collect(async (err, refs) => {
-          if (err) return resolve({ count: 0, voters: [], alreadySpread: false });
-          const byAuthor = new Map();
-          for (const r of refs) byAuthor.set(r.value.author, true);
-          const authors = Array.from(byAuthor.keys());
-          const voters = await Promise.all(authors.map(async (k) => ({
-            key: k,
-            name: await models.about.name(k).catch(() => k.slice(1, 9))
-          })));
-          resolve({ count: voters.length, voters, alreadySpread: authors.includes(myId) });
-        })
+        pull.collect((err, arr) => resolve(!err && arr ? arr : []))
       );
     });
+    const tombstoned = new Set(ownTombstoned);
+    await Promise.all(refs.map(r => new Promise((resolve) => {
+      pull(
+        ssb.backlinks.read({ query: [{ $filter: { dest: r.key } }], meta: true }),
+        pull.filter(t => t && t.value && t.value.content && t.value.content.type === 'tombstone' && t.value.content.target === r.key),
+        pull.collect((err, ts) => { if (!err && ts && ts.length) tombstoned.add(r.key); resolve(); })
+      );
+    })));
+    const byAuthor = new Map();
+    for (const r of refs) {
+      if (tombstoned.has(r.key)) continue;
+      byAuthor.set(r.value.author, true);
+    }
+    const ownExtra = ownSpreadsByTarget.get(msgKey);
+    if (ownExtra && ownExtra.size > 0) {
+      const hasNonTombstoned = Array.from(ownExtra).some(k => !tombstoned.has(k));
+      if (hasNonTombstoned) byAuthor.set(myId, true);
+    }
+    const authors = Array.from(byAuthor.keys());
+    const voters = await Promise.all(authors.map(async (k) => ({
+      key: k,
+      name: await models.about.name(k).catch(() => k.slice(1, 9))
+    })));
+    return { count: voters.length, voters, alreadySpread: authors.includes(myId) };
   }
 };
 

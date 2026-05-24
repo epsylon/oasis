@@ -1,9 +1,10 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require("./main_views");
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe");
+const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view");
+const opinionCategories = require("../backend/opinion_categories");
 
 const userId = config.keys.id;
 
@@ -11,14 +12,6 @@ const opt = (value, isSelected, text) =>
   option(Object.assign({ value }, isSelected ? { selected: "selected" } : {}), text);
 
 const safeArray = (v) => (Array.isArray(v) ? v : []);
-
-const toValueChildren = (v) => {
-  if (v === undefined || v === null) return [];
-  if (Array.isArray(v)) return v;
-  if (typeof v === "string") return renderUrl(v);
-  if (typeof v === "number" || typeof v === "boolean") return renderUrl(String(v));
-  return [v];
-};
 
 const normalizePrivacy = (v) => {
   const s = String(v || "public").toLowerCase();
@@ -33,13 +26,6 @@ const safeExternalHref = (url) => {
   if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("mailto:")) return s;
   return "";
 };
-
-const renderCardField = (labelText, valueNode) =>
-  div(
-    { class: "card-field" },
-    span({ class: "card-label" }, labelText),
-    span({ class: "card-value" }, ...toValueChildren(valueNode))
-  );
 
 const normalizeEventStatus = (v) => {
   const up = String(v || "").toUpperCase();
@@ -82,56 +68,6 @@ const renderEventAttendAction = (e, isAttending, returnTo) => {
     input({ type: "hidden", name: "returnTo", value: returnTo }),
     button({ type: "submit", class: "filter-btn" }, attendanceLabel(isAttending))
   );
-};
-
-const renderEventTopbar = (e, filter, opts = {}) => {
-  const currentFilter = filter || "all";
-  const isSingle = !!opts.single;
-
-  const returnToList = `/events?filter=${encodeURIComponent(currentFilter)}`;
-  const returnToSelf = `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`;
-  const rt = isSingle ? returnToSelf : returnToList;
-
-  const attendees = safeArray(e.attendees);
-  const isAttending = attendees.includes(userId);
-
-  const leftActions = [];
-
-  if (!isSingle) {
-    leftActions.push(
-      form(
-        { method: "GET", action: `/events/${encodeURIComponent(e.id)}` },
-        input({ type: "hidden", name: "filter", value: currentFilter }),
-        button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-      )
-    );
-  }
-
-  if (e.organizer && e.organizer !== userId) {
-    leftActions.push(
-      form(
-        { method: "GET", action: "/pm" },
-        input({ type: "hidden", name: "recipients", value: e.organizer }),
-        button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-      )
-    );
-  }
-
-  const rightActions = [];
-  const attendNode = renderEventAttendAction(e, isAttending, rt);
-  if (attendNode) rightActions.push(attendNode);
-
-  const ownerActions = renderEventOwnerActions(e, rt);
-  if (ownerActions.length) rightActions.push(...ownerActions);
-
-  const leftNode = leftActions.length ? div({ class: "bookmark-topbar-left event-topbar-left" }, ...leftActions) : null;
-  const rightNode = rightActions.length ? div({ class: "bookmark-actions event-actions" }, ...rightActions) : null;
-
-  const nodes = [];
-  if (leftNode) nodes.push(leftNode);
-  if (rightNode) nodes.push(rightNode);
-
-  return nodes.length ? div({ class: isSingle ? "bookmark-topbar event-topbar-single" : "bookmark-topbar" }, ...nodes) : null;
 };
 
 const renderEventCommentsSection = (eventId, comments = [], currentFilter = "all") => {
@@ -202,46 +138,53 @@ const renderEventCommentsSection = (eventId, comments = [], currentFilter = "all
   );
 };
 
-const renderEventItem = exports.renderEventItem = (e, filter) => {
+const renderEventStatusChip = (status) => {
+  const localized = eventStatusLabel(status);
+  return renderOpenClosedChip(status, { statusChipOPEN: localized, statusChipCLOSED: localized });
+};
+
+const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
   const currentFilter = filter || "all";
   const attendees = safeArray(e.attendees);
-  const commentCount = typeof e.commentCount === "number" ? e.commentCount : 0;
-  const urlHref = safeExternalHref(e.url);
+  const isPrivate = normalizePrivacy(e.isPublic) === "private";
+  const isAttending = attendees.includes(userId);
+  const price = parseFloat(e.price || 0);
 
-  const topbar = renderEventTopbar(e, currentFilter, { single: false });
+  const chips = [
+    renderEventStatusChip(e.status),
+    renderPrivacyChip(isPrivate, i18n),
+    e.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
+    isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
+    renderLifespanChip(e.lifetime, i18n)
+  ].filter(Boolean);
 
-  return div(
-    { class: "card card-section event" },
-    topbar ? topbar : null,
-    renderCardField(i18n.eventTitleLabel + ":", e.title),
-    renderCardField(i18n.eventDescriptionLabel + ":", ""),
-    p(...renderUrl(e.description)),
-    renderCardField(i18n.eventDateLabel + ":", e.date ? moment(e.date).format("YYYY/MM/DD HH:mm:ss") : ""),
-    renderCardField(i18n.eventStatus + ":", eventStatusLabel(e.status)),
-    renderCardField(i18n.eventPrivacyLabel + ":", privacyLabel(e.isPublic)),
-    e.location && String(e.location).trim() ? renderCardField(i18n.eventLocationLabel + ":", e.location) : null,
-    renderMapLocationVisitLabel(e.mapUrl),
-    urlHref ? renderCardField(i18n.eventUrlLabel + ":", a({ href: urlHref, target: "_blank", rel: "noopener noreferrer" }, urlHref)) : null,
-    renderCardField(i18n.eventPriceLabel + ":", parseFloat(e.price || 0).toFixed(6) + " ECO"),
-    renderCardField(i18n.eventAttendees + ":", String(attendees.length)),
-    br,
-    div(
-      { class: "card-comments-summary" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-      span({ class: "card-value" }, String(commentCount)),
-      br(),
-      br(),
-      form(
-        { method: "GET", action: `/events/${encodeURIComponent(e.id)}` },
-        input({ type: "hidden", name: "filter", value: currentFilter }),
-        button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
+  const dateText = e.date ? moment(e.date).format("YYYY/MM/DD HH:mm") : "";
+
+  return div({ class: "tribe-card event-card" },
+    div({ class: "tribe-card-body" },
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" },
+          a({ href: `/events/${encodeURIComponent(e.id)}` }, e.title || i18n.eventsTitle)
+        )
+      ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+      dateText ? p({ class: "card-date-highlight" }, dateText) : null,
+      e.location && String(e.location).trim()
+        ? p({ class: "job-meta-line" }, String(e.location))
+        : null,
+      price > 0
+        ? div({ class: "job-price-line card-salary" }, `${price.toFixed(6)} ECO`)
+        : null,
+      div({ class: "tribe-card-members" },
+        span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
+      ),
+      div({ class: "card-spread-centered" }, renderSpreadButton(e.id, spreadInfo)),
+      div({ class: "card-visit-btn-centered" },
+        form({ method: "GET", action: `/events/${encodeURIComponent(e.id)}` },
+          input({ type: "hidden", name: "filter", value: currentFilter }),
+          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+        )
       )
-    ),
-    br(),
-    p(
-      { class: "card-footer" },
-      span({ class: "date-link" }, `${moment(e.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-      userLink(e.organizer)
     )
   );
 };
@@ -301,9 +244,10 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
     section(
       div({ class: "tags-header" },
         h2(i18n.eventsTitle),
-        p(i18n.eventsDescription),
-        div({ class: "shop-title-row" }, renderReachChipEvents(viewerClearnetEvents, i18n))
+        p(i18n.eventsDescription)
       ),
+      div({ class: "shop-title-row" }, renderReachChipEvents(viewerClearnetEvents, i18n)),
+      br(),
       div(
         { class: "filters" },
         form(
@@ -410,10 +354,20 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
               input({ type: "text", name: "tags", id: "tags", value: currentFilter === "edit" ? editTags.join(", ") : "" }),
               br(),
               br(),
+              ...(currentFilter === "create" ? [
+                input({ type: "hidden", name: "addToCalendar", value: "0" }),
+                label(i18n.eventAddToCalendar || "Add to Calendar"),
+                br(),
+                input({ id: "addToCalendar", type: "checkbox", name: "addToCalendar", value: "1", class: "meme-checkbox" }),
+                br(),
+                br()
+              ] : []),
               button({ type: "submit" }, currentFilter === "edit" ? i18n.eventUpdateButton : i18n.eventCreateButton)
             )
           )
-        : div({ class: "event-list" }, filtered.length > 0 ? filtered.map((e) => renderEventItem(e, currentFilter)) : p(i18n.noevents))
+        : filtered.length > 0
+          ? div({ class: "jobs-grid" }, filtered.map((e) => renderEventItem(e, currentFilter, params.spreadMap && params.spreadMap.get(e.id))))
+          : p(i18n.noevents)
     )
   );
 };
@@ -450,60 +404,116 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     );
   }
 
-  const topbar = renderEventTopbar(event, currentFilter, { single: true });
+  const { renderReachChip, renderEncryptedChip } = require('./clearnet_view');
+  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetEvents && normalizeEventStatus(event.status) !== 'CLOSED' && normalizePrivacy(event.isPublic) === 'public');
+  const isPrivate = normalizePrivacy(event.isPublic) === 'private';
+  const isEncrypted = !!event.encrypted || isPrivate;
+  const isAttending = attendees.includes(userId);
+  const isOrganizer = String(event.organizer) === String(userId);
+  const returnToSelf = `/events/${encodeURIComponent(event.id)}?filter=${encodeURIComponent(currentFilter)}`;
+
+  const chips = [
+    renderEventStatusChip(event.status),
+    renderPrivacyChip(isPrivate, i18n),
+    isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n),
+    isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
+    renderLifespanChip(event.lifetime, i18n),
+    renderEcoTax(event.msgSize, event.id)
+  ].filter(Boolean);
+
+  const sideActions = [];
+  if (event.organizer && event.organizer !== userId) {
+    sideActions.push(form({ method: "GET", action: "/pm" },
+      input({ type: "hidden", name: "recipients", value: event.organizer }),
+      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
+    ));
+  }
+  const attendNode = renderEventAttendAction(event, isAttending, returnToSelf);
+  if (attendNode) sideActions.push(attendNode);
+  if (params.linkedCalendarId) {
+    sideActions.push(form({ method: "GET", action: `/calendars/${encodeURIComponent(params.linkedCalendarId)}` },
+      button({ type: "submit", class: "filter-btn" }, i18n.eventVisitCalendar || "Visit calendar")
+    ));
+  }
+  if (isOrganizer) sideActions.push(...renderEventOwnerActions(event, returnToSelf));
+
+  const tagsNode = event.tags && event.tags.filter(Boolean).length
+    ? div({ class: "card-tags" },
+        event.tags.filter(Boolean).map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
+      )
+    : null;
+
+  const infoRows = [];
+  const pushRow = (labelText, valueNode) =>
+    infoRows.push(tr(
+      td({ class: "tribe-info-label" }, labelText),
+      td({ class: "tribe-info-value" }, valueNode)
+    ));
+  if (event.date) pushRow(i18n.eventDateLabel, moment(event.date).format("YYYY/MM/DD HH:mm"));
+  pushRow(i18n.eventStatus, eventStatusLabel(event.status));
+  pushRow(i18n.eventPrivacyLabel, privacyLabel(event.isPublic));
+  if (event.location && String(event.location).trim()) pushRow(i18n.eventLocationLabel, event.location);
+  if (urlHref) pushRow(i18n.eventUrlLabel, a({ href: urlHref, target: "_blank", rel: "noopener noreferrer" }, urlHref));
+  const price = parseFloat(event.price || 0);
+  if (price > 0) pushRow(i18n.eventPriceLabel, `${price.toFixed(6)} ECO`);
+
+  const attendeesListNode = attendees.length
+    ? div({ class: "card-assigned-list" },
+        ...attendees.filter(Boolean).map((id) => userLink(id))
+      )
+    : null;
+
+  const eventSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, event.title)
+    ),
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    div({ class: "card-spread-centered" }, renderSpreadButton(event.id, params.spreads)),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    tagsNode,
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
+    ),
+    attendeesListNode
+  );
+
+  const returnToOpinions = `/events/${encodeURIComponent(event.id)}?filter=${encodeURIComponent(currentFilter)}`;
+  const opinionsBar = div(
+    { class: "voting-buttons" },
+    opinionCategories.map((category) =>
+      form(
+        { method: "POST", action: `/events/opinions/${encodeURIComponent(event.id)}/${category}` },
+        input({ type: "hidden", name: "returnTo", value: returnToOpinions }),
+        button(
+          { class: "vote-btn", type: "submit" },
+          `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${(event.opinions && event.opinions[category]) ? event.opinions[category] : 0}]`
+        )
+      )
+    )
+  );
+
+  const eventMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    event.description
+      ? div({ class: "job-section" },
+          h2({ class: "job-section-title" }, i18n.eventDescriptionLabel),
+          p({ class: "tribe-side-description" }, ...renderUrl(event.description))
+        )
+      : null,
+    event.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, event.mapUrl)) : null,
+    opinionsBar,
+    p({ class: "card-footer" },
+      span({ class: "date-link" }, `${moment(event.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      userLink(event.organizer)
+    ),
+    renderEventCommentsSection(event.id, comments, currentFilter)
+  );
 
   return template(
     event.title,
     section(
       filterBar,
-      div(
-        { class: "card card-section event" },
-        topbar ? topbar : null,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetEvents && normalizeEventStatus(event.status) !== 'CLOSED' && normalizePrivacy(event.isPublic) === 'public');
-          return div({ class: "shop-title-row" },
-            renderCardField(i18n.eventTitleLabel + ":", event.title),
-            renderReachChip(isClearnet, i18n)
-          );
-        })(),
-        renderCardField(i18n.eventDescriptionLabel + ":", ""),
-        p(...renderUrl(event.description)),
-        renderCardField(i18n.eventDateLabel + ":", event.date ? moment(event.date).format("YYYY/MM/DD HH:mm:ss") : ""),
-        renderCardField(i18n.eventStatus + ":", eventStatusLabel(event.status)),
-        renderCardField(i18n.eventPrivacyLabel + ":", privacyLabel(event.isPublic)),
-        event.location && String(event.location).trim() ? renderCardField(i18n.eventLocationLabel + ":", event.location) : null,
-        renderMapEmbed(params.mapData, event.mapUrl),
-        urlHref ? renderCardField(i18n.eventUrlLabel + ":", a({ href: urlHref, target: "_blank", rel: "noopener noreferrer" }, urlHref)) : null,
-        renderCardField(i18n.eventPriceLabel + ":", parseFloat(event.price || 0).toFixed(6) + " ECO"),
-        event.tags && event.tags.filter(Boolean).length
-          ? div(
-              { class: "card-tags" },
-              event.tags.filter(Boolean).map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
-            )
-          : null,
-        br(),
-        div(
-          { class: "card-field" },
-          span({ class: "card-label" }, i18n.eventAttendees + ":"),
-          span(
-            { class: "card-value" },
-            attendees.length
-              ? attendees
-                  .filter(Boolean)
-                  .map((id, i) => [i > 0 ? ", " : "", userLink(id)])
-                  .flat()
-              : i18n.noAttendees
-          )
-        ),
-        br(),
-        p(
-          { class: "card-footer" },
-          span({ class: "date-link" }, `${moment(event.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-          userLink(event.organizer)
-        )
-      ),
-      renderEventCommentsSection(event.id, comments, currentFilter)
+      div({ class: "tribe-details" }, eventSide, eventMain)
     )
   );
 };

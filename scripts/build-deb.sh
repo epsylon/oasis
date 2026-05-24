@@ -2,7 +2,7 @@
 
 set -e
 
-VERSION="0.7.4"
+VERSION="0.7.8"
 PKG_NAME="oasis"
 ARCH=$(dpkg --print-architecture)
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -25,7 +25,9 @@ mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/views"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/models"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/client"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/configs"
+mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/AI"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/scripts"
+mkdir -p "${DEB_ROOT}${INSTALL_DIR}/docs"
 mkdir -p "${DEB_ROOT}/usr/bin"
 mkdir -p "${DEB_ROOT}/usr/share/applications"
 mkdir -p "${DEB_ROOT}/usr/share/doc/${PKG_NAME}"
@@ -35,9 +37,7 @@ echo "Copying application files..."
 
 cp -r "${SRC_DIR}/src/server/package.json" "${DEB_ROOT}${INSTALL_DIR}/src/server/"
 cp -r "${SRC_DIR}/src/server/package-lock.json" "${DEB_ROOT}${INSTALL_DIR}/src/server/" 2>/dev/null || true
-cp "${SRC_DIR}/src/server/ssb_config.js" "${DEB_ROOT}${INSTALL_DIR}/src/server/"
-cp "${SRC_DIR}/src/server/ssb_metadata.js" "${DEB_ROOT}${INSTALL_DIR}/src/server/"
-cp "${SRC_DIR}/src/server/SSB_server.js" "${DEB_ROOT}${INSTALL_DIR}/src/server/"
+cp "${SRC_DIR}/src/server/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/server/"
 
 if [ -d "${SRC_DIR}/src/server/packages" ]; then
     cp -r "${SRC_DIR}/src/server/packages" "${DEB_ROOT}${INSTALL_DIR}/src/server/"
@@ -53,9 +53,20 @@ find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name ".ruff_cache" -type d -exec rm
 for f in oasis-config.json server-config.json snh-invite-code.json config-manager.js shared-state.js; do
     cp "${SRC_DIR}/src/configs/${f}" "${DEB_ROOT}${INSTALL_DIR}/src/configs/"
 done
+cp "${SRC_DIR}/src/AI/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/AI/" 2>/dev/null || true
+cp "${SRC_DIR}/src/AI/"*.mjs "${DEB_ROOT}${INSTALL_DIR}/src/AI/" 2>/dev/null || true
+if [ -d "${SRC_DIR}/src/AI/embeddings" ]; then
+    cp -r "${SRC_DIR}/src/AI/embeddings" "${DEB_ROOT}${INSTALL_DIR}/src/AI/"
+fi
 cp -r "${SRC_DIR}/scripts" "${DEB_ROOT}${INSTALL_DIR}/"
+if [ -d "${SRC_DIR}/docs/PUB" ]; then
+    mkdir -p "${DEB_ROOT}${INSTALL_DIR}/docs/PUB"
+    cp "${SRC_DIR}/docs/PUB/"* "${DEB_ROOT}${INSTALL_DIR}/docs/PUB/" 2>/dev/null || true
+fi
 cp "${SRC_DIR}/oasis.sh" "${DEB_ROOT}${INSTALL_DIR}/"
+cp "${SRC_DIR}/install.sh" "${DEB_ROOT}${INSTALL_DIR}/" 2>/dev/null || true
 cp "${SRC_DIR}/LICENSE" "${DEB_ROOT}${INSTALL_DIR}/"
+cp "${SRC_DIR}/README.md" "${DEB_ROOT}${INSTALL_DIR}/" 2>/dev/null || true
 
 cat > "${DEB_ROOT}/DEBIAN/control" << EOF
 Package: ${PKG_NAME}

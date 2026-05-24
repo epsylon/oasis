@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option } =
   require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -196,9 +196,9 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
             renderBookmarkActions(filter, bookmark, params)
           ),
           h2({ class: "bookmark-title" }, bookmark.category || bookmark.url || ""),
+          bookmark.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(bookmark.lifetime, i18n)) : null,
           renderCardField(i18n.bookmarkUrlLabel + ":", urlLink),
           renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
-          renderCardField(i18n.bookmarkCategoryLabel + ":", safeText(bookmark.category) || i18n.noCategory),
           br,
           div(
             { class: "card-comments-summary" },
@@ -215,6 +215,7 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
               button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
             )
           ),
+          div({ class: "card-spread-left" }, renderSpreadButton(bookmark.id, (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads)),
           (() => {
             const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
             const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
@@ -335,6 +336,12 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
     title,
     section(
       div({ class: "tags-header" }, h2(title), p(i18n.bookmarkDescription)),
+      (() => {
+        const { renderReachChip } = require('./clearnet_view');
+        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetBookmarks);
+        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+      })(),
+      br(),
       div(
         { class: "filters" },
         form(
@@ -385,6 +392,8 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
 
   const isAuthor = String(bookmark.author) === String(userId);
   const hasOpinions = Object.keys(bookmark.opinions || {}).length > 0;
+  const { renderReachChip } = require('./clearnet_view');
+  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetBookmarks);
 
   const lastVisit = bookmark.lastVisit ? moment(bookmark.lastVisit) : null;
   const lastVisitTxt =
@@ -396,35 +405,91 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
     ? a({ href: bookmark.url, target: "_blank", rel: "noreferrer noopener", class: "bookmark-url" }, bookmark.url)
     : i18n.noUrl;
 
-  const pmBtn = renderPMButton(bookmark.author);
+  const chips = [
+    renderLifespanChip(bookmark.lifetime, i18n),
+    bookmark.sizeBytes ? renderEcoTax(bookmark.sizeBytes, bookmark.id) : null
+  ].filter(Boolean);
 
-  const actions =
-    isAuthor
-      ? div(
-          { class: "bookmark-actions" },
-          renderFavoriteToggle(bookmark, returnTo),
-          !hasOpinions
-            ? form(
-                { method: "GET", action: `/bookmarks/edit/${encodeURIComponent(bookmark.id)}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                button({ class: "update-btn", type: "submit" }, i18n.bookmarkUpdateButton)
-              )
-            : null,
-          form(
-            { method: "POST", action: `/bookmarks/delete/${encodeURIComponent(bookmark.id)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ class: "delete-btn", type: "submit" }, i18n.bookmarkDeleteButton)
+  const sideActions = [];
+  sideActions.push(renderFavoriteToggle(bookmark, returnTo));
+  if (bookmark.author && String(bookmark.author) !== String(userId)) {
+    sideActions.push(renderPMButton(bookmark.author));
+  }
+  if (isAuthor && !hasOpinions) {
+    sideActions.push(form(
+      { method: "GET", action: `/bookmarks/edit/${encodeURIComponent(bookmark.id)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ class: "update-btn", type: "submit" }, i18n.bookmarkUpdateButton)
+    ));
+  }
+  if (isAuthor) {
+    sideActions.push(form(
+      { method: "POST", action: `/bookmarks/delete/${encodeURIComponent(bookmark.id)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ class: "delete-btn", type: "submit" }, i18n.bookmarkDeleteButton)
+    ));
+  }
+
+  const tagsNode = renderTags(bookmark.tags);
+
+  const bookmarkSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, bookmark.category || bookmark.url || ""),
+      renderReachChip(isClearnet, i18n)
+    ),
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    safeText(bookmark.description)
+      ? p({ class: "tribe-side-description" }, ...renderUrl(bookmark.description))
+      : null,
+    safeText(bookmark.category)
+      ? renderCardField(i18n.bookmarkCategoryLabel + ":", safeText(bookmark.category))
+      : null,
+    tagsNode,
+    div({ class: "card-spread-centered" }, renderSpreadButton(bookmark.id, params.spreads))
+  );
+
+  const bookmarkMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    renderCardField(i18n.bookmarkUrlLabel + ":", urlLink),
+    renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
+    div({ class: "voting-buttons" },
+      opinionCategories.map((category) =>
+        form(
+          { method: "POST", action: `/bookmarks/opinions/${encodeURIComponent(bookmark.id)}/${category}` },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          button(
+            { class: "vote-btn" },
+            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${bookmark.opinions?.[category] || 0}]`
           )
         )
-      : div(
-          { class: "bookmark-actions" },
-          pmBtn,
-          renderFavoriteToggle(bookmark, returnTo)
-        );
+      )
+    ),
+    (() => {
+      const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
+      const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
+      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+      return p(
+        { class: "card-footer" },
+        span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+        userLink(bookmark.author),
+        showUpdated
+          ? span(
+              { class: "votations-comment-date" },
+              ` | ${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+            )
+          : null
+      );
+    })(),
+    renderBookmarkCommentsSection(bookmark.id, bookmark.rootId, comments, returnTo)
+  );
 
   return template(
     i18n.bookmarkTitle,
     section(
+      div({ class: "tags-header" },
+        h2(i18n.bookmarkAllSectionTitle || i18n.bookmarkTitle),
+        p(i18n.bookmarkDescription)
+      ),
       div(
         { class: "filters" },
         form(
@@ -439,48 +504,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.bookmarkCreateButton)
         )
       ),
-      div(
-        { class: "bookmark-item card" },
-        actions,
-        h2({ class: "bookmark-title" }, bookmark.category || bookmark.url || ""),
-        renderCardField(i18n.bookmarkUrlLabel + ":", urlLink),
-        renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
-        renderCardField(i18n.bookmarkCategoryLabel + ":", safeText(bookmark.category) || i18n.noCategory),
-        safeText(bookmark.description) ? p(...renderUrl(bookmark.description)) : null,
-        renderTags(bookmark.tags),
-        br(),
-        (() => {
-          const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
-          const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
-          const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-          return p(
-            { class: "card-footer" },
-            span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            userLink(bookmark.author),
-            showUpdated
-              ? span(
-                  { class: "votations-comment-date" },
-                  ` | ${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
-                )
-              : null
-          );
-        })(),
-        div({ class: "spread-row" }, renderSpreadButton(bookmark.id, params.spreads)),
-        div(
-          { class: "voting-buttons" },
-          opinionCategories.map((category) =>
-            form(
-              { method: "POST", action: `/bookmarks/opinions/${encodeURIComponent(bookmark.id)}/${category}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              button(
-                { class: "vote-btn" },
-                `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${bookmark.opinions?.[category] || 0}]`
-              )
-            )
-          )
-        )
-      ),
-      renderBookmarkCommentsSection(bookmark.id, bookmark.rootId, comments, returnTo)
+      div({ class: "tribe-details" }, bookmarkSide, bookmarkMain)
     )
   );
 };

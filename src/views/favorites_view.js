@@ -54,7 +54,6 @@ const renderImagePreview = (item) => {
 const renderFavoriteCard = (item, filter) => {
   const returnTo = buildReturnTo(filter);
 
-  const titlePrefix = `[${String(item.kind || "").toUpperCase()}]`;
   const title = safeText(item.title) || safeText(item.name) || safeText(item.category) || safeText(item.url) || "";
 
   const ts = item.updatedAt || item.createdAt;
@@ -62,6 +61,11 @@ const renderFavoriteCard = (item, filter) => {
 
   return div(
     { class: "tags-header bookmark-card" },
+    div({ class: 'card-chips-row' },
+      span({ class: 'pm-exposition-chip pm-exposition-whole' },
+        span({ class: 'pm-exposition-text' }, String(item.kind || '').toUpperCase())
+      )
+    ),
     div(
       { class: "bookmark-topbar" },
       div(
@@ -82,7 +86,7 @@ const renderFavoriteCard = (item, filter) => {
         )
       )
     ),
-    title ? h2(`${titlePrefix} ${title}`) : h2(titlePrefix),
+    title ? h2(title) : null,
     renderImagePreview(item),
     renderBookmarkUrl(item),
     safeText(item.description) ? p(...renderUrl(item.description)) : null,

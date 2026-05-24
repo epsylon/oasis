@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const norm = (s) => String(s || "").trim().toLowerCase()

@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
@@ -40,7 +41,7 @@ module.exports = ({ cooler }) => {
 
     const forward = new Map();
     const replacedIds = new Set();
-    const tombstoned = new Set();
+    const tombstoned = buildValidatedTombstoneSet(messages);
     const feedsById = new Map();
     const actions = [];
 
@@ -48,10 +49,7 @@ module.exports = ({ cooler }) => {
       const c = msg?.value?.content;
       const k = msg?.key;
       if (!c || !k) continue;
-      if (c.type === "tombstone" && c.target) {
-        tombstoned.add(c.target);
-        continue;
-      }
+      if (c.type === 'tombstone') continue;
       if (c.type === "feed") {
         feedsById.set(k, msg);
         if (c.replaces) {
@@ -179,23 +177,29 @@ module.exports = ({ cooler }) => {
     if (!c || c.type !== "feed") throw new Error("Invalid feed");
     if (!isValidFeedText(c.text)) throw new Error("Invalid feed");
 
+    const contentVoters = new Set(Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : []);
     const existing = idx.actionsByRoot.get(tipId) || [];
     for (const a of existing) {
       const ac = a?.value?.content || {};
       if (ac.type === "feed-action" && ac.action === "vote" && a.value?.author === userId) throw new Error("Already voted");
     }
+    if (contentVoters.has(userId)) throw new Error("Already voted");
 
-    const action = {
-      type: "feed-action",
-      action: "vote",
-      category,
-      root: tipId,
-      createdAt: new Date().toISOString(),
-      author: userId
+    const now = new Date().toISOString();
+    const prevOpinions = c.opinions && typeof c.opinions === "object" ? c.opinions : {};
+    const updated = {
+      ...c,
+      replaces: tipId,
+      opinions: { ...prevOpinions, [category]: (Number(prevOpinions[category]) || 0) + 1 },
+      opinions_inhabitants: Array.from(contentVoters).concat(userId),
+      updatedAt: now
     };
 
+    const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };
+    await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
+
     return new Promise((resolve, reject) => {
-      ssbClient.publish(action, (err, result) => (err ? reject(err) : resolve(result)));
+      ssbClient.publish(updated, (err, result) => (err ? reject(err) : resolve(result)));
     });
   };
 

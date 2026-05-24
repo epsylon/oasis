@@ -14,6 +14,15 @@ Modes:
   server          Launch only the Oasis backend in headless / pub mode.
   help, -h        Show this help message.
 
+PUB admin commands (require the sbot to be running: sh oasis.sh server):
+  whoami                   Print this PUB id
+  invite [N]               Create an invite code (default uses=1)
+  name <text>              Set this PUB display name
+  announce <host> [port]   Publish a pub address (default port=8008)
+  follow <feedId>          Follow another PUB / feed
+  status                   Show peer / replication status
+  gossip                   List known gossip peers
+
 GUI options (forwarded to the backend):
   --host=<ip>           Hostname / IP the web UI listens on (default: localhost).
                         Use 0.0.0.0 to expose on a VPS.
@@ -28,9 +37,10 @@ GUI options (forwarded to the backend):
 Examples:
   sh oasis.sh
   sh oasis.sh server
+  sh oasis.sh invite 100
+  sh oasis.sh name "My PUB"
+  sh oasis.sh announce mypub.example.com
   sh oasis.sh --host=0.0.0.0 --port=8080 --no-open
-  sh oasis.sh --public --no-open --host=0.0.0.0 --port=8080
-  sh oasis.sh --allow-host=oasis.example.com --no-open
 EOF
 }
 
@@ -49,8 +59,16 @@ case "$MODE" in
     exit 0
     ;;
   server|pub)
+    if [ -f "$CONFIG_FILE" ]; then
+      sed -i.bak 's/"aiMod": *"on"/"aiMod": "off"/' "$CONFIG_FILE"
+      sed -i.bak 's/"aiNavMod": *"on"/"aiNavMod": "off"/' "$CONFIG_FILE"
+      rm -f "$CONFIG_FILE.bak"
+    fi
     cd "$CURRENT_DIR/src/server" || exit 1
     exec node SSB_server.js start
+    ;;
+  whoami|invite|name|announce|follow|status|gossip)
+    exec node "$CURRENT_DIR/scripts/oasis-pub.js" "$@"
     ;;
   gui)
     shift

@@ -3,7 +3,8 @@ const {
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip } = require('./main_views');
+const { renderEncryptedChip: renderForumEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
@@ -161,7 +162,7 @@ const renderThread = (nodes, level = 0, forumId) => {
     });
 };
 
-const renderForumList = (forums, currentFilter) => {
+const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
   const visibleForums = (Array.isArray(forums) ? forums : []).filter(f =>
     (f && f.title && String(f.title).trim()) || (f && f.text && String(f.text).trim())
   )
@@ -181,7 +182,10 @@ const renderForumList = (forums, currentFilter) => {
               a({
                 class: 'forum-title',
                 href: `/forum/${encodeURIComponent(f.key)}`
-              }, f.title)
+              }, f.title),
+              f.isPrivate ? renderPrivacyChip(true, i18n) : null,
+              f.isPrivate ? renderForumEncryptedChip(i18n) : null,
+              renderLifespanChip(f.lifetime, i18n)
             ),
 	    div({
 	      class: 'forum-body',
@@ -200,6 +204,10 @@ const renderForumList = (forums, currentFilter) => {
                 button({ type: 'submit', class: 'filter-btn' }, i18n.forumVisitButton)
               )
             ),
+            (() => {
+              const btn = renderSpreadButton(f.key, spreadMap.get(f.key));
+              return btn ? div({ class: 'card-spread-left' }, btn) : null;
+            })(),
             div({ class: 'forum-footer' },
               span({ class: 'date-link' },
                 `${moment(f.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
@@ -224,7 +232,7 @@ const renderForumList = (forums, currentFilter) => {
   );
 }
 
-exports.forumView = async (forums, currentFilter) => {
+exports.forumView = async (forums, currentFilter, params = {}) => {
   const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
   return template(i18n.forumTitle,
     section(
@@ -251,7 +259,8 @@ exports.forumView = async (forums, currentFilter) => {
         ? renderForumForm()
         : renderForumList(
           getFilteredForums(currentFilter || 'all', forums),
-          currentFilter
+          currentFilter,
+          params.spreadMap
         )
     )
   );
@@ -304,7 +313,10 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
             a({
               class: 'forum-title',
               href: `/forum/${encodeURIComponent(forum.key)}`
-            }, forum.title)
+            }, forum.title),
+            forum.isPrivate ? renderPrivacyChip(true, i18n) : null,
+            forum.isPrivate ? renderForumEncryptedChip(i18n) : null,
+            renderLifespanChip(forum.lifetime, i18n)
           ),
           div({ class: 'forum-footer' },
             span({ class: 'date-link' },

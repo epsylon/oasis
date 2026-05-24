@@ -71,7 +71,9 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (c.type !== "torrent") continue;
 
       const ts = v.timestamp || m.timestamp || 0;
-      nodes.set(k, { key: k, ts, c });
+      let sizeBytes = 0;
+      try { sizeBytes = Buffer.byteLength(JSON.stringify(v), "utf8"); } catch (_) { sizeBytes = 0; }
+      nodes.set(k, { key: k, ts, c, sizeBytes });
       authorByKey.set(k, v.author);
 
       if (c.replaces) {
@@ -128,7 +130,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       opinions_inhabitants: voters,
       hasVoted: viewerId ? voters.includes(viewerId) : false,
       tribeId: c.tribeId || null,
-      encrypted: !!undec
+      encrypted: !!undec,
+      sizeBytes: node.sizeBytes || 0
     };
   };
 

@@ -7,4 +7,5 @@ src/AI/embeddings/
 src/AI/.cache/
 .update_required
 cache/
-src/configs/banking-eco-history.json
+src/configs/
+test/results/

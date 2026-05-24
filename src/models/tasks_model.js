@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, pmModel }) => {
@@ -51,7 +52,9 @@ module.exports = ({ cooler, pmModel }) => {
         assignees: [userId],
         createdAt: new Date().toISOString(),
         status: 'OPEN',
-        author: userId
+        author: userId,
+        opinions: {},
+        opinions_inhabitants: []
       };
 
       return new Promise((res, rej) => ssb.publish(content, (err, msg) => err ? rej(err) : res(msg)));
@@ -169,6 +172,23 @@ module.exports = ({ cooler, pmModel }) => {
       return { id: taskId, ...c, status };
     },
 
+    async createOpinion(id, category) {
+      const categories = require('../backend/opinion_categories');
+      if (!categories.includes(category)) throw new Error('Invalid opinion category');
+      const ssb = await openSsb();
+      const userId = ssb.id;
+      const task = await new Promise((res, rej) => ssb.get(id, (err, m) => err || !m || !m.content ? rej(new Error('Task not found')) : res(m)));
+      const c = task.content;
+      const list = Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [];
+      if (list.includes(userId)) throw new Error('Already opined');
+      const opinions = Object.assign({}, c.opinions || {});
+      opinions[category] = (opinions[category] || 0) + 1;
+      const updated = { ...c, opinions, opinions_inhabitants: list.concat(userId), updatedAt: new Date().toISOString(), replaces: id };
+      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
+      await new Promise((res, rej) => ssb.publish(tombstone, err => err ? rej(err) : res()));
+      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+    },
+
     async toggleAssignee(taskId) {
       const ssb = await openSsb();
       const userId = ssb.id;
@@ -188,15 +208,14 @@ module.exports = ({ cooler, pmModel }) => {
         pull(ssb.createLogStream({ limit: logLimit }),
           pull.collect((err, results) => {
             if (err) return reject(err);
-            const tombstoned = new Set();
+            const tombstoned = buildValidatedTombstoneSet(results);
             const replaced = new Map();
             const tasks = new Map();
 
             for (const r of results) {
               const { key, value: { content: c } } = r;
               if (!c) continue;
-              if (c.type === 'tombstone') tombstoned.add(c.target);
-              if (c.type === 'task') {
+if (c.type === 'task') {
                 if (c.replaces) replaced.set(c.replaces, key);
                 const status = c.status === 'OPEN' && moment(c.endTime).isBefore(now) ? 'CLOSED' : c.status;
                 tasks.set(key, { id: key, ...c, status });
@@ -221,13 +240,13 @@ module.exports = ({ cooler, pmModel }) => {
       );
       const now = Date.now();
       const sent = new Set();
-      const tombstoned = new Set();
+      const tombstoned = buildValidatedTombstoneSet(messages);
       const replaced = new Set();
       const tasks = new Map();
       for (const m of messages) {
         const c = m.value && m.value.content;
         if (!c) continue;
-        if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue; }
+        if (c.type === 'tombstone') continue;
         if (c.type === 'taskReminderSent' && c.target) { sent.add(c.target); continue; }
         if (c.type === 'task') {
           if (c.replaces) replaced.add(c.replaces);

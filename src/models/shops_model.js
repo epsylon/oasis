@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])

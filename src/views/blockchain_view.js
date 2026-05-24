@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, input, span, pre, table, tr, td, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require("../views/main_views");
+const { template, i18n, userLink } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
@@ -299,7 +299,7 @@ const renderBlockDiagram = (blocks, qs) => {
 };
 
 const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, viewMode = 'block', restricted = false) => {
-  if (!block) {
+  if (!block || block.notAvailable) {
     return template(
       i18n.blockchain,
       section(
@@ -307,7 +307,16 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
           h2(i18n.blockchain),
           p(i18n.blockchainDescription)
         ),
-        p(i18n.blockchainNoBlocks || 'No blocks')
+        div({ class: 'block-single' },
+          block && block.id ? div({ class: 'block-row block-row--meta' },
+            span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockID || 'Block ID'}:`),
+            span({ class: 'blockchain-card-value' }, block.id)
+          ) : null,
+          p({ class: 'empty' }, i18n.blockchainBlockNotAvailable || 'This block is not available in your local feed. It may belong to a peer you are not yet replicating from.'),
+          div({ class: 'larp-actions' },
+            a({ href: '/blockexplorer', class: 'filter-btn' }, i18n.blockchainBackToBlockexplorer || 'Back to blockexplorer')
+          )
+        )
       )
     );
   }
@@ -323,10 +332,12 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
             span({ class: 'blockchain-card-value' }, block.id)
           ),
           div({ class: 'block-row block-row--meta' },
-            span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockTimestamp}:`),
-            span({ class: 'blockchain-card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ')),
             span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
             span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
+          ),
+          div({ class: 'block-row block-row--meta' },
+            span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockTimestamp}:`),
+            span({ class: 'blockchain-card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ'))
           )
         ),
         div({ class: 'block-row block-row--content' },
@@ -342,28 +353,35 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
               span({ class: 'blockchain-card-value' }, block.id)
             ),
             div({ class: 'block-row block-row--meta' },
-              span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockTimestamp}:`),
-              span({ class: 'blockchain-card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ')),
               span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
               span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
             ),
             div({ class: 'block-row block-row--meta' },
-              span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockCarbon || 'Carbon footprint'}:`),
-              span({ class: 'blockchain-card-value' }, formatCarbon(block.size))
-            ),
-            div({ class: 'block-row block-row--meta block-row--meta-spaced' },
+              span({ class: 'blockchain-card-label' }, `${i18n.oasisIdLabel || 'OasisID'}:`),
               a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author)
             )
           ),
           div({ class:'block-row block-row--content' },
             div({ class:'block-content-preview' },
               block.content && typeof block.content.encryptedPayload === 'string'
-                ? div({ class: 'encrypted-payload-box' },
-                    p({ class: 'encrypted-label' }, `[${i18n.bxEncrypted || 'ENCRYPTED'}]`),
-                    p({ class: 'encrypted-hex-label' }, i18n.bxEncryptedHexLabel || 'Ciphertext (preview)'),
-                    pre({ class: 'json-content' }, String(block.content.encryptedPayload).slice(0, 128) + (String(block.content.encryptedPayload).length > 128 ? '…' : ''))
-                  )
+                ? (() => {
+                    const { renderEncryptedChip } = require('./clearnet_view');
+                    return div({ class: 'encrypted-payload-box' },
+                      div({ class: 'title-with-chip' }, renderEncryptedChip(i18n)),
+                      pre({ class: 'json-content' }, String(block.content.encryptedPayload).slice(0, 128) + (String(block.content.encryptedPayload).length > 128 ? '…' : ''))
+                    );
+                  })()
                 : pre({ class:'json-content' }, JSON.stringify(block.content,null,2))
+            )
+          ),
+          div({ class: 'block-single' },
+            div({ class: 'block-row block-row--meta' },
+              span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockTimestamp}:`),
+              span({ class: 'blockchain-card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ'))
+            ),
+            div({ class: 'block-row block-row--meta' },
+              span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockCarbon || 'Carbon footprint'}:`),
+              span({ class: 'blockchain-card-value' }, formatCarbon(block.size))
             )
           )
         );
@@ -409,12 +427,14 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
   );
 };
 
-const renderBlockchainView = (blocks, filter, userId, search = {}) => {
+const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) => {
   const s = search || {};
   const authorVal = String(s.author || '');
   const idVal = String(s.id || '');
   const fromVal = toDatetimeLocal(s.from);
   const toVal = toDatetimeLocal(s.to);
+  const inspect = extras && extras.inspect ? extras.inspect : null;
+  const inspectVal = inspect ? String(inspect.block || '') : '';
 
   const shown = filterBlocks(blocks, filter, userId);
   const qs = toQueryString(filter, s);
@@ -457,6 +477,35 @@ const renderBlockchainView = (blocks, filter, userId, search = {}) => {
 	    )
 	  )
 	),
+      div({ id: 'inspect', class: 'blockexplorer-inspect' },
+        h3(i18n.bankTaxesLookupTitle || 'Inspect a block'),
+        p(i18n.bankTaxesLookupNote || 'Enter a block ID to look it up in your local feed. The inspector shows the block ID (linked to its detail page), its author, its content type, its size in bytes, its carbon footprint and its ECO tax in ECO.'),
+        form({ method: 'GET', action: '/blockexplorer', class: 'blockexplorer-search-form' },
+          input({ type: 'hidden', name: 'filter', value: filter }),
+          div({ class: 'blockexplorer-search-row' },
+            div({ class: 'blockexplorer-search-pair' },
+              input({ type: 'text', name: 'inspect', value: inspectVal, placeholder: i18n.bankTaxesLookupPlaceholder || 'Block ID (e.g. %abc...=.sha256)', class: 'blockexplorer-search-input' })
+            ),
+            div({ class: 'blockexplorer-search-actions' },
+              button({ type: 'submit', class: 'filter-box__button' }, i18n.bankTaxesLookupButton || 'Inspect')
+            )
+          )
+        ),
+        inspect
+          ? (inspect.found
+              ? div({ class: 'bank-taxes-lookup-result' },
+                  table({ class: 'bank-info-table' },
+                    tr(td({ class: 'card-label' }, i18n.blockchainBlockID || 'Block ID'), td({ class: 'card-value' }, a({ href: `/blockexplorer/block/${encodeURIComponent(inspect.block)}` }, inspect.block))),
+                    tr(td({ class: 'card-label' }, i18n.bankTaxesLookupAuthor || 'Author'), td({ class: 'card-value' }, inspect.author ? userLink(inspect.author) : '—')),
+                    tr(td({ class: 'card-label' }, i18n.bankTaxesLookupType || 'Type'), td({ class: 'card-value' }, String(inspect.blockType || '—'))),
+                    tr(td({ class: 'card-label' }, i18n.bankTaxesLookupSize || 'Size'), td({ class: 'card-value' }, `${Number(inspect.size || 0).toLocaleString()} B`)),
+                    tr(td({ class: 'card-label' }, i18n.bankTaxesLookupCarbon || 'Carbon footprint'), td({ class: 'card-value' }, formatCarbon(inspect.size || 0))),
+                    tr(td({ class: 'card-label' }, i18n.bankTaxesLookupEcoin || 'ECO Tax'), td({ class: 'card-value' }, `${Number(inspect.ecoinTax || 0).toFixed(6)} ECO`))
+                  )
+                )
+              : p({ class: 'empty' }, i18n.bankTaxesLookupNotFound || 'No block found in your local feed with that ID.'))
+          : null
+      ),
       renderBlockDiagram(shown, qs),
       h2({ class: 'block-diagram-title' }, 'Blockchain Blocks'),
       shown.length === 0

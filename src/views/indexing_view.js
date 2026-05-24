@@ -16,8 +16,7 @@ exports.indexingView = ({ percent }) => {
   const headingText = i18n.indexingTitle || 'Synchronizing';
   const message = i18n.indexingMessage || 'Oasis is trying to syncronize a huge network of inhabitants. Just wait!';
   const refreshNote = i18n.indexingRefreshNote || 'This page refreshes every 10 seconds.';
-  const editProfileLabel = i18n.indexingEditProfileLink || 'Set up my profile';
-  const welcomeLabel = i18n.indexingWelcomeLink || 'Tour of Oasis';
+  const editProfileLabel = i18n.indexingEditProfileLink || 'Set up my avatar';
 
   return template(
     headingText,
@@ -33,7 +32,6 @@ exports.indexingView = ({ percent }) => {
       ),
       div({ class: 'indexing-actions' },
         a({ href: '/profile/edit', class: 'filter-btn welcome-action-primary' }, editProfileLabel),
-        a({ href: '/welcome', class: 'filter-btn' }, welcomeLabel),
         a({ href: '/modules', class: 'filter-btn' }, i18n.modulesTitle || 'Modules')
       )
     )

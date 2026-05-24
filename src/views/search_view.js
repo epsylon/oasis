@@ -197,7 +197,6 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLocationLabel + ':'), span({ class: 'card-value' }, ...renderUrl(content.location))) : null,
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel + ':'), span({ class: 'card-value' }, content.isAnonymous ? i18n.tribePrivate : i18n.tribePublic)),
         content.inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeModeLabel + ':'), span({ class: 'card-value' }, String(content.inviteMode).toUpperCase())) : null,
-        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLARPLabel + ':'), span({ class: 'card-value' }, content.isLARP ? i18n.tribeYes : i18n.tribeNo)),
         Array.isArray(content.members)
           ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeMembersCount + ':'), span({ class: 'card-value' }, String(content.members.length)))
           : null,
@@ -354,7 +353,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchCategoryLabel + ':'), span({ class: 'card-value' }, content.category)) : null,
           content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.description)) : null,
           br(),
-          content.image ? img({ src: `/blob/${encodeURIComponent(content.image)}` }) : null,
+          blobImg(content.image),
           br(),
           typeof content.confirmations === 'number' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.reportsConfirmations + ':'), span({ class: 'card-value' }, content.confirmations)) : null,
           content.tags && content.tags.length
@@ -543,7 +542,6 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     ? Object.entries(results).map(([key, msgs]) =>
       div(
         { class: "search-result-group" },
-        h2(i18n[key + "Label"] || key.toUpperCase()),
         ...msgs.map((msg) => {
           const content = msg.value.content || {};
           const created = new Date(msg.timestamp).toLocaleString();
@@ -583,6 +581,11 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           );
 
           return div({ class: 'result-item' }, [
+            div({ class: 'card-chips-row' },
+              span({ class: 'pm-exposition-chip pm-exposition-whole' },
+                span({ class: 'pm-exposition-text' }, String(content.type || '').toUpperCase())
+              )
+            ),
             detailsButton,
             br(),
             contentHtml,

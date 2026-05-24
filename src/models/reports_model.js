@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const normU = (v) => String(v || '').trim().toUpperCase();
@@ -74,7 +75,9 @@ module.exports = ({ cooler }) => {
         confirmations: [],
         severity: normalizeSeverity(severity) || 'low',
         status: 'OPEN',
-        template: normalizeTemplate(cat, template)
+        template: normalizeTemplate(cat, template),
+        opinions: {},
+        opinions_inhabitants: []
       };
 
       return new Promise((res, rej) => ssb.publish(content, (err, msg) => err ? rej(err) : res(msg)));
@@ -200,6 +203,35 @@ module.exports = ({ cooler }) => {
       return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
     },
 
+    async createOpinion(id, category) {
+      const categories = require('../backend/opinion_categories');
+      if (!categories.includes(category)) throw new Error('Invalid opinion category');
+      const ssb = await openSsb();
+      const userId = ssb.id;
+      const report = await new Promise((res, rej) => ssb.get(id, (err, r) => err || !r || !r.content ? rej(new Error('Report not found')) : res(r)));
+      const c = report.content;
+      const list = Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [];
+      if (list.includes(userId)) throw new Error('Already opined');
+      const opinions = Object.assign({}, c.opinions || {});
+      opinions[category] = (opinions[category] || 0) + 1;
+      const cat = normU(c.category);
+      const updated = {
+        ...c,
+        type: 'report',
+        replaces: id,
+        opinions,
+        opinions_inhabitants: list.concat(userId),
+        updatedAt: new Date().toISOString(),
+        status: normalizeStatus(c.status || 'OPEN'),
+        category: cat,
+        severity: normalizeSeverity(c.severity) || 'low',
+        template: normalizeTemplate(cat, c.template || {})
+      };
+      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
+      await new Promise((res, rej) => ssb.publish(tombstone, err => err ? rej(err) : res()));
+      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+    },
+
     async listAll() {
       const ssb = await openSsb();
 
@@ -209,7 +241,7 @@ module.exports = ({ cooler }) => {
           pull.collect((err, results) => {
             if (err) return reject(err);
 
-            const tombstoned = new Set();
+            const tombstoned = buildValidatedTombstoneSet(results);
             const replaced = new Map();
             const reports = new Map();
 
@@ -218,7 +250,7 @@ module.exports = ({ cooler }) => {
               const c = r && r.value && r.value.content ? r.value.content : null;
               if (!key || !c) continue;
 
-              if (c.type === 'tombstone' && c.target) tombstoned.add(c.target);
+              if (c.type === 'tombstone') continue;
 
               if (c.type === 'report') {
                 if (c.replaces) replaced.set(c.replaces, key);

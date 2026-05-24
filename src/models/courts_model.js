@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const CASE_ANSWER_DAYS = 7;
@@ -81,15 +82,14 @@ module.exports = ({ cooler, services = {}, tribeCrypto }) => {
 
   async function listByType(type) {
     const msgs = await readLog();
-    const tomb = new Set();
+    const tomb = buildValidatedTombstoneSet(msgs);
     const rep = new Map();
     const map = new Map();
     for (const m of msgs) {
       const k = m.key || m.id;
       const c = m.value?.content || m.content;
       if (!c) continue;
-      if (c.type === 'tombstone' && c.target) tomb.add(c.target);
-      if (c.type === type) {
+if (c.type === type) {
         if (c.replaces) rep.set(c.replaces, k);
         map.set(k, { id: k, ...c });
       }

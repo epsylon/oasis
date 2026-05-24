@@ -8,6 +8,9 @@ if (!fs.existsSync(configFilePath)) {
     "themes": {
       "current": "Dark-SNH"
     },
+    "ux": {
+      "current": "blocks"
+    },
     "modules": {
       "popularMod": "on",
       "topicsMod": "on",
@@ -55,7 +58,8 @@ if (!fs.existsSync(configFilePath)) {
       "mapsMod": "on",
       "chatsMod": "on",
       "torrentsMod": "on",
-      "graphosMod": "on"
+      "graphosMod": "on",
+      "larpMod": "on"
     },
     "wallet": {
       "url": "http://localhost:7474",
@@ -75,7 +79,8 @@ if (!fs.existsSync(configFilePath)) {
     "homePage": "activity",
     "language": "en",
     "wish": "whole",
-    "pmVisibility": "whole"
+    "pmVisibility": "whole",
+    "lanBroadcasting": true
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
 }
@@ -85,6 +90,11 @@ const getConfig = () => {
   const cfg = JSON.parse(configData);
   if (!['whole', 'mutuals', 'only-lan'].includes(cfg.wish)) cfg.wish = 'whole';
   if (cfg.pmVisibility !== 'whole' && cfg.pmVisibility !== 'mutuals') cfg.pmVisibility = 'whole';
+  if (typeof cfg.ux === 'string') cfg.ux = { current: cfg.ux };
+  if (!cfg.ux || typeof cfg.ux !== 'object') cfg.ux = { current: 'blocks' };
+  if (cfg.ux.current === 'menus') cfg.ux.current = 'blocks';
+  if (cfg.ux.current !== 'blocks' && cfg.ux.current !== 'ainav') cfg.ux.current = 'blocks';
+  if (cfg.ux.current === 'ainav' && cfg.modules && cfg.modules.aiNavMod !== 'on') cfg.ux.current = 'blocks';
   return cfg;
 };
 

@@ -6,7 +6,7 @@ describe('tribes: create + list', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();
     const tm = A.use('tribes');
-    const r = await tm.createTribe('Secret', 'd', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await tm.createTribe('Secret', 'd', null, '', [], true, 'strict', null, 'OPEN', '');
     const list = await tm.listAll();
     eq(list.length, 1);
     eq(list[0].title, 'Secret');
@@ -17,7 +17,7 @@ describe('tribes: create + list', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    await A.use('tribes').createTribe('Public', '', null, '', [], false, false, 'strict', null, 'OPEN', '');
+    await A.use('tribes').createTribe('Public', '', null, '', [], false, 'strict', null, 'OPEN', '');
     B.setActor();
     const list = await B.use('tribes').listAll();
     eq(list.length, 1);
@@ -28,7 +28,7 @@ describe('tribes: create + list', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    await A.use('tribes').createTribe('Hidden', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    await A.use('tribes').createTribe('Hidden', '', null, '', [], true, 'strict', null, 'OPEN', '');
     B.setActor();
     eq((await B.use('tribes').listAll()).length, 0);
   });
@@ -36,7 +36,7 @@ describe('tribes: create + list', (t) => {
   t('private tribe envelope is opaque (no plaintext leak in log)', async () => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();
-    await A.use('tribes').createTribe('TopSecret', 'sensitive', null, '', ['x'], false, true, 'strict', null, 'OPEN', '');
+    await A.use('tribes').createTribe('TopSecret', 'sensitive', null, '', ['x'], true, 'strict', null, 'OPEN', '');
     const wrapped = net.log.find(m => m.value.content && m.value.content.type === 'tribe-msg');
     ok(wrapped);
     notOk(net.log.find(m => {
@@ -52,7 +52,7 @@ describe('tribes: invite + join', (t) => {
     const A = makePeer(net); const B = makePeer(net);
     A.setActor();
     const tmA = A.use('tribes');
-    const r = await tmA.createTribe('Club', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await tmA.createTribe('Club', '', null, '', [], true, 'strict', null, 'OPEN', '');
     const code = await tmA.generateInvite(r.key);
     eq(typeof code, 'string'); eq(code.length, 32);
     B.setActor();
@@ -70,7 +70,7 @@ describe('tribes: invite + join', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    const r = await A.use('tribes').createTribe('X', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('X', '', null, '', [], true, 'strict', null, 'OPEN', '');
     await A.use('tribes').generateInvite(r.key);
     B.setActor();
     await throwsAsync(() => B.use('tribes').joinByInvite('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'), 'Invalid');
@@ -80,7 +80,7 @@ describe('tribes: invite + join', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
     A.setActor();
-    const r = await A.use('tribes').createTribe('X', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('X', '', null, '', [], true, 'strict', null, 'OPEN', '');
     const code = await A.use('tribes').generateInvite(r.key);
     B.setActor();
     await B.use('tribes').joinByInvite(code);
@@ -94,7 +94,7 @@ describe('tribes: content', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    const r = await A.use('tribes').createTribe('G', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('G', '', null, '', [], true, 'strict', null, 'OPEN', '');
     const code = await A.use('tribes').generateInvite(r.key);
     B.setActor();
     await B.use('tribes').joinByInvite(code);
@@ -110,7 +110,7 @@ describe('tribes: content', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const C = makePeer(net);
     A.setActor();
-    const r = await A.use('tribes').createTribe('G', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('G', '', null, '', [], true, 'strict', null, 'OPEN', '');
     await A.use('tribesContent').create(r.key, 'feed', { description: 'private' });
     C.setActor();
     eq((await C.use('tribesContent').listByTribe(r.key, 'feed')).length, 0);
@@ -121,7 +121,7 @@ describe('tribes: invariants', (t) => {
   t('multiple updates resolve to single tribe with latest tip', async () => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();
-    const r = await A.use('tribes').createTribe('X', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('X', '', null, '', [], true, 'strict', null, 'OPEN', '');
     await A.use('tribes').updateTribeById(r.key, { description: 'a' });
     await A.use('tribes').updateTribeById(r.key, { description: 'b' });
     const list = await A.use('tribes').listAll();
@@ -132,7 +132,7 @@ describe('tribes: invariants', (t) => {
   t('getChainIds returns full chain', async () => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();
-    const r = await A.use('tribes').createTribe('X', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('X', '', null, '', [], true, 'strict', null, 'OPEN', '');
     await A.use('tribes').updateTribeById(r.key, { description: '1' });
     await A.use('tribes').updateTribeById(r.key, { description: '2' });
     const chain = await A.use('tribes').getChainIds(r.key);

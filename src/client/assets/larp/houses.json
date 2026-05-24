@@ -1,0 +1,92 @@
+{
+  "academia": {
+    "name": "ACADEMIA",
+    "short": "aca",
+    "motto": "Nosce te ipsum…",
+    "roles": "Educators, teachers, coordinators",
+    "function": "Education, understanding, talent discovery, selection process",
+    "description": "All inhabitants start here. ACADEMIA receives newcomers, provides information on the simulation mechanics, presents each house's objectives and runs the selection process.",
+    "month": 1,
+    "image": "/assets/larp/images/academia.jpg"
+  },
+  "solaris": {
+    "name": "SolarIS",
+    "short": "sol",
+    "motto": "The word makes us human. Violence, beasts.",
+    "roles": "Rulers, lawyers, diplomats",
+    "function": "Governance, law, dialogue, politics, communication",
+    "description": "Holds the political voice. Mediates disputes, drafts norms, builds coalitions through dialogue and persuasion.",
+    "month": 2,
+    "image": "/assets/larp/images/solaris.jpg"
+  },
+  "arrakis": {
+    "name": "ARRakis",
+    "short": "arr",
+    "motto": "How long do you say that it must be resolved?",
+    "roles": "Engineers, scientists, technicians",
+    "function": "Technology, invention, problem-solving, building and maintaining",
+    "description": "The makers. They keep the machinery running, prototype, repair, automate; favour pragmatic solutions over endless debate.",
+    "month": 3,
+    "image": "/assets/larp/images/arrakis.jpg"
+  },
+  "terraverde": {
+    "name": "TERRA.VErDE",
+    "short": "ter",
+    "motto": "Love nature, universe and being, because we are all one.",
+    "roles": "Farmers, ecologists, doctors, nutritionists",
+    "function": "Healthcare, food, nature, resources, climate management",
+    "description": "Stewards of the living systems. Manage food, health and the relationship with the biosphere; long timescales, regenerative principles.",
+    "month": 4,
+    "image": "/assets/larp/images/terraverde.jpg"
+  },
+  "unsystem": {
+    "name": "UNSYSTem",
+    "short": "uns",
+    "motto": "We do not make statements!",
+    "roles": "Chaos agents, trolls, punks",
+    "function": "Organization of disorder, tactical chaos",
+    "description": "Holds the right to question, sabotage, provoke. Resists capture by any other house and keeps the system uncomfortable.",
+    "month": 5,
+    "image": "/assets/larp/images/unsystem.jpg"
+  },
+  "dogma": {
+    "name": "DogmA",
+    "short": "dog",
+    "motto": "The question is not when to do it, the question is how.",
+    "roles": "Thinkers, journalists, philosophers",
+    "function": "Information control, knowledge, philosophy, memory, AI",
+    "description": "The archive and the discourse. Curates knowledge, drafts narratives, governs how information is produced and propagated.",
+    "month": 6,
+    "image": "/assets/larp/images/dogma.jpg"
+  },
+  "helix": {
+    "name": "HeliX",
+    "short": "hlx",
+    "motto": "If you do not smile, it's not my revolution.",
+    "roles": "Clowns, influencers, musicians, priests",
+    "function": "Entertainment, culture, humor, celebration, human relationships",
+    "description": "Carries culture, ritual and joy. Holds the social fabric together through art, festival and shared emotion.",
+    "month": 7,
+    "image": "/assets/larp/images/helix.jpg"
+  },
+  "quark": {
+    "name": "QuarK",
+    "short": "quk",
+    "motto": "Without security, there is no freedom!",
+    "roles": "Athletes, soldiers, street people",
+    "function": "Protection, security, defense, survival, family",
+    "description": "The guard. Trains, defends, organises mutual aid; demands clear loyalties and clear lines.",
+    "month": 8,
+    "image": "/assets/larp/images/quark.jpg"
+  },
+  "hermandad": {
+    "name": "HERmanDAD",
+    "short": "hrm",
+    "motto": "Grow. Build. Expand!",
+    "roles": "Architects, builders, investors, industrialists",
+    "function": "Construction, development, sustainability, logistics, production",
+    "description": "The builders. Plan large works, organise production lines and supply chains; measure success in things shipped and capacity created.",
+    "month": 9,
+    "image": "/assets/larp/images/hermandad.jpg"
+  }
+}

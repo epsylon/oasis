@@ -7,11 +7,12 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
   const description = i18n.pmDescription;
   const textLen = (initialText || '').length;
 
+  const { renderEncryptedChip } = require('./clearnet_view');
   return template(
     title,
     section(
       div({ class: "tags-header" },
-        h2(title),
+        div({ class: "title-with-chip" }, h2(title), renderEncryptedChip(i18n)),
         p(description)
       ),
       section(

@@ -91,13 +91,18 @@ const lightboxId = (id) => 'inhabitant_' + String(id || 'unknown').replace(/[^a-
 const renderInhabitantCard = (user, filter, currentUserId) => {
   const isMe = user.id === currentUserId;
   const raw = user.visibilityPrefs || {};
+  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
+  const hasClearnet = raw.clearnet === true || clearnetSubKeys.some(k => raw[k] === true);
   const prefs = {
     activity: raw.activity === true,
     device:   raw.device   === true,
     karma:    raw.karma !== false,
     ubi:      raw.ubi      === true,
     wallet:   raw.wallet   === true,
-    ecoTax:   raw.ecoTax   !== false
+    ecoTax:   raw.ecoTax   !== false,
+    larpSign: raw.larpSign === true,
+    gpg:      raw.gpg      !== false,
+    clearnet: hasClearnet
   };
   const dot = user.lastActivityBucket;
   const activityChip = prefs.activity && dot
@@ -118,25 +123,51 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
         span({ class: deviceClass }, src));
     }
   }
-  const activityGroup = (activityChip || deviceChip)
-    ? div({ class: 'inhabitant-activity-group' }, activityChip, deviceChip)
-    : null;
+  const { renderReachChip, renderClearnetUrlBlock } = require('./clearnet_view');
+  const sensorItems = [];
+  const clearnetPath = `/c/inhabitant/${encodeURIComponent(user.id)}`;
+  sensorItems.push(
+    div({ class: 'profile-reach' },
+      renderReachChip(prefs.clearnet, i18n, prefs.clearnet ? clearnetPath : null),
+      prefs.clearnet
+        ? renderClearnetUrlBlock({ path: clearnetPath, i18nObj: i18n })
+        : null
+    )
+  );
+  if (prefs.karma) sensorItems.push(span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0))));
+  if (activityChip) sensorItems.push(activityChip);
+  if (deviceChip) sensorItems.push(deviceChip);
+  if (prefs.larpSign && user.larpHouse && user.larpHouse.key) {
+    sensorItems.push(a({ href: `/larp/${user.larpHouse.key}`, class: 'larp-sign-block', title: user.larpHouse.name },
+      img({ src: user.larpHouse.image || '/assets/larp/images/default.jpg', alt: user.larpHouse.name, class: 'larp-sign-large' })
+    ));
+  }
+  if (prefs.gpg && (user.gpgFingerprint || isMe)) {
+    let gpgNode;
+    if (user.gpgFingerprint) {
+      const shortId = String(user.gpgFingerprint).slice(-8).toUpperCase();
+      gpgNode = a({ href: `/profile/${encodeURIComponent(user.id)}/gpg.asc`, title: i18n.profileGpgDownload || 'Download' }, strong(shortId));
+    } else {
+      const notCfg = i18n.statsEcoWalletNotConfigured || 'Not configured!';
+      gpgNode = isMe ? a({ href: '/profile/edit' }, strong(notCfg)) : strong(notCfg);
+    }
+    sensorItems.push(span({ class: 'gpg-line' }, `${i18n.profileGpgChip || 'GPG'}: `, gpgNode));
+  }
+  if (prefs.wallet && (user.ecoAddress || isMe)) {
+    const walletText = user.ecoAddress || (i18n.statsEcoWalletNotConfigured || 'Not configured!');
+    const walletNode = isMe ? a({ href: '/wallet' }, strong(walletText)) : strong(walletText);
+    sensorItems.push(span({ class: 'ubi-line' }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, walletNode));
+  }
+  if (prefs.ubi) sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(user.estimatedUBI || 0).toFixed(6)} ECO`)));
+  if (prefs.ecoTax) sensorItems.push(span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(user.carbonGrams))));
   return div({ class: 'inhabitant-card' },
     div({ class: 'inhabitant-left' },
       a(
          { href: `/author/${encodeURIComponent(user.id)}` },
          img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo, 256), alt: user.name || 'Anonymous' })
       ),
-      br(),
-      activityGroup,
-      (prefs.karma || prefs.ubi || prefs.wallet || prefs.ecoTax)
-        ? div({ class: 'inhabitant-karma-ubi' },
-            prefs.ecoTax ? span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(user.carbonGrams))) : null,
-            prefs.karma ? span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0))) : null,
-            prefs.ubi ? span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(user.estimatedUBI || 0).toFixed(6)} ECO`)) : null,
-            prefs.wallet ? span({ class: 'ubi-line' }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, strong(user.ecoAddress || (i18n.statsEcoWalletNotConfigured || 'Not configured!'))) : null
-          )
-        : null,
+      isMe ? span({ class: 'status you' }, i18n.relationshipYou) : null,
+      sensorItems.length ? div({ class: 'profile-sensors-box' }, ...sensorItems) : null,
       div(
         { class: 'cv-actions' },
         !isMe
@@ -144,7 +175,7 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
               { method: 'GET', action: `/inhabitant/${encodeURIComponent(user.id)}` },
               button({ type: 'submit', class: 'btn' }, i18n.inhabitantviewDetails)
             )
-          : p(i18n.relationshipYou),
+          : null,
         !isMe
           ? form(
               { method: 'GET', action: '/pm' },
@@ -163,7 +194,7 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
             p(`${i18n.matchScore}: ${Math.round((user.matchScore || 0) * 100)}%`)
           )
         : null,
-      filter === 'SUGGESTED'
+      filter === 'SUGGESTED' && (user.followsYou || user.commonSkills?.length || user.mutualCount)
         ? div({ class: 'suggested-meta' },
             user.followsYou ? span({ class: 'suggested-badge' }, i18n.suggestedFollowsYou || 'Follows you') : null,
             user.commonSkills?.length
@@ -347,9 +378,13 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
     karma:    rawPrefs.karma !== false,
     ubi:      rawPrefs.ubi      === true,
     wallet:   rawPrefs.wallet   === true,
-    ecoTax:   rawPrefs.ecoTax   !== false
+    ecoTax:   rawPrefs.ecoTax   !== false,
+    larpSign: rawPrefs.larpSign === true,
+    gpg:      rawPrefs.gpg      !== false
   };
+  const gpgFingerprint = String(safe.gpgFingerprint || '');
   const carbonGrams = typeof safe.carbonGrams === 'number' ? safe.carbonGrams : 0;
+  const larpHouse = (safe.larpHouse && safe.larpHouse.key) ? safe.larpHouse : null;
 
   const providedBucket = typeof safe.lastActivityBucket === 'string' ? safe.lastActivityBucket : null;
   const dotClass = providedBucket === 'green' ? 'green' : providedBucket === 'orange' ? 'orange' : 'red';
@@ -397,24 +432,39 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
                   span({ class: deviceClass }, src));
               }
             }
-            return (activityChip || deviceChip)
-              ? div({ class: 'inhabitant-activity-group' }, activityChip, deviceChip)
-              : null;
+            const sensorItems = [];
+            if (prefs.karma) sensorItems.push(span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore))));
+            if (activityChip) sensorItems.push(activityChip);
+            if (deviceChip) sensorItems.push(deviceChip);
+            if (prefs.larpSign && larpHouse && larpHouse.key) {
+              sensorItems.push(a({ href: `/larp/${larpHouse.key}`, class: 'larp-sign-block', title: larpHouse.name },
+                img({ src: larpHouse.image || '/assets/larp/images/default.jpg', alt: larpHouse.name, class: 'larp-sign-large' })
+              ));
+            }
+            if (prefs.gpg && (gpgFingerprint || isMe)) {
+              let gpgNode;
+              if (gpgFingerprint) {
+                const shortId = gpgFingerprint.slice(-8).toUpperCase();
+                gpgNode = a({ href: `/profile/${encodeURIComponent(id || viewedId)}/gpg.asc`, title: i18n.profileGpgDownload || 'Download' }, strong(shortId));
+              } else {
+                const notCfg = i18n.statsEcoWalletNotConfigured || 'Not configured!';
+                gpgNode = isMe ? a({ href: '/profile/edit' }, strong(notCfg)) : strong(notCfg);
+              }
+              sensorItems.push(span({ class: 'gpg-line' }, `${i18n.profileGpgChip || 'GPG'}: `, gpgNode));
+            }
+            if (prefs.wallet && (ecoAddress || isMe)) {
+              const walletText = ecoAddress || (i18n.statsEcoWalletNotConfigured || 'Not configured!');
+              const walletNode = isMe ? a({ href: '/wallet' }, strong(walletText)) : strong(walletText);
+              sensorItems.push(span({ class: 'ubi-line' }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, walletNode));
+            }
+            if (prefs.ubi) {
+              sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)));
+              sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed || 'Last claimed'}: `, lastClaimedDate ? new Date(lastClaimedDate).toLocaleDateString() : strong(i18n.bankUbiNeverClaimed || 'Never claimed')));
+              sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed || 'Total claimed'}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)));
+            }
+            if (prefs.ecoTax) sensorItems.push(span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))));
+            return sensorItems.length ? div({ class: 'profile-sensors-box' }, ...sensorItems) : null;
           })(),
-          (prefs.karma || prefs.ubi || prefs.ecoTax)
-            ? div({ class: 'inhabitant-karma-ubi' },
-                prefs.ecoTax ? span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))) : null,
-                prefs.karma ? span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore))) : null,
-                prefs.ubi ? span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)) : null,
-                prefs.ubi ? span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed || 'Last claimed'}: `, lastClaimedDate ? new Date(lastClaimedDate).toLocaleDateString() : strong(i18n.bankUbiNeverClaimed || 'Never claimed')) : null,
-                prefs.ubi ? span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed || 'Total claimed'}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)) : null
-              )
-            : null,
-          (prefs.wallet && ecoAddress)
-            ? div({ class: 'eco-wallet' },
-                p(`${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, a({ href: '/wallet' }, ecoAddress))
-              )
-            : null,
           (!isMe && (id || viewedId))
             ? form(
                 { method: 'GET', action: '/pm' },

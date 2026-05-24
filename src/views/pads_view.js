@@ -1,5 +1,6 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink} = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton } = require("./main_views")
+const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 
@@ -71,6 +72,16 @@ const renderStatus = (status, isClosed) => {
   return span({ class: "pad-status-open" }, i18n.padStatusOpen || "OPEN")
 }
 
+const renderPadStatusChip = (status, isClosed) => {
+  const s = isClosed ? "CLOSED" : String(status || "OPEN").toUpperCase()
+  const variant = s === "CLOSED" ? "closed" : s === "INVITE-ONLY" ? "whole" : "mutuals"
+  const icon = s === "CLOSED" ? "✗" : s === "INVITE-ONLY" ? "🔑" : "✓"
+  const label = s === "CLOSED" ? (i18n.padStatusClosed || "CLOSED")
+    : s === "INVITE-ONLY" ? (i18n.padStatusInviteOnly || "INVITE-ONLY")
+    : (i18n.padStatusOpen || "OPEN")
+  return renderStateChip(variant, icon, label)
+}
+
 const renderModeButtons = (currentFilter) =>
   div({ class: "tribe-mode-buttons" },
     ["all", "mine", "recent", "open", "closed"].map(f =>
@@ -87,21 +98,30 @@ const renderModeButtons = (currentFilter) =>
   )
 
 
-const renderPadCard = (pad, filter) => {
-  const returnTo = `/pads?filter=${encodeURIComponent(filter || "all")}`
+const renderPadCard = (pad, filter, spreadInfo) => {
+  const chips = [
+    renderPadStatusChip(pad.status, pad.isClosed),
+    renderEncryptedChip(i18n),
+    renderLifespanChip(pad.lifetime, i18n)
+  ].filter(Boolean)
   return div({ class: "tribe-card" },
     div({ class: "tribe-card-body" },
-      h2({ class: "tribe-card-title" },
-        span(null, "\uD83D\uDD12 "),
-        a({ href: `/pads/${encodeURIComponent(pad.rootId)}` }, pad.title || "\u2014")
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" },
+          a({ href: `/pads/${encodeURIComponent(pad.rootId)}` }, pad.title || "\u2014")
+        )
       ),
-      table({ class: "tribe-info-table" },
-        tr(td(i18n.padStatusLabel || "Status"), td(renderStatus(pad.status, pad.isClosed))),
-        pad.deadline ? tr(td(i18n.padDeadlineLabel || "Deadline"), td(moment(pad.deadline).format("YYYY-MM-DD HH:mm"))) : null
-      ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+      pad.deadline
+        ? p({ class: "job-meta-line" }, `${i18n.padDeadlineLabel || "Deadline"}: ${moment(pad.deadline).format("YYYY-MM-DD HH:mm")}`)
+        : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.padMembersLabel || "Members"}: ${pad.members.length}`)
       ),
+      (() => {
+        const btn = renderSpreadButton(pad.rootId, spreadInfo);
+        return btn ? div({ class: "card-spread-left" }, btn) : null;
+      })(),
       div({ class: "visit-btn-centered" },
         a({ href: `/pads/${encodeURIComponent(pad.rootId)}`, class: "filter-btn" }, i18n.padVisitPad || "Visit Pad")
       )
@@ -193,7 +213,7 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
       : div(
           filteredPads.length === 0
             ? p({ class: "no-content" }, i18n.padsNoItems || "No pads found.")
-            : div({ class: "tribe-grid" }, ...filteredPads.map(pd => renderPadCard(pd, filter)))
+            : div({ class: "tribe-grid" }, ...filteredPads.map(pd => renderPadCard(pd, filter, params && params.spreadMap && params.spreadMap.get(pd.rootId))))
         )
   )
 
@@ -212,22 +232,30 @@ exports.singlePadView = async (pad, entries, params) => {
     ? div({ class: "tribe-side-tags" }, ...pad.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}` }, `#${t}`)))
     : null
 
+  const detailChips = [
+    renderPadStatusChip(pad.status, padClosed),
+    renderEncryptedChip(i18n),
+    renderLifespanChip(pad.lifetime, i18n)
+  ].filter(Boolean)
   const padSide = div({ class: "tribe-side" },
-    h2(null,
-      span(null, "\uD83D\uDD12 "),
-      pad.title || "\u2014"
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, pad.title || "\u2014")
     ),
+    detailChips.length ? div({ class: "card-chips-row" }, ...detailChips) : null,
     div({ class: "shop-share" },
       span({ class: "tribe-info-label" }, i18n.padShareUrl || "Share URL"),
       input({ type: "text", readonly: true, value: shareUrl, class: "shop-share-input" })
     ),
+    (() => {
+      const btn = renderSpreadButton(pad.rootId);
+      return btn ? div({ class: "card-spread-centered" }, btn) : null;
+    })(),
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.padMembersLabel || "Members"}: ${pad.members.length}`)
     ),
     table({ class: "tribe-info-table" },
       tr(td({ class: "tribe-info-label" }, i18n.padCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(pad.createdAt).format("YYYY-MM-DD"))),
       isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-value pad-author-cell", colspan: "4" }, userLink(pad.author))),
-      tr(td({ class: "tribe-info-label" }, i18n.padStatusLabel || "Status"), td({ class: "tribe-info-value", colspan: "3" }, renderStatus(pad.status, padClosed))),
       isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-label" }, i18n.padDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, pad.deadline ? moment(pad.deadline).format("YYYY-MM-DD HH:mm") : "\u2014"))
     ),
     isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions" },

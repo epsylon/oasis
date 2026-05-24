@@ -4,14 +4,14 @@ const { makeNetwork, makePeer } = require('../../helpers/setup');
 describe('stats: counts', (t) => {
   t('member sees their tribes counted in stats', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('tribes').createTribe('T', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    await A.use('tribes').createTribe('T', '', null, '', [], true, 'strict', null, 'OPEN', '');
     const stats = await A.use('stats').getStats('ALL');
     ok(stats.content.tribe >= 1);
   });
 
   t('non-member sees zero tribes (privacy preserved)', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
-    await A.use('tribes').createTribe('Secret', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    await A.use('tribes').createTribe('Secret', '', null, '', [], true, 'strict', null, 'OPEN', '');
     B.setActor();
     const stats = await B.use('stats').getStats('ALL');
     eq(stats.content.tribe || 0, 0);

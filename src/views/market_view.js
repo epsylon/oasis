@@ -1,22 +1,22 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink} = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
 
-const renderMediaBlob = (value, fallbackSrc = null) => {
-  if (!value) return fallbackSrc ? img({ src: fallbackSrc }) : null
+const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
+  if (!value) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
   const s = String(value).trim()
-  if (!s) return fallbackSrc ? img({ src: fallbackSrc }) : null
-  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` })
+  if (!s) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, ...attrs })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mVideo) return video({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
+  if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mAudio) return audio({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
+  if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' })
-  return fallbackSrc ? img({ src: fallbackSrc }) : null
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: attrs.class || 'post-image' })
+  return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
 }
 
 const userId = config.keys.id
@@ -538,21 +538,30 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                     div({ class: "tribe-card-image-wrapper" },
                       a({ href: `/market/${encodeURIComponent(item.id)}` },
                         renderMediaBlob(item.image, '/assets/images/default-market.png', { class: 'tribe-card-hero-image' })
-                      ),
-                      form({ method: 'GET', action: `/market/${encodeURIComponent(item.id)}`, class: 'tribe-visit-btn-wrapper' },
-                        input({ type: "hidden", name: "returnTo", value: returnTo }),
-                        input({ type: "hidden", name: "filter", value: filter || "all" }),
-                        input({ type: "hidden", name: "q", value: q }),
-                        input({ type: "hidden", name: "minPrice", value: String(minPrice ?? "") }),
-                        input({ type: "hidden", name: "maxPrice", value: String(maxPrice ?? "") }),
-                        input({ type: "hidden", name: "sort", value: sort }),
-                        button({ type: 'submit', class: 'filter-btn' }, String(i18n.marketVisitItem || 'VISIT ITEM').toUpperCase())
                       )
                     ),
                     div({ class: "tribe-card-body" },
-                      span({ class: "market-card-kind" }, String(item.item_type || "").toUpperCase()),
-                      h2({ class: "tribe-card-title" }, a({ href: `/market/${encodeURIComponent(item.id)}` }, item.title)),
-                      div({ class: "market-card-price" }, `${item.price} ECO`)
+                      div({ class: "shop-title-row" },
+                        h2({ class: "tribe-card-title" }, a({ href: `/market/${encodeURIComponent(item.id)}` }, item.title))
+                      ),
+                      div({ class: "card-chips-row" },
+                        renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
+                        item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
+                        item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
+                        renderLifespanChip(item.lifetime, i18n)
+                      ),
+                      div({ class: "market-card-price card-date-highlight" }, `${item.price} ECO`),
+                      div({ class: "card-visit-btn-centered" },
+                        form({ method: 'GET', action: `/market/${encodeURIComponent(item.id)}` },
+                          input({ type: "hidden", name: "returnTo", value: returnTo }),
+                          input({ type: "hidden", name: "filter", value: filter || "all" }),
+                          input({ type: "hidden", name: "q", value: q }),
+                          input({ type: "hidden", name: "minPrice", value: String(minPrice ?? "") }),
+                          input({ type: "hidden", name: "maxPrice", value: String(maxPrice ?? "") }),
+                          input({ type: "hidden", name: "sort", value: sort }),
+                          button({ type: 'submit', class: 'filter-btn' }, i18n.viewItem || i18n.marketVisitItem || 'View Item')
+                        )
+                      )
                     )
                   )
                 })
@@ -601,93 +610,123 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.marketCreateButton)
         )
       ),
-      div(
-        { class: "tags-header" },
-        topbar ? topbar : null,
-        h2(item.title),
-        renderCardField(`${i18n.marketItemType}:`, `${String(item.item_type || "").toUpperCase()}`),
-        item.shopId && item.shopTitle
-          ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.marketShopLabel || "Shop"}:`), span({ class: "card-value" }, a({ href: `/shops/${encodeURIComponent(item.shopId)}`, class: "user-link" }, item.shopTitle)))
-          : null,
-        renderCardField(`${i18n.marketItemStatus}:`, item.status),
-        renderCountdownField(item),
-        renderCardField(`${i18n.marketItemCondition}:`, item.item_status),
-        br(),
-        div(
-          { class: "market-item image" },
-          renderMediaBlob(item.image, "/assets/images/default-market.png")
-        ),
-        renderCardField(`${i18n.marketItemDescription}:`, ""),
-        p(...renderUrl(item.description)),
-        item.tags && item.tags.length
+      (() => {
+        const isHidden = String(item.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN'
+        const chips = [
+          renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
+          item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
+          item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
+          isHidden ? renderStateChip("closed", "🚫", i18n.visibilityHidden || "HIDDEN") : null,
+          renderLifespanChip(item.lifetime, i18n),
+          renderEcoTax(item.msgSize, item.id)
+        ].filter(Boolean)
+
+        const tagsNode = item.tags && item.tags.length
           ? div({ class: "card-tags" }, item.tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
-          : null,
-        br(),
-        renderCardField(`${i18n.marketItemPrice}:`, ""),
-        br(),
-        div({ class: "card-label" }, h2(`${item.price} ECO`)),
-        br(),
-        renderStockBar(item.stock, maxStock),
-        br(),
-        renderCardField(`${i18n.marketItemIncludesShipping}:`, `${item.includesShipping ? i18n.YESLabel : i18n.NOLabel}`),
-        renderMapEmbedWithZoom(params.mapData, item.mapUrl, `/market/${encodeURIComponent(item.id)}`, params.zoom),
-        item.deadline ? renderCardField(`${i18n.marketItemAvailable}:`, `${moment(item.deadline).format("YYYY/MM/DD HH:mm:ss")}`) : null,
-        renderCardFieldRich(`${i18n.marketItemSeller}:`, [userLink(item.seller)]),
-        String(item.seller) === String(userId)
+          : null
+
+        const infoRows = []
+        const pushRow = (labelText, valueNode) =>
+          infoRows.push(tr(
+            td({ class: "tribe-info-label" }, labelText),
+            td({ class: "tribe-info-value" }, valueNode)
+          ))
+        pushRow(i18n.marketItemSeller, userLink(item.seller))
+        if (item.shopId && item.shopTitle) pushRow(i18n.marketShopLabel || "Shop", a({ href: `/shops/${encodeURIComponent(item.shopId)}`, class: "user-link" }, item.shopTitle))
+        if (item.deadline) pushRow(i18n.marketItemAvailable, moment(item.deadline).format("YYYY/MM/DD HH:mm:ss"))
+
+        const itemSide = div({ class: "tribe-side" },
+          div({ class: "shop-title-row" },
+            h2({ class: "tribe-card-title" }, item.title)
+          ),
+          chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+          div({ class: "card-spread-centered" }, renderSpreadButton(item.id, params.spreads)),
+          renderMediaBlob(item.image, "/assets/images/default-market.png"),
+          div({ class: "card-date-highlight" }, `${item.price} ECO`),
+          renderStockBar(item.stock, maxStock),
+          table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+          tagsNode
+        )
+
+        const visibilityToggle = String(item.seller) === String(userId)
           ? (() => {
-              const vis = (item.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC';
-              const next = vis === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC';
-              return div({ class: "card-field" },
-                span({ class: "card-label" }, `${i18n.visibilityLabel || 'Visibility'}: `),
-                span({ class: vis === 'PUBLIC' ? 'visibility-public' : 'visibility-hidden' },
-                  vis === 'PUBLIC' ? (i18n.visibilityPublic || 'Public') : (i18n.visibilityHidden || 'Hidden')
-                ),
-                " ",
-                form({ method: "POST", action: `/market/visibility/${encodeURIComponent(item.id)}`, class: "inline-form" },
-                  input({ type: "hidden", name: "visibility", value: next }),
-                  button({ type: "submit", class: "filter-btn" },
-                    next === 'PUBLIC' ? (i18n.visibilityMakePublic || 'Make public') : (i18n.visibilityMakeHidden || 'Make hidden')
-                  )
+              const vis = isHidden ? 'HIDDEN' : 'PUBLIC'
+              const next = vis === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC'
+              return form({ method: "POST", action: `/market/visibility/${encodeURIComponent(item.id)}`, class: "inline-form" },
+                input({ type: "hidden", name: "visibility", value: next }),
+                button({ type: "submit", class: "filter-btn" },
+                  next === 'PUBLIC' ? (i18n.visibilityMakePublic || 'Make public') : (i18n.visibilityMakeHidden || 'Make hidden')
                 )
-              );
+              )
             })()
           : null
-      ),
-      item.item_type === "auction"
-        ? div(
-            { class: "auction-info" },
-            p({ class: "auction-bid-text" }, i18n.marketAuctionBids),
-            parsedBids.length
-              ? table(
-                  { class: "auction-bid-table" },
-                  tr(th(i18n.marketAuctionBidTime), th(i18n.marketAuctionUser), th(i18n.marketAuctionBidAmount)),
-                  parsedBids.map((bid) =>
-                    tr(td(moment(bid.time).format("YYYY-MM-DD HH:mm:ss")), td(a({ href: `/author/${encodeURIComponent(bid.bidder)}` }, bid.bidder)), td(`${parseFloat(bid.amount).toFixed(6)} ECO`))
-                  )
+
+        const marketActions = []
+        if (item.seller && String(item.seller) !== String(userId)) {
+          marketActions.push(form({ method: "GET", action: "/pm" },
+            input({ type: "hidden", name: "recipients", value: item.seller }),
+            button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
+          ))
+        }
+        if (String(item.seller) === String(userId)) {
+          marketActions.push(form({ method: "GET", action: `/market/edit/${encodeURIComponent(item.id)}` },
+            button({ type: "submit", class: "update-btn" }, i18n.marketUpdateButton || "Update")
+          ))
+          marketActions.push(form({ method: "POST", action: `/market/delete/${encodeURIComponent(item.id)}` },
+            button({ type: "submit", class: "delete-btn" }, i18n.marketDeleteButton || "Delete")
+          ))
+        }
+        if (visibilityToggle) marketActions.push(visibilityToggle)
+
+        const itemMain = div({ class: "tribe-main" },
+          marketActions.length ? div({ class: "tribe-side-actions" }, ...marketActions) : null,
+          renderCountdownField(item),
+          item.description
+            ? div({ class: "job-section" },
+                h2({ class: "job-section-title" }, i18n.marketItemDescription),
+                p({ class: "tribe-side-description" }, ...renderUrl(item.description))
+              )
+            : null,
+          item.mapUrl ? div({ class: "job-section" }, renderMapEmbedWithZoom(params.mapData, item.mapUrl, `/market/${encodeURIComponent(item.id)}`, params.zoom)) : null,
+          item.item_type === "auction"
+            ? div(
+                { class: "auction-info job-section" },
+                p({ class: "auction-bid-text" }, i18n.marketAuctionBids),
+                parsedBids.length
+                  ? table(
+                      { class: "auction-bid-table" },
+                      tr(th(i18n.marketAuctionBidTime), th(i18n.marketAuctionUser), th(i18n.marketAuctionBidAmount)),
+                      parsedBids.map((bid) =>
+                        tr(td(moment(bid.time).format("YYYY-MM-DD HH:mm:ss")), td(a({ href: `/author/${encodeURIComponent(bid.bidder)}` }, bid.bidder)), td(`${parseFloat(bid.amount).toFixed(6)} ECO`))
+                      )
+                    )
+                  : null,
+                item.status !== "SOLD" && item.status !== "DISCARDED"
+                  ? form(
+                      { method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
+                      input({ type: "hidden", name: "returnTo", value: returnTo }),
+                      input({ type: "number", name: "bidAmount", step: "0.000001", min: "0.000001", placeholder: i18n.marketYourBid, required: true }),
+                      br(),
+                      button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
+                    )
+                  : null
+              )
+            : null,
+          showBuy
+            ? div(
+                { class: "market-item actions" },
+                form(
+                  { method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
+                  input({ type: "hidden", name: "returnTo", value: "/inbox?filter=sent" }),
+                  button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
                 )
-              : null,
-            item.status !== "SOLD" && item.status !== "DISCARDED"
-              ? form(
-                  { method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
-                  input({ type: "hidden", name: "returnTo", value: returnTo }),
-                  input({ type: "number", name: "bidAmount", step: "0.000001", min: "0.000001", placeholder: i18n.marketYourBid, required: true }),
-                  br(),
-                  button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
-                )
-              : null
-          )
-        : null,
-      showBuy
-        ? div(
-            { class: "market-item actions" },
-            form(
-              { method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
-              input({ type: "hidden", name: "returnTo", value: "/inbox?filter=sent" }),
-              button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
-            )
-          )
-        : null,
-      renderMarketCommentsSection(item.id, returnTo, comments)
+              )
+            : null,
+          renderMarketCommentsSection(item.id, returnTo, comments)
+        )
+
+        return div({ class: "tribe-details" }, itemSide, itemMain)
+      })()
     )
   )
 }

@@ -199,6 +199,18 @@ const renderFeedCard = (feed) => {
             )
         ),
         div(
+            { class: "voting-buttons" },
+            opinionCategories.map((cat) =>
+                form(
+                    { method: "POST", action: `/feed/opinions/${encodeURIComponent(feed.key)}/${cat}` },
+                    button(
+                        { class: alreadyVoted ? "vote-btn disabled" : "vote-btn", type: "submit", ...(alreadyVoted ? { disabled: true } : {}) },
+                        `${i18n["vote" + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${content.opinions?.[cat] || 0}]`
+                    )
+                )
+            )
+        ),
+        div(
             { class: "card-comments-summary" },
             span({ class: "card-label" }, `${i18n.voteCommentsLabel || "Comments"}:`),
             span({ class: "card-value" }, String(commentCount)),

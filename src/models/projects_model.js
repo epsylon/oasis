@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = (getConfig().ssbLogStream && getConfig().ssbLogStream.limit) || 1000
 
 module.exports = ({ cooler }) => {
@@ -104,8 +105,7 @@ module.exports = ({ cooler }) => {
     for (const m of all) {
       const c = m && m.value && m.value.content
       if (!c) continue
-      if (c.type === "tombstone" && c.target) tomb.add(c.target)
-      if (c.type === TYPE && c.replaces) forward.set(c.replaces, m.key)
+if (c.type === TYPE && c.replaces) forward.set(c.replaces, m.key)
     }
 
     let cur = id
@@ -182,7 +182,9 @@ module.exports = ({ cooler }) => {
         createdAt: new Date().toISOString(),
         updatedAt: null,
         mapUrl: String(data.mapUrl || "").trim(),
-        clearnetPublic: data.clearnetPublic === true || data.clearnetPublic === 'true' || data.clearnetPublic === 'on'
+        clearnetPublic: data.clearnetPublic === true || data.clearnetPublic === 'true' || data.clearnetPublic === 'on',
+        opinions: {},
+        opinions_inhabitants: []
       }
 
       return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))
@@ -248,6 +250,22 @@ module.exports = ({ cooler }) => {
       }
 
       return publishReplace(ssbClient, current.id, updated)
+    },
+
+    async createOpinion(id, category) {
+      const categories = require('../backend/opinion_categories')
+      if (!categories.includes(category)) throw new Error('Invalid opinion category')
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const tip = await resolveTipId(id)
+      const project = await getById(tip)
+      const list = Array.isArray(project.opinions_inhabitants) ? project.opinions_inhabitants : []
+      if (list.includes(userId)) throw new Error('Already opined')
+      const opinions = Object.assign({}, project.opinions || {})
+      opinions[category] = (opinions[category] || 0) + 1
+      const content = { ...project, opinions, opinions_inhabitants: list.concat(userId) }
+      delete content.id
+      return publishReplace(ssbClient, tip, content)
     },
 
     async deleteProject(id) {
@@ -433,7 +451,7 @@ module.exports = ({ cooler }) => {
       const currentUserId = ssbClient.id
       const msgs = await getAllMsgs(ssbClient)
 
-      const tomb = new Set()
+      const tomb = buildValidatedTombstoneSet(msgs)
       const nodes = new Map()
       const parent = new Map()
       const child = new Map()
@@ -442,10 +460,7 @@ module.exports = ({ cooler }) => {
         const k = m && m.key
         const c = m && m.value && m.value.content
         if (!c) continue
-        if (c.type === "tombstone" && c.target) {
-          tomb.add(c.target)
-          continue
-        }
+        if (c.type === "tombstone") continue
         if (c.type !== TYPE) continue
         nodes.set(k, { key: k, ts: (m.value && m.value.timestamp) || 0, c })
         if (c.replaces) {

@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "description": "Oasis - Social Networking Utopia",
   "repository": {
     "type": "git",
@@ -56,6 +56,7 @@
     "node-llama-cpp": "^3.10.0",
     "non-private-ip": "^2.2.0",
     "open": "^8.4.2",
+    "openpgp": "^6.3.0",
     "packet-stream": "^2.0.6",
     "packet-stream-codec": "^1.2.0",
     "pdfjs-dist": "^5.2.133",

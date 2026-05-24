@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
@@ -55,7 +56,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       case 'votes':
         return [content?.question, content?.deadline, content?.status, ...(Object.values(content?.votes || {})), content?.totalVotes];
       case 'tribe':
-        return [content?.title, content?.description, content?.image, content?.location, ...(content?.tags || []), content?.isLARP, content?.isAnonymous, content?.members?.length, content?.createdAt, content?.author];
+        return [content?.title, content?.description, content?.image, content?.location, ...(content?.tags || []), content?.isAnonymous, content?.members?.length, content?.createdAt, content?.author];
       case 'audio':
         return [content?.url, content?.mimeType, content?.title, content?.description, ...(content?.tags || [])];
       case 'image':
@@ -285,7 +286,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       );
     });
 
-    const tombstoned = new Set(messages.filter(m => m.value?.content?.type === 'tombstone').map(m => m.value.content.target));
+    const tombstoned = buildValidatedTombstoneSet(messages);
     const replacesMap = new Map();
     const latestByKey = new Map();
 

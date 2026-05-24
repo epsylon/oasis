@@ -75,7 +75,6 @@ const renderAgendaItem = (item, userId, filter) => {
     details = [
       renderCardField(i18n.agendaAnonymousLabel + ":", item.isAnonymous ? i18n.agendaYes : i18n.agendaNo),
       renderCardField(i18n.agendaInviteModeLabel + ":", (item.inviteMode ? String(item.inviteMode).toUpperCase() : i18n.noInviteMode)),
-      renderCardField(i18n.agendaLARPLabel + ":", item.isLARP ? i18n.agendaYes : i18n.agendaNo),
       renderCardField(i18n.agendaLocationLabel + ":", item.location || i18n.noLocation),
       renderCardField(i18n.agendaMembersCount + ":", Array.isArray(item.members) ? item.members.length : 0),
       br()
@@ -186,15 +185,21 @@ const renderAgendaItem = (item, userId, filter) => {
     }
   }
 
-  return div({ class: 'agenda-item card' },
-    h2(`[${String(item.type || '').toUpperCase()}] ${item.title || item.name || item.concept || ''}`),
-    form({ method: "GET", action: getViewDetailsAction(item) },
-      button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+  return div({ class: 'agenda-item trending-card' },
+    div({ class: 'card-chips-row' },
+      span({ class: 'pm-exposition-chip pm-exposition-whole' },
+        span({ class: 'pm-exposition-text' }, String(item.type || '').toUpperCase())
+      )
     ),
-    actionButton,
-    br(),
-    ...details,
-    br(),
+    div({ class: 'card-section' },
+      form({ method: "GET", action: getViewDetailsAction(item) },
+        button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+      ),
+      actionButton,
+      br(),
+      h2(item.title || item.name || item.concept || ''),
+      ...details
+    ),
     ...commonFields
   );
 };

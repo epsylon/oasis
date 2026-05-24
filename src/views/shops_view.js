@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink} = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -70,39 +70,27 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
     div({ class: "tribe-card-image-wrapper" },
       a({ href: `/shops/${encodeURIComponent(shop.key)}` },
         renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-card-hero-image' })
-      ),
-      form({ method: 'GET', action: `/shops/${encodeURIComponent(shop.key)}`, class: 'tribe-visit-btn-wrapper' },
-        button({ type: 'submit', class: 'filter-btn' }, String(i18n.shopVisitShop || 'VISIT SHOP').toUpperCase())
       )
     ),
     div({ class: "tribe-card-body" },
-      h2({ class: "tribe-card-title" }, a({ href: `/shops/${encodeURIComponent(shop.key)}` }, shop.title || i18n.shopUntitled)),
-      shop.shortDescription ? p({ class: "tribe-card-description" }, shop.shortDescription) : null,
-      renderMapLocationVisitLabel(shop.mapUrl),
-      br(),
-      table({ class: "tribe-info-table" },
-        tr(
-          td({ class: "tribe-info-label" }, i18n.shopStatus || "STATUS"),
-          td({ class: "tribe-info-value", colspan: "3" }, shop.visibility === "CLOSED" ? i18n.shopClosed : i18n.shopOpen)
-        ),
-        shop.location ? tr(
-          td({ class: "tribe-info-label" }, i18n.shopLocation),
-          td({ class: "tribe-info-value", colspan: "3" }, ...renderUrl(shop.location))
-        ) : null
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" }, a({ href: `/shops/${encodeURIComponent(shop.key)}` }, shop.title || i18n.shopUntitled))
+      ),
+      div({ class: "card-chips-row" },
+        shop.visibility === "CLOSED"
+          ? renderStateChip("closed", "✗", i18n.shopClosed)
+          : renderStateChip("mutuals", "✓", i18n.shopOpen),
+        renderLifespanChip(shop.lifetime, i18n)
       ),
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
       ),
-      safeArr(shop.featuredProducts).length
-        ? div({ class: "shop-featured-products" },
-            safeArr(shop.featuredProducts).slice(0, 4).map(prod =>
-              a({ href: `/shops/product/${encodeURIComponent(prod.key)}?shopId=${encodeURIComponent(prod.shopId)}`, class: "shop-featured-item" },
-                prod.image ? renderMediaBlob(prod.image, null, { class: "shop-featured-thumb" }) : null,
-                span({ class: "shop-featured-price" }, `${Number(prod.price || 0).toFixed(6)} ECO`)
-              )
-            )
-          )
-        : null
+      div({ class: "card-spread-centered" }, renderSpreadButton(shop.key, params.spreadMap && params.spreadMap.get(shop.key))),
+      div({ class: "card-visit-btn-centered" },
+        form({ method: 'GET', action: `/shops/${encodeURIComponent(shop.key)}` },
+          button({ type: 'submit', class: 'filter-btn' }, i18n.viewShop || i18n.shopVisitShop || 'View Shop')
+        )
+      )
     )
   )
 }
@@ -194,7 +182,7 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       label(i18n.blogImage || "Upload media (max-size: 50MB)"), br,
       input({ type: "file", name: "image", accept: "image/*,video/*" }), br(), br(),
       label(i18n.shopUrl), br,
-      input({ type: "text", name: "url", placeholder: i18n.shopUrlPlaceholder || "https://your-shop-url.com", value: shop.url || "" }), br,
+      input({ type: "text", name: "url", placeholder: "https://", value: shop.url || "" }), br,
       label(i18n.shopLocation), br,
       input({ type: "text", name: "location", placeholder: i18n.shopLocationPlaceholder || "City, Country", value: shop.location || "" }), br,
       label(i18n.mapLocationTitle || "Map Location"), br,
@@ -268,7 +256,8 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
       h2(title),
       p(i18n.shopDescription)
     ),
-    div({ class: "shop-title-row" }, renderReachChip(viewerClearnet, i18n))
+    div({ class: "shop-title-row" }, renderReachChip(viewerClearnet, i18n)),
+    br()
   ]
 
   const searchBar = div({ class: "filters" },
@@ -303,7 +292,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
             )
           : div({ class: "tribe-grid" },
               list.length
-                ? list.map(shop => renderShopCard(shop, filter, { q, sort }))
+                ? list.map(shop => renderShopCard(shop, filter, { q, sort, spreadMap: params.spreadMap }))
                 : p(i18n.shopNoItems)
             )
     )
@@ -320,16 +309,21 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
   const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetShops && shop.visibility !== 'CLOSED');
   const shopSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
-      h2(shop.title || i18n.shopUntitled),
+      h2({ class: "tribe-card-title" }, shop.title || i18n.shopUntitled)
+    ),
+    div({ class: "card-chips-row" },
+      shop.visibility === "CLOSED"
+        ? renderStateChip("closed", "✗", i18n.shopClosed)
+        : renderStateChip("mutuals", "✓", i18n.shopOpen),
+      renderLifespanChip(shop.lifetime, i18n),
       renderReachChip(isClearnet, i18n)
     ),
+    div({ class: "card-spread-centered" }, renderSpreadButton(shop.key, params.spreads)),
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
+    shop.description ? p({ class: "tribe-side-description" }, ...renderUrl(shop.description)) : null,
     div({ class: "shop-share" },
       span({ class: "tribe-info-label" }, `${i18n.shopShareUrl}: `),
       input({ type: "text", value: fullShareUrl, readonly: true, class: "shop-share-input" })
-    ),
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
     ),
     table({ class: "tribe-info-table" },
       tr(
@@ -352,8 +346,10 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         td({ class: "tribe-info-value", colspan: "3" }, ...renderUrl(shop.url))
       ) : null
     ),
-    shop.description ? p({ class: "tribe-side-description" }, ...renderUrl(shop.description)) : null,
     renderMapEmbed(params.mapData, shop.mapUrl),
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
+    ),
     div({ class: "tribe-side-actions" },
       renderFavoriteToggle(shop, returnTo),
       shop.author && String(shop.author) !== String(userId)

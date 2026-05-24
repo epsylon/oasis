@@ -7,6 +7,8 @@ let _inboxUnread = null;
 let _lastSyncTs = null;
 let _ecoValue = null;
 let _lastActivity = null;
+let _maxBlockBytes = 0;
+let _inhabitantCount = 0;
 module.exports = {
   getInboxCount: () => _inboxCount,
   setInboxCount: (n) => { _inboxCount = n; },
@@ -25,5 +27,9 @@ module.exports = {
   getEcoValue: () => _ecoValue,
   setEcoValue: (v) => { _ecoValue = v; },
   getLastActivity: () => _lastActivity,
-  setLastActivity: (a) => { _lastActivity = a; }
+  setLastActivity: (a) => { _lastActivity = a; },
+  getMaxBlockBytes: () => _maxBlockBytes,
+  setMaxBlockBytes: (n) => { if (Number(n) > _maxBlockBytes) _maxBlockBytes = Number(n); },
+  getInhabitantCount: () => _inhabitantCount,
+  setInhabitantCount: (n) => { _inhabitantCount = Math.max(0, Number(n) || 0); }
 };

@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 const opinionCategories = require("../backend/opinion_categories");
@@ -179,6 +179,7 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
             renderDocumentActions(filter, doc, params)
           ),
           title ? h2(title) : null,
+          doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
           doc?.url
             ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
             : p(i18n.documentNoFile),
@@ -197,6 +198,7 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
               button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
             )
           ),
+          div({ class: "card-spread-left" }, renderSpreadButton(doc.key, (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads)),
           br(),
           (() => {
             const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
@@ -284,13 +286,14 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
     section(
       div({ class: "tags-header" },
         h2(title),
-        p(i18n.documentDescription),
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetDocuments);
-          return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-        })()
+        p(i18n.documentDescription)
       ),
+      (() => {
+        const { renderReachChip } = require('./clearnet_view');
+        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetDocuments);
+        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+      })(),
+      br(),
       div(
         { class: "filters" },
         form(
@@ -344,46 +347,101 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   const sort = safeText(params.sort || "recent");
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
-  const isAuthor = String(doc.author) === String(userId);
-  const hasOpinions = Object.keys(doc.opinions || {}).length > 0;
-
   const title = safeText(doc.title);
   const pdfId = safeDomId("pdf-container-", doc.key);
+  const isAuthor = String(doc.author) === String(userId);
+  const hasOpinions = Object.keys(doc.opinions || {}).length > 0;
+  const { renderReachChip } = require('./clearnet_view');
+  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetDocuments);
 
-  const topbarLeft =
-    doc.author && String(doc.author) !== String(userId)
-      ? div(
-          { class: "bookmark-topbar-left" },
-          form(
-            { method: "GET", action: "/pm" },
-            input({ type: "hidden", name: "recipients", value: doc.author }),
-            button({ type: "submit", class: "filter-btn" }, i18n.documentMessageAuthorButton)
+  const chips = [
+    renderLifespanChip(doc.lifetime, i18n),
+    doc.sizeBytes ? renderEcoTax(doc.sizeBytes, doc.key) : null
+  ].filter(Boolean);
+
+  const sideActions = [];
+  sideActions.push(renderFavoriteToggle(doc, returnTo));
+  if (doc.author && String(doc.author) !== String(userId)) {
+    sideActions.push(form(
+      { method: "GET", action: "/pm" },
+      input({ type: "hidden", name: "recipients", value: doc.author }),
+      button({ type: "submit", class: "filter-btn" }, i18n.documentMessageAuthorButton)
+    ));
+  }
+  if (isAuthor && !hasOpinions) {
+    sideActions.push(form(
+      { method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ class: "update-btn", type: "submit" }, i18n.documentUpdateButton)
+    ));
+  }
+  if (isAuthor) {
+    sideActions.push(form(
+      { method: "POST", action: `/documents/delete/${encodeURIComponent(doc.key)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ class: "delete-btn", type: "submit" }, i18n.documentDeleteButton)
+    ));
+  }
+
+  const tagsNode = renderTags(doc.tags);
+
+  const docSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      title ? h2({ class: "tribe-card-title" }, title) : null,
+      renderReachChip(isClearnet, i18n)
+    ),
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    safeText(doc.description)
+      ? p({ class: "tribe-side-description" }, ...renderUrl(doc.description))
+      : null,
+    tagsNode,
+    div({ class: "card-spread-centered" }, renderSpreadButton(doc.key, params.spreads))
+  );
+
+  const docMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    doc?.url
+      ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
+      : p(i18n.documentNoFile),
+    div({ class: "voting-buttons" },
+      opinionCategories.map((category) =>
+        form(
+          { method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          button(
+            { class: "vote-btn" },
+            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${doc.opinions?.[category] || 0}]`
           )
         )
-      : null;
+      )
+    ),
+    (() => {
+      const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
+      const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
+      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
-  const topbarRight = div(
-    { class: "bookmark-actions" },
-    renderFavoriteToggle(doc, returnTo),
-    isAuthor && !hasOpinions
-      ? form(
-          { method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ class: "update-btn", type: "submit" }, i18n.documentUpdateButton)
-        )
-      : null,
-    isAuthor
-      ? form(
-          { method: "POST", action: `/documents/delete/${encodeURIComponent(doc.key)}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ class: "delete-btn", type: "submit" }, i18n.documentDeleteButton)
-        )
-      : null
+      return p(
+        { class: "card-footer" },
+        span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+        userLink(doc.author),
+        showUpdated
+          ? span(
+              { class: "votations-comment-date" },
+              ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+            )
+          : null
+      );
+    })(),
+    renderDocumentCommentsSection(doc.key, doc.rootId || doc.key, comments, returnTo)
   );
 
   const tpl = template(
     i18n.documentTitle,
     section(
+      div({ class: "tags-header" },
+        h2(i18n.documentAllSectionTitle || i18n.documentTitle),
+        p(i18n.documentDescription)
+      ),
       div(
         { class: "filters" },
         form(
@@ -401,54 +459,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.documentCreateButton)
         )
       ),
-      div(
-        { class: "bookmark-item card" },
-        div({ class: "bookmark-topbar" }, topbarLeft, topbarRight),
-        title ? h2(title) : null,
-        doc?.url
-          ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
-          : p(i18n.documentNoFile),
-        safeText(doc.description) ? p(...renderUrl(doc.description)) : null,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetDocuments);
-          return div({ class: 'shop-title-row' }, renderReachChip(isClearnet, i18n));
-        })(),
-        renderTags(doc.tags),
-        br(),
-        (() => {
-          const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
-          const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
-          const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-          return p(
-            { class: "card-footer" },
-            span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            userLink(doc.author),
-            showUpdated
-              ? span(
-                  { class: "votations-comment-date" },
-                  ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
-                )
-              : null
-          );
-        })(),
-        div({ class: "spread-row" }, renderSpreadButton(doc.key, params.spreads)),
-        div(
-          { class: "voting-buttons" },
-          opinionCategories.map((category) =>
-            form(
-              { method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              button(
-                { class: "vote-btn" },
-                `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${doc.opinions?.[category] || 0}]`
-              )
-            )
-          )
-        )
-      ),
-      div({ id: "comments" }, renderDocumentCommentsSection(doc.key, doc.rootId || doc.key, comments, returnTo))
+      div({ class: "tribe-details" }, docSide, docMain)
     )
   );
 

@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
+const { buildValidatedTombstoneSet } = require('./tombstone_validator')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const N = (s) => String(s || "").toUpperCase().replace(/\s+/g, "_")
@@ -70,17 +71,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const ssbClient = await openSsb()
     const messages = await readAll(ssbClient)
 
-    const tomb = new Set()
+    const tomb = buildValidatedTombstoneSet(messages)
     const fwd = new Map()
     const parent = new Map()
 
     for (const m of messages) {
       const c = m.value && m.value.content
       if (!c) continue
-      if (c.type === "tombstone" && c.target) {
-        tomb.add(c.target)
-        continue
-      }
+      if (c.type === "tombstone") continue
       if (c.type !== "market") continue
       if (c.replaces) {
         fwd.set(c.replaces, m.key)
@@ -247,7 +245,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const userId = ssbClient.id
       const messages = await readAll(ssbClient)
 
-      const tomb = new Set()
+      const tomb = buildValidatedTombstoneSet(messages)
       const nodes = new Map()
       const parent = new Map()
       const child = new Map()
@@ -256,10 +254,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         const k = m.key
         const c = m.value && m.value.content
         if (!c) continue
-        if (c.type === "tombstone" && c.target) {
-          tomb.add(c.target)
-          continue
-        }
+        if (c.type === "tombstone") continue
         if (c.type !== "market") continue
         nodes.set(k, { key: k, ts: (m.value && m.value.timestamp) || m.timestamp || 0, c })
         if (c.replaces) {
@@ -397,7 +392,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const userId = ssbClient.id
       const messages = await readAll(ssbClient)
 
-      const tomb = new Set()
+      const tomb = buildValidatedTombstoneSet(messages)
       const nodes = new Map()
       const parent = new Map()
       const child = new Map()
@@ -406,10 +401,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         const k = m.key
         const c = m.value && m.value.content
         if (!c) continue
-        if (c.type === "tombstone" && c.target) {
-          tomb.add(c.target)
-          continue
-        }
+        if (c.type === "tombstone") continue
         if (c.type !== "market") continue
         nodes.set(k, { key: k, ts: (m.value && m.value.timestamp) || m.timestamp || 0, c })
         if (c.replaces) {

@@ -1,4 +1,4 @@
-const { form, button, div, h2, p, section, select, option, input, br, a, label } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, select, option, input, br, a, label, span } = require("../server/node_modules/hyperaxe");
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
@@ -22,6 +22,9 @@ const settingsView = ({ version, aiPrompt }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
+  let serverConfig = {};
+  try { serverConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '../configs/server-config.json'), 'utf8')); } catch (_) {}
+  const currentHops = (serverConfig.friends && Number.isFinite(serverConfig.friends.hops)) ? serverConfig.friends.hops : 2;
   const walletUrl = currentConfig.wallet.url;
   const walletUser = currentConfig.wallet.user;
   const walletFee = currentConfig.wallet.fee;
@@ -106,6 +109,27 @@ const settingsView = ({ version, aiPrompt }) => {
     ),
     section(
       div({ class: "tags-header" },
+        h2(i18n.uxModeTitle || "UX"),
+        p(i18n.uxModeDescription || "Select which UX navigation mode you want for your GUI."),
+        form(
+          { action: "/settings/ux", method: "POST" },
+          (() => {
+            const aiNavEnabled = currentConfig.modules && currentConfig.modules.aiNavMod === 'on';
+            const opts = [
+              option({ value: "blocks", selected: (currentConfig.ux?.current !== "ainav") ? true : undefined }, i18n.uxModeMenus || "Blocks")
+            ];
+            if (aiNavEnabled) {
+              opts.push(option({ value: "ainav", selected: currentConfig.ux?.current === "ainav" ? true : undefined }, i18n.uxModeAINav || "AI"));
+            }
+            return select({ name: "ux" }, ...opts);
+          })(),
+          br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    section(
+      div({ class: "tags-header" },
         h2(i18n.homePageTitle),
         p(i18n.homePageDescription),
         form(
@@ -146,6 +170,49 @@ const settingsView = ({ version, aiPrompt }) => {
         button({ type: "submit" }, i18n.saveSettings)
       )
      )
+    ),
+    section(
+      div({ class: "tags-header" },
+        h2(i18n.settingsReplicationTitle || 'Replication'),
+        p(i18n.settingsReplicationDesc || 'Configure the number of hops your peer follows out from your own feed when replicating content.'),
+        form(
+          { action: "/settings/replication", method: "POST" },
+          label({ for: "replication_hops" }, i18n.settingsReplicationHopsLabel || 'Hops'),
+          br(),
+          input({
+            type: "number",
+            id: "replication_hops",
+            name: "hops",
+            min: 0,
+            max: 6,
+            value: currentHops
+          }),
+          br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    section(
+      div({ class: "tags-header" },
+        h2(i18n.settingsLanTitle || 'LAN Broadcasting'),
+        p(i18n.settingsLanDesc || 'Periodically announce this peer to other Oasis instances on the same local network. Disable to stop UDP broadcasts.'),
+        form(
+          { action: "/settings/lan-broadcasting", method: "POST" },
+          label({ for: "lanBroadcasting", class: "lan-checkbox-label" },
+            input({
+              type: "checkbox",
+              id: "lanBroadcasting",
+              name: "lanBroadcasting",
+              value: "on",
+              class: "lan-checkbox-input",
+              checked: currentConfig.lanBroadcasting !== false ? true : undefined
+            }),
+            span({ class: "lan-checkbox-text" }, i18n.settingsLanEnable || 'Enable LAN broadcasting')
+          ),
+          br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
     ),
     section(
       div({ class: "tags-header" },

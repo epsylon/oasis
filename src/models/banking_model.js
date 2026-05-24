@@ -4,6 +4,7 @@ const path = require("path");
 const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const { config } = require("../server/SSB_server.js");
+const sharedState = require("../configs/shared-state.js");
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
@@ -14,8 +15,7 @@ const DEFAULT_RULES = {
   alpha: 0.2,
   reserveMin: 500,
   capPerEpoch: 2000,
-  caps: { M_max: 3, T_max: 1.5, P_max: 2, cap_user_epoch: 50, w_min: 0.2, w_max: 6 },
-  coeffs: { a1: 0.6, a2: 0.4, a3: 0.3, a4: 0.5, b1: 0.5, b2: 1.0 },
+  caps: { cap_user_epoch: 50, floor_user: 1, w_min: 0.2, w_max: 6 },
   graceDays: 30
 };
 
@@ -26,6 +26,15 @@ const ADDR_PATH = path.join(STORAGE_DIR, "wallet-addresses.json");
 const ECO_HISTORY_PATH = path.join(STORAGE_DIR, "banking-eco-history.json");
 const ECO_HISTORY_MAX = 500;
 const ECO_HISTORY_MIN_GAP_MS = 5 * 60 * 1000;
+
+const ECOIN_PER_GRAM_CO2 = 0.1;
+const ECOIN_PER_DAY_OF_HISTORY = 0.001;
+const ONE_DAY_MS = 86400000;
+const ONE_MIB = 1024 * 1024;
+const carbonGramsFromBytes = (b) => (Number(b) || 0) / ONE_MIB * 0.095;
+const ecoinTaxFromGrams = (g) => (Number(g) || 0) * ECOIN_PER_GRAM_CO2;
+const ecoinTaxFromBytes = (b) => ecoinTaxFromGrams(carbonGramsFromBytes(b));
+const archTaxFromDays = (days) => Math.max(0, Number(days) || 0) * ECOIN_PER_DAY_OF_HISTORY;
 
 function ensureStoreFiles() {
   if (!fs.existsSync(STORAGE_DIR)) fs.mkdirSync(STORAGE_DIR, { recursive: true });
@@ -584,6 +593,152 @@ async function getCarbonGramsForUser(userId) {
   });
 }
 
+async function getBytesForUser(userId) {
+  const ssb = await openSsb();
+  if (!ssb || !userId) return 0;
+  return new Promise((resolve) => {
+    let bytes = 0;
+    pull(
+      ssb.createUserStream({ id: userId }),
+      pull.drain(
+        (m) => { try { bytes += Buffer.byteLength(JSON.stringify(m && m.value), 'utf8'); } catch (_) {} },
+        () => resolve(bytes)
+      )
+    );
+  });
+}
+
+let _ecoTaxStatsCache = null;
+const ECO_TAX_STATS_TTL_MS = 60 * 1000;
+
+async function calculateEcoTaxStatsInternal() {
+  const ssb = await (async () => {
+    try { return await openSsb(); } catch (_) { return null; }
+  })();
+  if (!ssb) return null;
+  return new Promise((resolve) => {
+    let totalBytes = 0;
+    let totalBlocks = 0;
+    let maxBlockBytes = 0;
+    let oldestTs = Infinity;
+    let newestTs = 0;
+    pull(
+      ssb.createLogStream({}),
+      pull.drain(
+        (m) => {
+          try {
+            const v = m && m.value;
+            if (!v) return;
+            totalBlocks += 1;
+            const size = Buffer.byteLength(JSON.stringify(v), 'utf8');
+            totalBytes += size;
+            if (size > maxBlockBytes) maxBlockBytes = size;
+            const ts = Number(v.timestamp || 0);
+            if (ts && ts < oldestTs) oldestTs = ts;
+            if (ts && ts > newestTs) newestTs = ts;
+          } catch (_) {}
+        },
+        () => {
+          const totalGramsCO2 = carbonGramsFromBytes(totalBytes);
+          const totalEcoinTax = ecoinTaxFromGrams(totalGramsCO2);
+          const spanMs = (newestTs && oldestTs && oldestTs !== Infinity) ? Math.max(1, newestTs - oldestTs) : 1;
+          const spanDays = spanMs / 86400000;
+          const annualEcoinTax = spanDays > 0 ? totalEcoinTax * (365 / spanDays) : totalEcoinTax;
+          const monthlyEcoinTax = annualEcoinTax / 12;
+          try { sharedState.setMaxBlockBytes(maxBlockBytes); } catch (_) {}
+          const ecoTaxes = {
+            lifetime: Number(totalEcoinTax.toFixed(6)),
+            annual: Number(annualEcoinTax.toFixed(6)),
+            monthly: Number(monthlyEcoinTax.toFixed(6))
+          };
+          const archLifetime = archTaxFromDays(spanDays);
+          const archAnnual = archTaxFromDays(365);
+          const archMonthly = archTaxFromDays(365 / 12);
+          const archTaxes = {
+            lifetime: Number(archLifetime.toFixed(6)),
+            annual: Number(archAnnual.toFixed(6)),
+            monthly: Number(archMonthly.toFixed(6))
+          };
+          const byType = { eco: ecoTaxes, arch: archTaxes };
+          const totals = {
+            lifetimeEcoinTax: Number(Object.values(byType).reduce((s, t) => s + (t.lifetime || 0), 0).toFixed(6)),
+            annualEcoinTax: Number(Object.values(byType).reduce((s, t) => s + (t.annual || 0), 0).toFixed(6)),
+            monthlyEcoinTax: Number(Object.values(byType).reduce((s, t) => s + (t.monthly || 0), 0).toFixed(6))
+          };
+          resolve({
+            totalBlocks,
+            totalBytes,
+            maxBlockBytes,
+            totalGramsCO2: Number(totalGramsCO2.toFixed(6)),
+            totalEcoinTax: ecoTaxes.lifetime,
+            annualEcoinTax: ecoTaxes.annual,
+            monthlyEcoinTax: ecoTaxes.monthly,
+            byType,
+            totals,
+            spanDays: Number(spanDays.toFixed(3)),
+            oldestTs: oldestTs === Infinity ? 0 : oldestTs,
+            newestTs,
+            ecoinPerGramCO2: ECOIN_PER_GRAM_CO2,
+            ecoinPerDayOfHistory: ECOIN_PER_DAY_OF_HISTORY
+          });
+        }
+      )
+    );
+  });
+}
+
+async function calculateEcoTaxStats() {
+  const now = Date.now();
+  if (_ecoTaxStatsCache && (now - _ecoTaxStatsCache.ts) < ECO_TAX_STATS_TTL_MS) {
+    return _ecoTaxStatsCache.value;
+  }
+  const value = await calculateEcoTaxStatsInternal().catch(() => null);
+  if (value) _ecoTaxStatsCache = { ts: now, value };
+  return value || {
+    totalBlocks: 0, totalBytes: 0, totalGramsCO2: 0,
+    totalEcoinTax: 0, annualEcoinTax: 0, monthlyEcoinTax: 0,
+    byType: {
+      eco: { lifetime: 0, annual: 0, monthly: 0 },
+      arch: { lifetime: 0, annual: 0, monthly: 0 }
+    },
+    totals: { lifetimeEcoinTax: 0, annualEcoinTax: 0, monthlyEcoinTax: 0 },
+    spanDays: 0, oldestTs: 0, newestTs: 0,
+    ecoinPerGramCO2: ECOIN_PER_GRAM_CO2,
+    ecoinPerDayOfHistory: ECOIN_PER_DAY_OF_HISTORY
+  };
+}
+
+async function getUserEcoinTax(userId) {
+  const bytes = await getBytesForUser(userId).catch(() => 0);
+  return ecoinTaxFromBytes(bytes);
+}
+
+async function getUserFirstBlockTs(userId) {
+  const ssb = await openSsb();
+  if (!ssb || !userId) return 0;
+  return new Promise((resolve) => {
+    let first = 0;
+    pull(
+      ssb.createUserStream({ id: userId, limit: 1 }),
+      pull.drain(
+        (m) => { if (m && m.value && m.value.timestamp && !first) first = Number(m.value.timestamp); },
+        () => resolve(first || 0)
+      )
+    );
+  });
+}
+
+async function getUserArchTax(userId) {
+  const firstTs = await getUserFirstBlockTs(userId).catch(() => 0);
+  if (!firstTs) return 0;
+  const stats = await calculateEcoTaxStats().catch(() => null);
+  const newestTs = stats && Number.isFinite(stats.newestTs) && stats.newestTs > 0
+    ? stats.newestTs
+    : Date.now();
+  const ageDays = Math.max(0, (newestTs - firstTs) / ONE_DAY_MS);
+  return archTaxFromDays(ageDays);
+}
+
 async function getUserEngagementScore(userId) {
   const ssb = await openSsb();
   const uid = resolveUserId(userId);
@@ -663,9 +818,9 @@ async function getLastPublishedTimestamp(userId) {
 }
 
   function computePoolVars(pubBal, rules) {
-    const alphaCap = (rules.alpha || DEFAULT_RULES.alpha) * pubBal;
-    const available = Math.max(0, pubBal - (rules.reserveMin || DEFAULT_RULES.reserveMin));
-    const rawMin = Math.min(available, (rules.capPerEpoch || DEFAULT_RULES.capPerEpoch), alphaCap);
+    const alphaCap = (rules.alpha ?? DEFAULT_RULES.alpha) * pubBal;
+    const available = Math.max(0, pubBal - (rules.reserveMin ?? DEFAULT_RULES.reserveMin));
+    const rawMin = Math.min(available, (rules.capPerEpoch ?? DEFAULT_RULES.capPerEpoch), alphaCap);
     const pool = clamp(rawMin, 0, Number.MAX_SAFE_INTEGER);
     return { pubBal, alphaCap, available, rawMin, pool };
   }
@@ -675,9 +830,10 @@ async function getLastPublishedTimestamp(userId) {
     const pv = computePoolVars(pubBal, rules);
     const addresses = await listAddressesMerged();
     const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address));
-    const capUser = (rules.caps && rules.caps.cap_user_epoch) || DEFAULT_RULES.caps.cap_user_epoch;
-    const wMin = (rules.caps && rules.caps.w_min) || DEFAULT_RULES.caps.w_min;
-    const wMax = (rules.caps && rules.caps.w_max) || DEFAULT_RULES.caps.w_max;
+    const capUser = rules.caps?.cap_user_epoch ?? DEFAULT_RULES.caps.cap_user_epoch;
+    const wMin = rules.caps?.w_min ?? DEFAULT_RULES.caps.w_min;
+    const wMax = rules.caps?.w_max ?? DEFAULT_RULES.caps.w_max;
+    const floorUbi = rules.caps?.floor_user ?? DEFAULT_RULES.caps.floor_user ?? 1;
     const weights = [];
     for (const entry of eligible) {
       const score = await getUserEngagementScore(entry.id);
@@ -688,17 +844,27 @@ async function getLastPublishedTimestamp(userId) {
       weights.push({ user: userId, w: clamp(1 + score / 100, wMin, wMax) });
     }
     const W = weights.reduce((acc, x) => acc + x.w, 0) || 1;
-    const floorUbi = 1;
-    const allocations = weights.map(({ user, w }) => {
-      const amount = Math.max(floorUbi, Math.min(pv.pool * w / W, capUser));
-      return {
+    const allocations = [];
+    for (const { user, w } of weights) {
+      const gross = Math.max(floorUbi, Math.min(pv.pool * w / W, capUser));
+      const surplus = Math.max(0, gross - floorUbi);
+      const userEcoTax = await getUserEcoinTax(user).catch(() => 0);
+      const userArchTax = await getUserArchTax(user).catch(() => 0);
+      const userTotalTax = userEcoTax + userArchTax;
+      const taxedSurplus = Math.max(0, surplus - userTotalTax);
+      const amount = floorUbi + taxedSurplus;
+      allocations.push({
         id: `alloc:${epochId}:${user}`,
         epoch: epochId,
         user,
         weight: Number(w.toFixed(6)),
+        gross: Number(gross.toFixed(6)),
+        ecoTax: Number((userEcoTax || 0).toFixed(6)),
+        archTax: Number((userArchTax || 0).toFixed(6)),
+        totalTax: Number((userTotalTax || 0).toFixed(6)),
         amount: Number(amount.toFixed(6))
-      };
-    });
+      });
+    }
     const snapshot = JSON.stringify({ epochId, pool: pv.pool, weights, allocations, rules }, null, 2);
     const hash = crypto.createHash("sha256").update(snapshot).digest("hex");
     return { epoch: { id: epochId, pool: Number(pv.pool.toFixed(6)), weightsSum: Number(W.toFixed(6)), rules, hash }, allocations };
@@ -721,7 +887,7 @@ async function getLastPublishedTimestamp(userId) {
         concept: `UBI ${eid}`,
         status: "UNCLAIMED",
         createdAt: new Date().toISOString(),
-        deadline: new Date(Date.now() + (rules.graceDays || DEFAULT_RULES.graceDays) * 86400000).toISOString(),
+        deadline: new Date(Date.now() + ((rules.graceDays ?? DEFAULT_RULES.graceDays) * 86400000)).toISOString(),
         tags: ["UBI", `epoch:${eid}`],
         opinions: {}
       };
@@ -836,7 +1002,7 @@ async function getLastPublishedTimestamp(userId) {
   async function publishPubAvailability() {
     if (!isPubNode()) return;
     const balance = await safeGetBalance("pub");
-    const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user || 1);
+    const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user ?? 1);
     const available = Number(balance) >= floor;
     const ssb = await openSsb();
     if (!ssb || !ssb.publish) return;
@@ -868,7 +1034,7 @@ async function getLastPublishedTimestamp(userId) {
     let allocations;
     if (isPubNode()) {
       pubBalance = await safeGetBalance("pub");
-      const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user || 1);
+      const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user ?? 1);
       ubiAvailable = Number(pubBalance) >= floor;
       try { await publishPubAvailability(); } catch (_) {}
       const all = await transfersRepo.listByTag("UBI");
@@ -911,7 +1077,24 @@ async function getLastPublishedTimestamp(userId) {
     };
     const exchange = await calculateEcoinValue();
     const exchangeHistory = readEcoHistory();
-    return { summary, allocations, epochs, rules: DEFAULT_RULES, addresses, exchange, exchangeHistory };
+    let taxStats = null;
+    let userEcoinTax = 0;
+    if (filter === 'taxes' || filter === 'exchange' || filter === 'overview') {
+      try { taxStats = await calculateEcoTaxStats(); } catch (_) { taxStats = null; }
+      try { userEcoinTax = await getUserEcoinTax(uid); } catch (_) { userEcoinTax = 0; }
+    }
+    const taxRules = { ecoinPerGramCO2: ECOIN_PER_GRAM_CO2, gramsCO2PerMiB: 0.095, ecoinPerDayOfHistory: ECOIN_PER_DAY_OF_HISTORY };
+    let userArchTax = 0;
+    if (filter === 'taxes' || filter === 'exchange' || filter === 'overview') {
+      try { userArchTax = await getUserArchTax(uid); } catch (_) { userArchTax = 0; }
+    }
+    const userTotalTax = (userEcoinTax || 0) + (userArchTax || 0);
+    return {
+      summary, allocations, epochs, rules: DEFAULT_RULES, taxRules, addresses, exchange, exchangeHistory, taxStats,
+      userEcoinTax: Number((userEcoinTax || 0).toFixed(6)),
+      userArchTax: Number((userArchTax || 0).toFixed(6)),
+      userTotalTax: Number(userTotalTax.toFixed(6))
+    };
   }
 
   async function getAllocationById(id) {
@@ -1012,16 +1195,34 @@ async function getLastPublishedTimestamp(userId) {
       const pool = pv.pool || 0;
       const addresses = await listAddressesMerged();
       const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address));
-      const totalW = eligible.length > 0 ? eligible.length + eligible.length * (karmaScore / 100) : 1;
-      const userW = 1 + karmaScore / 100;
+      const wMin = DEFAULT_RULES.caps?.w_min ?? 0.2;
+      const wMax = DEFAULT_RULES.caps?.w_max ?? 6;
+      const userW = clamp(1 + karmaScore / 100, wMin, wMax);
+      const otherUsers = Math.max(0, eligible.length - 1);
+      const totalW = Math.max(1, userW + otherUsers);
       const cap = DEFAULT_RULES.caps?.cap_user_epoch ?? 50;
-      estimatedUBI = Math.min(pool * (userW / Math.max(1, totalW)), cap);
+      const floor = DEFAULT_RULES.caps?.floor_user ?? 1;
+      estimatedUBI = eligible.length > 0
+        ? Math.max(floor, Math.min(pool * (userW / totalW), cap))
+        : 0;
     } catch (_) {}
+    const uid = resolveUserId(userId);
+    const userEcoinTax = await getUserEcoinTax(uid).catch(() => 0);
+    const userArchTax = await getUserArchTax(uid).catch(() => 0);
+    const userTotalTax = userEcoinTax + userArchTax;
+    const estimatedUBIBeforeTax = estimatedUBI;
+    const baseFloor = DEFAULT_RULES.caps?.floor_user ?? 1;
+    const surplus = Math.max(0, estimatedUBI - baseFloor);
+    estimatedUBI = baseFloor + Math.max(0, surplus - userTotalTax);
     const claimHistory = await getUbiClaimHistory(userId).catch(() => ({ lastClaimedDate: null, totalClaimed: 0 }));
     return {
       ecoValue,
       karmaScore,
       estimatedUBI,
+      estimatedUBIBeforeTax: Number(estimatedUBIBeforeTax.toFixed(6)),
+      userEcoinTax: Number(userEcoinTax.toFixed(6)),
+      userArchTax: Number(userArchTax.toFixed(6)),
+      userTotalTax: Number(userTotalTax.toFixed(6)),
       lastClaimedDate: claimHistory.lastClaimedDate,
       totalClaimed: claimHistory.totalClaimed
     };
@@ -1167,6 +1368,12 @@ async function getLastPublishedTimestamp(userId) {
     setUserAddress,
     listAddressesMerged,
     calculateEcoinValue,
-    getBankingData
+    calculateEcoTaxStats,
+    getUserEcoinTax,
+    getUserArchTax,
+    getUserFirstBlockTs,
+    getBankingData,
+    ECOIN_PER_GRAM_CO2,
+    ECOIN_PER_DAY_OF_HISTORY
   };
 };

@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream");
 const crypto = require("crypto");
 const { getConfig } = require("../configs/config-manager.js");
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const INVITE_CODE_BYTES = 16;
@@ -31,6 +32,49 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     return (tribeCrypto && tribeCrypto.getKeys(rid)) || [];
   };
   const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0);
+
+  const rotateMapKey = async (rootId, remainingMembers) => {
+    if (!ownCrypto || !tribeCrypto || !rootId) return;
+    const existing = lookupKey(rootId);
+    if (!existing) return;
+    const newKey = ownCrypto.generateTribeKey();
+    const newGen = ownCrypto.addNewKey(rootId, newKey);
+    if (!Array.isArray(remainingMembers) || !remainingMembers.length) return;
+    const ssbClient = await openSsb();
+    const ssbKeys = require("../server/node_modules/ssb-keys");
+    const memberKeys = {};
+    for (const m of remainingMembers) {
+      try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys); } catch (_) {}
+    }
+    if (Object.keys(memberKeys).length) {
+      await new Promise((resolve) => {
+        ssbClient.publish({ type: "tribe-keys", tribeId: rootId, generation: newGen, memberKeys }, () => resolve());
+      });
+    }
+  };
+
+  const ingestOwnTribeKeys = async () => {
+    if (!ownCrypto) return;
+    try {
+      const ssbClient = await openSsb();
+      const ssbKeys = require("../server/node_modules/ssb-keys");
+      const config = require("../server/ssb_config");
+      const msgs = await new Promise((resolve, reject) => pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? reject(e) : resolve(m))));
+      for (const m of msgs) {
+        const c = m.value && m.value.content;
+        if (!c || c.type !== "tribe-keys") continue;
+        const memberKeys = c.memberKeys;
+        if (!memberKeys || typeof memberKeys !== "object") continue;
+        const boxed = memberKeys[ssbClient.id];
+        if (!boxed) continue;
+        try {
+          const unboxed = ssbKeys.unbox(boxed, config.keys);
+          const key = typeof unboxed === "string" ? unboxed : (unboxed && unboxed.toString ? unboxed.toString() : null);
+          if (key && c.tribeId) ownCrypto.addNewKey(c.tribeId, key);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  };
 
   const tribeHelpers = tribeCrypto ? tribeCrypto.createHelpers(tribesModel) : null;
   const encryptIfTribe = tribeHelpers ? tribeHelpers.encryptIfTribe : async (c) => c;
@@ -223,6 +267,72 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
   return {
     type: "map",
 
+    async ingestKeys() { await ingestOwnTribeKeys() },
+
+    async pruneOrphanKeys() {
+      if (!ownCrypto || typeof ownCrypto.getAllRootIds !== "function") return 0;
+      try {
+        const ssbClient = await openSsb();
+        const messages = await new Promise((resolve, reject) => pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? reject(e) : resolve(m))));
+        const live = new Set();
+        const tomb = buildValidatedTombstoneSet(messages);
+        for (const m of messages) {
+          const c = m.value && m.value.content;
+          if (!c) continue;
+          if (c.type === "map") live.add(m.key);
+        }
+        const all = ownCrypto.getAllRootIds();
+        let removed = 0;
+        for (const rid of all) {
+          if (!live.has(rid) || tomb.has(rid)) {
+            try { ownCrypto.dropKey(rid); removed += 1; } catch (_) {}
+          }
+        }
+        return removed;
+      } catch (_) { return 0; }
+    },
+
+    async leaveMap(mapId) {
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const map = await this.getMapById(mapId, userId);
+      if (!map) throw new Error("Map not found");
+      if (map.author === userId) throw new Error("Author cannot leave their own map");
+      const members = (Array.isArray(map.members) ? map.members : []).filter(m => m !== userId);
+      if (!Array.isArray(map.members) || !map.members.includes(userId)) return;
+      const tipId = await this.resolveCurrentId(map.rootId || map.key);
+      const rootId = await this.resolveRootId(map.rootId || map.key);
+      const oldMsg = await getMsg(ssbClient, tipId);
+      const isWrapped = tribeCrypto && tribeCrypto.isTribeMsg(oldMsg.content);
+      const oldDecrypted = (isWrapped || (oldMsg.content && oldMsg.content.tribeId))
+        ? await decryptIfTribe(oldMsg.content)
+        : decryptMapRoot(oldMsg.content, rootId);
+      let updated = {
+        type: "map",
+        replaces: tipId,
+        title: oldDecrypted.title || "",
+        lat: oldDecrypted.lat,
+        lng: oldDecrypted.lng,
+        description: oldDecrypted.description || "",
+        markerLabel: oldDecrypted.markerLabel || "",
+        mapType: oldDecrypted.mapType,
+        tags: Array.isArray(oldDecrypted.tags) ? oldDecrypted.tags : [],
+        author: oldDecrypted.author,
+        members,
+        invites: Array.isArray(oldDecrypted.invites) ? oldDecrypted.invites : [],
+        ...(oldDecrypted.tribeId ? { tribeId: oldDecrypted.tribeId } : {}),
+        ...(oldDecrypted.image ? { image: oldDecrypted.image } : {}),
+        createdAt: oldDecrypted.createdAt,
+        updatedAt: new Date().toISOString()
+      };
+      if (oldDecrypted.tribeId) updated = await encryptIfTribe(updated);
+      else updated = encryptStandalone(updated, rootId);
+      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => e ? reject(e) : resolve(r)));
+      const tomb = await tombFor(tipId, oldDecrypted.tribeId, userId);
+      await new Promise((resolve, reject) => ssbClient.publish(tomb, e => e ? reject(e) : resolve()));
+      try { await rotateMapKey(rootId, members); } catch (_) {}
+    },
+
     async resolveCurrentId(id) {
       const ssbClient = await openSsb();
       const messages = await getAllMessages(ssbClient);
@@ -273,7 +383,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
         updatedAt: now
       };
 
-      const shouldEncryptStandalone = !tribeId && tribeCrypto && (mType === "OPEN" || mType === "CLOSED");
+      const shouldEncryptStandalone = !tribeId && tribeCrypto;
       let mapKey = null;
       let content = plainContent;
       if (tribeId) {
@@ -299,7 +409,8 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
         if (mType === "OPEN") {
           try {
             const pubCode = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex");
-            const ek = tribeCrypto.encryptForInvite(mapKey, pubCode);
+            const inviteSalt = tribeCrypto.generateInviteSalt();
+            const ek = tribeCrypto.encryptForInvite(mapKey, pubCode, inviteSalt);
             let updated = {
               type: "map",
               replaces: result.key,
@@ -311,7 +422,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
               mapType: mType,
               author: userId,
               members: [userId],
-              invites: [{ code: pubCode, ek, gen: 1, public: true }],
+              invites: [{ code: pubCode, ek, salt: inviteSalt, gen: 1, public: true }],
               tags,
               ...(image ? { image } : {}),
               createdAt: now,
@@ -440,7 +551,8 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
         content = await encryptIfTribe(content);
       } else if (tribeCrypto) {
         const mapKey = lookupKey(rootId);
-        if (mapKey) content = tribeCrypto.encryptContent(content, [mapKey], true);
+        if (!mapKey) throw new Error(`Missing map key for ${rootId} — cannot publish marker`);
+        content = tribeCrypto.encryptContent(content, [mapKey], true);
       }
 
       return new Promise((resolve, reject) => {
@@ -532,8 +644,9 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const code = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex");
       let invite = code;
       if (tribeCrypto && !map.tribeId) {
-        const ekChain = tribeCrypto.encryptChainForInvite([map.rootId || map.key], code);
-        if (ekChain) invite = { code, ekChain, gen: lookupGen(map.rootId || map.key) || 1 };
+        const inviteSalt = tribeCrypto.generateInviteSalt();
+        const ekChain = tribeCrypto.encryptChainForInvite([map.rootId || map.key], code, inviteSalt);
+        if (ekChain) invite = { code, ekChain, salt: inviteSalt, gen: lookupGen(map.rootId || map.key) || 1 };
       }
       const tipId = await this.resolveCurrentId(mapId);
       const rootId = await this.resolveRootId(mapId);
@@ -563,7 +676,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
         updatedAt: new Date().toISOString()
       };
       if (effectiveTribeId) updated = await encryptIfTribe(updated);
-      else if (oldDecrypted.mapType !== "SINGLE") updated = encryptStandalone(updated, rootId);
+      else updated = encryptStandalone(updated, rootId);
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => e ? reject(e) : resolve(r)));
       const tomb1 = await tombFor(tipId, effectiveTribeId, userId);
       await new Promise((resolve, reject) => ssbClient.publish(tomb1, e => e ? reject(e) : resolve()));
@@ -589,7 +702,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       let mapKey = null;
       if (tribeCrypto && typeof matchedInvite === "object") {
         if (matchedInvite.ekChain) {
-          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code);
+          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code, matchedInvite.salt);
           if (Array.isArray(chain) && chain.length) {
             for (const entry of chain) {
               if (Array.isArray(entry.keys) && entry.keys.length) {
@@ -601,7 +714,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
             mapKey = chain[0].key;
           }
         } else if (matchedInvite.ek) {
-          mapKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code);
+          mapKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt);
           ownCrypto.setKey(matched.rootId || matched.key, mapKey, matchedInvite.gen || 1);
         }
       }
@@ -639,7 +752,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
         updatedAt: new Date().toISOString()
       };
       if (effectiveTribeId2) updated = await encryptIfTribe(updated);
-      else if (oldDecrypted.mapType !== "SINGLE") updated = encryptStandalone(updated, rootId);
+      else updated = encryptStandalone(updated, rootId);
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => e ? reject(e) : resolve(r)));
       const tomb2 = await tombFor(tipId, effectiveTribeId2, userId);
       await new Promise((resolve, reject) => ssbClient.publish(tomb2, e => e ? reject(e) : resolve()));

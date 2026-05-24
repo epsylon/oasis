@@ -1,9 +1,56 @@
 const pull = require('../server/node_modules/pull-stream');
+const crypto = require('crypto');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
   let ssb, userId;
+  const ownCrypto = forumCrypto || tribeCrypto;
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null;
+
+  const decryptForumContent = (rawContent, rootId) => {
+    if (!rawContent) return rawContent;
+    if (!rawContent.encryptedPayload) return rawContent;
+    if (!ownCrypto || !tribeCrypto) return { ...rawContent, _undecryptable: true };
+    let keys = (rootId && ownCrypto.getKeys && ownCrypto.getKeys(rootId)) || [];
+    if (!keys.length && typeof ownCrypto.getAllRootIds === 'function') {
+      const seen = new Set();
+      for (const rid of ownCrypto.getAllRootIds()) {
+        const ks = ownCrypto.getKeys(rid) || [];
+        for (const k of ks) if (!seen.has(k)) { seen.add(k); keys.push(k); }
+      }
+    }
+    if (!keys.length) return { ...rawContent, _undecryptable: true };
+    const dec = tribeCrypto.decryptContent(rawContent, keys.map(k => [k]));
+    if (!dec || dec._undecryptable) return { ...rawContent, _undecryptable: true };
+    return { ...dec, _decrypted: true };
+  };
+
+  const ingestOwnTribeKeys = async () => {
+    if (!ownCrypto) return;
+    try {
+      const ssbClient = await openSsb();
+      const ssbKeys = require('../server/node_modules/ssb-keys');
+      const cfg = require('../server/ssb_config');
+      const msgs = await new Promise((res, rej) =>
+        pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? rej(e) : res(m)))
+      );
+      for (const m of msgs) {
+        const c = m.value && m.value.content;
+        if (!c || c.type !== 'tribe-keys') continue;
+        const memberKeys = c.memberKeys;
+        if (!memberKeys || typeof memberKeys !== 'object') continue;
+        const boxed = memberKeys[ssbClient.id];
+        if (!boxed) continue;
+        try {
+          const unboxed = ssbKeys.unbox(boxed, cfg.keys);
+          const key = typeof unboxed === 'string' ? unboxed : (unboxed && unboxed.toString ? unboxed.toString() : null);
+          if (key && c.tribeId) ownCrypto.addNewKey(c.tribeId, key);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  };
 
   const openSsb = async () => {
     if (!ssb) {
@@ -15,11 +62,9 @@ module.exports = ({ cooler }) => {
 
   async function collectTombstones(ssbClient) {
     return new Promise((resolve, reject) => {
-      const tomb = new Set();
       pull(
         ssbClient.createLogStream({ limit: logLimit }),
-        pull.filter(m => m.value.content?.type === 'tombstone' && m.value.content.target),
-        pull.drain(m => tomb.add(m.value.content.target), err => err ? reject(err) : resolve(tomb))
+        pull.collect((err, msgs) => err ? reject(err) : resolve(buildValidatedTombstoneSet(msgs)))
       );
     });
   }
@@ -79,9 +124,12 @@ module.exports = ({ cooler }) => {
   }
 
   return {
-    createForum: async (category, title, text) => {
+    ingestKeys: async () => { await ingestOwnTribeKeys(); },
+
+    createForum: async (category, title, text, isPrivate = false) => {
       const ssbClient = await openSsb();
-      const content = {
+      const isPrivateFlag = isPrivate === true || isPrivate === 'true' || isPrivate === 'on';
+      const plainContent = {
         type: 'forum',
         category,
         title,
@@ -89,16 +137,40 @@ module.exports = ({ cooler }) => {
         createdAt: new Date().toISOString(),
         author: userId,
         votes: { positives: 0, negatives: 0 },
-        votes_inhabitants: []
+        votes_inhabitants: [],
+        isPrivate: isPrivateFlag
       };
-      return new Promise((resolve, reject) =>
-        ssbClient.publish(content, (err, res) => err ? reject(err) : resolve({ key: res.key, ...content }))
+      let content = plainContent;
+      let forumKey = null;
+      if (isPrivateFlag && ownCrypto && tribeCrypto) {
+        forumKey = ownCrypto.generateTribeKey();
+        content = tribeCrypto.encryptContent(plainContent, [forumKey], true);
+      }
+      const result = await new Promise((resolve, reject) =>
+        ssbClient.publish(content, (err, res) => err ? reject(err) : resolve(res))
       );
+      if (forumKey) {
+        ownCrypto.setKey(result.key, forumKey, 1);
+        try {
+          const ssbKeys = require('../server/node_modules/ssb-keys');
+          const memberKeys = { [userId]: tribeCrypto.boxKeyForMember(forumKey, userId, ssbKeys) };
+          await new Promise((resolve) => {
+            ssbClient.publish({ type: 'tribe-keys', tribeId: result.key, generation: 1, memberKeys }, () => resolve());
+          });
+        } catch (_) {}
+      }
+      return { key: result.key, ...plainContent };
     },
 
     addMessageToForum: async (forumId, message, parentId = null) => {
       const ssbClient = await openSsb();
-      const content = {
+      const rawRoot = await new Promise((res, rej) => ssbClient.get(forumId, (e, m) => e ? rej(e) : res(m)));
+      const rootRaw = rawRoot && rawRoot.content;
+      const rootDec = rootRaw && rootRaw.encryptedPayload
+        ? decryptForumContent(rootRaw, forumId)
+        : rootRaw;
+      const isPrivate = rootDec && rootDec.isPrivate === true;
+      let content = {
         ...message,
         root: forumId,
         type: 'forum',
@@ -108,9 +180,57 @@ module.exports = ({ cooler }) => {
         votes_inhabitants: []
       };
       if (parentId) content.branch = parentId;
+      if (isPrivate && ownCrypto && tribeCrypto) {
+        const key = lookupKey(forumId);
+        if (!key) throw new Error('Missing forum key — cannot reply to encrypted forum');
+        content = tribeCrypto.encryptContent(content, [key], true);
+      }
       return new Promise((resolve, reject) =>
         ssbClient.publish(content, (err, res) => err ? reject(err) : resolve(res))
       );
+    },
+
+    generateInvite: async (forumId) => {
+      if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
+      const ssbClient = await openSsb();
+      const rawRoot = await new Promise((res, rej) => ssbClient.get(forumId, (e, m) => e ? rej(e) : res(m)));
+      if (!rawRoot || !rawRoot.content) throw new Error('Forum not found');
+      const rawC = rawRoot.content;
+      const dec = rawC && rawC.encryptedPayload ? decryptForumContent(rawC, forumId) : rawC;
+      if (dec && dec._undecryptable) throw new Error('Forum is encrypted and cannot be decrypted');
+      if (dec.author !== userId) throw new Error('Only the author can generate invites');
+      if (dec.isPrivate !== true) throw new Error('Only private forums use invitation codes');
+      const key = lookupKey(forumId);
+      if (!key) throw new Error('Missing forum key');
+      const code = crypto.randomBytes(16).toString('hex');
+      const inviteSalt = tribeCrypto.generateInviteSalt();
+      const ek = tribeCrypto.encryptForInvite(key, code, inviteSalt);
+      await new Promise((resolve, reject) => {
+        ssbClient.publish({ type: 'forum-invite', target: forumId, ek, salt: inviteSalt, codeHash: tribeCrypto.hashInviteCode(code, inviteSalt) }, (err) => err ? reject(err) : resolve());
+      });
+      return { code, forumId };
+    },
+
+    joinByInvite: async (code) => {
+      if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
+      const ssbClient = await openSsb();
+      const messages = await new Promise((res, rej) =>
+        pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? rej(e) : res(m)))
+      );
+      let matched = null;
+      for (const m of messages) {
+        const c = m.value && m.value.content;
+        if (!c || c.type !== 'forum-invite') continue;
+        try {
+          const hash = tribeCrypto.hashInviteCode(code, c.salt);
+          if (hash === c.codeHash) { matched = c; break; }
+        } catch (_) {}
+      }
+      if (!matched) throw new Error('Invalid or expired invite code');
+      const forumKey = tribeCrypto.decryptFromInvite(matched.ek, code, matched.salt);
+      if (!forumKey) throw new Error('Could not decrypt invite');
+      ownCrypto.addNewKey(matched.target, forumKey);
+      return { ok: true, forumId: matched.target };
     },
 
     voteContent: async (targetId, value) => {
@@ -160,12 +280,20 @@ module.exports = ({ cooler }) => {
         pull(ssbClient.createLogStream({ limit: logLimit }), 
         pull.collect((err, data) => err ? rej(err) : res(data)))
       );
-      const deleted = new Set(
-        msgs.filter(m => m.value.content?.type === 'tombstone').map(m => m.value.content.target)
-      );
+      const deleted = buildValidatedTombstoneSet(msgs);
+      const decode = (m) => {
+        const c = m.value && m.value.content;
+        if (!c) return null;
+        if (c.encryptedPayload) {
+          const dec = decryptForumContent(c, m.value.content.root || m.key);
+          return (dec && !dec._undecryptable) ? dec : null;
+        }
+        return c;
+      };
       const forums = msgs
-        .filter(m => m.value.content?.type === 'forum' && !m.value.content.root && !deleted.has(m.key))
-        .map(m => ({ ...m.value.content, key: m.key }));
+        .map(m => ({ m, c: decode(m) }))
+        .filter(({ m, c }) => c && c.type === 'forum' && !c.root && !deleted.has(m.key))
+        .map(({ m, c }) => ({ ...c, key: m.key }));
       const forumsWithVotes = await Promise.all(
         forums.map(async f => {
           const { positives, negatives } = await aggregateVotes(ssbClient, f.key);
@@ -174,10 +302,21 @@ module.exports = ({ cooler }) => {
       );
       const repliesByRoot = {};
       msgs.forEach(m => {
-        const c = m.value.content;
-        if (c?.type === 'forum' && c.root && !deleted.has(m.key)) {
-          repliesByRoot[c.root] = repliesByRoot[c.root] || [];
-          repliesByRoot[c.root].push({ key: m.key, text: c.text, author: c.author, timestamp: m.value.timestamp });
+        const cRaw = m.value && m.value.content;
+        if (!cRaw) return;
+        const root = cRaw.encryptedPayload ? null : cRaw.root;
+        if (!root) {
+          if (!cRaw.encryptedPayload) return;
+          const decReply = decryptForumContent(cRaw, null);
+          if (!decReply || decReply._undecryptable || decReply.type !== 'forum' || !decReply.root) return;
+          if (deleted.has(m.key)) return;
+          repliesByRoot[decReply.root] = repliesByRoot[decReply.root] || [];
+          repliesByRoot[decReply.root].push({ key: m.key, text: decReply.text, author: decReply.author, timestamp: m.value.timestamp });
+          return;
+        }
+        if (cRaw.type === 'forum' && root && !deleted.has(m.key)) {
+          repliesByRoot[root] = repliesByRoot[root] || [];
+          repliesByRoot[root].push({ key: m.key, text: cRaw.text, author: cRaw.author, timestamp: m.value.timestamp });
         }
       });
       const final = await Promise.all(
@@ -227,12 +366,12 @@ module.exports = ({ cooler }) => {
         pull(ssbClient.createLogStream({ limit: logLimit }), 
         pull.collect((err, data) => err ? rej(err) : res(data)))
       );
-      const deleted = new Set(
-        msgs.filter(m => m.value.content?.type === 'tombstone').map(m => m.value.content.target)
-      );
+      const deleted = buildValidatedTombstoneSet(msgs);
       const original = msgs.find(m => m.key === id && !deleted.has(m.key));
       if (!original || original.value.content?.type !== 'forum') throw new Error('Forum not found');
-      const base = original.value.content;
+      const rawBase = original.value.content;
+      const base = rawBase.encryptedPayload ? decryptForumContent(rawBase, id) : rawBase;
+      if (base && base._undecryptable) throw new Error('Forum is encrypted and cannot be decrypted with available keys');
       const { positives, negatives } = await aggregateVotes(ssbClient, id);
       return {
         ...base,
@@ -249,17 +388,27 @@ module.exports = ({ cooler }) => {
         pull(ssbClient.createLogStream({ limit: logLimit }), 
         pull.collect((err, data) => err ? rej(err) : res(data)))
       );
-      const deleted = new Set(
-        msgs.filter(m => m.value.content?.type === 'tombstone').map(m => m.value.content.target)
-      );
+      const deleted = buildValidatedTombstoneSet(msgs);
+      const decodeReply = (m) => {
+        const c = m.value && m.value.content;
+        if (!c || c.type !== 'forum') return null;
+        if (c.encryptedPayload) {
+          const dec = decryptForumContent(c, forumId);
+          if (!dec || dec._undecryptable || dec.root !== forumId) return null;
+          return { c: dec, m };
+        }
+        if (c.root !== forumId) return null;
+        return { c, m };
+      };
       const replies = msgs
-        .filter(m => m.value.content?.type === 'forum' && m.value.content.root === forumId && !deleted.has(m.key))
-        .map(m => ({
+        .map(decodeReply)
+        .filter(r => r && !deleted.has(r.m.key))
+        .map(({ c, m }) => ({
           key: m.key,
-          text: m.value.content.text,
-          author: m.value.content.author,
+          text: c.text,
+          author: c.author,
           timestamp: m.value.timestamp,
-          parent: m.value.content.branch || null
+          parent: c.branch || null
         }));
       for (let r of replies) {
         const { positives: rp, negatives: rn } = await aggregateVotes(ssbClient, r.key);

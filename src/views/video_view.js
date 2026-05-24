@@ -17,7 +17,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -208,6 +208,7 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
             ownerActions.length ? div({ class: "bookmark-actions" }, ...ownerActions) : null
           ),
           title ? h2(title) : null,
+          videoObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(videoObj.lifetime, i18n)) : null,
           renderVideoPlayer(videoObj),
           div(
             { class: "card-comments-summary" },
@@ -224,6 +225,7 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
               button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
             )
           ),
+          div({ class: "card-spread-left" }, renderSpreadButton(videoObj.key, (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads)),
           renderMapLocationVisitLabel(videoObj.mapUrl),
           br(),
           (() => {
@@ -319,13 +321,14 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
     section(
       div({ class: "tags-header" },
         h2(title),
-        p(i18n.videoDescription),
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetVideos);
-          return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-        })()
+        p(i18n.videoDescription)
       ),
+      (() => {
+        const { renderReachChip } = require('./clearnet_view');
+        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetVideos);
+        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+      })(),
+      br(),
       div(
         { class: "filters" },
         form(
@@ -384,21 +387,82 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(videoObj.title);
-  const ownerActions = renderVideoOwnerActions(filter, videoObj, { q, sort });
+  const { renderReachChip } = require('./clearnet_view');
+  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetVideos);
 
-  const topbar = div(
-    { class: "bookmark-topbar" },
-    div(
-      { class: "bookmark-topbar-left" },
-      renderVideoFavoriteToggle(videoObj, returnTo),
-      renderPMButton(videoObj.author)
+  const chips = [
+    renderLifespanChip(videoObj.lifetime, i18n),
+    videoObj.sizeBytes ? renderEcoTax(videoObj.sizeBytes, videoObj.key) : null
+  ].filter(Boolean);
+
+  const ownerActions = renderVideoOwnerActions(filter, videoObj, { q, sort });
+  const sideActions = [];
+  sideActions.push(renderVideoFavoriteToggle(videoObj, returnTo));
+  if (videoObj.author && String(videoObj.author) !== String(userId)) {
+    sideActions.push(renderPMButton(videoObj.author));
+  }
+  for (const a of ownerActions) sideActions.push(a);
+
+  const tagsNode = renderTags(videoObj.tags);
+
+  const videoSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      title ? h2({ class: "tribe-card-title" }, title) : null,
+      renderReachChip(isClearnet, i18n)
     ),
-    ownerActions.length ? div({ class: "bookmark-actions" }, ...ownerActions) : null
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    safeText(videoObj.description)
+      ? p({ class: "tribe-side-description" }, ...renderUrl(videoObj.description))
+      : null,
+    tagsNode,
+    div({ class: "card-spread-centered" }, renderSpreadButton(videoObj.key, params.spreads)),
+    renderMapLocationVisitLabel(videoObj.mapUrl)
+  );
+
+  const videoMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    renderVideoPlayer(videoObj),
+    div({ class: "voting-buttons" },
+      opinionCategories.map((category) =>
+        form(
+          { method: "POST", action: `/videos/opinions/${encodeURIComponent(videoObj.key)}/${category}` },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          button(
+            { class: "vote-btn" },
+            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
+              videoObj.opinions?.[category] || 0
+            }]`
+          )
+        )
+      )
+    ),
+    (() => {
+      const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
+      const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
+      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+
+      return p(
+        { class: "card-footer" },
+        span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+        userLink(videoObj.author),
+        showUpdated
+          ? span(
+              { class: "votations-comment-date" },
+              ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+            )
+          : null
+      );
+    })(),
+    renderVideoCommentsSection(videoObj.key, comments, returnTo)
   );
 
   return template(
     i18n.videoTitle,
     section(
+      div({ class: "tags-header" },
+        h2(i18n.videoAllSectionTitle || i18n.videoTitle),
+        p(i18n.videoDescription)
+      ),
       div(
         { class: "filters" },
         form(
@@ -416,56 +480,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.videoCreateButton)
         )
       ),
-      div(
-        { class: "bookmark-item card" },
-        topbar,
-        title ? h2(title) : null,
-        renderVideoPlayer(videoObj),
-        safeText(videoObj.description) ? p(...renderUrl(videoObj.description)) : null,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetVideos);
-          return div({ class: 'shop-title-row' }, renderReachChip(isClearnet, i18n));
-        })(),
-        renderTags(videoObj.tags),
-        br(),
-        renderMapLocationVisitLabel(videoObj.mapUrl),
-        br(),
-        (() => {
-          const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
-          const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
-          const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-          return p(
-            { class: "card-footer" },
-            span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            userLink(videoObj.author),
-            showUpdated
-              ? span(
-                  { class: "votations-comment-date" },
-                  ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
-                )
-              : null
-          );
-        })(),
-        div({ class: "spread-row" }, renderSpreadButton(videoObj.key, params.spreads)),
-        div(
-          { class: "voting-buttons" },
-          opinionCategories.map((category) =>
-            form(
-              { method: "POST", action: `/videos/opinions/${encodeURIComponent(videoObj.key)}/${category}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              button(
-                { class: "vote-btn" },
-                `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
-                  videoObj.opinions?.[category] || 0
-                }]`
-              )
-            )
-          )
-        )
-      ),
-      div({ id: "comments" }, renderVideoCommentsSection(videoObj.key, comments, returnTo))
+      div({ class: "tribe-details" }, videoSide, videoMain)
     )
   );
 };

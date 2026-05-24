@@ -159,22 +159,49 @@ async function step(name, fn) {
   }
 
   console.log('\nSEED: standalone chats / pads / calendars / maps');
-  await step('chat', () => models.chats.createChat(`Chat ${hash(2)}`, 'demo', null, 'general', 'OPEN', ['demo'], null));
-  await step('pad', () => models.pads.createPad(`Pad ${hash(2)}`, 'OPEN', futureISO(30), ['demo'], null));
-  await step('calendar', () => models.calendars.createCalendar({ title: `Cal ${hash(2)}`, status: 'OPEN', deadline: futureISO(60), tags: ['demo'], firstDate: futureISO(10), firstDateLabel: 'first', firstNote: '', tribeId: null }));
-  await step('map (SINGLE)', () => models.maps.createMap(40.4, -3.7, 'Madrid', 'SINGLE', ['demo'], `Map ${hash(2)}`, null, 'pin', null));
+  const seedChat = await step('chat', () => models.chats.createChat(`Chat ${hash(2)}`, 'demo', null, 'general', 'OPEN', ['demo'], null));
+  const seedPad = await step('pad', () => models.pads.createPad(`Pad ${hash(2)}`, 'OPEN', futureISO(30), ['demo'], null));
+  const seedCalendar = await step('calendar', () => models.calendars.createCalendar({ title: `Cal ${hash(2)}`, status: 'OPEN', deadline: futureISO(60), tags: ['demo'], firstDate: futureISO(10), firstDateLabel: 'first', firstNote: '', tribeId: null }));
+  const seedMap = await step('map (SINGLE)', () => models.maps.createMap(40.4, -3.7, 'Madrid', 'SINGLE', ['demo'], `Map ${hash(2)}`, null, 'pin', null));
+  await step('map (AREA)', () => models.maps.createMap(41.4, 2.2, 'Barcelona', 'AREA', ['demo'], `Region ${hash(2)}`, null, 'pin', null));
 
   console.log('\nSEED: tribes + content inside');
-  const tribe = await step('public tribe', () => tribesModel.createTribe(`Tribe ${hash(2)}`, 'public tribe demo', null, '', ['demo'], false, false, 'strict', null, 'OPEN', ''));
+  const tribe = await step('public tribe', () => tribesModel.createTribe(`Tribe ${hash(2)}`, 'public tribe demo', null, '', ['demo'], false, 'strict', null, 'OPEN', ''));
   if (tribe && tribe.key) {
     await step('feed inside tribe', () => models.tribesContent.create(tribe.key, 'feed', { description: `tribe feed ${longHash()}` }));
     await step('event inside tribe', () => models.tribesContent.create(tribe.key, 'event', { title: `tribe event ${hash(2)}`, description: 'demo', date: futureISO(15) }));
   }
-  const priv = await step('private tribe', () => tribesModel.createTribe(`Secret ${hash(2)}`, 'private demo', null, '', ['demo'], false, true, 'strict', null, 'OPEN', ''));
+  const priv = await step('private tribe', () => tribesModel.createTribe(`Secret ${hash(2)}`, 'private demo', null, '', ['demo'], true, 'strict', null, 'OPEN', ''));
   if (priv && priv.key) {
     await step('feed inside private tribe', () => models.tribesContent.create(priv.key, 'feed', { description: `private demo ${longHash()}` }));
     const code = await step('generate invite', () => tribesModel.generateInvite(priv.key));
     if (code) console.log(`    (invite code: ${code})`);
+  }
+
+  console.log('\nSEED: spreads (publish type:spread referencing existing content)');
+  const pull = require(path.join(__dirname, '..', 'src', 'server', 'node_modules', 'pull-stream'));
+  const ssbOpen = await sCooler.open();
+  const myFeed = ssbOpen.id;
+  const myMsgs = await new Promise((resolve) => {
+    pull(
+      ssbOpen.createUserStream({ id: myFeed, reverse: true, limit: 100 }),
+      pull.collect((err, msgs) => {
+        if (err) return resolve([]);
+        const SPREADABLE = new Set(['audio','video','image','document','torrent','bookmark','event','task','chat','pad','map','forum','post','feed','market','project','transfer','job','votes','vote','shop','shopProduct','report','calendar']);
+        const out = [];
+        for (const m of msgs || []) {
+          const c = m.value && m.value.content;
+          if (!c || typeof c !== 'object') continue;
+          if (SPREADABLE.has(c.type)) out.push({ key: m.key, type: c.type });
+        }
+        resolve(out);
+      })
+    );
+  });
+  for (const m of myMsgs.slice(0, 12)) {
+    await step(`spread ${m.type} ${m.key.slice(1, 9)}`,
+      () => new Promise((res, rej) => ssbOpen.publish({ type: 'spread', link: m.key, expression: '🔁' }, (e, msg) => e ? rej(e) : res(msg)))
+    );
   }
 
   console.log('\nDONE. Boot oasis (sh oasis.sh) to visually inspect the seeded content.');

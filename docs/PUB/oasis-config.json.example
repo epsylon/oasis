@@ -1,0 +1,78 @@
+{
+  "themes": {
+    "current": "Dark-SNH"
+  },
+  "ux": {
+    "current": "blocks"
+  },
+  "modules": {
+    "popularMod": "on",
+    "topicsMod": "on",
+    "summariesMod": "on",
+    "latestMod": "on",
+    "threadsMod": "on",
+    "multiverseMod": "on",
+    "invitesMod": "on",
+    "walletMod": "off",
+    "legacyMod": "off",
+    "cipherMod": "off",
+    "bookmarksMod": "on",
+    "videosMod": "on",
+    "docsMod": "on",
+    "audiosMod": "on",
+    "tagsMod": "on",
+    "imagesMod": "on",
+    "trendingMod": "on",
+    "eventsMod": "on",
+    "tasksMod": "on",
+    "marketMod": "off",
+    "votesMod": "on",
+    "tribesMod": "on",
+    "reportsMod": "on",
+    "opinionsMod": "on",
+    "padsMod": "on",
+    "calendarsMod": "on",
+    "transfersMod": "off",
+    "feedMod": "on",
+    "pixeliaMod": "on",
+    "melodyMod": "on",
+    "agendaMod": "on",
+    "aiMod": "off",
+    "aiNavMod": "off",
+    "forumMod": "on",
+    "gamesMod": "on",
+    "jobsMod": "off",
+    "shopsMod": "off",
+    "projectsMod": "off",
+    "bankingMod": "off",
+    "parliamentMod": "on",
+    "courtsMod": "on",
+    "favoritesMod": "on",
+    "logsMod": "on",
+    "mapsMod": "on",
+    "chatsMod": "on",
+    "torrentsMod": "on",
+    "graphosMod": "on",
+    "larpMod": "on"
+  },
+  "wallet": {
+    "url": "http://localhost:7474",
+    "user": "",
+    "pass": "",
+    "fee": "5"
+  },
+  "walletPub": {
+    "pubId": ""
+  },
+  "ai": {
+    "prompt": "Provide an informative and precise response."
+  },
+  "ssbLogStream": {
+    "limit": 2000
+  },
+  "homePage": "activity",
+  "language": "en",
+  "wish": "whole",
+  "pmVisibility": "whole",
+  "lanBroadcasting": false
+}

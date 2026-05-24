@@ -435,15 +435,11 @@ module.exports = (configPath, namespace = 'tribes') => {
   const createHelpers = (tribesModel) => ({
     async encryptIfTribe(content) {
       if (!content || !content.tribeId || !tribesModel) return content;
-      try {
-        const rootId = await tribesModel.getRootId(content.tribeId);
-        const key = getKey(rootId);
-        if (!key) return content;
-        const body = { k: content.type, ...content };
-        return wrapMsg(body, key);
-      } catch (_) {
-        return content;
-      }
+      const rootId = await tribesModel.getRootId(content.tribeId);
+      const key = getKey(rootId);
+      if (!key) throw new Error(`Missing tribe key for ${rootId} — cannot publish encrypted content`);
+      const body = { k: content.type, ...content };
+      return wrapMsg(body, key);
     },
     async decryptIfTribe(content) {
       if (!content || !tribesModel) return content;
@@ -489,7 +485,7 @@ module.exports = (configPath, namespace = 'tribes') => {
         if (!r || !r.body) continue;
         const inner = r.body;
         if (inner.k === 'tombstone' && inner.target) {
-          const flat = { type: 'tombstone', target: inner.target, deletedAt: inner.deletedAt, author: inner.author };
+          const flat = { type: 'tombstone', target: inner.target, deletedAt: inner.deletedAt, author: inner.author, _rootId: r.rootId };
           out.push({ ...m, value: { ...m.value, content: flat } });
         } else if (kSet.has(inner.k)) {
           const flat = { ...inner, type: inner.k, _decrypted: true, _rootId: r.rootId };
@@ -500,16 +496,12 @@ module.exports = (configPath, namespace = 'tribes') => {
       return out;
     },
     async encryptTombstone(target, tribeId, author) {
-      const tombstone = { type: 'tombstone', target, deletedAt: new Date().toISOString(), author };
-      if (!tribeId || !tribesModel) return tombstone;
-      try {
-        const rootId = await tribesModel.getRootId(tribeId);
-        const key = getKey(rootId);
-        if (!key) return tombstone;
-        return wrapMsg({ k: 'tombstone', target, deletedAt: tombstone.deletedAt, author }, key);
-      } catch (_) {
-        return tombstone;
-      }
+      const deletedAt = new Date().toISOString();
+      if (!tribeId || !tribesModel) return { type: 'tombstone', target, deletedAt, author };
+      const rootId = await tribesModel.getRootId(tribeId);
+      const key = getKey(rootId);
+      if (!key) throw new Error(`Missing tribe key for ${rootId} — cannot publish encrypted tombstone`);
+      return wrapMsg({ k: 'tombstone', target, deletedAt, author }, key);
     }
   });
 

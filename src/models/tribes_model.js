@@ -1,13 +1,14 @@
 const pull = require('../server/node_modules/pull-stream');
 const crypto = require('crypto');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const tribeLogLimit = Math.max(logLimit, 100000);
 
 const INVITE_CODE_BYTES = 16;
 const VALID_INVITE_MODES = ['strict', 'open'];
 
-const STRUCTURAL_FIELDS = ['title', 'description', 'image', 'location', 'tags', 'isLARP', 'isAnonymous', 'inviteMode', 'status', 'parentTribeId', 'mapUrl'];
+const STRUCTURAL_FIELDS = ['title', 'description', 'image', 'location', 'tags', 'isAnonymous', 'inviteMode', 'status', 'parentTribeId', 'mapUrl'];
 
 module.exports = ({ cooler, tribeCrypto }) => {
   let ssb;
@@ -94,7 +95,6 @@ module.exports = ({ cooler, tribeCrypto }) => {
           image: c.image,
           location: c.location,
           tags: c.tags,
-          isLARP: c.isLARP,
           isAnonymous: c.isAnonymous,
           members: c.members,
           invites: c.invites,
@@ -262,7 +262,6 @@ module.exports = ({ cooler, tribeCrypto }) => {
       image: c.image || null,
       location: c.location || null,
       tags: Array.isArray(c.tags) ? c.tags : [],
-      isLARP: !!c.isLARP,
       isAnonymous: c.isAnonymous !== false,
       members: Array.isArray(c.members) ? c.members : [],
       invites: Array.isArray(c.invites) ? c.invites : [],
@@ -292,7 +291,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   return {
     type: 'tribe',
 
-    async createTribe(title, description, image, location, tagsRaw = [], isLARP = false, isAnonymous = true, inviteMode = 'strict', parentTribeId = null, status = 'OPEN', mapUrl = '') {
+    async createTribe(title, description, image, location, tagsRaw = [], isAnonymous = true, inviteMode = 'strict', parentTribeId = null, status = 'OPEN', mapUrl = '') {
       if (!VALID_INVITE_MODES.includes(inviteMode)) throw new Error('Invalid invite mode. Must be "strict" or "open"');
       const client = await openSsb();
       const userId = client.id;
@@ -310,7 +309,6 @@ module.exports = ({ cooler, tribeCrypto }) => {
         image: blobId,
         location,
         tags,
-        isLARP: Boolean(isLARP),
         isAnonymous: isPrivate,
         members: [userId],
         invites: [],
@@ -481,7 +479,6 @@ module.exports = ({ cooler, tribeCrypto }) => {
         image: updatedContent.image !== undefined ? updatedContent.image : tribe.image,
         location: updatedContent.location !== undefined ? updatedContent.location : tribe.location,
         tags: updatedContent.tags !== undefined ? updatedContent.tags : tribe.tags,
-        isLARP: updatedContent.isLARP !== undefined ? !!updatedContent.isLARP : tribe.isLARP,
         isAnonymous: updatedContent.isAnonymous !== undefined ? updatedContent.isAnonymous : tribe.isAnonymous,
         members: updatedContent.members !== undefined ? updatedContent.members : tribe.members,
         invites: updatedContent.invites !== undefined ? updatedContent.invites : tribe.invites,
@@ -564,7 +561,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       return code;
     },
 
-    async joinByInvite(code) {
+    async joinByInvite(rawCode) {
+      const code = String(rawCode || '').trim();
+      if (!code) throw new Error('Invalid or expired invite code');
       const client = await openSsb();
       const userId = client.id;
       const msgs = await streamLog();
@@ -620,16 +619,21 @@ module.exports = ({ cooler, tribeCrypto }) => {
       );
     },
 
-    async leaveTribe(tribeId) {
+    async leaveTribe(tribeId, opts = {}) {
       const client = await openSsb();
       const userId = client.id;
       const tribe = await this.getTribeById(tribeId);
       if (!tribe) throw new Error('Tribe not found');
-      if (tribe.author === userId) throw new Error('Tribe author cannot leave their own tribe');
+      const isAuthor = tribe.author === userId;
+      if (isAuthor && !opts.force) throw new Error('Tribe author cannot leave their own tribe');
       const members = Array.isArray(tribe.members) ? [...tribe.members] : [];
       const idx = members.indexOf(userId);
       if (idx === -1) throw new Error('User is not a member of this tribe');
       members.splice(idx, 1);
+      if (isAuthor && members.length === 0) {
+        await this.publishTombstone(tribeId).catch(() => {});
+        return;
+      }
       await this.updateTribeById(tribeId, { members });
       if (members.length > 0) {
         await this.rotateTribeKey(tribeId, members).catch(() => {});

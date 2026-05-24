@@ -54,7 +54,9 @@ const FACTORIES = {
   banking: '../../src/models/banking_model',
   activity: '../../src/models/activity_model',
   stats: '../../src/models/stats_model',
-  blockchain: '../../src/models/blockchain_model'
+  blockchain: '../../src/models/blockchain_model',
+  larp: '../../src/models/larp_model',
+  melody: '../../src/models/melody_model'
 };
 
 function loadFactory(name) {
@@ -63,12 +65,6 @@ function loadFactory(name) {
   return require(p);
 }
 
-/**
- * Create a fresh peer with their own SSB log presence and tribe keyring.
- * @param {object} network - shared network (use makeNetwork())
- * @param {object} [keypair] - optional keypair (will be generated if missing)
- * @returns {object} { keypair, node, cooler, tribeCrypto, models, configDir, setActor }
- */
 function makePeer(network, keypair) {
   const kp = keypair || generateKeypair();
   const node = makeNode(network, kp);
@@ -79,6 +75,8 @@ function makePeer(network, keypair) {
   const padCrypto = tribeCryptoFactory(configDir, 'pads');
   const mapCrypto = tribeCryptoFactory(configDir, 'maps');
   const calendarCrypto = tribeCryptoFactory(configDir, 'calendars');
+  const eventCrypto = tribeCryptoFactory(configDir, 'events');
+  const forumCrypto = tribeCryptoFactory(configDir, 'forum');
   const baseDeps = { cooler, isPublic: false, tribeCrypto };
   const models = {};
   const requireOnce = (name) => {
@@ -95,8 +93,12 @@ function makePeer(network, keypair) {
       deps = { ...baseDeps, mapCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'calendars') {
       deps = { ...baseDeps, calendarCrypto, tribesModel: requireOnce('tribes') };
-    } else if (name === 'activity' || name === 'stats' || name === 'blockchain') {
+    } else if (name === 'activity' || name === 'stats' || name === 'blockchain' || name === 'larp') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes') };
+    } else if (name === 'events') {
+      deps = { ...baseDeps, eventCrypto, tribesModel: requireOnce('tribes') };
+    } else if (name === 'forum') {
+      deps = { cooler, isPublic: false, tribeCrypto, forumCrypto };
     } else if (name === 'search') {
       deps = { ...baseDeps, padsModel: requireOnce('pads'), tribesModel: requireOnce('tribes') };
     } else if (name === 'tags') {

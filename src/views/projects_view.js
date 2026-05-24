@@ -1,21 +1,22 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink} = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
+const opinionCategories = require("../backend/opinion_categories")
 
-const renderMediaBlob = (value) => {
+const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null
   const s = String(value).trim()
   if (!s) return null
-  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` })
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, ...attrs })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mVideo) return video({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
+  if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mAudio) return audio({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
+  if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' })
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: attrs.class || 'post-image' })
   return null
 }
 
@@ -369,222 +370,70 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
   return div({ class: "milestones-bounties" }, ...blocks, unassignedBlock)
 }
 
-const renderProjectOwnerActions = (project, returnTo, opts = {}) => {
-  const statusUpper = String(project.status || "ACTIVE").toUpperCase()
-  const pct = clamp(Math.round(toNum(project.progress) || 0), 0, 100)
-  const isList = !!opts.list
-  const rt = isList ? returnTo : `/projects/${encodeURIComponent(project.id)}?filter=${encodeURIComponent(String(opts.filter || "ALL"))}`
-
-  return div(
-    { class: "bookmark-actions project-actions" },
-    form(
-      { method: "GET", action: `/projects/edit/${encodeURIComponent(project.id)}` },
-      button({ class: "update-btn", type: "submit" }, i18n.projectUpdateButton)
-    ),
-    form(
-      { method: "POST", action: `/projects/delete/${encodeURIComponent(project.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.projectDeleteButton)
-    ),
-    form(
-      { method: "POST", action: `/projects/status/${encodeURIComponent(project.id)}`, class: "project-control-form project-control-form--status" },
-      input({ type: "hidden", name: "returnTo", value: rt }),
-      select(
-        { name: "status", class: "project-control-select" },
-        option({ value: "ACTIVE", selected: statusUpper === "ACTIVE" }, i18n.projectStatusACTIVE),
-        option({ value: "PAUSED", selected: statusUpper === "PAUSED" }, i18n.projectStatusPAUSED),
-        option({ value: "COMPLETED", selected: statusUpper === "COMPLETED" }, i18n.projectStatusCOMPLETED),
-        option({ value: "CANCELLED", selected: statusUpper === "CANCELLED" }, i18n.projectStatusCANCELLED)
-      ),
-      button({ class: "status-btn project-control-btn", type: "submit" }, i18n.projectSetStatus)
-    ),
-    form(
-      { method: "POST", action: `/projects/progress/${encodeURIComponent(project.id)}`, class: "project-control-form project-control-form--progress" },
-      input({ type: "hidden", name: "returnTo", value: rt }),
-      input({ type: "number", name: "progress", min: "0", max: "100", value: pct, class: "project-control-input project-progress-input" }),
-      button({ class: "status-btn project-control-btn", type: "submit" }, i18n.projectSetProgress)
-    )
-  )
+const renderProjectStatusChip = (status) => {
+  const s = String(status || "ACTIVE").toUpperCase()
+  const variant =
+    s === "ACTIVE" ? "mutuals" :
+    s === "PAUSED" ? "whole" :
+    s === "COMPLETED" ? "encrypted" :
+    s === "CANCELLED" ? "closed" :
+    "whole"
+  const localized = i18n["projectStatus" + s] || s
+  return renderStateChip(variant, "", localized)
 }
 
-const renderProjectTopbar = (project, filter, opts) => {
-  const o = opts || {}
-  const isSingle = !!o.single
-  const isAuthor = project && project.author === userId
-  const statusUpper = String((project && project.status) || "ACTIVE").toUpperCase()
-  const isActive = statusUpper === "ACTIVE"
-
-  const returnTo = isSingle
-    ? `/projects/${encodeURIComponent(project.id)}?filter=${encodeURIComponent(String(filter || "ALL").toUpperCase())}`
-    : buildReturnTo(filter)
-
-  const leftActions = []
-
-  if (!isSingle) {
-    leftActions.push(
-      form(
-        { method: "GET", action: `/projects/${encodeURIComponent(project.id)}` },
-        input({ type: "hidden", name: "filter", value: String(filter || "ALL").toUpperCase() }),
-        button({ type: "submit", class: "filter-btn" }, i18n.viewDetailsButton)
-      )
-    )
-  }
-
-  if (!isAuthor && project && project.author) {
-    leftActions.push(
-      form(
-        { method: "GET", action: "/pm" },
-        input({ type: "hidden", name: "recipients", value: project.author }),
-        button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-      )
-    )
-  }
-
-  if (!isAuthor && isActive) {
-    const following = safeArr(project && project.followers).includes(userId)
-    leftActions.push(
-      following
-        ? form(
-            { method: "POST", action: `/projects/unfollow/${encodeURIComponent(project.id)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: "unsubscribe-btn" }, i18n.projectUnfollowButton)
-          )
-        : form(
-            { method: "POST", action: `/projects/follow/${encodeURIComponent(project.id)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: "subscribe-btn" }, i18n.projectFollowButton)
-          )
-    )
-  }
-
-  const leftNode = leftActions.length ? div({ class: "bookmark-topbar-left project-topbar-left" }, ...leftActions) : null
-  const rightNode = isAuthor ? renderProjectOwnerActions(project, returnTo) : null
-
-  const nodes = []
-  if (leftNode) nodes.push(leftNode)
-  if (rightNode) nodes.push(rightNode)
-
-  return nodes.length ? div({ class: isSingle ? "bookmark-topbar project-topbar-single" : "bookmark-topbar" }, ...nodes) : null
-}
-
-const renderProjectList = exports.renderProjectList = (projects, filter) => {
+const renderProjectList = exports.renderProjectList = (projects, filter, spreadMap = new Map()) => {
   const list = safeArr(projects)
-  const returnTo = buildReturnTo(filter)
+  const currentFilter = String(filter || "ALL").toUpperCase()
 
-  return list.length
-    ? list.map((pr) => {
-        const statusUpper = String((pr && pr.status) || "ACTIVE").toUpperCase()
-        const statusClass = `status-${statusUpper.toLowerCase()}`
+  if (!list.length) return p(i18n.projectNoProjectsFound)
 
-        const pctRaw = toNum(pr && pr.progress)
-        const pct = clamp(Math.round(Number.isFinite(pctRaw) ? pctRaw : 0), 0, 100)
+  return div({ class: "jobs-grid" },
+    list.map((pr) => {
+      const goal = Math.max(0, toNum(pr && pr.goal) || 0)
+      const pledged = Math.max(0, toNum(pr && pr.pledged) || 0)
+      const fundingPct = goal > 0 ? clamp(Math.round((pledged / goal) * 100), 0, 100) : 0
+      const heroNode = pr.image
+        ? div({ class: "tribe-card-image-wrapper" },
+            a({ href: `/projects/${encodeURIComponent(pr.id)}` },
+              renderMediaBlob(pr.image, { class: "tribe-card-hero-image" })
+            )
+          )
+        : null
+      const chips = [
+        renderProjectStatusChip(pr.status),
+        renderLifespanChip(pr.lifetime, i18n)
+      ].filter(Boolean)
 
-        const goal = Math.max(0, toNum(pr && pr.goal) || 0)
-        const pledged = Math.max(0, toNum(pr && pr.pledged) || 0)
-        const fundingPct = goal > 0 ? clamp(Math.round((pledged / goal) * 100), 0, 100) : 0
-
-        const mileDone = safeArr(pr && pr.milestones).filter((m) => !!(m && m.done)).length
-        const mileTotal = safeArr(pr && pr.milestones).length
-
-        const topbar = renderProjectTopbar(pr, filter, { single: false })
-        const isMineAuthor = String(filter || "ALL").toUpperCase() === "MINE" && pr.author === userId
-
-        return div(
-          { class: `project-card ${statusClass}` },
-          topbar ? topbar : null,
-          h2(pr.title),
-          safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
-          pr.image ? div({ class: "activity-image-preview" }, renderMediaBlob(pr.image)) : null,
-          br(),
-          div({ class: "project-goal-highlight" }, renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`)),
-          div({ class: "project-goal-highlight" }, renderCardField(i18n.projectFollowers + ":", String(followersCount(pr)))),
-          renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100),
-            pr.mapUrl ? div({ class: "project-maploc" },
-            span({ class: "card-label" }, (i18n.mapLocationTitle || "Map Location") + ":"),
-            br(), br(),
-            a({ href: pr.mapUrl, class: "map-location-link" }, pr.mapUrl)) : null,
-          isMineAuthor
-            ? div(
-                { class: "project-admin-block" },
-                renderBudget(pr),
-                renderMilestonesAndBounties(pr, filter, true),
-                div(
-                  { class: "new-milestone" },
-                  h2(i18n.projectAddMilestoneTitle),
-                  form(
-                    { method: "POST", action: `/projects/milestones/add/${encodeURIComponent(pr.id)}` },
-                    input({ type: "hidden", name: "returnTo", value: returnTo }),
-                    label(i18n.projectMilestoneTitle),
-                    br(),
-                    input({ type: "text", name: "title", required: true }),
-                    br(),
-                    br(),
-                    label(i18n.projectMilestoneDescription),
-                    br(),
-                    textarea({ name: "description", rows: "3" }),
-                    br(),
-                    br(),
-                    label(i18n.projectMilestoneTargetPercent),
-                    br(),
-                    input({ type: "number", name: "targetPercent", min: "0", max: "100", step: "1", value: "0" }),
-                    br(),
-                    br(),
-                    label(i18n.projectMilestoneDueDate),
-                    br(),
-                    input({
-                      type: "datetime-local",
-                      name: "dueDate",
-                      min: moment().format("YYYY-MM-DDTHH:mm"),
-                      max: pr.deadline ? moment(pr.deadline).format("YYYY-MM-DDTHH:mm") : undefined
-                    }),
-                    br(),
-                    br(),
-                    button({ class: "btn", type: "submit" }, i18n.projectMilestoneCreateButton)
-                  )
-                ),
-                div(
-                  { class: "new-bounty" },
-                  h2(i18n.projectAddBountyTitle),
-                  form(
-                    { method: "POST", action: `/projects/bounties/add/${encodeURIComponent(pr.id)}` },
-                    input({ type: "hidden", name: "returnTo", value: returnTo }),
-                    label(i18n.projectBountyTitle),
-                    br(),
-                    input({ type: "text", name: "title", required: true }),
-                    br(),
-                    br(),
-                    label(i18n.projectBountyAmount),
-                    br(),
-                    input({ type: "number", step: "0.01", name: "amount", required: true, max: String(budgetSummary(pr).remaining) }),
-                    br(),
-                    br(),
-                    label(i18n.projectBountyDescription),
-                    br(),
-                    textarea({ name: "description", rows: "3" }),
-                    br(),
-                    br(),
-                    label(i18n.projectMilestoneSelect),
-                    br(),
-                    select(
-                      { name: "milestoneIndex" },
-                      option({ value: "" }, "-"),
-                      ...safeArr(pr && pr.milestones).map((m, idx) => option({ value: String(idx) }, m.title))
-                    ),
-                    br(),
-                    br(),
-                    button({ class: "btn", type: "submit", disabled: budgetSummary(pr).remaining <= 0 }, i18n.projectBountyCreateButton)
-                  )
-                )
-              )
+      return div({ class: "tribe-card project-card" },
+        heroNode,
+        div({ class: "tribe-card-body" },
+          div({ class: "shop-title-row" },
+            h2({ class: "tribe-card-title" },
+              a({ href: `/projects/${encodeURIComponent(pr.id)}` }, pr.title || i18n.projectsTitle)
+            )
+          ),
+          chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+          goal > 0
+            ? div({ class: "card-date-highlight" }, `${pr.goal} ECO`)
             : null,
-          div(
-            { class: "card-footer" },
-            span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            userLink(pr.author)
+          goal > 0
+            ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100)
+            : null,
+          div({ class: "tribe-card-members" },
+            span({ class: "tribe-members-count" }, `${i18n.projectFollowers}: ${followersCount(pr)}`)
+          ),
+          div({ class: "card-spread-centered" }, renderSpreadButton(pr.id || pr.key, spreadMap.get(pr.id || pr.key))),
+          div({ class: "card-visit-btn-centered" },
+            form({ method: "GET", action: `/projects/${encodeURIComponent(pr.id)}` },
+              input({ type: "hidden", name: "filter", value: currentFilter }),
+              button({ type: "submit", class: "filter-btn" }, i18n.viewProject || i18n.viewDetailsButton || "View Project")
+            )
           )
         )
-      })
-    : p(i18n.projectNoProjectsFound)
+      )
+    })
+  )
 }
 
 const renderProjectForm = (project, mode) => {
@@ -669,9 +518,10 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
     section(
       div({ class: "tags-header" },
         h2(sectionTitle),
-        p(i18n.projectsDescription),
-        div({ class: "shop-title-row" }, renderReachChipProjects(viewerClearnetProjects, i18n))
+        p(i18n.projectsDescription)
       ),
+      div({ class: "shop-title-row" }, renderReachChipProjects(viewerClearnetProjects, i18n)),
+      br(),
       div(
         { class: "filters" },
         form(
@@ -687,7 +537,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
           })()
         : (f === "BACKERS"
             ? renderBackersLeaderboard(projectsOrForm)
-            : div({ class: "projects-list" }, renderProjectList(projectsOrForm, f))
+            : div({ class: "projects-list" }, renderProjectList(projectsOrForm, f, params.spreadMap))
           )
     )
   )
@@ -697,18 +547,150 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
   const pr = project || {}
   const f = String(filter || "ALL").toUpperCase()
   const isAuthor = pr.author === userId
+  const isFollower = safeArr(pr.followers).includes(userId)
 
   const statusUpper = String(pr.status || "ACTIVE").toUpperCase()
-  const statusClass = `status-${statusUpper.toLowerCase()}`
-
   const pctRaw = toNum(pr.progress)
   const pct = clamp(Math.round(Number.isFinite(pctRaw) ? pctRaw : 0), 0, 100)
-
   const goal = Math.max(0, toNum(pr.goal) || 0)
   const pledged = Math.max(0, toNum(pr.pledged) || 0)
   const fundingPct = goal > 0 ? clamp(Math.round((pledged / goal) * 100), 0, 100) : 0
 
-  const topbar = renderProjectTopbar(pr, f, { single: true })
+  const returnTo = `/projects/${encodeURIComponent(pr.id)}?filter=${encodeURIComponent(f)}`
+
+  const chips = [
+    renderProjectStatusChip(pr.status),
+    isFollower ? renderStateChip("whole", "★", i18n.projectFollowing || "FOLLOWING") : null,
+    renderLifespanChip(pr.lifetime, i18n),
+    renderEcoTax(pr.msgSize, pr.id || pr.key)
+  ].filter(Boolean)
+
+  const sideActions = []
+  if (!isAuthor && pr.author) {
+    sideActions.push(form({ method: "GET", action: "/pm" },
+      input({ type: "hidden", name: "recipients", value: pr.author }),
+      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
+    ))
+  }
+  if (!isAuthor && statusUpper === "ACTIVE") {
+    sideActions.push(isFollower
+      ? form({ method: "POST", action: `/projects/unfollow/${encodeURIComponent(pr.id)}` },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          button({ type: "submit", class: "unsubscribe-btn" }, i18n.projectUnfollowButton)
+        )
+      : form({ method: "POST", action: `/projects/follow/${encodeURIComponent(pr.id)}` },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          button({ type: "submit", class: "subscribe-btn" }, i18n.projectFollowButton)
+        )
+    )
+  }
+  if (isAuthor) {
+    sideActions.push(form({ method: "GET", action: `/projects/edit/${encodeURIComponent(pr.id)}` },
+      button({ class: "update-btn", type: "submit" }, i18n.projectUpdateButton)
+    ))
+    sideActions.push(form({ method: "POST", action: `/projects/delete/${encodeURIComponent(pr.id)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ class: "delete-btn", type: "submit" }, i18n.projectDeleteButton)
+    ))
+    sideActions.push(form(
+      { method: "POST", action: `/projects/status/${encodeURIComponent(pr.id)}`, class: "project-control-form project-control-form--status" },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      select(
+        { name: "status", class: "project-control-select" },
+        option({ value: "ACTIVE", selected: statusUpper === "ACTIVE" }, i18n.projectStatusACTIVE),
+        option({ value: "PAUSED", selected: statusUpper === "PAUSED" }, i18n.projectStatusPAUSED),
+        option({ value: "COMPLETED", selected: statusUpper === "COMPLETED" }, i18n.projectStatusCOMPLETED),
+        option({ value: "CANCELLED", selected: statusUpper === "CANCELLED" }, i18n.projectStatusCANCELLED)
+      ),
+      button({ class: "status-btn project-control-btn", type: "submit" }, i18n.projectSetStatus)
+    ))
+    sideActions.push(form(
+      { method: "POST", action: `/projects/progress/${encodeURIComponent(pr.id)}`, class: "project-control-form project-control-form--progress" },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      input({ type: "number", name: "progress", min: "0", max: "100", value: pct, class: "project-control-input project-progress-input" }),
+      button({ class: "status-btn project-control-btn", type: "submit" }, i18n.projectSetProgress)
+    ))
+  }
+
+  const projectSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, pr.title)
+    ),
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    div({ class: "card-spread-centered" }, renderSpreadButton(pr.id || pr.key, params.spreads)),
+    pr.image ? renderMediaBlob(pr.image, { class: "tribe-detail-image" }) : null,
+    div({ class: "job-price-line card-salary" }, `${pr.goal || 0} ECO`),
+    div({ class: "job-price-line card-salary" }, `${i18n.projectFollowers}: ${followersCount(pr)}`),
+    renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
+    goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null
+  )
+
+  const projectMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    !isAuthor && isFollower ? p({ class: "hint" }, i18n.projectYouFollowHint) : null,
+    safeText(pr.description)
+      ? div({ class: "job-section" },
+          h2({ class: "job-section-title" }, i18n.projectDescription),
+          p({ class: "tribe-side-description" }, ...renderUrl(pr.description))
+        )
+      : null,
+    pr.mapUrl ? div({ class: "job-section" }, renderMapEmbedWithZoom(params.mapData, pr.mapUrl, `/projects/${encodeURIComponent(pr.id || pr.key)}`, params.zoom)) : null,
+    renderBudget(pr),
+    renderBackers(pr, f),
+    renderMilestonesAndBounties(pr, f, isAuthor),
+    renderFollowers(pr),
+    renderPledgeBox(pr, f, isAuthor),
+    div({ class: "card-footer" },
+      span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      userLink(pr.author)
+    ),
+    div(
+      { class: "voting-buttons" },
+      opinionCategories.map((category) =>
+        form(
+          { method: "POST", action: `/projects/opinions/${encodeURIComponent(pr.id || pr.key)}/${category}` },
+          button(
+            { class: "vote-btn", type: "submit" },
+            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${(pr.opinions && pr.opinions[category]) ? pr.opinions[category] : 0}]`
+          )
+        )
+      )
+    ),
+    div(
+      { id: "comments", class: "vote-comments-section" },
+      div({ class: "comment-form-wrapper" },
+        h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
+        form(
+          { method: "POST", action: `/projects/${encodeURIComponent(pr.id || pr.key)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
+          textarea({ id: "comment-text", name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
+          div({ class: "comment-file-upload" }, label(i18n.uploadMedia), br(), input({ type: "file", name: "blob" })),
+          br(),
+          button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
+        )
+      ),
+      (() => {
+        const visibleComments = (comments || []).filter(c => {
+          const t = c && c.value && c.value.content && c.value.content.text
+          return t && String(t).trim()
+        })
+        return visibleComments.length
+          ? div({ class: "comments-list" },
+              visibleComments.map((c) => {
+                const author = c?.value?.author || ""
+                const ts = c?.value?.timestamp || c?.timestamp
+                const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : ""
+                const relDate = ts ? moment(ts).fromNow() : ""
+                return div({ class: "comment-card" },
+                  div({ class: "comment-header" }, userLink(author)),
+                  div({ class: "comment-date" }, span({ title: absDate }, relDate)),
+                  div({ class: "comment-body" }, ...renderUrl(c?.value?.content?.text || ""))
+                )
+              })
+            )
+          : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
+      })()
+    )
+  )
 
   return template(
     i18n.projectsTitle,
@@ -722,65 +704,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
             .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.projectCreateProject))
         )
       ),
-      div(
-        { class: `project-card ${statusClass}` },
-        topbar ? topbar : null,
-        !isAuthor && safeArr(pr.followers).includes(userId) ? p({ class: "hint" }, i18n.projectYouFollowHint) : null,
-        h2(pr.title),
-        safeText(pr.description) ? renderCardFieldRich(i18n.projectDescription + ":", renderUrl(pr.description)) : null,
-        safeText(pr.description) ? br() : null,
-        pr.image ? renderMediaBlob(pr.image) : null,
-        renderMapEmbedWithZoom(params.mapData, pr.mapUrl, `/projects/${encodeURIComponent(pr.id || pr.key)}`, params.zoom),
-        div({ class: "project-goal-highlight" }, renderCardField(i18n.projectGoal + ":", `${pr.goal} ECO`)),
-        renderBackers(pr, f),
-        renderCardField(i18n.projectStatus + ":", i18n["projectStatus" + statusUpper] || statusUpper),
-        renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
-        renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100),
-        renderBudget(pr),
-        renderMilestonesAndBounties(pr, f, isAuthor),
-        renderFollowers(pr),
-        renderPledgeBox(pr, f, isAuthor),
-        div(
-          { class: "card-footer" },
-          span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-          userLink(pr.author)
-        )
-      ),
-      div(
-        { class: "comment-form-wrapper" },
-        h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-        form(
-          { method: "POST", action: `/projects/${encodeURIComponent(pr.id || pr.key)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-          textarea({ id: "comment-text", name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
-          div({ class: "comment-file-upload" }, label(i18n.uploadMedia), br(),
-          input({ type: "file", name: "blob" })),
-          br(),
-          button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-        )
-      ),
-      (() => {
-        const visibleComments = (comments || []).filter(c => {
-          const t = c && c.value && c.value.content && c.value.content.text
-          return t && String(t).trim()
-        })
-        return visibleComments.length
-        ? div(
-            { class: "comments-list" },
-            visibleComments.map((c) => {
-              const author = c?.value?.author || ""
-              const ts = c?.value?.timestamp || c?.timestamp
-              const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : ""
-              const relDate = ts ? moment(ts).fromNow() : ""
-              return div(
-                { class: "comment-card" },
-                div({ class: "comment-header" }, userLink(author)),
-                div({ class: "comment-date" }, span({ title: absDate }, relDate)),
-                div({ class: "comment-body" }, ...renderUrl(c?.value?.content?.text || ""))
-              )
-            })
-          )
-       : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
-      })()
+      div({ class: "tribe-details" }, projectSide, projectMain)
     )
   )
 }

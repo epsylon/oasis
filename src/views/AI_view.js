@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, textarea, br, span, input } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, textarea, br, span, input, label, select, option } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { renderUrl } = require('../backend/renderUrl');
 
@@ -112,21 +112,30 @@ exports.aiView = (history = [], userPrompt = '') => {
                   : null,
               entry.trainStatus === 'approved' || entry.trainStatus === 'rejected'
                 ? null
-                : div({ style: 'display:flex; flex-direction:column; gap:8px; width:100%;' },
-                    div({ style: 'display:flex; gap:8px; flex-wrap:wrap;' },
-                      form({ method: 'POST', action: '/ai/approve', style: 'display:inline-block;' },
-                        input({ type: 'hidden', name: 'ts', value: String(entry.timestamp) }),
-                        button({ type: 'submit', class: 'approve-btn', style: 'background:#1e7e34;color:#fff;border:none;padding:0.45em 0.9em;border-radius:6px;cursor:pointer;' }, i18n.aiApproveTrain)
+                : div({ class: 'ai-approve-block' },
+                    form({ method: 'POST', action: '/ai/approve', class: 'ai-approve-form' },
+                      input({ type: 'hidden', name: 'ts', value: String(entry.timestamp) }),
+                      div({ class: 'ai-approve-meta' },
+                        label({ class: 'ai-approve-meta-label' }, i18n.aiApproveTagsLabel || 'Tags (comma-separated)'),
+                        input({ type: 'text', name: 'tags', placeholder: i18n.aiApproveTagsPlaceholder || 'e.g. oasis, governance, ecology', maxlength: '160' }),
+                        label({ class: 'ai-approve-meta-label' }, i18n.aiApproveRatingLabel || 'Rating'),
+                        select({ name: 'rating' },
+                          option({ value: '0' }, '—'),
+                          option({ value: '1' }, '★'),
+                          option({ value: '2' }, '★★'),
+                          option({ value: '3' }, '★★★'),
+                          option({ value: '4' }, '★★★★'),
+                          option({ value: '5' }, '★★★★★')
+                        )
                       ),
-                      form({ method: 'POST', action: '/ai/reject', style: 'display:inline-block;' },
-                        input({ type: 'hidden', name: 'ts', value: String(entry.timestamp) }),
-                        button({ type: 'submit', class: 'reject-btn', style: 'background:#a71d2a;color:#fff;border:none;padding:0.45em 0.9em;border-radius:6px;cursor:pointer;' }, i18n.aiRejectTrain)
+                      textarea({ name: 'custom', rows: 3, placeholder: i18n.aiCustomAnswerPlaceholder, class: 'ai-approve-custom' }),
+                      div({ class: 'ai-approve-actions' },
+                        button({ type: 'submit', class: 'approve-btn' }, i18n.aiApproveTrain)
                       )
                     ),
-                    form({ method: 'POST', action: '/ai/approve', style: 'display:flex; flex-direction:column; gap:6px;' },
+                    form({ method: 'POST', action: '/ai/reject', class: 'ai-approve-reject' },
                       input({ type: 'hidden', name: 'ts', value: String(entry.timestamp) }),
-                      textarea({ name: 'custom', rows: 3, placeholder: i18n.aiCustomAnswerPlaceholder, style: 'width:100%;' }),
-                      button({ type: 'submit', class: 'approve-custom-btn', style: 'align-self:flex-start;background:#0d6efd;color:#fff;border:none;padding:0.45em 0.9em;border-radius:6px;cursor:pointer;' }, i18n.aiApproveCustomTrain)
+                      button({ type: 'submit', class: 'reject-btn' }, i18n.aiRejectTrain)
                     )
                   )
             )

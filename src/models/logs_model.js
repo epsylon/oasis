@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const util = require('../server/node_modules/util');
 const axios = require('../server/node_modules/axios');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -275,7 +276,7 @@ module.exports = ({ cooler }) => {
       )
     );
     const items = [];
-    const tombstoned = new Set();
+    const tombstoned = buildValidatedTombstoneSet(raw);
     const replaced = new Map();
     for (const m of raw) {
       if (!m || !m.value) continue;
@@ -290,7 +291,7 @@ module.exports = ({ cooler }) => {
       const c = v?.content;
       if (!c) continue;
       if (v.author !== userId) continue;
-      if (c.type === 'tombstone' && c.target) { tombstoned.add(c.target); continue; }
+      if (c.type === 'tombstone') continue;
       if (c.type !== 'log') continue;
       if (c.replaces) replaced.set(c.replaces, dec.key || keyIn);
       items.push({

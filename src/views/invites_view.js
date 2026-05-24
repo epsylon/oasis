@@ -127,7 +127,7 @@ const invitesView = ({ invitesEnabled }) => {
           { action: '/invites/inhabitant/follow', method: 'post' },
           input({ name: 'feedId', id: 'inh_oasis_id', type: 'text', placeholder: '@...=.ed25519', pattern: '@[A-Za-z0-9+/_\\-]{43}=\\.ed25519', required: true, maxlength: 56 }),
           br(),
-          button({ type: 'submit' }, i18n.invitesInhabitantsFollow || 'Follow')
+          button({ type: 'submit' }, i18n.invitesInhabitantsFollow || 'Give Support')
         )
       )
     ),
@@ -139,6 +139,18 @@ const invitesView = ({ invitesEnabled }) => {
           input({ name: 'inviteCode', type: 'text', placeholder: i18n.invitesTribeInviteCodePlaceholder, autofocus: true, required: true }),
           br(),
           button({ type: 'submit' }, i18n.invitesTribeJoinButton)
+        )
+      )
+    ),
+    section(
+      div({ class: 'invites-houses' },
+        h2(i18n.invitesHousesTitle || 'Houses'),
+        form(
+          { action: '/larp/invite/redeem', method: 'post' },
+          input({ type: 'hidden', name: 'returnTo', value: '/invites' }),
+          input({ name: 'code', type: 'text', placeholder: i18n.invitesHouseInviteCodePlaceholder || 'House invitation code', required: true, maxlength: 32 }),
+          br(),
+          button({ type: 'submit' }, i18n.invitesHouseJoinButton || 'Join House')
         )
       )
     ),

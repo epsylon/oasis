@@ -4,7 +4,7 @@ const { makeNetwork, makePeer } = require('../../helpers/setup');
 describe('blockchain (blockexplorer)', (t) => {
   t('member sees decrypted tribe content', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const r = await A.use('tribes').createTribe('G', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('G', '', null, '', [], true, 'strict', null, 'OPEN', '');
     await A.use('tribesContent').create(r.key, 'feed', { description: 'hi' });
     const blocks = await A.use('blockchain').listBlockchain('all', A.keypair.id, {});
     ok(Array.isArray(blocks));
@@ -15,7 +15,7 @@ describe('blockchain (blockexplorer)', (t) => {
 
   t('non-member sees no decrypted tribe content', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
-    const r = await A.use('tribes').createTribe('G', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('G', '', null, '', [], true, 'strict', null, 'OPEN', '');
     await A.use('tribesContent').create(r.key, 'feed', { description: 'top secret' });
     B.setActor();
     const blocks = await B.use('blockchain').listBlockchain('all', B.keypair.id, {});
@@ -25,7 +25,7 @@ describe('blockchain (blockexplorer)', (t) => {
 
   t('hidden envelope types do not appear in blockexplorer', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const r = await A.use('tribes').createTribe('T', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('T', '', null, '', [], true, 'strict', null, 'OPEN', '');
     await A.use('tribes').generateInvite(r.key);
     const blocks = await A.use('blockchain').listBlockchain('all', A.keypair.id, {});
     const inviteMsg = blocks.find(b => b.type === 'tribe-invite-msg');

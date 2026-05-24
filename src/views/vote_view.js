@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const opinionCategories = require("../backend/opinion_categories");
@@ -11,21 +11,6 @@ const safeArray = (v) => Array.isArray(v) ? v : [];
 
 const voteLabel = (opt) =>
   i18n["vote" + opt.split("_").map(w => w.charAt(0) + w.slice(1).toLowerCase()).join("")] || opt;
-
-const toValueChildren = (v) => {
-  if (v === undefined || v === null) return [];
-  if (Array.isArray(v)) return v;
-  if (typeof v === "string") return renderUrl(v);
-  if (typeof v === "number" || typeof v === "boolean") return renderUrl(String(v));
-  return [v];
-};
-
-const renderCardField = (labelText, valueNode) =>
-  div(
-    { class: "card-field" },
-    span({ class: "card-label" }, labelText),
-    span({ class: "card-value" }, ...toValueChildren(valueNode))
-  );
 
 const normalizeStatus = (v) => {
   const up = String(v || "").toUpperCase();
@@ -66,71 +51,15 @@ const renderVoteOwnerActions = (v, returnTo, mode) => {
   return actions;
 };
 
-const renderVotePMActions = (v) => {
-  if (!v.createdBy || v.createdBy === userId) return [];
-  return [
-    form(
-      { method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: v.createdBy }),
-      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-    )
-  ];
-};
-
-const renderVoteTopbar = (v, activeFilter, opts = {}) => {
-  const isSingle = !!opts.single;
-  const currentFilter = activeFilter || "all";
-
-  const returnToList = `/votes?filter=${encodeURIComponent(currentFilter)}`;
-  const returnToSelf = `/votes/${encodeURIComponent(v.id)}?filter=${encodeURIComponent(currentFilter)}`;
-  const rt = isSingle ? returnToSelf : returnToList;
-
-  const leftActions = [];
-
-  if (!isSingle) {
-    leftActions.push(
-      form(
-        { method: "GET", action: `/votes/${encodeURIComponent(v.id)}` },
-        input({ type: "hidden", name: "filter", value: currentFilter }),
-        button({ class: "filter-btn", type: "submit" }, i18n.viewDetails)
-      )
-    );
-  }
-
-  leftActions.push(...renderVotePMActions(v));
-
-  const ownerActions = renderVoteOwnerActions(v, rt, opts.mode || "");
-  const rightActions = [];
-  if (ownerActions.length) rightActions.push(...ownerActions);
-
-  const leftNode = leftActions.length ? div({ class: "bookmark-topbar-left" }, ...leftActions) : null;
-  const rightNode = rightActions.length ? div({ class: "bookmark-actions vote-actions" }, ...rightActions) : null;
-
-  const nodes = [];
-  if (leftNode) nodes.push(leftNode);
-  if (rightNode) nodes.push(rightNode);
-
-  return nodes.length ? div({ class: isSingle ? "bookmark-topbar vote-topbar-single" : "bookmark-topbar" }, ...nodes) : null;
-};
-
 const renderVoteButtons = (v, voteOptions, firstRow, secondRow, returnTo) => {
   if (normalizeStatus(v.status) !== "OPEN") return null;
 
+  const allOptions = [...firstRow, ...secondRow];
   return div(
     { class: "vote-buttons-block" },
     div(
-      { class: "vote-buttons-row" },
-      ...firstRow.map((opt) =>
-        form(
-          { method: "POST", action: `/votes/vote/${encodeURIComponent(v.id)}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ type: "submit", name: "choice", value: opt }, voteLabel(opt))
-        )
-      )
-    ),
-    div(
-      { class: "vote-buttons-row" },
-      ...secondRow.map((opt) =>
+      { class: "vote-buttons-row-single" },
+      ...allOptions.map((opt) =>
         form(
           { method: "POST", action: `/votes/vote/${encodeURIComponent(v.id)}` },
           input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -156,7 +85,53 @@ const renderOpinionsBar = (v, returnTo) =>
     )
   );
 
-const renderVoteCard = (v, voteOptions, firstRow, secondRow, mode, activeFilter) => {
+const renderVoteStatusChip = (status) => {
+  const localized = statusLabel(status);
+  return renderOpenClosedChip(status, { statusChipOPEN: localized, statusChipCLOSED: localized });
+};
+
+const renderVoteListItem = (v, voteOptions, activeFilter, spreadInfo) => {
+  const baseCounts = voteOptions.reduce((acc, opt) => {
+    acc[opt] = (v.votes && v.votes[opt]) ? v.votes[opt] : 0;
+    return acc;
+  }, {});
+  const maxOpt = voteOptions
+    .filter((opt) => opt !== "FOLLOW_MAJORITY")
+    .reduce((top, opt) => baseCounts[opt] > baseCounts[top] ? opt : top, "NOT_INTERESTED");
+  const totalVotesNum = typeof v.totalVotes === "number" ? v.totalVotes : parseInt(String(v.totalVotes || "0"), 10) || 0;
+  const result = totalVotesNum === 0 ? "NOT_INTERESTED" : maxOpt;
+  const chips = [
+    renderVoteStatusChip(v.status),
+    renderLifespanChip(v.lifetime, i18n)
+  ].filter(Boolean);
+
+  return div({ class: "tribe-card vote-card" },
+    div({ class: "tribe-card-body" },
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" },
+          a({ href: `/votes/${encodeURIComponent(v.id)}` }, v.question || i18n.votationsTitle)
+        )
+      ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+      v.deadline ? p({ class: "card-date-highlight" }, moment(v.deadline).format("YYYY/MM/DD HH:mm")) : null,
+      div({ class: "tribe-card-members" },
+        span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
+      ),
+      totalVotesNum > 0
+        ? div({ class: "job-meta-line" }, voteLabel(result))
+        : null,
+      div({ class: "card-spread-centered" }, renderSpreadButton(v.id, spreadInfo)),
+      div({ class: "card-visit-btn-centered" },
+        form({ method: "GET", action: `/votes/${encodeURIComponent(v.id)}` },
+          input({ type: "hidden", name: "filter", value: activeFilter || "all" }),
+          button({ type: "submit", class: "filter-btn" }, i18n.viewVotation || "View Votation")
+        )
+      )
+    )
+  );
+};
+
+const renderVoteDetail = (v, voteOptions, firstRow, secondRow, mode, activeFilter, params = {}) => {
   const baseCounts = voteOptions.reduce((acc, opt) => {
     acc[opt] = (v.votes && v.votes[opt]) ? v.votes[opt] : 0;
     return acc;
@@ -169,71 +144,80 @@ const renderVoteCard = (v, voteOptions, firstRow, secondRow, mode, activeFilter)
   const totalVotesNum = typeof v.totalVotes === "number" ? v.totalVotes : parseInt(String(v.totalVotes || "0"), 10) || 0;
   const result = totalVotesNum === 0 ? "NOT_INTERESTED" : maxOpt;
 
-  const commentCount = typeof v.commentCount === "number" ? v.commentCount : 0;
-  const showCommentsSummaryInCard = mode !== "detail";
+  const returnTo = `/votes/${encodeURIComponent(v.id)}?filter=${encodeURIComponent(activeFilter || "all")}`;
+  const chips = [
+    renderVoteStatusChip(v.status),
+    renderLifespanChip(v.lifetime, i18n),
+    renderEcoTax(v.msgSize, v.id)
+  ].filter(Boolean);
 
-  const listReturnTo = `/votes?filter=${encodeURIComponent(activeFilter || "all")}`;
-  const detailReturnTo = `/votes/${encodeURIComponent(v.id)}?filter=${encodeURIComponent(activeFilter || "all")}`;
-  const returnTo = mode === "detail" ? detailReturnTo : listReturnTo;
+  const sideActions = [];
+  if (v.createdBy && v.createdBy !== userId) {
+    sideActions.push(form({ method: "GET", action: "/pm" },
+      input({ type: "hidden", name: "recipients", value: v.createdBy }),
+      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
+    ));
+  }
+  for (const a of renderVoteOwnerActions(v, returnTo, mode || "")) sideActions.push(a);
 
-  const topbar = renderVoteTopbar(v, activeFilter, { single: mode === "detail", mode });
-
-  return div(
-    { class: "card card-section vote" },
-    topbar ? topbar : null,
-    renderCardField(i18n.voteQuestionLabel + ":", v.question),
-    renderCardField(i18n.voteDeadline + ":", v.deadline ? moment(v.deadline).format("YYYY/MM/DD HH:mm:ss") : ""),
-    renderCardField(i18n.voteStatus + ":", statusLabel(v.status)),
-    br(),
-    renderVoteButtons(v, voteOptions, firstRow, secondRow, returnTo),
-    renderCardField(i18n.voteTotalVotes + ":", totalVotesNum),
-    br(),
-    div(
-      { class: "vote-table" },
-      table(
-        tr(...voteOptions.map((opt) => th(voteLabel(opt)))),
-        tr(...voteOptions.map((opt) => td(baseCounts[opt])))
+  const tagsNode = v.tags && v.tags.filter(Boolean).length
+    ? div({ class: "card-tags" },
+        v.tags.filter(Boolean).map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
       )
+    : null;
+
+  const infoRows = [];
+  const pushRow = (labelText, valueNode) =>
+    infoRows.push(tr(
+      td({ class: "tribe-info-label" }, labelText),
+      td({ class: "tribe-info-value" }, valueNode)
+    ));
+  if (v.deadline) pushRow(i18n.voteDeadline, moment(v.deadline).format("YYYY/MM/DD HH:mm"));
+  pushRow(i18n.voteStatus, statusLabel(v.status));
+
+  const voteSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, v.question)
     ),
-    renderCardField(
-      i18n.voteBreakdown + ":",
-      span(
-        voteLabel(result), " = ", String(baseCounts[result] || 0),
-        " + ", voteLabel("FOLLOW_MAJORITY"), ": ", String(baseCounts.FOLLOW_MAJORITY || 0)
-      )
-    ),
-    br(),
-    div({ class: "vote-buttons-row" }, h2(voteLabel(result))),
-    v.tags && v.tags.filter(Boolean).length
-      ? div(
-          { class: "card-tags" },
-          v.tags.filter(Boolean).map((tag) =>
-            a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)
-          )
-        )
-      : null,
-    showCommentsSummaryInCard
-      ? div(
-          { class: "card-comments-summary" },
-          span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-          span({ class: "card-value" }, String(commentCount)),
-          br(),
-          br(),
-          form(
-            { method: "GET", action: `/votes/${encodeURIComponent(v.id)}` },
-            input({ type: "hidden", name: "filter", value: activeFilter || "all" }),
-            button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-          )
-        )
-      : null,
-    br(),
-    p(
-      { class: "card-footer" },
-      span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-      userLink(v.createdBy)
-    ),
-    renderOpinionsBar(v, returnTo)
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    div({ class: "card-spread-centered" }, renderSpreadButton(v.id, params.spreads)),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    tagsNode,
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
+    )
   );
+
+  const voteButtonsNode = renderVoteButtons(v, voteOptions, firstRow, secondRow, returnTo);
+
+  const voteMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    voteButtonsNode
+      ? div({ class: "job-section" },
+          h2({ class: "job-section-title" }, i18n.voteCastTitle || "Cast Vote"),
+          voteButtonsNode
+        )
+      : null,
+    div({ class: "job-section" },
+      h2({ class: "job-section-title" }, i18n.voteResults || "Results"),
+      div({ class: "vote-table" },
+        table(
+          tr(...voteOptions.map((opt) => th(voteLabel(opt)))),
+          tr(...voteOptions.map((opt) => td(baseCounts[opt])))
+        )
+      ),
+      totalVotesNum > 0
+        ? p({ class: "job-price-line card-salary" }, voteLabel(result))
+        : null
+    ),
+    renderOpinionsBar(v, returnTo),
+    p({ class: "card-footer" },
+      span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      userLink(v.createdBy)
+    )
+  );
+
+  return div({ class: "tribe-details" }, voteSide, voteMain);
 };
 
 const renderCommentsSection = (voteId, comments, activeFilter) => {
@@ -298,7 +282,7 @@ const renderCommentsSection = (voteId, comments, activeFilter) => {
   );
 };
 
-exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam) => {
+exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam, params = {}) => {
   const list = Array.isArray(votes) ? votes : [votes];
 
   const standardFilters = ["all", "mine", "open", "closed"];
@@ -380,12 +364,11 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam)
               button({ type: "submit" }, mode === "edit" ? i18n.voteUpdateButton : i18n.voteCreateButton)
             )
           )
-        : div(
-            { class: "vote-list" },
-            filtered.length > 0
-              ? filtered.map((v) => renderVoteCard(v, voteOptions, firstRow, secondRow, mode, activeFilter))
-              : p(i18n.novotes)
-          ),
+        : mode === "detail" && voteId
+          ? renderVoteDetail(filtered[0] || list.find(v => v.id === voteId) || {}, voteOptions, firstRow, secondRow, mode, activeFilter, params)
+          : filtered.length > 0
+            ? div({ class: "jobs-grid" }, filtered.map((v) => renderVoteListItem(v, voteOptions, activeFilter, params.spreadMap && params.spreadMap.get(v.id))))
+            : p(i18n.novotes),
       (mode === "detail" && voteId) ? renderCommentsSection(voteId, comments, activeFilter) : null
     )
   );

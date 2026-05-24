@@ -39,14 +39,36 @@ function fieldsForSnippet(type, c) {
   return []
 }
 
-async function publishExchange({ q, a, ctx = [], tokens = {} }) {
+async function publishExchange({ q, a, ctx = [], tokens = {}, lang = '', tags = [], rating = 0 }) {
   const s = await openSsb()
   if (!s) return null
+  const safeLang = String(lang || '').trim().slice(0, 8).toLowerCase()
+  const safeTags = Array.isArray(tags)
+    ? Array.from(new Set(tags.map(t => String(t || '').trim().slice(0, 32)).filter(Boolean))).slice(0, 10)
+    : []
+  const safeRating = Math.max(0, Math.min(5, Math.round(Number(rating) || 0)))
   const content = {
     type: 'aiExchange',
     question: clip(String(q || ''), 2000),
     answer: clip(String(a || ''), 5000),
     ctx: ctx.slice(0, 12).map(x => clip(String(x || ''), 800)),
+    timestamp: Date.now()
+  }
+  if (safeLang) content.lang = safeLang
+  if (safeTags.length) content.tags = safeTags
+  if (safeRating > 0) content.rating = safeRating
+  return new Promise((resolve, reject) => {
+    s.publish(content, (err, res) => err ? reject(err) : resolve(res))
+  })
+}
+
+async function publishExchangeVote({ targetId, helpful = true }) {
+  const s = await openSsb()
+  if (!s || !targetId) return null
+  const content = {
+    type: 'aiExchangeVote',
+    target: String(targetId),
+    helpful: !!helpful,
     timestamp: Date.now()
   }
   return new Promise((resolve, reject) => {
@@ -101,4 +123,4 @@ async function getBestTrainedAnswer(question) {
   })
 }
 
-module.exports = { fieldsForSnippet, buildContext, clip, publishExchange, getBestTrainedAnswer }
+module.exports = { fieldsForSnippet, buildContext, clip, publishExchange, publishExchangeVote, getBestTrainedAnswer }

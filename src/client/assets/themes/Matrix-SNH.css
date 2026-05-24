@@ -457,3 +457,22 @@ a.user-link:focus {
 .tribe-subtribe-link:hover { background: #00FF00 !important; color: #000 !important; }
 .tribe-parent-image { border-color: #00FF00 !important; }
 .tribe-parent-box { background: #1A1A1A !important; }
+
+.oasis-nav-header { color: #00FF00 !important; border-color: #00FF00 !important; background: #000000 !important; }
+.oasis-nav-header:hover { color: #000000 !important; background: #00FF00 !important; }
+.oasis-nav-header .emoji, .oasis-nav-header .nav-text, .oasis-nav-arrow { color: inherit !important; }
+.oasis-nav-list li a { color: #00FF00 !important; }
+.oasis-nav-list li a:hover { color: #00FF00 !important; opacity: 1 !important; }
+.oasis-nav-list .emoji, .oasis-nav-list .nav-text { color: inherit !important; }
+nav, .sidebar-left nav, .sidebar-right nav, .sidebar-left ul, .sidebar-right ul { color: #00FF00 !important; }
+.sidebar-left a, .sidebar-right a { color: #00FF00 !important; }
+
+.ai-ask-form .ai-ask-input, .ai-ask-form .ai-ask-btn { color: #00FF00 !important; border-color: #00FF00 !important; background: #000000 !important; }
+.ai-ask-form .ai-ask-input::placeholder { color: rgba(0,255,0,0.55) !important; }
+.ai-ask-form .ai-ask-input:focus { border-color: #00FF00 !important; background: #1A1A1A !important; box-shadow: 0 0 6px rgba(0,255,0,0.4) !important; }
+.ai-ask-form .ai-ask-btn:hover { background: #00FF00 !important; color: #000000 !important; border-color: #00FF00 !important; }
+.ai-nav-results, .ai-nav-result-card { color: #00FF00 !important; border-color: #00FF00 !important; background: #000000 !important; }
+.ai-nav-result-card .card-label { color: #00FF00 !important; }
+.ai-nav-result-card a { color: #00FF00 !important; }
+.ai-nav-result-card a:hover { background: #00FF00 !important; color: #000000 !important; }
+.ai-nav-query { color: #00FF00 !important; }

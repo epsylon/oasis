@@ -1,0 +1,65 @@
+{
+  "logging": {
+    "level": "notice"
+  },
+  "caps": {
+    "shs": "H5EC+V5BU9s0lWxCkt4z8a095Sj8a6TgiLKPYi1JD7s="
+  },
+  "pub": true,
+  "local": false,
+  "friends": {
+    "dunbar": 300,
+    "hops": 3
+  },
+  "gossip": {
+    "connections": 50,
+    "local": false,
+    "friends": true,
+    "seed": true,
+    "global": true
+  },
+  "replicationScheduler": {
+    "autostart": true,
+    "partialReplication": null
+  },
+  "autofollow": {
+    "enabled": true,
+    "feeds": [
+      "@0qSCyK3xyL71X4qKkmf84Cb2riP6OeUqxCvbP2Z6HWs=.ed25519"
+    ]
+  },
+  "connections": {
+    "seeds": [
+    ],
+  "incoming": {
+    "net": [
+    {
+      "scope": ["device", "local", "public"],
+      "transform": "shs",
+      "port": 8008,
+      "external": "pub.example.com"
+    }
+    ],
+      "unix": [
+        {
+          "scope": [
+            "device",
+            "local",
+            "private"
+          ],
+          "transform": "noauth"
+        }
+      ]
+    },
+    "outgoing": {
+      "net": [
+        {
+          "transform": "shs"
+        }
+      ],
+      "tunnel": [],
+      "onion": [],
+      "ws": []
+    }
+  }
+}

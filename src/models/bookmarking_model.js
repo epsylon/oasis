@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream");
 const moment = require("../server/node_modules/moment");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -48,7 +49,7 @@ module.exports = ({ cooler }) => {
     });
 
   const buildIndex = (messages) => {
-    const tomb = new Set();
+    const tomb = buildValidatedTombstoneSet(messages);
     const nodes = new Map();
     const parent = new Map();
     const child = new Map();
@@ -59,15 +60,14 @@ module.exports = ({ cooler }) => {
       const c = v.content;
       if (!c) continue;
 
-      if (c.type === "tombstone" && c.target) {
-        tomb.add(c.target);
-        continue;
-      }
+      if (c.type === 'tombstone') continue;
 
       if (c.type !== "bookmark") continue;
 
       const ts = v.timestamp || m.timestamp || 0;
-      nodes.set(k, { key: k, ts, c });
+      let sizeBytes = 0;
+      try { sizeBytes = Buffer.byteLength(JSON.stringify(v), "utf8"); } catch (_) { sizeBytes = 0; }
+      nodes.set(k, { key: k, ts, c, sizeBytes });
 
       if (c.replaces) {
         parent.set(k, c.replaces);
@@ -115,7 +115,8 @@ module.exports = ({ cooler }) => {
       opinions: c.opinions || {},
       opinions_inhabitants: voters,
       author: c.author,
-      hasVoted: viewerId ? voters.includes(viewerId) : false
+      hasVoted: viewerId ? voters.includes(viewerId) : false,
+      sizeBytes: node.sizeBytes || 0
     };
   };
 

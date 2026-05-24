@@ -2,6 +2,9 @@
   "themes": {
     "current": "Dark-SNH"
   },
+  "ux": {
+    "current": "blocks"
+  },
   "modules": {
     "popularMod": "on",
     "topicsMod": "on",
@@ -49,7 +52,8 @@
     "mapsMod": "on",
     "chatsMod": "on",
     "torrentsMod": "on",
-    "graphosMod": "on"
+    "graphosMod": "on",
+    "larpMod": "on"
   },
   "wallet": {
     "url": "http://localhost:7474",
@@ -68,6 +72,7 @@
   },
   "homePage": "activity",
   "language": "en",
-  "wish": "only-lan",
-  "pmVisibility": "whole"
+  "wish": "whole",
+  "pmVisibility": "whole",
+  "lanBroadcasting": true
 }

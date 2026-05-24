@@ -92,6 +92,9 @@ module.exports = ({ cooler }) => {
       });
       const posts = [];
       const tombed = new Set();
+      const tombClaims = new Map();
+      const authorByKey = new Map();
+      const recpsByKey = new Map();
       for (const m of raw) {
         if (!m || !m.value) continue;
         const keyIn = m.key || m.value?.key || m.value?.hash || '';
@@ -108,11 +111,15 @@ module.exports = ({ cooler }) => {
         const k = dec?.key || keyIn;
         if (!c || c.private !== true || !k) continue;
         if (c.type === 'tombstone' && c.target) {
-          tombed.add(c.target);
+          const set = tombClaims.get(c.target) || new Set();
+          set.add(v.author);
+          tombClaims.set(c.target, set);
           continue;
         }
+        authorByKey.set(k, v.author);
         if (c.type === 'post') {
           const to = Array.isArray(c.to) ? c.to : [];
+          recpsByKey.set(k, to);
           const author = v.author;
           if (author === userId || to.includes(userId)) {
             posts.push({
@@ -120,6 +127,16 @@ module.exports = ({ cooler }) => {
               value: { author, content: c },
               timestamp: v.timestamp || tsIn
             });
+          }
+        }
+      }
+      for (const [target, tombAuthors] of tombClaims.entries()) {
+        const origAuthor = authorByKey.get(target);
+        const origRecps = recpsByKey.get(target) || [];
+        for (const tombAuthor of tombAuthors) {
+          if (tombAuthor === origAuthor || tombAuthor === userId || origRecps.includes(tombAuthor)) {
+            tombed.add(target);
+            break;
           }
         }
       }

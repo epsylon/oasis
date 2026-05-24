@@ -1,6 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip } = require('./main_views');
+const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
 const { renderMapLocationUrl, renderMapLocationGrid, renderMapLocationVisitLabel } = require("./maps_view");
@@ -39,6 +40,7 @@ const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
   if (!value) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
   const s = String(value).trim()
   if (!s) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
+  if (s.startsWith('/assets/') || s.startsWith('/blob/') || s.startsWith('/image/')) return img({ src: s, ...attrs })
   if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, ...attrs })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
@@ -61,6 +63,7 @@ const toImageUrl = (raw, fallback) => {
   if (!raw) return fallback
   const s = String(raw).trim()
   if (/^\[video:|^\[audio:/.test(s)) return fallback
+  if (s.startsWith('/assets/') || s.startsWith('/blob/') || s.startsWith('/image/')) return s
   const url = toBlobUrl(raw)
   return url || fallback
 }
@@ -141,7 +144,6 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
       filter === 'recent' ? visible(t) && isMainTribe(t) && ((typeof t.createdAt === 'string' ? Date.parse(t.createdAt) : t.createdAt) >= now - MS_PER_DAY ) :
       filter === 'top' ? visible(t) && isMainTribe(t) :
       filter === 'gallery' ? visible(t) && isMainTribe(t) :
-      filter === 'larp' ? visible(t) && isMainTribe(t) && t.isLARP === true :
       filter === 'create' ? true :
       filter === 'edit' ? true :
       false
@@ -170,7 +172,6 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     filter === 'edit' ? i18n.tribeUpdateSectionTitle :
     filter === 'gallery' ? i18n.tribeGallerySectionTitle :
     filter === 'top' ? i18n.tribeTopSectionTitle :
-    filter === 'larp' ? i18n.tribeLarpSectionTitle :
     filter === 'subtribes' ? (i18n.tribeSubTribes || 'SUB-TRIBES') :
     i18n.tribeAllSectionTitle;
 
@@ -187,7 +188,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
   );
 
   const modeButtons = div({ class: 'tribe-mode-buttons' },
-    ['all','recent','mine','membership','subtribes','larp','top','gallery'].map(f =>
+    ['all','recent','mine','membership','subtribes','top','gallery'].map(f =>
     form({ method: 'GET', action: '/tribes' },
       input({ type: 'hidden', name: 'filter', value: f }),
       button({ type: 'submit', class: filter === f ? 'filter-btn active' : 'filter-btn' },
@@ -249,14 +250,6 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
       option({ value: 'open', selected: tribeToEdit.inviteMode === 'open' ? 'selected' : undefined }, i18n.tribeOpen)
     ),
     br(), br(),
-    isSubEdit ? null : label({ for: 'isLARP' }, i18n.tribeIsLARPLabel),
-    isSubEdit ? null : br,
-    isSubEdit ? null : select({ name: 'isLARP', id: 'isLARP' },
-      option({ value: 'false', selected: tribeToEdit.isLARP !== true ? 'selected' : undefined }, i18n.tribeNo),
-      option({ value: 'true', selected: tribeToEdit.isLARP === true ? 'selected' : undefined }, i18n.tribeYes)
-    ),
-    isSubEdit ? null : br(),
-    isSubEdit ? null : br(),
     button({ type: 'submit' }, isEdit ? i18n.tribeUpdateButton : i18n.tribeCreateButton)
     )
   ) : null;
@@ -279,10 +272,18 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
           : null
       ),
       div({ class: 'tribe-card-body' },
-        h2({ class: 'tribe-card-title' }, a({ href: `/tribe/${encodeURIComponent(t.id)}` }, t.isAnonymous ? "\uD83D\uDD12 " : "", t.title)),
+        div({ class: 'shop-title-row' },
+          h2({ class: 'tribe-card-title' }, a({ href: `/tribe/${encodeURIComponent(t.id)}` }, t.title))
+        ),
+        div({ class: 'card-chips-row' },
+          t.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
+          t.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
+          renderModeChip(t.inviteMode, i18n),
+          renderLifespanChip(t.lifetime, i18n)
+        ),
         t.description ? p({ class: 'tribe-card-description' }, ...renderUrl(t.description)) : null,
         renderMapLocationVisitLabel(t.mapUrl),
-        table({ class: 'tribe-info-table' },
+        (parentTribe || t.location) ? table({ class: 'tribe-info-table' },
           parentTribe ? tr(
             td({ class: 'tribe-info-label' }, i18n.tribeRootLabel || 'ROOT'),
             td({ class: 'tribe-info-value', colspan: '3' }, a({ href: `/tribe/${encodeURIComponent(parentTribe.id)}` }, parentTribe.title))
@@ -290,20 +291,8 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
           t.location ? tr(
             td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
             td({ class: 'tribe-info-value', colspan: '3' }, ...renderUrl(t.location))
-          ) : null,
-          !t.parentTribeId ? tr(
-            td({ class: 'tribe-info-label' }, i18n.tribeIsAnonymousLabel || 'STATUS'),
-            td({ class: 'tribe-info-value', colspan: '3' }, t.isAnonymous ? i18n.tribePrivate : i18n.tribePublic)
-          ) : null,
-          tr(
-            td({ class: 'tribe-info-label' }, i18n.tribeModeLabel || 'MODE'),
-            td({ class: 'tribe-info-value', colspan: '3' }, String(inviteModeI18n()[t.inviteMode] || t.inviteMode).toUpperCase())
-          ),
-          !t.parentTribeId ? tr(
-            td({ class: 'tribe-info-label' }, i18n.tribeLARPLabel || 'L.A.R.P.'),
-            td({ class: 'tribe-info-value', colspan: '3' }, t.isLARP ? i18n.tribeYes : i18n.tribeNo)
           ) : null
-        ),
+        ) : null,
         div({ class: 'tribe-card-members' },
           span({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${t.members.length}`)
         ),
@@ -1540,7 +1529,15 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
             )
           )
         : null,
-      h2(tribe.isAnonymous ? "\uD83D\uDD12 " : "", tribe.title),
+      div({ class: 'shop-title-row' },
+        h2({ class: 'tribe-card-title' }, tribe.title)
+      ),
+      div({ class: 'card-chips-row' },
+        tribe.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
+        tribe.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
+        renderModeChip(tribe.inviteMode, i18n),
+        renderLifespanChip(tribe.lifetime, i18n)
+      ),
       renderMediaBlob(imageSrc, '/assets/images/default-tribe.png', { alt: tribe.title, class: 'tribe-detail-image' }),
       table({ class: 'tribe-info-table' },
         tr(
@@ -1553,19 +1550,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
         tribe.location ? tr(
           td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
           td({ class: 'tribe-info-value', colspan: '3' }, ...renderUrl(tribe.location))
-        ) : null,
-        tr(
-          td({ class: 'tribe-info-label' }, i18n.tribeStatusLabel || 'STATUS'),
-          td({ class: 'tribe-info-value', colspan: '3' }, String(tribe.isAnonymous ? i18n.tribePrivate : i18n.tribePublic).toUpperCase())
-        ),
-        tr(
-          td({ class: 'tribe-info-label' }, i18n.tribeModeLabel || 'MODE'),
-          td({ class: 'tribe-info-value', colspan: '3' }, String(inviteModeI18n()[tribe.inviteMode] || tribe.inviteMode).toUpperCase())
-        ),
-        tr(
-          td({ class: 'tribe-info-label' }, i18n.tribeLARPLabel || 'L.A.R.P.'),
-          td({ class: 'tribe-info-value', colspan: '3' }, tribe.isLARP ? i18n.tribeYes : i18n.tribeNo)
-        )
+        ) : null
       ),
       h2({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${tribe.members.length}`),
       (!tribe.parentTribeId && ((tribe.inviteMode === 'open' || tribe.author === userId) || subTribes.length > 0)) ? div({ class: 'tribe-side-subtribes' },

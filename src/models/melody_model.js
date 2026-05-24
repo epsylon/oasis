@@ -112,6 +112,70 @@ module.exports = ({ cooler }) => {
     NOTE_NAMES,
     OCTAVES,
     TYPE_TO_DEGREE,
-    getUserMelody: getUserMelodyInternal
+    getUserMelody: getUserMelodyInternal,
+    embedTextInWav,
+    extractTextFromWav
   };
 };
+
+const STEG_MAGIC = Buffer.from([0xBC, 0x53]);
+const STEG_HEADER_BITS = 32;
+
+function embedTextInWav(wavBuffer, text) {
+  if (!Buffer.isBuffer(wavBuffer) || wavBuffer.length < 44) return wavBuffer;
+  const payload = Buffer.from(String(text || ''), 'utf8');
+  if (payload.length === 0) return wavBuffer;
+  if (payload.length > 4096) return wavBuffer;
+  const lenBuf = Buffer.alloc(2);
+  lenBuf.writeUInt16BE(payload.length, 0);
+  const fullData = Buffer.concat([STEG_MAGIC, lenBuf, payload]);
+  const totalBits = fullData.length * 8;
+  const dataLen = wavBuffer.readUInt32LE(40);
+  const numSamples = Math.floor(dataLen / 2);
+  if (totalBits > numSamples) return wavBuffer;
+  const out = Buffer.from(wavBuffer);
+  for (let i = 0; i < totalBits; i++) {
+    const byteIdx = i >> 3;
+    const bitIdx = i & 7;
+    const bit = (fullData[byteIdx] >> (7 - bitIdx)) & 1;
+    const sampleOffset = 44 + (i * 2);
+    let sample = out.readInt16LE(sampleOffset);
+    sample = (sample & ~1) | bit;
+    out.writeInt16LE(sample, sampleOffset);
+  }
+  return out;
+}
+
+function readBitsAsBuffer(wavBuffer, startBit, numBits) {
+  const bytes = Math.ceil(numBits / 8);
+  const out = Buffer.alloc(bytes, 0);
+  for (let i = 0; i < numBits; i++) {
+    const sampleOffset = 44 + ((startBit + i) * 2);
+    if (sampleOffset + 2 > wavBuffer.length) return null;
+    const sample = wavBuffer.readInt16LE(sampleOffset);
+    const bit = sample & 1;
+    const byteIdx = i >> 3;
+    const bitIdx = i & 7;
+    out[byteIdx] |= bit << (7 - bitIdx);
+  }
+  return out;
+}
+
+function extractTextFromWav(wavBuffer) {
+  if (!Buffer.isBuffer(wavBuffer) || wavBuffer.length < 44 + STEG_HEADER_BITS * 2) return null;
+  if (wavBuffer.slice(0, 4).toString('ascii') !== 'RIFF') return null;
+  if (wavBuffer.slice(8, 12).toString('ascii') !== 'WAVE') return null;
+  const magic = readBitsAsBuffer(wavBuffer, 0, 16);
+  if (!magic || magic[0] !== STEG_MAGIC[0] || magic[1] !== STEG_MAGIC[1]) return null;
+  const lenBuf = readBitsAsBuffer(wavBuffer, 16, 16);
+  if (!lenBuf) return null;
+  const len = lenBuf.readUInt16BE(0);
+  if (len === 0 || len > 4096) return null;
+  const payload = readBitsAsBuffer(wavBuffer, 32, len * 8);
+  if (!payload) return null;
+  try {
+    const text = payload.toString('utf8');
+    if (!text) return null;
+    return text;
+  } catch (_) { return null; }
+}

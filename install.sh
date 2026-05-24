@@ -3,15 +3,41 @@
 cd src/server
 
 printf "==========================\n"
-printf "|| OASIS Installer v0.4 ||\n"
+printf "|| OASIS Installer v0.5 ||\n"
 printf "==========================\n"
 
 sudo apt-get install -y git curl tar
 
 curl -sL http://deb.nodesource.com/setup_22.x | sudo bash -
 sudo apt-get install -y nodejs
-npm install .
-npm audit fix
+
+GREEN=$'\e[32m'
+DIM=$'\e[2m'
+RESET=$'\e[0m'
+
+echo ""
+echo "Installing Node.js packages..."
+echo ""
+
+NPM_LOG=$(mktemp)
+if ! npm install . --silent --no-audit --no-fund --no-progress --loglevel=error >"$NPM_LOG" 2>&1; then
+    echo "npm install failed. Output:"
+    cat "$NPM_LOG"
+    rm -f "$NPM_LOG"
+    exit 1
+fi
+rm -f "$NPM_LOG"
+
+DEPS=$(node -e "const p=require('./package.json'); console.log(Object.keys({...(p.dependencies||{}), ...(p.devDependencies||{})}).sort().join('\n'))" 2>/dev/null)
+for dep in $DEPS; do
+    if [ -d "node_modules/$dep" ]; then
+        printf "  ${GREEN}[✓]${RESET} %s\n" "$dep"
+    fi
+done
+
+echo ""
+
+npm audit fix --silent --no-fund --no-progress >/dev/null 2>&1 || true
 
 MODEL_DIR="../AI"
 LLM_FILE="oasis-42-1-chat.Q4_K_M.gguf"

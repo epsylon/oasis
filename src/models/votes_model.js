@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
 const categories = require('../backend/opinion_categories');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -23,7 +24,7 @@ module.exports = ({ cooler }) => {
   }
 
   function buildIndex(messages) {
-    const tombstoned = new Set();
+    const tombstoned = buildValidatedTombstoneSet(messages);
     const replaced = new Map();
     const votes = new Map();
     const parent = new Map();
@@ -34,10 +35,7 @@ module.exports = ({ cooler }) => {
       const c = v && v.content;
       if (!c) continue;
 
-      if (c.type === 'tombstone' && c.target) {
-        tombstoned.add(c.target);
-        continue;
-      }
+      if (c.type === 'tombstone') continue;
 
       if (c.type !== TYPE) continue;
 

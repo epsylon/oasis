@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
@@ -19,11 +20,7 @@ module.exports = ({ cooler }) => {
       );
     });
 
-    const tombstoned = new Set(
-      messages
-        .filter(m => m.value?.content?.type === 'tombstone' && m.value?.content?.target)
-        .map(m => m.value.content.target)
-    );
+    const tombstoned = buildValidatedTombstoneSet(messages);
 
     const replaces = new Map();
     const byId = new Map();
@@ -96,7 +93,7 @@ module.exports = ({ cooler }) => {
       );
     });
 
-    const tombstoned = new Set();
+    const tombstoned = buildValidatedTombstoneSet(messages);
     const replaces = new Map();
     const byKey = new Map();
 
@@ -104,10 +101,7 @@ module.exports = ({ cooler }) => {
       const c = m.value?.content;
       const k = m.key;
       if (!c) continue;
-      if (c.type === 'tombstone' && c.target) {
-        tombstoned.add(c.target);
-        continue;
-      }
+      if (c.type === 'tombstone') continue;
       if (c.type === 'pixelia') {
         if (tombstoned.has(k)) continue;
         if (c.replaces) replaces.set(c.replaces, k);

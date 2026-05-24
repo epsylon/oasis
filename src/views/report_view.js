@@ -1,20 +1,21 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require("./main_views");
+const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require("../backend/renderUrl");
+const opinionCategories = require("../backend/opinion_categories");
 
-const renderMediaBlob = (value) => {
+const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null;
   const s = String(value).trim();
   if (!s) return null;
-  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` });
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, ...attrs });
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
-  if (mVideo) return video({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` });
+  if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` });
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
-  if (mAudio) return audio({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` });
+  if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` });
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
-  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' });
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: attrs.class || 'post-image' });
   return null;
 };
 
@@ -71,60 +72,20 @@ const renderPmButton = (recipientId) =>
       )
     : null;
 
-const renderReportOwnerActions = (report, currentFilter) => {
+const renderReportStatusSetter = (report) => {
   const st = normalizeStatus(report && report.status ? report.status : "OPEN");
-
-  return div(
-    { class: "bookmark-actions report-actions" },
-    form(
-      { method: "GET", action: `/reports/edit/${encodeURIComponent(report.id)}` },
-      button({ type: "submit", class: "update-btn" }, i18n.reportsUpdateButton)
+  return form(
+    { method: "POST", action: `/reports/status/${encodeURIComponent(report.id)}`, class: "project-control-form project-control-form--status" },
+    select(
+      { name: "status", class: "project-control-select" },
+      opt("OPEN", st === "OPEN", i18n.reportsStatusOpen),
+      opt("UNDER_REVIEW", st === "UNDER_REVIEW", i18n.reportsStatusUnderReview),
+      opt("RESOLVED", st === "RESOLVED", i18n.reportsStatusResolved),
+      opt("INVALID", st === "INVALID", i18n.reportsStatusInvalid),
+      opt("CLOSED", st === "CLOSED", i18n.reportsStatusClosed || "CLOSED")
     ),
-    form(
-      { method: "POST", action: `/reports/delete/${encodeURIComponent(report.id)}` },
-      button({ type: "submit", class: "delete-btn" }, i18n.reportsDeleteButton)
-    ),
-    form(
-      { method: "POST", action: `/reports/status/${encodeURIComponent(report.id)}`, class: "project-control-form project-control-form--status" },
-      select(
-        { name: "status", class: "project-control-select" },
-        opt("OPEN", st === "OPEN", i18n.reportsStatusOpen),
-        opt("UNDER_REVIEW", st === "UNDER_REVIEW", i18n.reportsStatusUnderReview),
-        opt("RESOLVED", st === "RESOLVED", i18n.reportsStatusResolved),
-        opt("INVALID", st === "INVALID", i18n.reportsStatusInvalid),
-        opt("CLOSED", st === "CLOSED", i18n.reportsStatusClosed || "CLOSED")
-      ),
-      button({ class: "status-btn project-control-btn", type: "submit" }, i18n.reportsSetStatus || i18n.projectSetStatus || "Set status")
-    )
+    button({ class: "status-btn project-control-btn", type: "submit" }, i18n.reportsSetStatus || i18n.projectSetStatus || "Set status")
   );
-};
-
-const renderReportTopbar = (report, currentFilter, isSingle) => {
-  const isAuthor = report && String(report.author) === String(userId);
-
-  const leftActions = [];
-
-  if (!isSingle) {
-    leftActions.push(
-      form(
-        { method: "GET", action: `/reports/${encodeURIComponent(report.id)}` },
-        input({ type: "hidden", name: "filter", value: currentFilter }),
-        button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-      )
-    );
-  }
-
-  const pm = renderPmButton(report && report.author);
-  if (pm) leftActions.push(pm);
-
-  const leftNode = leftActions.length ? div({ class: "bookmark-topbar-left report-topbar-left" }, ...leftActions) : null;
-  const rightNode = isAuthor ? renderReportOwnerActions(report, currentFilter) : null;
-
-  const nodes = [];
-  if (leftNode) nodes.push(leftNode);
-  if (rightNode) nodes.push(rightNode);
-
-  return nodes.length ? div({ class: isSingle ? "bookmark-topbar report-topbar-single" : "bookmark-topbar" }, ...nodes) : null;
 };
 
 const renderTemplateDetails = (report) => {
@@ -362,60 +323,84 @@ const renderTemplateForCategory = (category, templateData = {}) => {
   );
 };
 
-const renderReportCard = (report, userId, currentFilter = "all") => {
+const renderReportStatusChip = (status) => {
+  const s = normalizeStatus(status);
+  const variant =
+    s === "OPEN" ? "whole" :
+    s === "UNDER_REVIEW" ? "lifespan-orange" :
+    s === "RESOLVED" ? "mutuals" :
+    s === "INVALID" ? "closed" :
+    s === "CLOSED" ? "closed" :
+    "whole";
+  const localized =
+    s === "OPEN" ? i18n.reportsStatusOpen :
+    s === "UNDER_REVIEW" ? i18n.reportsStatusUnderReview :
+    s === "RESOLVED" ? i18n.reportsStatusResolved :
+    s === "INVALID" ? i18n.reportsStatusInvalid :
+    s === "CLOSED" ? (i18n.reportsStatusClosed || "CLOSED") :
+    s;
+  return renderStateChip(variant, "", localized);
+};
+
+const renderReportSeverityChip = (severity) => {
+  const s = String(severity || "low").toLowerCase();
+  const variant =
+    s === "critical" ? "closed" :
+    s === "high" ? "lifespan-orange" :
+    s === "medium" ? "whole" :
+    "mutuals";
+  const localized =
+    s === "critical" ? i18n.reportsSeverityCritical :
+    s === "high" ? i18n.reportsSeverityHigh :
+    s === "medium" ? i18n.reportsSeverityMedium :
+    i18n.reportsSeverityLow;
+  return renderStateChip(variant, "⚑", localized);
+};
+
+const renderReportCategoryChip = (category) => {
+  const c = normU(category);
+  const localized =
+    c === "FEATURES" ? i18n.reportsCategoryFeatures :
+    c === "BUGS" ? i18n.reportsCategoryBugs :
+    c === "ABUSE" ? i18n.reportsCategoryAbuse :
+    c === "CONTENT" ? i18n.reportsCategoryContent :
+    c;
+  return renderStateChip("encrypted", "", localized);
+};
+
+const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => {
   const confirmations = Array.isArray(report.confirmations) ? report.confirmations : [];
-  const commentCount = typeof report.commentCount === "number" ? report.commentCount : 0;
-  const severity = normU(report.severity || "low");
 
-  const topbar = renderReportTopbar(report, currentFilter, false);
-  const details = renderTemplateDetails(report);
+  const chips = [
+    renderReportStatusChip(report.status),
+    renderReportSeverityChip(report.severity),
+    renderReportCategoryChip(report.category),
+    renderLifespanChip(report.lifetime, i18n)
+  ].filter(Boolean);
 
-  return div(
-    { class: "card card-section report" },
-    topbar ? topbar : null,
-    renderCardField(i18n.reportsTitleLabel + ":", report.title),
-    renderCardField(i18n.reportsStatus + ":", report.status),
-    renderCardField(i18n.reportsSeverity + ":", severity),
-    renderCardField(i18n.reportsCategory + ":", report.category),
-    report.image ? br() : null,
-    report.image ? div({ class: "card-field" }, renderMediaBlob(report.image)) : null,
-    report.image && details ? br() : null,
-    details ? details : null,
-    br(),
-    renderCardField(i18n.reportsConfirmations + ":", confirmations.length),
-    br(),
-    form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` }, button({ type: "submit" }, i18n.reportsConfirmButton)),
-    a({ href: "/tasks?filter=create", target: "_blank" }, button({ type: "button" }, i18n.reportsCreateTaskButton)),
-    br(),
-    br(),
-    report.tags && report.tags.length
-      ? div(
-          { class: "card-tags" },
-          report.tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
+  return div({ class: "tribe-card report-card" },
+    div({ class: "tribe-card-body" },
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" },
+          a({ href: `/reports/${encodeURIComponent(report.id)}` }, report.title || i18n.reportsTitle)
         )
-      : null,
-    div(
-      { class: "card-comments-summary" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-      span({ class: "card-value" }, String(commentCount)),
-      br(),
-      br(),
-      form(
-        { method: "GET", action: `/reports/${encodeURIComponent(report.id)}` },
-        input({ type: "hidden", name: "filter", value: currentFilter }),
-        button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
+      ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+      div({ class: "tribe-card-members" },
+        span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
+      ),
+      div({ class: "card-spread-centered" }, renderSpreadButton(report.id, spreadInfo)),
+      div({ class: "card-visit-btn-centered" },
+        form({ method: "GET", action: `/reports/${encodeURIComponent(report.id)}` },
+          input({ type: "hidden", name: "filter", value: currentFilter }),
+          button({ type: "submit", class: "filter-btn" }, i18n.viewReport || "View Report")
+        )
       )
-    ),
-    br(),
-    p(
-      { class: "card-footer" },
-      span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
-      userLink(report.author)
     )
   );
 };
 
-exports.reportView = async (reports, filter, reportId, createCategory) => {
+exports.reportView = async (reports, filter, reportId, createCategory, params = {}) => {
   const title =
     filter === "create" ? i18n.reportsCreateButton :
     filter === "edit" ? i18n.reportsUpdateButton :
@@ -600,21 +585,97 @@ exports.reportView = async (reports, filter, reportId, createCategory) => {
                   )
                 )
           )
-        : div(
-            { class: "report-list" },
-            filtered.length > 0 ? filtered.map((r) => renderReportCard(r, userId, filter)) : p(i18n.reportsNoItems)
-          )
+        : filtered.length > 0
+          ? div({ class: "jobs-grid" }, filtered.map((r) => renderReportCard(r, userId, filter, params.spreadMap && params.spreadMap.get(r.id))))
+          : p(i18n.reportsNoItems)
     )
   );
 };
 
-exports.singleReportView = async (report, filter, comments = []) => {
+exports.singleReportView = async (report, filter, comments = [], params = {}) => {
   const btnClass = (v) => (filter === v ? "filter-btn active" : "filter-btn");
   const confirmations = Array.isArray(report.confirmations) ? report.confirmations : [];
-  const severity = normU(report.severity || "low");
-
-  const topbar = renderReportTopbar(report, filter || "all", true);
+  const isAuthor = String(report.author) === String(userId);
   const details = renderTemplateDetails(report);
+
+  const chips = [
+    renderReportStatusChip(report.status),
+    renderReportSeverityChip(report.severity),
+    renderReportCategoryChip(report.category),
+    renderLifespanChip(report.lifetime, i18n),
+    renderEcoTax(report.msgSize, report.id)
+  ].filter(Boolean);
+
+  const sideActions = [];
+  const pm = renderPmButton(report.author);
+  if (pm) sideActions.push(pm);
+  sideActions.push(form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
+    button({ type: "submit", class: "filter-btn" }, i18n.reportsConfirmButton)
+  ));
+  sideActions.push(a({ href: "/tasks?filter=create", target: "_blank" },
+    button({ type: "button", class: "filter-btn" }, i18n.reportsCreateTaskButton)
+  ));
+  if (isAuthor) {
+    sideActions.push(renderReportStatusSetter(report));
+    sideActions.push(form({ method: "GET", action: `/reports/edit/${encodeURIComponent(report.id)}` },
+      button({ type: "submit", class: "update-btn" }, i18n.reportsUpdateButton)
+    ));
+    sideActions.push(form({ method: "POST", action: `/reports/delete/${encodeURIComponent(report.id)}` },
+      button({ type: "submit", class: "delete-btn" }, i18n.reportsDeleteButton)
+    ));
+  }
+
+  const tagsNode = report.tags && report.tags.length
+    ? div({ class: "card-tags" },
+        report.tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
+      )
+    : null;
+
+  const infoRows = [];
+  const pushRow = (labelText, valueNode) =>
+    infoRows.push(tr(
+      td({ class: "tribe-info-label" }, labelText),
+      td({ class: "tribe-info-value" }, valueNode)
+    ));
+  pushRow(i18n.reportsStatus, report.status);
+  pushRow(i18n.reportsSeverity, normU(report.severity || "low"));
+  pushRow(i18n.reportsCategory, report.category);
+
+  const reportSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, report.title)
+    ),
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    div({ class: "card-spread-centered" }, renderSpreadButton(report.id, params.spreads)),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    tagsNode,
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
+    )
+  );
+
+  const opinionsBar = div(
+    { class: "voting-buttons" },
+    opinionCategories.map((category) =>
+      form(
+        { method: "POST", action: `/reports/opinions/${encodeURIComponent(report.id)}/${category}` },
+        button(
+          { class: "vote-btn", type: "submit" },
+          `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${(report.opinions && report.opinions[category]) ? report.opinions[category] : 0}]`
+        )
+      )
+    )
+  );
+
+  const reportMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    (details || report.image) ? div({ class: "job-section" },
+      details || null,
+      report.image ? renderMediaBlob(report.image, { class: "report-detail-image" }) : null
+    ) : null,
+    opinionsBar,
+    renderReportCommentsSection(report.id, comments)
+  );
 
   return template(
     report.title,
@@ -637,38 +698,7 @@ exports.singleReportView = async (report, filter, comments = []) => {
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.reportsCreateButton)
         )
       ),
-      div(
-        { class: "card card-section report" },
-        topbar ? topbar : null,
-        renderCardField(i18n.reportsTitleLabel + ":", report.title),
-        renderCardField(i18n.reportsStatus + ":", report.status),
-        renderCardField(i18n.reportsSeverity + ":", severity),
-        renderCardField(i18n.reportsCategory + ":", report.category),
-        report.image ? br() : null,
-        report.image ? div({ class: "card-field" }, renderMediaBlob(report.image)) : null,
-        report.image && details ? br() : null,
-        details ? details : null,
-        br(),
-        renderCardField(i18n.reportsConfirmations + ":", confirmations.length),
-        br(),
-        form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` }, button({ type: "submit" }, i18n.reportsConfirmButton)),
-        a({ href: "/tasks?filter=create", target: "_blank" }, button({ type: "button" }, i18n.reportsCreateTaskButton)),
-        br(),
-        br(),
-        report.tags && report.tags.length
-          ? div(
-              { class: "card-tags" },
-              report.tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
-            )
-          : null,
-        br(),
-        p(
-          { class: "card-footer" },
-          span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
-          userLink(report.author)
-        )
-      ),
-      renderReportCommentsSection(report.id, comments)
+      div({ class: "tribe-details" }, reportSide, reportMain)
     )
   );
 };

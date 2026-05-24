@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const extractBlobId = str => {
@@ -148,11 +149,7 @@ module.exports = ({ cooler }) => {
           pull.collect((err, msgs) => {
             if (err) return reject(err);
 
-            const tombstoned = new Set(
-              msgs
-                .filter(m => m.value?.content?.type === 'tombstone' && m.value.content.target)
-                .map(m => m.value.content.target)
-            );
+            const tombstoned = buildValidatedTombstoneSet(msgs);
 
             const cvMsgs = msgs
               .filter(m =>

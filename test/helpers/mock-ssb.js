@@ -151,6 +151,34 @@ function makeNode(network, keypair, opts = {}) {
         return c && typeof c === 'object' && c.type === wantedType;
       });
       return pull.values(items);
+    },
+    backlinks: {
+      read(opts = {}) {
+        const filters = opts && opts.query && opts.query[0] && opts.query[0].$filter || {};
+        const dest = filters.dest;
+        const wantType = filters.value && filters.value.content && filters.value.content.type;
+        const wantAuthor = filters.value && filters.value.author;
+        const refsFor = (c) => {
+          const out = [];
+          const walk = (v) => {
+            if (!v) return;
+            if (typeof v === 'string' && v.startsWith('%')) out.push(v);
+            else if (Array.isArray(v)) v.forEach(walk);
+            else if (typeof v === 'object') Object.values(v).forEach(walk);
+          };
+          walk(c);
+          return out;
+        };
+        const matches = network.log.filter(m => {
+          const c = m.value && m.value.content;
+          if (!c || typeof c !== 'object') return false;
+          if (wantType && c.type !== wantType) return false;
+          if (wantAuthor && m.value.author !== wantAuthor) return false;
+          if (dest && !refsFor(c).includes(dest)) return false;
+          return true;
+        });
+        return pull.values(opts && opts.reverse ? matches.slice().reverse() : matches);
+      }
     }
   };
   return node;

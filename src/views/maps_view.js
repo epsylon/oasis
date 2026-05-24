@@ -2,7 +2,8 @@ const { form, button, div, h2, h3, p, section, input, label, br, a, span, textar
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderLifespanChip, renderSpreadButton } = require("./main_views");
+const { renderEncryptedChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapWithPins, renderZoomedMapWithPins, getViewportBounds, latLngToPx, pxToLatLng, MAP_W, MAP_H, getMaxTileZoom } = require("../maps/map_renderer");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
@@ -328,11 +329,19 @@ const renderMapCard = (mapObj, filter, params = {}) => {
   const thumbFile = renderMapWithPins(thumbMarkers, 0);
   const thumbSrc = thumbFile ? `/mapcache/${thumbFile}` : "/assets/images/worldmap-z2.png";
 
+  const chips = [
+    renderEncryptedChip(i18n),
+    renderLifespanChip(mapObj.lifetime, i18n)
+  ].filter(Boolean);
+
   return div({ class: "map-card" },
     a({ href: `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}`, class: "map-card-thumb-link" },
       { innerHTML: `<img src="${thumbSrc}" class="map-card-thumb" alt="map">` }),
     div({ class: "map-card-body" },
-      mapObj.title ? h2(a({ href: `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}` }, mapObj.title)) : null,
+      div({ class: "shop-title-row" },
+        mapObj.title ? h2({ class: "tribe-card-title" }, a({ href: `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}` }, mapObj.title)) : null
+      ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       div({ class: "map-card-header" },
         div({ class: "map-card-info" },
           span({ class: "map-type-badge" }, mapObj.mapType),
@@ -348,6 +357,10 @@ const renderMapCard = (mapObj, filter, params = {}) => {
           renderPMButton(mapObj.author),
           ...ownerActions)),
       safeText(mapObj.description) ? p({ class: "map-description" }, mapObj.description) : null,
+      (() => {
+        const btn = renderSpreadButton(mapObj.key, params.spreadMap && params.spreadMap.get(mapObj.key));
+        return btn ? div({ class: "card-spread-left" }, btn) : null;
+      })(),
       p({ class: "card-footer" },
         span({ class: "date-link" }, moment(mapObj.createdAt).fromNow()),
         span(" · "),
@@ -406,7 +419,13 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
     section(renderFilters(filter, q)),
     section(
       div({ class: "map-detail" },
-        mapObj.title ? h2(mapObj.title) : null,
+        mapObj.title ? div({ class: "shop-title-row" },
+          h2({ class: "tribe-card-title" }, mapObj.title)
+        ) : null,
+        mapObj.title ? div({ class: "card-chips-row" },
+          renderEncryptedChip(i18n),
+          renderLifespanChip(mapObj.lifetime, i18n)
+        ) : null,
         safeText(mapObj.description) ? p({ class: "map-description" }, mapObj.description) : null,
         div({ class: "map-detail-header" },
           div({ class: "map-detail-info" },
@@ -430,6 +449,10 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
         renderMap(allMarkers, null, 0, { pinLabels, pinImages, pinPrefix: `detail${areaCounter}`, zoom: zoomVal, centerLat: parseFloat(mapObj.lat) || 0, centerLng: parseFloat(mapObj.lng) || 0 }),
         renderMarkersList(mapObj.markers, mapObj),
         renderTags(mapObj.tags),
+        (() => {
+          const btn = renderSpreadButton(mapObj.key);
+          return btn ? div({ class: "card-spread-centered" }, btn) : null;
+        })(),
         br(),
         p({ class: "card-footer" },
           span({ class: "date-link" }, `${moment(mapObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),

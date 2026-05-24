@@ -1,4 +1,5 @@
 const pull = require("../server/node_modules/pull-stream");
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 
@@ -40,7 +41,7 @@ module.exports = ({ cooler }) => {
     });
 
   const buildIndex = (messages) => {
-    const tomb = new Set();
+    const tomb = buildValidatedTombstoneSet(messages);
     const nodes = new Map();
     const parent = new Map();
     const child = new Map();
@@ -51,15 +52,14 @@ module.exports = ({ cooler }) => {
       const c = v.content;
       if (!c) continue;
 
-      if (c.type === "tombstone" && c.target) {
-        tomb.add(c.target);
-        continue;
-      }
+      if (c.type === "tombstone") continue;
 
       if (c.type !== "audio") continue;
 
       const ts = v.timestamp || m.timestamp || 0;
-      nodes.set(k, { key: k, ts, c });
+      let sizeBytes = 0;
+      try { sizeBytes = Buffer.byteLength(JSON.stringify(v), 'utf8'); } catch (_) { sizeBytes = 0; }
+      nodes.set(k, { key: k, ts, c, sizeBytes });
 
       if (c.replaces) {
         parent.set(k, c.replaces);
@@ -94,20 +94,26 @@ module.exports = ({ cooler }) => {
   const buildAudio = (node, rootId, viewerId) => {
     const c = node.c || {};
     const voters = safeArr(c.opinions_inhabitants);
+    const composition = Array.isArray(c.bcsComposition) ? c.bcsComposition : null;
+    const tagsArr = safeArr(c.tags);
+    const isBcs = (composition && composition.length > 0) || tagsArr.some(t => String(t).toLowerCase() === 'bcs');
     return {
       key: node.key,
       rootId,
       url: c.url,
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
-      tags: safeArr(c.tags),
+      tags: tagsArr,
       author: c.author,
       title: c.title || "",
       description: c.description || "",
       mapUrl: c.mapUrl || "",
       opinions: c.opinions || {},
       opinions_inhabitants: voters,
-      hasVoted: viewerId ? voters.includes(viewerId) : false
+      hasVoted: viewerId ? voters.includes(viewerId) : false,
+      bcsComposition: composition,
+      isBcs,
+      sizeBytes: node.sizeBytes || 0
     };
   };
 
@@ -158,6 +164,60 @@ module.exports = ({ cooler }) => {
         opinions: {},
         opinions_inhabitants: []
       };
+
+      return new Promise((resolve, reject) => {
+        ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)));
+      });
+    },
+
+    async createBcsAudio(blobId, title, description, composition) {
+      const ssbClient = await openSsb();
+      const now = new Date().toISOString();
+      const cleanComposition = safeArr(composition)
+        .map(n => ({
+          t: String(n.type || n.t || ''),
+          n: String(n.name || n.n || ''),
+          d: Number(n.durMs || n.d || 0),
+          id: typeof n.id === 'string' ? n.id : (typeof n.key === 'string' ? n.key : null)
+        }))
+        .filter(n => n.t && n.n);
+
+      const baseContent = {
+        type: "audio",
+        url: blobId,
+        createdAt: now,
+        updatedAt: null,
+        author: ssbClient.id,
+        tags: ["bcs"],
+        title: title || "",
+        description: description || "",
+        mapUrl: "",
+        bcsComposition: [],
+        opinions: {},
+        opinions_inhabitants: []
+      };
+
+      const SSB_MAX_BYTES = 8000;
+      const wrapEnvelope = (content) => ({
+        previous: "%0000000000000000000000000000000000000000000=.sha256",
+        sequence: 999999,
+        author: ssbClient.id,
+        timestamp: Date.now(),
+        hash: "sha256",
+        content,
+        signature: "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000==.sig.ed25519"
+      });
+      const fitted = [];
+      for (const item of cleanComposition) {
+        fitted.push(item);
+        const probe = wrapEnvelope({ ...baseContent, bcsComposition: fitted });
+        if (Buffer.byteLength(JSON.stringify(probe, null, 2), 'utf8') > SSB_MAX_BYTES) {
+          fitted.pop();
+          break;
+        }
+      }
+
+      const content = { ...baseContent, bcsComposition: fitted };
 
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)));
@@ -241,8 +301,8 @@ module.exports = ({ cooler }) => {
       else if (filter === "recent") list = list.filter((a) => new Date(a.createdAt).getTime() >= now - 86400000);
       else if (filter === "top") {
         list = list.slice().sort((a, b) => voteSum(b.opinions) - voteSum(a.opinions) || new Date(b.createdAt) - new Date(a.createdAt));
-      } else if (filter === "blockchain") {
-        list = list.filter((a) => safeArr(a.tags).some((t) => String(t).toLowerCase() === "blockchain"));
+      } else if (filter === "bcs") {
+        list = list.filter((a) => a.isBcs === true);
       }
 
       if (q) {

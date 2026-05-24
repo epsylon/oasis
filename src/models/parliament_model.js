@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const TERM_DAYS = 60;
@@ -91,7 +92,7 @@ module.exports = ({ cooler, services = {} }) => {
   }
 
   function listByTypeFromMsgs(msgs, type) {
-    const tomb = new Set();
+    const tomb = buildValidatedTombstoneSet(msgs);
     const rep = new Map();
     const children = new Map();
     const map = new Map();
@@ -101,10 +102,7 @@ module.exports = ({ cooler, services = {} }) => {
       const v = m.value || {};
       const c = v.content;
       if (!c) continue;
-
-      if (c.type === 'tombstone' && c.target) tomb.add(c.target);
-
-      if (c.type === type) {
+if (c.type === type) {
         if (c.replaces) {
           const oldId = c.replaces;
           const ts = normMs(v.timestamp || m.timestamp || Date.now());
@@ -1215,12 +1213,12 @@ module.exports = ({ cooler, services = {} }) => {
     } catch (_) { chainIds = [tribeId]; }
     const tribeIdSet = new Set(Array.isArray(chainIds) && chainIds.length ? chainIds : [tribeId]);
     const msgs = await tribeReadLog();
-    const tomb = new Set();
+    const tomb = buildValidatedTombstoneSet(msgs);
     const replaced = new Set();
     const items = new Map();
     for (const m of msgs) {
       const c = m.value?.content; if (!c) continue;
-      if (c.type === 'tombstone' && c.target) { tomb.add(c.target); continue; }
+      if (c.type === 'tombstone') continue;
       if (c.type !== type) continue;
       if (!tribeIdSet.has(c.tribeId)) continue;
       if (c.replaces) replaced.add(c.replaces);

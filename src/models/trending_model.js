@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const opinionCategories = require('../backend/opinion_categories');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -34,7 +35,7 @@ module.exports = ({ cooler }) => {
       );
     });
 
-    const tombstoned = new Set();
+    const tombstoned = buildValidatedTombstoneSet(messages);
     const replaces = new Map();
     const itemsById = new Map();
 

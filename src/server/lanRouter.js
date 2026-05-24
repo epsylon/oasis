@@ -1,7 +1,16 @@
 const pull = require('./node_modules/pull-stream');
 const Ref = require('./node_modules/ssb-ref');
+const fs = require('fs');
+const path = require('path');
 
 const staged = new Set();
+
+function readOasisConfig() {
+  try {
+    const p = path.join(__dirname, '..', 'configs', 'oasis-config.json');
+    return JSON.parse(fs.readFileSync(p, 'utf8')) || {};
+  } catch (_) { return {}; }
+}
 
 function stagePeer(ssb, address, key, eagerReplicate) {
   if (!address || !key || key === ssb.id) return;
@@ -45,6 +54,8 @@ function handleDiscovery(ssb, d, opts) {
 
 function startRouter(ssb, opts) {
   if (!ssb.lan || typeof ssb.lan.discoveredPeers !== 'function') return;
+  const oasisCfg = readOasisConfig();
+  if (oasisCfg.lanBroadcasting === false) return;
   try { ssb.lan.start(); } catch (_) {}
   pull(
     ssb.lan.discoveredPeers(),

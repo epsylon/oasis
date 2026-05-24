@@ -1,5 +1,5 @@
-const { div, h2, p, section, button, form, a, input, br, span, label, select, option, progress } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink} = require("./main_views")
+const { div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const opinionCategories = require("../backend/opinion_categories")
@@ -86,11 +86,11 @@ const formatBlockSize = (bytes) => {
 const renderBlockInfoCard = (block) => {
   if (!block || !block.id) return null
   return div(
-    { class: "transfer-item transfer-block-card" },
-    div(
-      { class: "card-section transfer" },
-      renderCardField(`${i18n.blockchainBlockID || "Block ID"}:`,
-        a({ href: `/blockexplorer/block/${encodeURIComponent(block.id)}`, class: "user-link" }, block.id)
+    { class: "transfer-block-card" },
+    div({ class: "card-field" },
+      span({ class: "card-label" }, `${i18n.blockchainBlockID || "Block ID"}: `),
+      span({ class: "card-value" },
+        a({ href: `/blockexplorer/block/${encodeURIComponent(block.id)}` }, block.id)
       )
     )
   )
@@ -135,102 +135,62 @@ const renderUpdatedLabel = (createdAt, updatedAt) => {
     : null
 }
 
-const renderTransferTopbar = (transfer, filter, params = {}) => {
-  const returnTo = buildReturnTo(filter, params)
-  const dl = transfer.deadline ? moment(transfer.deadline) : null
-  const isExpired = dl && dl.isValid() ? dl.isBefore(moment()) : false
-  const isExpiringSoon = dl && dl.isValid() ? !isExpired && dl.diff(moment(), "hours") <= 24 : false
-  const otherParty = transfer.from === userId ? transfer.to : transfer.from
-  const isSingle = params && params.single === true
 
-  const chips = []
-  if (isExpired) chips.push(span({ class: "chip chip-warn" }, i18n.transfersExpiredBadge))
-
-  const leftActions = []
-
-  if (!isSingle) {
-    leftActions.push(
-      form(
-        { method: "GET", action: `/transfers/${encodeURIComponent(transfer.id)}` },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        input({ type: "hidden", name: "filter", value: filter || "all" }),
-        params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-        params.minAmount !== undefined ? input({ type: "hidden", name: "minAmount", value: String(params.minAmount ?? "") }) : null,
-        params.maxAmount !== undefined ? input({ type: "hidden", name: "maxAmount", value: String(params.maxAmount ?? "") }) : null,
-        params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-        button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-      )
-    )
-  }
-
-  if (otherParty && String(otherParty) !== String(userId)) {
-    leftActions.push(
-      form(
-        { method: "GET", action: "/pm" },
-        input({ type: "hidden", name: "recipients", value: otherParty }),
-        button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-      )
-    )
-  }
-
-  const leftChildren = []
-  if (chips.length) leftChildren.push(div({ class: "transfer-chips" }, ...chips))
-  leftChildren.push(...leftActions.filter(Boolean))
-
-  const ownerActions = renderOwnerActions(transfer, returnTo)
-  const actionsNode = ownerActions.length ? div({ class: "bookmark-actions transfer-actions" }, ...ownerActions) : null
-
-  const leftClass = leftChildren.length ? "bookmark-topbar-left transfer-topbar-left" : ""
-  const leftNode = leftChildren.length ? div({ class: leftClass }, ...leftChildren) : null
-
-  const topbarChildren = []
-  if (leftNode) topbarChildren.push(leftNode)
-  if (actionsNode) topbarChildren.push(actionsNode)
-
-  const topbarClass = isSingle ? "bookmark-topbar transfer-topbar-single" : "bookmark-topbar"
-  return topbarChildren.length ? div({ class: topbarClass }, ...topbarChildren) : null
+const renderTransferStatusChip = (status) => {
+  const up = String(status || "").toUpperCase()
+  const variant =
+    up === "CLOSED" ? "mutuals" :
+    up === "DISCARDED" ? "closed" :
+    "whole"
+  const icon = up === "CLOSED" ? "✓" : up === "DISCARDED" ? "✗" : "↻"
+  return renderStateChip(variant, icon, i18n[statusKey(up)] || up)
 }
 
+const renderTransferCategoryChip = (cat) =>
+  renderStateChip("encrypted", "", categoryLabel(cat))
+
 const generateTransferCard = (transfer, filter, params = {}) => {
-  const returnTo = buildReturnTo(filter, params)
   const confirmedBy = safeArr(transfer.confirmedBy)
   const required = transfer.from === transfer.to ? 1 : 2
   const confirmedCount = confirmedBy.length
-  const isUnconfirmed = String(transfer.status || "").toUpperCase() === "UNCONFIRMED"
   const dl = transfer.deadline ? moment(transfer.deadline) : null
   const isExpired = dl && dl.isValid() ? dl.isBefore(moment()) : false
   const tags = Array.isArray(transfer.tags) ? transfer.tags.map(t => String(t).toUpperCase()) : []
   const isUbi = tags.includes("UBI")
-  const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired
+  const cat = categoryOf(transfer)
 
-  const topbar = renderTransferTopbar(transfer, filter, params)
+  const chips = [
+    renderTransferStatusChip(transfer.status),
+    isUbi ? renderStateChip("mutuals", "🎁", "UBI") : null,
+    isExpired ? renderStateChip("closed", "⏰", i18n.transfersExpiredBadge) : null,
+    renderLifespanChip(transfer.lifetime, i18n)
+  ].filter(Boolean)
 
-  return div(
-    { class: "transfer-item" },
-    div(
-      { class: "card-section transfer" },
-      topbar ? topbar : null,
-      renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
-      renderCardField(`${i18n.transfersCategory || "Category"}:`, categoryLabel(categoryOf(transfer))),
-      isUbi ? null : renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
-      renderCardField(`${i18n.transfersStatus}:`, i18n[statusKey(transfer.status)] || String(transfer.status || "")),
-      br,
-      categoryOf(transfer) === "TRUST" ? null : div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, fmtAmountWithUnit(transfer))),
-      renderConfirmationsBar(confirmedCount, required),
-      showConfirm
-        ? form(
-            { method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit" }, i18n.transfersConfirmButton),
-            br(),
-            br()
-          )
+  const otherParty = transfer.from === userId ? transfer.to : transfer.from
+  const partyDir = transfer.from === userId ? "→" : "←"
+
+  return div({ class: "tribe-card transfer-card" },
+    div({ class: "tribe-card-body" },
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" },
+          a({ href: `/transfers/${encodeURIComponent(transfer.id)}` }, transfer.concept || i18n.transfersTitle)
+        )
+      ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+      !isUbi && dl && dl.isValid()
+        ? p({ class: "card-date-highlight" }, dl.format("YYYY-MM-DD HH:mm"))
         : null,
-      p(
-        { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
-        userLink(transfer.from),
-        renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
+      cat !== "TRUST"
+        ? div({ class: "job-price-line card-salary" }, fmtAmountWithUnit(transfer))
+        : null,
+      div({ class: "tribe-card-members" },
+        span({ class: "tribe-members-count" }, `${i18n.transfersConfirmations}: ${confirmedCount}/${required}`)
+      ),
+      div({ class: "card-spread-centered" }, renderSpreadButton(transfer.id, params.spreadMap && params.spreadMap.get(transfer.id))),
+      div({ class: "card-visit-btn-centered" },
+        form({ method: "GET", action: `/transfers/${encodeURIComponent(transfer.id)}` },
+          button({ type: "submit", class: "filter-btn" }, i18n.viewTransfer || "View Transfer")
+        )
       )
     )
   )
@@ -433,12 +393,11 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
               )
             ),
             br(),
-            div(
-              { class: "transfer-list" },
-              filtered.length
-                ? filtered.map(t => generateTransferCard(t, normalizedFilter, { q, minAmount: minAmountRaw, maxAmount: maxAmountRaw, sort }))
-                : p(q || String(minAmountRaw) || String(maxAmountRaw) ? i18n.transfersNoMatch : i18n.transfersNoItems)
-            )
+            filtered.length
+              ? div({ class: "jobs-grid" },
+                  filtered.map(t => generateTransferCard(t, normalizedFilter, { q, minAmount: minAmountRaw, maxAmount: maxAmountRaw, sort, spreadMap: params.spreadMap }))
+                )
+              : p(q || String(minAmountRaw) || String(maxAmountRaw) ? i18n.transfersNoMatch : i18n.transfersNoItems)
           )
     )
   )
@@ -460,8 +419,123 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
   const isUbi = tags.includes("UBI")
   const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired
 
-  const topbar = renderTransferTopbar(transfer, normalizedFilter, { ...params, q, sort, single: true })
   const tagsNode = renderTags(transfer.tags)
+  const cat = categoryOf(transfer)
+  const otherParty = transfer.from === userId ? transfer.to : transfer.from
+  const chips = [
+    renderTransferStatusChip(transfer.status),
+    isUbi ? renderStateChip("mutuals", "🎁", "UBI") : null,
+    isExpired ? renderStateChip("closed", "⏰", i18n.transfersExpiredBadge) : null,
+    renderLifespanChip(transfer.lifetime, i18n)
+  ].filter(Boolean)
+
+  const sideActions = []
+  if (otherParty && String(otherParty) !== String(userId)) {
+    sideActions.push(form({ method: "GET", action: "/pm" },
+      input({ type: "hidden", name: "recipients", value: otherParty }),
+      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
+    ))
+  }
+  if (showConfirm) {
+    sideActions.push(form({ method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ type: "submit", class: "filter-btn" }, i18n.transfersConfirmButton)
+    ))
+  }
+  const canEdit = transfer.from === userId && String(transfer.status || "").toUpperCase() === "UNCONFIRMED"
+  if (canEdit) {
+    sideActions.push(form({ method: "GET", action: `/transfers/edit/${encodeURIComponent(transfer.id)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ type: "submit", class: "update-btn" }, i18n.transfersUpdateButton)
+    ))
+    sideActions.push(form({ method: "POST", action: `/transfers/delete/${encodeURIComponent(transfer.id)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ type: "submit", class: "delete-btn" }, i18n.transfersDeleteButton)
+    ))
+  }
+  sideActions.push(form({ method: "GET", action: `/transfers/contract/${encodeURIComponent(transfer.id)}`, class: "transfer-contract-form" },
+    button({ type: "submit", class: "filter-btn" }, i18n.transfersExportContract || 'Create Contract')
+  ))
+
+  const infoRows = []
+  const pushRow = (labelText, valueNode) =>
+    infoRows.push(tr(
+      td({ class: "tribe-info-label" }, labelText),
+      td({ class: "tribe-info-value" }, valueNode)
+    ))
+  pushRow(i18n.transfersFrom, userLink(transfer.from))
+  pushRow(i18n.transfersTo, userLink(transfer.to))
+  if (cat !== "TRUST") pushRow(i18n.transfersAmount, fmtAmountWithUnit(transfer))
+  pushRow(i18n.transfersCategory || "Category", categoryLabel(cat))
+  if (!isUbi) pushRow(i18n.transfersDeadline, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : "")
+  pushRow(i18n.transfersStatus, i18n[statusKey(transfer.status)] || String(transfer.status || ""))
+
+  const transferSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, transfer.concept || i18n.transfersTitle)
+    ),
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    div({ class: "card-spread-centered" }, renderSpreadButton(transfer.id, params.spreads)),
+    tagsNode,
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.transfersConfirmations}: ${confirmedCount}/${required}`)
+    ),
+    params.block && params.block.id
+      ? div({ class: "card-field" },
+          span({ class: "card-label" }, `${i18n.blockchainBlockID || "Block ID"}: `),
+          span({ class: "card-value" }, a({ class: "user-link", href: `/blockexplorer/block/${encodeURIComponent(params.block.id)}` }, params.block.id))
+        )
+      : null
+  )
+
+  const transferMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    div({ class: "job-section" },
+      div({ class: "card-field" },
+        span({ class: "card-label" }, `${i18n.transfersFrom}: `),
+        span({ class: "card-value" }, userLink(transfer.from))
+      ),
+      div({ class: "card-field" },
+        span({ class: "card-label" }, `${i18n.transfersTo}: `),
+        span({ class: "card-value" }, userLink(transfer.to))
+      ),
+      cat !== "TRUST" ? div({ class: "card-field" },
+        span({ class: "card-label" }, `${i18n.transfersAmount}: `),
+        span({ class: "card-value card-salary" }, fmtAmountWithUnit(transfer))
+      ) : null,
+      div({ class: "card-field" },
+        span({ class: "card-label" }, `${i18n.transfersCategory || "Category"}: `),
+        span({ class: "card-value" }, categoryLabel(cat))
+      ),
+      div({ class: "card-field" },
+        span({ class: "card-label" }, `${i18n.transfersConcept}: `),
+        span({ class: "card-value" }, transfer.concept || "")
+      ),
+      !isUbi && dl && dl.isValid() ? div({ class: "card-field" },
+        span({ class: "card-label" }, `${i18n.transfersDeadline}: `),
+        span({ class: "card-value" }, dl.format("YYYY-MM-DD HH:mm"))
+      ) : null,
+      div({ class: "card-field" },
+        span({ class: "card-label" }, `${i18n.transfersStatus}: `),
+        span({ class: "card-value" }, i18n[statusKey(transfer.status)] || String(transfer.status || ""))
+      )
+    ),
+    p({ class: "card-footer" },
+      span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
+      userLink(transfer.from),
+      renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
+    ),
+    div({ class: "voting-buttons transfer-voting-buttons" },
+      opinionCategories.map(category =>
+        form({ method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          button({ class: "vote-btn" },
+            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${transfer.opinions?.[category] || 0}]`
+          )
+        )
+      )
+    )
+  )
 
   return template(
     transfer.concept,
@@ -489,59 +563,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.transfersCreateButton)
         )
       ),
-      renderBlockInfoCard(params.block),
-      div(
-        { class: "transfer-item" },
-        div(
-          { class: "card-section transfer" },
-          topbar ? topbar : null,
-          renderCardField(`${i18n.transfersFrom}:`, userLink(transfer.from)),
-          renderCardField(`${i18n.transfersTo}:`, userLink(transfer.to)),
-          br,
-          categoryOf(transfer) === "TRUST" ? null : div({ class: "transfer-amount-highlight" }, renderCardField(`${i18n.transfersAmount}:`, fmtAmountWithUnit(transfer))),
-          renderCardField(`${i18n.transfersCategory || "Category"}:`, categoryLabel(categoryOf(transfer))),
-          renderCardField(`${i18n.transfersConcept}:`, transfer.concept || ""),
-          isUbi ? null : renderCardField(`${i18n.transfersDeadline}:`, dl && dl.isValid() ? dl.format("YYYY-MM-DD HH:mm") : ""),
-          renderCardField(`${i18n.transfersStatus}:`, i18n[statusKey(transfer.status)] || String(transfer.status || "")),
-          br,
-          renderConfirmationsBar(confirmedCount, required),
-          showConfirm
-            ? form(
-                { method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                button({ type: "submit" }, i18n.transfersConfirmButton),
-                br(),
-                br()
-              )
-            : null,
-          tagsNode ? tagsNode : null,
-          tagsNode ? br() : null,
-          form(
-            { method: "GET", action: `/transfers/contract/${encodeURIComponent(transfer.id)}`, class: "transfer-contract-form" },
-            button({ type: "submit", class: "filter-btn" }, i18n.transfersExportContract || 'Create Contract')
-          ),
-          br(),
-          p(
-            { class: "card-footer" },
-            span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY-MM-DD HH:mm")} ${i18n.performed} `),
-            userLink(transfer.from),
-            renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
-          ),
-          div(
-            { class: "voting-buttons transfer-voting-buttons" },
-            opinionCategories.map(category =>
-              form(
-                { method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                button(
-                  { class: "vote-btn" },
-                  `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${transfer.opinions?.[category] || 0}]`
-                )
-              )
-            )
-          )
-        )
-      )
+      div({ class: "tribe-details" }, transferSide, transferMain)
     )
   )
 }

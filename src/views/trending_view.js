@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span} = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton} = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -24,7 +24,7 @@ const generateFilterButtons = (filters, currentFilter, action) =>
 const voteLabelFor = (cat) =>
   i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat;
 
-const renderTrendingCard = (item, votes, categories, seenTitles) => {
+const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new Map()) => {
   const c = item.value.content;
   const created = new Date(item.value.timestamp).toLocaleString();
 
@@ -188,8 +188,14 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
   }
 
   return div(
-    { class: 'trending-card', style: 'background-color:#2c2f33;border-radius:8px;padding:16px;border:1px solid #444;' },
+    { class: 'trending-card' },
+    div({ class: 'card-chips-row' },
+      span({ class: 'pm-exposition-chip pm-exposition-whole' },
+        span({ class: 'pm-exposition-text' }, String(c.type || '').toUpperCase())
+      )
+    ),
     contentHtml,
+    div({ class: 'card-spread-left' }, renderSpreadButton(item.key, spreadMap.get(item.key))),
     p(
       { class: 'card-footer' },
       span({ class: 'date-link' }, `${created} ${i18n.performed} `),
@@ -203,13 +209,13 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
         const maxVal = Math.max(...entries.map(([, v]) => v));
         const dominant = entries.filter(([, v]) => v === maxVal).map(([k]) => voteLabelFor(k));
         return [
-          span({ style: 'margin:0 8px;opacity:0.5;' }, '|'),
-          span({ style: 'font-weight:700;' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
+          span({ class: 'trending-dominant-sep' }, '|'),
+          span({ class: 'trending-dominant-text' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
         ];
       })();
       return h2(
         `${i18n.trendingTotalOpinions || i18n.trendingTotalCount}: `,
-        span({ style: 'font-weight:700;' }, String(votes)),
+        span({ class: 'trending-total-count' }, String(votes)),
         ...(dominantPart || [])
       );
     })(),
@@ -227,7 +233,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles) => {
   );
 };
 
-exports.trendingView = (items, filter, categories = opinionCategories) => {
+exports.trendingView = (items, filter, categories = opinionCategories, spreadMap = new Map()) => {
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
@@ -270,7 +276,8 @@ exports.trendingView = (items, filter, categories = opinionCategories) => {
         item,
         Object.values(item.value.content.opinions || {}).reduce((s, n) => s + (n || 0), 0),
         categories,
-        seenDocumentTitles
+        seenDocumentTitles,
+        spreadMap
       )
     )
     .filter(Boolean);

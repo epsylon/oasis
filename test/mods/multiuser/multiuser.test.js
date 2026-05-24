@@ -6,7 +6,7 @@ describe('multi-user (3+ peers): tribe membership & content', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
     A.setActor();
-    const r = await A.use('tribes').createTribe('G3', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('G3', '', null, '', [], true, 'strict', null, 'OPEN', '');
     const codeB = await A.use('tribes').generateInvite(r.key);
     B.setActor();
     await B.use('tribes').joinByInvite(codeB);
@@ -33,7 +33,7 @@ describe('multi-user (3+ peers): tribe membership & content', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net); const C = makePeer(net); const D = makePeer(net);
     A.setActor();
-    const r = await A.use('tribes').createTribe('Closed', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('Closed', '', null, '', [], true, 'strict', null, 'OPEN', '');
     for (const peer of [B, C]) {
       A.setActor();
       const code = await A.use('tribes').generateInvite(r.key);
@@ -54,7 +54,7 @@ describe('multi-user (3+ peers): tribe membership & content', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
     A.setActor();
-    const r = await A.use('tribes').createTribe('Trio', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
+    const r = await A.use('tribes').createTribe('Trio', '', null, '', [], true, 'strict', null, 'OPEN', '');
     for (const peer of [B, C]) {
       A.setActor();
       const code = await A.use('tribes').generateInvite(r.key);
@@ -154,8 +154,8 @@ describe('multi-user: sub-tribe membership isolation (3 peers)', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
     A.setActor();
-    const parent = await A.use('tribes').createTribe('P', '', null, '', [], false, true, 'strict', null, 'OPEN', '');
-    const sub = await A.use('tribes').createTribe('S', '', null, '', [], false, true, 'strict', parent.key, 'OPEN', '');
+    const parent = await A.use('tribes').createTribe('P', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const sub = await A.use('tribes').createTribe('S', '', null, '', [], true, 'strict', parent.key, 'OPEN', '');
 
     A.setActor();
     const parentInvite = await A.use('tribes').generateInvite(parent.key);

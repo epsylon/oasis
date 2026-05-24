@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const categories = require('../backend/opinion_categories');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
@@ -73,7 +74,7 @@ module.exports = ({ cooler }) => {
         pull.collect((err, msgs) => err ? rej(err) : res(msgs))
       );
     });
-    const tombstoned = new Set();
+    const tombstoned = buildValidatedTombstoneSet(messages);
     const replaces = new Map();
     const byId = new Map();
 
@@ -81,9 +82,8 @@ module.exports = ({ cooler }) => {
       const key = msg.key;
       const c = msg.value?.content;
       if (!c) continue;
-      if (c.type === 'tombstone' && c.target) {
-        tombstoned.add(c.target);
-        byId.delete(c.target);
+      if (c.type === 'tombstone') {
+        if (tombstoned.has(c.target)) byId.delete(c.target);
         continue;
       }
       if (c.opinions && !tombstoned.has(key) && !['task', 'event', 'report'].includes(c.type)) {

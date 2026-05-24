@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink} = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton } = require("./main_views")
+const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -48,9 +49,22 @@ const renderModeButtons = (currentFilter) =>
     )
   )
 
+const renderChatStatusChip = (status) => {
+  const s = String(status || "OPEN").toUpperCase()
+  const variant = s === "CLOSED" ? "closed" : s === "INVITE-ONLY" ? "whole" : "mutuals"
+  const icon = s === "CLOSED" ? "\u2717" : s === "INVITE-ONLY" ? "\uD83D\uDD11" : "\u2713"
+  const label = s === "CLOSED" ? i18n.chatStatusClosed
+    : s === "INVITE-ONLY" ? i18n.chatStatusInviteOnly
+    : i18n.chatStatusOpen
+  return renderStateChip(variant, icon, label)
+}
+
 const renderChatCard = (chat, filter, params = {}) => {
-  const statusLabel = chat.status === "CLOSED" ? i18n.chatStatusClosed :
-    chat.status === "INVITE-ONLY" ? i18n.chatStatusInviteOnly : i18n.chatStatusOpen
+  const chips = [
+    renderChatStatusChip(chat.status),
+    renderEncryptedChip(i18n),
+    renderLifespanChip(chat.lifetime, i18n)
+  ].filter(Boolean)
 
   return div({ class: "tribe-card" },
     div({ class: "tribe-card-image-wrapper" },
@@ -59,20 +73,20 @@ const renderChatCard = (chat, filter, params = {}) => {
       )
     ),
     div({ class: "tribe-card-body" },
-      h2({ class: "tribe-card-title" },
-        a({ href: `/chats/${encodeURIComponent(chat.key)}` }, "\uD83D\uDD12 " + (chat.title || i18n.chatUntitled))
-      ),
-      chat.description ? p({ class: "tribe-card-description" }, chat.description) : null,
-      br(),
-      table({ class: "tribe-info-table" },
-        tr(
-          td({ class: "tribe-info-label" }, i18n.chatStatus),
-          td({ class: "tribe-info-value", colspan: "3" }, statusLabel)
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" },
+          a({ href: `/chats/${encodeURIComponent(chat.key)}` }, chat.title || i18n.chatUntitled)
         )
       ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+      chat.description ? p({ class: "tribe-card-description" }, chat.description) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.chatParticipants}: ${safeArr(chat.members).length}`)
       ),
+      (() => {
+        const btn = renderSpreadButton(chat.key, (params && params.spreadMap && params.spreadMap.get(chat.key)) || (params && params.spreads));
+        return btn ? div({ class: "card-spread-left" }, btn) : null;
+      })(),
       div({ class: "visit-btn-centered" },
         a({ href: `/chats/${encodeURIComponent(chat.key)}`, class: "filter-btn" }, i18n.chatVisitChat)
       )
@@ -218,13 +232,25 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   const statusLabel = chat.status === "CLOSED" ? i18n.chatStatusClosed :
     chat.status === "INVITE-ONLY" ? i18n.chatStatusInviteOnly : i18n.chatStatusOpen
 
+  const detailChips = [
+    renderChatStatusChip(chat.status),
+    renderEncryptedChip(i18n),
+    renderLifespanChip(chat.lifetime, i18n)
+  ].filter(Boolean)
   const chatSide = div({ class: "tribe-side" },
-    h2("\uD83D\uDD12 " + (chat.title || i18n.chatUntitled)),
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, chat.title || i18n.chatUntitled)
+    ),
+    detailChips.length ? div({ class: "card-chips-row" }, ...detailChips) : null,
     renderMediaBlob(chat.image, "/assets/images/default-avatar.png", { class: "tribe-detail-image" }),
     div({ class: "shop-share" },
       span({ class: "tribe-info-label" }, `${i18n.chatShareUrl}: `),
       input({ type: "text", value: fullShareUrl, readonly: true, class: "shop-share-input" })
     ),
+    (() => {
+      const btn = renderSpreadButton(chat.key, params.spreads);
+      return btn ? div({ class: "card-spread-centered" }, btn) : null;
+    })(),
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.chatParticipants}: ${safeArr(chat.members).length}`)
     ),
@@ -237,10 +263,6 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         td({ class: "tribe-info-value", colspan: "4" },
           userLink(chat.author)
         )
-      ),
-      tr(
-        td({ class: "tribe-info-label" }, i18n.chatStatus),
-        td({ class: "tribe-info-value", colspan: "3" }, statusLabel)
       ),
       !isRestrictedInviteOnly && chat.category ? tr(
         td({ class: "tribe-info-label" }, i18n.chatCategoryLabel),

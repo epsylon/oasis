@@ -87,6 +87,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Jobs: Module to discover and manage jobs.	
  + Legacy: Module to manage your secret (private key) quickly and securely.	
  + Latest: Module to receive the most recent posts and discussions.
+ + L.A.R.P.: Module for a live-action role-playing layer with 9 houses.
  + Logs: Module to record (via AI assistant) your experiences.
  + Maps: Module to manage and share offline maps.
  + Market: Module to exchange goods or services.

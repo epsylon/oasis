@@ -46,13 +46,112 @@ const userLink = (feedId, knownName) => {
 exports.userLink = userLink;
 exports.userLinkLabel = userLinkLabel;
 
+const renderStateChip = (variant, icon, text) =>
+  span({ class: `pm-exposition-chip pm-exposition-${variant}` },
+    icon ? span({ class: "pm-exposition-icon" }, icon) : null,
+    span({ class: "pm-exposition-text" }, String(text || ""))
+  );
+
+const renderOpenClosedChip = (status, i18nObj) => {
+  const s = String(status || "").toUpperCase();
+  const isOpen = s === "OPEN";
+  const label = (i18nObj && i18nObj["statusChip" + s]) || s;
+  return renderStateChip(isOpen ? "mutuals" : "closed", isOpen ? "✓" : "✗", label);
+};
+
+const renderVisibilityChip = (visibility, i18nObj) => {
+  const v = String(visibility || "").toUpperCase();
+  if (v === "HIDDEN") {
+    return renderStateChip("closed", "🚫", (i18nObj && i18nObj.visibilityHidden) || "HIDDEN");
+  }
+  return renderStateChip("mutuals", "👁", (i18nObj && i18nObj.visibilityPublic) || "PUBLIC");
+};
+
+const renderPrivacyChip = (isPrivate, i18nObj) =>
+  isPrivate
+    ? renderStateChip("closed", "🔒", (i18nObj && i18nObj.privacyPrivate) || "PRIVATE")
+    : renderStateChip("mutuals", "🌐", (i18nObj && i18nObj.privacyPublic) || "PUBLIC");
+
+const renderModeChip = (mode, i18nObj) => {
+  const m = String(mode || "").toLowerCase();
+  if (m === "strict") return renderStateChip("closed", null, (i18nObj && i18nObj.tribeStrict) || "STRICT");
+  return renderStateChip("mutuals", null, (i18nObj && i18nObj.tribeOpen) || "OPEN");
+};
+
+const renderLifespanChip = (lifetime, i18nObj) => {
+  const lt = lifetime || null;
+  if (!lt || !lt.bucket) return null;
+  const range = lt.range || "";
+  if (range) {
+    return span({ class: `pm-exposition-chip pm-exposition-lifespan-${lt.bucket}` },
+      span({ class: "pm-exposition-text" }, range)
+    );
+  }
+  return span({ class: `pm-exposition-chip pm-exposition-lifespan-${lt.bucket}` },
+    span({ class: `activity-dot ${lt.bucket}` }, "●"),
+    span({ class: "pm-exposition-text" }, (i18nObj && i18nObj.lifespanLabel) || "Lifespan")
+  );
+};
+
+exports.renderStateChip = renderStateChip;
+exports.renderOpenClosedChip = renderOpenClosedChip;
+exports.renderVisibilityChip = renderVisibilityChip;
+exports.renderPrivacyChip = renderPrivacyChip;
+exports.renderModeChip = renderModeChip;
+exports.renderLifespanChip = renderLifespanChip;
+
+const formatCarbon = (bytes) => {
+  const n = Number(bytes) || 0;
+  if (!n) return '0 µg CO₂';
+  const grams = (n / (1024 * 1024)) * 0.095;
+  if (grams >= 1) return `${grams.toFixed(2)} g CO₂`;
+  const mg = grams * 1000;
+  if (mg >= 1) return `${mg.toFixed(2)} mg CO₂`;
+  const ug = mg * 1000;
+  return `${ug.toFixed(2)} µg CO₂`;
+};
+
+const renderEcoTax = (sizeBytes, blockId) => {
+  const n = Number(sizeBytes);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const label = (i18n && i18n.ecoTaxLabel) ? i18n.ecoTaxLabel : 'ECO Tax';
+  const href = blockId
+    ? `/blockexplorer?inspect=${encodeURIComponent(blockId)}#inspect`
+    : '/blockexplorer#inspect';
+  let band = 'low';
+  let reducer = 1;
+  let rawRatio = 0;
+  let inhabitants = 1;
+  try {
+    const maxObserved = sharedState.getMaxBlockBytes ? Number(sharedState.getMaxBlockBytes()) : 0;
+    const max = maxObserved > 0 ? maxObserved : n;
+    rawRatio = max > 0 ? Math.min(1, n / max) : 0;
+    inhabitants = Math.max(1, (sharedState.getInhabitantCount && sharedState.getInhabitantCount()) || 1);
+    reducer = 1 + Math.log10(inhabitants);
+    const adjusted = rawRatio / reducer;
+    if (adjusted >= 0.66) band = 'high';
+    else if (adjusted >= 0.33) band = 'mid';
+    else band = 'low';
+  } catch (_) {}
+  const reducerNote = inhabitants > 1
+    ? ` · reducer ×${reducer.toFixed(2)} (${inhabitants} inhabitants)`
+    : '';
+  const title = `${label} · ${formatCarbon(sizeBytes)}${reducerNote}`;
+  return a({ href, class: `eco-tax-chip eco-tax-chip-${band}`, title },
+    span({ class: 'eco-tax-chip-label' }, label + ': '),
+    span({ class: 'eco-tax-chip-value' }, formatCarbon(sizeBytes))
+  );
+};
+
+exports.formatCarbon = formatCarbon;
+exports.renderEcoTax = renderEcoTax;
+
 const errorView = ({ title, message, backHref }) => {
   const heading = title || i18n.errorPageTitle || 'Error';
   return exports.template(
     heading,
     section(
       div({ class: 'tags-header' },
-        h2(heading),
         message ? p({ class: 'error-page-message' }, String(message)) : null,
         div({ class: 'error-page-actions' },
           a({ href: backHref || '/', class: 'filter-btn' }, i18n.goBack || 'Go back')
@@ -63,20 +162,22 @@ const errorView = ({ title, message, backHref }) => {
 };
 exports.errorView = errorView;
 
-const renderSpreadButton = (msgKey, opts = {}) => {
-  if (!msgKey || typeof msgKey !== 'string') return null;
-  const voters = Array.isArray(opts.voters) ? opts.voters : [];
-  const count = typeof opts.count === 'number' ? opts.count : voters.length;
-  const alreadySpread = opts.alreadySpread === true;
-  const maxNames = 16;
+const renderSpreadButton = (msgKey, opts) => {
+  if (!msgKey || typeof msgKey !== 'string' || !msgKey.startsWith('%') || !/\.sha256$/.test(msgKey)) return null;
+  const o = (opts && typeof opts === 'object') ? opts : {};
+  const voters = Array.isArray(o.voters) ? o.voters : [];
+  const count = typeof o.count === 'number' ? o.count : voters.length;
+  const alreadySpread = o.alreadySpread === true;
+  const maxNames = 5;
   const maxLen = 16;
-  const tooltipNames = voters.slice(0, maxNames)
+  const lastVoters = voters.slice(-maxNames);
+  const tooltipNames = lastVoters
     .map(v => (v && typeof v === 'object' ? (v.name || v.key || '') : String(v || '')))
     .filter(Boolean)
     .map(n => n.slice(0, maxLen))
     .join(', ');
   const extra = count > maxNames ? ` +${count - maxNames} ${i18n.spreadMore || 'more'}` : '';
-  const tooltip = count > 0 ? `${tooltipNames}${extra}` : (i18n.spreadHint || 'Spread this to your followers (replicates via your feed).');
+  const tooltip = count > 0 ? `${tooltipNames}${extra}` : (i18n.spreadHint || 'Spread this to your supporters (replicates via your feed).');
   return form(
     { method: 'POST', action: `/spread/${encodeURIComponent(msgKey)}`, class: 'spread-form' },
     button(
@@ -630,6 +731,20 @@ const renderTribesLink = () => {
     : "";
 };
 
+const renderLarpLink = () => {
+  const larpMod = getConfig().modules.larpMod === "on";
+  return larpMod
+    ? [
+        navLink({
+          href: "/larp",
+          emoji: "✦",
+          text: i18n.larpTitle || "L.A.R.P.",
+          class: "larp-link enabled"
+        })
+      ]
+    : "";
+};
+
 const renderParliamentLink = () => {
   const parliamentMod = getConfig().modules.parliamentMod === "on";
   return parliamentMod
@@ -902,6 +1017,7 @@ const renderTasksLink = () => {
 const template = (titlePrefix, ...elements) => {
   const currentConfig = getConfig();
   const theme = currentConfig.themes.current || "Dark-SNH";
+  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : "blocks";
   const themeLink = link({
     rel: "stylesheet",
     href: `/assets/themes/${theme}.css`
@@ -926,7 +1042,7 @@ const template = (titlePrefix, ...elements) => {
     ),
     body(
       div(
-        { class: "header" },
+        { class: uxMode === "ainav" ? "header ainav-only" : "header" },
         div(
           { class: "top-bar-left" },
           a(
@@ -937,7 +1053,21 @@ const template = (titlePrefix, ...elements) => {
               alt: "Oasis Logo"
             })
           ),
-          nav(
+          uxMode === "ainav" ? nav(
+            ul(
+              (() => {
+                const inboxCount = sharedState.getInboxCount();
+                const badge = inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : '';
+                return li(
+                  a({ href: "/inbox" },
+                    span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, badge
+                  )
+                );
+              })(),
+              navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
+              navLink({ href: "/invites", emoji: "ꔮ", text: i18n.invites })
+            )
+          ) : nav(
             ul(
               (() => {
                 const inboxCount = sharedState.getInboxCount();
@@ -959,9 +1089,9 @@ const template = (titlePrefix, ...elements) => {
         ),
         (() => {
           const aiNavOn = getConfig().modules.aiNavMod === 'on';
-          if (!aiNavOn) return null;
+          if (!aiNavOn && uxMode !== 'ainav') return null;
           return div(
-            { class: "top-bar-center" },
+            { class: uxMode === 'ainav' ? "top-bar-center top-bar-center-ainav" : "top-bar-center" },
             form(
               { method: 'POST', action: '/ai/ask', class: 'ai-ask-form' },
               input({
@@ -970,13 +1100,23 @@ const template = (titlePrefix, ...elements) => {
                 class: 'ai-ask-input',
                 placeholder: i18n.aiNavPlaceholder || 'Where do you want to go?',
                 autocomplete: 'off',
-                maxlength: '300'
+                maxlength: '300',
+                autofocus: uxMode === 'ainav' ? 'autofocus' : undefined
               }),
               button({ type: 'submit', class: 'ai-ask-btn' }, '➤')
             )
           );
         })(),
-        div(
+        uxMode === "ainav" ? div(
+          { class: "top-bar-right" },
+          nav(
+            ul(
+              navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
+              navLink({ href: "/graphos", emoji: "ꕢ", text: i18n.graphos }),
+              navLink({ href: "/peers", emoji: "⧖", text: i18n.peers })
+            )
+          )
+        ) : div(
           { class: "top-bar-right" },
           nav(
             ul(
@@ -1000,8 +1140,8 @@ const template = (titlePrefix, ...elements) => {
         return null;
       })(),
       div(
-        { class: "main-content" },
-        div(
+        { class: uxMode === "ainav" ? "main-content ainav-only" : "main-content" },
+        uxMode === "ainav" ? null : div(
           { class: "sidebar-left" },
           nav(
             ul(
@@ -1066,6 +1206,7 @@ const template = (titlePrefix, ...elements) => {
                   text: i18n.inhabitantsLabel
                 }),
                 renderTribesLink(),
+                renderLarpLink(),
                 renderParliamentLink(),
                 renderCourtsLink()
               ),
@@ -1106,7 +1247,7 @@ const template = (titlePrefix, ...elements) => {
           )
         ),
         main({ id: "content", class: "main-column" }, elements),
-        div(
+        uxMode === "ainav" ? null : div(
           { class: "sidebar-right" },
           nav(
             ul(
@@ -1178,6 +1319,90 @@ const template = (titlePrefix, ...elements) => {
 // menu END
 
 exports.template = template;
+
+exports.ainavHomeView = ({ recentTags = [] } = {}) => {
+  const currentConfig = getConfig();
+  const theme = currentConfig.themes.current || "Dark-SNH";
+  const placeholder = i18n.aiNavPlaceholder || 'Where do you want to go?';
+  const nodes = html(
+    { lang: "en" },
+    head(
+      title(placeholder, " | Oasis"),
+      link({ rel: "stylesheet", href: "/assets/styles/style.css" }),
+      link({ rel: "stylesheet", href: `/assets/themes/${theme}.css` }),
+      link({ rel: "stylesheet", href: "/assets/styles/mobile.css", media: "(max-width: 768px)" }),
+      link({ rel: "icon", href: "/assets/images/favicon.svg" }),
+      meta({ charset: "utf-8" }),
+      meta({ name: "description", content: i18n.oasisDescription }),
+      meta({ name: "viewport", content: toAttributes({ width: "device-width", "initial-scale": 1 }) })
+    ),
+    body(
+      div({ class: "ainav-landing" },
+        div({ class: "ainav-landing-topbar" },
+          div({ class: "top-bar-left" },
+            nav(
+              ul(
+                (() => {
+                  const inboxCount = sharedState.getInboxCount();
+                  const badge = inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : '';
+                  return li(
+                    a({ href: "/inbox" },
+                      span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, badge
+                    )
+                  );
+                })(),
+                navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
+                navLink({ href: "/invites", emoji: "ꔮ", text: i18n.invites })
+              )
+            )
+          ),
+          div({ class: "top-bar-right" },
+            nav(
+              ul(
+                navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
+                navLink({ href: "/graphos", emoji: "ꕢ", text: i18n.graphos }),
+                navLink({ href: "/peers", emoji: "⧖", text: i18n.peers })
+              )
+            )
+          )
+        ),
+        div({ class: "ainav-landing-center" },
+          a({ href: "/", class: "ainav-landing-logo" },
+            img({ src: "/assets/images/snh-oasis.jpg", alt: "Oasis Logo" })
+          ),
+          (() => {
+            const myId = (config.keys && config.keys.id) ? config.keys.id : '';
+            return myId ? div({ class: 'ainav-landing-myid oasis-footer-center' },
+              a({ href: '/profile' }, span(myId))
+            ) : null;
+          })(),
+          form(
+            { method: 'POST', action: '/ai/ask', class: 'ai-ask-form ainav-landing-form' },
+            input({
+              type: 'text',
+              name: 'q',
+              class: 'ai-ask-input ainav-landing-input',
+              placeholder,
+              autocomplete: 'off',
+              maxlength: '300',
+              autofocus: 'autofocus'
+            }),
+            button({ type: 'submit', class: 'ai-ask-btn ainav-landing-btn' }, '➤')
+          ),
+          Array.isArray(recentTags) && recentTags.length
+            ? div({ class: 'ainav-landing-tags' },
+                recentTags.map(t => a({
+                  href: `/search?query=%23${encodeURIComponent(t.name || t)}`,
+                  class: 'tag-link'
+                }, `#${t.name || t}`))
+              )
+            : null
+        )
+      )
+    )
+  );
+  return doctypeString + nodes.outerHTML;
+};
 
 exports.tribeAccessDeniedView = (tribe) => {
   const tribeName = tribe && !tribe.isAnonymous ? tribe.title : "";
@@ -1761,7 +1986,7 @@ const post = ({ msg, aside = false, preview = false }) => {
     }
 };
 
-exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '', baseUrl = '' }) => {
+exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '', baseUrl = '', gpgFingerprint = '' }) => {
   const prefs = {
     activity: visibilityPrefs.activity === true,
     device:   visibilityPrefs.device   === true,
@@ -1778,6 +2003,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     clearnetImages:    visibilityPrefs.clearnetImages    === true,
     clearnetDocuments: visibilityPrefs.clearnetDocuments === true,
     clearnetTorrents:  visibilityPrefs.clearnetTorrents  === true,
+    clearnetBookmarks: visibilityPrefs.clearnetBookmarks === true,
     profileShops:      visibilityPrefs.profileShops      === true,
     profileJobs:       visibilityPrefs.profileJobs       === true,
     profileEvents:     visibilityPrefs.profileEvents     === true,
@@ -1788,9 +2014,12 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     profileImages:     visibilityPrefs.profileImages     === true,
     profileDocuments:  visibilityPrefs.profileDocuments  === true,
     profileTorrents:   visibilityPrefs.profileTorrents   === true,
-    ecoTax:            visibilityPrefs.ecoTax            !== false
+    profileBookmarks:  visibilityPrefs.profileBookmarks  === true,
+    ecoTax:            visibilityPrefs.ecoTax            !== false,
+    larpSign:          visibilityPrefs.larpSign          === true,
+    gpg:               visibilityPrefs.gpg               !== false
   };
-  prefs.clearnet = prefs.clearnetShops || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents;
+  prefs.clearnet = prefs.clearnetShops || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks;
   const togglePill = (key, labelText) => label({ class: "pref-pill", for: `vis_${key}` },
     input({ type: "checkbox", name: `vis_${key}`, id: `vis_${key}`, value: "1", class: "pref-pill-input", checked: prefs[key] ? "checked" : undefined }),
     span({ class: "pref-pill-label" }, labelText)
@@ -1828,6 +2057,19 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             description
           )
         ),
+        br(),br(),
+        label(
+          i18n.profileGpgKey || 'GPG Public Key (.asc)',
+          br(),
+          div({ class: "gpg-edit-row" },
+            input({ type: "file", name: "gpgKey", accept: ".asc,.gpg,.pgp,application/pgp-keys,text/plain" }),
+            gpgFingerprint
+              ? button({ type: "submit", formaction: "/profile/gpg/remove", formenctype: "application/x-www-form-urlencoded", formnovalidate: true, class: "gpg-remove-btn" },
+                  (i18n.profileGpgRemove || 'Remove') + ' (' + String(gpgFingerprint).slice(-8).toUpperCase() + ')'
+                )
+              : null
+          )
+        ),
         br(), br(),
         div({ class: "prefs-card" },
           div({ class: "tags-header" },
@@ -1844,7 +2086,8 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             togglePill('profileVideos',    i18n.profileClearnetVideosLabel    || 'Videos'),
             togglePill('profileImages',    i18n.profileClearnetImagesLabel    || 'Images'),
             togglePill('profileDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'),
-            togglePill('profileTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents')
+            togglePill('profileTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'),
+            togglePill('profileBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks')
           )
         ),
         br(),
@@ -1854,12 +2097,14 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             p({ class: "prefs-help" }, i18n.profileSensorsHelp || 'Optional metrics shown on your profile.')
           ),
           div({ class: "pref-pill-row" },
-            togglePill('ecoTax',   i18n.profileVisibilityEcoTax   || 'ECO Tax'),
+            togglePill('karma',    i18n.profileVisibilityKarma    || 'KARMA Scoring'),
             togglePill('activity', i18n.profileVisibilityActivity || 'Activity Level'),
             togglePill('device',   i18n.profileVisibilityDevice   || 'Device'),
-            togglePill('karma',    i18n.profileVisibilityKarma    || 'KARMA Scoring'),
+            togglePill('larpSign', i18n.profileVisibilityLarpSign || 'L.A.R.P. Sign'),
+            togglePill('gpg',      i18n.profileVisibilityGpg      || 'GPG Key'),
+            togglePill('wallet',   i18n.profileVisibilityWallet   || 'ECOIN Wallet'),
             togglePill('ubi',      i18n.profileVisibilityUbi      || 'UBI'),
-            togglePill('wallet',   i18n.profileVisibilityWallet   || 'ECOIN Wallet')
+            togglePill('ecoTax',   i18n.profileVisibilityEcoTax   || 'ECO Tax')
           )
         ),
         br(),
@@ -1878,7 +2123,8 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             togglePill('clearnetVideos',    i18n.profileClearnetVideosLabel    || 'Videos'),
             togglePill('clearnetImages',    i18n.profileClearnetImagesLabel    || 'Images'),
             togglePill('clearnetDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'),
-            togglePill('clearnetTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents')
+            togglePill('clearnetTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'),
+            togglePill('clearnetBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks')
           )
         ),
         br(),
@@ -1969,7 +2215,8 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
     { key: 'videos',    label: 'Videos',    kind: 'Video',    prefKey: 'clearnetVideos' },
     { key: 'images',    label: 'Images',    kind: 'Image',    prefKey: 'clearnetImages' },
     { key: 'documents', label: 'Documents', kind: 'Document', prefKey: 'clearnetDocuments' },
-    { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' }
+    { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' },
+    { key: 'bookmarks', label: 'Bookmarks', kind: 'Bookmark', prefKey: 'clearnetBookmarks' }
   ];
   const allItems = [];
   for (const m of moduleDef) {
@@ -2057,13 +2304,15 @@ exports.authorView = async ({
   lastClaimedDate = null,
   totalClaimed = 0,
   carbonGrams = 0,
+  larpHouse = null,
   lastActivityBucket,
   visibilityPrefs = null,
   baseUrl = '',
   userActions = [],
   allActions = [],
   profileItems = null,
-  profileFilterType = ''
+  profileFilterType = '',
+  gpgFingerprint = ''
 }) => {
   const isOwnProfile = !!(relationship && relationship.me);
   const rawPrefs = visibilityPrefs || {};
@@ -2074,9 +2323,10 @@ exports.authorView = async ({
     ubi:      rawPrefs.ubi      === true,
     wallet:   rawPrefs.wallet   === true,
     ecoTax:   rawPrefs.ecoTax   !== false,
+    larpSign: rawPrefs.larpSign === true,
     clearnet: rawPrefs.clearnet === true
   };
-  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents'];
+  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
   const anySubClearnet = clearnetSubKeys.some(k => rawPrefs[k] === true);
   prefs.clearnet = prefs.clearnet || anySubClearnet;
   const showField = (key) => prefs[key];
@@ -2148,28 +2398,46 @@ exports.authorView = async ({
     if (mg >= 1) return `${mg.toFixed(2)} mg CO₂`;
     return `${(mg * 1000).toFixed(2)} µg CO₂`;
   };
-  const karmaUbiChildren = [];
-  if (showField('ecoTax')) {
-    karmaUbiChildren.push(span({ class: "karma-line eco-tax-line" }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))));
-  }
+  const sensorsItems = [];
   if (showField('karma')) {
-    karmaUbiChildren.push(span({ class: "karma-line" }, `${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)));
+    sensorsItems.push(span({ class: "karma-line" }, `${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)));
+  }
+  if (activityChip) sensorsItems.push(activityChip);
+  if (deviceChip) sensorsItems.push(deviceChip);
+  const larpSignBlockInline = (showField('larpSign') && larpHouse && larpHouse.key)
+    ? a({ href: `/larp/${larpHouse.key}`, class: 'larp-sign-block', title: larpHouse.name },
+        img({ src: larpHouse.image || '/assets/larp/images/default.jpg', alt: larpHouse.name, class: 'larp-sign-large' })
+      )
+    : null;
+  if (larpSignBlockInline) sensorsItems.push(larpSignBlockInline);
+  if (showField('gpg') && (gpgFingerprint || isOwnProfile)) {
+    let gpgNode;
+    if (gpgFingerprint) {
+      const shortId = String(gpgFingerprint).slice(-8).toUpperCase();
+      gpgNode = a({ href: `/profile/${encodeURIComponent(feedId)}/gpg.asc`, title: i18n.profileGpgDownload || 'Download' }, strong(shortId));
+    } else {
+      const notCfg = i18n.statsEcoWalletNotConfigured || 'Not configured!';
+      gpgNode = isOwnProfile ? a({ href: '/profile/edit' }, strong(notCfg)) : strong(notCfg);
+    }
+    sensorsItems.push(span({ class: "gpg-line" }, `${i18n.profileGpgChip || 'GPG'}: `, gpgNode));
+  }
+  if (showField('wallet') && (ecoAddress || isOwnProfile)) {
+    const walletText = ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!';
+    const walletNode = isOwnProfile
+      ? a({ href: '/wallet' }, strong(walletText))
+      : strong(walletText);
+    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, walletNode));
   }
   if (showField('ubi')) {
-    karmaUbiChildren.push(span({ class: "ubi-line" }, `${i18n.bankUbiThisMonth}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)));
-    karmaUbiChildren.push(span({ class: "ubi-line" }, `${i18n.bankUbiLastClaimed}: `,
+    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.bankUbiThisMonth}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)));
+    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.bankUbiLastClaimed}: `,
       lastClaimedDate
         ? a({ href: "/transfers?filter=ubi", class: "user-link" }, new Date(lastClaimedDate).toLocaleDateString())
         : strong(i18n.bankUbiNeverClaimed)));
-    karmaUbiChildren.push(span({ class: "ubi-line" }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)));
+    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)));
   }
-  const sensorsItems = [];
-  if (activityChip) sensorsItems.push(activityChip);
-  if (deviceChip) sensorsItems.push(deviceChip);
-  for (const c of karmaUbiChildren) sensorsItems.push(c);
-  if (showField('wallet') && (ecoAddress || isOwnProfile)) {
-    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `,
-      a({ href: '/wallet' }, ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!')));
+  if (showField('ecoTax')) {
+    sensorsItems.push(span({ class: "karma-line eco-tax-line" }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))));
   }
   const metricsBlock = sensorsItems.length ? div({ class: "profile-sensors-box" }, ...sensorsItems) : null;
 
@@ -2587,7 +2855,8 @@ exports.privateView = async (messagesInput, filter) => {
 
   const chip = (txt) => span({ class: 'chip' }, txt)
 
-  function headerLine({ sentAt, from, toLinks, subject }) {
+  function headerLine({ sentAt, from, toLinks, subject, msgKey, msgSize }) {
+    const ecoChip = msgSize ? renderEcoTax(msgSize, msgKey) : null;
     return table({ class: 'pm-info-table' },
       tr(
         td({ class: 'card-label' }, i18n.pmFromLabel || 'From:'),
@@ -2604,8 +2873,18 @@ exports.privateView = async (messagesInput, filter) => {
       tr(
         td({ class: 'card-label' }, i18n.pmSubjectLabel || 'Subject:'),
         td({ class: 'card-value' }, subject || i18n.pmNoSubject || '(no subject)')
-      )
+      ),
+      ecoChip
+        ? tr(
+            td({ class: 'card-label' }, i18n.ecoTaxLabel || 'ECO Tax'),
+            td({ class: 'card-value' }, ecoChip)
+          )
+        : null
     )
+  }
+
+  function msgSizeBytes(m) {
+    try { return Buffer.byteLength(JSON.stringify(m && m.value), 'utf8'); } catch (_) { return 0; }
   }
 
   function actions({ key, replyId, subjectRaw, text }) {
@@ -2691,7 +2970,7 @@ exports.privateView = async (messagesInput, filter) => {
       .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`)
       .replace(/\/calendars\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="calendar-link" href="/calendars/${encodeURIComponent(id)}">${match}</a>`)
       .replace(/\/ai\/ask\?[^\s<"]+/g, (match) => `<a class="ai-ask-link" href="${match}">${match}</a>`)
-      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
+      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|melody|audios|videos|images|documents|bookmarks|torrents|forum|feed|events|tasks|votes|reports|market|jobs|projects|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
       .replace(/(https?:\/\/[^\s<"]+)/g, (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`)
   }
 
@@ -2704,8 +2983,9 @@ exports.privateView = async (messagesInput, filter) => {
 
   const inboxSet = new Set()
   for (const arr of Object.values(threads)) {
-    const hasInbound = arr.some(isToUser)
-    if (hasInbound) for (const m of arr) inboxSet.add(m)
+    for (const m of arr) {
+      if (!isSent(m) && isToUser(m)) inboxSet.add(m)
+    }
   }
 
   const isReminder = m => {
@@ -2733,7 +3013,7 @@ exports.privateView = async (messagesInput, filter) => {
     return sa - sb
   })
 
-  function JobCard({ type, sentAt, from, toLinks, text, key }) {
+  function JobCard({ type, sentAt, from, toLinks, text, key, msgSize }) {
     const isSub = type === 'JOB_SUBSCRIBED'
     const icon = isSub ? '🟡' : '🟠'
     const titleH = isSub ? (i18n.inboxJobSubscribedTitle || 'New subscription to your job offer') : (i18n.inboxJobUnsubscribedTitle || 'Unsubscription from your job offer')
@@ -2742,7 +3022,7 @@ exports.privateView = async (messagesInput, filter) => {
     const href = jobId ? hrefFor.job(jobId) : null
     return div(
       clickableCardProps(href, `job-notification thread-level-0`),
-      headerLine({ sentAt, from, toLinks, subject: type }),
+      headerLine({ sentAt, from, toLinks, subject: type, msgKey: key, msgSize }),
       h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotJobs} · ${titleH}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -2755,7 +3035,7 @@ exports.privateView = async (messagesInput, filter) => {
     )
   }
 
-  function ProjectFollowCard({ type, sentAt, from, toLinks, text, key }) {
+  function ProjectFollowCard({ type, sentAt, from, toLinks, text, key, msgSize }) {
     const isFollow = type === 'PROJECT_FOLLOWED'
     const icon = isFollow ? '🔔' : '🔕'
     const titleH = isFollow
@@ -2766,7 +3046,7 @@ exports.privateView = async (messagesInput, filter) => {
     const href = projectId ? hrefFor.project(projectId) : null
     return div(
       clickableCardProps(href, `project-${isFollow ? 'follow' : 'unfollow'}-notification thread-level-0`),
-      headerLine({ sentAt, from, toLinks, subject: type }),
+      headerLine({ sentAt, from, toLinks, subject: type, msgKey: key, msgSize }),
       h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotProjects} · ${titleH}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -2780,7 +3060,7 @@ exports.privateView = async (messagesInput, filter) => {
     )
   }
 
-  function MarketSoldCard({ sentAt, from, toLinks, subject, text, key }) {
+  function MarketSoldCard({ sentAt, from, toLinks, subject, text, key, msgSize }) {
     const itemTitle = quoted(subject) || quoted(text) || 'item'
     const buyerId = (text.match(/OASIS ID:\s*([\w=/+.-]+)/) || [])[1] || from
     const price = (text.match(/for:\s*\$([\d.]+)/) || [])[1] || ''
@@ -2788,7 +3068,7 @@ exports.privateView = async (messagesInput, filter) => {
     const href = marketId ? hrefFor.market(marketId) : null
     return div(
       clickableCardProps(href, 'market-sold-notification thread-level-0'),
-      headerLine({ sentAt, from, toLinks, subject }),
+      headerLine({ sentAt, from, toLinks, subject, msgKey: key, msgSize }),
       h2({ class: 'pm-title' }, `💰 ${i18n.pmBotMarket} · ${i18n.inboxMarketItemSoldTitle}`),
       p(
         i18n.pmYourItem, ' ',
@@ -2802,14 +3082,14 @@ exports.privateView = async (messagesInput, filter) => {
     )
   }
 
-  function ProjectPledgeCard({ sentAt, from, toLinks, content, text, key }) {
+  function ProjectPledgeCard({ sentAt, from, toLinks, content, text, key, msgSize }) {
     const amount = content.meta?.amount ?? (text.match(/pledged\s+([\d.]+)/)?.[1] || '0')
     const projectTitle = content.meta?.projectTitle ?? (text.match(/project\s+"([^"]+)"/)?.[1] || 'project')
     const projectId = content.meta?.projectId ?? pickLink(text, 'project')
     const href = projectId ? hrefFor.project(projectId) : null
     return div(
       clickableCardProps(href, 'project-pledge-notification thread-level-0'),
-      headerLine({ sentAt, from, toLinks, subject: 'PROJECT_PLEDGE' }),
+      headerLine({ sentAt, from, toLinks, subject: 'PROJECT_PLEDGE', msgKey: key, msgSize }),
       h2({ class: 'pm-title' }, `💚 ${i18n.pmBotProjects} · ${i18n.inboxProjectPledgedTitle}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -2823,22 +3103,31 @@ exports.privateView = async (messagesInput, filter) => {
     )
   }
 
+  const { renderEncryptedChip } = require('./clearnet_view');
   return template(
     i18n.private,
     section(
       div({ class: 'tags-header' },
-        h2(i18n.private),
+        div({ class: 'title-with-chip' }, h2(i18n.private), renderEncryptedChip(i18n)),
         p(i18n.privateDescription)
       ),
       (() => {
         const pmVis = getConfig().pmVisibility === 'mutuals' ? 'mutuals' : 'whole'
         const pmVisLabel = pmVis === 'mutuals' ? i18n.settingsPmVisibilityMutuals : i18n.settingsPmVisibilityWhole
         const pmVisIcon = pmVis === 'mutuals' ? '🤝' : '🌐'
+        const nextVis = pmVis === 'mutuals' ? 'whole' : 'mutuals'
+        const nextLabel = nextVis === 'mutuals'
+          ? (i18n.inboxToggleToMutuals || 'Switch to mutuals')
+          : (i18n.inboxToggleToWhole || 'Switch to whole')
         return div({ class: 'pm-exposition inbox-exposition' },
           span({ class: 'inbox-filters-label' }, i18n.inboxFiltersLabel || 'Filters:'),
           span({ class: `pm-exposition-chip pm-exposition-${pmVis}` },
             span({ class: 'pm-exposition-icon' }, pmVisIcon),
             span({ class: 'pm-exposition-text' }, pmVisLabel)
+          ),
+          form({ method: 'POST', action: '/settings/pm-visibility?returnTo=/inbox', class: 'inbox-vis-toggle' },
+            input({ type: 'hidden', name: 'pmVisibility', value: nextVis }),
+            button({ type: 'submit', class: 'btn' }, nextLabel)
           )
         )
       })(),
@@ -2884,23 +3173,24 @@ exports.privateView = async (messagesInput, filter) => {
             const fromResolved = content.from || author
             const toLinks = Array.isArray(content.to) ? content.to.map(addr => linkAuthor(addr)) : []
             const level = threadLevel(subjectRaw)
+            const msgSize = msgSizeBytes(msg)
 
             if (subjectU === 'JOB_SUBSCRIBED' || subjectU === 'JOB_UNSUBSCRIBED') {
-              return JobCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key })
+              return JobCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'PROJECT_FOLLOWED' || subjectU === 'PROJECT_UNFOLLOWED') {
-              return ProjectFollowCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key })
+              return ProjectFollowCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'MARKET_SOLD') {
-              return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key })
+              return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key, msgSize })
             }
             if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
-              return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key })
+              return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key, msgSize })
             }
 
             return div(
               { class: 'pm-card normal-pm' },
-              headerLine({ sentAt, from: fromResolved, toLinks, subject: subjectRaw }),
+              headerLine({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, msgKey: msg.key, msgSize }),
               div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text)) }),
               actions({ key: msg.key, replyId: fromResolved, subjectRaw, text })
             )

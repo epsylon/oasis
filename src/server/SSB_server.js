@@ -12,10 +12,35 @@ const { printMetadata } = require('./ssb_metadata');
 
 (() => {
   const realErr = console.error;
-  const SHS_NOISE = /shs\.server: client hello invalid|they dailed a wrong number|client hello invalid/i;
+  const SHS_NOISE = /shs\.server:|they dailed a wrong number|client hello invalid|invalid challenge|wrong application cap/i;
+  const EBT_NOISE = /stream ended with:\s*\d+\s+but wanted:\s*\d+/i;
+  const isEbtReplicateException = (args) =>
+    args.length >= 2 &&
+    typeof args[0] === 'string' &&
+    /rpc\.ebt\.replicate exception/i.test(args[0]) &&
+    args[1] && typeof args[1].message === 'string' && EBT_NOISE.test(args[1].message);
+  const parsePeer = (addr) => {
+    if (typeof addr !== 'string') return 'unknown';
+    const m = /net:(.+?):(\d+)(?:~|$)/.exec(addr);
+    if (!m) return addr;
+    return `${m[1].replace(/^::ffff:/, '')}:${m[2]}`;
+  };
+  const logRejection = (peer) => {
+    const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    realErr.call(console, `[${ts}] REJECTED    ${peer} (wrong SHS cap)`);
+  };
   console.error = function (...args) {
-    if (args.length >= 2 && args[0] === 'server error, from' && typeof args[1] === 'string' && args[1].includes('~shs:')) return;
-    if (args.length >= 1 && args[0] && typeof args[0].message === 'string' && SHS_NOISE.test(args[0].message)) return;
+    if (args.length >= 2 && args[0] === 'server error, from' && typeof args[1] === 'string' && args[1].includes('~shs:')) {
+      logRejection(parsePeer(args[1]));
+      return;
+    }
+    if (args.length >= 1 && args[0] && typeof args[0].message === 'string' && SHS_NOISE.test(args[0].message)) {
+      logRejection(parsePeer(args[0].address));
+      return;
+    }
+    if (args.length >= 1 && args[0] && typeof args[0].message === 'string' && EBT_NOISE.test(args[0].message)) return;
+    if (isEbtReplicateException(args)) return;
+    if (args.length >= 1 && typeof args[0] === 'string' && /rpc\.ebt\.replicate exception:.*stream ended with/i.test(args[0])) return;
     return realErr.apply(console, args);
   };
 })();
@@ -36,7 +61,7 @@ const Server = SecretStack({ caps })
   .use(require('ssb-search'))
   .use(require('ssb-private'))
   .use(require('ssb-friend-pub'))
-  .use(require('ssb-invite-client'))
+  .use(config.pub ? require('ssb-invite') : require('ssb-invite-client'))
   .use(require('ssb-logging'))
   .use(require('ssb-replication-scheduler'))
   .use(require('ssb-partial-replication'))
@@ -54,7 +79,15 @@ if (!config.pub) {
   Server.use(require('./lanRouter'));
 }
 
-if (config.autofollow?.enabled !== false) {
+if (config.autofollow && typeof config.autofollow === 'object' && !Array.isArray(config.autofollow)) {
+  if (config.autofollow.enabled === false) {
+    config.autofollow = null;
+  } else {
+    const feeds = Array.isArray(config.autofollow.feeds) ? config.autofollow.feeds : (Array.isArray(config.autofollow.suggestions) ? config.autofollow.suggestions : []);
+    config.autofollow = feeds.filter(f => typeof f === 'string' && f.length > 0);
+  }
+}
+if (config.autofollow && (Array.isArray(config.autofollow) ? config.autofollow.length > 0 : true)) {
   Server.use(require('ssb-autofollow'));
 }
 

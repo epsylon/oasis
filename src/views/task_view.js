@@ -1,8 +1,21 @@
-const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
+const opinionCategories = require("../backend/opinion_categories");
+
+const renderTaskMediaBlob = (value, attrs = {}) => {
+  if (!value) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, ...attrs });
+  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
+  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: attrs.class || 'post-image' });
+  const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
+  if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` });
+  return null;
+};
 
 const userId = config.keys.id;
 
@@ -10,21 +23,6 @@ const opt = (value, isSelected, text) =>
   option(Object.assign({ value }, isSelected ? { selected: "selected" } : {}), text);
 
 const safeArray = (v) => Array.isArray(v) ? v : [];
-
-const toValueChildren = (v) => {
-  if (v === undefined || v === null) return [];
-  if (Array.isArray(v)) return v;
-  if (typeof v === "string") return renderUrl(v);
-  if (typeof v === "number" || typeof v === "boolean") return renderUrl(String(v));
-  return [v];
-};
-
-const renderCardField = (labelText, valueNode) =>
-  div(
-    { class: "card-field" },
-    span({ class: "card-label" }, labelText),
-    span({ class: "card-value" }, ...toValueChildren(valueNode))
-  );
 
 const normalizeStatus = (v) => {
   const up = String(v || "").toUpperCase();
@@ -82,55 +80,6 @@ const renderTaskAssignAction = (task, isAssignedToMe, returnTo) => {
     input({ type: "hidden", name: "returnTo", value: returnTo }),
     button({ type: "submit", class: "filter-btn" }, isAssignedToMe ? i18n.taskUnassignButton : i18n.taskAssignButton)
   );
-};
-
-const renderTaskTopbar = (task, filter, opts = {}) => {
-  const currentFilter = filter || "all";
-  const isSingle = !!opts.single;
-
-  const returnToList = `/tasks?filter=${encodeURIComponent(currentFilter)}`;
-  const returnToSelf = `/tasks/${encodeURIComponent(task.id)}?filter=${encodeURIComponent(currentFilter)}`;
-  const rt = isSingle ? returnToSelf : returnToList;
-
-  const assignees = safeArray(task.assignees);
-  const isAssignedToMe = assignees.includes(userId);
-
-  const leftActions = [];
-  if (!isSingle) {
-    leftActions.push(
-      form(
-        { method: "GET", action: `/tasks/${encodeURIComponent(task.id)}` },
-        input({ type: "hidden", name: "filter", value: currentFilter }),
-        button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-      )
-    );
-  }
-
-  if (task.author && task.author !== userId) {
-    leftActions.push(
-      form(
-        { method: "GET", action: "/pm" },
-        input({ type: "hidden", name: "recipients", value: task.author }),
-        button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-      )
-    );
-  }
-
-  const ownerActions = task.author === userId ? renderTaskOwnerActions(task, rt) : [];
-  const assignNode = renderTaskAssignAction(task, isAssignedToMe, rt);
-
-  const rightActions = [];
-  if (assignNode) rightActions.push(assignNode);
-  if (ownerActions.length) rightActions.push(...ownerActions);
-
-  const leftNode = leftActions.length ? div({ class: "bookmark-topbar-left task-topbar-left" }, ...leftActions) : null;
-  const rightNode = rightActions.length ? div({ class: "bookmark-actions task-actions" }, ...rightActions) : null;
-
-  const nodes = [];
-  if (leftNode) nodes.push(leftNode);
-  if (rightNode) nodes.push(rightNode);
-
-  return nodes.length ? div({ class: isSingle ? "bookmark-topbar task-topbar-single" : "bookmark-topbar" }, ...nodes) : null;
 };
 
 const renderTaskCommentsSection = (taskId, comments = [], currentFilter = "all") => {
@@ -201,59 +150,85 @@ const renderTaskCommentsSection = (taskId, comments = [], currentFilter = "all")
   );
 };
 
-const renderTaskItem = (task, filter) => {
+const renderTaskStatusChip = (status) => {
+  const s = normalizeStatus(status);
+  const variant = s === "OPEN" ? "mutuals" : s === "IN-PROGRESS" ? "whole" : "closed";
+  const icon = s === "OPEN" ? "✓" : s === "IN-PROGRESS" ? "↻" : "✗";
+  return renderStateChip(variant, icon, statusLabel(s));
+};
+
+const renderTaskPriorityChip = (priority) => {
+  const p = String(priority || "").toUpperCase();
+  if (!p) return null;
+  const variant =
+    p === "URGENT" ? "closed" :
+    p === "HIGH" ? "lifespan-orange" :
+    p === "MEDIUM" ? "whole" :
+    "mutuals";
+  const localized =
+    p === "URGENT" ? i18n.taskPriorityUrgent :
+    p === "HIGH" ? i18n.taskPriorityHigh :
+    p === "MEDIUM" ? i18n.taskPriorityMedium :
+    i18n.taskPriorityLow;
+  return renderStateChip(variant, "⚑", localized || p);
+};
+
+const renderTaskItem = (task, filter, spreadInfo) => {
   const currentFilter = filter || "all";
   const assignees = safeArray(task.assignees);
-  const commentCount = typeof task.commentCount === "number" ? task.commentCount : 0;
+  const isPrivate = String(task.isPublic || "").toUpperCase() === "PRIVATE";
 
-  const topbar = renderTaskTopbar(task, currentFilter, { single: false });
+  const heroNode = task.image
+    ? div({ class: "tribe-card-image-wrapper" },
+        a({ href: `/tasks/${encodeURIComponent(task.id)}` },
+          renderTaskMediaBlob(task.image, { class: "tribe-card-hero-image" })
+        ),
+        div({ class: "tribe-visit-btn-wrapper" },
+          form({ method: "GET", action: `/tasks/${encodeURIComponent(task.id)}` },
+            input({ type: "hidden", name: "filter", value: currentFilter }),
+            button({ type: "submit", class: "filter-btn" }, i18n.viewTask || "View Task")
+          )
+        )
+      )
+    : null;
 
-  return div(
-    { class: "card card-section task" },
-    topbar ? topbar : null,
-    renderCardField(i18n.taskTitleLabel + ":", task.title),
-    renderCardField(i18n.taskDescriptionLabel + ":", ""),
-    p(...renderUrl(task.description)),
-    task.location && String(task.location).trim() ? renderCardField(i18n.taskLocationLabel + ":", task.location) : null,
-    renderCardField(i18n.taskStatus + ":", statusLabel(task.status)),
-    renderCardField(i18n.taskPriorityLabel + ":", task.priority),
-    renderCardField(i18n.taskVisibilityLabel + ":", visibilityLabel(task.isPublic)),
-    renderCardField(i18n.taskStartTimeLabel + ":", task.startTime ? moment(task.startTime).format("YYYY/MM/DD HH:mm:ss") : ""),
-    renderCardField(i18n.taskEndTimeLabel + ":", task.endTime ? moment(task.endTime).format("YYYY/MM/DD HH:mm:ss") : ""),
-    br(),
-    div(
-      { class: "card-field" },
-      span({ class: "card-label" }, i18n.taskAssignedTo + ":"),
-      span(
-        { class: "card-value" },
-        assignees.length
-          ? assignees.map((id, i) => [i > 0 ? ", " : "", userLink(id)]).flat()
-          : i18n.noAssignees
-      )
-    ),
-    br(),
-    div(
-      { class: "card-comments-summary" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-      span({ class: "card-value" }, String(commentCount)),
-      br(),
-      br(),
-      form(
-        { method: "GET", action: `/tasks/${encodeURIComponent(task.id)}` },
-        input({ type: "hidden", name: "filter", value: currentFilter }),
-        button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-      )
-    ),
-    br(),
-    p(
-      { class: "card-footer" },
-      span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-      userLink(task.author)
+  const chips = [
+    renderTaskStatusChip(task.status),
+    isPrivate ? renderPrivacyChip(true, i18n) : null,
+    renderTaskPriorityChip(task.priority),
+    renderLifespanChip(task.lifetime, i18n)
+  ].filter(Boolean);
+
+  const start = task.startTime ? moment(task.startTime).format("YYYY/MM/DD HH:mm") : "";
+  const end = task.endTime ? moment(task.endTime).format("YYYY/MM/DD HH:mm") : "";
+
+  return div({ class: "tribe-card task-card" },
+    heroNode,
+    div({ class: "tribe-card-body" },
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" },
+          a({ href: `/tasks/${encodeURIComponent(task.id)}` }, task.title || i18n.tasksTitle)
+        )
+      ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+      (start || end) ? p({ class: "card-date-highlight" }, start && end ? `${start} → ${end}` : (start || end)) : null,
+      div({ class: "tribe-card-members" },
+        span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
+      ),
+      div({ class: "card-spread-centered" }, renderSpreadButton(task.id, spreadInfo)),
+      !heroNode
+        ? div({ class: "card-visit-btn-centered" },
+            form({ method: "GET", action: `/tasks/${encodeURIComponent(task.id)}` },
+              input({ type: "hidden", name: "filter", value: currentFilter }),
+              button({ type: "submit", class: "filter-btn" }, i18n.viewTask || "View Task")
+            )
+          )
+        : null
     )
   );
 };
 
-exports.taskView = async (tasks, filter, taskId, returnTo) => {
+exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
   const list = Array.isArray(tasks) ? tasks : [tasks];
   const currentFilter = filter || "all";
 
@@ -378,17 +353,14 @@ exports.taskView = async (tasks, filter, taskId, returnTo) => {
               button({ type: "submit" }, currentFilter === "edit" ? i18n.taskUpdateButton : i18n.taskCreateButton)
             )
           )
-        : div(
-            { class: "task-list" },
-            filtered.length > 0
-              ? filtered.map((t) => renderTaskItem(t, currentFilter))
-              : p(i18n.notasks)
-          )
+        : filtered.length > 0
+          ? div({ class: "jobs-grid" }, filtered.map((t) => renderTaskItem(t, currentFilter, params.spreadMap && params.spreadMap.get(t.id))))
+          : p(i18n.notasks)
     )
   );
 };
 
-exports.singleTaskView = async (task, filter, comments = []) => {
+exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
   const currentFilter = filter || "all";
   const assignees = safeArray(task.assignees);
   const commentCount = typeof task.commentCount === "number" ? task.commentCount : 0;
@@ -422,49 +394,104 @@ exports.singleTaskView = async (task, filter, comments = []) => {
     );
   }
 
-  const topbar = renderTaskTopbar(task, currentFilter, { single: true });
+  const isAuthor = String(task.author) === String(userId);
+  const isAssignedToMe = assignees.includes(userId);
+  const isPrivate = String(task.isPublic || "").toUpperCase() === "PRIVATE";
+  const returnToSelf = `/tasks/${encodeURIComponent(task.id)}?filter=${encodeURIComponent(currentFilter)}`;
+
+  const lifespanChipNode = renderLifespanChip(task.lifetime, i18n);
+  const ecoTaxChipNode = renderEcoTax(task.msgSize, task.id);
+
+  const chips = [
+    renderTaskStatusChip(task.status),
+    renderPrivacyChip(isPrivate, i18n),
+    renderTaskPriorityChip(task.priority),
+    lifespanChipNode,
+    ecoTaxChipNode
+  ].filter(Boolean);
+
+  const tagsNode = Array.isArray(task.tags) && task.tags.length
+    ? div({ class: "card-tags" },
+        task.tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
+      )
+    : null;
+
+  const assigneesListNode = assignees.length
+    ? div({ class: "card-assigned-list" },
+        ...assignees.filter(Boolean).map((id) => userLink(id))
+      )
+    : null;
+
+  const sideActions = [];
+  if (task.author && task.author !== userId) {
+    sideActions.push(form({ method: "GET", action: "/pm" },
+      input({ type: "hidden", name: "recipients", value: task.author }),
+      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
+    ));
+  }
+  const assignNode = renderTaskAssignAction(task, isAssignedToMe, returnToSelf);
+  if (assignNode) sideActions.push(assignNode);
+  if (isAuthor) sideActions.push(...renderTaskOwnerActions(task, returnToSelf));
+
+  const infoRows = [];
+  const pushRow = (labelText, valueNode) =>
+    infoRows.push(tr(
+      td({ class: "tribe-info-label" }, labelText),
+      td({ class: "tribe-info-value" }, valueNode)
+    ));
+  if (task.startTime) pushRow(i18n.taskStartTimeLabel, moment(task.startTime).format("YYYY/MM/DD HH:mm"));
+  if (task.endTime) pushRow(i18n.taskEndTimeLabel, moment(task.endTime).format("YYYY/MM/DD HH:mm"));
+  pushRow(i18n.taskPriorityLabel, String(task.priority || "").toUpperCase() || "—");
+  pushRow(i18n.taskStatus, statusLabel(task.status));
+  if (task.location && String(task.location).trim()) pushRow(i18n.taskLocationLabel, task.location);
+
+  const taskSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, task.title)
+    ),
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    div({ class: "card-spread-centered" }, renderSpreadButton(task.id, params.spreads)),
+    task.image ? renderTaskMediaBlob(task.image, { class: "tribe-detail-image" }) : null,
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    tagsNode,
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
+    ),
+    assigneesListNode
+  );
+
+  const returnToOpinions = `/tasks/${encodeURIComponent(task.id)}?filter=${encodeURIComponent(currentFilter)}`;
+  const opinionsBar = div(
+    { class: "voting-buttons" },
+    opinionCategories.map((category) =>
+      form(
+        { method: "POST", action: `/tasks/opinions/${encodeURIComponent(task.id)}/${category}` },
+        input({ type: "hidden", name: "returnTo", value: returnToOpinions }),
+        button(
+          { class: "vote-btn", type: "submit" },
+          `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${(task.opinions && task.opinions[category]) ? task.opinions[category] : 0}]`
+        )
+      )
+    )
+  );
+
+  const taskMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    task.description
+      ? div({ class: "job-section" },
+          h2({ class: "job-section-title" }, i18n.taskDescriptionLabel),
+          p({ class: "tribe-side-description" }, ...renderUrl(task.description))
+        )
+      : null,
+    opinionsBar,
+    renderTaskCommentsSection(task.id, comments, currentFilter)
+  );
 
   return template(
     task.title,
     section(
       filterBar,
-      div(
-        { class: "card card-section task" },
-        topbar ? topbar : null,
-        renderCardField(i18n.taskTitleLabel + ":", task.title),
-        renderCardField(i18n.taskDescriptionLabel + ":", ""),
-        p(...renderUrl(task.description)),
-        renderCardField(i18n.taskStartTimeLabel + ":", task.startTime ? moment(task.startTime).format("YYYY/MM/DD HH:mm:ss") : ""),
-        renderCardField(i18n.taskEndTimeLabel + ":", task.endTime ? moment(task.endTime).format("YYYY/MM/DD HH:mm:ss") : ""),
-        renderCardField(i18n.taskPriorityLabel + ":", task.priority),
-        task.location && String(task.location).trim() ? renderCardField(i18n.taskLocationLabel + ":", task.location) : null,
-        renderCardField(i18n.taskStatus + ":", statusLabel(task.status)),
-        renderCardField(i18n.taskVisibilityLabel + ":", visibilityLabel(task.isPublic)),
-        Array.isArray(task.tags) && task.tags.length
-          ? div(
-              { class: "card-tags" },
-              task.tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
-            )
-          : null,
-        br,
-        div(
-          { class: "card-field" },
-          span({ class: "card-label" }, i18n.taskAssignedTo + ":"),
-          span(
-            { class: "card-value" },
-            assignees.length
-              ? assignees.map((id, i) => [i > 0 ? ", " : "", userLink(id)]).flat()
-              : i18n.noAssignees
-          )
-        ),
-        br,
-        p(
-          { class: "card-footer" },
-          span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-          userLink(task.author)
-        )
-      ),
-      renderTaskCommentsSection(task.id, comments, currentFilter)
+      div({ class: "tribe-details" }, taskSide, taskMain)
     )
   );
 };

@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const config = require('../server/ssb_config');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
@@ -137,7 +138,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         )
       );
 
-      const tombstoned = new Set();
+      const tombstoned = buildValidatedTombstoneSet(results);
       const idToBlock = new Map();
       const referencedAsReplaces = new Set();
 
@@ -177,7 +178,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         }
 
         if (c.type === 'tombstone' && c.target) {
-          tombstoned.add(c.target);
           idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
           continue;
         }
@@ -301,7 +301,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       );
 
       const me = userId || config.keys.id;
-      const tombstoned = new Set();
+      const tombstoned = buildValidatedTombstoneSet(results);
       const idToBlock = new Map();
       const referencedAsReplaces = new Set();
       const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
@@ -330,7 +330,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
           continue;
         }
         if (c.type === 'tombstone' && c.target) {
-          tombstoned.add(c.target);
           idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
           continue;
         }

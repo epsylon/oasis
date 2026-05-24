@@ -269,7 +269,12 @@ exports.statsView = (stats, filter) => {
 
   const bankingCard = div({ class: 'stats-card' },
     table({ class: 'block-info-table' },
-      tr(td({ class: 'card-label' }, i18n.statsEcoWalletLabel), td({ class: 'card-value' }, a({ href: '/wallet', class: 'stats-link-break' }, stats?.banking?.myAddress || i18n.statsEcoWalletNotConfigured)))
+      tr(td({ class: 'card-label' }, i18n.statsEcoWalletLabel), td({ class: 'card-value' }, a({ href: '/wallet', class: 'stats-link-break' }, stats?.banking?.myAddress || i18n.statsEcoWalletNotConfigured))),
+      tr(td({ class: 'card-label' }, i18n.profileGpgChip || 'GPG'), td({ class: 'card-value' },
+        stats?.gpgFingerprint
+          ? a({ href: `/profile/${encodeURIComponent(stats.id)}/gpg.asc`, class: 'stats-link-break' }, String(stats.gpgFingerprint).slice(-8).toUpperCase())
+          : a({ href: '/profile/edit', class: 'stats-link-break' }, i18n.statsEcoWalletNotConfigured)
+      ))
     )
   );
 
@@ -360,21 +365,15 @@ exports.statsView = (stats, filter) => {
   const myPrivateTribesDetailed = Array.isArray(stats.myPrivateTribesDetailed) ? stats.myPrivateTribesDetailed : [];
 
   const buildContentRows = () => {
+    const excluded = new Set([
+      'karmaScore', 'shopProduct', 'padEntry', 'chatMessage', 'calendarDate', 'calendarNote',
+      'parliamentTerm'
+    ]);
     const rows = [];
-    types.filter(t => t !== 'karmaScore' && t !== 'shopProduct' && t !== 'padEntry' && t !== 'chatMessage' && t !== 'calendarDate' && t !== 'calendarNote').forEach(t => {
+    types.filter(t => !excluded.has(t)).forEach(t => {
       const cnt = C(stats, t);
       if (cnt <= 0) return;
       rows.push([labels[t], cnt]);
-      if (t === 'shop') rows.push([labels.shopProduct, C(stats, 'shopProduct')]);
-      else if (t === 'pad') rows.push([labels.padEntry, C(stats, 'padEntry')]);
-      else if (t === 'chat') rows.push([labels.chatMessage, C(stats, 'chatMessage')]);
-      else if (t === 'calendar') {
-        rows.push([labels.calendarDate, C(stats, 'calendarDate')]);
-        rows.push([labels.calendarNote, C(stats, 'calendarNote')]);
-      } else if (t === 'tribe') {
-        rows.push([i18n.statsPublic, stats.tribePublicCount || 0]);
-        rows.push([i18n.statsPrivate, stats.tribePrivateCount || 0]);
-      }
     });
     return rows;
   };
@@ -441,15 +440,41 @@ exports.statsView = (stats, filter) => {
     : null;
 
   const tombMode = filter === 'TOMBSTONE'
-    ? div({ class: 'stats-container' }, [
-        div({ class: 'stats-block' },
-          kpiGrid(
-            kpi(i18n.TOMBSTONEButton, stats.userTombstoneCount || 0),
-            kpi(i18n.statsTombstoneRatio, `${(stats.tombstoneKPIs?.ratio || 0).toFixed(2)}%`)
+    ? (() => {
+        const userTomb = Number(stats.userTombstoneCount || 0);
+        const netTomb = Number(stats.tombstoneKPIs?.networkTombstoneCount || 0);
+        if (userTomb === 0 && netTomb === 0) {
+          return div({ class: 'stats-container' },
+            div({ class: 'stats-block' },
+              p({ class: 'no-content' }, i18n.statsTombstoneEmpty || 'No tombstones in the network yet.')
+            )
+          );
+        }
+        return div({ class: 'stats-container' }, [
+          div({ class: 'stats-block' },
+            kpiGrid(
+              kpi(i18n.TOMBSTONEButton, userTomb),
+              kpi(i18n.statsTombstoneRatio, `${(stats.tombstoneKPIs?.ratio || 0).toFixed(2)}%`)
+            )
           )
-        )
-      ])
+        ]);
+      })()
     : null;
+
+  const ets = stats.ecoTaxStats || null;
+  const userTax = Number(stats.userEcoinTax || 0);
+  const ecoTaxBlock = ets ? div({ class: 'stats-card' },
+    table({ class: 'block-info-table' },
+      filter === 'MINE'
+        ? tr(td({ class: 'card-label' }, i18n.bankTaxesUserAmount || 'Your ECO tax'), td({ class: 'card-value' }, `${userTax.toFixed(6)} ECO`))
+        : null,
+      tr(td({ class: 'card-label' }, i18n.bankTaxesTotalEcoin || 'Total ECO tax (lifetime)'), td({ class: 'card-value' }, `${Number(ets.totalEcoinTax || 0).toFixed(6)} ECO`)),
+      tr(td({ class: 'card-label' }, i18n.bankTaxesAnnualEcoin || 'ECO tax (annual)'), td({ class: 'card-value' }, `${Number(ets.annualEcoinTax || 0).toFixed(6)} ECO`)),
+      tr(td({ class: 'card-label' }, i18n.bankTaxesMonthlyEcoin || 'ECO tax (monthly)'), td({ class: 'card-value' }, `${Number(ets.monthlyEcoinTax || 0).toFixed(6)} ECO`)),
+      tr(td({ class: 'card-label' }, i18n.bankTaxesTotalCarbon || 'Total carbon'), td({ class: 'card-value' }, `${Number(ets.totalGramsCO2 || 0).toFixed(3)} g CO₂`)),
+      tr(td({ class: 'card-label' }, i18n.bankTaxesRate || 'Rate'), td({ class: 'card-value' }, `${Number(ets.ecoinPerGramCO2 || 0).toFixed(4)} ECO / g CO₂`))
+    )
+  ) : null;
 
   return template(
     title,
@@ -469,6 +494,7 @@ exports.statsView = (stats, filter) => {
       section(
         topStrip,
         headerCard,
+        filter !== 'TOMBSTONE' ? ecoTaxBlock : null,
         bankingCard,
         allMode,
         mineMode,

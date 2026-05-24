@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, padsModel, tribesModel }) => {
@@ -107,12 +108,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
         );
       });
 
-      const tombstoned = new Set(
-        messages
-          .filter(m => m?.value?.content?.type === 'tombstone')
-          .map(m => m.value.content.target)
-          .filter(Boolean)
-      );
+      const tombstoned = buildValidatedTombstoneSet(messages);
 
       const replacesMap = new Map();
       const latestByKey = new Map();

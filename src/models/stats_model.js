@@ -3,6 +3,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const STORAGE_DIR = path.join(__dirname, "..", "configs");
@@ -291,11 +292,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (c.type && HIDDEN_ENVELOPE_TYPES.has(c.type)) return false;
       return true;
     });
-    const tombTargets = new Set(
-      allMsgs
-        .filter(m => m.value.content && m.value.content.type === 'tombstone' && m.value.content.target)
-        .map(m => m.value.content.target)
-    );
+    const tombTargets = buildValidatedTombstoneSet(allMsgs);
 
     const scopedMsgs = filter === 'MINE' ? allMsgs.filter(m => m.value.author === userId) : allMsgs;
 
@@ -522,7 +519,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const myMsgsAll = allMsgs.filter(m => m.value.author === userId);
     const myShare = allMsgs.length ? (myMsgsAll.length / allMsgs.length) * 100 : 0;
     const avgMsgsPerInhabitant = inhabitants ? allMsgs.length / inhabitants : 0;
-    const tombstoneRatio = allMsgs.length ? (allMsgs.filter(m => m.value.content.type === 'tombstone').length / allMsgs.length) * 100 : 0;
+    const validatedTombstoneCount = tombTargets.size;
+    const tombstoneRatio = allMsgs.length ? (validatedTombstoneCount / allMsgs.length) * 100 : 0;
 
     const totalsTs = allMsgs.map(m => m.value.timestamp || 0).filter(Boolean).sort((a, b) => a - b);
     const networkSpanDays = totalsTs.length >= 2 ? (totalsTs[totalsTs.length - 1] - totalsTs[0]) / 86400000 : 0;
@@ -552,8 +550,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       tribePublicNames,
       tribePublicCount,
       tribePrivateCount,
-      userTombstoneCount: scopedMsgs.filter(m => m.value.content.type === 'tombstone').length,
-      networkTombstoneCount: allMsgs.filter(m => m.value.content.type === 'tombstone').length,
+      userTombstoneCount: scopedMsgs.filter(m => m.value.content.type === 'tombstone' && m.value.author === userId).length,
+      networkTombstoneCount: validatedTombstoneCount,
       folderSize: formatSize(folderSize),
       statsBlockchainSize: formatSize(flumeSize),
       statsBlobsSize: formatSize(blobsSize),
@@ -588,7 +586,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         topAuthors
       },
       tombstoneKPIs: {
-        networkTombstoneCount: allMsgs.filter(m => m.value.content.type === 'tombstone').length,
+        networkTombstoneCount: validatedTombstoneCount,
         ratio: tombstoneRatio
       },
       networkKPIs: {

@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const crypto = require("crypto")
 const { getConfig } = require("../configs/config-manager.js")
+const { buildValidatedTombstoneSet } = require('./tombstone_validator')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 const INVITE_CODE_BYTES = 16
 
@@ -44,6 +45,49 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
   }
   const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
+
+  const rotateCalendarKey = async (rootId, remainingMembers) => {
+    if (!ownCrypto || !tribeCrypto || !rootId) return
+    const existing = lookupKey(rootId)
+    if (!existing) return
+    const newKey = ownCrypto.generateTribeKey()
+    const newGen = ownCrypto.addNewKey(rootId, newKey)
+    if (!Array.isArray(remainingMembers) || !remainingMembers.length) return
+    const ssbClient = await openSsb()
+    const ssbKeys = require("../server/node_modules/ssb-keys")
+    const memberKeys = {}
+    for (const m of remainingMembers) {
+      try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
+    }
+    if (Object.keys(memberKeys).length) {
+      await new Promise((resolve) => {
+        ssbClient.publish({ type: "tribe-keys", tribeId: rootId, generation: newGen, memberKeys }, () => resolve())
+      })
+    }
+  }
+
+  const ingestOwnTribeKeys = async () => {
+    if (!ownCrypto) return
+    try {
+      const ssbClient = await openSsb()
+      const ssbKeys = require("../server/node_modules/ssb-keys")
+      const config = require("../server/ssb_config")
+      const msgs = await readAll(ssbClient)
+      for (const m of msgs) {
+        const c = m.value && m.value.content
+        if (!c || c.type !== "tribe-keys") continue
+        const memberKeys = c.memberKeys
+        if (!memberKeys || typeof memberKeys !== "object") continue
+        const boxed = memberKeys[ssbClient.id]
+        if (!boxed) continue
+        try {
+          const unboxed = ssbKeys.unbox(boxed, config.keys)
+          const key = typeof unboxed === "string" ? unboxed : (unboxed && unboxed.toString ? unboxed.toString() : null)
+          if (key && c.tribeId) ownCrypto.addNewKey(c.tribeId, key)
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
 
   const readAll = async (ssbClient) =>
     new Promise((resolve, reject) =>
@@ -163,6 +207,31 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
   return {
     type: "calendar",
 
+    async ingestKeys() { await ingestOwnTribeKeys() },
+
+    async pruneOrphanKeys() {
+      if (!ownCrypto || typeof ownCrypto.getAllRootIds !== "function") return 0
+      try {
+        const ssbClient = await openSsb()
+        const messages = await readAll(ssbClient)
+        const live = new Set()
+        const tomb = buildValidatedTombstoneSet(messages)
+        for (const m of messages) {
+          const c = m.value && m.value.content
+          if (!c) continue
+          if (c.type === "calendar") live.add(m.key)
+        }
+        const all = ownCrypto.getAllRootIds()
+        let removed = 0
+        for (const rid of all) {
+          if (!live.has(rid) || tomb.has(rid)) {
+            try { ownCrypto.dropKey(rid); removed += 1 } catch (_) {}
+          }
+        }
+        return removed
+      } catch (_) { return 0 }
+    },
+
     async resolveRootId(id) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
@@ -235,7 +304,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         if (validStatus === "OPEN") {
           try {
             const pubCode = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex")
-            const ek = tribeCrypto.encryptForInvite(calKey, pubCode)
+            const inviteSalt = tribeCrypto.generateInviteSalt()
+            const ek = tribeCrypto.encryptForInvite(calKey, pubCode, inviteSalt)
             const tipId = await this.resolveCurrentId(calendarId)
             const item = await new Promise((resolve, reject) => ssbClient.get(tipId, (e, it) => e ? reject(e) : resolve(it)))
             const dec = decryptCalendarRoot(item.content, calendarId)
@@ -247,7 +317,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
               tags: Array.isArray(dec.tags) ? dec.tags : [],
               author: userId,
               participants: [userId],
-              invites: [{ code: pubCode, ek, gen: 1, public: true }],
+              invites: [{ code: pubCode, ek, salt: inviteSalt, gen: 1, public: true }],
               createdAt: dec.createdAt,
               updatedAt: new Date().toISOString(),
               replaces: tipId
@@ -418,9 +488,26 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       if (item.content.tribeId) updated = await encryptIfTribe(updated)
       else updated = encryptStandalone(updated, rootId)
       const result = await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
+      try { await rotateCalendarKey(rootId, updated.participants) } catch (_) {}
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
       await new Promise((resolve, reject) => ssbClient.publish(tombstone, e => e ? reject(e) : resolve()))
       return result
+    },
+
+    async findCalendarByLinkText(linkSubstring) {
+      if (!linkSubstring) return null
+      const ssbClient = await openSsb()
+      const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
+      await decryptIndexNodes(idx)
+      for (const node of idx.nodes.values()) {
+        const c = node && node.c
+        if (!c || c.type !== "calendarNote") continue
+        if (typeof c.text === "string" && c.text.includes(linkSubstring)) {
+          return c.calendarId || null
+        }
+      }
+      return null
     },
 
     async getCalendarById(id) {
@@ -798,8 +885,9 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const code = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex")
       let invite = code
       if (tribeCrypto && !cal.tribeId) {
-        const ekChain = tribeCrypto.encryptChainForInvite([cal.rootId], code)
-        if (ekChain) invite = { code, ekChain, gen: lookupGen(cal.rootId) }
+        const inviteSalt = tribeCrypto.generateInviteSalt()
+        const ekChain = tribeCrypto.encryptChainForInvite([cal.rootId], code, inviteSalt)
+        if (ekChain) invite = { code, ekChain, salt: inviteSalt, gen: lookupGen(cal.rootId) }
       }
       const tipId = await this.resolveCurrentId(calendarId)
       const item = await new Promise((resolve, reject) => ssbClient.get(tipId, (e, it) => e ? reject(e) : resolve(it)))
@@ -848,7 +936,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       let calKey = null
       if (tribeCrypto && typeof matchedInvite === "object") {
         if (matchedInvite.ekChain) {
-          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code)
+          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code, matchedInvite.salt)
           if (Array.isArray(chain) && chain.length) {
             for (const entry of chain) {
               if (Array.isArray(entry.keys) && entry.keys.length) {
@@ -860,7 +948,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
             calKey = chain[0].key
           }
         } else if (matchedInvite.ek) {
-          calKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code)
+          calKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt)
           ownCrypto.setKey(matched.rootId, calKey, matchedInvite.gen || 1)
         }
       }

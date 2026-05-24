@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton} = require("./main_views");
+const { template, i18n, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -134,6 +134,10 @@ const renderImageList = exports.renderImageList = (images, filter, params = {}) 
             ownerActions.length ? div({ class: "bookmark-actions" }, ...ownerActions) : null
           ),
           title ? h2(title) : null,
+          (imgObj.meme || imgObj.lifetime) ? div({ class: "card-chips-row" },
+            imgObj.meme ? a({ href: "/images?filter=meme", class: "chip-link" }, renderStateChip("mutuals", null, i18n.imageFilterMeme || "MEME")) : null,
+            imgObj.lifetime ? renderLifespanChip(imgObj.lifetime, i18n) : null
+          ) : null,
           renderImageMedia(imgObj, filter, params),
           div(
             { class: "card-comments-summary" },
@@ -150,6 +154,7 @@ const renderImageList = exports.renderImageList = (images, filter, params = {}) 
               button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
             )
           ),
+          div({ class: "card-spread-left" }, renderSpreadButton(imgObj.key, (params.spreadMap && params.spreadMap.get(imgObj.key)) || params.spreads)),
           renderMapLocationVisitLabel(imgObj.mapUrl),
           br(),
           (() => {
@@ -350,13 +355,14 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
     section(
       div({ class: "tags-header" },
         h2(title),
-        p(i18n.imageDescription),
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetImages);
-          return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-        })()
+        p(i18n.imageDescription)
       ),
+      (() => {
+        const { renderReachChip } = require('./clearnet_view');
+        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetImages);
+        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
+      })(),
+      br(),
       div(
         { class: "filters" },
         form(
@@ -421,21 +427,96 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(imageObj.title);
-  const ownerActions = renderImageOwnerActions(filter, imageObj, { q, sort });
+  const { renderReachChip } = require('./clearnet_view');
+  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetImages);
 
-  const topbar = div(
-    { class: "bookmark-topbar" },
-    div(
-      { class: "bookmark-topbar-left" },
-      renderImageFavoriteToggle(imageObj, returnTo),
-      renderPMButton(imageObj.author)
+  const memeChip = imageObj.meme
+    ? a({ href: "/images?filter=meme", class: "chip-link" }, renderStateChip("mutuals", null, i18n.imageFilterMeme || "MEME"))
+    : null;
+  const chips = [
+    memeChip,
+    renderLifespanChip(imageObj.lifetime, i18n),
+    imageObj.sizeBytes ? renderEcoTax(imageObj.sizeBytes, imageObj.key) : null
+  ].filter(Boolean);
+
+  const ownerActions = renderImageOwnerActions(filter, imageObj, { q, sort });
+  const sideActions = [];
+  sideActions.push(renderImageFavoriteToggle(imageObj, returnTo));
+  if (imageObj.author && String(imageObj.author) !== String(userId)) {
+    sideActions.push(renderPMButton(imageObj.author));
+  }
+  for (const a of ownerActions) sideActions.push(a);
+
+  const tagsNode = renderTags(imageObj.tags);
+
+  const imageSide = div({ class: "tribe-side" },
+    div({ class: "shop-title-row" },
+      title ? h2({ class: "tribe-card-title" }, title) : null,
+      renderReachChip(isClearnet, i18n)
     ),
-    ownerActions.length ? div({ class: "bookmark-actions" }, ...ownerActions) : null
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    safeText(imageObj.description)
+      ? p({ class: "tribe-side-description" }, ...renderUrl(imageObj.description))
+      : null,
+    tagsNode,
+    div({ class: "card-spread-centered" }, renderSpreadButton(imageObj.key, params.spreads)),
+    renderMapLocationVisitLabel(imageObj.mapUrl)
+  );
+
+  const imageMain = div({ class: "tribe-main" },
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    imageObj?.url
+      ? div(
+          { class: "image-container" },
+          img({
+            src: `/blob/${encodeURIComponent(imageObj.url)}`,
+            alt: imageObj.title || "",
+            class: "media-preview",
+            loading: "lazy"
+          })
+        )
+      : p(i18n.imageNoFile),
+    div({ class: "voting-buttons" },
+      opinionCategories.map((category) =>
+        form(
+          { method: "POST", action: `/images/opinions/${encodeURIComponent(imageObj.key)}/${category}` },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          button(
+            { class: "vote-btn" },
+            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
+              imageObj.opinions?.[category] || 0
+            }]`
+          )
+        )
+      )
+    ),
+    (() => {
+      const createdTs = imageObj.createdAt ? new Date(imageObj.createdAt).getTime() : NaN;
+      const updatedTs = imageObj.updatedAt ? new Date(imageObj.updatedAt).getTime() : NaN;
+      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+
+      return p(
+        { class: "card-footer" },
+        span({ class: "date-link" }, `${moment(imageObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+        userLink(imageObj.author),
+        showUpdated
+          ? span(
+              { class: "votations-comment-date" },
+              ` | ${i18n.imageUpdatedAt}: ${moment(imageObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+            )
+          : null
+      );
+    })(),
+    renderImageCommentsSection(imageObj.key, comments, returnTo)
   );
 
   return template(
     i18n.imageTitle,
     section(
+      div({ class: "tags-header" },
+        h2(i18n.imageAllSectionTitle || i18n.imageTitle),
+        p(i18n.imageDescription)
+      ),
       div(
         { class: "filters" },
         form(
@@ -458,66 +539,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.imageCreateButton)
         )
       ),
-      div(
-        { class: "bookmark-item card" },
-        topbar,
-        title ? h2(title) : null,
-        imageObj?.url
-          ? div(
-              { class: "image-container", style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" },
-              img({
-                src: `/blob/${encodeURIComponent(imageObj.url)}`,
-                alt: imageObj.title || "",
-                class: "media-preview",
-                loading: "lazy"
-              })
-            )
-          : p(i18n.imageNoFile),
-        safeText(imageObj.description) ? p(...renderUrl(imageObj.description)) : null,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetImages);
-          return div({ class: 'shop-title-row' }, renderReachChip(isClearnet, i18n));
-        })(),
-        renderTags(imageObj.tags),
-        br(),
-        renderMapLocationVisitLabel(imageObj.mapUrl),
-        br(),
-        (() => {
-          const createdTs = imageObj.createdAt ? new Date(imageObj.createdAt).getTime() : NaN;
-          const updatedTs = imageObj.updatedAt ? new Date(imageObj.updatedAt).getTime() : NaN;
-          const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-          return p(
-            { class: "card-footer" },
-            span({ class: "date-link" }, `${moment(imageObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-            userLink(imageObj.author),
-            showUpdated
-              ? span(
-                  { class: "votations-comment-date" },
-                  ` | ${i18n.imageUpdatedAt}: ${moment(imageObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
-                )
-              : null
-          );
-        })(),
-        div({ class: "spread-row" }, renderSpreadButton(imageObj.key, params.spreads)),
-        div(
-          { class: "voting-buttons" },
-          opinionCategories.map((category) =>
-            form(
-              { method: "POST", action: `/images/opinions/${encodeURIComponent(imageObj.key)}/${category}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              button(
-                { class: "vote-btn" },
-                `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
-                  imageObj.opinions?.[category] || 0
-                }]`
-              )
-            )
-          )
-        )
-      ),
-      div({ id: "comments" }, renderImageCommentsSection(imageObj.key, comments, returnTo))
+      div({ class: "tribe-details" }, imageSide, imageMain)
     )
   );
 };

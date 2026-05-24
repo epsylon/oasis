@@ -5,6 +5,7 @@ const moment = require('../server/node_modules/moment');
 
 const agendaConfigPath = path.join(__dirname, '../configs/agenda-config.json');
 const { getConfig } = require('../configs/config-manager.js');
+const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 function readAgendaConfig() {
@@ -18,7 +19,7 @@ function writeAgendaConfig(cfg) {
   fs.writeFileSync(agendaConfigPath, JSON.stringify(cfg, null, 2));
 }
 
-module.exports = ({ cooler, calendarsModel }) => {
+module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -33,7 +34,7 @@ module.exports = ({ cooler, calendarsModel }) => {
           pull.collect((err, msgs) => {
             if (err) return reject(err);
 
-            const tomb = new Set();
+            const tomb = buildValidatedTombstoneSet(msgs);
             const nodes = new Map();
             const parent = new Map();
             const child = new Map();
@@ -43,8 +44,9 @@ module.exports = ({ cooler, calendarsModel }) => {
               const v = m.value;
               const c = v?.content;
               if (!c) continue;
-              if (c.type === 'tombstone' && c.target) { tomb.add(c.target); continue; }
+              if (c.type === 'tombstone') continue;
               if (c.type !== targetType) continue;
+              if (c.encryptedPayload) continue;
               nodes.set(k, { key: k, ts: v.timestamp || 0, content: c });
               if (c.replaces) { parent.set(k, c.replaces); child.set(c.replaces, k); }
             }
@@ -140,16 +142,47 @@ module.exports = ({ cooler, calendarsModel }) => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
+      const normalize = (arr) => arr.map(it => ({
+        ...it,
+        key: it.id || it.key,
+        createdAt: it.createdAt || new Date().toISOString(),
+        tipId: it.tipId || it.id || it.key
+      }));
+
+      const eventsViaModel = eventsModel && typeof eventsModel.listAll === 'function'
+        ? eventsModel.listAll(null, 'all').then(normalize).catch(() => [])
+        : fetchItems('event');
+
+      const calendarsViaModel = calendarsModel && typeof calendarsModel.listAll === 'function'
+        ? calendarsModel.listAll({ filter: 'all', viewerId: userId }).then(normalize).catch(() => [])
+        : fetchItems('calendar');
+
+      const tasksViaModel = tasksModel && typeof tasksModel.listAll === 'function'
+        ? tasksModel.listAll().then(normalize).catch(() => [])
+        : fetchItems('task');
+
+      const marketViaModel = marketModel && typeof marketModel.listAllItems === 'function'
+        ? marketModel.listAllItems('all').then(normalize).catch(() => [])
+        : fetchItems('market');
+
+      const jobsViaModel = jobsModel && typeof jobsModel.listJobs === 'function'
+        ? jobsModel.listJobs('ALL', userId).then(normalize).catch(() => [])
+        : fetchItems('job');
+
+      const projectsViaModel = projectsModel && typeof projectsModel.listProjects === 'function'
+        ? projectsModel.listProjects('all').then(normalize).catch(() => [])
+        : fetchItems('project');
+
       const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll, projectsAll, calendarsAll] = await Promise.all([
-        fetchItems('task'),
-        fetchItems('event'),
+        tasksViaModel,
+        eventsViaModel,
         fetchItems('transfer'),
         fetchItems('tribe'),
-        fetchItems('market'),
+        marketViaModel,
         fetchItems('report'),
-        fetchItems('job'),
-        fetchItems('project'),
-        fetchItems('calendar')
+        jobsViaModel,
+        projectsViaModel,
+        calendarsViaModel
       ]);
 
       const tasks = tasksAll.filter(c => Array.isArray(c.assignees) && c.assignees.includes(userId)).map(t => ({ ...t, type: 'task' }));

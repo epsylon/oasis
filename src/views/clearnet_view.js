@@ -37,6 +37,13 @@ const renderReachChip = (isClearnet, i18nObj = {}, href = null) => {
   return chip;
 };
 
+const renderEncryptedChip = (i18nObj = {}) => {
+  return span({ class: 'pm-exposition-chip pm-exposition-encrypted' },
+    span({ class: 'pm-exposition-icon' }, '🔒'),
+    span({ class: 'pm-exposition-text' }, i18nObj.encryptedChipLabel || 'Encrypted')
+  );
+};
+
 const INTERNAL_OASIS_PATHS = [
   'author','thread','hashtag','inbox','pm','profile','settings','banking','wallet',
   'jobs','events','projects','shops','audios','videos','images','documents','torrents',
@@ -243,6 +250,7 @@ module.exports = {
   blobIdOf,
   blobUrl,
   renderReachChip,
+  renderEncryptedChip,
   renderClearnetUrlBlock,
   renderClearnetSearchForm,
   renderClearnetPage,

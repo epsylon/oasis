@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "This script requires bash, not sh. Re-run it as:  bash $0 $*" 1>&2
+  exec bash "$0" "$@"
+fi
 set -u
 export NODE_NO_WARNINGS=1
 
@@ -57,7 +61,6 @@ done
 
 if [ "$CLEAN_ALL" = "1" ]; then
   echo "${YELLOW}${BOLD}clean-all:${RESET}"
-  # Restore latest backup if there is one
   latest_backup=$(ls -dt "$HOME"/.ssb-bak-* 2>/dev/null | head -1)
   if [ -n "$latest_backup" ] && [ -d "$SSB_DIR" ]; then
     echo "  found backup: $latest_backup"
@@ -93,14 +96,12 @@ if [ "$CLEAN_ALL" = "1" ]; then
   else
     echo "  no ~/.ssb to clean."
   fi
-  # Clean other backup dirs
   bak_count=$(ls -d "$HOME"/.ssb-bak-* 2>/dev/null | wc -l)
   if [ "$bak_count" -gt 0 ]; then
     for b in "$HOME"/.ssb-bak-*; do
       [ -e "$b" ] && rm -rf "$b" && echo "  removed: $b"
     done
   fi
-  # Clean results
   if [ -d "test/results" ]; then
     n=$(ls test/results/unit_test_*.md 2>/dev/null | wc -l)
     rm -f test/results/unit_test_*.md
@@ -177,7 +178,6 @@ if [ "$DUMMY_ONLY" = "1" ]; then
 fi
 
 isolate_ssb
-# -----------------------------------------------------------------------
 
 MODULES=(
   mods/crypto
@@ -206,6 +206,7 @@ MODULES=(
   mods/parliament
   mods/courts
   mods/opinions
+  mods/spread
   mods/activity
   mods/stats
   mods/blockchain
@@ -224,6 +225,8 @@ MODULES=(
   mods/profile
   mods/peers
   mods/multiuser
+  mods/larp
+  mods/melody
 )
 
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
@@ -231,7 +234,6 @@ REPORT_DIR="test/results"
 mkdir -p "$REPORT_DIR"
 REPORT="$REPORT_DIR/unit_test_${DATE}.md"
 
-# Working files
 TMP=$(mktemp -d)
 trap "rm -rf $TMP" EXIT
 
@@ -282,7 +284,6 @@ if [ "$total_failed" -gt 0 ]; then
   for f in "${failed_modules[@]}"; do echo "  - $f"; done
 fi
 
-# Generate the markdown report
 {
   echo "# Unit test report — $DATE"
   echo ""
