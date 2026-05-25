@@ -2312,7 +2312,8 @@ exports.authorView = async ({
   allActions = [],
   profileItems = null,
   profileFilterType = '',
-  gpgFingerprint = ''
+  gpgFingerprint = '',
+  spreadMap = null
 }) => {
   const isOwnProfile = !!(relationship && relationship.me);
   const rawPrefs = visibilityPrefs || {};
@@ -2556,7 +2557,7 @@ exports.authorView = async ({
         const { renderActionCards } = require('./activity_view');
         mainColumnContent.push(filterRow);
         mainColumnContent.push(div({ class: 'feed-container profile-module-section' },
-          renderActionCards(limited, feedId, allActions || limited)
+          renderActionCards(limited, feedId, allActions || limited, spreadMap instanceof Map ? spreadMap : new Map())
         ));
       }
     }

@@ -165,7 +165,7 @@ function getGoverningHouseKey(now = new Date()) {
   return HOUSE_KEYS[now.getMonth() % HOUSE_KEYS.length];
 }
 
-module.exports = ({ cooler, tribesModel }) => {
+module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -191,30 +191,204 @@ module.exports = ({ cooler, tribesModel }) => {
     return candidates[0];
   }
 
+  async function findEarliestHouseAnchor(houseKey) {
+    if (!VALID_KEY(houseKey)) return null;
+    const client = await openSsb();
+    return new Promise((resolve) => {
+      const anchors = [];
+      const tombstones = [];
+      pull(
+        client.createLogStream(),
+        pull.drain((m) => {
+          const c = m && m.value && m.value.content;
+          if (!c) return;
+          if (c.type === 'larpHouseTribeAnchor') {
+            if (c.house !== houseKey) return;
+            if (typeof c.tribeRootId !== 'string') return;
+            const tribeTs = Number(Date.parse(c.tribeCreatedAt || '')) || m.value.timestamp || 0;
+            anchors.push({ tribeRootId: c.tribeRootId, anchorAuthor: m.value.author, tribeTs });
+          } else if (c.type === 'larpHouseTribeAnchorTombstone') {
+            if (c.house !== houseKey) return;
+            if (typeof c.tribeRootId !== 'string') return;
+            tombstones.push({ tribeRootId: c.tribeRootId, tombstoneAuthor: m.value.author });
+          }
+        }, () => {
+          const validKills = new Set();
+          for (const t of tombstones) {
+            const a = anchors.find(x => x.tribeRootId === t.tribeRootId);
+            if (a && a.anchorAuthor === t.tombstoneAuthor) validKills.add(t.tribeRootId);
+          }
+          const live = anchors.filter(a => !validKills.has(a.tribeRootId));
+          if (!live.length) return resolve(null);
+          live.sort((a, b) => a.tribeTs - b.tribeTs);
+          const first = live[0];
+          resolve({ tribeRootId: first.tribeRootId, author: first.anchorAuthor, tribeTs: first.tribeTs });
+        })
+      );
+    });
+  }
+
+  async function findHouseAnchorByTribe(houseKey, tribeRootId) {
+    if (!VALID_KEY(houseKey) || !tribeRootId) return null;
+    const client = await openSsb();
+    return new Promise((resolve) => {
+      let hit = null;
+      pull(
+        client.createLogStream(),
+        pull.drain((m) => {
+          if (hit) return;
+          const c = m && m.value && m.value.content;
+          if (!c || c.type !== 'larpHouseTribeAnchor') return;
+          if (c.house !== houseKey) return;
+          if (c.tribeRootId !== tribeRootId) return;
+          hit = { author: m.value.author, ts: m.value.timestamp || 0 };
+        }, () => resolve(hit))
+      );
+    });
+  }
+
+  async function publishHouseTribeAnchor(houseKey, tribeRootId, tribeCreatedAt) {
+    if (!VALID_KEY(houseKey) || !tribeRootId) return null;
+    const client = await openSsb();
+    return new Promise((resolve) => {
+      client.publish({
+        type: 'larpHouseTribeAnchor',
+        house: houseKey,
+        tribeRootId,
+        tribeCreatedAt: tribeCreatedAt || new Date().toISOString(),
+        anchoredAt: new Date().toISOString()
+      }, (err, msg) => resolve(err ? null : msg));
+    });
+  }
+
+  async function listMyHouseTribes(houseKey) {
+    if (!tribesModel || !VALID_KEY(houseKey)) return [];
+    const client = await openSsb();
+    const me = client.id;
+    let list = [];
+    try { list = await tribesModel.listAll(); } catch (_) { return []; }
+    const tag = houseTribeTag(houseKey);
+    const out = [];
+    for (const t of list) {
+      const tags = Array.isArray(t.tags) ? t.tags : [];
+      const members = Array.isArray(t.members) ? t.members : [];
+      if (!tags.includes(tag) || !members.includes(me)) continue;
+      const rootId = await tribesModel.getRootId(t.id).catch(() => t.id);
+      const createdAtTs = Number(Date.parse(t.createdAt || '')) || 0;
+      out.push({ tribe: t, rootId, createdAtTs });
+    }
+    return out;
+  }
+
+  async function tombstoneMyTribe(houseKey, rootId, tribeId) {
+    try { await tribesModel.publishTombstone(tribeId); } catch (_) {}
+    if (houseKey !== 'academia') {
+      await publishHouseAnchorTombstone(houseKey, rootId).catch(() => {});
+    }
+    if (tribeCrypto && typeof tribeCrypto.dropKey === 'function') {
+      try { tribeCrypto.dropKey(rootId); } catch (_) {}
+    }
+  }
+
   async function ensureHouseTribe(houseKey) {
     if (!tribesModel || !VALID_KEY(houseKey)) return null;
-    const existing = await findMyHouseTribe(houseKey);
-    if (existing) return existing;
+    const client = await openSsb();
+    const me = client.id;
+
+    if (houseKey === 'academia') {
+      const existing = await findMyHouseTribe(houseKey);
+      if (existing) return existing;
+      const house = HOUSES[houseKey] || {};
+      const tag = houseTribeTag(houseKey);
+      try {
+        await tribesModel.createTribe(house.name || houseKey, house.description || '', house.image || null, '', [tag], false, 'open', null, 'PUBLIC', '');
+      } catch (_) {}
+      return await findMyHouseTribe(houseKey);
+    }
+
+    const anchor = await findEarliestHouseAnchor(houseKey).catch(() => null);
+    const myTribes = await listMyHouseTribes(houseKey);
+    myTribes.sort((a, b) => a.createdAtTs - b.createdAtTs);
+
+    let myCanonical = null;
+    if (anchor) {
+      myCanonical = myTribes.find(x => x.rootId === anchor.tribeRootId) || null;
+    }
+
+    if (!myCanonical && myTribes.length > 0) {
+      const myOldest = myTribes[0];
+      const myOldestTs = myOldest.createdAtTs;
+      if (!anchor) {
+        await publishHouseTribeAnchor(houseKey, myOldest.rootId, myOldest.tribe.createdAt).catch(() => {});
+        myCanonical = myOldest;
+      } else if (myOldestTs > 0 && anchor.tribeTs > 0 && myOldestTs < anchor.tribeTs) {
+        const existingAnchor = await findHouseAnchorByTribe(houseKey, myOldest.rootId);
+        if (!existingAnchor) {
+          await publishHouseTribeAnchor(houseKey, myOldest.rootId, myOldest.tribe.createdAt).catch(() => {});
+        }
+        myCanonical = myOldest;
+      }
+    }
+
+    for (const t of myTribes) {
+      if (myCanonical && t.rootId === myCanonical.rootId) continue;
+      if (t.tribe.author !== me) continue;
+      await tombstoneMyTribe(houseKey, t.rootId, t.tribe.id);
+    }
+
+    if (myCanonical) {
+      const existingAnchorForMine = await findHouseAnchorByTribe(houseKey, myCanonical.rootId);
+      if (!existingAnchorForMine) {
+        await publishHouseTribeAnchor(houseKey, myCanonical.rootId, myCanonical.tribe.createdAt).catch(() => {});
+      }
+      return myCanonical.tribe;
+    }
+
+    if (anchor) return null;
+
     const house = HOUSES[houseKey] || {};
     const tag = houseTribeTag(houseKey);
-    const title = house.name || houseKey;
-    const description = house.description || '';
-    const image = house.image || null;
-    const isAcademia = houseKey === 'academia';
-    const isAnonymous = !isAcademia;
-    const status = isAcademia ? 'PUBLIC' : 'PRIVATE';
-    const inviteMode = 'open';
     try {
-      await tribesModel.createTribe(title, description, image, '', [tag], isAnonymous, inviteMode, null, status, '');
+      await tribesModel.createTribe(house.name || houseKey, house.description || '', house.image || null, '', [tag], true, 'open', null, 'PRIVATE', '');
     } catch (_) {}
-    return await findMyHouseTribe(houseKey);
+    const created = await findMyHouseTribe(houseKey);
+    if (created) {
+      const rootId = await tribesModel.getRootId(created.id).catch(() => created.id);
+      await publishHouseTribeAnchor(houseKey, rootId, created.createdAt).catch(() => {});
+    }
+    return created;
+  }
+
+  async function publishHouseAnchorTombstone(houseKey, tribeRootId) {
+    if (!VALID_KEY(houseKey) || !tribeRootId) return null;
+    const client = await openSsb();
+    return new Promise((resolve) => {
+      client.publish({
+        type: 'larpHouseTribeAnchorTombstone',
+        house: houseKey,
+        tribeRootId,
+        tombstonedAt: new Date().toISOString()
+      }, (err, msg) => resolve(err ? null : msg));
+    });
   }
 
   async function leaveMyHouseTribe(houseKey) {
     if (!tribesModel) return;
-    const tribe = await findMyHouseTribe(houseKey);
-    if (!tribe) return;
-    try { await tribesModel.leaveTribe(tribe.id, { force: true }); } catch (_) {}
+    const client = await openSsb();
+    const me = client.id;
+    const myTribes = await listMyHouseTribes(houseKey);
+    for (const t of myTribes) {
+      const isSoloAuthor = t.tribe.author === me && Array.isArray(t.tribe.members) && t.tribe.members.length === 1 && t.tribe.members[0] === me;
+      try { await tribesModel.leaveTribe(t.tribe.id, { force: true }); } catch (_) {}
+      if (isSoloAuthor) {
+        if (houseKey !== 'academia') {
+          await publishHouseAnchorTombstone(houseKey, t.rootId).catch(() => {});
+        }
+        if (tribeCrypto && typeof tribeCrypto.dropKey === 'function') {
+          try { tribeCrypto.dropKey(t.rootId); } catch (_) {}
+        }
+      }
+    }
   }
 
   async function publishJoin(houseKey) {
@@ -233,6 +407,8 @@ module.exports = ({ cooler, tribesModel }) => {
       await leaveMyHouseTribe(previousHouse).catch(() => {});
     }
     await ensureHouseTribe(houseKey).catch(() => {});
+    await redeemPendingAutoInvites().catch(() => {});
+    await issueAutoInvitesForMyHouse().catch(() => {});
   }
 
   async function getUserHouse(feedId) {
@@ -449,6 +625,203 @@ module.exports = ({ cooler, tribesModel }) => {
     return { ok: true, passed: true, house: target, score: bestScore, scores, ranking };
   }
 
+  async function issueAutoInvitesForMyHouse() {
+    if (!tribesModel) return;
+    const client = await openSsb();
+    const me = client.id;
+    const myHouse = await getUserHouse(me).catch(() => null);
+    if (!VALID_KEY(myHouse) || myHouse === 'academia') return;
+    const anchor = await findEarliestHouseAnchor(myHouse).catch(() => null);
+    if (!anchor) return;
+    let canonicalTribe;
+    try { canonicalTribe = await tribesModel.getTribeById(anchor.tribeRootId); } catch (_) { return; }
+    if (!canonicalTribe) return;
+    const tribeMembers = Array.isArray(canonicalTribe.members) ? canonicalTribe.members : [];
+    if (!tribeMembers.includes(me)) return;
+    const houseMembers = await getMembersOfHouse(myHouse).catch(() => []);
+    const missing = houseMembers.filter(id => id && id !== me && !tribeMembers.includes(id));
+    if (!missing.length) return;
+    const sent = await listMyAutoInviteRecipients(myHouse, anchor.tribeRootId).catch(() => new Set());
+    for (const newMember of missing) {
+      if (sent.has(newMember)) continue;
+      try {
+        const code = await tribesModel.generateInvite(canonicalTribe.id);
+        await new Promise((resolve) => {
+          client.publish({
+            type: 'larpAutoInvite',
+            house: myHouse,
+            tribeRootId: anchor.tribeRootId,
+            to: newMember,
+            code,
+            sentAt: new Date().toISOString(),
+            recps: [newMember, me]
+          }, () => resolve());
+        });
+      } catch (_) {}
+    }
+  }
+
+  async function listMyAutoInviteRecipients(houseKey, tribeRootId) {
+    const client = await openSsb();
+    const me = client.id;
+    const ssbKeys = require('../server/node_modules/ssb-keys');
+    const config = require('../server/ssb_config');
+    return new Promise((resolve) => {
+      const out = new Set();
+      pull(
+        client.createUserStream({ id: me }),
+        pull.drain((m) => {
+          const c = m && m.value && m.value.content;
+          if (typeof c !== 'string' || !c.endsWith('.box')) return;
+          let decoded;
+          try { decoded = ssbKeys.unbox(c, config.keys); } catch (_) { return; }
+          if (!decoded) return;
+          if (typeof decoded === 'string') {
+            try { decoded = JSON.parse(decoded); } catch (_) { return; }
+          }
+          if (!decoded || decoded.type !== 'larpAutoInvite') return;
+          if (decoded.house !== houseKey) return;
+          if (decoded.tribeRootId !== tribeRootId) return;
+          if (typeof decoded.to === 'string' && decoded.to !== me) out.add(decoded.to);
+        }, () => resolve(out))
+      );
+    });
+  }
+
+  async function alreadyInCanonical(houseKey) {
+    if (!VALID_KEY(houseKey)) return false;
+    const anchor = await findEarliestHouseAnchor(houseKey).catch(() => null);
+    if (!anchor) return false;
+    try {
+      const canonical = await tribesModel.getTribeById(anchor.tribeRootId);
+      const client = await openSsb();
+      return !!(canonical && Array.isArray(canonical.members) && canonical.members.includes(client.id));
+    } catch (_) { return false; }
+  }
+
+  async function redeemPendingAutoInvites() {
+    if (!tribesModel) return;
+    const client = await openSsb();
+    const me = client.id;
+    const myHouse = await getUserHouse(me).catch(() => null);
+    if (!VALID_KEY(myHouse) || myHouse === 'academia') return;
+    if (await alreadyInCanonical(myHouse)) return;
+    const ssbKeys = require('../server/node_modules/ssb-keys');
+    const config = require('../server/ssb_config');
+    const codes = [];
+    await new Promise((resolve) => {
+      pull(
+        client.createLogStream({ reverse: true, limit: 2000 }),
+        pull.drain((m) => {
+          const c = m && m.value && m.value.content;
+          if (typeof c !== 'string' || !c.endsWith('.box')) return;
+          let decoded;
+          try { decoded = ssbKeys.unbox(c, config.keys); } catch (_) { return; }
+          if (!decoded) return;
+          if (typeof decoded === 'string') {
+            try { decoded = JSON.parse(decoded); } catch (_) { return; }
+          }
+          if (!decoded || decoded.type !== 'larpAutoInvite') return;
+          if (!VALID_KEY(decoded.house) || typeof decoded.code !== 'string') return;
+          if (decoded.house !== myHouse) return;
+          if (m.value.author === me) return;
+          codes.push(decoded.code);
+        }, () => resolve())
+      );
+    });
+    for (const code of codes) {
+      try { await tribesModel.joinByInvite(code); } catch (_) {}
+    }
+  }
+
+  let liveSubscriberStarted = false;
+  let initRan = false;
+  let processingChain = Promise.resolve();
+
+  function enqueue(fn) {
+    processingChain = processingChain.then(fn).catch(() => {});
+    return processingChain;
+  }
+
+  async function runCatchup() {
+    try {
+      const client = await openSsb();
+      const me = client.id;
+      const myHouse = await getUserHouse(me).catch(() => null);
+      if (VALID_KEY(myHouse)) {
+        await ensureHouseTribe(myHouse).catch(() => {});
+      }
+      await redeemPendingAutoInvites().catch(() => {});
+      await issueAutoInvitesForMyHouse().catch(() => {});
+    } catch (_) {}
+  }
+
+  async function handleLiveMessage(m) {
+    const c = m && m.value && m.value.content;
+    if (!c) return;
+    const client = await openSsb();
+    const me = client.id;
+    const ssbKeys = require('../server/node_modules/ssb-keys');
+    const config = require('../server/ssb_config');
+    try {
+      if (typeof c === 'object' && c.type === 'larpJoinHouse' && VALID_KEY(c.house)) {
+        if (m.value.author === me) return;
+        const myHouse = await getUserHouse(me).catch(() => null);
+        if (myHouse !== c.house) return;
+        await issueAutoInvitesForMyHouse().catch(() => {});
+        return;
+      }
+      if (typeof c === 'object' && c.type === 'larpHouseTribeAnchor' && VALID_KEY(c.house)) {
+        if (m.value.author === me) return;
+        const myHouse = await getUserHouse(me).catch(() => null);
+        if (myHouse !== c.house) return;
+        await ensureHouseTribe(c.house).catch(() => {});
+        await redeemPendingAutoInvites().catch(() => {});
+        await issueAutoInvitesForMyHouse().catch(() => {});
+        return;
+      }
+      if (typeof c === 'object' && c.type === 'larpHouseTribeAnchorTombstone' && VALID_KEY(c.house)) {
+        if (m.value.author === me) return;
+        const myHouse = await getUserHouse(me).catch(() => null);
+        if (myHouse !== c.house) return;
+        await ensureHouseTribe(c.house).catch(() => {});
+        await redeemPendingAutoInvites().catch(() => {});
+        return;
+      }
+      if (typeof c === 'string' && c.endsWith('.box')) {
+        if (m.value.author === me) return;
+        let decoded;
+        try { decoded = ssbKeys.unbox(c, config.keys); } catch (_) { return; }
+        if (!decoded) return;
+        if (typeof decoded === 'string') {
+          try { decoded = JSON.parse(decoded); } catch (_) { return; }
+        }
+        if (!decoded || decoded.type !== 'larpAutoInvite') return;
+        if (!VALID_KEY(decoded.house) || typeof decoded.code !== 'string') return;
+        const myHouse = await getUserHouse(me).catch(() => null);
+        if (decoded.house !== myHouse) return;
+        if (await alreadyInCanonical(myHouse)) return;
+        try { await tribesModel.joinByInvite(decoded.code); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  async function init() {
+    if (initRan) return;
+    initRan = true;
+    if (!liveSubscriberStarted) {
+      liveSubscriberStarted = true;
+      try {
+        const client = await openSsb();
+        pull(
+          client.createLogStream({ live: true, old: false }),
+          pull.drain((m) => { enqueue(() => handleLiveMessage(m)); }, () => { liveSubscriberStarted = false; })
+        );
+      } catch (_) { liveSubscriberStarted = false; }
+    }
+    enqueue(runCatchup);
+  }
+
   async function createHouseInvite(houseKey) {
     if (!VALID_KEY(houseKey)) throw new Error('Invalid house key');
     if (houseKey === 'academia') throw new Error('ACADEMIA does not issue invites');
@@ -509,6 +882,9 @@ module.exports = ({ cooler, tribesModel }) => {
     findMyHouseTribe,
     ensureHouseTribe,
     leaveMyHouseTribe,
+    issueAutoInvitesForMyHouse,
+    redeemPendingAutoInvites,
+    init,
     getHouse: (key) => HOUSES[key] || null
   };
 };
