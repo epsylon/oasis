@@ -287,6 +287,22 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       return decryptPadFields(content, rootId, tKeys)
     },
 
+    decryptContentPublicSync(content) {
+      if (!content) return null
+      if (content.encrypted !== true) {
+        return { title: safeText(content.title), deadline: content.deadline ? String(content.deadline) : "", tags: normalizeTags(content.tags) }
+      }
+      if (content.tribeId) return null
+      const keyHex = tryDecryptPublicInviteKey(content.invites)
+      if (!keyHex) return null
+      try {
+        const title = content.title ? decryptField(content.title, keyHex) : ""
+        const deadline = content.deadline ? decryptField(content.deadline, keyHex) : ""
+        const tagsRaw = content.tags ? decryptField(content.tags, keyHex) : ""
+        return { title, deadline, tags: normalizeTags(tagsRaw) }
+      } catch (_) { return null }
+    },
+
     async resolveRootId(id) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)

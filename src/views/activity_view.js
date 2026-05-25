@@ -606,9 +606,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
     }
 
     if (type === 'map') {
-      const { lat, lng, mapType } = content;
+      const { lat, lng, mapType, title } = content;
+      const mapKey = action.id || action.key || '';
       cardBody.push(
         div({ class: 'card-section map' },
+          title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.mapTitle || 'Map') + ':'), span({ class: 'card-value' }, mapKey ? a({ href: `/maps/${encodeURIComponent(mapKey)}`, class: 'user-link' }, title) : title)) : "",
           div({ class: 'map-card-info' },
             span({ class: 'map-type-badge' }, mapType || 'SINGLE'),
             span({ class: 'map-coords' }, `${(parseFloat(lat) || 0).toFixed(4)}, ${(parseFloat(lng) || 0).toFixed(4)}`)
