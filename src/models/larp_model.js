@@ -196,29 +196,43 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     const client = await openSsb();
     return new Promise((resolve) => {
       const anchors = [];
-      const tombstones = [];
+      const anchorTombstones = [];
+      const tribeTombstones = new Map();
+      const msgAuthorByKey = new Map();
       pull(
         client.createLogStream(),
         pull.drain((m) => {
-          const c = m && m.value && m.value.content;
-          if (!c) return;
+          if (!m || !m.value) return;
+          const author = m.value.author;
+          if (m.key && author) msgAuthorByKey.set(m.key, author);
+          const c = m.value.content;
+          if (!c || typeof c !== 'object') return;
           if (c.type === 'larpHouseTribeAnchor') {
             if (c.house !== houseKey) return;
             if (typeof c.tribeRootId !== 'string') return;
             const tribeTs = Number(Date.parse(c.tribeCreatedAt || '')) || m.value.timestamp || 0;
-            anchors.push({ tribeRootId: c.tribeRootId, anchorAuthor: m.value.author, tribeTs });
+            anchors.push({ tribeRootId: c.tribeRootId, anchorAuthor: author, tribeTs });
           } else if (c.type === 'larpHouseTribeAnchorTombstone') {
             if (c.house !== houseKey) return;
             if (typeof c.tribeRootId !== 'string') return;
-            tombstones.push({ tribeRootId: c.tribeRootId, tombstoneAuthor: m.value.author });
+            anchorTombstones.push({ tribeRootId: c.tribeRootId, tombstoneAuthor: author });
+          } else if (c.type === 'tombstone' && typeof c.target === 'string') {
+            tribeTombstones.set(c.target, author);
           }
         }, () => {
-          const validKills = new Set();
-          for (const t of tombstones) {
-            const a = anchors.find(x => x.tribeRootId === t.tribeRootId);
-            if (a && a.anchorAuthor === t.tombstoneAuthor) validKills.add(t.tribeRootId);
+          const killedAnchorPairs = new Set();
+          for (const t of anchorTombstones) {
+            killedAnchorPairs.add(`${t.tribeRootId}|${t.tombstoneAuthor}`);
           }
-          const live = anchors.filter(a => !validKills.has(a.tribeRootId));
+          const deadTribes = new Set();
+          for (const [target, tombAuthor] of tribeTombstones) {
+            const tribeAuthor = msgAuthorByKey.get(target);
+            if (tribeAuthor && tribeAuthor === tombAuthor) deadTribes.add(target);
+          }
+          const live = anchors.filter(a =>
+            !killedAnchorPairs.has(`${a.tribeRootId}|${a.anchorAuthor}`) &&
+            !deadTribes.has(a.tribeRootId)
+          );
           if (!live.length) return resolve(null);
           live.sort((a, b) => a.tribeTs - b.tribeTs);
           const first = live[0];

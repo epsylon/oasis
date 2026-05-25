@@ -136,6 +136,27 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     return keys.map(k => [k])
   }
 
+  const tryDecryptPublicInviteKey = (invites) => {
+    if (!tribeCrypto || !Array.isArray(invites)) return null
+    for (const inv of invites) {
+      if (!inv || typeof inv !== "object" || inv.public !== true) continue
+      if (typeof inv.code !== "string") continue
+      if (typeof inv.ek === "string") {
+        try {
+          const k = tribeCrypto.decryptFromInvite(inv.ek, inv.code, inv.salt)
+          if (k) return k
+        } catch (_) {}
+      }
+      if (typeof inv.ekChain === "string") {
+        try {
+          const chain = tribeCrypto.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt)
+          if (Array.isArray(chain) && chain.length && chain[0].key) return chain[0].key
+        } catch (_) {}
+      }
+    }
+    return null
+  }
+
   const buildChat = (node, rootId) => {
     const rawC = node.c || {}
     if (rawC.type !== "chat") return null
@@ -146,6 +167,16 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const keyChainSets = resolveKeyChainSets(rootId)
       c = tribeCrypto.decryptContent(c, keyChainSets)
       undecryptable = !!c._undecryptable
+      if (undecryptable) {
+        const pubKey = tryDecryptPublicInviteKey(rawC.invites)
+        if (pubKey) {
+          const retry = tribeCrypto.decryptContent(rawC, [[pubKey]])
+          if (retry && !retry._undecryptable) {
+            c = retry
+            undecryptable = false
+          }
+        }
+      }
     }
 
     const invites = safeArr(c.invites)
@@ -274,12 +305,13 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         })
       }
 
-      const chatKey = ownCrypto.generateTribeKey()
       if (st === "OPEN") {
-        const code = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex")
-        const ek = tribeCrypto.encryptForInvite(chatKey, code)
-        content.invites = [{ code, ek, gen: 1, public: true }]
+        return new Promise((resolve, reject) => {
+          ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
+        })
       }
+
+      const chatKey = ownCrypto.generateTribeKey()
       content = tribeCrypto.encryptContent(content, [chatKey], true)
       const result = await new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
@@ -661,7 +693,8 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       }
       if (image) content.image = image
 
-      if (tribeCrypto) {
+      const chatIsEncrypted = !!(chat.tribeId) || !!lookupKey(chat.rootId)
+      if (chatIsEncrypted && tribeCrypto) {
         let encKey = null
         if (chat.tribeId) encKey = await getTribeFirstKeyFor(chat.tribeId)
         if (!encKey) encKey = lookupKey(chat.rootId)
@@ -669,7 +702,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         content.encryptedText = tribeCrypto.encryptWithKey(safeText(text), encKey)
         if (chat.tribeId) content.tribeId = chat.tribeId
       } else {
-        throw new Error('Chat crypto unavailable — cannot send message')
+        content.text = safeText(text)
       }
 
       return new Promise((resolve, reject) => {

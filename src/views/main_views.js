@@ -1436,7 +1436,7 @@ exports.inviteRequiredView = (kind, tribe) => {
   );
 };
 
-const thread = (messages) => {
+const thread = (messages, spreadMap = null) => {
   let lookingForTarget = true;
   let shallowest = Infinity;
 
@@ -1459,6 +1459,8 @@ const thread = (messages) => {
     }
   }
 
+  const getSpread = (key) => (spreadMap instanceof Map ? spreadMap.get(key) : null) || null;
+
   const msgList = [];
   for (let i = 0; i < messages.length; i++) {
     const j = i + 1;
@@ -1470,7 +1472,7 @@ const thread = (messages) => {
       return lodash.get(msg, "value.meta.thread.depth", 0);
     };
 
-    msgList.push(post({ msg: currentMsg }));
+    msgList.push(post({ msg: currentMsg, spreadInfo: getSpread(currentMsg.key) }));
 
     if (depth(currentMsg) < depth(nextMsg)) {
       const isAncestor = Boolean(
@@ -1564,7 +1566,7 @@ const postAside = ({ key, value }) => {
   return fragments;
 };
 
-const post = ({ msg, aside = false, preview = false }) => {
+const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
     const encoded = {
         key: encodeURIComponent(msg.key),
         author: encodeURIComponent(msg.value?.author),
@@ -1573,7 +1575,7 @@ const post = ({ msg, aside = false, preview = false }) => {
 
     const url = {
         author: `/author/${encoded.author}`,
-        likeForm: `/like/${encoded.key}`,
+        spreadForm: `/spread/${encoded.key}`,
         link: `/thread/${encoded.key}#${encoded.key}`,
         parent: `/thread/${encoded.parent}#${encoded.parent}`,
         avatar: msg.value?.meta?.author?.avatar?.url || '/assets/images/default-avatar.png',
@@ -1869,25 +1871,36 @@ const post = ({ msg, aside = false, preview = false }) => {
     const timeAgo = validTimestamp.fromNow();
     const timeAbsolute = validTimestamp.toISOString().split(".")[0].replace("T", " ");
 
-    const likeButton = msg.value?.meta?.voted
-        ? { value: 0, class: "liked" }
-        : { value: 1, class: null };
-
-    const likeCount = msg.value?.meta?.votes?.length || 0;
-    const maxLikedNameLength = 16;
-    const maxLikedNames = 16;
-
-    const likedByNames = msg.value?.meta?.votes
-        .slice(0, maxLikedNames)
+    const fallbackVoted = !!msg.value?.meta?.voted;
+    const fallbackVoteCount = msg.value?.meta?.votes?.length || 0;
+    const fallbackVoteNames = (msg.value?.meta?.votes || [])
         .map((person) => person.name)
-        .map((n) => n.slice(0, maxLikedNameLength))
+        .filter(Boolean);
+
+    const spreadInfoObj = (spreadInfo && typeof spreadInfo === 'object') ? spreadInfo : null;
+    const spreadCount = spreadInfoObj && typeof spreadInfoObj.count === 'number'
+        ? spreadInfoObj.count
+        : fallbackVoteCount;
+    const alreadySpread = spreadInfoObj && typeof spreadInfoObj.alreadySpread === 'boolean'
+        ? spreadInfoObj.alreadySpread
+        : fallbackVoted;
+    const spreadVoters = (spreadInfoObj && Array.isArray(spreadInfoObj.voters))
+        ? spreadInfoObj.voters
+              .map(v => (v && typeof v === 'object') ? (v.name || v.key || '') : String(v || ''))
+              .filter(Boolean)
+        : fallbackVoteNames;
+
+    const maxSpreadNameLength = 16;
+    const maxSpreadNames = 16;
+    const spreadByNames = spreadVoters
+        .slice(0, maxSpreadNames)
+        .map((n) => String(n).slice(0, maxSpreadNameLength))
         .join(", ");
-
-    const additionalLikesMessage =
-        likeCount > maxLikedNames ? `+${likeCount - maxLikedNames} more` : ``;
-
-    const likedByMessage =
-        likeCount > 0 ? `${likedByNames} ${additionalLikesMessage}` : null;
+    const additionalSpreadsMessage =
+        spreadCount > maxSpreadNames ? `+${spreadCount - maxSpreadNames} more` : ``;
+    const spreadByMessage =
+        spreadCount > 0 ? `${spreadByNames} ${additionalSpreadsMessage}`.trim() : (i18n.spreadHint || 'Spread this to your supporters (replicates via your feed).');
+    const spreadButtonClass = alreadySpread ? 'liked' : null;
 
     const messageClasses = ["post"];
     const recps = [];
@@ -1956,16 +1969,14 @@ const post = ({ msg, aside = false, preview = false }) => {
         footer(
             div(
                 form(
-                    { action: url.likeForm, method: "post" },
+                    { action: url.spreadForm, method: "post" },
                     button(
                         {
-                            name: "voteValue",
                             type: "submit",
-                            value: likeButton.value,
-                            class: likeButton.class,
-                            title: likedByMessage,
+                            class: spreadButtonClass,
+                            title: spreadByMessage,
                         },
-                        `☉ ${likeCount}`
+                        `☉ ${spreadCount}`
                     )
                 ),
                 a({ href: url.comment }, i18n.comment),
@@ -2608,7 +2619,7 @@ exports.previewCommentView = async ({
 };
 
 exports.commentView = async (
-  { messages, myFeedId, parentMessage },
+  { messages, myFeedId, parentMessage, spreadMap = null },
   preview,
   text,
   contentWarning
@@ -2666,7 +2677,8 @@ exports.commentView = async (
     markdownMention = `[@${parentAuthorName}](${parentAuthorFeedId})\n\n`;
   }
 
-  const messageElements = threadMessages.map((m) => post({ msg: m }));
+  const getSpread = (key) => (spreadMap instanceof Map ? spreadMap.get(key) : null) || null;
+  const messageElements = threadMessages.map((m) => post({ msg: m, spreadInfo: getSpread(m.key) }));
 
   const action = `/comment/preview/${encodeURIComponent(parentKey)}`;
   const method = "post";
@@ -3280,7 +3292,7 @@ exports.publishCustomView = async () => {
   );
 };
 
-exports.threadView = ({ messages }) => {
+exports.threadView = ({ messages, spreadMap = null }) => {
   const rootMessage = messages[0];
   const rootAuthorName = rootMessage.value.meta.author.name;
 
@@ -3291,7 +3303,7 @@ exports.threadView = ({ messages }) => {
 
   const tpl = template(
     [`@${rootAuthorName}`],
-    div(thread(messages))
+    div(thread(messages, spreadMap))
   );
 
   return `${tpl}${
@@ -3587,11 +3599,12 @@ const viewInfoBox = ({ viewTitle = null, viewDescription = null }) => {
 }
 //generate preview
 
-exports.likesView = async ({ messages, feed, name }) => {
+exports.likesView = async ({ messages, feed, name, spreadMap = null }) => {
   const authorLink = a(
     { href: `/author/${encodeURIComponent(feed)}` },
     "@" + name
   );
+  const getSpread = (key) => (spreadMap instanceof Map ? spreadMap.get(key) : null) || null;
 
   return template(
     ["@", name],
@@ -3599,7 +3612,7 @@ exports.likesView = async ({ messages, feed, name }) => {
       viewTitle: span(authorLink),
       viewDescription: span(i18n.spreadedDescription)
     }),
-    messages.map((msg) => post({ msg }))
+    messages.map((msg) => post({ msg, spreadInfo: getSpread(msg.key) }))
   );
 };
 
@@ -3609,6 +3622,7 @@ const messageListView = ({
   viewDescription = null,
   viewElements = null,
   aside = null,
+  spreadMap = null,
 }) => {
   const hasHeader = !!viewElements;
   const titleBlock = hasHeader
@@ -3617,14 +3631,15 @@ const messageListView = ({
         h2(viewTitle),
         p(viewDescription)
       );
+  const getSpread = (key) => (spreadMap instanceof Map ? spreadMap.get(key) : null) || null;
   return template(
     viewTitle,
     section(titleBlock),
-    messages.map((msg) => post({ msg, aside }))
+    messages.map((msg) => post({ msg, aside, spreadInfo: getSpread(msg.key) }))
   );
 };
 
-exports.popularView = ({ messages, prefix }) => {
+exports.popularView = ({ messages, prefix, spreadMap = null }) => {
   const header = div({ class: "tags-header" },
     h2(i18n.popular),
     p(i18n.popularDescription)
@@ -3632,11 +3647,12 @@ exports.popularView = ({ messages, prefix }) => {
   return messageListView({
     messages,
     viewTitle: i18n.popular,
-    viewElements: [header, prefix]
+    viewElements: [header, prefix],
+    spreadMap
   });
 };
 
-exports.extendedView = ({ messages }) => {
+exports.extendedView = ({ messages, spreadMap = null }) => {
   const header = div({ class: "tags-header" },
     h2(i18n.extended),
     p(i18n.extendedDescription)
@@ -3644,11 +3660,12 @@ exports.extendedView = ({ messages }) => {
   return messageListView({
     messages,
     viewTitle: i18n.extended,
-    viewElements: header
+    viewElements: header,
+    spreadMap
   });
 };
 
-exports.latestView = ({ messages }) => {
+exports.latestView = ({ messages, spreadMap = null }) => {
   const header = div({ class: "tags-header" },
     h2(i18n.latest),
     p(i18n.latestDescription)
@@ -3656,11 +3673,12 @@ exports.latestView = ({ messages }) => {
   return messageListView({
     messages,
     viewTitle: i18n.latest,
-    viewElements: header
+    viewElements: header,
+    spreadMap
   });
 };
 
-exports.topicsView = ({ messages, prefix }) => {
+exports.topicsView = ({ messages, prefix, spreadMap = null }) => {
   const header = div({ class: "tags-header" },
     h2(i18n.topics),
     p(i18n.topicsDescription)
@@ -3668,11 +3686,12 @@ exports.topicsView = ({ messages, prefix }) => {
   return messageListView({
     messages,
     viewTitle: i18n.topics,
-    viewElements: [header, prefix]
+    viewElements: [header, prefix],
+    spreadMap
   });
 };
 
-exports.summaryView = ({ messages }) => {
+exports.summaryView = ({ messages, spreadMap = null }) => {
   const header = div({ class: "tags-header" },
     h2(i18n.summaries),
     p(i18n.summariesDescription)
@@ -3681,7 +3700,8 @@ exports.summaryView = ({ messages }) => {
     messages,
     viewTitle: i18n.summaries,
     viewElements: header,
-    aside: true
+    aside: true,
+    spreadMap
   });
 };
 
@@ -3697,7 +3717,7 @@ exports.spreadedView = ({ messages }) => {
   });
 };
 
-exports.threadsView = ({ messages }) => {
+exports.threadsView = ({ messages, spreadMap = null }) => {
   const header = div({ class: "tags-header" },
     h2(i18n.threads),
     p(i18n.threadsDescription)
@@ -3706,7 +3726,8 @@ exports.threadsView = ({ messages }) => {
     messages,
     viewTitle: i18n.threads,
     viewElements: header,
-    aside: true
+    aside: true,
+    spreadMap
   });
 };
 
@@ -3731,7 +3752,7 @@ exports.previewSubtopicView = async ({
 };
 
 exports.subtopicView = async (
-  { messages, myFeedId },
+  { messages, myFeedId, spreadMap = null },
   preview,
   text,
   contentWarning
@@ -3741,6 +3762,7 @@ exports.subtopicView = async (
   )}`;
 
   let markdownMention;
+  const getSpread = (key) => (spreadMap instanceof Map ? spreadMap.get(key) : null) || null;
 
   const messageElements = await Promise.all(
     messages.reverse().map((message) => {
@@ -3753,7 +3775,7 @@ exports.subtopicView = async (
           markdownMention = x;
         }
       }
-      return post({ msg: message });
+      return post({ msg: message, spreadInfo: getSpread(message.key) });
     })
   );
 

@@ -90,12 +90,36 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     return tribeCrypto.encryptContent(content, [key], true);
   };
 
+  const tryDecryptPublicInviteKey = (invites) => {
+    if (!tribeCrypto || !Array.isArray(invites)) return null;
+    for (const inv of invites) {
+      if (!inv || typeof inv !== "object" || inv.public !== true) continue;
+      if (typeof inv.code !== "string") continue;
+      if (typeof inv.ek === "string") {
+        try {
+          const k = tribeCrypto.decryptFromInvite(inv.ek, inv.code, inv.salt);
+          if (k) return k;
+        } catch (_) {}
+      }
+      if (typeof inv.ekChain === "string") {
+        try {
+          const chain = tribeCrypto.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt);
+          if (Array.isArray(chain) && chain.length && chain[0].key) return chain[0].key;
+        } catch (_) {}
+      }
+    }
+    return null;
+  };
+
   const decryptMapRoot = (content, rootId) => {
     if (!content || !content.encryptedPayload) return content;
     if (!tribeCrypto) return content;
     const keys = lookupKeys(rootId);
-    if (!keys || !keys.length) return { ...content, _undecryptable: true };
-    return tribeCrypto.decryptContent(content, keys.map(k => [k]));
+    let candidateChains = (keys || []).map(k => [k]);
+    const pubKey = tryDecryptPublicInviteKey(content.invites);
+    if (pubKey) candidateChains.push([pubKey]);
+    if (!candidateChains.length) return { ...content, _undecryptable: true };
+    return tribeCrypto.decryptContent(content, candidateChains);
   };
 
   const decryptIndexNodes = async (idx) => {
@@ -383,7 +407,8 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
         updatedAt: now
       };
 
-      const shouldEncryptStandalone = !tribeId && tribeCrypto;
+      const isPublicOpen = mType === "OPEN" && !tribeId;
+      const shouldEncryptStandalone = !tribeId && !isPublicOpen && tribeCrypto;
       let mapKey = null;
       let content = plainContent;
       if (tribeId) {
@@ -551,8 +576,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
         content = await encryptIfTribe(content);
       } else if (tribeCrypto) {
         const mapKey = lookupKey(rootId);
-        if (!mapKey) throw new Error(`Missing map key for ${rootId} — cannot publish marker`);
-        content = tribeCrypto.encryptContent(content, [mapKey], true);
+        if (mapKey) content = tribeCrypto.encryptContent(content, [mapKey], true);
       }
 
       return new Promise((resolve, reject) => {

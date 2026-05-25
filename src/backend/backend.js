@@ -1339,8 +1339,9 @@ router
     if (!checkMod(ctx, 'popularMod')) return ctx.redirect('/modules');
     const i18n = require("../client/assets/translations/i18n"), lang = ctx.cookies.get('language') || getConfig().language || 'en', t = i18n[lang] || i18n['en'];
     const messages = sanitizeMessages(await post.popular({ period: ctx.params.period }));
-    ctx.body = await popularView({ messages, prefix: nav(div({ class: "filters" }, ul(['day','week','month','year'].map(p => li(form({ method: "GET", action: `/public/popular/${p}` }, button({ type: "submit", class: "filter-btn" }, t[p]))))))) });
-  }) 
+    const spreadMap = await spreads.forMessages((messages || []).map(m => m && m.key)).catch(() => new Map());
+    ctx.body = await popularView({ messages, prefix: nav(div({ class: "filters" }, ul(['day','week','month','year'].map(p => li(form({ method: "GET", action: `/public/popular/${p}` }, button({ type: "submit", class: "filter-btn" }, t[p]))))))), spreadMap });
+  })
   .get("/modules", async (ctx) => {
     const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
     const cfg = getConfig().modules;
@@ -1541,12 +1542,14 @@ router
   .get("/public/latest", async (ctx) => {
     if (!checkMod(ctx, 'latestMod')) { ctx.redirect('/modules'); return; }
     const messages = sanitizeMessages(await post.latest());
-    ctx.body = await latestView({ messages });
+    const spreadMap = await spreads.forMessages((messages || []).map(m => m && m.key)).catch(() => new Map());
+    ctx.body = await latestView({ messages, spreadMap });
   })
   .get("/public/latest/extended", async (ctx) => {
     if (!checkMod(ctx, 'extendedMod')) { ctx.redirect('/modules'); return; }
     const messages = sanitizeMessages(await post.latestExtended());
-    ctx.body = await extendedView({ messages });
+    const spreadMap = await spreads.forMessages((messages || []).map(m => m && m.key)).catch(() => new Map());
+    ctx.body = await extendedView({ messages, spreadMap });
   })
   .get("/public/latest/topics", async (ctx) => {
     if (!checkMod(ctx, 'topicsMod')) { ctx.redirect('/modules'); return; }
@@ -1556,17 +1559,20 @@ router
       return li(a({ href: `/hashtag/${c}` }, `#${c}`));
     });
     const prefix = nav(ul(list));
-    ctx.body = await topicsView({ messages, prefix });
+    const spreadMap = await spreads.forMessages((messages || []).map(m => m && m.key)).catch(() => new Map());
+    ctx.body = await topicsView({ messages, prefix, spreadMap });
   })
   .get("/public/latest/summaries", async (ctx) => {
     if (!checkMod(ctx, 'summariesMod')) { ctx.redirect('/modules'); return; }
     const messages = sanitizeMessages(await post.latestSummaries());
-    ctx.body = await summaryView({ messages });
+    const spreadMap = await spreads.forMessages((messages || []).map(m => m && m.key)).catch(() => new Map());
+    ctx.body = await summaryView({ messages, spreadMap });
   })
   .get("/public/latest/threads", async (ctx) => {
     if (!checkMod(ctx, 'threadsMod')) { ctx.redirect('/modules'); return; }
     const messages = sanitizeMessages(await post.latestThreads());
-    ctx.body = await threadsView({ messages });
+    const spreadMap = await spreads.forMessages((messages || []).map(m => m && m.key)).catch(() => new Map());
+    ctx.body = await threadsView({ messages, spreadMap });
   })
   .get('/author/:feed', async (ctx) => {
     const feedId = decodeURIComponent(ctx.params.feed || ''), gt = Number(ctx.request.query.gt || -1), lt = Number(ctx.request.query.lt || -1);
@@ -3114,7 +3120,9 @@ router
   })
   .get("/likes/:feed", async (ctx) => {
     const { feed } = ctx.params;
-    ctx.body = await likesView({ messages: await post.likes({ feed }), feed, name: await about.name(feed) });
+    const messages = await post.likes({ feed });
+    const spreadMap = await spreads.forMessages((messages || []).map(m => m && m.key)).catch(() => new Map());
+    ctx.body = await likesView({ messages, feed, name: await about.name(feed), spreadMap });
   })
   .get("/mentions", async (ctx) => {
     const { messages, myFeedId } = await post.mentionsMe();
@@ -4237,7 +4245,8 @@ router
     const { message } = ctx.params;
     const thread = async (message) => {
       const messages = await post.fromThread(message);
-      return threadView({ messages });
+      const spreadMap = await spreads.forMessages((messages || []).map(m => m && m.key)).catch(() => new Map());
+      return threadView({ messages, spreadMap });
     };
     ctx.body = await thread(message);
   })
@@ -4247,7 +4256,8 @@ router
     const myFeedId = await meta.myFeedId();
     debug("%O", rootMessage);
     const messages = [rootMessage];
-    ctx.body = await subtopicView({ messages, myFeedId });
+    const spreadMap = await spreads.forMessages(messages.map(m => m && m.key)).catch(() => new Map());
+    ctx.body = await subtopicView({ messages, myFeedId, spreadMap });
   })
   .get("/publish", async (ctx) => {
     ctx.body = await publishView();
@@ -4255,7 +4265,9 @@ router
   .get("/comment/:message", async (ctx) => {
     const { messages, myFeedId, parentMessage } =
       await resolveCommentComponents(ctx);
-    ctx.body = await commentView({ messages, myFeedId, parentMessage });
+    const allKeys = [parentMessage && parentMessage.key, ...(messages || []).map(m => m && m.key)].filter(Boolean);
+    const spreadMap = await spreads.forMessages(allKeys).catch(() => new Map());
+    ctx.body = await commentView({ messages, myFeedId, parentMessage, spreadMap });
   })
   .get("/wallet", async (ctx) => {
     const { url, user, pass } = getConfig().wallet;
@@ -6562,12 +6574,13 @@ router
   })
   .post("/update", koaBody(), async (ctx) => {
     const exec = require("node:util").promisify(require("node:child_process").exec);
-    const { stdout, stderr } = await exec("git reset --hard && git pull");
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    const { stdout, stderr } = await exec("git reset --hard && git pull", { cwd: repoRoot });
     console.log("oasis@version: updating Oasis...", stdout, stderr);
-    const { stdout: shOut, stderr: shErr } = await exec("sh install.sh");
+    const { stdout: shOut, stderr: shErr } = await exec("sh install.sh", { cwd: repoRoot });
     console.log("oasis@version: running install.sh...", shOut, shErr);
     safeRefererRedirect(ctx, '/settings');
-  })  
+  })
   .post("/settings/theme", koaBody(), async (ctx) => {
     const theme = String(ctx.request.body.theme || "").trim(), cfg = getConfig();
     cfg.themes.current = theme || "Dark-SNH";
