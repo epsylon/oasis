@@ -11,7 +11,6 @@ const safeFeedId = (v) => {
 
 const isContentSane = (c) => {
   if (!c || typeof c !== 'object') return false;
-  if (c.type === 'contact') return !!safeFeedId(c.contact);
   if (c.type === 'about') {
     if (c.about === undefined) return true;
     if (typeof c.about === 'string' && ssbRef.isFeed(c.about)) return true;
@@ -180,6 +179,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         if (!c) continue;
         if (typeof c === 'string' && c.endsWith('.box')) continue;
         if (c.type && HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
+        if (c.type === 'contact') continue;
         if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
           const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
           if (!r || !r.body) continue;
@@ -208,8 +208,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         }
         if (!isContentSane(c)) continue;
         const ts = v?.timestamp || Number(c?.timestamp || 0) || (c?.updatedAt ? Date.parse(c.updatedAt) : 0) || 0;
-        const normalized = c.type === 'contact' ? { ...c, contact: safeFeedId(c.contact) } : c;
-        idToAction.set(k, { id: k, author: v?.author, ts, type: inferType(c), content: normalized });
+        idToAction.set(k, { id: k, author: v?.author, ts, type: inferType(c), content: c });
         rawById.set(k, msg);
         if (c.replaces) parentOf.set(k, c.replaces);
       }

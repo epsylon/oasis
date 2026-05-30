@@ -72,7 +72,7 @@ ssbClient(ssbConfig.keys, { remote, caps: ssbConfig.caps }).then(async (ssb) => 
         break;
       }
       case 'gossip': {
-        const r = await call(ssb.gossip.peers.bind(ssb.gossip));
+        const r = await call(ssb.conn.dbPeers.bind(ssb.conn));
         console.log(JSON.stringify(r, null, 2));
         break;
       }

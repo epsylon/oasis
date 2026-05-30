@@ -1011,32 +1011,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       );
     }
 
-    if (type === 'contact') {
-      const { contact } = content || {};
-      const aId = action.author || '';
-      const bId = typeof contact === 'string'
-        ? contact
-        : (contact && typeof contact === 'object' && typeof contact.link === 'string' ? contact.link : '');
-      if (!bId) { skip = true; return null; }
-      const pa = getProfile(aId);
-      const pb = getProfile(bId);
-      const srcA = pa.image ? `/blob/${encodeURIComponent(pa.image)}` : '/assets/images/default-avatar.png';
-      const srcB = pb.image ? `/blob/${encodeURIComponent(pb.image)}` : '/assets/images/default-avatar.png';
-      cardBody.push(
-        div({ class: 'card-section contact' },
-          div({ class: 'activity-contact' },
-            a({ href: `/author/${encodeURIComponent(aId)}`, class: 'activity-contact-avatar-link' },
-              img({ src: srcA, alt: pa.name || pa.id, class: 'activity-contact-avatar' })
-            ),
-            span({ class: 'activity-contact-arrow' }, ''),
-            a({ href: `/author/${encodeURIComponent(bId)}`, class: 'activity-contact-avatar-link' },
-              img({ src: srcB, alt: pb.name || pb.id, class: 'activity-contact-avatar' })
-            )
-          )
-        )
-      );
-    }
-
     if (type === 'pub') {
       const { address } = content || {};
       const { key } = address || {};
@@ -1668,7 +1642,6 @@ function getViewDetailsAction(type, action) {
     case 'task':       return `/tasks/${id}`;
     case 'taskAssignment': return `/tasks/${encodeURIComponent(action.content?.taskId || action.tipId || action.id)}`;
     case 'about':      return `/author/${encodeURIComponent(action.author)}`;
-    case 'contact':    return `/inhabitants`;
     case 'pub':        return `/invites`;
     case 'market':     return `/market/${id}`;
     case 'shop':       return `/shops/${id}`;
@@ -1698,7 +1671,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'mine',      label: i18n.mineButton },
     { type: 'report',    label: i18n.typeReport },
     { type: 'aiExchange',label: i18n.typeAiExchange },
-    { type: 'about',     label: i18n.typeAbout },
     { type: 'tribe',     label: i18n.typeTribe },
     { type: 'parliament',label: i18n.typeParliament },
     { type: 'courts',    label: i18n.typeCourts },
@@ -1728,7 +1700,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'video',     label: i18n.typeVideo }
   ];
 
-  const EXCLUDED_TYPES = new Set(['spread', 'pixelia']);
+  const EXCLUDED_TYPES = new Set(['spread', 'pixelia', 'about', 'pub']);
   actions = actions.filter(action => !EXCLUDED_TYPES.has(action.type));
 
   let filteredActions;
