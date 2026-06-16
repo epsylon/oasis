@@ -18,6 +18,7 @@ if (!fs.existsSync(configFilePath)) {
       "latestMod": "on",
       "threadsMod": "on",
       "multiverseMod": "on",
+      "fediverseMod": "off",
       "invitesMod": "on",
       "walletMod": "on",
       "legacyMod": "on",

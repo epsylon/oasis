@@ -77,6 +77,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Documents: Module to discover and manage documents.	
  + Events: Module to discover and manage events.
  + Favorites: Module to manage your favorite content.
+ + Fediverse: Manage your other fediverse accounts, including sending and receiving content.
  + Feed: Module to discover and share short-texts (feeds).
  + Forums: Module to discover and manage forums.
  + Games: Module to play and share your scores in various mini-games.	
@@ -131,19 +132,19 @@ Our AI is trained with content from the OASIS network and its purpose is to take
 
 ----------
 
-## Parliament (politics)
+## Parliament
 
 Oasis contains its own Parliament (Government system).
 
   ![SNH](https://solarnethub.com/git/oasis-parliament.png "SolarNET.HuB")
   
-## Courts (justice)
+## Courts
 
 Oasis contains its own Courts (Justice system).
 
   ![SNH](https://solarnethub.com/git/oasis-courts.png "SolarNET.HuB")
   
-## ECOin (crypto-economy)
+## ECOin
 
 Oasis contains its own cryptocurrency. With it, you can exchange items and services in the marketplace. 
 
@@ -153,7 +154,7 @@ You can also receive a -Universal Basic Income- if you contribute to the Tribes 
 
  + https://ecoin.03c8.net
  
-## Banking (crypto-economy)
+## Banking
 
 Oasis contains its own UBI (Universal Basic Income), distributed weekly using ECOin, and calculated by our AI through positive and efficient participation and trust.
 
@@ -161,7 +162,7 @@ Oasis contains its own UBI (Universal Basic Income), distributed weekly using EC
   
 ----------
 
-## Carbon Footprinting (ecology)
+## Carbon Footprinting
 
 Oasis contains its own carbon footprint meter.
 
@@ -190,6 +191,18 @@ The main objective is to empower the inhabitants to organize around specific pro
 Check "The Houses" to review which one fit better with your ambitions:
 
  + https://wiki.solarnethub.com/socialnet/roleplaying#the_houses
+
+----------
+
+## Fediverse
+
+Oasis bridges to the **Fediverse**. You can connect your fediverse accounts (ex: **Mastodon**) and use them for content from inside Oasis: read your home timeline, publish (text, images and video), reply, boost and favourite — without storing any third-party content in your SSB log (the feed is fetched live and shown ephemerally; only your credentials are kept locally).
+
+  ![SNH](https://solarnethub.com/git/oasis-fediverse.png "SolarNET.HuB")
+
+Connect your account from **Settings → Fediverse**, then open it from the **Fediverse** menu. Each network lives in its own space.
+
+ + Mastodon connect guide: [docs/FEDIVERSE/MASTODON/connect.md](docs/FEDIVERSE/MASTODON/connect.md)
 
 ----------
   

@@ -986,6 +986,55 @@ article img {
   margin: 8px 0;
 }
 
+.feed-container .post-image{max-width:100%;width:auto;max-height:480px;height:auto}
+.feed-container .post-video,.feed-container .video-container video{width:100%;max-width:720px;max-height:480px;height:auto}
+.feed-container .post-audio,.feed-container .audio-container audio{width:100%;max-width:640px}
+
+.fediverse-network{border-radius:8px;padding:18px 22px;margin-top:10px;display:flex;flex-direction:column;gap:16px}
+.fediverse-network h3{margin:0}
+.fediverse-profile{display:flex;flex-direction:column;gap:24px}
+.fediverse-namerow{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.fediverse-namerow .fediverse-avatar{width:80px;height:80px}
+.fediverse-profile-id{display:flex;flex-direction:column;min-width:0}
+.fediverse-name{font-weight:700;font-size:1.3em}
+.fediverse-acct{margin-top:4px !important}
+.fediverse-namerow .fediverse-compact-actions{margin-left:auto !important;align-self:flex-start}
+.fediverse-compact-actions{display:inline-flex;gap:8px;flex-wrap:wrap}
+.fediverse-pre{white-space:pre-wrap;word-break:break-word}
+.fediverse-preview-head .fediverse-avatar{width:72px;height:72px}
+.fediverse-stats{display:flex;flex-wrap:wrap;gap:32px;margin:0}
+.fediverse-stat{display:flex;flex-direction:column;gap:4px}
+.fediverse-stat strong{white-space:nowrap}
+.fediverse-stat-label{font-size:0.8em;opacity:0.65}
+.fediverse-bio{margin:0;padding:0;text-indent:0;opacity:0.9;word-break:break-word;white-space:normal}
+.fediverse-bio p{margin:0;padding:0;text-indent:0;white-space:normal}
+.fediverse-bio p+p{margin-top:6px}
+.fediverse-fields{display:flex;flex-direction:column;gap:10px;margin:0;border-radius:8px;padding:14px 16px}
+.fediverse-field{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.fediverse-field-name{font-weight:700;opacity:0.75;min-width:110px}
+.fediverse-field-value{min-width:0;word-break:break-word}
+.fediverse-field-verified{color:#7fff7f}
+.fediverse-reach-url{display:block;margin-top:6px;word-break:break-all}
+.pm-exposition-fediverse{background:#2a1a3a;color:#c9a0ff;border-color:#6f4fa3}
+.fediverse-profile,.fediverse-profile-id,.fediverse-namerow,.fediverse-stat,.fediverse-name,.fediverse-compact-actions,.fediverse-author,.fediverse-head,.fediverse-bio,.fediverse-stats,.fediverse-field,.fediverse-field-value,.fediverse-actions,.fediverse-compose,.fediverse-compose-actions,.fediverse-media,.fediverse-reach,.fediverse-preview-card,.fediverse-preview-head,.fediverse-disconnected{border:none !important;background:none !important;padding:0 !important;margin:0 !important;box-shadow:none !important;border-radius:0 !important}
+.fediverse-empty{text-align:center;padding:24px}
+.fediverse-error{color:#ff6b6b;margin:8px 0}
+.fediverse-compose{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.fediverse-compose textarea{width:100%;box-sizing:border-box;resize:vertical}
+.fediverse-compose-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.fediverse-attach{display:inline-flex;align-items:center;gap:6px;font-size:0.9em;opacity:0.85}
+.fediverse-card{display:flex;flex-direction:column;gap:8px}
+.fediverse-boosted{font-size:0.85em;opacity:0.7}
+.fediverse-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.fediverse-avatar{width:40px;height:40px;border-radius:8px;object-fit:cover;flex-shrink:0}
+.fediverse-author{display:flex;flex-direction:column;min-width:0}
+.fediverse-name{font-weight:700}
+.fediverse-acct{font-size:0.85em;opacity:0.7;word-break:break-all}
+.fediverse-date{margin-left:auto;font-size:0.8em;opacity:0.6;white-space:nowrap}
+.fediverse-media{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.fediverse-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.fediverse-focus,.fediverse-focus .fediverse-card{border:none !important;background:none !important;padding:0 !important;margin:0 !important;box-shadow:none !important;border-radius:0 !important}
+
 .post-pdf {
   color: #FFA500;
   text-decoration: none;
@@ -5800,8 +5849,8 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .tribe-card-body .job-card-view-btn{margin-top:8px;margin-bottom:0}
 .transfer-block-card{border:none;background:transparent;padding:0;margin:0 0 12px 0}
 .tribe-main .job-section{border:none;background:transparent}
-.profile-reach{display:flex;flex-direction:column;align-items:center;gap:8px;margin:12px 0;text-align:center}
-.profile-reach .shop-clearnet-url{margin:0;text-align:center}
+.profile-reach{display:flex;flex-direction:column;align-items:center;gap:8px;margin:12px 0;text-align:center;border:none !important;background:none !important}
+.profile-reach .shop-clearnet-url{margin:0;text-align:center;border:none !important;background:none !important}
 .profile-reach-toggle{margin:0}
 .profile-reach-toggle .btn{
   background-color:#FFA500;

@@ -14,6 +14,11 @@ const cliArgs = ~i ? argv.slice(0, i) : argv;
 let config = Config('ssb', minimist(conf));
 config = { ...config, ...configData };
 
+const debug = process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
+if (debug) {
+  config.logging = { ...(config.logging || {}), level: 'debug' };
+}
+
 const megabyte = Math.pow(2, 20);
 config.blobs = config.blobs || {};
 config.blobs.max = 50 * megabyte;

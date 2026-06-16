@@ -37,6 +37,31 @@ const renderReachChip = (isClearnet, i18nObj = {}, href = null) => {
   return chip;
 };
 
+const fediverseProfileUrl = (handle) => {
+  const h = String(handle || '').trim().replace(/^@/, '');
+  const at = h.indexOf('@');
+  if (at <= 0) return '';
+  const acct = h.slice(0, at), host = h.slice(at + 1);
+  if (!acct || !host || /[\s/]/.test(host)) return '';
+  return `https://${host}/@${acct}`;
+};
+
+const renderFediverseReach = (prefs, i18nObj = {}) => {
+  if (!prefs || prefs.fediverse !== true) return null;
+  const handle = String(prefs.fediverseHandle || '').trim();
+  const url = fediverseProfileUrl(handle);
+  if (!url) return null;
+  return div({ class: 'profile-reach fediverse-reach' },
+    a({ href: url, target: '_blank', rel: 'noopener noreferrer', class: 'pm-exposition-chip-link' },
+      span({ class: 'pm-exposition-chip pm-exposition-fediverse' },
+        span({ class: 'pm-exposition-icon' }, '🐘'),
+        span({ class: 'pm-exposition-text' }, i18nObj.fediverse || 'Fediverse')
+      )
+    ),
+    a({ href: url, target: '_blank', rel: 'noopener noreferrer', class: 'fediverse-reach-url' }, handle)
+  );
+};
+
 const renderEncryptedChip = (i18nObj = {}) => {
   return span({ class: 'pm-exposition-chip pm-exposition-encrypted' },
     span({ class: 'pm-exposition-icon' }, '🔒'),
@@ -250,6 +275,7 @@ module.exports = {
   blobIdOf,
   blobUrl,
   renderReachChip,
+  renderFediverseReach,
   renderEncryptedChip,
   renderClearnetUrlBlock,
   renderClearnetSearchForm,

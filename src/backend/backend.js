@@ -600,6 +600,7 @@ const bankingModel = require("../models/banking_model")({ services: { cooler }, 
 const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel });
 const logsModel = require("../models/logs_model")({ cooler });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
+const fediverseModel = require('../models/fediverse_model')({ isPublic: config.public });
 const { renderGovernance: renderTribeGovernance } = require('../views/tribes_view');
 const viewerFilters = require('../models/viewer_filters');
 
@@ -1105,8 +1106,75 @@ const preparePreview = async function (ctx) {
 }
 const megabyte = Math.pow(2, 20);
 const maxSize = 50 * megabyte;
+const collectFediverseMedia = async (ctx) => {
+  const files = ctx.request.files && ctx.request.files.media;
+  if (!files) return [];
+  const arr = Array.isArray(files) ? files : [files];
+  const out = [];
+  for (const f of arr.slice(0, 4)) {
+    if (!f || !f.filepath || !Number(f.size || 0)) continue;
+    const m = await fediverseModel.uploadMedia(f).catch(() => null);
+    if (m && m.id) out.push(m);
+  }
+  return out;
+};
+const fediverseReturnTo = (ctx, fallback) => {
+  const rt = ctx.request.body && ctx.request.body.returnTo;
+  return typeof rt === 'string' && rt.startsWith('/fediverse') ? rt : fallback;
+};
 const homeDir = os.homedir();
 const blobsPath = path.join(homeDir, '.ssb', 'blobs', 'tmp');
+const FEDIVERSE_TMP_PREFIX = 'fediverse-';
+const FEDIVERSE_MIME_BY_EXT = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', avif:'image/avif', mp4:'video/mp4', m4v:'video/mp4', webm:'video/webm', mov:'video/quicktime', ogg:'audio/ogg', mp3:'audio/mpeg', wav:'audio/wav' };
+const fediverseExtFromName = (n) => { const m = String(n || '').match(/\.([a-zA-Z0-9]+)$/); return m ? m[1].toLowerCase() : ''; };
+const fediverseMimeFromExt = (ext) => FEDIVERSE_MIME_BY_EXT[ext] || 'application/octet-stream';
+const isFediverseTmpName = (n) => typeof n === 'string' && /^fediverse-[0-9]+-[0-9]+\.[a-zA-Z0-9]+$/.test(n);
+const fediverseTmpType = (name) => {
+  const mime = fediverseMimeFromExt(fediverseExtFromName(name));
+  return /^video\//.test(mime) ? 'video' : /^audio\//.test(mime) ? 'audio' : 'image';
+};
+const sweepFediverseTmp = () => {
+  try {
+    const now = Date.now();
+    for (const f of fs.readdirSync(blobsPath)) {
+      if (!f.startsWith(FEDIVERSE_TMP_PREFIX)) continue;
+      const full = path.join(blobsPath, f);
+      try { if (now - fs.statSync(full).mtimeMs > 30 * 60 * 1000) fs.unlinkSync(full); } catch (_) {}
+    }
+  } catch (_) {}
+};
+const saveFediverseTempMedia = (ctx) => {
+  const files = ctx.request.files && ctx.request.files.media;
+  if (!files) return [];
+  const arr = Array.isArray(files) ? files : [files];
+  try { fs.mkdirSync(blobsPath, { recursive: true }); } catch (_) {}
+  const out = [];
+  let i = 0;
+  for (const f of arr.slice(0, 4)) {
+    if (!f || !f.filepath || !Number(f.size || 0)) continue;
+    const ext = fediverseExtFromName(f.originalFilename) || fediverseExtFromName(f.filepath) || 'bin';
+    const name = `${FEDIVERSE_TMP_PREFIX}${Date.now()}-${i++}.${ext}`;
+    try {
+      fs.copyFileSync(f.filepath, path.join(blobsPath, name));
+      out.push({ name, type: /^video|^audio/.test(fediverseMimeFromExt(ext)) ? fediverseMimeFromExt(ext).split('/')[0] : 'image' });
+    } catch (_) {}
+  }
+  return out;
+};
+const publishFediverseTempMedia = async (names) => {
+  const list = Array.isArray(names) ? names : (names ? [names] : []);
+  const ids = [];
+  for (const name of list.slice(0, 4)) {
+    if (!isFediverseTmpName(name)) continue;
+    const full = path.join(blobsPath, name);
+    if (!fs.existsSync(full)) continue;
+    const ext = fediverseExtFromName(name);
+    const m = await fediverseModel.uploadMedia({ filepath: full, mimetype: fediverseMimeFromExt(ext), originalFilename: name, size: 1 }).catch(() => null);
+    if (m && m.id) ids.push(m.id);
+    try { fs.unlinkSync(full); } catch (_) {}
+  }
+  return ids;
+};
 const gossipPath = path.join(homeDir, '.ssb', 'gossip.json');
 const unfollowedPath = path.join(homeDir, '.ssb', 'gossip_unfollowed.json');
 const ensureJSONFile = (p, init = []) => { fs.mkdirSync(path.dirname(p), { recursive: true }); if (!fs.existsSync(p)) fs.writeFileSync(p, JSON.stringify(init, null, 2), 'utf8'); };
@@ -1196,6 +1264,7 @@ const { cipherView } = require("../views/cipher_view");
 const { imageView, singleImageView } = require("../views/image_view");
 const { mapsView, singleMapView } = require("../views/maps_view");
 const { settingsView } = require("../views/settings_view");
+const { fediverseView, fediverseThreadView, fediverseOverviewView, fediversePreviewView } = require("../views/fediverse_view");
 const { trendingView } = require("../views/trending_view");
 const { marketView, singleMarketView } = require("../views/market_view");
 const { aiView } = require("../views/AI_view");
@@ -1343,7 +1412,7 @@ router
     ctx.body = await popularView({ messages, prefix: nav(div({ class: "filters" }, ul(['day','week','month','year'].map(p => li(form({ method: "GET", action: `/public/popular/${p}` }, button({ type: "submit", class: "filter-btn" }, t[p]))))))), spreadMap });
   })
   .get("/modules", async (ctx) => {
-    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
+    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts'];
     const cfg = getConfig().modules;
     ctx.body = modulesView(modules.reduce((acc, m) => { acc[`${m}Mod`] = cfg[`${m}Mod`]; return acc; }, {}));
   })
@@ -1612,7 +1681,7 @@ router
     const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','transfer','job','report','chat','chatMessage','pad','padEntry','forum','map']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
-    ctx.body = await authorView({ feedId, messages: sanitizedMsgs, firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap });
+    ctx.body = await authorView({ feedId, messages: sanitizedMsgs, firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
   })
   .get("/search", async (ctx) => {
     const inhabitantQ = String(ctx.query.inhabitant || '').trim();
@@ -2113,7 +2182,7 @@ router
         (a, b) => (order[a.lastActivityBucket] ?? 3) - (order[b.lastActivityBucket] ?? 3)
       );
     }
-    ctx.body = await inhabitantsView(enriched, filter, query, userId);
+    ctx.body = await inhabitantsView(enriched, filter, query, userId, fediverseModel.hasAccount());
   })
   .get('/inhabitant/:id', async (ctx) => {
     const id = ctx.params.id;
@@ -2136,7 +2205,7 @@ router
     const estimatedUBI = bank?.estimatedUBI || 0;
     const lastClaimedDate = bank?.lastClaimedDate || null;
     const totalClaimed = bank?.totalClaimed || 0;
-    ctx.body = await inhabitantsProfileView({ about: aboutMsg, cv, feed, photo, karmaScore, estimatedUBI, lastClaimedDate, totalClaimed, carbonGrams, larpHouse, lastActivityBucket: bucketInfo.bucket, viewedId: id, visibilityPrefs }, currentUserId);
+    ctx.body = await inhabitantsProfileView({ about: aboutMsg, cv, feed, photo, karmaScore, estimatedUBI, lastClaimedDate, totalClaimed, carbonGrams, larpHouse, lastActivityBucket: bucketInfo.bucket, viewedId: id, visibilityPrefs }, currentUserId, fediverseModel.hasAccount());
   })
   .get('/parliament', async (ctx) => {
     if (!checkMod(ctx, 'parliamentMod')) return ctx.redirect('/modules');
@@ -2539,7 +2608,7 @@ router
     const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','transfer','job','report','chat','chatMessage','pad','padEntry','forum','map']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
-    ctx.body = await authorView({ feedId: myFeedId, messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, baseUrl, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap });
+    ctx.body = await authorView({ feedId: myFeedId, messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, baseUrl, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
   })
   .get("/profile/edit", async (ctx) => {
     const myFeedId = await meta.myFeedId();
@@ -2623,6 +2692,8 @@ router
       ecoTax:   flag(body.vis_ecoTax),
       larpSign: flag(body.vis_larpSign),
       gpg:      flag(body.vis_gpg),
+      fediverse: flag(body.vis_fediverse),
+      fediverseHandle: typeof body.fediverseHandle === 'string' ? body.fediverseHandle : '',
       clearnet: clearnetShops || clearnetJobs || clearnetEvents || clearnetProjects || clearnetPosts || clearnetAudios || clearnetVideos || clearnetImages || clearnetDocuments || clearnetTorrents || clearnetBookmarks,
       clearnetShops,
       clearnetJobs,
@@ -2822,7 +2893,7 @@ router
   })
   .get("/settings", async (ctx) => {
     const cfg = getConfig(), theme = ctx.cookies.get("theme") || "Dark-SNH";
-    ctx.body = await settingsView({ theme, version: version.toString(), aiPrompt: cfg.ai?.prompt || "" });
+    ctx.body = await settingsView({ theme, version: version.toString(), aiPrompt: cfg.ai?.prompt || "", fediverseAccount: fediverseModel.getAccount(), fediverseError: typeof ctx.query.fediverseError === "string" ? ctx.query.fediverseError : "" });
   })
   .get("/peers", async (ctx) => {
     const { discoveredPeers, unknownPeers } = await meta.discovered();
@@ -3197,6 +3268,155 @@ router
     if (!feed) { ctx.redirect('/feed'); return; }
     const comments = await feedModel.getComments(ctx.params.feedId).catch(() => []);
     ctx.body = singleFeedView(feed, comments);
+  })
+  .get("/fediverse", async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    const account = fediverseModel.getAccount();
+    const stats = account ? await fediverseModel.getAccountStats() : null;
+    ctx.body = fediverseOverviewView({ account, stats });
+  })
+  .get("/fediverse/mastodon", async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    if (!fediverseModel.hasAccount()) { ctx.redirect('/fediverse'); return; }
+    if (ctx.query.refresh) { try { fediverseModel.invalidateCache(); } catch (_) {} }
+    const data = await fediverseModel.getTimeline();
+    if (data && data.connected) { data.stats = await fediverseModel.getAccountStats(); }
+    if (data && typeof ctx.query.error === 'string' && ctx.query.error) data.error = ctx.query.error;
+    ctx.body = fediverseView(data);
+  })
+  .get("/fediverse/mastodon/thread/:id", async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    if (!fediverseModel.hasAccount()) { ctx.redirect('/fediverse'); return; }
+    const account = fediverseModel.getAccount();
+    const stats = account ? await fediverseModel.getAccountStats() : null;
+    const thread = await fediverseModel.getThread(ctx.params.id);
+    const error = (thread && thread.error) || (typeof ctx.query.error === 'string' && ctx.query.error ? ctx.query.error : undefined);
+    ctx.body = fediverseThreadView({ account, stats, thread, error });
+  })
+  .get("/fediverse/media", async (ctx) => {
+    const u = typeof ctx.query.u === 'string' ? ctx.query.u : '';
+    const media = await fediverseModel.proxyMedia(u);
+    if (!media) { ctx.status = 404; ctx.body = ''; return; }
+    ctx.set('Cache-Control', 'private, max-age=3600');
+    ctx.type = media.contentType;
+    ctx.body = media.buffer;
+  })
+  .get("/fediverse/tmp/:name", async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.status = 404; ctx.body = ''; return; }
+    const name = ctx.params.name;
+    if (!isFediverseTmpName(name)) { ctx.status = 404; ctx.body = ''; return; }
+    try {
+      const buf = fs.readFileSync(path.join(blobsPath, name));
+      ctx.type = fediverseMimeFromExt(fediverseExtFromName(name));
+      ctx.set('Cache-Control', 'private, max-age=300');
+      ctx.body = buf;
+    } catch (_) { ctx.status = 404; ctx.body = ''; }
+  })
+  .get("/fediverse/mastodon/preview", async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    if (!fediverseModel.hasAccount()) { ctx.redirect('/fediverse'); return; }
+    sweepFediverseTmp();
+    const account = fediverseModel.getAccount();
+    const stats = account ? await fediverseModel.getAccountStats() : null;
+    ctx.body = fediversePreviewView({ account, stats });
+  })
+  .post("/fediverse/mastodon/preview", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    sweepFediverseTmp();
+    const text = ctx.request.body?.text || '';
+    let existing = ctx.request.body?.tmp || [];
+    if (!Array.isArray(existing)) existing = existing ? [existing] : [];
+    existing = existing.filter(isFediverseTmpName).map(name => ({ name, type: fediverseTmpType(name) }));
+    const fresh = saveFediverseTempMedia(ctx);
+    const media = [...existing, ...fresh].slice(0, 4);
+    const account = fediverseModel.getAccount();
+    const stats = account ? await fediverseModel.getAccountStats() : null;
+    const error = (!String(text).trim() && !media.length) ? 'fediverseErrEmpty' : undefined;
+    ctx.body = fediversePreviewView({ account, stats, text, media, error });
+  })
+  .post("/fediverse/mastodon/post", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    try {
+      const text = ctx.request.body?.text || '';
+      const tmpIds = await publishFediverseTempMedia(ctx.request.body?.tmp);
+      const fileIds = (await collectFediverseMedia(ctx)).map(m => m.id);
+      const mediaIds = [...tmpIds, ...fileIds].slice(0, 4);
+      await fediverseModel.postStatus({ text, mediaIds });
+    } catch (err) {
+      ctx.redirect('/fediverse/mastodon?error=' + encodeURIComponent(err && err.message ? err.message : 'fediverseErrPost'));
+      return;
+    }
+    ctx.redirect('/fediverse/mastodon');
+  })
+  .post("/fediverse/mastodon/reply/:id/preview", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    if (!fediverseModel.hasAccount()) { ctx.redirect('/fediverse'); return; }
+    sweepFediverseTmp();
+    const id = ctx.params.id;
+    const text = ctx.request.body?.text || '';
+    let existing = ctx.request.body?.tmp || [];
+    if (!Array.isArray(existing)) existing = existing ? [existing] : [];
+    existing = existing.filter(isFediverseTmpName).map(name => ({ name, type: fediverseTmpType(name) }));
+    const fresh = saveFediverseTempMedia(ctx);
+    const media = [...existing, ...fresh].slice(0, 4);
+    const account = fediverseModel.getAccount();
+    const stats = account ? await fediverseModel.getAccountStats() : null;
+    const thread = await fediverseModel.getThread(id);
+    const parent = thread && thread.status ? thread.status : null;
+    const error = (!String(text).trim() && !media.length) ? 'fediverseErrEmpty' : undefined;
+    ctx.body = fediversePreviewView({ account, stats, text, media, error, replyToId: id, parent });
+  })
+  .post("/fediverse/mastodon/reply/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    const id = ctx.params.id;
+    try {
+      const text = ctx.request.body?.text || '';
+      const tmpIds = await publishFediverseTempMedia(ctx.request.body?.tmp);
+      const fileIds = (await collectFediverseMedia(ctx)).map(m => m.id);
+      const mediaIds = [...tmpIds, ...fileIds].slice(0, 4);
+      await fediverseModel.postStatus({ text, inReplyToId: id, mediaIds });
+    } catch (err) {
+      ctx.redirect(`/fediverse/mastodon/thread/${encodeURIComponent(id)}?error=` + encodeURIComponent(err && err.message ? err.message : 'fediverseErrPost'));
+      return;
+    }
+    ctx.redirect(`/fediverse/mastodon/thread/${encodeURIComponent(id)}`);
+  })
+  .post("/fediverse/mastodon/boost/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    try { await fediverseModel.reblog(ctx.params.id); } catch (_) {}
+    ctx.redirect(fediverseReturnTo(ctx, '/fediverse/mastodon'));
+  })
+  .post("/fediverse/mastodon/unboost/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    try { await fediverseModel.unreblog(ctx.params.id); } catch (_) {}
+    ctx.redirect(fediverseReturnTo(ctx, '/fediverse/mastodon'));
+  })
+  .post("/fediverse/mastodon/fav/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    try { await fediverseModel.favourite(ctx.params.id); } catch (_) {}
+    ctx.redirect(fediverseReturnTo(ctx, '/fediverse/mastodon'));
+  })
+  .post("/fediverse/mastodon/unfav/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    try { await fediverseModel.unfavourite(ctx.params.id); } catch (_) {}
+    ctx.redirect(fediverseReturnTo(ctx, '/fediverse/mastodon'));
+  })
+  .post("/settings/fediverse", koaBody(), async (ctx) => {
+    try {
+      const acc = await fediverseModel.connectMastodon({ instance: ctx.request.body?.instance, token: ctx.request.body?.token });
+      try {
+        const host = String(acc.instance || '').replace(/^https?:\/\//, '');
+        if (acc.acct && host) await post.publishFediverseHandle(`${acc.acct}@${host}`);
+      } catch (_) {}
+      ctx.redirect('/fediverse');
+    } catch (err) {
+      ctx.redirect(`/settings?fediverseError=${encodeURIComponent(err.message || 'fediverseError')}`);
+    }
+  })
+  .post("/settings/fediverse/disconnect", koaBody(), async (ctx) => {
+    try { fediverseModel.disconnect(); } catch (_) {}
+    try { await post.publishFediverseHandle(''); } catch (_) {}
+    ctx.redirect('/settings');
   })
   .get('/forum', async ctx => {
     if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
@@ -7035,11 +7255,11 @@ router
   })
   .post("/settings/rebuild", async ctx => { meta.rebuild(); ctx.redirect("/settings"); })
   .post("/modules/preset", koaBody(), async (ctx) => {
-    const ALL_MODULES = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
+    const ALL_MODULES = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
     const PRESETS = {
       minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
-      social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-      economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'feed', 'forum', 'games', 'images', 'invites', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
+      social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
+      economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
       full: ALL_MODULES
     };
     const preset = String(ctx.request.body.preset || '');
@@ -7051,7 +7271,7 @@ router
     ctx.redirect('/modules');
   })
   .post("/save-modules", koaBody(), async (ctx) => {
-    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'graphos', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
+    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'graphos', 'jobs', 'projects', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
     const cfg = getConfig();
     modules.forEach(mod => cfg.modules[`${mod}Mod`] = ctx.request.body[`${mod}Form`] === 'on' ? 'on' : 'off');
     saveConfig(cfg);

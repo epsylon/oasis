@@ -20,17 +20,17 @@ const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const renderMediaBlob = (value, fallbackSrc = null) => {
-  if (!value) return fallbackSrc ? img({ src: fallbackSrc }) : null
+  if (!value) return fallbackSrc ? img({ src: fallbackSrc, class: 'post-image' }) : null
   const s = String(value).trim()
-  if (!s) return fallbackSrc ? img({ src: fallbackSrc }) : null
-  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}` })
+  if (!s) return fallbackSrc ? img({ src: fallbackSrc, class: 'post-image' }) : null
+  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, class: 'post-image' })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mVideo) return videoHyperaxe({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mAudio) return audioHyperaxe({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' })
-  return fallbackSrc ? img({ src: fallbackSrc }) : null
+  return fallbackSrc ? img({ src: fallbackSrc, class: 'post-image' }) : null
 }
 
 const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
@@ -1039,7 +1039,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
           br(),
           image
             ? renderMediaBlob(image, '/assets/images/default-market.png')
-            : img({ src: '/assets/images/default-market.png', alt: title }),
+            : img({ src: '/assets/images/default-market.png', alt: title, class: 'post-image' }),
           br(),
           div({ class: "market-card price" },
             p(`${i18n.marketItemPrice}: ${price} ECO`)
@@ -1303,22 +1303,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankingUserEngagementScore + ':'),
             span({ class: 'card-value' }, karmaScore)
-          )
-        )
-      );
-    }
-
-    if (type === 'gameScore') {
-      const { game, score } = content;
-      cardBody.push(
-        div({ class: 'card-section ai-exchange' },
-          game ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.gamesTitle || 'Game') + ':'),
-            span({ class: 'card-value' }, String(game).toUpperCase())
-          ) : null,
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.gamesHallScore || 'Score') + ':'),
-            span({ class: 'card-value' }, String(score || 0))
           )
         )
       );
@@ -1655,7 +1639,6 @@ function getViewDetailsAction(type, action) {
     case 'bankWallet': return `/wallet`;
     case 'bankClaim':  return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
     case 'ubiClaim':   return action.content?.transferId ? `/transfers/${encodeURIComponent(action.content.transferId)}` : `/transfers?filter=ubi`;
-    case 'gameScore':  return `/games?filter=scoring`;
     default:           return `/activity`;
   }
 }
@@ -1669,18 +1652,16 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'recent',    label: i18n.typeRecent },
     { type: 'all',       label: i18n.allButton },
     { type: 'mine',      label: i18n.mineButton },
-    { type: 'report',    label: i18n.typeReport },
-    { type: 'aiExchange',label: i18n.typeAiExchange },
     { type: 'tribe',     label: i18n.typeTribe },
     { type: 'parliament',label: i18n.typeParliament },
     { type: 'courts',    label: i18n.typeCourts },
-    { type: 'votes',     label: i18n.typeVotes },
     { type: 'event',     label: i18n.typeEvent },
     { type: 'calendar',  label: i18n.typeCalendar },
     { type: 'task',      label: i18n.typeTask },
-    { type: 'gameScore', label: i18n.typeGameScore },
-    { type: 'feed',      label: i18n.typeFeed },
+    { type: 'votes',     label: i18n.typeVotes },
+    { type: 'report',    label: i18n.typeReport },
     { type: 'post',      label: i18n.typePost },
+    { type: 'feed',      label: i18n.typeFeed },
     { type: 'chat',      label: i18n.typeChat },
     { type: 'pad',       label: i18n.typePad },
     { type: 'forum',     label: i18n.typeForum },
@@ -1700,8 +1681,21 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'video',     label: i18n.typeVideo }
   ];
 
-  const EXCLUDED_TYPES = new Set(['spread', 'pixelia', 'about', 'pub']);
-  actions = actions.filter(action => !EXCLUDED_TYPES.has(action.type));
+  const FILTER_META = new Set(['recent', 'all', 'mine']);
+  const GROUP_SUBTYPES = {
+    parliament: ['parliamentCandidature', 'parliamentTerm', 'parliamentProposal', 'parliamentRevocation', 'parliamentLaw'],
+    courts:     ['courtsCase', 'courtsNomination', 'courtsNominationVote'],
+    banking:    ['bankWallet', 'bankClaim', 'ubiClaim'],
+    task:       ['task', 'taskAssignment'],
+    shop:       ['shop', 'shopProduct']
+  };
+  const ALLOWED_TYPES = new Set();
+  for (const { type } of activityTypes) {
+    if (FILTER_META.has(type)) continue;
+    if (GROUP_SUBTYPES[type]) GROUP_SUBTYPES[type].forEach(t => ALLOWED_TYPES.add(t));
+    else ALLOWED_TYPES.add(type);
+  }
+  actions = actions.filter(action => ALLOWED_TYPES.has(action.type));
 
   let filteredActions;
   if (filter === 'mine') {
@@ -1722,8 +1716,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     });
   } else if (filter === 'task') {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment'));
-  } else if (filter === 'gameScore') {
-    filteredActions = actions.filter(action => action.type === 'gameScore');
   } else if (filter === 'torrent') {
     filteredActions = actions.filter(action => action.type === 'torrent');
   } else {
@@ -1785,12 +1777,12 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
       ),
       div({ class: 'activity-filter-grid' },
         ...[
-          activityTypes.slice(0, 5),
-          activityTypes.slice(5, 9),
-          activityTypes.slice(9, 13),
-          activityTypes.slice(13, 20),
-          activityTypes.slice(20, 27),
-          activityTypes.slice(27)
+          activityTypes.slice(0, 3),
+          activityTypes.slice(3, 6),
+          activityTypes.slice(6, 11),
+          activityTypes.slice(11, 17),
+          activityTypes.slice(17, 24),
+          activityTypes.slice(24)
         ].map(col =>
           div({ class: 'activity-filter-col' },
             col.map(({ type, label }) =>

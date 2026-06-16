@@ -9,10 +9,30 @@ let printed = false;
 let checkedForUpdate = false;
 let pendingClearnetModules = null;
 let clearnetReady = false;
+let pendingWarmup = null;
+let warmupReady = false;
 
 function setClearnetModules(modules) {
   pendingClearnetModules = Array.isArray(modules) ? modules : [];
   clearnetReady = true;
+}
+
+function setWarmupTime(str) {
+  pendingWarmup = str;
+  warmupReady = true;
+}
+
+function waitForWarmup(timeoutMs = 120000) {
+  return new Promise((resolve) => {
+    if (warmupReady) return resolve(pendingWarmup);
+    const started = Date.now();
+    const tick = () => {
+      if (warmupReady) return resolve(pendingWarmup);
+      if (Date.now() - started >= timeoutMs) return resolve(null);
+      setTimeout(tick, 250);
+    };
+    tick();
+  });
 }
 
 function getModules() {
@@ -85,15 +105,19 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
     list && list.some(i => !i.internal && i.family === 'IPv4')
   );
   console.log(`- Protocol (port): ${ssbPort}`);
+  console.log(`- Mode: ${isOnline ? 'online' : 'offline'}`);
+  console.log(`- Replication (hops): ${hops}`);
   console.log(`- LAN Broadcasting (UDP): ${localDiscovery ? 'enabled' : 'disabled'}`);
   const clearnetModules = await waitForClearnet();
-  if (clearnetModules && clearnetModules.length > 0) {
-    console.log(`- Internet Broadcasting (Clearnet): ${clearnetModules.join(', ')}`);
-  } else {
-    console.log(`- Internet Broadcasting (Clearnet): disabled`);
-  }
-  console.log(`- Replication (hops): ${hops}`);
-  console.log(`- Mode: ${isOnline ? 'online' : 'offline'}`);
+  const clearnetStatus = (clearnetModules && clearnetModules.length > 0) ? clearnetModules.join(', ') : 'disabled';
+  let fediverseConnected = false;
+  try {
+    const acc = JSON.parse(fs.readFileSync(path.join(__dirname, '../configs/fediverse-accounts.json'), 'utf8'));
+    fediverseConnected = !!(acc && acc.mastodon);
+  } catch (_) {}
+  console.log(`- Internet Broadcasting:`);
+  console.log(`  - Clearnet: ${clearnetStatus}`);
+  console.log(`  - Fediverse: ${fediverseConnected ? 'enabled' : 'disabled'}`);
   console.log("");
   console.log("=========================");
   console.log("Modules loaded: [", modules.length, "]");
@@ -102,10 +126,16 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   // Check for updates
   await checkForUpdate();
   console.log("=========================");
+
+  if (/gui/i.test(mode)) {
+    const warmup = await waitForWarmup();
+    if (warmup) console.log(`- Warmup-time: ${warmup}`);
+  }
 }
 
 module.exports = {
   printMetadata,
   setClearnetModules,
+  setWarmupTime,
   colors
 };

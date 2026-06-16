@@ -654,6 +654,17 @@ const renderMultiverseLink = () => {
     : "";
 };
 
+const renderMastodonLink = () => {
+  const fediverseMod = getConfig().modules.fediverseMod === "on";
+  return fediverseMod
+    ? navLink({
+        href: "/fediverse",
+        emoji: "ꗵ",
+        text: i18n.fediverseTimeline
+      })
+    : "";
+};
+
 const renderMarketLink = () => {
   const marketMod = getConfig().modules.marketMod === "on";
   return marketMod
@@ -1178,24 +1189,6 @@ const template = (titlePrefix, ...elements) => {
               ),
               navGroup(
                 {
-                  id: "content",
-                  emoji: "✦",
-                  title: i18n.menuContent
-                },
-                navLink({
-                  href: "/mentions",
-                  emoji: "✺",
-                  text: i18n.mentions
-                }),
-                renderLatestLink(),
-                renderThreadsLink(),
-                renderTopicsLink(),
-                renderSummariesLink(),
-                renderPopularLink(),
-                renderMultiverseLink()
-              ),
-              navGroup(
-                {
                   id: "governance",
                   emoji: "⚖",
                   title: i18n.menuGovernance
@@ -1221,6 +1214,19 @@ const template = (titlePrefix, ...elements) => {
                 renderCalendarsLink(),
                 renderTasksLink(),
                 renderReportsLink()
+              ),
+              navGroup(
+                {
+                  id: "economy",
+                  emoji: "¤",
+                  title: i18n.menuEconomy
+                },
+                renderBankingLink(),
+                renderMarketLink(),
+                renderProjectsLink(),
+                renderJobsLink(),
+                renderShopsLink(),
+                renderTransfersLink()
               ),
               navGroup(
                 {
@@ -1272,6 +1278,24 @@ const template = (titlePrefix, ...elements) => {
               ),
               navGroup(
                 {
+                  id: "blogs",
+                  emoji: "✦",
+                  title: i18n.menuBlogs
+                },
+                navLink({
+                  href: "/mentions",
+                  emoji: "✺",
+                  text: i18n.mentions
+                }),
+                renderLatestLink(),
+                renderThreadsLink(),
+                renderTopicsLink(),
+                renderSummariesLink(),
+                renderPopularLink(),
+                renderMultiverseLink()
+              ),
+              navGroup(
+                {
                   id: "creative",
                   emoji: "✎",
                   title: i18n.menuCreative
@@ -1280,19 +1304,6 @@ const template = (titlePrefix, ...elements) => {
                 renderGamesLink(),
                 renderPixeliaLink(),
                 renderMelodyLink()
-              ),
-              navGroup(
-                {
-                  id: "economy",
-                  emoji: "¤",
-                  title: i18n.menuEconomy
-                },
-                renderBankingLink(),
-                renderMarketLink(),
-                renderProjectsLink(),
-                renderJobsLink(),
-                renderShopsLink(),
-                renderTransfersLink()
               ),
               navGroup(
                 {
@@ -1306,6 +1317,14 @@ const template = (titlePrefix, ...elements) => {
                 renderImagesLink(),
                 renderTorrentsLink(),
                 renderVideosLink()
+              ),
+              navGroup(
+                {
+                  id: "fediverse",
+                  emoji: "⌬",
+                  title: i18n.fediverse
+                },
+                renderMastodonLink()
               )
             )
           )
@@ -2028,8 +2047,10 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     profileBookmarks:  visibilityPrefs.profileBookmarks  === true,
     ecoTax:            visibilityPrefs.ecoTax            !== false,
     larpSign:          visibilityPrefs.larpSign          === true,
+    fediverse:         visibilityPrefs.fediverse         === true,
     gpg:               visibilityPrefs.gpg               !== false
   };
+  const fediverseHandleValue = typeof visibilityPrefs.fediverseHandle === 'string' ? visibilityPrefs.fediverseHandle : '';
   prefs.clearnet = prefs.clearnetShops || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks;
   const togglePill = (key, labelText) => label({ class: "pref-pill", for: `vis_${key}` },
     input({ type: "checkbox", name: `vis_${key}`, id: `vis_${key}`, value: "1", class: "pref-pill-input", checked: prefs[key] ? "checked" : undefined }),
@@ -2110,13 +2131,15 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
           div({ class: "pref-pill-row" },
             togglePill('karma',    i18n.profileVisibilityKarma    || 'KARMA Scoring'),
             togglePill('activity', i18n.profileVisibilityActivity || 'Activity Level'),
+            togglePill('fediverse', i18n.profileVisibilityFediverse || 'Fediverse'),
             togglePill('device',   i18n.profileVisibilityDevice   || 'Device'),
             togglePill('larpSign', i18n.profileVisibilityLarpSign || 'L.A.R.P. Sign'),
             togglePill('gpg',      i18n.profileVisibilityGpg      || 'GPG Key'),
             togglePill('wallet',   i18n.profileVisibilityWallet   || 'ECOIN Wallet'),
             togglePill('ubi',      i18n.profileVisibilityUbi      || 'UBI'),
             togglePill('ecoTax',   i18n.profileVisibilityEcoTax   || 'ECO Tax')
-          )
+          ),
+          input({ type: "hidden", name: "fediverseHandle", value: fediverseHandleValue })
         ),
         br(),
         div({ class: "prefs-card" },
@@ -2324,7 +2347,8 @@ exports.authorView = async ({
   profileItems = null,
   profileFilterType = '',
   gpgFingerprint = '',
-  spreadMap = null
+  spreadMap = null,
+  fediverseConfigured = false
 }) => {
   const isOwnProfile = !!(relationship && relationship.me);
   const rawPrefs = visibilityPrefs || {};
@@ -2337,6 +2361,8 @@ exports.authorView = async ({
     ecoTax:   rawPrefs.ecoTax   !== false,
     larpSign: rawPrefs.larpSign === true,
     clearnet: rawPrefs.clearnet === true,
+    fediverse: rawPrefs.fediverse === true,
+    fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : '',
     gpg:      rawPrefs.gpg      !== false
   };
   const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
@@ -2345,7 +2371,7 @@ exports.authorView = async ({
   const showField = (key) => prefs[key];
   const qrSrc = feedId ? `/qr/${encodeURIComponent(feedId)}` : null;
   const linkUrl = `/author/${encodeURIComponent(feedId)}`;
-  const { renderReachChip, renderClearnetUrlBlock } = require('./clearnet_view');
+  const { renderReachChip, renderClearnetUrlBlock, renderFediverseReach } = require('./clearnet_view');
   const reachChip = renderReachChip(!!prefs.clearnet, i18n, prefs.clearnet ? `/c/inhabitant/${encodeURIComponent(feedId)}` : null);
 
   const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -2491,16 +2517,13 @@ exports.authorView = async ({
       isOwnProfile && prefs.clearnet
         ? renderClearnetUrlBlock({ baseUrl, path: `/c/inhabitant/${encodeURIComponent(feedId)}`, i18nObj: i18n })
         : null,
-      isOwnProfile
+      isOwnProfile && prefs.clearnet
         ? form({ method: 'POST', action: '/profile/clearnet-toggle', class: 'profile-reach-toggle' },
-            button({ type: 'submit', class: 'btn' },
-              prefs.clearnet
-                ? (i18n.profileSwitchToOasis || 'Return to Oasis')
-                : (i18n.profileSwitchToClearnet || 'Dive into Clearnet')
-            )
+            button({ type: 'submit', class: 'btn' }, i18n.profileSwitchToOasis || 'Return to Oasis')
           )
         : null
     ),
+    (isOwnProfile && !fediverseConfigured) ? null : renderFediverseReach(prefs, i18n),
     div({ class: "profile-side-actions" },
       isOwnProfile ? a({ href: `/profile/edit`, class: "btn" }, i18n.editProfile) : null,
       a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes),
@@ -2984,7 +3007,7 @@ exports.privateView = async (messagesInput, filter) => {
       .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`)
       .replace(/\/calendars\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="calendar-link" href="/calendars/${encodeURIComponent(id)}">${match}</a>`)
       .replace(/\/ai\/ask\?[^\s<"]+/g, (match) => `<a class="ai-ask-link" href="${match}">${match}</a>`)
-      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|melody|audios|videos|images|documents|bookmarks|torrents|forum|feed|events|tasks|votes|reports|market|jobs|projects|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
+      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|melody|audios|videos|images|documents|bookmarks|torrents|forum|feed|fediverse|events|tasks|votes|reports|market|jobs|projects|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
       .replace(/(https?:\/\/[^\s<"]+)/g, (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`)
   }
 

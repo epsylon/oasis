@@ -179,6 +179,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         if (!c) continue;
         if (typeof c === 'string' && c.endsWith('.box')) continue;
         if (c.type && HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
+        if (typeof c.type === 'string' && /e2ee/i.test(c.type)) continue;
         if (c.type === 'contact') continue;
         if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
           const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
@@ -504,7 +505,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
 
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
-      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log']);
+      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'gameScore']);
       const isAllowedTribeActivity = (a) => {
         if (tribeInternalTypes.has(a.type)) return false;
         const c = a.content || {};
@@ -554,7 +555,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         });
       else if (filter === 'task')
         out = deduped.filter(a => a.type === 'task' || a.type === 'taskAssignment');
-      else if (filter === 'gameScore') out = deduped.filter(a => a.type === 'gameScore');
       else if (filter === 'pad') out = deduped.filter(a => a.type === 'pad' && (a.content || {}).status === 'OPEN');
       else if (filter === 'chat') out = deduped.filter(a => a.type === 'chat' && (a.content || {}).status === 'OPEN');
       else if (filter === 'calendar') out = deduped.filter(a => a.type === 'calendar' && (a.content || {}).status === 'OPEN');

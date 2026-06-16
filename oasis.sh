@@ -5,6 +5,8 @@ MODE=$1
 MODEL_PATH="$CURRENT_DIR/src/AI/oasis-42-1-chat.Q4_K_M.gguf"
 CONFIG_FILE="$CURRENT_DIR/src/configs/oasis-config.json"
 
+case " $* " in *" --debug "*) export OASIS_DEBUG=1 ;; esac
+
 show_help() {
   cat <<'EOF'
 Usage: sh oasis.sh [mode] [-- <option>=<value> ...]

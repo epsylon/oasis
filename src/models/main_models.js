@@ -311,6 +311,8 @@ models.about = {
       larpSign: result.larpSign === true,
       gpg:      result.gpg      !== false,
       clearnet: result.clearnet === true,
+      fediverse: result.fediverse === true,
+      fediverseHandle: typeof result.fediverseHandle === 'string' ? result.fediverseHandle : '',
       clearnetShops:     result.clearnetShops     === true,
       clearnetJobs:      result.clearnetJobs      === true,
       clearnetEvents:    result.clearnetEvents    === true,
@@ -436,7 +438,7 @@ models.about = {
           if (msg.sync && msg.sync === true) {
             const _elapsed = Date.now() - _warmupStart;
             const _fmt = _elapsed >= 1000 ? `${(_elapsed/1000).toFixed(2)}s` : `${_elapsed}ms`;
-            console.log(`- Warmup-time: ${_fmt}`);
+            try { require('../server/ssb_metadata').setWarmupTime(_fmt); } catch (_) { console.log(`- Warmup-time: ${_fmt}`); }
             transposeLookupTable();
             intervals.push(setInterval(transposeLookupTable, 1000 * 60)); 
             return false;
@@ -1886,6 +1888,16 @@ const post = {
         });
       });
     },
+    publishFediverseHandle: async (handle) => {
+      const ssb = await cooler.open();
+      const current = (await models.about.visibilityPrefs(ssb.id).catch(() => null)) || {};
+      const h = String(handle || '');
+      const prefs = { ...current, fediverseHandle: h };
+      if (h === '') prefs.fediverse = false;
+      return new Promise((resolve, reject) => {
+        ssb.publish({ type: "about", about: ssb.id, visibilityPrefs: prefs }, (err, msg) => err ? reject(err) : resolve(msg));
+      });
+    },
     publishProfileEdit: async ({ name, description, image, visibilityPrefs, gpgFingerprint, gpgBlob, gpgBlobId }) => {
       const ssb = await cooler.open();
       const normalizePrefs = (raw) => {
@@ -1900,6 +1912,8 @@ const post = {
           larpSign: r.larpSign === true,
           gpg:      r.gpg      !== false,
           clearnet: r.clearnet === true,
+          fediverse: r.fediverse === true,
+          fediverseHandle: typeof r.fediverseHandle === 'string' ? r.fediverseHandle : '',
           clearnetShops:     r.clearnetShops     === true,
           clearnetJobs:      r.clearnetJobs      === true,
           clearnetEvents:    r.clearnetEvents    === true,

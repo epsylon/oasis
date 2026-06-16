@@ -1,4 +1,4 @@
-const { form, button, div, h2, p, section, select, option, input, br, a, label, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span } = require("../server/node_modules/hyperaxe");
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
@@ -18,7 +18,7 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version, aiPrompt }) => {
+const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -244,6 +244,7 @@ const settingsView = ({ version, aiPrompt }) => {
       )
     ),
     section(
+      { id: "wallet" },
       div({ class: "tags-header" },
         h2(i18n.wallet),
 	p(
@@ -297,6 +298,39 @@ const settingsView = ({ version, aiPrompt }) => {
             required: true
           }), br(),
           button({ type: "submit" }, i18n.aiConfiguration)
+        )
+      )
+    ),
+    section(
+      { id: "fediverse" },
+      div({ class: "tags-header" },
+        h2(i18n.fediverseSettingsTitle),
+        div({ class: "fediverse-network" },
+          h3("Mastodon"),
+          p(i18n.fediverseTokenHelp),
+          fediverseError ? p({ class: "fediverse-error" }, i18n[fediverseError] || i18n.fediverseError) : "",
+          fediverseAccount
+            ? (() => {
+                const host = String(fediverseAccount.instance || "").replace(/^https?:\/\//, "");
+                const profileUrl = `${fediverseAccount.instance}/@${fediverseAccount.acct}`;
+                const link = (txt) => a({ href: profileUrl, target: "_blank", rel: "noopener noreferrer" }, txt);
+                return form(
+                  { action: "/settings/fediverse/disconnect", method: "POST" },
+                  p(
+                    `${i18n.fediverseConnectedAs}: `,
+                    link(`${fediverseAccount.acct}@${host}`)
+                  ),
+                  button({ type: "submit" }, i18n.fediverseDisconnect)
+                );
+              })()
+            : form(
+                { action: "/settings/fediverse", method: "POST" },
+                label({ for: "fediverse_instance" }, i18n.fediverseInstanceLabel), br(),
+                input({ type: "text", id: "fediverse_instance", name: "instance", placeholder: "mastodon.social", required: true }), br(),
+                label({ for: "fediverse_token" }, i18n.fediverseTokenLabel), br(),
+                input({ type: "password", id: "fediverse_token", name: "token", autocomplete: "off", required: true }), br(),
+                button({ type: "submit" }, i18n.fediverseConnect)
+              )
         )
       )
     ),

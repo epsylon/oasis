@@ -88,7 +88,7 @@ function lastActivityBadge(user, isMe) {
 
 const lightboxId = (id) => 'inhabitant_' + String(id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
 
-const renderInhabitantCard = (user, filter, currentUserId) => {
+const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) => {
   const isMe = user.id === currentUserId;
   const raw = user.visibilityPrefs || {};
   const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
@@ -102,7 +102,9 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
     ecoTax:   raw.ecoTax   !== false,
     larpSign: raw.larpSign === true,
     gpg:      raw.gpg      !== false,
-    clearnet: hasClearnet
+    clearnet: hasClearnet,
+    fediverse: raw.fediverse === true,
+    fediverseHandle: typeof raw.fediverseHandle === 'string' ? raw.fediverseHandle : ''
   };
   const dot = user.lastActivityBucket;
   const activityChip = prefs.activity && dot
@@ -123,7 +125,7 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
         span({ class: deviceClass }, src));
     }
   }
-  const { renderReachChip, renderClearnetUrlBlock } = require('./clearnet_view');
+  const { renderReachChip, renderClearnetUrlBlock, renderFediverseReach } = require('./clearnet_view');
   const sensorItems = [];
   const clearnetPath = `/c/inhabitant/${encodeURIComponent(user.id)}`;
   sensorItems.push(
@@ -134,6 +136,7 @@ const renderInhabitantCard = (user, filter, currentUserId) => {
         : null
     )
   );
+  { const fr = (isMe && !fediverseConfigured) ? null : renderFediverseReach(prefs, i18n); if (fr) sensorItems.push(fr); }
   if (prefs.karma) sensorItems.push(span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0))));
   if (activityChip) sensorItems.push(activityChip);
   if (deviceChip) sensorItems.push(deviceChip);
@@ -271,7 +274,7 @@ function msgIdOf(m) {
   return m && (m.key || m.value?.key || m.value?.content?.root || m.value?.content?.branch || null);
 }
 
-exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
+exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseConfigured) => {
   const title = filter === 'contacts'    ? i18n.yourContacts
                : filter === 'CVs'         ? i18n.allCVs
                : filter === 'MATCHSKILLS' ? i18n.matchSkills
@@ -320,7 +323,7 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
         ? renderGalleryInhabitants(inhabitants)
         : div({ class: 'inhabitants-list' },
             inhabitants.length
-              ? inhabitants.map(user => renderInhabitantCard(user, filter, currentUserId))
+              ? inhabitants.map(user => renderInhabitantCard(user, filter, currentUserId, fediverseConfigured))
               : p({ class: 'no-results' }, i18n.noInhabitantsFound)
           ),
       ...renderLightbox(inhabitants)
@@ -328,7 +331,7 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId) => {
   );
 };
 
-exports.inhabitantsProfileView = (payload, currentUserId) => {
+exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) => {
   const safe = payload && typeof payload === 'object' ? payload : {};
   const about = (safe.about && typeof safe.about === 'object') ? safe.about : {};
   const cv = (safe.cv && typeof safe.cv === 'object') ? safe.cv : {};
@@ -380,7 +383,9 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
     wallet:   rawPrefs.wallet   === true,
     ecoTax:   rawPrefs.ecoTax   !== false,
     larpSign: rawPrefs.larpSign === true,
-    gpg:      rawPrefs.gpg      !== false
+    gpg:      rawPrefs.gpg      !== false,
+    fediverse: rawPrefs.fediverse === true,
+    fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : ''
   };
   const gpgFingerprint = String(safe.gpgFingerprint || '');
   const carbonGrams = typeof safe.carbonGrams === 'number' ? safe.carbonGrams : 0;
@@ -463,6 +468,7 @@ exports.inhabitantsProfileView = (payload, currentUserId) => {
               sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed || 'Total claimed'}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)));
             }
             if (prefs.ecoTax) sensorItems.push(span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))));
+            { const { renderFediverseReach } = require('./clearnet_view'); const fr = (isMe && !fediverseConfigured) ? null : renderFediverseReach(prefs, i18n); if (fr) sensorItems.push(fr); }
             return sensorItems.length ? div({ class: 'profile-sensors-box' }, ...sensorItems) : null;
           })(),
           (!isMe && (id || viewedId))
