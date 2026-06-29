@@ -261,7 +261,7 @@ exports.singlePadView = async (pad, entries, params) => {
     isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions" },
       isAuthor && pad.status === "INVITE-ONLY"
         ? form({ method: "POST", action: `/pads/generate-invite/${encodeURIComponent(pad.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.padGenerateCode || "Generate Code")
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
           )
         : null,
       form(
@@ -286,17 +286,13 @@ exports.singlePadView = async (pad, entries, params) => {
         : null,
       isAuthor
         ? form({ method: "POST", action: `/pads/delete/${encodeURIComponent(pad.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.padDelete || "Delete")
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.padDelete || "Delete")
           )
         : null
     ),
     !isAuthor && pad.status === "INVITE-ONLY" && !isMember
       ? div({ class: "pad-invite-section" },
-          form({ method: "POST", action: "/pads/join-code" },
-            label(i18n.padInviteCodeLabel || "Invite Code"),
-            input({ type: "text", name: "code", placeholder: i18n.padInviteCodePlaceholder || "Enter invite code..." }),
-            button({ type: "submit", class: "filter-btn" }, i18n.padValidateInvite || "Validate")
-          )
+          a({ class: "tribe-action-btn", href: "/invites#invites-pads" }, i18n.tribeEnterInvite)
         )
       : null,
     !isRestrictedInviteOnly && !isAuthor && !isMember && pad.status === "OPEN" && !padClosed

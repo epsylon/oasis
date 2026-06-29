@@ -183,7 +183,10 @@ describe('larp: entrance test attempts', (t) => {
     for (const q of questions) {
       ok(typeof q.question === 'string' && q.question.length > 0);
       ok(Array.isArray(q.options) && q.options.length >= 2);
-      for (const opt of q.options) ok(typeof opt === 'string' && opt.length > 0);
+      for (const opt of q.options) {
+        ok(opt && typeof opt.key === 'string' && opt.key.length > 0);
+        ok(typeof opt.text === 'string' && opt.text.length > 0);
+      }
     }
   });
 

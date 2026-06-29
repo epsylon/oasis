@@ -298,6 +298,10 @@ models.about = {
     });
     return result === true;
   },
+  deviceSource: async (feedId) => {
+    const result = await getAbout({ key: "deviceSource", feedId });
+    return typeof result === 'string' && result.trim() ? result : null;
+  },
   visibilityPrefs: async (feedId) => {
     const result = await getAbout({ key: "visibilityPrefs", feedId });
     if (!result || typeof result !== 'object') return null;
@@ -1940,6 +1944,8 @@ const post = {
       };
       const prefs = visibilityPrefs ? normalizePrefs(visibilityPrefs) : undefined;
       const baseFields = { type: "about", about: ssb.id, name, description };
+      const curTheme = getConfig()?.themes?.current;
+      baseFields.deviceSource = curTheme === 'OasisKIT' ? 'KIT' : (curTheme === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP';
       if (prefs) baseFields.visibilityPrefs = prefs;
       if (gpgFingerprint !== undefined) baseFields.gpgFingerprint = String(gpgFingerprint || "");
       let resolvedBlobId = gpgBlobId;

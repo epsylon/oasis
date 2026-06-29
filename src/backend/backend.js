@@ -597,7 +597,7 @@ const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config
 const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public, tribeCrypto, mapCrypto, tribesModel });
 const gamesModel = require('../models/games_model')({ cooler });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
-const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel });
+const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel });
 const logsModel = require("../models/logs_model")({ cooler });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const fediverseModel = require('../models/fediverse_model')({ isPublic: config.public });
@@ -1245,7 +1245,7 @@ const { tagsView } = require("../views/tags_view");
 const { videoView, singleVideoView } = require("../views/video_view");
 const { audioView, singleAudioView, audiosTranscodeView, audioTranscodeDetailView } = require("../views/audio_view");
 const { torrentsView, singleTorrentView } = require("../views/torrents_view");
-const { eventView, singleEventView, clearnetEventView } = require("../views/event_view");
+const { eventView, singleEventView, clearnetEventView, renderEventInvitePage } = require("../views/event_view");
 const { invitesView } = require("../views/invites_view");
 const { modulesView } = require("../views/modules_view");
 const { reportView, singleReportView } = require("../views/report_view");
@@ -1268,10 +1268,10 @@ const { fediverseView, fediverseThreadView, fediverseOverviewView, fediversePrev
 const { trendingView } = require("../views/trending_view");
 const { marketView, singleMarketView } = require("../views/market_view");
 const { aiView } = require("../views/AI_view");
-const { forumView, singleForumView } = require("../views/forum_view");
+const { forumView, singleForumView, renderForumInvitePage } = require("../views/forum_view");
 const { renderBlockchainView, renderSingleBlockView } = require("../views/blockchain_view");
 const { jobsView, singleJobsView, renderJobForm, clearnetJobView } = require("../views/jobs_view");
-const { shopsView, singleShopView, singleProductView, editProductView, shopOrdersView, clearnetShopView } = require("../views/shops_view");
+const { shopsView, singleShopView, singleProductView, editProductView, shopOrdersView, myPurchasesView, clearnetShopView, renderShopInvitePage } = require("../views/shops_view");
 const { chatsView, singleChatView, renderChatInvitePage } = require("../views/chats_view");
 const { padsView, singlePadView, renderPadInvitePage } = require("../views/pads_view");
 const { calendarsView, singleCalendarView, renderCalendarInvitePage } = require("../views/calendars_view");
@@ -1647,6 +1647,8 @@ router
     const feedId = decodeURIComponent(ctx.params.feed || ''), gt = Number(ctx.request.query.gt || -1), lt = Number(ctx.request.query.lt || -1);
     if (lt > 0 && gt > 0 && gt >= lt) throw new Error('Given search range is empty');
     const visibilityPrefs = await about.visibilityPrefs(feedId).catch(() => null);
+    const deviceSource = await about.deviceSource(feedId).catch(() => null);
+    const stats = await inhabitantsModel.getInhabitantStats(feedId, getViewerId()).catch(() => ({}));
     const rawPrefs = visibilityPrefs || {};
     const needsBanking = (rawPrefs.karma !== false) || rawPrefs.ubi === true;
     const needsWallet  = rawPrefs.wallet === true;
@@ -1681,7 +1683,7 @@ router
     const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','transfer','job','report','chat','chatMessage','pad','padEntry','forum','map']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
-    ctx.body = await authorView({ feedId, messages: sanitizedMsgs, firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
+    ctx.body = await authorView({ feedId, messages: sanitizedMsgs, firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, deviceSource, stats, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
   })
   .get("/search", async (ctx) => {
     const inhabitantQ = String(ctx.query.inhabitant || '').trim();
@@ -1703,7 +1705,7 @@ router
       if (c.type === 'event' && c.isPublic === 'private' && c.organizer !== userId && !(Array.isArray(c.attendees) && c.attendees.includes(userId))) return false;
       if (c.type === 'task' && String(c.isPublic).toUpperCase() === 'PRIVATE' && c.author !== userId && !(Array.isArray(c.assignees) && c.assignees.includes(userId))) return false;
       if (c.status === 'PRIVATE') return false;
-      if (c.type === 'shop' && c.visibility === 'CLOSED' && c.author !== userId) return false;
+      if (c.type === 'shop' && (c.visibility === 'CLOSED' || c.encryptedPayload) && c.author !== userId) return false;
       return true;
     });
     const results = await searchModel.search({ query, types: [] });
@@ -2119,6 +2121,18 @@ router
         catch { return { id: u.id, fp: '' }; }
       })
     );
+    const deviceList = await Promise.all(
+      inhabitants.map(async (u) => {
+        try { return { id: u.id, src: await about.deviceSource(u.id) }; }
+        catch { return { id: u.id, src: null }; }
+      })
+    );
+    const statsList = await Promise.all(
+      inhabitants.map(async (u) => {
+        try { return { id: u.id, stats: await inhabitantsModel.getInhabitantStats(u.id, userId) }; }
+        catch { return { id: u.id, stats: {} }; }
+      })
+    );
     const carbonList = await Promise.all(
       inhabitants.map(async (u) => {
         try { return { id: u.id, carbon: await getCarbonGramsForFeed(u.id) }; }
@@ -2152,6 +2166,8 @@ router
     const prefsMap = new Map(prefsList.map(x => [x.id, x.prefs]));
     const relMap = new Map(relList.map(x => [x.id, x.rel]));
     const gpgMap = new Map(gpgList.map(x => [x.id, x.fp]));
+    const deviceMap = new Map(deviceList.map(x => [x.id, x.src]));
+    const statsMap = new Map(statsList.map(x => [x.id, x.stats]));
     const carbonMap = new Map(carbonList.map(x => [x.id, x.carbon]));
     let enriched = inhabitants.map(u => {
       const kd = karmaMap.get(u.id) || {};
@@ -2169,6 +2185,8 @@ router
         relationship: relMap.get(u.id) || null,
         larpHouse: lh ? { key: lhKey, ...lh } : null,
         gpgFingerprint: gpgMap.get(u.id) || '',
+        deviceSource: deviceMap.get(u.id) || null,
+        stats: statsMap.get(u.id) || {},
         carbonGrams: carbonMap.get(u.id) || 0
       };
     });
@@ -2187,7 +2205,7 @@ router
   .get('/inhabitant/:id', async (ctx) => {
     const id = ctx.params.id;
     const aboutModel = about;
-    const [aboutMsg, cv, feed, photo, bank, lastTs, visibilityPrefs, carbonGrams, larpHouseKey] = await Promise.all([
+    const [aboutMsg, cv, feed, photo, bank, lastTs, visibilityPrefs, carbonGrams, larpHouseKey, deviceSource] = await Promise.all([
       inhabitantsModel.getLatestAboutById(id),
       inhabitantsModel.getCVByUserId(id),
       inhabitantsModel.getFeedByUserId(id),
@@ -2196,16 +2214,18 @@ router
       inhabitantsModel.getLastActivityTimestampByUserId(id).catch(() => null),
       aboutModel.visibilityPrefs(id).catch(() => null),
       getCarbonGramsForFeed(id).catch(() => 0),
-      larpModel.getUserHouse(id).catch(() => null)
+      larpModel.getUserHouse(id).catch(() => null),
+      aboutModel.deviceSource(id).catch(() => null)
     ]);
     const larpHouse = larpHouseKey ? { key: larpHouseKey, ...larpModel.getHouse(larpHouseKey) } : null;
     const bucketInfo = inhabitantsModel.bucketLastActivity(lastTs || null);
     const currentUserId = getViewerId();
+    const stats = await inhabitantsModel.getInhabitantStats(id, currentUserId).catch(() => ({}));
     const karmaScore = bank && typeof bank.karmaScore === 'number' ? bank.karmaScore : 0;
     const estimatedUBI = bank?.estimatedUBI || 0;
     const lastClaimedDate = bank?.lastClaimedDate || null;
     const totalClaimed = bank?.totalClaimed || 0;
-    ctx.body = await inhabitantsProfileView({ about: aboutMsg, cv, feed, photo, karmaScore, estimatedUBI, lastClaimedDate, totalClaimed, carbonGrams, larpHouse, lastActivityBucket: bucketInfo.bucket, viewedId: id, visibilityPrefs }, currentUserId, fediverseModel.hasAccount());
+    ctx.body = await inhabitantsProfileView({ about: aboutMsg, cv, feed, photo, karmaScore, estimatedUBI, lastClaimedDate, totalClaimed, carbonGrams, larpHouse, lastActivityBucket: bucketInfo.bucket, viewedId: id, visibilityPrefs, deviceSource, stats }, currentUserId, fediverseModel.hasAccount());
   })
   .get('/parliament', async (ctx) => {
     if (!checkMod(ctx, 'parliamentMod')) return ctx.redirect('/modules');
@@ -2596,6 +2616,7 @@ router
       inhabitantsModel.getLastActivityTimestampByUserId(myFeedId).catch(() => null)
     ]);
     const larpHouse = larpHouseKey ? { key: larpHouseKey, ...larpModel.getHouse(larpHouseKey) } : null;
+    const stats = await inhabitantsModel.getInhabitantStats(myFeedId, myFeedId).catch(() => ({}));
     const userActions = (allActions || []).filter(a => a && a.author === myFeedId && a.type !== 'tombstone' && a.type !== 'post');
     const normTs = t => { const n = Number(t || 0); return !isFinite(n) || n <= 0 ? 0 : n < 1e12 ? n * 1000 : n; };
     const pickTs = obj => { if (!obj) return 0; const v = obj.value || obj; return normTs(v.timestamp || v.ts || v.time || v.meta?.timestamp || 0); };
@@ -2608,7 +2629,7 @@ router
     const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','transfer','job','report','chat','chatMessage','pad','padEntry','forum','map']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
-    ctx.body = await authorView({ feedId: myFeedId, messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, baseUrl, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
+    ctx.body = await authorView({ feedId: myFeedId, messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, stats, baseUrl, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
   })
   .get("/profile/edit", async (ctx) => {
     const myFeedId = await meta.myFeedId();
@@ -2685,7 +2706,7 @@ router
     const profileBookmarks  = flag(body.vis_profileBookmarks);
     const visibilityPrefs = {
       activity: flag(body.vis_activity),
-      device:   flag(body.vis_device),
+      device:   true,
       karma:    flag(body.vis_karma),
       ubi:      flag(body.vis_ubi),
       wallet:   flag(body.vis_wallet),
@@ -3698,6 +3719,7 @@ router
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
     const viewerPrefs = await about.visibilityPrefs(getViewerId()).catch(() => null);
+    const hasPurchases = (await shopsModel.listMyPurchases().catch(() => [])).length > 0;
     if (filter === 'products' || filter === 'prices') {
       const products = await shopsModel.listAllProducts({ filter: 'top', sort, viewerId: getViewerId() });
       const enriched = await Promise.all(products.map(async (prod) => {
@@ -3706,7 +3728,7 @@ router
           return { ...prod, shopTitle: shop ? shop.title : '' };
         } catch (_) { return prod; }
       }));
-      ctx.body = await shopsView(enriched, filter, null, { q, sort, viewerPrefs });
+      ctx.body = await shopsView(enriched, filter, null, { q, sort, viewerPrefs, hasPurchases });
       return;
     }
     const items = await shopsModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort, viewerId: getViewerId() });
@@ -3720,7 +3742,7 @@ router
     }));
     try { withFeatured = await lifetime.enrichAndFilter(withFeatured, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
     const spreadMap = await spreads.forMessages((withFeatured || []).map(x => x && (x.key || x.id)));
-    ctx.body = await shopsView(withFeatured, filter, null, { q, sort, viewerPrefs, spreadMap });
+    ctx.body = await shopsView(withFeatured, filter, null, { q, sort, viewerPrefs, spreadMap, hasPurchases });
   })
   .get("/shops/edit/:id", async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
@@ -3741,7 +3763,10 @@ router
     if (!product) { ctx.redirect('/shops'); return; }
     const shop = await shopsModel.getShopById(product.shopId);
     const comments = await getVoteComments(product.key);
-    ctx.body = await singleProductView(withCount(product, comments), shop, comments, { shopId: product.shopId, returnTo: safeReturnTo(ctx, `/shops/${encodeURIComponent(product.shopId)}`, ['/shops']) });
+    const myPurchases = await shopsModel.listMyPurchases().catch(() => []);
+    const productRootId = product.rootId || product.key;
+    const canRate = myPurchases.some(o => o.productId === productRootId && String(o.status || '').toUpperCase() === 'RECEIVED');
+    ctx.body = await singleProductView(withCount(product, comments), shop, comments, { shopId: product.shopId, canRate, returnTo: safeReturnTo(ctx, `/shops/${encodeURIComponent(product.shopId)}`, ['/shops']) });
   })
   .get("/c/audios/:id", async (ctx) => {
     let item; try { item = await audiosModel.getAudioById(ctx.params.id); } catch (_) {}
@@ -4023,17 +4048,24 @@ router
     ctx.type = 'text/html';
     ctx.body = await clearnetShopView(shop, products || []);
   })
+  .get("/shops/purchases", async (ctx) => {
+    if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
+    const purchases = await shopsModel.listMyPurchases().catch(() => []);
+    ctx.body = await myPurchasesView(purchases);
+  })
   .get("/shops/:shopId", async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
     const shop = await shopsModel.getShopById(ctx.params.shopId);
     if (!shop) { ctx.redirect('/shops'); return; }
+    if (shop.encrypted && shop.undecryptable && shop.author !== getViewerId()) { ctx.redirect('/invites#invites-shops'); return; }
     const fav = await mediaFavorites.getFavoriteSet('shops');
     const [products, comments, mapData] = await Promise.all([shopsModel.listProducts(shop.rootId || shop.key), getVoteComments(shop.key), resolveMapUrl(shop.mapUrl)]);
     const baseUrl = resolveExternalBaseUrl(ctx);
     const authorPrefs = await about.visibilityPrefs(shop.author).catch(() => null);
     await enrichItemLifetime(shop, { key: shop.rootId || shop.key });
-    ctx.body = await singleShopView({ ...shop, isFavorite: fav.has(String(shop.rootId || shop.key)), commentCount: comments.length }, filter, products, comments, { q, sort, returnTo: safeReturnTo(ctx, `/shops?filter=${encodeURIComponent(filter)}`, ['/shops']), mapData, baseUrl, authorPrefs, spreads: await spreads.forMessage(shop.key).catch(() => null) });
+    const pendingOrders = shop.author === getViewerId() ? await shopsModel.countPendingOrders(shop.rootId || shop.key).catch(() => 0) : 0;
+    ctx.body = await singleShopView({ ...shop, isFavorite: fav.has(String(shop.rootId || shop.key)), commentCount: comments.length, pendingOrders }, filter, products, comments, { q, sort, returnTo: safeReturnTo(ctx, `/shops?filter=${encodeURIComponent(filter)}`, ['/shops']), mapData, baseUrl, authorPrefs, spreads: await spreads.forMessage(shop.key).catch(() => null) });
   })
   .get("/shops/:shopId/orders", async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
@@ -4042,6 +4074,16 @@ router
     const rootId = shop.rootId || shop.key;
     const orders = await shopsModel.listShopOrders(rootId).catch(e => { throw e; });
     ctx.body = await shopOrdersView(shop, orders);
+  })
+  .post("/shops/orders/:orderId/status", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const shopId = String(b.shopId || '');
+    try {
+      await shopsModel.setOrderStatus(ctx.params.orderId, b.status);
+    } catch (_) {}
+    const dest = (typeof b.returnTo === 'string' && b.returnTo.startsWith('/shops')) ? b.returnTo : `/shops/${encodeURIComponent(shopId)}/orders`;
+    ctx.redirect(dest);
   })
   .get("/chats", async (ctx) => {
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
@@ -4578,7 +4620,8 @@ router
     try { list = await lifetime.enrichAndFilter(list, { getAuthor: (x) => x.from }); } catch (_) {}
     await enrichMsgSize(list);
     const spreadMap = await spreads.forMessages((list || []).map(x => x && (x.id || x.key)));
-    ctx.body = await transferView(list, filter, null, { q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', category: ctx.query.category || '', spreadMap });
+    const prefill = filter === 'create' ? { to: ctx.query.to || '', amount: ctx.query.amount || '', concept: ctx.query.concept || '', category: ctx.query.category || '' } : undefined;
+    ctx.body = await transferView(list, filter, null, { q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', category: ctx.query.category || '', spreadMap, prefill });
   })
   .get('/transfers/edit/:id', async ctx => {
     if (!checkMod(ctx, 'transfersMod')) { ctx.redirect('/modules'); return; }
@@ -4912,7 +4955,7 @@ router
       if (c.type === 'event' && c.isPublic === 'private' && c.organizer !== userId && !(Array.isArray(c.attendees) && c.attendees.includes(userId))) return false;
       if (c.type === 'task' && String(c.isPublic).toUpperCase() === 'PRIVATE' && c.author !== userId && !(Array.isArray(c.assignees) && c.assignees.includes(userId))) return false;
       if (c.status === 'PRIVATE') return false;
-      if (c.type === 'shop' && c.visibility === 'CLOSED' && c.author !== userId) return false;
+      if (c.type === 'shop' && (c.visibility === 'CLOSED' || c.encryptedPayload) && c.author !== userId) return false;
       return true;
     });
     const results = await searchModel.search({ query, types });
@@ -5137,8 +5180,9 @@ router
     ctx.redirect(target);
   }) 
   .post('/forum/create', koaBody(), async ctx => {
-    const { category, title, text } = ctx.request.body;
-    await forumModel.createForum(category, stripDangerousTags(title), stripDangerousTags(text));
+    const { category, title, text, isPublic } = ctx.request.body;
+    const isPrivate = String(isPublic || 'public').toLowerCase() === 'private';
+    await forumModel.createForum(category, stripDangerousTags(title), stripDangerousTags(text), isPrivate);
     ctx.redirect('/forum');
   })
   .post('/forum/:id/message', koaBody(), async ctx => {
@@ -5157,6 +5201,25 @@ router
     if (!forum || forum.author !== getViewerId()) { sendErrorPage(ctx, 'Forbidden', { status: 403 }); return; }
     await forumModel.deleteForumById(ctx.params.id);
     ctx.redirect('/forum');
+  })
+  .post('/forum/generate-invite/:id', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
+    try {
+      const { code } = await forumModel.generateInvite(ctx.params.id);
+      ctx.body = renderForumInvitePage(code);
+    } catch (_) {
+      ctx.redirect(safeReturnTo(ctx, `/forum/${encodeURIComponent(ctx.params.id)}`, ['/forum']));
+    }
+  })
+  .post('/forum/join-code', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
+    const code = String((ctx.request.body || {}).code || '').trim();
+    try {
+      const { forumId } = await forumModel.joinByInvite(code);
+      ctx.redirect(safeReturnTo(ctx, `/forum/${encodeURIComponent(forumId)}`, ['/forum']));
+    } catch (_) {
+      ctx.redirect(safeReturnTo(ctx, '/forum', ['/forum']));
+    }
   })
   .post('/legacy/export', koaBody(), async (ctx) => {
     const pw = ctx.request.body.password;
@@ -5788,6 +5851,25 @@ router
     await eventsModel.deleteEventById(ctx.params.id);
     ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events']));
   })
+  .post('/events/generate-invite/:id', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'eventsMod')) { ctx.redirect('/modules'); return; }
+    try {
+      const { code } = await eventsModel.generateInvite(ctx.params.id);
+      ctx.body = renderEventInvitePage(code);
+    } catch (_) {
+      ctx.redirect(safeReturnTo(ctx, `/events/${encodeURIComponent(ctx.params.id)}`, ['/events']));
+    }
+  })
+  .post('/events/join-code', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'eventsMod')) { ctx.redirect('/modules'); return; }
+    const code = String((ctx.request.body || {}).code || '').trim();
+    try {
+      const { eventId } = await eventsModel.joinByInvite(code);
+      ctx.redirect(safeReturnTo(ctx, `/events/${encodeURIComponent(eventId)}`, ['/events']));
+    } catch (_) {
+      ctx.redirect(safeReturnTo(ctx, '/events', ['/events']));
+    }
+  })
   .post('/events/:eventId/comments', koaBodyMiddleware, async ctx => commentAction(ctx, 'events', 'eventId'))
   .post('/votes/create', koaBody(), async ctx => {
     const b = ctx.request.body, defaultOptions = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'];
@@ -6083,10 +6165,16 @@ router
     if (!checkMod(ctx, 'marketMod')) { ctx.redirect('/modules'); return; }
     const item = await marketModel.getItemById(ctx.params.id);
     if (!item) ctx.throw(404, "Item not found");
-    if (item.item_type === "exchange" && item.status !== "SOLD") {
+    if (String(item.seller) === String(getViewerId())) ctx.throw(403, "You cannot buy your own item");
+    if (item.item_type === "auction") ctx.throw(400, "Auction items are acquired via bids");
+    if (String(item.status || "").toUpperCase() === "SOLD") ctx.throw(400, "Item already sold");
+    if (Number(item.stock || 0) <= 0) ctx.throw(400, "Out of stock");
+    try {
       await pmModel.sendMessage([item.seller], "MARKET_SOLD", `item "${item.title}" has been sold -> /market/${ctx.params.id}  OASIS ID: ${getViewerId()}  for: ${item.price} ECO`);
-      await marketModel.setItemAsSold(ctx.params.id);
-    } else await marketModel.decrementStock(ctx.params.id);
+    } catch (_) {}
+    if (item.item_type === "exchange") await marketModel.setItemAsSold(ctx.params.id);
+    else await marketModel.decrementStock(ctx.params.id);
+    try { await mediaFavorites.addFavorite('market', item.id || ctx.params.id); } catch (_) {}
     if (item.shopProductId && checkMod(ctx, 'shopsMod')) {
       try { await shopsModel.buyProduct(item.shopProductId); } catch (_) {}
     }
@@ -6199,8 +6287,27 @@ router
   })
   .post("/shops/visibility/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
-    await shopsModel.updateShopById(ctx.params.id, { visibility: ctx.request.body.visibility });
+    await shopsModel.setShopVisibility(ctx.params.id, ctx.request.body.visibility);
     ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(ctx.params.id)}`, ['/shops']));
+  })
+  .post("/shops/generate-invite/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
+    try {
+      const { code } = await shopsModel.generateInvite(ctx.params.id);
+      ctx.body = renderShopInvitePage(code);
+    } catch (_) {
+      ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(ctx.params.id)}`, ['/shops']));
+    }
+  })
+  .post("/shops/join-code", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
+    const code = String((ctx.request.body || {}).code || '').trim();
+    try {
+      const { shopId } = await shopsModel.joinByCode(code);
+      ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(shopId)}`, ['/shops']));
+    } catch (_) {
+      ctx.redirect(safeReturnTo(ctx, '/shops', ['/shops']));
+    }
   })
   .post("/shops/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'shops', 'add'))
   .post("/shops/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'shops', 'remove'))
@@ -6252,6 +6359,10 @@ router
       notes: stripDangerousTags(String(b.notes || "")).trim()
     });
     await shopsModel.buyProduct(ctx.params.id);
+    try {
+      const pr = await shopsModel.getProductById(ctx.params.id).catch(() => null);
+      await mediaFavorites.addFavorite('shopProducts', (pr && pr.rootId) || ctx.params.id);
+    } catch (_) {}
     if (checkMod(ctx, 'marketMod')) {
       try { const mi = await marketModel.getItemByShopProductId(ctx.params.id); if (mi) await marketModel.decrementStock(mi.id); } catch (_) {}
     }

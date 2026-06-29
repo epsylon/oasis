@@ -28,3 +28,26 @@ describe('maps: create + marker + list', (t) => {
     ok(!found);
   });
 });
+
+describe('maps: invite + join', (t) => {
+  t('A creates a private map, generates an invite, B joins by code', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('maps').createMap(10, 20, 'secret place', 'SINGLE', [], 'Private Map', null, '', null);
+    const code = await A.use('maps').generateInvite(r.key);
+    ok(typeof code === 'string' && code.length > 0, 'invite code generated');
+    B.setActor();
+    const joined = await B.use('maps').joinByInvite(code);
+    ok(joined, 'B joined the private map via invite');
+  });
+
+  t('non-author cannot generate an invite for a map', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('maps').createMap(0, 0, 'd', 'SINGLE', [], 'Mine', null, '', null);
+    B.setActor();
+    let threw = false;
+    try { await B.use('maps').generateInvite(r.key); } catch (_) { threw = true; }
+    ok(threw, 'only the author can generate map invites');
+  });
+});

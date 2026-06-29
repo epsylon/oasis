@@ -166,7 +166,7 @@ const renderMapUrl = (mapObj) =>
 const renderMapOwnerActions = (filter, mapObj, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   if (String(mapObj.author) !== String(userId)) return [];
-  return [
+  const actions = [
     form({ method: "GET", action: `/maps/edit/${encodeURIComponent(mapObj.key)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ class: "update-btn", type: "submit" }, i18n.mapUpdateButton)),
@@ -174,6 +174,12 @@ const renderMapOwnerActions = (filter, mapObj, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ class: "delete-btn", type: "submit" }, i18n.mapDeleteButton))
   ];
+  const isPrivateMap = !mapObj.tribeId && mapObj.mapType !== "OPEN";
+  if (isPrivateMap) {
+    actions.push(form({ method: "POST", action: `/maps/generate-invite/${encodeURIComponent(mapObj.key)}` },
+      button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)));
+  }
+  return actions;
 };
 
 const renderFilters = (filter, q) =>
@@ -434,6 +440,9 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
           div({ class: "map-detail-actions" },
             renderMapFavoriteToggle(mapObj, returnTo),
             renderPMButton(mapObj.author),
+            (String(mapObj.author) !== String(userId) && !mapObj.tribeId && mapObj.mapType !== "OPEN")
+              ? a({ class: "tribe-action-btn", href: "/invites#invites-maps" }, i18n.tribeEnterInvite)
+              : null,
             ...ownerActions)),
         renderMapUrl(mapObj),
         br(),

@@ -1585,7 +1585,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           : null,
         tribe.author === userId
           ? form({ method: 'POST', action: `/tribes/delete/${encodeURIComponent(tribe.id)}` },
-              button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeDeleteButton)
+              button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeDeleteButton)
             )
           : null,
         tribe.author !== userId

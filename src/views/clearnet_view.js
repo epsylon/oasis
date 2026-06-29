@@ -1,4 +1,20 @@
-const { a, br, div, input, span } = require("../server/node_modules/hyperaxe");
+const { a, br, div, input, span, strong } = require("../server/node_modules/hyperaxe");
+
+const STAT_TYPE_KEYS = { post:'statsPost', event:'statsEvent', task:'statsTask', forum:'statsForum', tribe:'statsTribe', market:'statsMarket', job:'statsJob', project:'statsProject', shop:'statsShop', image:'statsImage', video:'statsVideo', audio:'statsAudio', document:'statsDocument', bookmark:'statsBookmark', transfer:'statsTransfer', map:'statsMap' };
+const STAT_ORDER = ['post','event','task','forum','tribe','market','job','project','shop','image','video','audio','document','bookmark','transfer','map'];
+const renderContentStats = (stats, i18nObj = {}) => {
+  if (!stats || typeof stats !== 'object') return null;
+  const chips = STAT_ORDER
+    .filter(t => (stats[t] || 0) > 0)
+    .map(t => span({ class: 'inhabitant-stat' },
+      span({ class: 'inhabitant-stat-label' }, i18nObj[STAT_TYPE_KEYS[t]] || t),
+      strong({ class: 'inhabitant-stat-value' }, String(stats[t]))
+    ));
+  if (!chips.length) return null;
+  return div({ class: 'inhabitant-stats-box' },
+    div({ class: 'inhabitant-stats-grid' }, ...chips)
+  );
+};
 
 const escapeHtml = (s) => String(s || '')
   .replace(/&/g, '&amp;')
@@ -276,6 +292,7 @@ module.exports = {
   blobUrl,
   renderReachChip,
   renderFediverseReach,
+  renderContentStats,
   renderEncryptedChip,
   renderClearnetUrlBlock,
   renderClearnetSearchForm,

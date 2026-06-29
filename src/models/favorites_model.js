@@ -15,7 +15,7 @@ const toTs = (d) => {
   return Number.isFinite(t) ? t : 0;
 };
 
-module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel }) => {
+module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel }) => {
   const kindConfig = {
     audios: {
       base: "/audios/",
@@ -56,10 +56,18 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     torrents: {
       base: "/torrents/",
       getById: getFn(torrentsModel, ["getTorrentById", "getById"])
+    },
+    market: {
+      base: "/market/",
+      getById: getFn(marketModel, ["getItemById", "getById"])
+    },
+    shopProducts: {
+      base: "/shops/product/",
+      getById: getFn(shopsModel, ["getProductById"])
     }
   };
 
-  const kindOrder = ["audios", "bookmarks", "calendars", "chats", "documents", "images", "maps", "pads", "torrents", "videos"];
+  const kindOrder = ["audios", "bookmarks", "calendars", "chats", "documents", "images", "maps", "pads", "torrents", "videos", "market", "shopProducts"];
 
   const hydrateKind = async (kind, ids) => {
     const cfg = kindConfig[kind];
@@ -121,6 +129,8 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
       pads: byKind.pads.length,
       torrents: byKind.torrents.length,
       videos: byKind.videos.length,
+      market: byKind.market.length,
+      shopProducts: byKind.shopProducts.length,
       all: flat.length
     };
 

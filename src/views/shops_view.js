@@ -5,16 +5,18 @@ const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const opinionCategories = require("../backend/opinion_categories")
-const { renderReachChip, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml } = require("./clearnet_view")
+const { renderReachChip, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml } = require("./clearnet_view")
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v || "").trim()
 const voteSum = (opinions = {}) => Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)
+const sumCats = (opinions = {}, cats = []) => (cats || []).reduce((s, c) => s + (Number((opinions || {})[c]) || 0), 0)
 const renderStarRating = (opinions, voterCount) => {
-  const total = voteSum(opinions)
-  const avg = voterCount > 0 ? Math.min(5, Math.round((total / voterCount) * 5) / 5) : 0
-  const full = Math.floor(avg)
+  const pos = sumCats(opinions, opinionCategories.positive)
+  const neg = sumCats(opinions, opinionCategories.constructive) + sumCats(opinions, opinionCategories.moderation)
+  const totalVotes = pos + neg
+  const full = totalVotes > 0 ? Math.round((pos / totalVotes) * 5) : 0
   const stars = "\u2605".repeat(full) + "\u2606".repeat(5 - full)
   return span({ class: "shop-product-stars" }, `${stars} (${voterCount})`)
 }
@@ -48,6 +50,9 @@ const renderModeButtons = (currentFilter) =>
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`shopFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
       )
+    ),
+    form({ method: "GET", action: "/shops/purchases" },
+      button({ type: "submit", class: currentFilter === "purchases" ? "filter-btn active" : "filter-btn" }, (i18n.shopPurchasesButton || "Purchases").toUpperCase())
     ),
     form({ method: "GET", action: "/shops" },
       input({ type: "hidden", name: "filter", value: "create" }),
@@ -189,11 +194,14 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: shop.mapUrl || "" }), br,
       label(i18n.shopTags), br,
       input({ type: "text", name: "tags", placeholder: i18n.shopTagsPlaceholder || "tag1, tag2, tag3", value: safeArr(shop.tags).join(", ") }), br,
-      label(i18n.shopVisibility), br,
-      select({ name: "visibility" },
+      isEdit ? null : label(i18n.shopVisibility),
+      isEdit ? null : br,
+      isEdit ? null : select({ name: "visibility" },
         option({ value: "OPEN", selected: (shop.visibility || "OPEN") === "OPEN" }, i18n.shopOpen),
         option({ value: "CLOSED", selected: shop.visibility === "CLOSED" }, i18n.shopClosed)
-      ), br(), br(),
+      ),
+      isEdit ? null : br(),
+      br(),
       button({ type: "submit" }, isEdit ? i18n.shopUpdate : i18n.shopCreate)
     )
   )
@@ -315,6 +323,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       shop.visibility === "CLOSED"
         ? renderStateChip("closed", "✗", i18n.shopClosed)
         : renderStateChip("mutuals", "✓", i18n.shopOpen),
+      shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
       renderLifespanChip(shop.lifetime, i18n),
       renderReachChip(isClearnet, i18n)
     ),
@@ -362,29 +371,35 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         : null,
       isAuthor
         ? form({ method: "GET", action: `/shops/${encodeURIComponent(shop.key)}/orders` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.shopOrdersTitle || "Orders")
+            button({ type: "submit", class: "tribe-action-btn" },
+              i18n.shopOrdersTitle || "Orders",
+              Number(shop.pendingOrders || 0) > 0 ? span({ class: "shop-orders-badge", title: i18n.shopOrdersPending || "Pending orders" }, ` ● ${shop.pendingOrders}`) : null
+            )
           )
         : null,
       isAuthor
         ? form({ method: "POST", action: `/shops/delete/${encodeURIComponent(shop.key)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.shopDelete)
-          )
-        : null,
-      isAuthor && shop.visibility !== "CLOSED"
-        ? form({ method: "POST", action: `/shops/visibility/${encodeURIComponent(shop.key)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            input({ type: "hidden", name: "visibility", value: "CLOSED" }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.shopCloseShop)
-          )
-        : null,
-      isAuthor && shop.visibility === "CLOSED"
-        ? form({ method: "POST", action: `/shops/visibility/${encodeURIComponent(shop.key)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            input({ type: "hidden", name: "visibility", value: "OPEN" }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.shopOpenShop)
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.shopDelete)
           )
         : null
     ),
+    isAuthor
+      ? div({ class: "tribe-side-actions shop-visibility-row" },
+          span({ class: "card-label" }, `${i18n.visibilityLabel || "Visibility"}: `),
+          shop.encrypted
+            ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E")
+            : renderStateChip("mutuals", "👁", i18n.shopOpen),
+          shop.encrypted
+            ? form({ method: "POST", action: `/shops/generate-invite/${encodeURIComponent(shop.key)}` },
+                button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite))
+            : null,
+          form({ method: "POST", action: `/shops/visibility/${encodeURIComponent(shop.key)}`, class: "inline-form" },
+            input({ type: "hidden", name: "returnTo", value: returnTo }),
+            input({ type: "hidden", name: "visibility", value: shop.encrypted ? "OPEN" : "CLOSED" }),
+            button({ type: "submit", class: "tribe-action-btn" },
+              shop.encrypted ? i18n.shopMakePublic : i18n.shopMakePrivate))
+        )
+      : null,
     safeArr(shop.tags).length
       ? div({ class: "tribe-side-tags" }, safeArr(shop.tags).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
       : null
@@ -487,7 +502,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
           " ",
           userLink(product.author)
         ),
-        !isAuthor && safeArr(product.buyers).includes(userId) && !safeArr(product.opinions_inhabitants).includes(userId)
+        !isAuthor && params.canRate && !safeArr(product.opinions_inhabitants).includes(userId)
           ? div({ class: "voting-buttons transfer-voting-buttons" },
               opinionCategories.map(category =>
                 form({ method: "POST", action: `/shops/product/opinions/${encodeURIComponent(product.key)}/${category}` },
@@ -514,16 +529,56 @@ exports.editProductView = async (product, shopId, params = {}) => {
   )
 }
 
+const ORDER_STATUS_VARIANT = { PENDING: "whole", ACCEPTED: "mutuals", REJECTED: "closed", PAID: "mutuals", SHIPPED: "hidden", RECEIVED: "mutuals" }
+const orderStatusChip = (st) => {
+  const s = String(st || "PENDING").toUpperCase()
+  const labels = {
+    PENDING: i18n.shopOrderStatusPending || "Pending",
+    ACCEPTED: i18n.shopOrderStatusAccepted || "Accepted",
+    REJECTED: i18n.shopOrderStatusRejected || "Rejected",
+    PAID: i18n.shopOrderStatusPaid || "Payment received",
+    SHIPPED: i18n.shopOrderStatusShipped || "Shipped",
+    RECEIVED: i18n.shopOrderStatusReceived || "Received"
+  }
+  return renderStateChip(ORDER_STATUS_VARIANT[s] || "whole", "", labels[s] || s)
+}
+
 exports.shopOrdersView = async (shop, orders) => {
+  const sid = shop.rootId || shop.key || shop.id || ""
   const title = `${i18n.shopOrdersTitle || "Orders"}: ${shop.title || ""}`
+  const statusForm = (orderId, status, label, cls) =>
+    form({ method: "POST", action: `/shops/orders/${encodeURIComponent(orderId)}/status`, class: "inline-form" },
+      input({ type: "hidden", name: "shopId", value: sid }),
+      input({ type: "hidden", name: "status", value: status }),
+      button({ type: "submit", class: cls || "tribe-action-btn" }, label)
+    )
+  const orderActions = (o) => {
+    const s = String(o.status || "PENDING").toUpperCase()
+    const acts = []
+    if (s === "PENDING") {
+      acts.push(statusForm(o.id, "ACCEPTED", i18n.shopOrderAccept || "Accept"))
+      acts.push(statusForm(o.id, "REJECTED", i18n.shopOrderReject || "Reject", "tribe-action-btn danger-btn"))
+    } else if (s === "ACCEPTED") {
+      const concept = `${i18n.shopOrderInvoiceConcept || "Invoice"} — ${i18n.shopOrderContractConcept || "Shop order"}: ${o.title || ""}`
+      const cHref = `/transfers?filter=create&to=${encodeURIComponent(o.buyer)}&amount=${encodeURIComponent(Number(o.price || 0).toFixed(6))}&concept=${encodeURIComponent(concept)}&category=ECONOMIC`
+      acts.push(a({ href: cHref, class: "tribe-action-btn" }, i18n.shopOrderInvoice || "Invoice"))
+      acts.push(statusForm(o.id, "PAID", i18n.shopOrderMarkPaid || "Payment received"))
+    } else if (s === "PAID") {
+      acts.push(statusForm(o.id, "SHIPPED", i18n.shopOrderMarkShipped || "Mark shipped"))
+    }
+    acts.push(a({ href: `/pm?recipients=${encodeURIComponent(o.buyer)}`, class: "tribe-action-btn" }, i18n.shopOrderPmBuyer || i18n.privateMessage || "PM"))
+    return div({ class: "tribe-side-actions" }, ...acts)
+  }
   const rows = (orders || []).map(o => div({ class: "shop-order-card card-section" },
+    div({ class: "card-chips-row" }, renderEncryptedChip(i18n), orderStatusChip(o.status)),
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderProduct || "Product"}:`), span({ class: "card-value" }, String(o.title || o.productId || ""))),
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderPrice || "Price"}:`), span({ class: "card-value" }, `${Number(o.price || 0).toFixed(6)} ECO`)),
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderBuyer || "Buyer"}:`), userLink(o.buyer)),
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyDeliveryAddress || "Delivery address"}:`), span({ class: "card-value" }, String(o.deliveryAddress || ""))),
     o.contact ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyContact || "Contact"}:`), span({ class: "card-value" }, String(o.contact))) : null,
     o.notes ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyNotes || "Notes"}:`), span({ class: "card-value" }, String(o.notes))) : null,
-    p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.createdAt || o.ts).format("YYYY-MM-DD HH:mm")))
+    p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.createdAt || o.ts).format("YYYY-MM-DD HH:mm"))),
+    orderActions(o)
   ))
   return template(
     title,
@@ -533,6 +588,43 @@ exports.shopOrdersView = async (shop, orders) => {
     ),
     section(
       rows.length ? div({ class: "shop-orders-list" }, ...rows) : p(i18n.shopOrdersEmpty || "No orders yet.")
+    )
+  )
+}
+
+exports.myPurchasesView = async (purchases) => {
+  const title = i18n.shopMyOrdersTitle || "My orders"
+  const buyerActions = (o) => {
+    const acts = []
+    if (o.seller) acts.push(a({ href: `/pm?recipients=${encodeURIComponent(o.seller)}`, class: "tribe-action-btn" }, i18n.shopOrderPmSeller || i18n.privateMessage || "PM"))
+    if (String(o.status || "PENDING").toUpperCase() === "SHIPPED") {
+      acts.push(form({ method: "POST", action: `/shops/orders/${encodeURIComponent(o.id)}/status`, class: "inline-form" },
+        input({ type: "hidden", name: "status", value: "RECEIVED" }),
+        input({ type: "hidden", name: "returnTo", value: "/shops/purchases" }),
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.shopOrderConfirmReceived || "Confirm received")
+      ))
+    }
+    return acts.length ? div({ class: "tribe-side-actions" }, ...acts) : null
+  }
+  const rows = (purchases || []).map(o => div({ class: "shop-order-card card-section" },
+    div({ class: "card-chips-row" }, renderEncryptedChip(i18n), orderStatusChip(o.status)),
+    div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderProduct || "Product"}:`), span({ class: "card-value" }, String(o.title || o.productId || ""))),
+    div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderPrice || "Price"}:`), span({ class: "card-value" }, `${Number(o.price || 0).toFixed(6)} ECO`)),
+    o.seller ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderSeller || "Seller"}:`), userLink(o.seller)) : null,
+    div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyDeliveryAddress || "Delivery address"}:`), span({ class: "card-value" }, String(o.deliveryAddress || ""))),
+    o.contact ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyContact || "Contact"}:`), span({ class: "card-value" }, String(o.contact))) : null,
+    o.notes ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyNotes || "Notes"}:`), span({ class: "card-value" }, String(o.notes))) : null,
+    p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.createdAt || o.ts).format("YYYY-MM-DD HH:mm"))),
+    buyerActions(o)
+  ))
+  return template(
+    title,
+    section(
+      div({ class: "tags-header" }, h2(title), p(i18n.shopMyOrdersDescription || "Your encrypted purchase orders."))
+    ),
+    section(renderModeButtons("purchases")),
+    section(
+      rows.length ? div({ class: "shop-orders-list" }, ...rows) : p(i18n.shopMyOrdersEmpty || "You have no purchases yet.")
     )
   )
 }
@@ -597,4 +689,14 @@ exports.clearnetShopView = async (shop, products = []) => {
     body,
     hubFeedId: shop.author || null
   });
+};
+
+exports.renderShopInvitePage = (code) => {
+  const pageContent = div({ class: "invite-page" },
+    h2(i18n.tribeInviteCodeText, code),
+    form({ method: "GET", action: "/shops" },
+      button({ type: "submit", class: "filter-btn" }, i18n.walletBack)
+    )
+  );
+  return template(i18n.invitesShopsTitle || "Shops", section(pageContent));
 };

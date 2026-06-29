@@ -274,7 +274,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         ? form({ method: "POST", action: `/chats/generate-invite` },
             input({ type: "hidden", name: "chatId", value: chat.key }),
             input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.chatGenerateCode)
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
           )
         : null,
       form(
@@ -301,26 +301,19 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         : null,
       isAuthor
         ? form({ method: "POST", action: `/chats/delete/${encodeURIComponent(chat.key)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.chatDelete)
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
           )
         : null,
       !isAuthor && isMember
         ? form({ method: "POST", action: `/chats/leave/${encodeURIComponent(chat.key)}` },
             input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.chatLeave)
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeLeaveButton)
           )
         : null
     ),
     !isMember && chat.status === "INVITE-ONLY"
       ? div({ class: "chat-join-section" },
-          div({ class: "chat-invite-form" },
-            form({ method: "POST", action: "/chats/join-code" },
-              input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}` }),
-              label(i18n.chatInviteCodeLabel), br(),
-              input({ type: "text", name: "code", required: true, placeholder: i18n.chatInviteCode }), br(), br(),
-              button({ type: "submit", class: "filter-btn" }, i18n.chatJoinByInvite)
-            )
-          )
+          a({ class: "tribe-action-btn", href: "/invites#invites-chats" }, i18n.tribeEnterInvite)
         )
       : null,
     !isRestrictedInviteOnly && safeArr(chat.tags).length

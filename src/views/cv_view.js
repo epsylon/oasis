@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, textarea, label, input, br, img, a, select, option, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require('./main_views');
+const { template, i18n, userLink, renderVisibilityChip } = require('./main_views');
 const { renderUrl } = require('../backend/renderUrl');
 
 const generateCVBox = (label, content, className) => {
@@ -146,9 +146,7 @@ exports.cvView = async (cv) => {
             const next = vis === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC';
             return div({ class: "cv-visibility-row" },
               span({ class: "card-label" }, `${i18n.visibilityLabel || 'Visibility'}: `),
-              span({ class: vis === 'PUBLIC' ? 'visibility-public' : 'visibility-hidden' },
-                vis === 'PUBLIC' ? (i18n.visibilityPublic || 'Public') : (i18n.visibilityHidden || 'Hidden')
-              ),
+              renderVisibilityChip(vis, i18n),
               " ",
               form({ method: "POST", action: `/cv/visibility/${encodeURIComponent(cv.id)}`, class: "inline-form" },
                 input({ type: "hidden", name: "visibility", value: next }),

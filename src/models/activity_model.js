@@ -519,7 +519,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         }
         return true;
       };
-      const isVisible = (a) => {
+      const itemVisible = (a) => {
         if (hiddenTypes.has(a.type)) return false;
         const c = a.content || {};
         if (c.encryptedPayload) return false;
@@ -534,6 +534,21 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         if (a.type === 'shop' && String(c.visibility || '').toUpperCase() === 'CLOSED' && a.author !== userId) return false;
         if (a.type === 'curriculum' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId) return false;
         if (a.type === 'shopProduct' && c.shopVisibility && String(c.shopVisibility).toUpperCase() === 'CLOSED' && a.author !== userId) return false;
+        return true;
+      };
+      const isVisible = (a) => {
+        if (!itemVisible(a)) return false;
+        if (a.type === 'post' || a.type === 'opinion') {
+          const c = a.content || {};
+          const ref = (typeof c.root === 'string' && c.root)
+            || (typeof c.branch === 'string' && c.branch)
+            || (typeof c.target === 'string' && c.target)
+            || null;
+          if (ref) {
+            const parent = idToAction.get(ref);
+            if (parent && !itemVisible(parent)) return false;
+          }
+        }
         return true;
       };
 

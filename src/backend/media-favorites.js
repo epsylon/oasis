@@ -13,6 +13,8 @@ const DEFAULT = {
   maps: [],
   pads: [],
   shops: [],
+  market: [],
+  shopProducts: [],
   torrents: [],
   videos: []
 };

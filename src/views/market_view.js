@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -547,6 +547,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       div({ class: "card-chips-row" },
                         renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
                         item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
+                        String(item.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
                         item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
                         renderLifespanChip(item.lifetime, i18n)
                       ),
@@ -616,7 +617,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
           item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
           item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
-          isHidden ? renderStateChip("closed", "🚫", i18n.visibilityHidden || "HIDDEN") : null,
+          isHidden ? renderVisibilityChip("HIDDEN", i18n) : null,
           renderLifespanChip(item.lifetime, i18n),
           renderEcoTax(item.msgSize, item.id)
         ].filter(Boolean)
@@ -648,14 +649,18 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           tagsNode
         )
 
-        const visibilityToggle = String(item.seller) === String(userId)
+        const visibilityRow = String(item.seller) === String(userId)
           ? (() => {
               const vis = isHidden ? 'HIDDEN' : 'PUBLIC'
               const next = vis === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC'
-              return form({ method: "POST", action: `/market/visibility/${encodeURIComponent(item.id)}`, class: "inline-form" },
-                input({ type: "hidden", name: "visibility", value: next }),
-                button({ type: "submit", class: "filter-btn" },
-                  next === 'PUBLIC' ? (i18n.visibilityMakePublic || 'Make public') : (i18n.visibilityMakeHidden || 'Make hidden')
+              return div({ class: "tribe-side-actions" },
+                span({ class: "card-label" }, `${i18n.visibilityLabel || 'Visibility'}: `),
+                renderVisibilityChip(vis, i18n),
+                form({ method: "POST", action: `/market/visibility/${encodeURIComponent(item.id)}`, class: "inline-form" },
+                  input({ type: "hidden", name: "visibility", value: next }),
+                  button({ type: "submit", class: "filter-btn" },
+                    next === 'PUBLIC' ? (i18n.visibilityMakePublic || 'Make public') : (i18n.visibilityMakeHidden || 'Make hidden')
+                  )
                 )
               )
             })()
@@ -676,22 +681,21 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
             button({ type: "submit", class: "delete-btn" }, i18n.marketDeleteButton || "Delete")
           ))
         }
-        if (visibilityToggle) marketActions.push(visibilityToggle)
-
         const itemMain = div({ class: "tribe-main" },
           marketActions.length ? div({ class: "tribe-side-actions" }, ...marketActions) : null,
-          renderCountdownField(item),
+          visibilityRow,
           item.description
             ? div({ class: "job-section" },
                 h2({ class: "job-section-title" }, i18n.marketItemDescription),
                 p({ class: "tribe-side-description" }, ...renderUrl(item.description))
               )
             : null,
+          renderCountdownField(item),
           item.mapUrl ? div({ class: "job-section" }, renderMapEmbedWithZoom(params.mapData, item.mapUrl, `/market/${encodeURIComponent(item.id)}`, params.zoom)) : null,
           item.item_type === "auction"
             ? div(
                 { class: "auction-info job-section" },
-                p({ class: "auction-bid-text" }, i18n.marketAuctionBids),
+                h2({ class: "job-section-title" }, i18n.marketAuctionBids),
                 parsedBids.length
                   ? table(
                       { class: "auction-bid-table" },
@@ -700,8 +704,8 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
                         tr(td(moment(bid.time).format("YYYY-MM-DD HH:mm:ss")), td(a({ href: `/author/${encodeURIComponent(bid.bidder)}` }, bid.bidder)), td(`${parseFloat(bid.amount).toFixed(6)} ECO`))
                       )
                     )
-                  : null,
-                item.status !== "SOLD" && item.status !== "DISCARDED"
+                  : p({ class: "tribe-side-description" }, i18n.marketNoBids || "No bids yet"),
+                item.status !== "SOLD" && item.status !== "DISCARDED" && String(item.seller) !== String(userId)
                   ? form(
                       { method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
                       input({ type: "hidden", name: "returnTo", value: returnTo }),

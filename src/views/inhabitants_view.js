@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, br, span, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require('./main_views');
+const { template, i18n, userLink, renderUserSensors } = require('./main_views');
+const { renderContentStats } = require('./clearnet_view');
 const { renderUrl } = require('../backend/renderUrl');
 const { getConfig } = require('../configs/config-manager');
 
@@ -106,87 +107,34 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
     fediverse: raw.fediverse === true,
     fediverseHandle: typeof raw.fediverseHandle === 'string' ? raw.fediverseHandle : ''
   };
-  const dot = user.lastActivityBucket;
-  const activityChip = prefs.activity && dot
-    ? span({ class: 'inhabitant-last-activity' },
-        `${i18n.inhabitantActivityLevel}: `,
-        span({ class: `activity-dot ${dot}` }, '●'))
-    : null;
-  let deviceChip = null;
-  if (prefs.device) {
-    const src = isMe
-      ? (getConfig().themes.current === 'OasisKIT' ? 'KIT' : (getConfig().themes.current === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP')
-      : user.deviceSource;
-    if (src) {
-      const upper = String(src).toUpperCase();
-      const deviceClass = upper === 'KIT' ? 'device-kit' : upper === 'MOBILE' ? 'device-mobile' : 'device-desktop';
-      deviceChip = span({ class: 'inhabitant-last-activity' },
-        `${i18n.deviceLabel || 'Device'}: `,
-        span({ class: deviceClass }, src));
-    }
-  }
-  const { renderReachChip, renderClearnetUrlBlock, renderFediverseReach } = require('./clearnet_view');
-  const sensorItems = [];
-  const clearnetPath = `/c/inhabitant/${encodeURIComponent(user.id)}`;
-  sensorItems.push(
-    div({ class: 'profile-reach' },
-      renderReachChip(prefs.clearnet, i18n, prefs.clearnet ? clearnetPath : null),
-      prefs.clearnet
-        ? renderClearnetUrlBlock({ path: clearnetPath, i18nObj: i18n })
-        : null
-    )
-  );
-  { const fr = (isMe && !fediverseConfigured) ? null : renderFediverseReach(prefs, i18n); if (fr) sensorItems.push(fr); }
-  if (prefs.karma) sensorItems.push(span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(typeof user.karmaScore === 'number' ? user.karmaScore : 0))));
-  if (activityChip) sensorItems.push(activityChip);
-  if (deviceChip) sensorItems.push(deviceChip);
-  if (prefs.larpSign && user.larpHouse && user.larpHouse.key) {
-    sensorItems.push(a({ href: `/larp/${user.larpHouse.key}`, class: 'larp-sign-block', title: user.larpHouse.name },
-      img({ src: user.larpHouse.image || '/assets/larp/images/default.jpg', alt: user.larpHouse.name, class: 'larp-sign-large' })
-    ));
-  }
-  if (prefs.gpg && (user.gpgFingerprint || isMe)) {
-    let gpgNode;
-    if (user.gpgFingerprint) {
-      const shortId = String(user.gpgFingerprint).slice(-8).toUpperCase();
-      gpgNode = a({ href: `/profile/${encodeURIComponent(user.id)}/gpg.asc`, title: i18n.profileGpgDownload || 'Download' }, strong(shortId));
-    } else {
-      const notCfg = i18n.statsEcoWalletNotConfigured || 'Not configured!';
-      gpgNode = isMe ? a({ href: '/profile/edit' }, strong(notCfg)) : strong(notCfg);
-    }
-    sensorItems.push(span({ class: 'gpg-line' }, `${i18n.profileGpgChip || 'GPG'}: `, gpgNode));
-  }
-  if (prefs.wallet && (user.ecoAddress || isMe)) {
-    const walletText = user.ecoAddress || (i18n.statsEcoWalletNotConfigured || 'Not configured!');
-    const walletNode = isMe ? a({ href: '/wallet' }, strong(walletText)) : strong(walletText);
-    sensorItems.push(span({ class: 'ubi-line' }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, walletNode));
-  }
-  if (prefs.ubi) sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(user.estimatedUBI || 0).toFixed(6)} ECO`)));
-  if (prefs.ecoTax) sensorItems.push(span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(user.carbonGrams))));
   return div({ class: 'inhabitant-card' },
     div({ class: 'inhabitant-left' },
       a(
          { href: `/author/${encodeURIComponent(user.id)}` },
          img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo, 256), alt: user.name || 'Anonymous' })
       ),
-      isMe ? span({ class: 'status you' }, i18n.relationshipYou) : null,
-      sensorItems.length ? div({ class: 'profile-sensors-box' }, ...sensorItems) : null,
-      div(
-        { class: 'cv-actions' },
-        !isMe
-          ? form(
+      ...renderUserSensors({
+        isMe, fediverseConfigured, prefs, id: user.id,
+        karmaScore: user.karmaScore, carbonGrams: user.carbonGrams,
+        deviceSource: user.deviceSource, activityBucket: user.lastActivityBucket,
+        gpgFingerprint: user.gpgFingerprint, ecoAddress: user.ecoAddress,
+        estimatedUBI: user.estimatedUBI, lastClaimedDate: user.lastClaimedDate, totalClaimed: user.totalClaimed,
+        larpHouse: user.larpHouse, stats: user.stats
+      }, { relationshipNode: isMe ? span({ class: 'status you' }, i18n.relationshipYou) : null, excludeContent: true }),
+      !isMe
+        ? div(
+            { class: 'cv-actions' },
+            form(
               { method: 'GET', action: `/inhabitant/${encodeURIComponent(user.id)}` },
               button({ type: 'submit', class: 'btn' }, i18n.inhabitantviewDetails)
-            )
-          : null,
-        !isMe
-          ? form(
+            ),
+            form(
               { method: 'GET', action: '/pm' },
               input({ type: 'hidden', name: 'recipients', value: user.id }),
               button({ type: 'submit', class: 'btn' }, i18n.pmCreateButton)
             )
-          : null
-      )
+          )
+        : null
     ),
     div({ class: 'inhabitant-details' },
       h2(user.name || 'Anonymous'),
@@ -233,7 +181,8 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
             )
           )
         )
-      })() : null
+      })() : null,
+      renderContentStats(user.stats, i18n)
     )
   );
 };
@@ -375,6 +324,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
   const totalClaimed = typeof safe.totalClaimed === 'number' ? safe.totalClaimed : 0;
   const ecoAddress = typeof safe.ecoAddress === 'string' ? safe.ecoAddress : null;
   const rawPrefs = safe.visibilityPrefs || {};
+  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
   const prefs = {
     activity: rawPrefs.activity === true,
     device:   rawPrefs.device   === true,
@@ -384,6 +334,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
     ecoTax:   rawPrefs.ecoTax   !== false,
     larpSign: rawPrefs.larpSign === true,
     gpg:      rawPrefs.gpg      !== false,
+    clearnet: rawPrefs.clearnet === true || clearnetSubKeys.some(k => rawPrefs[k] === true),
     fediverse: rawPrefs.fediverse === true,
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : ''
   };
@@ -418,59 +369,12 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
         div({ class: 'inhabitant-left' },
           img({ class: 'inhabitant-photo-details', src: image, alt: name || 'Anonymous' }),
           h2(name || 'Anonymous'),
-          (() => {
-            const activityChip = prefs.activity
-              ? span({ class: 'inhabitant-last-activity' },
-                  `${i18n.inhabitantActivityLevel}: `,
-                  span({ class: `activity-dot ${dotClass}` }, '●'))
-              : null;
-            let deviceChip = null;
-            if (prefs.device) {
-              const src = isMe
-                ? (getConfig().themes.current === 'OasisKIT' ? 'KIT' : (getConfig().themes.current === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP')
-                : safe.deviceSource;
-              if (src) {
-                const upper = String(src).toUpperCase();
-                const deviceClass = upper === 'KIT' ? 'device-kit' : upper === 'MOBILE' ? 'device-mobile' : 'device-desktop';
-                deviceChip = span({ class: 'inhabitant-last-activity' },
-                  `${i18n.deviceLabel || 'Device'}: `,
-                  span({ class: deviceClass }, src));
-              }
-            }
-            const sensorItems = [];
-            if (prefs.karma) sensorItems.push(span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(karmaScore))));
-            if (activityChip) sensorItems.push(activityChip);
-            if (deviceChip) sensorItems.push(deviceChip);
-            if (prefs.larpSign && larpHouse && larpHouse.key) {
-              sensorItems.push(a({ href: `/larp/${larpHouse.key}`, class: 'larp-sign-block', title: larpHouse.name },
-                img({ src: larpHouse.image || '/assets/larp/images/default.jpg', alt: larpHouse.name, class: 'larp-sign-large' })
-              ));
-            }
-            if (prefs.gpg && (gpgFingerprint || isMe)) {
-              let gpgNode;
-              if (gpgFingerprint) {
-                const shortId = gpgFingerprint.slice(-8).toUpperCase();
-                gpgNode = a({ href: `/profile/${encodeURIComponent(id || viewedId)}/gpg.asc`, title: i18n.profileGpgDownload || 'Download' }, strong(shortId));
-              } else {
-                const notCfg = i18n.statsEcoWalletNotConfigured || 'Not configured!';
-                gpgNode = isMe ? a({ href: '/profile/edit' }, strong(notCfg)) : strong(notCfg);
-              }
-              sensorItems.push(span({ class: 'gpg-line' }, `${i18n.profileGpgChip || 'GPG'}: `, gpgNode));
-            }
-            if (prefs.wallet && (ecoAddress || isMe)) {
-              const walletText = ecoAddress || (i18n.statsEcoWalletNotConfigured || 'Not configured!');
-              const walletNode = isMe ? a({ href: '/wallet' }, strong(walletText)) : strong(walletText);
-              sensorItems.push(span({ class: 'ubi-line' }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, walletNode));
-            }
-            if (prefs.ubi) {
-              sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)));
-              sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed || 'Last claimed'}: `, lastClaimedDate ? new Date(lastClaimedDate).toLocaleDateString() : strong(i18n.bankUbiNeverClaimed || 'Never claimed')));
-              sensorItems.push(span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed || 'Total claimed'}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)));
-            }
-            if (prefs.ecoTax) sensorItems.push(span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))));
-            { const { renderFediverseReach } = require('./clearnet_view'); const fr = (isMe && !fediverseConfigured) ? null : renderFediverseReach(prefs, i18n); if (fr) sensorItems.push(fr); }
-            return sensorItems.length ? div({ class: 'profile-sensors-box' }, ...sensorItems) : null;
-          })(),
+          ...renderUserSensors({
+            isMe, fediverseConfigured, prefs, id: id || viewedId,
+            karmaScore, carbonGrams, deviceSource: safe.deviceSource, activityBucket: providedBucket,
+            gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
+            larpHouse, stats: safe.stats
+          }, { excludeContent: true }),
           (!isMe && (id || viewedId))
             ? form(
                 { method: 'GET', action: '/pm' },
@@ -479,28 +383,32 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
               )
             : null
         ),
-        detailNodes.length ? div({ class: 'inhabitant-details' }, ...detailNodes) : null
-      ),
-      feed.length
-        ? section({ class: 'profile-feed' },
-            h2(i18n.latestInteractions),
-            ...feed.map(m => {
-              const raw = (m.value?.content?.text || '').replace(/<br\s*\/?>/g, '');
-              const parts = stripAndCollectImgs(raw);
-              const tid = msgIdOf(m);
-              const visitBtn = tid
-                ? form({ method: 'GET', action: `/thread/${encodeURIComponent(tid)}#${encodeURIComponent(tid)}` },
-                    button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
-                  )
-                : null;
-              return div({ class: 'post' },
-                visitBtn,
-                parts.clean && parts.clean.trim() ? p(...renderUrl(parts.clean)) : null,
-                ...(parts.imgs || []).map(src => img({ src, class: 'post-image', alt: 'image' }))
-              );
-            })
-          )
-        : null
+        (() => {
+          const feedNodes = feed.length
+            ? [ section({ class: 'profile-feed' },
+                  h2(i18n.latestInteractions),
+                  ...feed.map(m => {
+                    const raw = (m.value?.content?.text || '').replace(/<br\s*\/?>/g, '');
+                    const parts = stripAndCollectImgs(raw);
+                    const tid = msgIdOf(m);
+                    const visitBtn = tid
+                      ? form({ method: 'GET', action: `/thread/${encodeURIComponent(tid)}#${encodeURIComponent(tid)}` },
+                          button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
+                        )
+                      : null;
+                    return div({ class: 'post' },
+                      visitBtn,
+                      parts.clean && parts.clean.trim() ? p(...renderUrl(parts.clean)) : null,
+                      ...(parts.imgs || []).map(src => img({ src, class: 'post-image', alt: 'image' }))
+                    );
+                  })
+                ) ]
+            : [];
+          const contentStatsNode = renderContentStats(safe.stats, i18n);
+          const rightNodes = [...detailNodes, contentStatsNode, ...feedNodes].filter(Boolean);
+          return rightNodes.length ? div({ class: 'inhabitant-details' }, ...rightNodes) : null;
+        })()
+      )
     )
   );
 };

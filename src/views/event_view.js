@@ -8,6 +8,16 @@ const opinionCategories = require("../backend/opinion_categories");
 
 const userId = config.keys.id;
 
+exports.renderEventInvitePage = (code) => {
+  const pageContent = div({ class: "invite-page" },
+    h2(i18n.tribeInviteCodeText, code),
+    form({ method: "GET", action: "/events" },
+      button({ type: "submit", class: "filter-btn" }, i18n.walletBack)
+    )
+  );
+  return template(i18n.invitesEventsTitle || "Events", section(pageContent));
+};
+
 const opt = (value, isSelected, text) =>
   option(Object.assign({ value }, isSelected ? { selected: "selected" } : {}), text);
 
@@ -45,7 +55,7 @@ const attendanceLabel = (isAttending) => (isAttending ? i18n.eventAttended : i18
 const renderEventOwnerActions = (e, returnTo) => {
   const st = normalizeEventStatus(e.status);
   if (e.organizer !== userId || st !== "OPEN") return [];
-  return [
+  const actions = [
     form(
       { method: "GET", action: `/events/edit/${encodeURIComponent(e.id)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -57,12 +67,22 @@ const renderEventOwnerActions = (e, returnTo) => {
       button({ type: "submit", class: "delete-btn" }, i18n.eventDeleteButton)
     )
   ];
+  if (normalizePrivacy(e.isPublic) === "private") {
+    actions.push(form(
+      { method: "POST", action: `/events/generate-invite/${encodeURIComponent(e.id)}` },
+      button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
+    ));
+  }
+  return actions;
 };
 
 const renderEventAttendAction = (e, isAttending, returnTo) => {
   const st = normalizeEventStatus(e.status);
   if (st !== "OPEN") return null;
   if (e.organizer === userId) return null;
+  if (normalizePrivacy(e.isPublic) === "private" && !isAttending) {
+    return a({ class: "tribe-action-btn", href: "/invites#invites-events" }, i18n.tribeEnterInvite);
+  }
   return form(
     { method: "POST", action: `/events/attend/${encodeURIComponent(e.id)}` },
     input({ type: "hidden", name: "returnTo", value: returnTo }),

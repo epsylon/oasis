@@ -62,7 +62,7 @@ const renderOpenClosedChip = (status, i18nObj) => {
 const renderVisibilityChip = (visibility, i18nObj) => {
   const v = String(visibility || "").toUpperCase();
   if (v === "HIDDEN") {
-    return renderStateChip("closed", "🚫", (i18nObj && i18nObj.visibilityHidden) || "HIDDEN");
+    return renderStateChip("hidden", "🙈", (i18nObj && i18nObj.visibilityHidden) || "HIDDEN");
   }
   return renderStateChip("mutuals", "👁", (i18nObj && i18nObj.visibilityPublic) || "PUBLIC");
 };
@@ -2052,8 +2052,10 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
   };
   const fediverseHandleValue = typeof visibilityPrefs.fediverseHandle === 'string' ? visibilityPrefs.fediverseHandle : '';
   prefs.clearnet = prefs.clearnetShops || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks;
-  const togglePill = (key, labelText) => label({ class: "pref-pill", for: `vis_${key}` },
-    input({ type: "checkbox", name: `vis_${key}`, id: `vis_${key}`, value: "1", class: "pref-pill-input", checked: prefs[key] ? "checked" : undefined }),
+  const togglePill = (key, labelText, forced = false) => label(
+    { class: forced ? "pref-pill pref-pill-forced" : "pref-pill", for: forced ? undefined : `vis_${key}`, title: forced ? (i18n.profileDeviceLockedHint || 'On mobile devices this sensor is mandatory and cannot be disabled.') : undefined },
+    forced ? input({ type: "hidden", name: `vis_${key}`, value: "1" }) : null,
+    input({ type: "checkbox", name: forced ? undefined : `vis_${key}`, id: forced ? undefined : `vis_${key}`, value: "1", class: "pref-pill-input", checked: (forced || prefs[key]) ? "checked" : undefined, disabled: forced ? "disabled" : undefined }),
     span({ class: "pref-pill-label" }, labelText)
   );
   return template(
@@ -2132,7 +2134,6 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             togglePill('karma',    i18n.profileVisibilityKarma    || 'KARMA Scoring'),
             togglePill('activity', i18n.profileVisibilityActivity || 'Activity Level'),
             togglePill('fediverse', i18n.profileVisibilityFediverse || 'Fediverse'),
-            togglePill('device',   i18n.profileVisibilityDevice   || 'Device'),
             togglePill('larpSign', i18n.profileVisibilityLarpSign || 'L.A.R.P. Sign'),
             togglePill('gpg',      i18n.profileVisibilityGpg      || 'GPG Key'),
             togglePill('wallet',   i18n.profileVisibilityWallet   || 'ECOIN Wallet'),
@@ -2323,6 +2324,79 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   });
 };
 
+const renderUserSensors = (u, opts = {}) => {
+  const { renderReachChip, renderClearnetUrlBlock, renderFediverseReach, renderContentStats } = require('./clearnet_view');
+  const prefs = u.prefs || {};
+  const isMe = !!u.isMe;
+  const show = (k) => prefs[k];
+  const fmtCarbon = (g) => {
+    const n = Number(g) || 0;
+    if (!n) return '0 µg CO₂';
+    if (n >= 1) return `${n.toFixed(2)} g CO₂`;
+    const mg = n * 1000;
+    if (mg >= 1) return `${mg.toFixed(2)} mg CO₂`;
+    return `${(mg * 1000).toFixed(2)} µg CO₂`;
+  };
+  const fediverseNode = (isMe && !u.fediverseConfigured) ? null : renderFediverseReach(prefs, i18n);
+  const dot = u.activityBucket === 'green' ? 'green' : u.activityBucket === 'orange' ? 'orange' : u.activityBucket === 'red' ? 'red' : null;
+  const activityChip = (show('activity') && dot)
+    ? span({ class: 'inhabitant-last-activity' }, `${i18n.inhabitantActivityLevel}: `, span({ class: `activity-dot ${dot}` }, '●'))
+    : null;
+  const deviceSrc = isMe
+    ? (getConfig().themes.current === 'OasisKIT' ? 'KIT' : (getConfig().themes.current === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP')
+    : (u.deviceSource || null);
+  const deviceChip = deviceSrc
+    ? (() => {
+        const up = String(deviceSrc).toUpperCase();
+        const cls = up === 'KIT' ? 'device-kit' : up === 'MOBILE' ? 'device-mobile' : 'device-desktop';
+        return span({ class: 'inhabitant-last-activity' }, `${i18n.deviceLabel || 'Device'}: `, span({ class: cls }, deviceSrc));
+      })()
+    : null;
+  const items = [];
+  if (show('karma')) items.push(span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(u.karmaScore !== undefined ? u.karmaScore : 0))));
+  if (show('ecoTax')) items.push(span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(fmtCarbon(u.carbonGrams))));
+  if (activityChip) items.push(activityChip);
+  if (deviceChip) items.push(deviceChip);
+  if (show('gpg') && (u.gpgFingerprint || isMe)) {
+    let gpgNode;
+    if (u.gpgFingerprint) {
+      const sid = String(u.gpgFingerprint).slice(-8).toUpperCase();
+      gpgNode = a({ href: `/profile/${encodeURIComponent(u.id)}/gpg.asc`, title: i18n.profileGpgDownload || 'Download' }, strong(sid));
+    } else {
+      const nc = i18n.statsEcoWalletNotConfigured || 'Not configured!';
+      gpgNode = isMe ? a({ href: '/profile/edit' }, strong(nc)) : strong(nc);
+    }
+    items.push(span({ class: 'gpg-line' }, `${i18n.profileGpgChip || 'GPG'}: `, gpgNode));
+  }
+  if (show('wallet') && (u.ecoAddress || isMe)) {
+    const wt = u.ecoAddress || (i18n.statsEcoWalletNotConfigured || 'Not configured!');
+    const wn = isMe ? a({ href: '/wallet' }, strong(wt)) : strong(wt);
+    items.push(span({ class: 'ubi-line' }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, wn));
+  }
+  if (show('ubi')) {
+    items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(u.estimatedUBI || 0).toFixed(6)} ECO`)));
+    items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed || 'Last claimed'}: `, u.lastClaimedDate ? a({ href: '/transfers?filter=ubi', class: 'user-link' }, new Date(u.lastClaimedDate).toLocaleDateString()) : strong(i18n.bankUbiNeverClaimed || 'Never claimed')));
+    items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed || 'Total claimed'}: `, strong(`${Number(u.totalClaimed || 0).toFixed(6)} ECO`)));
+  }
+  const sensorsBox = items.length ? div({ class: 'profile-sensors-box' }, ...items) : null;
+  const larpNode = (show('larpSign') && u.larpHouse && u.larpHouse.key)
+    ? a({ href: `/larp/${u.larpHouse.key}`, class: 'larp-sign-block', title: u.larpHouse.name }, img({ src: u.larpHouse.image || '/assets/larp/images/default.jpg', alt: u.larpHouse.name, class: 'larp-sign-large' }))
+    : null;
+  const reachNode = prefs.clearnet
+    ? (() => {
+        const path = `/c/inhabitant/${encodeURIComponent(u.id)}`;
+        return div({ class: 'profile-reach' },
+          renderReachChip(true, i18n, path),
+          renderClearnetUrlBlock({ path, i18nObj: i18n }),
+          isMe ? form({ method: 'POST', action: '/profile/clearnet-toggle', class: 'profile-reach-toggle' }, button({ type: 'submit', class: 'btn' }, i18n.profileSwitchToOasis || 'Return to Oasis')) : null
+        );
+      })()
+    : null;
+  const contentNode = opts.excludeContent ? null : renderContentStats(u.stats, i18n);
+  return [fediverseNode, opts.relationshipNode || null, sensorsBox, larpNode, reachNode, contentNode].filter(Boolean);
+};
+exports.renderUserSensors = renderUserSensors;
+
 exports.authorView = async ({
   avatarUrl,
   description,
@@ -2341,6 +2415,8 @@ exports.authorView = async ({
   larpHouse = null,
   lastActivityBucket,
   visibilityPrefs = null,
+  deviceSource = null,
+  stats = {},
   baseUrl = '',
   userActions = [],
   allActions = [],
@@ -2371,8 +2447,6 @@ exports.authorView = async ({
   const showField = (key) => prefs[key];
   const qrSrc = feedId ? `/qr/${encodeURIComponent(feedId)}` : null;
   const linkUrl = `/author/${encodeURIComponent(feedId)}`;
-  const { renderReachChip, renderClearnetUrlBlock, renderFediverseReach } = require('./clearnet_view');
-  const reachChip = renderReachChip(!!prefs.clearnet, i18n, prefs.clearnet ? `/c/inhabitant/${encodeURIComponent(feedId)}` : null);
 
   const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const markdownMention = `[@${escHtml(name)}](<strong>${escHtml(feedId)}</strong>)`;
@@ -2403,83 +2477,6 @@ exports.authorView = async ({
     return messagesArr.join(". ") + ".";
   })();
 
-  const bucket = lastActivityBucket || 'red';
-
-  const dotClass = bucket === 'green' ? 'green' : bucket === 'orange' ? 'orange' : bucket === 'red' ? 'red' : null;
-  const activityChip = (dotClass && showField('activity'))
-    ? span({ class: 'inhabitant-last-activity' },
-        `${i18n.inhabitantActivityLevel}: `,
-        span({ class: `activity-dot ${dotClass}` }, '●'))
-    : null;
-  const deviceSrc = (() => {
-    if (!isOwnProfile) return null;
-    const t = getConfig().themes.current;
-    return t === 'OasisKIT' ? 'KIT' : (t === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP';
-  })();
-  const deviceChip = (deviceSrc && showField('device'))
-    ? (() => {
-        const upper = String(deviceSrc).toUpperCase();
-        const deviceClass = upper === 'KIT' ? 'device-kit' : upper === 'MOBILE' ? 'device-mobile' : 'device-desktop';
-        return span({ class: 'inhabitant-last-activity' },
-          `${i18n.deviceLabel || 'Device'}: `,
-          span({ class: deviceClass }, deviceSrc));
-      })()
-    : null;
-  const activityGroup = (activityChip || deviceChip)
-    ? div({ class: 'inhabitant-activity-group' }, activityChip, deviceChip)
-    : null;
-
-  const formatCarbonValue = (g) => {
-    const n = Number(g) || 0;
-    if (!n) return '0 µg CO₂';
-    if (n >= 1) return `${n.toFixed(2)} g CO₂`;
-    const mg = n * 1000;
-    if (mg >= 1) return `${mg.toFixed(2)} mg CO₂`;
-    return `${(mg * 1000).toFixed(2)} µg CO₂`;
-  };
-  const sensorsItems = [];
-  if (showField('karma')) {
-    sensorsItems.push(span({ class: "karma-line" }, `${i18n.bankingUserEngagementScore}: `, strong(karmaScore !== undefined ? karmaScore : 0)));
-  }
-  if (activityChip) sensorsItems.push(activityChip);
-  if (deviceChip) sensorsItems.push(deviceChip);
-  const larpSignBlockInline = (showField('larpSign') && larpHouse && larpHouse.key)
-    ? a({ href: `/larp/${larpHouse.key}`, class: 'larp-sign-block', title: larpHouse.name },
-        img({ src: larpHouse.image || '/assets/larp/images/default.jpg', alt: larpHouse.name, class: 'larp-sign-large' })
-      )
-    : null;
-  if (larpSignBlockInline) sensorsItems.push(larpSignBlockInline);
-  if (showField('gpg') && (gpgFingerprint || isOwnProfile)) {
-    let gpgNode;
-    if (gpgFingerprint) {
-      const shortId = String(gpgFingerprint).slice(-8).toUpperCase();
-      gpgNode = a({ href: `/profile/${encodeURIComponent(feedId)}/gpg.asc`, title: i18n.profileGpgDownload || 'Download' }, strong(shortId));
-    } else {
-      const notCfg = i18n.statsEcoWalletNotConfigured || 'Not configured!';
-      gpgNode = isOwnProfile ? a({ href: '/profile/edit' }, strong(notCfg)) : strong(notCfg);
-    }
-    sensorsItems.push(span({ class: "gpg-line" }, `${i18n.profileGpgChip || 'GPG'}: `, gpgNode));
-  }
-  if (showField('wallet') && (ecoAddress || isOwnProfile)) {
-    const walletText = ecoAddress || i18n.statsEcoWalletNotConfigured || 'Not configured!';
-    const walletNode = isOwnProfile
-      ? a({ href: '/wallet' }, strong(walletText))
-      : strong(walletText);
-    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, walletNode));
-  }
-  if (showField('ubi')) {
-    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.bankUbiThisMonth}: `, strong(`${Number(estimatedUBI || 0).toFixed(6)} ECO`)));
-    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.bankUbiLastClaimed}: `,
-      lastClaimedDate
-        ? a({ href: "/transfers?filter=ubi", class: "user-link" }, new Date(lastClaimedDate).toLocaleDateString())
-        : strong(i18n.bankUbiNeverClaimed)));
-    sensorsItems.push(span({ class: "ubi-line" }, `${i18n.bankUbiTotalClaimed}: `, strong(`${Number(totalClaimed || 0).toFixed(6)} ECO`)));
-  }
-  if (showField('ecoTax')) {
-    sensorsItems.push(span({ class: "karma-line eco-tax-line" }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(formatCarbonValue(carbonGrams))));
-  }
-  const metricsBlock = sensorsItems.length ? div({ class: "profile-sensors-box" }, ...sensorsItems) : null;
-
   const relationshipBlock = relationship.me
     ? span({ class: "status you" }, i18n.relationshipYou)
     : div({ class: "relationship-status" },
@@ -2500,6 +2497,13 @@ exports.authorView = async ({
           : null
       );
 
+  const userSensors = renderUserSensors({
+    isMe: isOwnProfile, fediverseConfigured, prefs, id: feedId,
+    karmaScore, carbonGrams, deviceSource, activityBucket: lastActivityBucket,
+    gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
+    larpHouse, stats
+  }, { relationshipNode: div({ class: "profile-side-relationship" }, relationshipBlock) });
+
   const sideColumn = div({ class: "tribe-side profile-side" },
     img({ class: "inhabitant-photo-details", src: avatarUrl, alt: name }),
     h2({ class: "profile-side-name" }, name),
@@ -2510,20 +2514,7 @@ exports.authorView = async ({
     description !== ""
       ? div({ class: "profile-side-description", innerHTML: sanitizeHtml(markdown(description)) })
       : null,
-    div({ class: "profile-side-relationship" }, relationshipBlock),
-    metricsBlock,
-    div({ class: "profile-reach" },
-      reachChip,
-      isOwnProfile && prefs.clearnet
-        ? renderClearnetUrlBlock({ baseUrl, path: `/c/inhabitant/${encodeURIComponent(feedId)}`, i18nObj: i18n })
-        : null,
-      isOwnProfile && prefs.clearnet
-        ? form({ method: 'POST', action: '/profile/clearnet-toggle', class: 'profile-reach-toggle' },
-            button({ type: 'submit', class: 'btn' }, i18n.profileSwitchToOasis || 'Return to Oasis')
-          )
-        : null
-    ),
-    (isOwnProfile && !fediverseConfigured) ? null : renderFediverseReach(prefs, i18n),
+    ...userSensors,
     div({ class: "profile-side-actions" },
       isOwnProfile ? a({ href: `/profile/edit`, class: "btn" }, i18n.editProfile) : null,
       a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "btn" }, i18n.viewLikes),

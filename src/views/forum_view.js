@@ -11,6 +11,17 @@ const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const userId = config.keys.id;
+
+exports.renderForumInvitePage = (code) => {
+  const pageContent = div({ class: 'invite-page' },
+    h2(i18n.tribeInviteCodeText, code),
+    form({ method: 'GET', action: '/forum' },
+      button({ type: 'submit', class: 'filter-btn' }, i18n.walletBack)
+    )
+  );
+  return template(i18n.invitesForumsTitle || 'Forums', section(pageContent));
+};
+
 const BASE_FILTERS = ['hot','all','mine','recent','top'];
 const CAT_BLOCK1 = ['GENERAL','OASIS','L.A.R.P.','POLITICS','TECH'];
 const CAT_BLOCK2 = ['SCIENCE','MUSIC','ART','GAMING','BOOKS','FILMS'];
@@ -79,6 +90,11 @@ const renderForumForm = () =>
       label(i18n.forumCategoryLabel), br(),
       select({ name: 'category', required: true },
         ALL_CATS.map(cat => option({ value: cat }, catLabel(cat)))
+      ), br(), br(),
+      label(i18n.eventPrivacyLabel), br(),
+      select({ name: 'isPublic', id: 'isPublic' },
+        option({ value: 'public', selected: true }, i18n.eventPublic),
+        option({ value: 'private' }, i18n.eventPrivate)
       ), br(), br(),
       label(i18n.forumTitleLabel), br(),
       input({
@@ -316,12 +332,18 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
             }, forum.title),
             forum.isPrivate ? renderPrivacyChip(true, i18n) : null,
             forum.isPrivate ? renderForumEncryptedChip(i18n) : null,
-            renderLifespanChip(forum.lifetime, i18n)
-          ),
-          div({ class: 'forum-footer' },
-            span({ class: 'date-link' },
-              `${moment(forum.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
-            userLink(forum.author)
+            renderLifespanChip(forum.lifetime, i18n),
+            (forum.isPrivate && forum.author === userId)
+              ? form({ method: 'POST', action: `/forum/generate-invite/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
+                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite))
+              : null,
+            (forum.isPrivate && forum.author !== userId)
+              ? a({ class: 'tribe-action-btn', href: '/invites#invites-forums' }, i18n.tribeEnterInvite)
+              : null,
+            (forum.author === userId)
+              ? form({ method: 'POST', action: `/forum/delete/${encodeURIComponent(forum.key)}`, class: 'forum-delete-form' },
+                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.forumDeleteButton))
+              : null
           ),
 	  div({
 	    class: 'forum-body',
@@ -339,7 +361,15 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
             span({ class: 'forum-messages' },
               `${i18n.forumMessages.toUpperCase()}: ${messagesData.total}`)
           ),
-          div({ class: 'spread-row' }, renderSpreadButton(forum.key))
+          (() => {
+            const btn = renderSpreadButton(forum.key);
+            return btn ? div({ class: 'card-spread-left' }, btn) : null;
+          })(),
+          div({ class: 'forum-footer' },
+            span({ class: 'date-link' },
+              `${moment(forum.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
+            userLink(forum.author)
+          )
         )
       ),
       div({

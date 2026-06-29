@@ -288,7 +288,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
         : null,
       isAuthor && calendar.status !== "OPEN"
         ? form({ method: "POST", action: `/calendars/generate-invite/${encodeURIComponent(calendar.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.calendarGenerateInvite || "Generate invite")
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
           )
         : null,
       isAuthor
@@ -305,14 +305,11 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           )
         : null,
       !isAuthor && !isParticipant && calendar.status !== "OPEN"
-        ? form({ method: "POST", action: "/calendars/join-code" },
-            input({ type: "text", name: "code", placeholder: i18n.calendarInviteCodePlaceholder || "Enter invite code..." }),
-            button({ type: "submit", class: "filter-btn" }, i18n.calendarValidateInvite || "Validate code")
-          )
+        ? a({ class: "tribe-action-btn", href: "/invites#invites-calendars" }, i18n.tribeEnterInvite)
         : null,
       !isAuthor && isParticipant
         ? form({ method: "POST", action: `/calendars/leave/${encodeURIComponent(calendar.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.calendarLeave || "Leave Calendar")
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeLeaveButton)
           )
         : null
     ),

@@ -158,6 +158,14 @@ exports.favoritesView = async (items, filter = "all", counts = {}) => {
           button(
             { type: "submit", name: "filter", value: "torrents", class: filter === "torrents" ? "filter-btn active" : "filter-btn" },
             `${i18n.favoritesFilterTorrents || "TORRENTS"} (${c.torrents || 0})`
+          ),
+          button(
+            { type: "submit", name: "filter", value: "market", class: filter === "market" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterMarket || "MARKET"} (${c.market || 0})`
+          ),
+          button(
+            { type: "submit", name: "filter", value: "shopProducts", class: filter === "shopProducts" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterShopProducts || "SHOP ITEMS"} (${c.shopProducts || 0})`
           )
         )
       ),

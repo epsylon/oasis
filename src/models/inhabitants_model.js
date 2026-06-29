@@ -400,6 +400,45 @@ module.exports = ({ cooler }) => {
         .slice(0, 10);
     },
 
+    async getInhabitantStats(targetId, viewerId) {
+      const ssbClient = await openSsb();
+      const target = targetId || ssbClient.id;
+      const viewer = viewerId || ssbClient.id;
+      const isOwner = viewer === target;
+      const arr = (v) => Array.isArray(v) ? v : [];
+      const up = (v) => String(v || '').toUpperCase();
+      const COUNTED = new Set(['post','event','task','forum','tribe','market','job','project','shop','image','video','audio','document','bookmark','transfer','map']);
+      const accessible = (type, c) => {
+        if (c.encryptedPayload) return false;
+        switch (type) {
+          case 'task':   return up(c.isPublic) !== 'PRIVATE' || isOwner || arr(c.assignees).includes(viewer);
+          case 'event':  return String(c.isPublic || '').toLowerCase() !== 'private' || isOwner || arr(c.attendees).includes(viewer);
+          case 'forum':  return c.isPrivate !== true || isOwner;
+          case 'job':    return up(c.visibility) !== 'HIDDEN' || isOwner || arr(c.subscribers).includes(viewer);
+          case 'market': return up(c.visibility) !== 'HIDDEN' || isOwner;
+          case 'shop':   return up(c.visibility) !== 'CLOSED' || isOwner;
+          case 'tribe':  { const st = up(c.status); return !(st === 'PRIVATE' || st === 'INVITE-ONLY') || isOwner || arr(c.members).includes(viewer); }
+          default: return true;
+        }
+      };
+      const counts = {};
+      await new Promise((resolve) => {
+        pull(
+          ssbClient.createUserStream({ id: target }),
+          pull.drain((m) => {
+            const c = m && m.value && m.value.content;
+            if (!c || typeof c !== 'object') return;
+            const type = c.type;
+            if (!type || !COUNTED.has(type)) return;
+            if (c.replaces) return;
+            if (!accessible(type, c)) return;
+            counts[type] = (counts[type] || 0) + 1;
+          }, () => resolve())
+        );
+      });
+      return counts;
+    },
+
     async getCVByUserId(id) {
       const ssbClient = await openSsb();
       const targetId = id || ssbClient.id;

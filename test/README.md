@@ -211,6 +211,28 @@ Every `bash test/run.sh` generates `test/results/unit_test_<YYYY-MM-DD_HH-MM-SS>
 - Tribe cryptography (wrap/unwrap, AAD, invites, sub-tribes)
 - Sub-tribe content publishing + parent/sub key isolation
 - Banking address management + epoch / claim history (no RPC parts)
+- i18n translation-key consistency across all languages (`mods/i18n`)
+
+## i18n consistency (`mods/i18n`)
+
+`mods/i18n/i18n.test.js` validates the translation files in
+`src/client/assets/translations/` (`oasis_<lang>.js`). The language list is
+discovered dynamically from those files, so adding or removing a language needs
+no change to the test. English is the reference; the goal is that **every file
+has the exact same set of keys** — only the values (the translations) differ.
+It checks:
+
+1. **Each language contains every English key** — fails listing the missing keys
+   per language (e.g. `fr is missing 3 key(s): …`).
+2. **English has no gaps** — English is not missing any key that exists in another
+   language, so every file shares an identical key set.
+3. **No undefined references** — every `i18n.<key>` used in `src/views/**` is
+   defined in English. This catches chips/labels that silently fall back to
+   hardcoded English text (e.g. a `PRIVATE` chip whose `privacyPrivate` key was
+   never added to the translations).
+
+Run it on its own with `node run.js mods/i18n`. On failure it prints the exact
+keys involved, so adding a label means: add its key to **every** language file.
 
 ## Out of scope
 

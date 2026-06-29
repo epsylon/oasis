@@ -260,7 +260,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
   }
 
   const isForm = normalizedFilter === "create" || normalizedFilter === "edit"
-  const transferToEdit = normalizedFilter === "edit" ? (list.find(t => t.id === transferId) || {}) : {}
+  const transferToEdit = normalizedFilter === "edit" ? (list.find(t => t.id === transferId) || {}) : (params.prefill || {})
   const returnToForForm = buildReturnTo("all", {})
   const validCategories = ["ECONOMIC", "TIME", "TRUST"]
   const paramCategoryRaw = safeText(params.category || "").toUpperCase()

@@ -660,9 +660,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
   const visibilityRow = isAuthor
     ? div({ class: "tribe-side-actions" },
         span({ class: "card-label" }, `${i18n.visibilityLabel || 'Visibility'}: `),
-        span({ class: visibility === 'PUBLIC' ? 'visibility-public' : 'visibility-hidden' },
-          visibility === 'PUBLIC' ? (i18n.visibilityPublic || 'Public') : (i18n.visibilityHidden || 'Hidden')
-        ),
+        renderVisibilityChip(visibility, i18n),
         form({ method: "POST", action: `/jobs/visibility/${encodeURIComponent(job.id)}`, class: "inline-form" },
           input({ type: "hidden", name: "visibility", value: nextVisibility }),
           button({ type: "submit", class: "filter-btn" },
