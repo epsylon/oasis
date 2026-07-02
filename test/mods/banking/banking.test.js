@@ -4,28 +4,28 @@ const { makeNetwork, makePeer } = require('../../helpers/setup');
 describe('banking: address management (no RPC)', (t) => {
   t('A adds own ECO address', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('banking').addAddress({ userId: A.keypair.id, address: 'ECoinAddrAAA1111111111111111' });
+    await A.use('banking').addAddress({ userId: A.keypair.id, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A' });
     const addr = await A.use('banking').getUserAddress(A.keypair.id);
-    eq(addr, 'ECoinAddrAAA1111111111111111');
+    eq(addr, 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A');
   });
 
   t('A sets address (publishes if self)', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('banking').setUserAddress(A.keypair.id, 'ECoinAddrXYZ222222222222222', true);
+    await A.use('banking').setUserAddress(A.keypair.id, 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42B', true);
     const addr = await A.use('banking').getUserAddress(A.keypair.id);
-    eq(addr, 'ECoinAddrXYZ222222222222222');
+    eq(addr, 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42B');
   });
 
   t('listAddressesMerged returns combined view', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('banking').addAddress({ userId: A.keypair.id, address: 'ECoinAddrZ4444444444444444' });
+    await A.use('banking').addAddress({ userId: A.keypair.id, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42C' });
     const merged = await A.use('banking').listAddressesMerged();
     ok(Array.isArray(merged));
   });
 
   t('A removes own address', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('banking').addAddress({ userId: A.keypair.id, address: 'addr1' });
+    await A.use('banking').addAddress({ userId: A.keypair.id, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42D' });
     await A.use('banking').removeAddress({ userId: A.keypair.id });
     const addr = await A.use('banking').getUserAddress(A.keypair.id);
     eq(addr, null);

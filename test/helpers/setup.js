@@ -4,6 +4,9 @@ const path = require('path');
 const { makeNetwork, makeNode, makeCooler, generateKeypair } = require('./mock-ssb');
 
 const tmpRoot = path.join(os.tmpdir(), 'oasis-tests-' + process.pid);
+const bankingStoreDir = path.join(tmpRoot, 'banking-store');
+fs.mkdirSync(bankingStoreDir, { recursive: true });
+process.env.OASIS_BANKING_DIR = bankingStoreDir;
 let counter = 0;
 const fresh = () => {
   counter++;

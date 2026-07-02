@@ -17,11 +17,10 @@ const {
 } = require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
-const opinionCategories = require("../backend/opinion_categories");
 
 const userId = config.keys.id;
 
@@ -155,7 +154,6 @@ const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => 
             const ts = c?.value?.timestamp || c?.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
             const relDate = ts ? moment(ts).fromNow() : "";
-            const userName = author && author.includes("@") ? author.split("@")[1] : author;
             const content = c?.value?.content || {};
             const rootId = content.fork || content.root || null;
             const text = content.text || "";
@@ -165,7 +163,7 @@ const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => 
               span(
                 { class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 absDate ? span(" | ") : "",
                 absDate ? span({ class: "votations-comment-date" }, absDate) : "",
                 relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
@@ -416,26 +414,12 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       : null,
     tagsNode,
     div({ class: "card-spread-centered" }, renderSpreadButton(videoObj.key, params.spreads)),
-    renderMapLocationVisitLabel(videoObj.mapUrl)
+    renderMapLocationVisitLabel(videoObj.mapUrl),
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const videoMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     renderVideoPlayer(videoObj),
-    div({ class: "voting-buttons" },
-      opinionCategories.map((category) =>
-        form(
-          { method: "POST", action: `/videos/opinions/${encodeURIComponent(videoObj.key)}/${category}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button(
-            { class: "vote-btn" },
-            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
-              videoObj.opinions?.[category] || 0
-            }]`
-          )
-        )
-      )
-    ),
     (() => {
       const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
       const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
@@ -453,6 +437,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
           : null
       );
     })(),
+    renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants),
     renderVideoCommentsSection(videoObj.key, comments, returnTo)
   );
 

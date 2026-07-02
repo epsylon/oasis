@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { dedupeBy, norm } = require('./dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, pmModel }) => {
@@ -225,7 +226,7 @@ if (c.type === 'task') {
             tombstoned.forEach(id => tasks.delete(id));
             replaced.forEach((_, oldId) => tasks.delete(oldId));
 
-            resolve([...tasks.values()]);
+            resolve(dedupeBy([...tasks.values()], t => t.title ? [norm(t.author), norm(t.title), norm(t.startTime)].join('|') : null));
           })
         );
       });

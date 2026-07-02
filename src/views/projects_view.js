@@ -1,10 +1,9 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
-const opinionCategories = require("../backend/opinion_categories")
 
 const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null
@@ -622,11 +621,11 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     div({ class: "job-price-line card-salary" }, `${pr.goal || 0} ECO`),
     div({ class: "job-price-line card-salary" }, `${i18n.projectFollowers}: ${followersCount(pr)}`),
     renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
-    goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null
+    goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null,
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   )
 
   const projectMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     !isAuthor && isFollower ? p({ class: "hint" }, i18n.projectYouFollowHint) : null,
     safeText(pr.description)
       ? div({ class: "job-section" },
@@ -644,18 +643,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
       span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
       userLink(pr.author)
     ),
-    div(
-      { class: "voting-buttons" },
-      opinionCategories.map((category) =>
-        form(
-          { method: "POST", action: `/projects/opinions/${encodeURIComponent(pr.id || pr.key)}/${category}` },
-          button(
-            { class: "vote-btn", type: "submit" },
-            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${(pr.opinions && pr.opinions[category]) ? pr.opinions[category] : 0}]`
-          )
-        )
-      )
-    ),
+    renderOpinionsVoting('/projects/opinions', pr.id || pr.key, pr.opinions, null, pr.opinions_inhabitants),
     div(
       { id: "comments", class: "vote-comments-section" },
       div({ class: "comment-form-wrapper" },

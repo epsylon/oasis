@@ -272,6 +272,52 @@ describe('larp: tribe integration', (t) => {
     eq(first.id, second.id);
   });
 
+  t('a house tribe is never duplicated across peers', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('larp').publishJoin('arrakis');
+    const tA = await A.use('larp').ensureHouseTribe('arrakis');
+    ok(tA);
+    const houseTag = (tA.tags || []).find(x => String(x).startsWith('larp-'));
+    ok(houseTag, 'tribe carries the static larp house tag');
+    B.setActor();
+    await B.use('larp').publishJoin('arrakis');
+    await B.use('larp').ensureHouseTribe('arrakis');
+    const bView = (await B.use('tribes').listAll()).filter(t => (t.tags || []).includes(houseTag));
+    eq(bView.length, 0, 'B did not create a duplicate house tribe');
+    A.setActor();
+    const aView = (await A.use('tribes').listAll()).filter(t => (t.tags || []).includes(houseTag));
+    eq(aView.length, 1, 'exactly one canonical tribe remains for the house');
+  });
+
+  t('ensureHouseTribe collapses pre-existing duplicate ACADEMIA tribes to one', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const tag = 'larp-ACADEMIA';
+    await A.use('tribes').createTribe('ACADEMIA', '', null, '', [tag], false, 'open', null, 'PUBLIC', '');
+    await A.use('tribes').createTribe('ACADEMIA', '', null, '', [tag], false, 'open', null, 'PUBLIC', '');
+    let all = (await A.use('tribes').listAll()).filter(t => (t.tags || []).includes(tag));
+    ok(all.length >= 2, 'two ACADEMIA tribes exist before convergence');
+    await A.use('larp').ensureHouseTribe('academia');
+    all = (await A.use('tribes').listAll()).filter(t => (t.tags || []).includes(tag));
+    eq(all.length, 1, 'converged to a single ACADEMIA tribe (oldest prevails)');
+  });
+
+  t('academia: entering never re-creates a duplicate when a canonical one exists', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net);
+    const tag = 'larp-ACADEMIA';
+    A.setActor();
+    await A.use('tribes').createTribe('ACADEMIA', '', null, '', [tag], false, 'open', null, 'PUBLIC', '');
+    B.setActor();
+    await B.use('tribes').createTribe('ACADEMIA', '', null, '', [tag], false, 'open', null, 'PUBLIC', '');
+    ok((await B.use('tribes').listAll()).filter(t => (t.tags || []).includes(tag)).length >= 2);
+    await B.use('larp').ensureHouseTribe('academia');
+    const bOwn = (await B.use('tribes').listAll()).filter(t => (t.tags || []).includes(tag) && t.author === B.keypair.id);
+    eq(bOwn.length, 0, 'B removed its own duplicate and did not create another');
+  });
+
   t('academia tribe is public and not E2E-encrypted', async () => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();

@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { dedupeBy, norm } = require('./dedupe');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -241,7 +242,7 @@ module.exports = ({ cooler }) => {
         items.push(buildImage(node, rootId, viewerId));
       }
 
-      let list = items;
+      let list = dedupeBy(items, x => x.url ? [norm(x.author), norm(x.url)].join('|') : null);
       const now = Date.now();
 
       if (filter === "mine") list = list.filter((im) => String(im.author) === String(viewerId));

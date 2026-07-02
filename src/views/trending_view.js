@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span} = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderSpreadButton} = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
@@ -289,16 +289,25 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
     section(
       header,
       div(
-        { class: 'mode-buttons', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;margin-bottom:24px;' },
-        generateFilterButtons(baseFilters, filter, '/trending'),
-        ...contentFilters.map(row =>
-          div({ style: 'display:flex;flex-direction:column;gap:8px;' },
-            row.map(mode =>
-              form({ method: 'GET', action: '/trending' },
-                input({ type: 'hidden', name: 'filter', value: mode }),
-                button(
-                  { type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' },
-                  i18n[mode + 'Button'] || mode
+        { class: 'mode-buttons', style: 'margin-bottom:24px;' },
+        div({ style: 'display:flex;gap:16px;flex-wrap:wrap;' },
+          generateFilterButtons(baseFilters, filter, '/trending')
+        ),
+        details(
+          Object.assign({ class: 'opinions-collapse', style: 'margin-top:12px;' }, contentFilters.flat().includes(filter) ? { open: true } : {}),
+          summary({ class: 'filter-btn opinions-summary', style: 'cursor:pointer;display:inline-block;' },
+            `${i18n.opinionsTitle || 'Opinions'} (${contentFilters.flat().length})`),
+          div({ style: 'display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;' },
+            ...contentFilters.map(row =>
+              div({ style: 'display:flex;flex-direction:column;gap:8px;' },
+                row.map(mode =>
+                  form({ method: 'GET', action: '/trending' },
+                    input({ type: 'hidden', name: 'filter', value: mode }),
+                    button(
+                      { type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' },
+                      i18n[mode + 'Button'] || mode
+                    )
+                  )
                 )
               )
             )

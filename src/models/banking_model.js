@@ -19,7 +19,7 @@ const DEFAULT_RULES = {
   graceDays: 30
 };
 
-const STORAGE_DIR = path.join(__dirname, "..", "configs");
+const STORAGE_DIR = process.env.OASIS_BANKING_DIR || path.join(__dirname, "..", "configs");
 const EPOCHS_PATH = path.join(STORAGE_DIR, "banking-epochs.json");
 const TRANSFERS_PATH = path.join(STORAGE_DIR, "banking-allocations.json");
 const ADDR_PATH = path.join(STORAGE_DIR, "wallet-addresses.json");
@@ -198,7 +198,7 @@ function getLogLimit() {
 }
 
 function isValidEcoinAddress(addr) {
-  return typeof addr === "string" && /^[A-Za-z0-9]{20,64}$/.test(addr);
+  return typeof addr === "string" && /^E[1-9A-HJ-NP-Za-km-z]{32,34}$/.test(addr);
 }
 
 function getWalletCfg(kind) {
@@ -321,6 +321,7 @@ module.exports = ({ services } = {}) => {
   }
 
   async function setUserAddress(userId, address, publishIfSelf) {
+    if (!userId || !isValidEcoinAddress(address)) return false;
     const m = readAddrMap();
     m[userId] = address;
     writeAddrMap(m);
@@ -341,16 +342,19 @@ module.exports = ({ services } = {}) => {
   async function removeAddress({ userId }) {
     if (!userId) return { status: "invalid" };
     const m = readAddrMap();
-    if (m[userId]) {
+    const hadLocal = !!m[userId] && m[userId] !== "__removed__";
+    const ssbAll = await scanAllWalletsSSB();
+    if (ssbAll[userId]) {
+      m[userId] = "__removed__";
+      writeAddrMap(m);
+      return { status: "deleted" };
+    }
+    if (hadLocal) {
       delete m[userId];
       writeAddrMap(m);
       return { status: "deleted" };
     }
-    const ssbAll = await scanAllWalletsSSB();
-    if (!ssbAll[userId]) return { status: "not_found" };
-    m[userId] = "__removed__";
-    writeAddrMap(m);
-    return { status: "deleted" };
+    return { status: "not_found" };
   }
 
   async function listAddressesMerged() {
@@ -554,7 +558,7 @@ function scoreFromActions(actions) {
     else if (t === "bankclaim") score += Math.min(20, Math.log(1 + Math.max(0, Number(c.amount) || 0)) * 5) * decay;
     else if (t === "bankwallet") score += 2 * decay;
     else if (t === "transfer") score += 1 * decay;
-    else if (t === "about") score += 1 * decay;
+    else if (t === "about") score += (1 + ((c.visibilityPrefs && c.visibilityPrefs.fediverseHandle) ? 8 : 0)) * decay;
     else if (t === "contact") score += 1 * decay;
     else if (t === "pub") score += 1 * decay;
     else if (t === "parliamentcandidature" || rawType === "parliamentcandidature") score += 12 * decay;
@@ -574,6 +578,17 @@ function scoreFromActions(actions) {
     else if (t === "courts_open_support" || t === "courtsopensupport" || rawType === "courts_open_support") score += 2 * decay;
     else if (t === "courts_verdict_vote" || t === "courtsverdictvote" || rawType === "courts_verdict_vote") score += 3 * decay;
     else if (t === "courts_judge_assign" || t === "courtsjudgeassign" || rawType === "courts_judge_assign") score += 5 * decay;
+    else if (t === "larpjoinhouse") score += 15 * decay;
+    else if (t === "larphousepost") score += 6 * decay;
+    else if (t === "larptestattempt") score += 3 * decay;
+    else if (t === "torrent") score += 6 * decay;
+    else if (t === "shop" || t === "shopproduct") score += 6 * decay;
+    else if (t === "shop-purchase") score += 2 * decay;
+    else if (t === "pad" || t === "padentry") score += 3 * decay;
+    else if (t === "calendar" || t === "calendarnote" || t === "calendardate") score += 3 * decay;
+    else if (t === "chat") score += 1 * decay;
+    else if (t === "gamescore") score += 2 * decay;
+    else if (t === "pixelia") score += 2 * decay;
   }
   return Math.max(0, Math.round(score));
 }

@@ -161,7 +161,7 @@ describe('spreads.forMessage', (t) => {
 
   t('counts spread on votation', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const v = await A.use('votes').createVote('Q?', new Date(Date.now()+86400000).toISOString(), ['YES','NO']);
+    const v = await A.use('votes').createVote('Q?', new Date(Date.now()+8*86400000).toISOString(), ['YES','NO']);
     const ssb = await A.cooler.open();
     await publishSpread(ssb, v.id || v.key);
     const main = mainModelsFactory({ cooler: A.cooler, isPublic: false });

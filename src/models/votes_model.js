@@ -2,8 +2,10 @@ const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
+const { dedupeBy, norm } = require('./dedupe');
 const categories = require('../backend/opinion_categories');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const MIN_VOTE_DAYS = 7;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -146,7 +148,8 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const parsedDeadline = moment(deadline, moment.ISO_8601, true);
-      if (!parsedDeadline.isValid() || parsedDeadline.isBefore(moment())) throw new Error('Invalid deadline');
+      if (!parsedDeadline.isValid()) throw new Error('Invalid deadline');
+      if (parsedDeadline.isBefore(moment().add(MIN_VOTE_DAYS, 'days').subtract(2, 'minutes'))) throw new Error(`Deadline must be at least ${MIN_VOTE_DAYS} days from now`);
 
       const tags = Array.isArray(tagsRaw)
         ? tagsRaw.filter(Boolean)
@@ -214,7 +217,8 @@ module.exports = ({ cooler }) => {
       let newDeadline = c.deadline;
       if (deadline != null && deadline !== '') {
         const parsed = moment(deadline, moment.ISO_8601, true);
-        if (!parsed.isValid() || parsed.isBefore(moment())) throw new Error('Invalid deadline');
+        if (!parsed.isValid()) throw new Error('Invalid deadline');
+        if (parsed.isBefore(moment().add(MIN_VOTE_DAYS, 'days').subtract(2, 'minutes'))) throw new Error(`Deadline must be at least ${MIN_VOTE_DAYS} days from now`);
         newDeadline = parsed.toISOString();
       }
 
@@ -363,7 +367,8 @@ module.exports = ({ cooler }) => {
         list = list.filter(v => v.status === 'CLOSED');
       }
 
-      return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      const deduped = dedupeBy(list, v => v.question ? [norm(v.createdBy), norm(v.question), norm(v.deadline)].join('|') : null);
+      return deduped.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     },
 
     async createOpinion(id, category) {

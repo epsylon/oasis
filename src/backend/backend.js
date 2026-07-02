@@ -883,6 +883,23 @@ const mediaUpdateAction = async (ctx, kind) => {
 };
 const qf = (ctx, def = 'all') => ctx.query.filter || def;
 const qp = (ctx, def = 1) => Math.max(1, parseInt(ctx.query.page) || def);
+const dedupeLarpHouseTribes = (list) => {
+  const arr = Array.isArray(list) ? list : [];
+  const earliest = new Map();
+  for (const t of arr) {
+    const larpTag = (Array.isArray(t.tags) ? t.tags : []).find(x => String(x).startsWith('larp-'));
+    if (!larpTag) continue;
+    const ts = Number(Date.parse(t.createdAt || '')) || 0;
+    const prev = earliest.get(larpTag);
+    if (!prev || ts < prev.ts) earliest.set(larpTag, { id: t.id, ts });
+  }
+  if (!earliest.size) return arr;
+  return arr.filter(t => {
+    const larpTag = (Array.isArray(t.tags) ? t.tags : []).find(x => String(x).startsWith('larp-'));
+    if (!larpTag) return true;
+    return earliest.get(larpTag).id === t.id;
+  });
+};
 about._startNameWarmup();
 async function renderBlobMarkdown(text, mentions = {}, myFeedId, myUsername) {
   if (!text) return '';
@@ -2319,6 +2336,17 @@ router
     const uid = getViewerId();
     const filter = qf(ctx), search = ctx.query.search || '';
     let tribes = await tribesModel.listTribesForViewer(uid);
+    tribes = dedupeLarpHouseTribes(tribes);
+    try {
+      if (tribes.some(t => (Array.isArray(t.tags) ? t.tags : []).some(x => String(x).startsWith('larp-')))) {
+        const houses = await larpModel.listHousesWithCounts().catch(() => []);
+        const countByTag = new Map(houses.map(h => [`larp-${h.name}`, h.memberCount]));
+        for (const t of tribes) {
+          const lt = (Array.isArray(t.tags) ? t.tags : []).find(x => String(x).startsWith('larp-'));
+          if (lt && countByTag.has(lt)) t.memberCount = countByTag.get(lt);
+        }
+      }
+    } catch (_) {}
     let filteredTribes = search ? tribes.filter(t => t.title.toLowerCase().includes(search.toLowerCase())) : tribes;
     try { filteredTribes = await lifetime.enrichAndFilter(filteredTribes, { getKey: (x) => x.id || x.key }); } catch (_) {}
     ctx.body = await tribesView(filteredTribes, filter, null, ctx.query, tribes);
@@ -2564,6 +2592,14 @@ router
       if (sectionData.tasks) await resolveItemMentions(sectionData.tasks);
       if (sectionData.feed) await resolveItemMentions(sectionData.feed);
     }
+    try {
+      const HK = ['academia','solaris','arrakis','terraverde','unsystem','dogma','helix','quark','hermandad'];
+      const larpTag = Array.isArray(tribe.tags) ? tribe.tags.find(x => String(x).startsWith('larp-')) : null;
+      if (larpTag) {
+        const norm = larpTag.slice(5).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (HK.includes(norm)) tribe.larpHouseKey = norm;
+      }
+    } catch (_) {}
     ctx.body = await tribeView(tribe, uid, query, section, sectionData);
   })
   .get('/activity', async ctx => {
@@ -2582,6 +2618,32 @@ router
           else if (action.content) { action.content.title = decrypted.title; action.content.deadline = decrypted.deadline; }
         }
       }
+      if (action.type === 'parliamentProposal' || action.type === 'parliamentRevocation') {
+        const c = action.value?.content || action.content || {};
+        if (c.voteId) {
+          const derived = await parliamentModel.deriveProposalStatus(c.method, c.voteId).catch(() => null);
+          if (derived) {
+            if (action.value?.content) action.value.content.status = derived;
+            else if (action.content) action.content.status = derived;
+          }
+        }
+      }
+    }
+    if (filter === 'larp') {
+      try {
+        const gk = larpModel.getGoverningHouseKey();
+        const myHouse = await larpModel.getUserHouse(userId).catch(() => null);
+        const houseKeys = [...new Set([gk, myHouse].filter(Boolean))];
+        const seenPosts = new Set();
+        for (const hk of houseKeys) {
+          const posts = await larpModel.listHousePosts(hk, { viewerHouse: myHouse, isGoverning: hk === gk });
+          for (const p of posts) {
+            if (seenPosts.has(p.id)) continue;
+            seenPosts.add(p.id);
+            allActions.push({ type: 'larpHousePost', id: p.id, author: p.author, ts: p.ts, content: { type: 'larpHousePost', text: p.text, createdAt: p.createdAt, house: hk } });
+          }
+        }
+      } catch (_) {}
     }
     allActions = await applyListFilters(allActions, ctx);
     const spreadMap = new Map();
@@ -3009,7 +3071,16 @@ router
         }
       } catch (_) {}
     } catch (_) {}
-    const technicalPeers = Array.from(peerMap.values()).sort((a, b) => (a.state === 'connected' ? -1 : 1) - (b.state === 'connected' ? -1 : 1));
+    const PEER_IDLE_MAX_MS = 10 * 24 * 60 * 60 * 1000;
+    const nowTs = Date.now();
+    const technicalPeers = Array.from(peerMap.values())
+      .filter(p => {
+        const st = String(p.state || '');
+        if (st === 'connected' || st === 'connecting' || st === 'staged') return true;
+        const sc = Number(p.stateChange) || 0;
+        return !sc || (nowTs - sc) < PEER_IDLE_MAX_MS;
+      })
+      .sort((a, b) => (a.state === 'connected' ? -1 : 1) - (b.state === 'connected' ? -1 : 1));
     ctx.body = await peersView({ onlinePeers: await meta.onlinePeers(), discoveredPeers, unknownPeers, lanBroadcastActive, technicalPeers });
   })
   .get("/graphos", async (ctx) => {
@@ -3041,31 +3112,66 @@ router
         return shortId(key);
       }
     };
+    const GRAPHOS_MAX_NODES = 48;
+    const FEED_RE = /^@[A-Za-z0-9+/]+=?\.ed25519$/;
+    const centerRaw = ctx.query?.center ? decodeURIComponent(String(ctx.query.center)) : null;
+    const isFocus = !!(centerRaw && FEED_RE.test(centerRaw) && centerRaw !== myId);
+
+    if (isFocus) {
+      const graph = await new Promise((res) => {
+        try { ssb.friends.graph((err, g) => res(err ? {} : (g || {}))); } catch (_) { res({}); }
+      });
+      const rel = graph[centerRaw] || {};
+      const followedAll = Object.entries(rel).filter(([, v]) => v >= 0).map(([k]) => k).filter(k => k !== centerRaw && k !== myId);
+      const followedIds = followedAll.slice(0, GRAPHOS_MAX_NODES);
+      const focusPeers = await Promise.all(followedIds.map(async (k) => ({ key: k, name: await resolveName(k), kind: 'discovered' })));
+      focusPeers.push({ key: myId, name: await resolveName(myId), kind: 'me' });
+      const focusMe = { key: centerRaw, name: await resolveName(centerRaw), kind: 'online' };
+      const kpis = { total: followedAll.length, online: 0, discovered: followedAll.length, unknown: 0 };
+      ctx.body = await graphosView({ filter, me: focusMe, peers: focusPeers, kpis, focus: String(focusMe.name || centerRaw).replace(/^@/, ''), focusId: centerRaw, shown: followedIds.length, total: followedAll.length });
+      return;
+    }
+
+    const keysOf = (entries) => {
+      const s = new Set();
+      for (const [, data] of entries) if (data && data.key) s.add(data.key);
+      return s;
+    };
+    const onlineKeys = keysOf(onlinePeers);
+    const unknownKeys = keysOf(unknownPeers);
+    // Nodes partition into discovered vs unknown (total = discovered + unknown);
+    // "online" is an orthogonal status flag (a subset of the nodes).
     const seen = new Set([myId]);
-    const collected = [];
-    const collect = (entries, kind) => {
+    const nodes = [];
+    const addFrom = (entries) => {
       for (const [, data] of entries) {
         if (!data || !data.key || seen.has(data.key)) continue;
         seen.add(data.key);
-        collected.push({ key: data.key, kind });
+        const isOnline = onlineKeys.has(data.key);
+        const cat = unknownKeys.has(data.key) ? 'unknown' : 'discovered';
+        nodes.push({ key: data.key, isOnline, cat, kind: isOnline ? 'online' : cat });
       }
     };
-    collect(onlinePeers, 'online');
-    collect(discoveredPeers, 'discovered');
-    collect(unknownPeers, 'unknown');
-    const peers = await Promise.all(collected.map(async (p) => ({
+    addFrom(onlinePeers);
+    addFrom(discoveredPeers);
+    addFrom(unknownPeers);
+    const shownNodes = nodes.slice(0, GRAPHOS_MAX_NODES);
+    const peers = await Promise.all(shownNodes.map(async (p) => ({
       key: p.key,
       name: await resolveName(p.key),
       kind: p.kind
     })));
     const me = { key: myId, name: await resolveName(myId), kind: 'online' };
+    const discoveredCount = nodes.filter(n => n.cat === 'discovered').length;
+    const unknownCount = nodes.filter(n => n.cat === 'unknown').length;
+    const onlineCount = nodes.filter(n => n.isOnline).length;
     const kpis = {
-      total: peers.length + 1,
-      online: onlinePeers.length + 1,
-      discovered: discoveredPeers.length,
-      unknown: unknownPeers.length
+      total: discoveredCount + unknownCount,
+      online: onlineCount,
+      discovered: discoveredCount,
+      unknown: unknownCount
     };
-    ctx.body = await graphosView({ filter, me, peers, kpis });
+    ctx.body = await graphosView({ filter, me, peers, kpis, shown: peers.length, total: nodes.length });
   })
   .get("/larp", async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
@@ -3160,6 +3266,13 @@ router
       larpModel.getUserHouse(myFeedId).catch(() => null),
       larpModel.listHousesWithCounts()
     ]);
+    if (myHouseKey === houseKey) {
+      Promise.resolve().then(async () => {
+        try { await larpModel.ensureHouseTribe(houseKey); } catch (_) {}
+        try { await larpModel.issueAutoInvitesForMyHouse(); } catch (_) {}
+        try { await larpModel.redeemPendingAutoInvites(); } catch (_) {}
+      });
+    }
     const cycle = larpModel.computeCycle();
     const governingKey = larpModel.getGoverningHouseKey();
     const canPost = myHouseKey === houseKey;
@@ -3208,7 +3321,7 @@ router
   })
   .get("/invites", async (ctx) => {
     if (!checkMod(ctx, 'invitesMod')) return ctx.redirect('/modules');
-    ctx.body = await invitesView({});
+    ctx.body = await invitesView({ flash: String(ctx.query.flash || '') });
   })
   .get("/likes/:feed", async (ctx) => {
     const { feed } = ctx.params;
@@ -6931,7 +7044,22 @@ router
   .post("/settings/conn/stop", koaBody(), async ctx => { await meta.connStop(); ctx.redirect("/peers"); })
   .post("/settings/conn/sync", koaBody(), async ctx => { await meta.sync(); ctx.redirect("/peers"); })
   .post("/settings/conn/restart", koaBody(), async ctx => { await meta.connRestart(); ctx.redirect("/peers"); })
-  .post("/settings/invite/accept", koaBody(), async ctx => { await meta.acceptInvite(String(ctx.request.body.invite)); ctx.redirect("/invites"); })
+  .post("/settings/invite/accept", koaBody(), async ctx => {
+    const invite = String(ctx.request.body.invite || '');
+    const pubKey = (invite.match(/@[A-Za-z0-9+/=_-]{43,}\.ed25519/) || [])[0] || null;
+    if (pubKey) {
+      try {
+        const os = require('os'), fsx = require('fs'), px = require('path');
+        const gossip = JSON.parse(fsx.readFileSync(px.join(os.homedir(), '.ssb', 'gossip.json'), 'utf8') || '[]');
+        let unfollowed = [];
+        try { unfollowed = JSON.parse(fsx.readFileSync(px.join(os.homedir(), '.ssb', 'gossip_unfollowed.json'), 'utf8') || '[]'); } catch (_) {}
+        const activePub = Array.isArray(gossip) && gossip.some(p => p && p.key === pubKey) && !unfollowed.some(u => u && u.key === pubKey);
+        if (activePub) { ctx.redirect('/invites?flash=alreadyFederated'); return; }
+      } catch (_) {}
+    }
+    try { await meta.acceptInvite(invite); } catch (_) {}
+    ctx.redirect("/invites");
+  })
   .post("/invites/inhabitant/follow", koaBody(), async (ctx) => {
     const feedId = String(ctx.request.body?.feedId || '').trim();
     if (!/^@[A-Za-z0-9+/_\-]{43}=\.ed25519$/.test(feedId)) {
@@ -7000,7 +7128,7 @@ router
     const ssb = await cooler.open();
     const addr = msAddrFrom(hostStr, prt, kcanon);
     try { ssb.conn.remember(addr, { type: "peer", autoconnect: true, key: kcanon }); } catch (e) { console.error('[peers/connect] remember failed:', e.message || e); }
-    try { await new Promise((res, rej) => ssb.conn.connect(addr, { type: "peer" }, (err) => err ? rej(err) : res())); } catch (e) { console.error('[peers/connect] live connect failed:', e.message || e); }
+    try { await new Promise((res, rej) => ssb.conn.connect(addr, { type: "peer" }, (err) => err ? rej(err) : res())); } catch (_) {}
     try { await new Promise((res, rej) => ssb.publish({ type: "contact", contact: kcanon, following: true }, e => e ? rej(e) : res())); } catch (_) {}
     const unf = readJSON(unfollowedPath);
     writeJSON(unfollowedPath, unf.filter(x => !(x && canonicalKey(x.key) === kcanon)));

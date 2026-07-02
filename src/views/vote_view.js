@@ -1,16 +1,28 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const opinionCategories = require("../backend/opinion_categories");
 const { renderUrl } = require("../backend/renderUrl");
 
 const userId = config.keys.id;
+const VOTE_QUORUM = 2;
 
 const safeArray = (v) => Array.isArray(v) ? v : [];
 
 const voteLabel = (opt) =>
   i18n["vote" + opt.split("_").map(w => w.charAt(0) + w.slice(1).toLowerCase()).join("")] || opt;
+
+const computeVoteOutcome = (baseCounts, voteOptions, totalVotesNum) => {
+  const noResult = { text: i18n.voteNoQuorum || "NO QUORUM", color: "#ffcc00" };
+  if (totalVotesNum < VOTE_QUORUM) return noResult;
+  const opts = voteOptions.filter((o) => o !== "FOLLOW_MAJORITY");
+  const maxCount = opts.reduce((m, o) => Math.max(m, baseCounts[o] || 0), 0);
+  const topOpts = opts.filter((o) => (baseCounts[o] || 0) === maxCount);
+  if (maxCount === 0 || topOpts.length > 1) return noResult;
+  const winner = topOpts[0];
+  const color = winner === "YES" ? "#4caf50" : winner === "NO" ? "#e53935" : "#ffcc00";
+  return { text: voteLabel(winner), color };
+};
 
 const normalizeStatus = (v) => {
   const up = String(v || "").toUpperCase();
@@ -71,19 +83,7 @@ const renderVoteButtons = (v, voteOptions, firstRow, secondRow, returnTo) => {
 };
 
 const renderOpinionsBar = (v, returnTo) =>
-  div(
-    { class: "voting-buttons" },
-    opinionCategories.map((category) =>
-      form(
-        { method: "POST", action: `/votes/opinions/${encodeURIComponent(v.id)}/${category}` },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        button(
-          { class: "vote-btn", type: "submit" },
-          `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${(v.opinions && v.opinions[category]) ? v.opinions[category] : 0}]`
-        )
-      )
-    )
-  );
+  renderOpinionsVoting('/votes/opinions', v.id, v.opinions, returnTo, v.opinions_inhabitants);
 
 const renderVoteStatusChip = (status) => {
   const localized = statusLabel(status);
@@ -95,11 +95,8 @@ const renderVoteListItem = (v, voteOptions, activeFilter, spreadInfo) => {
     acc[opt] = (v.votes && v.votes[opt]) ? v.votes[opt] : 0;
     return acc;
   }, {});
-  const maxOpt = voteOptions
-    .filter((opt) => opt !== "FOLLOW_MAJORITY")
-    .reduce((top, opt) => baseCounts[opt] > baseCounts[top] ? opt : top, "NOT_INTERESTED");
   const totalVotesNum = typeof v.totalVotes === "number" ? v.totalVotes : parseInt(String(v.totalVotes || "0"), 10) || 0;
-  const result = totalVotesNum === 0 ? "NOT_INTERESTED" : maxOpt;
+  const outcome = computeVoteOutcome(baseCounts, voteOptions, totalVotesNum);
   const chips = [
     renderVoteStatusChip(v.status),
     renderLifespanChip(v.lifetime, i18n)
@@ -117,9 +114,7 @@ const renderVoteListItem = (v, voteOptions, activeFilter, spreadInfo) => {
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
       ),
-      totalVotesNum > 0
-        ? div({ class: "job-meta-line" }, voteLabel(result))
-        : null,
+      div({ class: "job-meta-line", style: `color:${outcome.color};font-weight:bold;` }, `${i18n.voteResults || "Results"}: ${outcome.text}`),
       div({ class: "card-spread-centered" }, renderSpreadButton(v.id, spreadInfo)),
       div({ class: "card-visit-btn-centered" },
         form({ method: "GET", action: `/votes/${encodeURIComponent(v.id)}` },
@@ -137,12 +132,8 @@ const renderVoteDetail = (v, voteOptions, firstRow, secondRow, mode, activeFilte
     return acc;
   }, {});
 
-  const maxOpt = voteOptions
-    .filter((opt) => opt !== "FOLLOW_MAJORITY")
-    .reduce((top, opt) => baseCounts[opt] > baseCounts[top] ? opt : top, "NOT_INTERESTED");
-
   const totalVotesNum = typeof v.totalVotes === "number" ? v.totalVotes : parseInt(String(v.totalVotes || "0"), 10) || 0;
-  const result = totalVotesNum === 0 ? "NOT_INTERESTED" : maxOpt;
+  const outcome = computeVoteOutcome(baseCounts, voteOptions, totalVotesNum);
 
   const returnTo = `/votes/${encodeURIComponent(v.id)}?filter=${encodeURIComponent(activeFilter || "all")}`;
   const chips = [
@@ -160,9 +151,10 @@ const renderVoteDetail = (v, voteOptions, firstRow, secondRow, mode, activeFilte
   }
   for (const a of renderVoteOwnerActions(v, returnTo, mode || "")) sideActions.push(a);
 
-  const tagsNode = v.tags && v.tags.filter(Boolean).length
+  const cleanTags = (Array.isArray(v.tags) ? v.tags : []).filter((t) => t && !String(t).includes(":"));
+  const tagsNode = cleanTags.length
     ? div({ class: "card-tags" },
-        v.tags.filter(Boolean).map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
+        cleanTags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
       )
     : null;
 
@@ -185,13 +177,13 @@ const renderVoteDetail = (v, voteOptions, firstRow, secondRow, mode, activeFilte
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
-    )
+    ),
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const voteButtonsNode = renderVoteButtons(v, voteOptions, firstRow, secondRow, returnTo);
 
   const voteMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     voteButtonsNode
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.voteCastTitle || "Cast Vote"),
@@ -199,22 +191,22 @@ const renderVoteDetail = (v, voteOptions, firstRow, secondRow, mode, activeFilte
         )
       : null,
     div({ class: "job-section" },
-      h2({ class: "job-section-title" }, i18n.voteResults || "Results"),
+      h2({ class: "job-section-title" },
+        `${i18n.voteResults || "Results"}: `,
+        span({ style: `color:${outcome.color} !important;font-weight:bold;` }, outcome.text)
+      ),
       div({ class: "vote-table" },
         table(
           tr(...voteOptions.map((opt) => th(voteLabel(opt)))),
           tr(...voteOptions.map((opt) => td(baseCounts[opt])))
         )
-      ),
-      totalVotesNum > 0
-        ? p({ class: "job-price-line card-salary" }, voteLabel(result))
-        : null
+      )
     ),
-    renderOpinionsBar(v, returnTo),
     p({ class: "card-footer" },
       span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
       userLink(v.createdBy)
-    )
+    ),
+    renderOpinionsBar(v, returnTo)
   );
 
   return div({ class: "tribe-details" }, voteSide, voteMain);
@@ -257,7 +249,6 @@ const renderCommentsSection = (voteId, comments, activeFilter) => {
             const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
             const relDate = ts ? moment(ts).fromNow() : "";
-            const userName = author && author.includes("@") ? author.split("@")[1] : author;
 
             const content = c.value && c.value.content ? c.value.content : {};
             const root = content.fork || content.root || "";
@@ -268,7 +259,7 @@ const renderCommentsSection = (voteId, comments, activeFilter) => {
               span(
                 { class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 absDate ? span(" | ") : "",
                 absDate ? span({ class: "votations-comment-date" }, absDate) : "",
                 relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",

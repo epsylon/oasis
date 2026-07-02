@@ -250,7 +250,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       else if (t === 'bankclaim') score += Math.min(20, Math.log(1 + Math.max(0, Number(c.amount) || 0)) * 5);
       else if (t === 'bankwallet') score += 2;
       else if (t === 'transfer') score += 1;
-      else if (t === 'about') score += 1;
+      else if (t === 'about') score += 1 + ((c.visibilityPrefs && c.visibilityPrefs.fediverseHandle) ? 8 : 0);
       else if (t === 'contact') score += 1;
       else if (t === 'pub') score += 1;
       else if (t === 'parliamentcandidature' || rawType === 'parliamentcandidature') score += 12;
@@ -270,6 +270,17 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       else if (t === 'courts_open_support' || t === 'courtsopensupport' || rawType === 'courts_open_support') score += 2;
       else if (t === 'courts_verdict_vote' || t === 'courtsverdictvote' || rawType === 'courts_verdict_vote') score += 3;
       else if (t === 'courts_judge_assign' || t === 'courtsjudgeassign' || rawType === 'courts_judge_assign') score += 5;
+      else if (t === 'larpjoinhouse') score += 15;
+      else if (t === 'larphousepost') score += 6;
+      else if (t === 'larptestattempt') score += 3;
+      else if (t === 'torrent') score += 6;
+      else if (t === 'shop' || t === 'shopproduct') score += 6;
+      else if (t === 'shop-purchase') score += 2;
+      else if (t === 'pad' || t === 'padentry') score += 3;
+      else if (t === 'calendar' || t === 'calendarnote' || t === 'calendardate') score += 3;
+      else if (t === 'chat') score += 1;
+      else if (t === 'gamescore') score += 2;
+      else if (t === 'pixelia') score += 2;
     }
     return Math.max(0, Math.round(score));
   };

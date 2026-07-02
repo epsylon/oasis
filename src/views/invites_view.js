@@ -31,7 +31,7 @@ const deduplicateByHost = (list) => {
   });
 };
 
-const invitesView = ({ invitesEnabled }) => {
+const invitesView = ({ invitesEnabled, flash }) => {
   let pubs = [];
   let pubsValue = "false";
   let unfollowed = [];
@@ -101,6 +101,9 @@ const invitesView = ({ invitesEnabled }) => {
         p(description)
       )
     ),
+    flash === 'alreadyFederated'
+      ? section(div({ class: 'message-banner' }, p(i18n.invitesAlreadyFederated || 'You are already federated with this pub.')))
+      : null,
     section(
       div({ class: 'pubs-section' },
         h2(i18n.invitesPubsTitle),

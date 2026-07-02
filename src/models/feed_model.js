@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { dedupeBy, norm } = require('./dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
@@ -303,7 +304,11 @@ module.exports = ({ cooler }) => {
       return { ...base, value: { ...base.value, content } };
     };
 
-    let feeds = tips.map(materialize);
+    let feeds = dedupeBy(tips.map(materialize), m => {
+      const c = (m && m.value && m.value.content) || {};
+      const author = c.author || (m && m.value && m.value.author);
+      return c.text ? [norm(author), norm(c.text)].join('|') : null;
+    });
 
     if (q) {
       const terms = q.split(/\s+/).map((s) => s.trim()).filter(Boolean);

@@ -1,8 +1,7 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
-const opinionCategories = require("../backend/opinion_categories");
 const moment = require("../server/node_modules/moment");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const { renderUrl } = require("../backend/renderUrl");
@@ -115,7 +114,6 @@ const renderFeedCommentsSection = (feedKey, comments = []) => {
             const ts = c?.value?.timestamp || c?.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
             const relDate = ts ? moment(ts).fromNow() : "";
-            const userName = author && author.includes("@") ? author.split("@")[1] : author;
 
             const content = c?.value?.content || {};
             const text = content.text || c?.value?.text || "";
@@ -126,7 +124,7 @@ const renderFeedCommentsSection = (feedKey, comments = []) => {
               span(
                 { class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 absDate ? span(" | ") : "",
                 absDate ? span({ class: "votations-comment-date" }, absDate) : "",
                 relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
@@ -154,7 +152,6 @@ const renderFeedCard = (feed) => {
     const me = config?.keys?.id;
 
     const alreadyRefeeded = Array.isArray(content.refeeds_inhabitants) && me ? content.refeeds_inhabitants.includes(me) : false;
-    const alreadyVoted = Array.isArray(content.opinions_inhabitants) && me ? content.opinions_inhabitants.includes(me) : false;
 
     const authorId = content.author || feed.value.author || "";
     const refeedsNum = Number(content.refeeds || 0) || 0;
@@ -198,18 +195,7 @@ const renderFeedCard = (feed) => {
                 )
             )
         ),
-        div(
-            { class: "voting-buttons" },
-            opinionCategories.map((cat) =>
-                form(
-                    { method: "POST", action: `/feed/opinions/${encodeURIComponent(feed.key)}/${cat}` },
-                    button(
-                        { class: alreadyVoted ? "vote-btn disabled" : "vote-btn", type: "submit", ...(alreadyVoted ? { disabled: true } : {}) },
-                        `${i18n["vote" + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${content.opinions?.[cat] || 0}]`
-                    )
-                )
-            )
-        ),
+        renderOpinionsVoting('/feed/opinions', feed.key, content.opinions, null, content.opinions_inhabitants),
         div(
             { class: "card-comments-summary" },
             span({ class: "card-label" }, `${i18n.voteCommentsLabel || "Comments"}:`),
@@ -327,7 +313,6 @@ exports.singleFeedView = (feed, comments = []) => {
   const createdAt = formatDate(feed);
   const styledHtml = rewriteHashtagLinks(renderTextWithStyles(safeText));
   const me = config?.keys?.id;
-  const alreadyVoted = Array.isArray(content.opinions_inhabitants) && me ? content.opinions_inhabitants.includes(me) : false;
   const alreadyRefeeded = Array.isArray(content.refeeds_inhabitants) && me ? content.refeeds_inhabitants.includes(me) : false;
   const refeedsNum = Number(content.refeeds || 0) || 0;
   const tags = extractTags(safeText);
@@ -378,19 +363,7 @@ exports.singleFeedView = (feed, comments = []) => {
             )
           )
         ),
-        div(
-          { class: "voting-buttons" },
-          opinionCategories.map((cat) =>
-            form(
-              { method: "POST", action: `/feed/opinions/${encodeURIComponent(feed.key)}/${cat}` },
-              button(
-                { class: alreadyVoted ? "vote-btn disabled" : "vote-btn", type: "submit", ...(alreadyVoted ? { disabled: true } : {}) },
-                `${i18n["vote" + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${content.opinions?.[cat] || 0}]`
-              )
-            )
-          )
-        ),
-        alreadyVoted ? p({ class: "muted" }, i18n.alreadyVoted) : null
+        renderOpinionsVoting('/feed/opinions', feed.key, content.opinions, null, content.opinions_inhabitants)
       ),
       renderFeedCommentsSection(feed.key, comments)
     )

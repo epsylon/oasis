@@ -2,10 +2,9 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
-const opinionCategories = require("../backend/opinion_categories");
 
 const userId = config.keys.id;
 
@@ -114,7 +113,6 @@ const renderDocumentCommentsSection = (documentKey, rootId, comments = [], retur
             const ts = c?.value?.timestamp || c?.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
             const relDate = ts ? moment(ts).fromNow() : "";
-            const userName = author && author.includes("@") ? author.split("@")[1] : author;
 
             const content = c?.value?.content || {};
             const text = content.text || "";
@@ -125,7 +123,7 @@ const renderDocumentCommentsSection = (documentKey, rootId, comments = [], retur
               span(
                 { class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 absDate ? span(" | ") : "",
                 absDate ? span({ class: "votations-comment-date" }, absDate) : "",
                 relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
@@ -395,26 +393,14 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
       ? p({ class: "tribe-side-description" }, ...renderUrl(doc.description))
       : null,
     tagsNode,
-    div({ class: "card-spread-centered" }, renderSpreadButton(doc.key, params.spreads))
+    div({ class: "card-spread-centered" }, renderSpreadButton(doc.key, params.spreads)),
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const docMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     doc?.url
       ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
       : p(i18n.documentNoFile),
-    div({ class: "voting-buttons" },
-      opinionCategories.map((category) =>
-        form(
-          { method: "POST", action: `/documents/opinions/${encodeURIComponent(doc.key)}/${category}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button(
-            { class: "vote-btn" },
-            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${doc.opinions?.[category] || 0}]`
-          )
-        )
-      )
-    ),
     (() => {
       const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
       const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
@@ -432,6 +418,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
           : null
       );
     })(),
+    renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
     renderDocumentCommentsSection(doc.key, doc.rootId || doc.key, comments, returnTo)
   );
 

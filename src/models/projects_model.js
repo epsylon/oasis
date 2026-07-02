@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { dedupeBy, norm } = require('./dedupe')
 const logLimit = (getConfig().ssbLogStream && getConfig().ssbLogStream.limit) || 1000
 
 module.exports = ({ cooler }) => {
@@ -510,7 +511,7 @@ if (c.type === TYPE && c.replaces) forward.set(c.replaces, m.key)
         })
       }
 
-      let list = out
+      let list = dedupeBy(out, p => p.title ? [norm(p.author), norm(p.title), norm(p.createdAt)].join('|') : null)
       const F = String(filter || "ALL").toUpperCase()
 
       if (F === "MINE") list = list.filter((p) => p && p.author === currentUserId)

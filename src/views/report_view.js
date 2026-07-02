@@ -1,9 +1,8 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require("../backend/renderUrl");
-const opinionCategories = require("../backend/opinion_categories");
 
 const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null;
@@ -189,7 +188,6 @@ const renderReportCommentsSection = (reportId, comments = []) => {
             const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
             const relDate = ts ? moment(ts).fromNow() : "";
-            const userName = author && author.includes("@") ? author.split("@")[1] : author;
 
             const content = c.value && c.value.content ? c.value.content : {};
             const root = content.fork || content.root || "";
@@ -200,7 +198,7 @@ const renderReportCommentsSection = (reportId, comments = []) => {
               span(
                 { class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 absDate ? span(" | ") : "",
                 absDate ? span({ class: "votations-comment-date" }, absDate) : "",
                 relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
@@ -651,28 +649,21 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
-    )
+    ),
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
-  const opinionsBar = div(
-    { class: "voting-buttons" },
-    opinionCategories.map((category) =>
-      form(
-        { method: "POST", action: `/reports/opinions/${encodeURIComponent(report.id)}/${category}` },
-        button(
-          { class: "vote-btn", type: "submit" },
-          `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${(report.opinions && report.opinions[category]) ? report.opinions[category] : 0}]`
-        )
-      )
-    )
-  );
+  const opinionsBar = renderOpinionsVoting('/reports/opinions', report.id, report.opinions, null, report.opinions_inhabitants);
 
   const reportMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     (details || report.image) ? div({ class: "job-section" },
       details || null,
       report.image ? renderMediaBlob(report.image, { class: "report-detail-image" }) : null
     ) : null,
+    p({ class: "card-footer" },
+      span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      userLink(report.author)
+    ),
     opinionsBar,
     renderReportCommentsSection(report.id, comments)
   );

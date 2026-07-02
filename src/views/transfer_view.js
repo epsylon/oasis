@@ -1,8 +1,7 @@
 const { div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
-const opinionCategories = require("../backend/opinion_categories")
 
 const userId = config.keys.id
 
@@ -485,11 +484,11 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           span({ class: "card-label" }, `${i18n.blockchainBlockID || "Block ID"}: `),
           span({ class: "card-value" }, a({ class: "user-link", href: `/blockexplorer/block/${encodeURIComponent(params.block.id)}` }, params.block.id))
         )
-      : null
+      : null,
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   )
 
   const transferMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     div({ class: "job-section" },
       div({ class: "card-field" },
         span({ class: "card-label" }, `${i18n.transfersFrom}: `),
@@ -525,16 +524,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
       userLink(transfer.from),
       renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
     ),
-    div({ class: "voting-buttons transfer-voting-buttons" },
-      opinionCategories.map(category =>
-        form({ method: "POST", action: `/transfers/opinions/${encodeURIComponent(transfer.id)}/${category}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ class: "vote-btn" },
-            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${transfer.opinions?.[category] || 0}]`
-          )
-        )
-      )
-    )
+    renderOpinionsVoting('/transfers/opinions', transfer.id, transfer.opinions, returnTo, transfer.opinions_inhabitants)
   )
 
   return template(

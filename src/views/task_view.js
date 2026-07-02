@@ -1,9 +1,8 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
-const opinionCategories = require("../backend/opinion_categories");
 
 const renderTaskMediaBlob = (value, attrs = {}) => {
   if (!value) return null;
@@ -124,7 +123,6 @@ const renderTaskCommentsSection = (taskId, comments = [], currentFilter = "all")
             const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
             const relDate = ts ? moment(ts).fromNow() : "";
-            const userName = author && author.includes("@") ? author.split("@")[1] : author;
 
             const content = c.value && c.value.content ? c.value.content : {};
             const root = content.fork || content.root || "";
@@ -135,7 +133,7 @@ const renderTaskCommentsSection = (taskId, comments = [], currentFilter = "all")
               span(
                 { class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 absDate ? span(" | ") : "",
                 absDate ? span({ class: "votations-comment-date" }, absDate) : "",
                 relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
@@ -457,32 +455,24 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
     ),
-    assigneesListNode
+    assigneesListNode,
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const returnToOpinions = `/tasks/${encodeURIComponent(task.id)}?filter=${encodeURIComponent(currentFilter)}`;
-  const opinionsBar = div(
-    { class: "voting-buttons" },
-    opinionCategories.map((category) =>
-      form(
-        { method: "POST", action: `/tasks/opinions/${encodeURIComponent(task.id)}/${category}` },
-        input({ type: "hidden", name: "returnTo", value: returnToOpinions }),
-        button(
-          { class: "vote-btn", type: "submit" },
-          `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${(task.opinions && task.opinions[category]) ? task.opinions[category] : 0}]`
-        )
-      )
-    )
-  );
+  const opinionsBar = renderOpinionsVoting('/tasks/opinions', task.id, task.opinions, returnToOpinions, task.opinions_inhabitants);
 
   const taskMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     task.description
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.taskDescriptionLabel),
           p({ class: "tribe-side-description" }, ...renderUrl(task.description))
         )
       : null,
+    p({ class: "card-footer" },
+      span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      userLink(task.author)
+    ),
     opinionsBar,
     renderTaskCommentsSection(task.id, comments, currentFilter)
   );

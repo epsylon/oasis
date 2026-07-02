@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -159,7 +159,7 @@ const renderCommentsSection = (parentId, returnTo, comments = []) => {
             return div({ class: "votations-comment-card" },
               span({ class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${author.split("@")[1] || author}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 ts ? span(" | ", span({ class: "votations-comment-date" }, moment(ts).format("YYYY/MM/DD HH:mm:ss"))) : "",
                 ts && rootId ? span(" | ", a({ href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}` }, moment(ts).fromNow())) : ""
               ),
@@ -502,15 +502,8 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
           " ",
           userLink(product.author)
         ),
-        !isAuthor && params.canRate && !safeArr(product.opinions_inhabitants).includes(userId)
-          ? div({ class: "voting-buttons transfer-voting-buttons" },
-              opinionCategories.map(category =>
-                form({ method: "POST", action: `/shops/product/opinions/${encodeURIComponent(product.key)}/${category}` },
-                  input({ type: "hidden", name: "returnTo", value: returnTo }),
-                  button({ class: "vote-btn" }, `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${product.opinions?.[category] || 0}]`)
-                )
-              )
-            )
+        !isAuthor && params.canRate
+          ? renderOpinionsVoting('/shops/product/opinions', product.key, product.opinions, returnTo, product.opinions_inhabitants)
           : null
       ),
       renderCommentsSection(product.key, returnTo, comments)

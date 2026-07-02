@@ -2,11 +2,10 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
-const opinionCategories = require("../backend/opinion_categories");
 
 const userId = config.keys.id;
 
@@ -299,7 +298,6 @@ const renderImageCommentsSection = (imageKey, comments = [], returnTo = null) =>
             const ts = c?.value?.timestamp || c?.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
             const relDate = ts ? moment(ts).fromNow() : "";
-            const userName = author && author.includes("@") ? author.split("@")[1] : author;
 
             const content = c?.value?.content || {};
             const text = content.text || "";
@@ -310,7 +308,7 @@ const renderImageCommentsSection = (imageKey, comments = [], returnTo = null) =>
               span(
                 { class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 absDate ? span(" | ") : "",
                 absDate ? span({ class: "votations-comment-date" }, absDate) : "",
                 relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
@@ -460,11 +458,11 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
       : null,
     tagsNode,
     div({ class: "card-spread-centered" }, renderSpreadButton(imageObj.key, params.spreads)),
-    renderMapLocationVisitLabel(imageObj.mapUrl)
+    renderMapLocationVisitLabel(imageObj.mapUrl),
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const imageMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     imageObj?.url
       ? div(
           { class: "image-container" },
@@ -476,20 +474,6 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
           })
         )
       : p(i18n.imageNoFile),
-    div({ class: "voting-buttons" },
-      opinionCategories.map((category) =>
-        form(
-          { method: "POST", action: `/images/opinions/${encodeURIComponent(imageObj.key)}/${category}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button(
-            { class: "vote-btn" },
-            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
-              imageObj.opinions?.[category] || 0
-            }]`
-          )
-        )
-      )
-    ),
     (() => {
       const createdTs = imageObj.createdAt ? new Date(imageObj.createdAt).getTime() : NaN;
       const updatedTs = imageObj.updatedAt ? new Date(imageObj.updatedAt).getTime() : NaN;
@@ -507,6 +491,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
           : null
       );
     })(),
+    renderOpinionsVoting('/images/opinions', imageObj.key, imageObj.opinions, returnTo, imageObj.opinions_inhabitants),
     renderImageCommentsSection(imageObj.key, comments, returnTo)
   );
 

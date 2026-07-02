@@ -19,11 +19,10 @@ const {
   td
 } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
-const opinionCategories = require("../backend/opinion_categories");
 
 const userId = config.keys.id;
 
@@ -130,7 +129,6 @@ const renderTorrentCommentsSection = (torrentId, comments = [], returnTo = null)
             const ts = c?.value?.timestamp || c?.timestamp;
             const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
             const relDate = ts ? moment(ts).fromNow() : "";
-            const userName = author && author.includes("@") ? author.split("@")[1] : author;
             const content = c?.value?.content || {};
             const rootId = content.fork || content.root || null;
             const text = content.text || "";
@@ -140,7 +138,7 @@ const renderTorrentCommentsSection = (torrentId, comments = [], returnTo = null)
               span(
                 { class: "created-at" },
                 span(i18n.createdBy),
-                author ? a({ href: `/author/${encodeURIComponent(author)}` }, `@${userName}`) : span("(unknown)"),
+                author ? userLink(author) : span("(unknown)"),
                 absDate ? span(" | ") : "",
                 absDate ? span({ class: "votations-comment-date" }, absDate) : "",
                 relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
@@ -369,30 +367,16 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
       ? p({ class: "tribe-side-description" }, ...renderUrl(torrentObj.description))
       : null,
     tagsNode,
-    div({ class: "card-spread-centered" }, renderSpreadButton(torrentObj.key, params.spreads))
+    div({ class: "card-spread-centered" }, renderSpreadButton(torrentObj.key, params.spreads)),
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const torrentMain = div({ class: "tribe-main" },
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     torrentObj.url && torrentObj.url.startsWith("&")
       ? div({ class: "torrent-download" },
           a({ href: `/blob/${encodeURIComponent(torrentObj.url)}?name=${encodeURIComponent((torrentObj.title || 'download').replace(/\.torrent$/i, '') + '.torrent')}` , class: "filter-btn" }, i18n.torrentDownloadButton || "DOWNLOAD IT!")
         )
       : p(i18n.torrentNoFile),
-    div({ class: "voting-buttons" },
-      opinionCategories.map((category) =>
-        form(
-          { method: "POST", action: `/torrents/opinions/${encodeURIComponent(torrentObj.key)}/${category}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button(
-            { class: "vote-btn" },
-            `${i18n[`vote${category.charAt(0).toUpperCase() + category.slice(1)}`] || category} [${
-              torrentObj.opinions?.[category] || 0
-            }]`
-          )
-        )
-      )
-    ),
     (() => {
       const createdTs = torrentObj.createdAt ? new Date(torrentObj.createdAt).getTime() : NaN;
       const updatedTs = torrentObj.updatedAt ? new Date(torrentObj.updatedAt).getTime() : NaN;
@@ -410,6 +394,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
           : null
       );
     })(),
+    renderOpinionsVoting('/torrents/opinions', torrentObj.key, torrentObj.opinions, returnTo, torrentObj.opinions_inhabitants),
     renderTorrentCommentsSection(torrentObj.key, comments, returnTo)
   );
 

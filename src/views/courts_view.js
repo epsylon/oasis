@@ -998,23 +998,32 @@ const HistoryList = (rows = []) => {
   return div({ class: 'cards' }, ...cards);
 };
 
-const RulesContent = () =>
-  div(
+const RulesContent = () => {
+  const points = [
+    i18n.courtsRulesIntro,
+    i18n.courtsRulesLifecycle,
+    i18n.courtsRulesRoles,
+    i18n.courtsRulesEvidence,
+    i18n.courtsRulesDeliberation,
+    i18n.courtsRulesVerdict,
+    i18n.courtsRulesAppeals,
+    i18n.courtsRulesPrivacy,
+    i18n.courtsRulesMisconduct,
+    i18n.courtsRulesGlossary
+  ];
+  return div(
     { class: 'card' },
     h2(i18n.courtsRulesTitle),
-    ul(
-      li(i18n.courtsRulesIntro),
-      li(i18n.courtsRulesLifecycle),
-      li(i18n.courtsRulesRoles),
-      li(i18n.courtsRulesEvidence),
-      li(i18n.courtsRulesDeliberation),
-      li(i18n.courtsRulesVerdict),
-      li(i18n.courtsRulesAppeals),
-      li(i18n.courtsRulesPrivacy),
-      li(i18n.courtsRulesMisconduct),
-      li(i18n.courtsRulesGlossary)
+    div({ class: 'rules-points' },
+      points.filter(Boolean).map((t, i) =>
+        div({ class: 'rules-point' },
+          span({ class: 'rules-point-num' }, String(i + 1)),
+          span({ class: 'rules-point-text' }, t)
+        )
+      )
     )
   );
+};
 
 const CaseSearch = (filter, search = '') =>
   div(

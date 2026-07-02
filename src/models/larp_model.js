@@ -191,6 +191,20 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     return candidates[0];
   }
 
+  async function findAnyHouseTribe(houseKey) {
+    if (!tribesModel || !VALID_KEY(houseKey)) return null;
+    let list = [];
+    try { list = await tribesModel.listAll(); } catch (_) { return null; }
+    const tag = houseTribeTag(houseKey);
+    const candidates = list.filter(t => {
+      const tags = Array.isArray(t.tags) ? t.tags : [];
+      return tags.includes(tag);
+    });
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    return candidates[0];
+  }
+
   async function findEarliestHouseAnchor(houseKey) {
     if (!VALID_KEY(houseKey)) return null;
     const client = await openSsb();
@@ -310,8 +324,22 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     const me = client.id;
 
     if (houseKey === 'academia') {
-      const existing = await findMyHouseTribe(houseKey);
-      if (existing) return existing;
+      const canonical = await findAnyHouseTribe(houseKey).catch(() => null);
+      const canonRoot = canonical ? await tribesModel.getRootId(canonical.id).catch(() => canonical.id) : null;
+      const myTribes = await listMyHouseTribes(houseKey);
+      myTribes.sort((a, b) => a.createdAtTs - b.createdAtTs);
+      const keepRoot = canonRoot || (myTribes[0] && myTribes[0].rootId);
+      for (const t of myTribes) {
+        if (t.rootId === keepRoot) continue;
+        if (t.tribe.author !== me) continue;
+        await tombstoneMyTribe(houseKey, t.rootId, t.tribe.id).catch(() => {});
+      }
+      const mineNow = await findMyHouseTribe(houseKey);
+      if (mineNow) return mineNow;
+      if (canonical) {
+        await redeemPendingAutoInvites().catch(() => {});
+        return await findMyHouseTribe(houseKey) || canonical;
+      }
       const house = HOUSES[houseKey] || {};
       const tag = houseTribeTag(houseKey);
       try {
@@ -359,6 +387,16 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     }
 
     if (anchor) return null;
+
+    const existingAny = await findAnyHouseTribe(houseKey).catch(() => null);
+    if (existingAny) {
+      const rootId = await tribesModel.getRootId(existingAny.id).catch(() => existingAny.id);
+      const hasAnchor = await findHouseAnchorByTribe(houseKey, rootId);
+      if (!hasAnchor) await publishHouseTribeAnchor(houseKey, rootId, existingAny.createdAt).catch(() => {});
+      if (Array.isArray(existingAny.members) && existingAny.members.includes(me)) return existingAny;
+      await redeemPendingAutoInvites().catch(() => {});
+      return await findMyHouseTribe(houseKey);
+    }
 
     const house = HOUSES[houseKey] || {};
     const tag = houseTribeTag(houseKey);

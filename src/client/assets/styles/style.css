@@ -1501,6 +1501,44 @@ button.create-button:hover {
   border-radius: 6px;
 }
 
+.trending-image .feed-image,
+.opinion-image .feed-image {
+  max-width: 100%;
+  width: auto;
+  max-height: 480px;
+  height: auto;
+}
+
+.opinions-voting-collapse { margin: 8px 0; }
+.opinions-summary {
+  display: inline-block !important;
+  width: auto !important;
+  max-width: max-content;
+  box-sizing: border-box;
+  cursor: pointer;
+  font: inherit;
+  padding: 10px 20px;
+  border: 1px solid #ff3300;
+  border-radius: 5px;
+  background-color: #ff6600;
+  color: #fff;
+  transition: background-color .2s, border-color .2s;
+  list-style: none;
+}
+.opinions-summary:hover { background-color: #ff9900; border-color: #e68a00; color: #000; }
+.opinions-summary::-webkit-details-marker { display: none; }
+.opinions-summary::after { content: " \25BE"; opacity: 0.85; }
+details[open] > .opinions-summary::after { content: " \25B4"; }
+
+.message-banner {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border: 1px solid #ffa300;
+  border-radius: 6px;
+  background: rgba(255, 163, 0, 0.12);
+}
+.message-banner p { margin: 0; }
+
 .feed-search-form {
   display: flex;
   align-items: center;
@@ -6035,6 +6073,88 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
   font-size: 13px;
   color: #aaa;
 }
+.tribe-details .card-footer,
+.tribe-main>.card-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tribe-details .card-footer .date-link,
+.tribe-main>.card-footer .date-link { margin-left: 0; }
+
+.rules-points { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.rules-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #333;
+  border-left: 3px solid #ff6600;
+  border-radius: 6px;
+  line-height: 1.5;
+}
+.rules-point-num {
+  flex: 0 0 auto;
+  min-width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: #ff6600;
+  color: #fff;
+  font-weight: bold;
+  font-size: 0.85em;
+}
+.rules-point-text { flex: 1 1 auto; }
+
+.parliament-leader-avatar,
+.leader-table__avatar,
+.avatar--lg {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+.candidature-voters { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.candidature-voter { font-size: 0.85em; }
+.candidature-votes-count { font-weight: bold; }
+.parliament-method-img { width: 160px; height: 160px; object-fit: contain; display: block; margin: 0 auto; }
+.parliament-avatar-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  background: none !important;
+  border: none !important;
+}
+.parliament-avatar-name {
+  font-size: 0.9em;
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+}
+.parliament-gov-table td, .parliament-gov-table th,
+.parliament-actor-table td, .parliament-actor-table th,
+.table--centered td, .table--centered th,
+.gov-overview td, .gov-overview th { text-align: center !important; vertical-align: middle; }
+.parliament-gov-table td:first-child,
+.gov-overview td:first-child { background: none !important; border: none !important; }
+
+.graphos-backbar { margin: 24px 0; }
+.graphos-focus-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+}
+.graphos-focus-label { font-weight: bold; }
+.graphos-cap-note { opacity: 0.75; font-size: 0.9em; margin: 4px 0 0; }
+.graphos-node-link { cursor: pointer; }
 .card-fields-container { display:flex; flex-direction:column; gap:0; }
 
 /* Table-like layout for label/value pairs inside item cards. Two-column grid: label fixed, value flexible, subtle row separator. */

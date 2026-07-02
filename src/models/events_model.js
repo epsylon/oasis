@@ -3,6 +3,7 @@ const moment = require('../server/node_modules/moment');
 const crypto = require('crypto');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
+const { dedupeBy, norm } = require('./dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
@@ -503,6 +504,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
             tombstoned.forEach(id => byId.delete(id));
 
             let out = Array.from(byId.values());
+            out = dedupeBy(out, e => e.title ? [norm(e.organizer), norm(e.title), norm(e.date)].join('|') : null);
 
             if (filter === 'mine') out = out.filter(e => e.organizer === userId);
             if (filter === 'open') out = out.filter(e => String(e.status).toUpperCase() === 'OPEN');

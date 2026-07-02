@@ -33,7 +33,9 @@ const nameCache = require('../backend/nameCache');
 const userLinkLabel = (feedId, knownName) => {
   const id = String(feedId || '');
   if (!id) return '';
-  const name = (knownName && String(knownName).trim()) || nameCache.get(id);
+  let kn = (knownName && String(knownName).trim()) || '';
+  if (kn === id || /^@[A-Za-z0-9+/_-]{43}=\.ed25519$/.test(kn)) kn = '';
+  const name = kn || nameCache.get(id);
   if (name && name.length) return '@' + name;
   return id;
 };
@@ -234,6 +236,29 @@ exports.setLanguage = (language) => {
 };
 exports.i18n = i18n;
 Object.defineProperty(exports, 'selectedLanguage', { get: () => selectedLanguage });
+
+const opinionCategoriesList = require('../backend/opinion_categories');
+const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters) => {
+  const ops = opinions || {};
+  const total = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
+  const myId = (config.keys && config.keys.id) ? config.keys.id : '';
+  const alreadyVoted = Array.isArray(voters) && myId ? voters.includes(myId) : false;
+  return details({ class: 'opinions-voting-collapse' },
+    summary({ class: 'opinions-summary' },
+      `${i18n.opinionsTitle || 'Opinions'} (${total})`),
+    div({ class: 'voting-buttons' },
+      opinionCategoriesList.map((category) =>
+        form({ method: 'POST', action: `${basePath}/${encodeURIComponent(id)}/${category}` },
+          returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
+          button({ class: alreadyVoted ? 'vote-btn disabled' : 'vote-btn', type: 'submit', ...(alreadyVoted ? { disabled: true } : {}) },
+            `${i18n['vote' + category.charAt(0).toUpperCase() + category.slice(1)] || category} [${ops[category] || 0}]`)
+        )
+      )
+    ),
+    alreadyVoted ? p({ class: 'muted' }, i18n.alreadyVoted) : null
+  );
+};
+exports.renderOpinionsVoting = renderOpinionsVoting;
 
 // markdown
 const markdownUrl = "https://commonmark.org/help/";
@@ -1976,7 +2001,7 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
                 span(
                     { class: "created-at" },
                     `${i18n.createdBy} `,
-                    a({ href: url.author }, "@", name),
+                    userLink(authorIdForName, msg.value?.meta?.author?.name),
                     ` | ${timeAbsolute} | ${i18n.sendTime} `,
                     a({ href: url.link }, timeAgo)
                 ),

@@ -1,5 +1,5 @@
 const h = require("../server/node_modules/hyperaxe");
-const { div, h2, p, section, button, form, input, span } = h;
+const { div, h2, p, section, button, form, input, span, a } = h;
 const { template, i18n } = require('./main_views');
 
 const TAU = Math.PI * 2;
@@ -53,26 +53,35 @@ const buildGraphSvg = (me, peers) => {
     const xs = x.toFixed(2);
     const ys = y.toFixed(2);
     const labelY = (y + nodeR + labelGap).toFixed(2);
-    const href = `/author/${escAttr(encodeURIComponent(peer.key))}`;
+    const enc = escAttr(encodeURIComponent(peer.key));
+    const centerHref = `/graphos?center=${enc}`;
+    const profileHref = `/author/${enc}`;
     const name = escText(peer.name);
-    return `<a href="${href}" class="graphos-node-link">`
-      + `<g class="graphos-node graphos-node-${peer.kind}">`
+    return `<g class="graphos-node graphos-node-${peer.kind}">`
       + `<title>${name} (${peer.kind})</title>`
+      + `<a href="${centerHref}" class="graphos-node-link">`
       + `<circle cx="${xs}" cy="${ys}" r="${nodeR}" class="graphos-node-circle graphos-node-circle-${peer.kind}" />`
+      + `</a>`
+      + `<a href="${profileHref}" class="graphos-node-link">`
       + `<text x="${xs}" y="${labelY}" text-anchor="middle" class="graphos-node-label">${name}</text>`
-      + `</g></a>`;
+      + `</a>`
+      + `</g>`;
   }).join('');
 
   const meLabelY = (cy + meR + labelGap + 2).toFixed(2);
-  const meHref = `/author/${escAttr(encodeURIComponent(me.key))}`;
+  const meEnc = escAttr(encodeURIComponent(me.key));
+  const meProfileHref = `/author/${meEnc}`;
   const meName = escText(me.name);
-  const center = `<a href="${meHref}" class="graphos-node-link">`
-    + `<g class="graphos-node graphos-node-me">`
-    + `<title>${meName} (you, online)</title>`
+  const center = `<g class="graphos-node graphos-node-me">`
+    + `<title>${meName}</title>`
+    + `<a href="/graphos" class="graphos-node-link">`
     + `<circle cx="${cx}" cy="${cy}" r="${(meR + 5).toFixed(2)}" class="graphos-node-circle graphos-node-circle-online graphos-me-online-ring" />`
     + `<circle cx="${cx}" cy="${cy}" r="${meR}" class="graphos-node-circle graphos-node-circle-me" />`
+    + `</a>`
+    + `<a href="${meProfileHref}" class="graphos-node-link">`
     + `<text x="${cx}" y="${meLabelY}" text-anchor="middle" class="graphos-node-label graphos-node-label-me">${meName}</text>`
-    + `</g></a>`;
+    + `</a>`
+    + `</g>`;
 
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" class="graphos-svg">`
     + edges + nodes + center
@@ -90,10 +99,11 @@ const legendItem = (kind, label) =>
     span(label)
   );
 
-exports.graphosView = ({ filter, me, peers, kpis }) => {
+exports.graphosView = ({ filter, me, peers, kpis, focus = null, focusId = null, shown = null, total = null }) => {
   const title = i18n.graphos || 'Graphos';
   const description = i18n.graphosDescription || 'Interactive map of the network around you.';
   const modes = ['ALL', 'MINE'];
+  const capped = Number.isFinite(shown) && Number.isFinite(total) && total > shown;
 
   return template(
     title,
@@ -102,14 +112,27 @@ exports.graphosView = ({ filter, me, peers, kpis }) => {
         h2(title),
         p(description)
       ),
-      div({ class: 'mode-buttons stats-mode-row' },
-        modes.map(m =>
-          form({ method: 'GET', action: '/graphos' },
-            input({ type: 'hidden', name: 'filter', value: m }),
-            button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, i18n[m + 'Button'])
-          )
-        )
-      ),
+      focus
+        ? [
+            form({ method: 'GET', action: '/graphos', class: 'graphos-backbar' },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.graphosBackToMine || '← My network')
+            ),
+            div({ class: 'graphos-focus-bar' },
+              span({ class: 'graphos-focus-label' }, `${i18n.graphosViewingGraphOf || 'Viewing'}: `),
+              a({ class: 'user-link', href: `/author/${encodeURIComponent(focusId || '')}` }, `@${focus}`)
+            )
+          ]
+        : div({ class: 'mode-buttons stats-mode-row' },
+            modes.map(m =>
+              form({ method: 'GET', action: '/graphos' },
+                input({ type: 'hidden', name: 'filter', value: m }),
+                button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, i18n[m + 'Button'])
+              )
+            )
+          ),
+      capped
+        ? p({ class: 'graphos-cap-note' }, `${i18n.graphosShowing || 'Showing'} ${shown} / ${total}`)
+        : null,
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
         legendItem('online', i18n.online || 'Online'),

@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { dedupeBy, norm } = require('./dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const normU = (v) => String(v || '').trim().toUpperCase();
@@ -272,7 +273,7 @@ module.exports = ({ cooler }) => {
             tombstoned.forEach(id => reports.delete(id));
             replaced.forEach((_, oldId) => reports.delete(oldId));
 
-            resolve([...reports.values()]);
+            resolve(dedupeBy([...reports.values()], x => x.title ? [norm(x.author), norm(x.title), norm(x.category)].join('|') : null));
           })
         );
       });

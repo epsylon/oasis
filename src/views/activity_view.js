@@ -368,6 +368,19 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         ? Object.entries(votes).map(([option, count]) => ({ option, count }))
         : [];
 
+      const voteOutcome = (() => {
+        const totalNum = Number(totalVotes || 0);
+        const noResult = { text: i18n.voteNoQuorum || 'NO QUORUM', color: '#ffcc00' };
+        if (totalNum < 2) return noResult;
+        const entries = Object.entries(votes || {}).filter(([o]) => o !== 'FOLLOW_MAJORITY');
+        const maxCount = entries.reduce((m, [, c]) => Math.max(m, Number(c) || 0), 0);
+        const top = entries.filter(([, c]) => (Number(c) || 0) === maxCount);
+        if (maxCount === 0 || top.length > 1) return noResult;
+        const w = top[0][0];
+        const label = i18n['vote' + w.split('_').map(x => x.charAt(0) + x.slice(1).toLowerCase()).join('')] || w;
+        return { text: label, color: w === 'YES' ? '#4caf50' : w === 'NO' ? '#e53935' : '#ffcc00' };
+      })();
+
       cardBody.push(
         div({ class: 'card-section votes' },
           div(
@@ -384,6 +397,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
             { class: 'card-field' },
             span({ class: 'card-label' }, i18n.voteTotalVotes + ':'),
             span({ class: 'card-value' }, totalVotes)
+          ),
+          div(
+            { class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.voteResults || 'Results') + ':'),
+            span({ class: 'card-value', style: `color:${voteOutcome.color};font-weight:bold;` }, voteOutcome.text)
           ),
           div(
             { class: 'card-field' },
@@ -518,6 +536,16 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       );
     }
 
+    if (type === 'larpHousePost') {
+      const { text, house } = content;
+      cardBody.push(
+        div({ class: 'card-section post' },
+          house ? a({ href: `/larp/${encodeURIComponent(house)}`, class: 'tag-link' }, `L.A.R.P · ${String(house).toUpperCase()}`) : null,
+          text ? p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(String(text))) : null
+        )
+      );
+    }
+
     if (type === 'tribe') {
       const { title, image, description, location, tags, inviteMode, isAnonymous } = content;
       if (isAnonymous === true) { skip = true; }
@@ -533,8 +561,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
             inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeModeLabel) + ':'), span({ class: 'card-value' }, inviteMode.toUpperCase())) : ""
          ),
           image
-            ? renderMediaBlob(image, '/assets/images/default-tribe.png')
-            : img({ src: '/assets/images/default-tribe.png', class: 'feed-image tribe-image' }),
+            ? (/^(\/|https?:)/.test(String(image))
+                ? img({ src: image, class: 'feed-image tribe-image' })
+                : renderMediaBlob(image, null))
+            : null,
           p({ class: 'tribe-description' }, ...renderUrl(description || '')),
           validTags.length
             ? div({ class: 'card-tags' }, validTags.map(tag =>
@@ -814,7 +844,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       const parent = isReply ? (byIdAll.get(replyToId) || byIdAll.get(threadId)) : null;
       const parentContent = parent ? (parent.value?.content || parent.content || {}) : {};
       const parentAuthor = parent?.author || '';
-      const parentName = parent?.authorName || parentAuthor;
+      const parentName = parent?.authorName || '';
       const parentText = parent ? excerptPostText(parentContent, 220) : '';
       cardBody.push(
         div({ class: 'card-section post' },
@@ -909,7 +939,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         const parentContent = parentForum ? (parentForum.value?.content || parentForum.content || {}) : {};
         const parentTitle = (parentContent?.title && String(parentContent.title).trim()) ? parentContent.title : ((rootTitle && String(rootTitle).trim()) ? rootTitle : '');
         const parentAuthor = parentForum?.author || '';
-        const parentName = parentForum?.authorName || parentAuthor;
+        const parentName = parentForum?.authorName || '';
         const hrefKey = rootKey || rootId;
         cardBody.push(
           div({ class: 'card-section forum' },
@@ -1000,13 +1030,15 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
     }
 
     if (type === 'about') {
-      const { about, name, image } = content;
+      const { about, name, image, description } = content;
+      const imgId = image ? (typeof image === 'string' ? image : (image.link || '')) : '';
       cardBody.push(
         div({ class: 'card-section about' },
           h2(userLink(about, name)),
-          image
-            ? img({ src: `/blob/${encodeURIComponent(image)}`, alt: name, class: 'activity-avatar' })
-            : img({ src: '/assets/images/default-avatar.png', alt: name, class: 'activity-avatar' })
+          imgId
+            ? img({ src: `/blob/${encodeURIComponent(imgId)}`, alt: name, class: 'activity-avatar' })
+            : img({ src: '/assets/images/default-avatar.png', alt: name, class: 'activity-avatar' }),
+          description ? p({ class: 'tribe-side-description' }, ...renderUrlPreserveNewlines(String(description))) : null
         )
       );
     }
@@ -1652,13 +1684,15 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'recent',    label: i18n.typeRecent },
     { type: 'all',       label: i18n.allButton },
     { type: 'mine',      label: i18n.mineButton },
+    { type: 'inhabitants', label: i18n.typeInhabitants },
     { type: 'tribe',     label: i18n.typeTribe },
+    { type: 'larp',      label: i18n.typeLarp },
     { type: 'parliament',label: i18n.typeParliament },
     { type: 'courts',    label: i18n.typeCourts },
+    { type: 'votes',     label: i18n.typeVotes },
     { type: 'event',     label: i18n.typeEvent },
     { type: 'calendar',  label: i18n.typeCalendar },
     { type: 'task',      label: i18n.typeTask },
-    { type: 'votes',     label: i18n.typeVotes },
     { type: 'report',    label: i18n.typeReport },
     { type: 'post',      label: i18n.typePost },
     { type: 'feed',      label: i18n.typeFeed },
@@ -1668,10 +1702,10 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'map',       label: i18n.typeMap },
     { type: 'banking',   label: i18n.typeBanking },
     { type: 'market',    label: i18n.typeMarket },
-    { type: 'shop',      label: i18n.typeShop },
     { type: 'project',   label: i18n.typeProject },
-    { type: 'transfer',  label: i18n.typeTransfer },
     { type: 'job',       label: i18n.typeJob },
+    { type: 'shop',      label: i18n.typeShop },
+    { type: 'transfer',  label: i18n.typeTransfer },
     { type: 'curriculum',label: i18n.typeCurriculum },
     { type: 'audio',     label: i18n.typeAudio },
     { type: 'bookmark',  label: i18n.typeBookmark },
@@ -1687,7 +1721,9 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     courts:     ['courtsCase', 'courtsNomination', 'courtsNominationVote'],
     banking:    ['bankWallet', 'bankClaim', 'ubiClaim'],
     task:       ['task', 'taskAssignment'],
-    shop:       ['shop', 'shopProduct']
+    shop:       ['shop', 'shopProduct'],
+    larp:       ['larpHousePost'],
+    inhabitants:['about']
   };
   const ALLOWED_TYPES = new Set();
   for (const { type } of activityTypes) {
@@ -1707,6 +1743,10 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim' || action.type === 'ubiClaim'));
   } else if (filter === 'tribe') {
     filteredActions = actions.filter(action => action.type === 'tribe');
+  } else if (filter === 'larp') {
+    filteredActions = actions.filter(action => action.type === 'larpHousePost');
+  } else if (filter === 'inhabitants') {
+    filteredActions = actions.filter(action => action.type === 'about');
   } else if (filter === 'parliament') {
     filteredActions = actions.filter(action => ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(action.type));
   } else if (filter === 'courts') {
@@ -1720,6 +1760,46 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action => action.type === 'torrent');
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all' || (filter === 'shop' && action.type === 'shopProduct')) && action.type !== 'tombstone');
+  }
+
+  const larpEarliest = new Map();
+  for (const action of filteredActions) {
+    if (action.type !== 'tribe') continue;
+    const c = action.value?.content || action.content || {};
+    const larpTag = (Array.isArray(c.tags) ? c.tags : []).find(x => String(x).startsWith('larp-'));
+    if (!larpTag) continue;
+    const ts = action.ts || 0;
+    const prev = larpEarliest.get(larpTag);
+    if (!prev || ts < prev.ts) larpEarliest.set(larpTag, { id: action.id, ts });
+  }
+  if (larpEarliest.size) {
+    filteredActions = filteredActions.filter(action => {
+      if (action.type !== 'tribe') return true;
+      const c = action.value?.content || action.content || {};
+      const larpTag = (Array.isArray(c.tags) ? c.tags : []).find(x => String(x).startsWith('larp-'));
+      if (!larpTag) return true;
+      return larpEarliest.get(larpTag).id === action.id;
+    });
+  }
+
+  const aboutLatest = new Map();
+  for (const action of filteredActions) {
+    if (action.type !== 'about') continue;
+    const c = action.value?.content || action.content || {};
+    const subject = c.about || action.author;
+    if (!subject) continue;
+    const ts = action.ts || 0;
+    const prev = aboutLatest.get(subject);
+    if (!prev || ts > prev.ts) aboutLatest.set(subject, { id: action.id, ts });
+  }
+  if (aboutLatest.size) {
+    filteredActions = filteredActions.filter(action => {
+      if (action.type !== 'about') return true;
+      const c = action.value?.content || action.content || {};
+      const subject = c.about || action.author;
+      if (!subject) return true;
+      return aboutLatest.get(subject).id === action.id;
+    });
   }
 
   const qs = String(q || '').trim();
@@ -1778,11 +1858,11 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
       div({ class: 'activity-filter-grid' },
         ...[
           activityTypes.slice(0, 3),
-          activityTypes.slice(3, 6),
-          activityTypes.slice(6, 11),
-          activityTypes.slice(11, 17),
-          activityTypes.slice(17, 24),
-          activityTypes.slice(24)
+          activityTypes.slice(3, 8),
+          activityTypes.slice(8, 13),
+          activityTypes.slice(13, 19),
+          activityTypes.slice(19, 26),
+          activityTypes.slice(26)
         ].map(col =>
           div({ class: 'activity-filter-col' },
             col.map(({ type, label }) =>
