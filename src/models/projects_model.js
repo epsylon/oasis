@@ -2,7 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('./dedupe')
+const { dedupeBy, norm } = require('../backend/dedupe')
 const logLimit = (getConfig().ssbLogStream && getConfig().ssbLogStream.limit) || 1000
 
 module.exports = ({ cooler }) => {
@@ -96,36 +96,124 @@ module.exports = ({ cooler }) => {
     return { milestones, progress, changed }
   }
 
-  async function resolveTipId(id) {
-    const ssbClient = await openSsb()
-    const all = await getAllMsgs(ssbClient)
+  const COLLAB_MSG = new Set(["projectOpinion", "projectFollow", "projectPledge", "projectClaim", "projectPledgeConfirm"])
 
-    const tomb = new Set()
-    const forward = new Map()
-
-    for (const m of all) {
+  function buildProjectIndex(messages) {
+    const tomb = buildValidatedTombstoneSet(messages)
+    const nodes = new Map()
+    const collab = { opinion: [], follow: [], pledge: [], claim: [], pledgeConfirm: [] }
+    for (const m of messages) {
       const c = m && m.value && m.value.content
       if (!c) continue
-if (c.type === TYPE && c.replaces) forward.set(c.replaces, m.key)
+      if (c.type === "tombstone") continue
+      if (c.type === "projectOpinion") { collab.opinion.push({ target: c.target, author: m.value.author, category: c.category, ts: (m.value && m.value.timestamp) || 0 }); continue }
+      if (c.type === "projectFollow") { collab.follow.push({ target: c.target, author: m.value.author, on: c.on !== false, ts: (m.value && m.value.timestamp) || 0 }); continue }
+      if (c.type === "projectPledge") { collab.pledge.push({ target: c.target, author: m.value.author, amount: Math.max(0, parseFloat(c.amount || 0) || 0), transferId: c.transferId || null, milestoneIndex: c.milestoneIndex != null ? c.milestoneIndex : null, bountyIndex: c.bountyIndex != null ? c.bountyIndex : null, ts: (m.value && m.value.timestamp) || 0 }); continue }
+      if (c.type === "projectPledgeConfirm") { collab.pledgeConfirm.push({ target: c.target, author: m.value.author, transferId: c.transferId || null, ts: (m.value && m.value.timestamp) || 0 }); continue }
+      if (c.type === "projectClaim") { collab.claim.push({ target: c.target, author: m.value.author, index: parseInt(c.index, 10), ts: (m.value && m.value.timestamp) || 0 }); continue }
+      if (c.type !== TYPE) continue
+      nodes.set(m.key, { key: m.key, ts: (m.value && m.value.timestamp) || 0, c, author: m.value.author })
+    }
+    const naiveNext = new Map(), naivePrev = new Map(), strictNext = new Map()
+    for (const [key, n] of nodes) {
+      const t = n.c.replaces
+      if (!t) continue
+      naiveNext.set(t, key); naivePrev.set(key, t)
+      const orig = nodes.get(t)
+      if (orig && orig.author === n.author) strictNext.set(t, key)
+    }
+    return { tomb, nodes, collab, naiveNext, naivePrev, strictNext }
+  }
+
+  function resolveProjectGroup(idx, root) {
+    const { nodes, collab, naiveNext, strictNext } = idx
+    const followStrict = (key) => { let x = key, g = 0; while (strictNext.has(x) && g++ < 100000) x = strictNext.get(x); return x }
+    const rootNode = nodes.get(root)
+    const rootAuthor = rootNode ? rootNode.author : null
+    let tip = followStrict(root)
+    const tn = nodes.get(tip)
+    if (!tn || tn.author !== rootAuthor) tip = root
+    const best = nodes.get(tip)
+    if (!best) return null
+
+    const groupKeys = []
+    { let x = root, g = 0; groupKeys.push(x); while (naiveNext.has(x) && g++ < 100000) { x = naiveNext.get(x); groupKeys.push(x) } }
+
+    const project = { ...best.c, id: tip }
+
+    const followers = new Set()
+    const opinions = {}
+    const opinionSet = new Set()
+    let backers = []
+    const claimByIndex = new Map()
+    for (const k of groupKeys) {
+      const n = nodes.get(k); if (!n) continue
+      if (n.author !== rootAuthor) continue
+      const c = n.c
+      for (const f of (Array.isArray(c.followers) ? c.followers : [])) followers.add(f)
+      if (Array.isArray(c.backers) && c.backers.length > backers.length) backers = c.backers.slice()
+      for (const v of (Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])) {
+        if (!opinionSet.has(v)) opinionSet.add(v)
+      }
+      if (c.opinions && typeof c.opinions === "object") { for (const kk of Object.keys(c.opinions)) opinions[kk] = Math.max(opinions[kk] || 0, Number(c.opinions[kk]) || 0) }
+      if (Array.isArray(c.bounties)) c.bounties.forEach((b, i) => { if (b && b.claimedBy && !claimByIndex.has(i)) claimByIndex.set(i, b.claimedBy) })
     }
 
-    let cur = id
-    while (forward.has(cur)) cur = forward.get(cur)
-    if (tomb.has(cur)) throw new Error("Project not found")
-    return cur
+    for (const f of collab.follow.filter(x => x.target === root).sort((a, b) => a.ts - b.ts)) { if (f.on) followers.add(f.author); else followers.delete(f.author) }
+    for (const op of collab.opinion.filter(x => x.target === root)) { if (!opinionSet.has(op.author)) { opinionSet.add(op.author); opinions[op.category] = (opinions[op.category] || 0) + 1 } }
+    const confirmedTransfers = new Set(collab.pledgeConfirm.filter(x => x.target === root && x.author === rootAuthor && x.transferId).map(x => String(x.transferId)))
+    const pledgeMsgs = collab.pledge.filter(x => x.target === root).sort((a, b) => a.ts - b.ts)
+    for (const p of pledgeMsgs) backers.push({ userId: p.author, amount: p.amount, at: new Date(p.ts || 0).toISOString(), transferId: p.transferId || null, milestoneIndex: p.milestoneIndex, bountyIndex: p.bountyIndex, confirmed: !!(p.transferId && confirmedTransfers.has(String(p.transferId))) })
+    for (const cl of collab.claim.filter(x => x.target === root).sort((a, b) => a.ts - b.ts)) { if (Number.isInteger(cl.index) && !claimByIndex.has(cl.index)) claimByIndex.set(cl.index, cl.author) }
+
+    project.followers = [...followers]
+    project.opinions = opinions
+    project.opinions_inhabitants = [...opinionSet]
+    project.backers = backers
+    const pledged = backers.reduce((s, b) => s + (parseFloat(b && b.amount || 0) || 0), 0)
+    project.pledged = pledged
+    if (Array.isArray(project.bounties)) project.bounties = project.bounties.map((b, i) => ({ ...b, claimedBy: claimByIndex.has(i) ? claimByIndex.get(i) : (b && b.claimedBy) || null }))
+    const goalNum = parseFloat(project.goal || 0) || 0
+    if (goalNum > 0) project.progress = Math.max(clampPercent(project.progress), Math.min(100, Math.round((pledged / goalNum) * 100)))
+
+    return { tip, root, best, project, tombstoned: idx.tomb.has(tip) }
+  }
+
+  const rootOfIdx = (idx, key) => { let x = key, g = 0; while (idx.naivePrev.has(x) && idx.nodes.has(idx.naivePrev.get(x)) && g++ < 100000) x = idx.naivePrev.get(x); return x }
+
+  async function resolveTipId(id) {
+    const ssbClient = await openSsb()
+    const idx = buildProjectIndex(await getAllMsgs(ssbClient))
+    const g = resolveProjectGroup(idx, rootOfIdx(idx, id))
+    if (!g || g.tombstoned) throw new Error("Project not found")
+    return g.tip
   }
 
   async function getById(id) {
     const ssbClient = await openSsb()
-    const tip = await resolveTipId(id)
-    const msg = await new Promise((r, j) => ssbClient.get(tip, (e, m) => (e ? j(e) : r(m))))
-    if (!msg || !msg.content) throw new Error("Project not found")
-    return { id: tip, ...msg.content }
+    const idx = buildProjectIndex(await getAllMsgs(ssbClient))
+    const g = resolveProjectGroup(idx, rootOfIdx(idx, id))
+    if (!g || g.tombstoned) throw new Error("Project not found")
+    return g.project
+  }
+
+  const CONTENT_COLLAB_FIELDS = ["followers", "backers", "opinions", "opinions_inhabitants", "pledged", "activity"]
+  function stripCollab(content) {
+    const out = { ...content }
+    delete out.id
+    for (const f of CONTENT_COLLAB_FIELDS) delete out[f]
+    out.followers = []
+    out.backers = []
+    out.opinions = {}
+    out.opinions_inhabitants = []
+    out.pledged = 0
+    if (Array.isArray(out.bounties)) out.bounties = out.bounties.map((b) => ({ ...b, claimedBy: null }))
+    return out
   }
 
   async function publishReplace(ssbClient, currentId, content) {
     const tomb = { type: "tombstone", target: currentId, deletedAt: new Date().toISOString(), author: ssbClient.id }
-    const updated = { ...content, type: TYPE, replaces: currentId, updatedAt: new Date().toISOString() }
+    const updated = { ...stripCollab(content), type: TYPE, replaces: currentId, updatedAt: new Date().toISOString() }
     await new Promise((res, rej) => ssbClient.publish(tomb, (e) => (e ? rej(e) : res())))
     return new Promise((res, rej) => ssbClient.publish(updated, (e, m) => (e ? rej(e) : res(m))))
   }
@@ -258,15 +346,12 @@ if (c.type === TYPE && c.replaces) forward.set(c.replaces, m.key)
       if (!categories.includes(category)) throw new Error('Invalid opinion category')
       const ssbClient = await openSsb()
       const userId = ssbClient.id
-      const tip = await resolveTipId(id)
-      const project = await getById(tip)
-      const list = Array.isArray(project.opinions_inhabitants) ? project.opinions_inhabitants : []
-      if (list.includes(userId)) throw new Error('Already opined')
-      const opinions = Object.assign({}, project.opinions || {})
-      opinions[category] = (opinions[category] || 0) + 1
-      const content = { ...project, opinions, opinions_inhabitants: list.concat(userId) }
-      delete content.id
-      return publishReplace(ssbClient, tip, content)
+      const idx = buildProjectIndex(await getAllMsgs(ssbClient))
+      const g = resolveProjectGroup(idx, rootOfIdx(idx, id))
+      if (!g || g.tombstoned) throw new Error('Project not found')
+      if ((g.project.opinions_inhabitants || []).includes(userId)) throw new Error('Already opined')
+      const content = { type: 'projectOpinion', target: g.root, category, createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))
     },
 
     async deleteProject(id) {
@@ -289,33 +374,46 @@ if (c.type === TYPE && c.replaces) forward.set(c.replaces, m.key)
     },
 
     async followProject(id, uid) {
-      const tip = await resolveTipId(id)
       const ssbClient = await openSsb()
-      const project = await getById(tip)
-      const followers = Array.isArray(project.followers) ? project.followers.slice() : []
-      if (!followers.includes(uid)) followers.push(uid)
-      return publishReplace(ssbClient, project.id, { ...project, followers, activity: { kind: "follow", activityActor: uid, at: new Date().toISOString() } })
+      const idx = buildProjectIndex(await getAllMsgs(ssbClient))
+      const g = resolveProjectGroup(idx, rootOfIdx(idx, id))
+      if (!g || g.tombstoned) throw new Error("Project not found")
+      const content = { type: "projectFollow", target: g.root, on: true, createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))
     },
 
     async unfollowProject(id, uid) {
-      const tip = await resolveTipId(id)
       const ssbClient = await openSsb()
-      const project = await getById(tip)
-      const followers = Array.isArray(project.followers) ? project.followers.filter((x) => x !== uid) : []
-      return publishReplace(ssbClient, project.id, { ...project, followers, activity: { kind: "unfollow", activityActor: uid, at: new Date().toISOString() } })
+      const idx = buildProjectIndex(await getAllMsgs(ssbClient))
+      const g = resolveProjectGroup(idx, rootOfIdx(idx, id))
+      if (!g || g.tombstoned) throw new Error("Project not found")
+      const content = { type: "projectFollow", target: g.root, on: false, createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))
     },
 
-    async pledgeToProject(id, uid, amount) {
-      const tip = await resolveTipId(id)
+    async pledgeToProject(id, uid, amount, extra = {}) {
       const ssbClient = await openSsb()
-      const project = await getById(tip)
+      const idx = buildProjectIndex(await getAllMsgs(ssbClient))
+      const g = resolveProjectGroup(idx, rootOfIdx(idx, id))
+      if (!g || g.tombstoned) throw new Error("Project not found")
       const amt = Math.max(0, parseFloat(amount || 0) || 0)
       if (amt <= 0) throw new Error("Invalid amount")
-      const backers = Array.isArray(project.backers) ? project.backers.slice() : []
-      backers.push({ userId: uid, amount: amt, at: new Date().toISOString(), confirmed: false })
-      const pledged = (parseFloat(project.pledged || 0) || 0) + amt
-      const progress = project.goal ? (pledged / parseFloat(project.goal || 1)) * 100 : project.progress
-      return publishReplace(ssbClient, project.id, { ...project, backers, pledged, progress })
+      const content = { type: "projectPledge", target: g.root, amount: amt, createdAt: new Date().toISOString() }
+      if (extra && extra.transferId) content.transferId = extra.transferId
+      if (extra && extra.milestoneIndex != null) content.milestoneIndex = extra.milestoneIndex
+      if (extra && extra.bountyIndex != null) content.bountyIndex = extra.bountyIndex
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))
+    },
+
+    async confirmPledge(id, transferId) {
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const idx = buildProjectIndex(await getAllMsgs(ssbClient))
+      const g = resolveProjectGroup(idx, rootOfIdx(idx, id))
+      if (!g || g.tombstoned) throw new Error("Project not found")
+      if (String(g.project.author) !== String(userId)) throw new Error("Only the project author can confirm pledges")
+      const content = { type: "projectPledgeConfirm", target: g.root, transferId: String(transferId || ""), createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))
     },
 
     async addBounty(id, bounty) {
@@ -400,15 +498,16 @@ if (c.type === TYPE && c.replaces) forward.set(c.replaces, m.key)
     },
 
     async claimBounty(id, index, uid) {
-      const tip = await resolveTipId(id)
       const ssbClient = await openSsb()
-      const project = await getById(tip)
-      const bounties = Array.isArray(project.bounties) ? project.bounties.slice() : []
+      const idx = buildProjectIndex(await getAllMsgs(ssbClient))
+      const g = resolveProjectGroup(idx, rootOfIdx(idx, id))
+      if (!g || g.tombstoned) throw new Error("Project not found")
+      const bounties = Array.isArray(g.project.bounties) ? g.project.bounties : []
       if (!bounties[index]) throw new Error("Bounty not found")
       if (bounties[index].claimedBy) throw new Error("Already claimed")
-      if (project.author === uid) throw new Error("Authors cannot claim")
-      bounties[index].claimedBy = uid
-      return publishReplace(ssbClient, project.id, { ...project, bounties })
+      if (g.project.author === uid) throw new Error("Authors cannot claim")
+      const content = { type: "projectClaim", target: g.root, index: parseInt(index, 10), createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))))
     },
 
     async completeBounty(id, index, uid) {
@@ -450,64 +549,22 @@ if (c.type === TYPE && c.replaces) forward.set(c.replaces, m.key)
     async listProjects(filter) {
       const ssbClient = await openSsb()
       const currentUserId = ssbClient.id
-      const msgs = await getAllMsgs(ssbClient)
+      const idx = buildProjectIndex(await getAllMsgs(ssbClient))
 
-      const tomb = buildValidatedTombstoneSet(msgs)
-      const nodes = new Map()
-      const parent = new Map()
-      const child = new Map()
-
-      for (const m of msgs) {
-        const k = m && m.key
-        const c = m && m.value && m.value.content
-        if (!c) continue
-        if (c.type === "tombstone") continue
-        if (c.type !== TYPE) continue
-        nodes.set(k, { key: k, ts: (m.value && m.value.timestamp) || 0, c })
-        if (c.replaces) {
-          parent.set(k, c.replaces)
-          child.set(c.replaces, k)
-        }
-      }
-
-      const rootOf = (id) => {
-        let cur = id
-        while (parent.has(cur)) cur = parent.get(cur)
-        return cur
-      }
-
-      const groups = new Map()
-      for (const id of nodes.keys()) {
-        const r = rootOf(id)
-        if (!groups.has(r)) groups.set(r, new Set())
-        groups.get(r).add(id)
-      }
+      const roots = new Set()
+      for (const key of idx.nodes.keys()) roots.add(rootOfIdx(idx, key))
 
       const out = []
-      for (const entry of groups.entries()) {
-        const root = entry[0]
-        const ids = entry[1]
-
-        let tip = Array.from(ids).find((id) => !child.has(id))
-        if (!tip) {
-          const arr = Array.from(ids)
-          tip = arr.reduce((a, b) => (nodes.get(a).ts > nodes.get(b).ts ? a : b))
-        }
-        if (tomb.has(tip)) continue
-        const n = nodes.get(tip)
-        if (!n || !n.c) continue
-
-        const c = n.c
-        const status = String(c.status || "ACTIVE").toUpperCase()
-        const createdAt = c.createdAt || new Date(n.ts).toISOString()
-        const deadline = c.deadline || null
-
+      for (const root of roots) {
+        const g = resolveProjectGroup(idx, root)
+        if (!g || g.tombstoned) continue
+        const c = g.project
         out.push({
-          id: tip,
           ...c,
-          status,
-          createdAt,
-          deadline
+          id: g.tip,
+          status: String(c.status || "ACTIVE").toUpperCase(),
+          createdAt: c.createdAt || new Date(g.best.ts).toISOString(),
+          deadline: c.deadline || null
         })
       }
 

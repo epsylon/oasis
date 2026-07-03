@@ -416,7 +416,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
   const isExpired = dl && dl.isValid() ? dl.isBefore(moment()) : false
   const tags = Array.isArray(transfer.tags) ? transfer.tags.map(t => String(t).toUpperCase()) : []
   const isUbi = tags.includes("UBI")
-  const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired
+  const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired && !tags.includes("PENDING")
 
   const tagsNode = renderTags(transfer.tags)
   const cat = categoryOf(transfer)

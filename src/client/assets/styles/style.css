@@ -4095,6 +4095,54 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   text-align: center;
 }
 
+.tribe-open-invite {
+  border: none;
+  border-radius: 4px;
+  padding: 8px;
+  margin: 6px 0;
+  background: #1e1f23;
+  text-align: center;
+}
+.tribe-open-invite-code {
+  font-family: monospace;
+  word-break: break-all;
+  font-weight: bold;
+  margin-left: 6px;
+}
+.tribe-open-invite-panel { margin: 6px 0; }
+.profile-side-version { margin: 4px 0 8px; font-size: 0.9em; text-align: center; }
+.larp-house-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  margin: 0 0 6px;
+}
+.larp-house-mini {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+
+.invite-qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  margin: 8px 0;
+}
+.invite-qr-img {
+  width: 200px;
+  height: 200px;
+  background: #fff;
+  padding: 8px;
+  border-radius: 8px;
+  image-rendering: pixelated;
+}
+
 .tribe-card-actions {
   border: 1px solid #555;
   border-radius: 4px;
@@ -4156,6 +4204,19 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .map-detail-actions .delete-btn:hover {
   background: #d9534f;
   color: #000;
+}
+.tribe-action-btn.danger-btn,
+.tribe-card-actions .tribe-action-btn.danger-btn,
+.tribe-side-actions .tribe-action-btn.danger-btn {
+  border: 1px solid #d9534f !important;
+  color: #d9534f !important;
+  background: transparent !important;
+}
+.tribe-action-btn.danger-btn:hover,
+.tribe-card-actions .tribe-action-btn.danger-btn:hover,
+.tribe-side-actions .tribe-action-btn.danger-btn:hover {
+  background: #d9534f !important;
+  color: #000 !important;
 }
 .tribe-action-btn:hover {
   background: #ffa300;
@@ -6121,7 +6182,8 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .candidature-voters { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .candidature-voter { font-size: 0.85em; }
 .candidature-votes-count { font-weight: bold; }
-.parliament-method-img { width: 160px; height: 160px; object-fit: contain; display: block; margin: 0 auto; }
+.parliament-method-img { width: 160px; height: 160px; object-fit: contain; display: block; margin: -12px auto 0; vertical-align: middle; }
+.parliament-method-col { vertical-align: middle !important; }
 .parliament-avatar-cell {
   display: flex;
   flex-direction: column;
@@ -6130,17 +6192,26 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
   text-align: center;
   background: none !important;
   border: none !important;
+  box-shadow: none !important;
 }
 .parliament-avatar-name {
   font-size: 0.9em;
   background: none !important;
   border: none !important;
+  box-shadow: none !important;
   padding: 0 !important;
+}
+.parliament-avatar-cell a,
+.parliament-avatar-name a {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 .parliament-gov-table td, .parliament-gov-table th,
 .parliament-actor-table td, .parliament-actor-table th,
 .table--centered td, .table--centered th,
 .gov-overview td, .gov-overview th { text-align: center !important; vertical-align: middle; }
+.parliament-gov-table td, .parliament-gov-table th,
 .parliament-gov-table td:first-child,
 .gov-overview td:first-child { background: none !important; border: none !important; }
 

@@ -291,6 +291,23 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
             button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
           )
         : null,
+      (() => {
+        if (!(isAuthor && !calendar.tribeId)) return null
+        const invs = Array.isArray(calendar.invites) ? calendar.invites : []
+        const openInvite = invs.find(inv => typeof inv === "object" && inv && inv.public === true && inv.code)
+        if (openInvite) return [
+          div({ class: "tribe-open-invite" },
+            span({ class: "card-label" }, i18n.tribeInviteCodeText),
+            span({ class: "tribe-open-invite-code" }, openInvite.code)
+          ),
+          form({ method: "POST", action: `/calendars/open-invite/remove/${encodeURIComponent(calendar.rootId)}` },
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
+          )
+        ]
+        return form({ method: "POST", action: `/calendars/open-invite/create/${encodeURIComponent(calendar.rootId)}` },
+          button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
+        )
+      })(),
       isAuthor
         ? form({ method: "POST", action: `/calendars/delete/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.calendarDelete || "Delete")

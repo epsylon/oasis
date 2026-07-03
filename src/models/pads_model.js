@@ -202,8 +202,11 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     const nodes = new Map()
     const parent = new Map()
     const child = new Map()
+    const strictParent = new Map()
+    const strictChild = new Map()
     const authorByKey = new Map()
     const tombRequests = []
+    const memberMsgs = []
 
     for (const m of messages) {
       const k = m.key
@@ -211,6 +214,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const c = v.content
       if (!c) continue
       if (c.type === "tombstone" && c.target) { tombRequests.push({ target: c.target, author: v.author }); continue }
+      if (c.type === "padMember" && c.target) { memberMsgs.push({ target: c.target, member: c.member, on: c.on !== false, author: v.author, ts: v.timestamp || m.timestamp || 0, code: typeof c.code === "string" ? c.code : "" }); continue }
       if (c.type === "pad") {
         nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
         authorByKey.set(k, v.author)
@@ -218,20 +222,68 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       }
     }
 
+    for (const [k, node] of nodes) {
+      const t = node.c.replaces
+      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) { strictParent.set(k, t); strictChild.set(t, k) } }
+    }
+
     for (const t of tombRequests) {
       const targetAuthor = authorByKey.get(t.target)
       if (targetAuthor && t.author === targetAuthor) tomb.add(t.target)
     }
 
-    const rootOf = (id) => { let cur = id; while (parent.has(cur)) cur = parent.get(cur); return cur }
-    const tipOf = (id) => { let cur = id; while (child.has(cur)) cur = child.get(cur); return cur }
+    const rootOf = (id) => { let cur = id, g = 0; while (parent.has(cur) && g++ < 100000) cur = parent.get(cur); return cur }
+    const tipOf = (id) => { let cur = id, g = 0; while (child.has(cur) && g++ < 100000) cur = child.get(cur); return cur }
+    const strictRootOf = (id) => { let cur = id, g = 0; while (strictParent.has(cur) && g++ < 100000) cur = strictParent.get(cur); return cur }
+    const contentTipOf = (root) => {
+      let cur = root, g = 0
+      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur)
+      const n = nodes.get(cur), rn = nodes.get(root)
+      return (n && rn && n.author === rn.author) ? cur : root
+    }
 
     const roots = new Set()
-    for (const id of nodes.keys()) roots.add(rootOf(id))
-    const tipByRoot = new Map()
-    for (const r of roots) tipByRoot.set(r, tipOf(r))
+    for (const id of nodes.keys()) roots.add(strictRootOf(id))
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot }
+    const memberByRoot = new Map()
+    const consumedByRoot = new Map()
+    for (const mm of memberMsgs) {
+      if (!nodes.has(mm.target)) continue
+      const r = strictRootOf(mm.target)
+      const ownerAuthor = nodes.get(r) && nodes.get(r).author
+      if (!ownerAuthor) continue
+      const self = mm.member === mm.author
+      const byOwner = mm.author === ownerAuthor
+      if (!self && !byOwner) continue
+      if (!mm.member) continue
+      if (!memberByRoot.has(r)) memberByRoot.set(r, new Map())
+      const m2 = memberByRoot.get(r)
+      const p = m2.get(mm.member)
+      if (!p || mm.ts >= p.ts) m2.set(mm.member, { on: mm.on, ts: mm.ts })
+      if (mm.on && mm.code) {
+        if (!consumedByRoot.has(r)) consumedByRoot.set(r, new Set())
+        consumedByRoot.get(r).add(mm.code)
+      }
+    }
+
+    const isCodeConsumed = (root, code) => {
+      if (!code) return false
+      const set = consumedByRoot.get(root)
+      return !!(set && set.has(code))
+    }
+
+    const resolveMembers = (root) => {
+      const ownerNode = nodes.get(root)
+      const oc = ownerNode ? ownerNode.c : {}
+      const set = new Set(Array.isArray(oc.members) ? oc.members.filter(x => typeof x === "string" && x) : [])
+      for (const [mem, st] of (memberByRoot.get(root) || new Map())) { if (st.on) set.add(mem); else set.delete(mem) }
+      return [...set]
+    }
+
+    const tipByRoot = new Map()
+    for (const r of roots) tipByRoot.set(r, contentTipOf(r))
+
+    return { tomb, nodes, parent, child, rootOf, tipOf, strictRootOf, contentTipOf, tipByRoot, resolveMembers, isCodeConsumed }
   }
 
   const decryptPadFields = (c, rootId, tribeKeys) => {
@@ -252,7 +304,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     return { title, deadline, tags }
   }
 
-  const buildPad = (node, rootId, tribeKeys) => {
+  const buildPad = (node, rootId, tribeKeys, members) => {
     const c = node.c || {}
     if (c.type !== "pad") return null
     const { title, deadline, tags } = decryptPadFields(c, rootId, tribeKeys)
@@ -264,7 +316,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       deadline,
       tags,
       author: c.author || node.author,
-      members: Array.isArray(c.members) ? c.members : [],
+      members: Array.isArray(members) ? members : (Array.isArray(c.members) ? c.members : []),
       invites: Array.isArray(c.invites) ? c.invites : [],
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
@@ -307,11 +359,9 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const root = idx.strictRootOf(id)
+      const tip = idx.contentTipOf(root)
       if (idx.tomb.has(tip)) throw new Error("Not found")
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
       return root
     },
 
@@ -319,8 +369,8 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const root = idx.strictRootOf(id)
+      const tip = idx.contentTipOf(root)
       if (idx.tomb.has(tip)) throw new Error("Not found")
       return tip
     },
@@ -425,6 +475,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
             status: data.status !== undefined ? (["OPEN","INVITE-ONLY"].includes(String(data.status).toUpperCase()) ? String(data.status).toUpperCase() : c.status) : c.status,
             deadline: data.deadline !== undefined ? (isEncrypted ? enc(String(data.deadline)) : String(data.deadline)) : c.deadline,
             tags: data.tags !== undefined ? tagsField(data.tags) : c.tags,
+            invites: data.invites !== undefined ? data.invites : c.invites,
             updatedAt: new Date().toISOString(),
             replaces: tipId
           }
@@ -483,20 +534,12 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const pad = await this.getPadById(padId)
       if (!pad) throw new Error("Pad not found")
       if (pad.author === userId) throw new Error("Author cannot leave their own pad")
-      const members = (Array.isArray(pad.members) ? pad.members : []).filter(m => m !== userId)
       if (!Array.isArray(pad.members) || !pad.members.includes(userId)) return
-      const tipId = await this.resolveCurrentId(padId)
+      const members = pad.members.filter(m => m !== userId)
       const rootId = await this.resolveRootId(padId)
       await new Promise((resolve, reject) => {
-        ssbClient.get(tipId, (err, item) => {
-          if (err || !item?.content) return reject(new Error("Pad not found"))
-          const updated = { ...item.content, members, updatedAt: new Date().toISOString(), replaces: tipId }
-          const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-          ssbClient.publish(tombstone, (e1) => {
-            if (e1) return reject(e1)
-            ssbClient.publish(updated, (e2) => e2 ? reject(e2) : resolve())
-          })
-        })
+        const content = { type: "padMember", target: rootId, member: userId, on: false, createdAt: new Date().toISOString() }
+        ssbClient.publish(content, (e) => e ? reject(e) : resolve())
       })
       try { await rotatePadKey(rootId, members) } catch (_) {}
     },
@@ -526,7 +569,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       } catch (_) { return 0 }
     },
 
-    async addMemberToPad(padId, feedId) {
+    async addMemberToPad(padId, feedId, consumedCode) {
       const tipId = await this.resolveCurrentId(padId)
       const ssbClient = await openSsb()
       const rootId = await this.resolveRootId(padId)
@@ -535,25 +578,12 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
         ssbClient.get(tipId, (err, item) => {
           if (err || !item?.content) return reject(new Error("Pad not found"))
           const c = item.content
-          const members = Array.isArray(c.members) ? c.members : []
-          if (members.includes(feedId)) return resolve()
           if (c.encrypted === true && !c.tribeId && !getPadKey(rootId)) {
             const key = tryDecryptPublicInviteKey(c.invites)
             if (key) setPadKey(rootId, key)
           }
-          const updated = { ...c, members: [...members, feedId], updatedAt: new Date().toISOString(), replaces: tipId }
-          const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: ssbClient.id }
-          ssbClient.publish(tombstone, (e1) => {
-            if (e1) return reject(e1)
-            ssbClient.publish(updated, (e2, res) => {
-              if (e2) return reject(e2)
-              if (c.encrypted === true && !c.tribeId) {
-                const keyHex = getPadKey(rootId)
-                if (keyHex) setPadKey(res.key, keyHex)
-              }
-              resolve(res)
-            })
-          })
+          const content = { type: "padMember", target: rootId, member: feedId, on: true, createdAt: new Date().toISOString(), ...(typeof consumedCode === "string" && consumedCode ? { code: consumedCode } : {}) }
+          ssbClient.publish(content, (e, res) => e ? reject(e) : resolve(res))
         })
       })
     },
@@ -576,15 +606,13 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const root = idx.strictRootOf(id)
+      const tip = idx.contentTipOf(root)
       if (idx.tomb.has(tip)) return null
       const node = idx.nodes.get(tip)
       if (!node || node.c.type !== "pad") return null
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
       const tKeys = node.c.tribeId ? await getTribeKeysFor(node.c.tribeId) : []
-      const pad = buildPad(node, root, tKeys)
+      const pad = buildPad(node, root, tKeys, idx.resolveMembers(root))
       if (!pad) return null
       pad.isClosed = isClosed(pad)
       return pad
@@ -608,7 +636,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
           }
           tKeys = tribeKeyCache.get(node.c.tribeId)
         }
-        const pad = buildPad(node, rootId, tKeys)
+        const pad = buildPad(node, rootId, tKeys, idx.resolveMembers(rootId))
         if (!pad) continue
         pad.isClosed = isClosed(pad)
         items.push(pad)
@@ -622,7 +650,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       return list.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     },
 
-    async generateInvite(padId) {
+    async generateInvite(padId, opts = {}) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const pad = await this.getPadById(padId)
@@ -632,14 +660,41 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const keyHex = getPadKey(rootId)
       const code = crypto.randomBytes(INVITE_BYTES).toString("hex")
       let invite = code
+      const pubFlag = opts.public ? { public: true } : {}
       if (keyHex) {
         const inviteSalt = generateInviteSalt()
         const ek = encryptForInvite(keyHex, code, inviteSalt)
-        invite = { code, ek, salt: inviteSalt }
+        invite = { code, ek, salt: inviteSalt, ...pubFlag }
       }
+      if (opts.public && typeof invite !== "object") invite = { code, public: true }
       const invites = [...pad.invites, invite]
       await this.updatePadById(padId, { invites })
       return code
+    },
+
+    async getOpenInvite(padId) {
+      const pad = await this.getPadById(padId).catch(() => null)
+      if (!pad || !Array.isArray(pad.invites)) return null
+      const pub = pad.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code)
+      return pub ? { code: pub.code } : null
+    },
+
+    async generateOpenInvite(padId) {
+      const pad = await this.getPadById(padId)
+      if (!pad) throw new Error("Pad not found")
+      const existing = (Array.isArray(pad.invites) ? pad.invites : []).find(inv => typeof inv === "object" && inv.public === true)
+      if (existing) throw new Error("An open invitation already exists")
+      return this.generateInvite(padId, { public: true })
+    },
+
+    async removeOpenInvite(padId) {
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const pad = await this.getPadById(padId)
+      if (!pad) throw new Error("Pad not found")
+      if (pad.author !== userId) throw new Error("Only the author can remove invites")
+      const invites = (Array.isArray(pad.invites) ? pad.invites : []).filter(inv => !(typeof inv === "object" && inv.public === true))
+      await this.updatePadById(padId, { invites })
     },
 
     async joinByInvite(code) {
@@ -657,14 +712,19 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       }
       if (!matchedPad) throw new Error("Invalid or expired invite code")
       if (matchedPad.members.includes(userId)) throw new Error("Already a member")
+      const isPublic = typeof matchedInvite === "object" && matchedInvite.public === true
+      let resolvedRootId = await this.resolveRootId(matchedPad.rootId)
+      if (!isPublic) {
+        const messages = await readAll(ssbClient)
+        const idx = buildIndex(messages)
+        if (idx.isCodeConsumed(resolvedRootId, code)) throw new Error("Invite already used")
+      }
       let padKey = null
-      let resolvedRootId = null
       if (typeof matchedInvite === "object" && matchedInvite.ek) {
         padKey = decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt)
-        resolvedRootId = await this.resolveRootId(matchedPad.rootId)
         setPadKey(resolvedRootId, padKey)
       }
-      await this.addMemberToPad(matchedPad.rootId, userId)
+      await this.addMemberToPad(matchedPad.rootId, userId, isPublic ? "" : code)
       if (tribeCrypto && padKey && resolvedRootId) {
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys")
@@ -680,24 +740,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
           }
         } catch (_) {}
       }
-      const isPublicInvite = typeof matchedInvite === "object" && matchedInvite.public === true
-      const invites = isPublicInvite ? matchedPad.invites : matchedPad.invites.filter(inv => {
-        if (typeof inv === "string") return inv !== code
-        return inv.code !== code
-      })
-      const tipId = await this.resolveCurrentId(matchedPad.rootId)
-      const ssbC = await openSsb()
-      return new Promise((resolve, reject) => {
-        ssbC.get(tipId, (err, item) => {
-          if (err || !item?.content) return reject(new Error("Pad not found after join"))
-          const updated = { ...item.content, invites, updatedAt: new Date().toISOString(), replaces: tipId }
-          const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-          ssbC.publish(tombstone, (e1) => {
-            if (e1) return reject(e1)
-            ssbC.publish(updated, (e2, res) => e2 ? reject(e2) : resolve(matchedPad.rootId))
-          })
-        })
-      })
+      return matchedPad.rootId
     },
 
     async addEntry(padId, text) {

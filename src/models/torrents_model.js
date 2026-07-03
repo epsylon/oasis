@@ -2,7 +2,7 @@ const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 
-const { dedupeBy, norm } = require('./dedupe');
+const { dedupeBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -55,8 +55,10 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const nodes = new Map();
     const parent = new Map();
     const child = new Map();
+    const strictChild = new Map();
     const authorByKey = new Map();
     const tombRequests = [];
+    const opinionMsgs = [];
 
     for (const m of messages) {
       const k = m.key;
@@ -69,12 +71,14 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         continue;
       }
 
+      if (c.type === "torrentOpinion") { opinionMsgs.push({ target: c.target, author: v.author, category: c.category }); continue; }
+
       if (c.type !== "torrent") continue;
 
       const ts = v.timestamp || m.timestamp || 0;
       let sizeBytes = 0;
       try { sizeBytes = Buffer.byteLength(JSON.stringify(v), "utf8"); } catch (_) { sizeBytes = 0; }
-      nodes.set(k, { key: k, ts, c, sizeBytes });
+      nodes.set(k, { key: k, ts, c, sizeBytes, author: v.author });
       authorByKey.set(k, v.author);
 
       if (c.replaces) {
@@ -83,16 +87,22 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       }
     }
 
+    for (const [k, node] of nodes) {
+      const t = node.c.replaces;
+      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
+    }
+
     const rootOf = (id) => {
-      let cur = id;
-      while (parent.has(cur)) cur = parent.get(cur);
+      let cur = id, g = 0;
+      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
       return cur;
     };
 
-    const tipOf = (id) => {
-      let cur = id;
-      while (child.has(cur)) cur = child.get(cur);
-      return cur;
+    const contentTipOf = (root) => {
+      let cur = root, g = 0;
+      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
+      const n = nodes.get(cur), rn = nodes.get(root);
+      return (n && rn && n.author === rn.author) ? cur : root;
     };
 
     for (const t of tombRequests) {
@@ -103,19 +113,38 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const roots = new Set();
     for (const id of nodes.keys()) roots.add(rootOf(id));
 
+    const opinionsByRoot = new Map();
+    for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
+
     const tipByRoot = new Map();
-    for (const r of roots) tipByRoot.set(r, tipOf(r));
+    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
 
     const forward = new Map();
     for (const [newId, oldId] of parent.entries()) forward.set(oldId, newId);
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot, forward };
+    const resolveGroup = (root) => {
+      const contentTip = contentTipOf(root);
+      const contentNode = nodes.get(contentTip) || nodes.get(root);
+      const lc = contentNode ? contentNode.c : {};
+      const opinions = { ...(lc.opinions || {}) };
+      const voters = safeArr(lc.opinions_inhabitants).slice();
+      const voterSet = new Set(voters);
+      for (const op of (opinionsByRoot.get(root) || [])) {
+        if (voterSet.has(op.author)) continue;
+        voterSet.add(op.author); voters.push(op.author);
+        opinions[op.category] = (opinions[op.category] || 0) + 1;
+      }
+      return { contentTip, contentNode, opinions, voters };
+    };
+
+    return { tomb, nodes, parent, child, rootOf, tipByRoot, forward, resolveGroup };
   };
 
-  const buildTorrent = (node, rootId, viewerId) => {
+  const buildTorrent = (node, rootId, viewerId, agg) => {
     const c = node.c || {};
     const undec = c.encryptedPayload && c._decrypted === false;
-    const voters = safeArr(c.opinions_inhabitants);
+    const opinions = agg ? agg.opinions : (c.opinions || {});
+    const voters = agg ? agg.voters : safeArr(c.opinions_inhabitants);
     return {
       key: node.key,
       rootId,
@@ -127,7 +156,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       title: undec ? "" : (c.title || ""),
       description: undec ? "" : (c.description || ""),
       size: c.size || 0,
-      opinions: c.opinions || {},
+      opinions,
       opinions_inhabitants: voters,
       hasVoted: viewerId ? voters.includes(viewerId) : false,
       tribeId: c.tribeId || null,
@@ -145,8 +174,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(unwrapForIndex(messages));
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
+      const tip = idx.tipByRoot.get(idx.rootOf(id)) || id;
       if (idx.tomb.has(tip)) throw new Error("Torrent not found");
       return tip;
     },
@@ -203,8 +231,9 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const oldDec = await decryptIfTribe(oldMsg.content);
       if (!oldDec || oldDec.type !== "torrent") throw new Error("Torrent not found");
       assertReadable(oldDec, "Torrent");
-      if (Object.keys(oldDec.opinions || {}).length > 0) throw new Error("Cannot edit torrent after it has received opinions.");
       if ((oldDec.author || oldMsg.content.author) !== userId) throw new Error("Not the author");
+      const aggTorrent = await this.getTorrentById(id, userId);
+      if (aggTorrent && Object.keys(aggTorrent.opinions || {}).some(k => (aggTorrent.opinions[k] || 0) > 0)) throw new Error("Cannot edit torrent after it has received opinions.");
 
       const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldDec.tags);
       const blobId = blobMarkdown ? parseBlobId(blobMarkdown) : null;
@@ -272,7 +301,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         if (idx.tomb.has(tipId)) continue;
         const node = idx.nodes.get(tipId);
         if (!node) continue;
-        items.push(buildTorrent(node, rootId, viewerId));
+        items.push(buildTorrent(node, rootId, viewerId, idx.resolveGroup(rootId)));
       }
 
       let list = dedupeBy(items, x => x.url ? [norm(x.author), norm(x.url)].join('|') : null);
@@ -312,15 +341,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const idx = buildIndex(unwrapForIndex(messages));
       await decryptIndexNodes(idx);
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
+      const root = idx.rootOf(id);
+      const agg = idx.resolveGroup(root);
+      if (agg.contentNode && !idx.tomb.has(agg.contentTip)) return buildTorrent(agg.contentNode, root, viewer, agg);
+
+      const tip = idx.tipByRoot.get(root) || id;
       if (idx.tomb.has(tip)) throw new Error("Torrent not found");
-
-      let root = tip;
-      while (idx.parent.has(root)) root = idx.parent.get(root);
-
-      const node = idx.nodes.get(tip);
-      if (node) return buildTorrent(node, root, viewer);
 
       const msg = await getMsg(ssbClient, tip);
       if (!msg) throw new Error("Torrent not found");
@@ -339,45 +365,14 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
       if (!categories.includes(category)) throw new Error("Invalid voting category");
 
-      const tipId = await this.resolveCurrentId(id);
-      const msg = await getMsg(ssbClient, tipId);
+      const torrent = await this.getTorrentById(id, userId);
+      if (!torrent) throw new Error("Torrent not found");
+      if (safeArr(torrent.opinions_inhabitants).includes(userId)) throw new Error("Already voted");
 
-      if (!msg) throw new Error("Torrent not found");
-
-      const oldDec = await decryptIfTribe(msg.content);
-      if (!oldDec || oldDec.type !== "torrent") throw new Error("Torrent not found");
-      assertReadable(oldDec, "Torrent");
-      const voters = safeArr(oldDec.opinions_inhabitants);
-      if (voters.includes(userId)) throw new Error("Already voted");
-
-      const now = new Date().toISOString();
-      let updated = {
-        type: "torrent",
-        replaces: tipId,
-        url: oldDec.url,
-        tags: oldDec.tags || [],
-        title: oldDec.title || "",
-        description: oldDec.description || "",
-        size: oldDec.size || 0,
-        opinions: {
-          ...(oldDec.opinions || {}),
-          [category]: ((oldDec.opinions || {})[category] || 0) + 1
-        },
-        opinions_inhabitants: voters.concat(userId),
-        author: oldDec.author,
-        ...(msg.content.tribeId ? { tribeId: msg.content.tribeId } : {}),
-        createdAt: oldDec.createdAt,
-        updatedAt: now
-      };
-
-      updated = await encryptIfTribe(updated);
-
-      const result = await new Promise((resolve, reject) => {
-        ssbClient.publish(updated, (err, res) => (err ? reject(err) : resolve(res)));
+      const content = { type: "torrentOpinion", target: torrent.rootId, category, createdAt: new Date().toISOString() };
+      return new Promise((resolve, reject) => {
+        ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)));
       });
-      const tombstone = await tombFor(tipId, oldDec.tribeId || msg.content.tribeId, userId);
-      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
-      return result;
     }
   };
 };

@@ -369,6 +369,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
         div({ class: 'inhabitant-left' },
           img({ class: 'inhabitant-photo-details', src: image, alt: name || 'Anonymous' }),
           h2(name || 'Anonymous'),
+          safe.oasisVersion ? div({ class: 'profile-side-version' }, '🌴 ' + (i18n.oasisVersionLabel || 'Oasis Version') + ': ', strong(safe.oasisVersion)) : null,
           ...renderUserSensors({
             isMe, fediverseConfigured, prefs, id: id || viewedId,
             karmaScore, carbonGrams, deviceSource: safe.deviceSource, activityBucket: providedBucket,

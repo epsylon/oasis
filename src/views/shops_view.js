@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderInviteQrCard } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -392,6 +392,22 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
           shop.encrypted
             ? form({ method: "POST", action: `/shops/generate-invite/${encodeURIComponent(shop.key)}` },
                 button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite))
+            : null,
+          (shop.encrypted && shop.author === userId && !shop.openInviteCode)
+            ? form({ method: "POST", action: `/shops/open-invite/create/${encodeURIComponent(shop.key)}` },
+                button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation))
+            : null,
+          (shop.encrypted && shop.author === userId && shop.openInviteCode)
+            ? span({ class: "tribe-open-invite" },
+                span({ class: "card-label" }, i18n.tribeInviteCodeText),
+                span({ class: "tribe-open-invite-code" }, shop.openInviteCode))
+            : null,
+          (shop.encrypted && shop.author === userId && shop.openInviteCode)
+            ? renderInviteQrCard({ qrDataUrl: shop.openInviteQr, name: shop.title })
+            : null,
+          (shop.encrypted && shop.author === userId && shop.openInviteCode)
+            ? form({ method: "POST", action: `/shops/open-invite/remove/${encodeURIComponent(shop.key)}` },
+                button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation))
             : null,
           form({ method: "POST", action: `/shops/visibility/${encodeURIComponent(shop.key)}`, class: "inline-form" },
             input({ type: "hidden", name: "returnTo", value: returnTo }),

@@ -41,13 +41,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   const decodeContentMsgs = async (msgs, opts) => {
     const fpIdx = tribeCrypto.buildFingerprintIndex();
     const targetRootId = opts && opts.rootId ? opts.rootId : null;
+    const wantType = opts && opts.contentType ? opts.contentType : null;
     const allowedFps = targetRootId ? fingerprintsForRoot(targetRootId) : null;
 
-    const items = new Map();
-    const replacedBy = new Map();
-    const tombstoned = new Set();
-    const authorByKey = new Map();
+    const content = new Map();
     const tombRequests = [];
+    const collabMsgs = [];
 
     for (const m of msgs) {
       const c = m.value && m.value.content;
@@ -60,24 +59,96 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const b = r.body;
 
       if (b.k === 'tombstone') {
-        tombRequests.push({ target: b.target, author: m.value.author, rootId: r.rootId });
+        tombRequests.push({ target: b.target, author: m.value.author });
+        continue;
+      }
+      if (b.k === 'tc-collab') {
+        collabMsgs.push({ sub: b.sub, target: b.target, author: m.value.author, ts: m.value.timestamp || 0, option: b.option, on: b.on, category: b.category });
         continue;
       }
       if (b.k !== 'tribe-content') continue;
-      if (targetRootId && b.rootId !== targetRootId) continue;
-      if (opts && opts.contentType && b.contentType !== opts.contentType) continue;
-
-      authorByKey.set(m.key, m.value.author);
-      if (b.replaces) replacedBy.set(b.replaces, m.key);
-      items.set(m.key, { id: m.key, ...b, _ts: m.value.timestamp });
+      content.set(m.key, { author: m.value.author, body: b, ts: m.value.timestamp });
     }
 
-    for (const t of tombRequests) {
-      const targetAuthor = authorByKey.get(t.target);
-      if (targetAuthor && t.author === targetAuthor) tombstoned.add(t.target);
+    const naiveNext = new Map();
+    const strictNext = new Map();
+    for (const [key, node] of content) {
+      const t = node.body.replaces;
+      if (!t) continue;
+      naiveNext.set(t, key);
+      const orig = content.get(t);
+      if (orig && orig.author === node.author) strictNext.set(t, key);
+    }
+    const naivePrev = new Map();
+    for (const [t, key] of naiveNext) naivePrev.set(key, t);
+    const followTo = (start, nextMap) => { let x = start, g = 0; while (nextMap.has(x) && g++ < 100000) x = nextMap.get(x); return x; };
+    const rootOf = (key) => { let x = key, g = 0; while (naivePrev.has(x) && content.has(naivePrev.get(x)) && g++ < 100000) x = naivePrev.get(x); return x; };
+
+    const roots = new Set();
+    for (const [key, node] of content) { const t = node.body.replaces; if (!t || !content.has(t)) roots.add(key); }
+
+    const tombstoned = new Set();
+    for (const t of tombRequests) { const orig = content.get(t.target); if (orig && t.author === orig.author) tombstoned.add(t.target); }
+
+    const collabByRoot = new Map();
+    const getCB = (root) => { if (!collabByRoot.has(root)) collabByRoot.set(root, { vote: new Map(), attend: new Map(), assign: new Map(), refeed: new Set(), opinion: new Map() }); return collabByRoot.get(root); };
+    for (const cm of collabMsgs) {
+      if (!content.has(cm.target)) continue;
+      const a = getCB(rootOf(cm.target));
+      if (cm.sub === 'vote' && Number.isInteger(cm.option)) { if (!a.vote.has(cm.author)) a.vote.set(cm.author, cm.option); }
+      else if (cm.sub === 'attend') { const p = a.attend.get(cm.author); if (!p || cm.ts >= p.ts) a.attend.set(cm.author, { on: cm.on !== false, ts: cm.ts }); }
+      else if (cm.sub === 'assign') { const p = a.assign.get(cm.author); if (!p || cm.ts >= p.ts) a.assign.set(cm.author, { on: cm.on !== false, ts: cm.ts }); }
+      else if (cm.sub === 'refeed') { a.refeed.add(cm.author); }
+      else if (cm.sub === 'opinion' && cm.category) { if (!a.opinion.has(cm.author)) a.opinion.set(cm.author, cm.category); }
     }
 
-    return { items, replacedBy, tombstoned };
+    const items = new Map();
+    const tipOf = new Map();
+    const EMPTY = { vote: new Map(), attend: new Map(), assign: new Map(), refeed: new Set(), opinion: new Map() };
+
+    for (const root of roots) {
+      const contentTip = followTo(root, strictNext);
+      const tipNode = content.get(contentTip);
+      if (!tipNode) continue;
+      const body = tipNode.body;
+      const lb = tipNode.body;
+      const a = collabByRoot.get(root) || EMPTY;
+
+      const item = { id: contentTip, ...body, _ts: tipNode.ts };
+
+      const voteAuthors = new Set(); const votes = {};
+      const legacyVotes = lb.votes && typeof lb.votes === 'object' ? lb.votes : {};
+      for (const k of Object.keys(legacyVotes)) { const arr = Array.isArray(legacyVotes[k]) ? legacyVotes[k] : []; for (const au of arr) if (!voteAuthors.has(au)) { voteAuthors.add(au); (votes[k] = votes[k] || []).push(au); } }
+      for (const [au, opt] of a.vote) if (!voteAuthors.has(au)) { voteAuthors.add(au); const k = String(opt); (votes[k] = votes[k] || []).push(au); }
+      item.votes = votes;
+
+      const att = new Set(Array.isArray(lb.attendees) ? lb.attendees : []);
+      for (const [au, st] of a.attend) { if (st.on) att.add(au); else att.delete(au); }
+      item.attendees = [...att];
+
+      const asg = new Set(Array.isArray(lb.assignees) ? lb.assignees : []);
+      for (const [au, st] of a.assign) { if (st.on) asg.add(au); else asg.delete(au); }
+      item.assignees = [...asg];
+
+      const rf = new Set(Array.isArray(lb.refeeds_inhabitants) ? lb.refeeds_inhabitants : []);
+      for (const au of a.refeed) rf.add(au);
+      item.refeeds_inhabitants = [...rf]; item.refeeds = rf.size;
+
+      const opInh = new Set(Array.isArray(lb.opinions_inhabitants) ? lb.opinions_inhabitants : []);
+      const opinions = { ...(lb.opinions && typeof lb.opinions === 'object' ? lb.opinions : {}) };
+      for (const [au, cat] of a.opinion) if (!opInh.has(au)) { opInh.add(au); opinions[cat] = (opinions[cat] || 0) + 1; }
+      item.opinions_inhabitants = [...opInh]; item.opinions = opinions;
+
+      let cur = root, g = 0; tipOf.set(root, contentTip);
+      while (naiveNext.has(cur) && g++ < 100000) { cur = naiveNext.get(cur); tipOf.set(cur, contentTip); }
+
+      if (tombstoned.has(contentTip)) continue;
+      if (targetRootId && body.rootId !== targetRootId) continue;
+      if (wantType && body.contentType !== wantType) continue;
+      items.set(contentTip, item);
+    }
+
+    return { items, tipOf, tombstoned };
   };
 
   return {
@@ -188,19 +259,15 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
     async getById(contentId) {
       const msgs = await readLog();
-      const { items, replacedBy, tombstoned } = await decodeContentMsgs(msgs, {});
-      let latestId = contentId;
-      while (replacedBy.has(latestId)) latestId = replacedBy.get(latestId);
-      if (tombstoned.has(latestId)) return null;
-      return items.get(latestId) || null;
+      const { items, tipOf } = await decodeContentMsgs(msgs, {});
+      const tip = tipOf.get(contentId) || contentId;
+      return items.get(tip) || null;
     },
 
     async listByTribe(tribeId, contentType, filter) {
       const rootId = await tribesModel.getRootId(tribeId).catch(() => tribeId);
       const msgs = await readLog();
-      const { items, replacedBy, tombstoned } = await decodeContentMsgs(msgs, { rootId, contentType });
-      for (const id of tombstoned) items.delete(id);
-      for (const oldId of replacedBy.keys()) items.delete(oldId);
+      const { items } = await decodeContentMsgs(msgs, { rootId, contentType });
 
       let result = [...items.values()];
       if (filter === 'open') result = result.filter(i => i.status === 'OPEN');
@@ -219,11 +286,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const userId = client.id;
       const item = await this.getById(contentId);
       if (!item) throw new Error('Content not found');
-      const attendees = Array.isArray(item.attendees) ? [...item.attendees] : [];
-      const idx = attendees.indexOf(userId);
-      if (idx === -1) attendees.push(userId);
-      else attendees.splice(idx, 1);
-      return this.update(contentId, { attendees }, item);
+      const on = !(Array.isArray(item.attendees) && item.attendees.includes(userId));
+      return wrapAndPublishContent(item.rootId, { k: 'tc-collab', sub: 'attend', rootId: item.rootId, target: item.id, on });
     },
 
     async toggleAssignee(contentId) {
@@ -231,11 +295,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const userId = client.id;
       const item = await this.getById(contentId);
       if (!item) throw new Error('Content not found');
-      const assignees = Array.isArray(item.assignees) ? [...item.assignees] : [];
-      const idx = assignees.indexOf(userId);
-      if (idx === -1) assignees.push(userId);
-      else assignees.splice(idx, 1);
-      return this.update(contentId, { assignees }, item);
+      const on = !(Array.isArray(item.assignees) && item.assignees.includes(userId));
+      return wrapAndPublishContent(item.rootId, { k: 'tc-collab', sub: 'assign', rootId: item.rootId, target: item.id, on });
     },
 
     async updateStatus(contentId, status) {
@@ -258,10 +319,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         const arr = Array.isArray(votes[key]) ? votes[key] : [];
         if (arr.includes(userId)) throw new Error('Already voted');
       }
-      const key = String(optionIndex);
-      if (!votes[key]) votes[key] = [];
-      votes[key].push(userId);
-      return this.update(votationId, { votes }, item);
+      return wrapAndPublishContent(item.rootId, { k: 'tc-collab', sub: 'vote', rootId: item.rootId, target: item.id, option: optionIndex });
     },
 
     async toggleRefeed(contentId) {
@@ -269,10 +327,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const userId = client.id;
       const item = await this.getById(contentId);
       if (!item) throw new Error('Content not found');
-      const inhabitants = Array.isArray(item.refeeds_inhabitants) ? [...item.refeeds_inhabitants] : [];
-      if (inhabitants.includes(userId)) return item;
-      inhabitants.push(userId);
-      return this.update(contentId, { refeeds: (item.refeeds || 0) + 1, refeeds_inhabitants: inhabitants }, item);
+      if (Array.isArray(item.refeeds_inhabitants) && item.refeeds_inhabitants.includes(userId)) return item;
+      return wrapAndPublishContent(item.rootId, { k: 'tc-collab', sub: 'refeed', rootId: item.rootId, target: item.id });
     },
 
     async castOpinion(contentId, category) {
@@ -281,18 +337,13 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const userId = client.id;
       const item = await this.getById(contentId);
       if (!item) throw new Error('Content not found');
-      const inhabitants = Array.isArray(item.opinions_inhabitants) ? [...item.opinions_inhabitants] : [];
-      if (inhabitants.includes(userId)) throw new Error('Already voted');
-      inhabitants.push(userId);
-      const opinions = { ...(item.opinions || {}), [category]: (item.opinions?.[category] || 0) + 1 };
-      return this.update(contentId, { opinions, opinions_inhabitants: inhabitants }, item);
+      if (Array.isArray(item.opinions_inhabitants) && item.opinions_inhabitants.includes(userId)) throw new Error('Already voted');
+      return wrapAndPublishContent(item.rootId, { k: 'tc-collab', sub: 'opinion', rootId: item.rootId, target: item.id, category });
     },
 
     async getThread(forumId) {
       const msgs = await readLog();
-      const { items, replacedBy, tombstoned } = await decodeContentMsgs(msgs, {});
-      for (const id of tombstoned) items.delete(id);
-      for (const oldId of replacedBy.keys()) items.delete(oldId);
+      const { items } = await decodeContentMsgs(msgs, {});
       const all = [...items.values()];
       const parent = all.find(i => i.id === forumId);
       if (!parent) return { parent: null, replies: [] };

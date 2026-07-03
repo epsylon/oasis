@@ -288,6 +288,30 @@ module.exports = ({ cooler, tribeCrypto }) => {
     return result;
   };
 
+  const scanOpenInviteMarkers = async () => {
+    const msgs = await streamLog();
+    const tombstoned = new Set();
+    for (const m of msgs) {
+      const c = m.value && m.value.content;
+      if (!c) continue;
+      if (c.type === 'tribe-open-invite-tombstone' && typeof c.target === 'string') tombstoned.add(c.target);
+      if (c.type === 'tribe-invite-tombstone' && typeof c.target === 'string') tombstoned.add('inv:' + c.target);
+    }
+    const byRoot = new Map();
+    for (const m of msgs) {
+      const v = m.value;
+      const c = v && v.content;
+      if (!c || c.type !== 'tribe-open-invite' || c.v !== 1) continue;
+      if (typeof c.rootId !== 'string' || typeof c.code !== 'string') continue;
+      if (tombstoned.has(m.key)) continue;
+      if (c.inviteKey && tombstoned.has('inv:' + c.inviteKey)) continue;
+      const ts = (v && v.timestamp) || 0;
+      const prev = byRoot.get(c.rootId);
+      if (!prev || ts > prev.ts) byRoot.set(c.rootId, { code: c.code, by: c.by || v.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts });
+    }
+    return byRoot;
+  };
+
   return {
     type: 'tribe',
 
@@ -561,6 +585,71 @@ module.exports = ({ cooler, tribeCrypto }) => {
       return code;
     },
 
+    async getOpenInvite(tribeId) {
+      const root = await this.getRootId(tribeId).catch(() => tribeId);
+      const map = await scanOpenInviteMarkers();
+      const rec = map.get(root);
+      return rec ? { code: rec.code, by: rec.by, markerKey: rec.markerKey, inviteKey: rec.inviteKey } : null;
+    },
+
+    async enrichOpenInvites(tribes) {
+      const list = Array.isArray(tribes) ? tribes : [];
+      if (!list.length) return list;
+      const map = await scanOpenInviteMarkers();
+      const idx = await buildTribeIndex();
+      for (const t of list) {
+        const root = idx.rootByTip.get(t.id) || t.id;
+        const rec = map.get(root);
+        if (rec) { t.openInviteCode = rec.code; t.openInviteBy = rec.by; }
+      }
+      return list;
+    },
+
+    async generateOpenInvite(tribeId) {
+      const client = await openSsb();
+      const userId = client.id;
+      const tribe = await this.getTribeById(tribeId);
+      if (tribe.inviteMode === 'strict' && tribe.author !== userId) {
+        throw new Error('Only the author can generate invites in strict mode');
+      }
+      if (tribe.inviteMode === 'open' && tribe.author !== userId && !tribe.members.includes(userId)) {
+        throw new Error('Only tribe members can generate invites in open mode');
+      }
+      const existing = await this.getOpenInvite(tribeId);
+      if (existing) throw new Error('An open invitation already exists');
+      const code = crypto.randomBytes(INVITE_CODE_BYTES).toString('hex');
+      const targetRoot = await this.getRootId(tribeId);
+      if (!targetRoot) throw new Error('Cannot resolve tribe root');
+      const salt = tribeCrypto.generateInviteSalt();
+      const ekChain = tribeCrypto.encryptChainForInvite([targetRoot], code, salt);
+      if (!ekChain) throw new Error('Cannot encrypt invite chain — missing keys');
+      const codeHash = tribeCrypto.hashInviteCode(code, salt);
+      const invitePub = await new Promise((resolve, reject) =>
+        client.publish({ type: 'tribe-invite-msg', v: 1, multi: 1, ch: codeHash, s: salt, ek: ekChain }, (err, r) => err ? reject(err) : resolve(r))
+      );
+      await new Promise((resolve, reject) =>
+        client.publish({ type: 'tribe-open-invite', v: 1, rootId: targetRoot, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() }, (err, r) => err ? reject(err) : resolve(r))
+      );
+      tribeIndex = null;
+      return code;
+    },
+
+    async removeOpenInvite(tribeId) {
+      const client = await openSsb();
+      const userId = client.id;
+      const tribe = await this.getTribeById(tribeId).catch(() => null);
+      const rec = await this.getOpenInvite(tribeId);
+      if (!rec) return;
+      if (rec.by !== userId && !(tribe && tribe.author === userId)) {
+        throw new Error('Not allowed to remove this invitation');
+      }
+      await new Promise((resolve, reject) =>
+        client.publish({ type: 'tribe-open-invite-tombstone', v: 1, target: rec.markerKey, ts: new Date().toISOString() }, (err, r) => err ? reject(err) : resolve(r))
+      );
+      if (rec.inviteKey) await this.publishInviteTombstone(rec.inviteKey).catch(() => {});
+      tribeIndex = null;
+    },
+
     async joinByInvite(rawCode) {
       const code = String(rawCode || '').trim();
       if (!code) throw new Error('Invalid or expired invite code');
@@ -584,7 +673,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (tribeCrypto.hashInviteCode(code, c.s) !== c.ch) continue;
         const chain = tribeCrypto.decryptChainFromInvite(c.ek, code, c.s);
         if (Array.isArray(chain) && chain.length) {
-          matched = { msgKey: m.key, codeHash: c.ch, chain };
+          matched = { msgKey: m.key, codeHash: c.ch, chain, multi: c.multi === 1 || c.multi === true };
           break;
         }
       }
@@ -599,9 +688,13 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!tribe) throw new Error('Tribe not found after key import');
       if (tribe.members.includes(userId)) throw new Error('Already a member of this tribe');
       const members = [...tribe.members, userId];
-      const invites = (tribe.invites || []).filter(inv => inv.codeHash !== matched.codeHash);
-      await this.updateTribeById(tribe.id, { members, invites });
-      await this.publishInviteTombstone(matched.msgKey).catch(() => {});
+      if (matched.multi) {
+        await this.updateTribeById(tribe.id, { members });
+      } else {
+        const invites = (tribe.invites || []).filter(inv => inv.codeHash !== matched.codeHash);
+        await this.updateTribeById(tribe.id, { members, invites });
+        await this.publishInviteTombstone(matched.msgKey).catch(() => {});
+      }
       await this.ensureFollowTribeMembers(tribe.id).catch(() => {});
       subscribeInvalidation().catch(() => {});
       return rootId;

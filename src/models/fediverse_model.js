@@ -380,8 +380,19 @@ module.exports = ({ isPublic } = {}) => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
       try {
-        const res = await fetch(u.href, { signal: controller.signal, redirect: 'follow', headers: spoofHeaders('image/avif,image/webp,*/*') });
-        if (!res.ok) return null;
+        let current = u, res = null;
+        for (let hop = 0; hop < 5; hop++) {
+          res = await fetch(current.href, { signal: controller.signal, redirect: 'manual', headers: spoofHeaders('image/avif,image/webp,*/*') });
+          if (res.status < 300 || res.status >= 400) break;
+          const loc = res.headers.get('location');
+          if (!loc) return null;
+          let next;
+          try { next = new URL(loc, current); } catch (_) { return null; }
+          if (next.protocol !== 'https:') return null;
+          if (isPrivateHost(next.hostname)) return null;
+          current = next;
+        }
+        if (!res || !res.ok) return null;
         const ct = res.headers.get('content-type') || 'application/octet-stream';
         if (!/^(image|video|audio)\//i.test(ct)) return null;
         const ab = await res.arrayBuffer();

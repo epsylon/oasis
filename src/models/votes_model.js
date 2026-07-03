@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
-const { dedupeBy, norm } = require('./dedupe');
+const { dedupeBy, norm } = require('../backend/dedupe');
 const categories = require('../backend/opinion_categories');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const MIN_VOTE_DAYS = 7;
@@ -27,9 +27,10 @@ module.exports = ({ cooler }) => {
 
   function buildIndex(messages) {
     const tombstoned = buildValidatedTombstoneSet(messages);
-    const replaced = new Map();
     const votes = new Map();
-    const parent = new Map();
+    const naivePrev = new Map();
+    const collabVotes = [];
+    const collabOpinions = [];
 
     for (const m of messages) {
       const key = m.key;
@@ -38,25 +39,22 @@ module.exports = ({ cooler }) => {
       if (!c) continue;
 
       if (c.type === 'tombstone') continue;
-
+      if (c.type === 'votesVote') { collabVotes.push({ target: c.target, author: v.author, choice: c.choice, ts: v.timestamp || 0 }); continue; }
+      if (c.type === 'votesOpinion') { collabOpinions.push({ target: c.target, author: v.author, category: c.category, ts: v.timestamp || 0 }); continue; }
       if (c.type !== TYPE) continue;
 
-      const node = {
-        key,
-        ts: v.timestamp || m.timestamp || 0,
-        content: c
-      };
-
-      votes.set(key, node);
-
-      if (c.replaces) {
-        replaced.set(c.replaces, key);
-        parent.set(key, c.replaces);
-      }
+      votes.set(key, { key, ts: v.timestamp || m.timestamp || 0, content: c, author: v.author });
     }
 
-    return { tombstoned, replaced, votes, parent };
+    for (const [key, node] of votes) {
+      const t = node.content.replaces;
+      if (t) { naivePrev.set(key, t); }
+    }
+
+    return { tombstoned, votes, naivePrev, collabVotes, collabOpinions };
   }
+
+  const rootOfIn = (naivePrev, votes, key) => { let x = key, g = 0; while (naivePrev.has(x) && votes.has(naivePrev.get(x)) && g++ < 100000) x = naivePrev.get(x); return x; };
 
   function statusFromContent(content, now) {
     const raw = String(content.status || 'OPEN').toUpperCase();
@@ -68,56 +66,78 @@ module.exports = ({ cooler }) => {
   }
 
   function computeActiveVotes(index) {
-    const { tombstoned, replaced, votes, parent } = index;
-    const active = new Map(votes);
-
-    tombstoned.forEach(id => active.delete(id));
-    replaced.forEach((_, oldId) => active.delete(oldId));
-
-    const rootOf = id => {
-      let cur = id;
-      while (parent.has(cur)) cur = parent.get(cur);
-      return cur;
-    };
+    const { tombstoned, votes, naivePrev, collabVotes, collabOpinions } = index;
+    const rootOf = key => rootOfIn(naivePrev, votes, key);
 
     const groups = new Map();
-    for (const [id, node] of active.entries()) {
-      const root = rootOf(id);
+    for (const [key, node] of votes.entries()) {
+      const root = rootOf(key);
       if (!groups.has(root)) groups.set(root, []);
       groups.get(root).push(node);
     }
 
+    const cvByRoot = new Map(); const coByRoot = new Map();
+    for (const cv of collabVotes) { if (!votes.has(cv.target)) continue; const r = rootOf(cv.target); if (!cvByRoot.has(r)) cvByRoot.set(r, []); cvByRoot.get(r).push(cv); }
+    for (const co of collabOpinions) { if (!votes.has(co.target)) continue; const r = rootOf(co.target); if (!coByRoot.has(r)) coByRoot.set(r, []); coByRoot.get(r).push(co); }
+
     const now = moment();
     const result = [];
 
-    for (const nodes of groups.values()) {
-      if (!nodes.length) continue;
-      let best = nodes[0];
-      let bestStatus = statusFromContent(best.content, now);
+    for (const [root, nodes] of groups.entries()) {
+      const rootNode = votes.get(root);
+      const rootAuthor = rootNode ? rootNode.author : null;
+      const ownerNodes = nodes.filter(n => n.author === rootAuthor);
+      const pool = ownerNodes.length ? ownerNodes : (rootNode ? [rootNode] : nodes);
 
-      for (let i = 1; i < nodes.length; i++) {
-        const candidate = nodes[i];
+      let best = pool[0];
+      let bestStatus = statusFromContent(best.content, now);
+      for (let i = 1; i < pool.length; i++) {
+        const candidate = pool[i];
         const cStatus = statusFromContent(candidate.content, now);
         if (cStatus === bestStatus) {
           const bestTime = new Date(best.content.updatedAt || best.content.createdAt || best.ts || 0);
           const cTime = new Date(candidate.content.updatedAt || candidate.content.createdAt || candidate.ts || 0);
-          if (cTime > bestTime) {
-            best = candidate;
-            bestStatus = cStatus;
-          }
-        } else if (cStatus === 'CLOSED' && bestStatus !== 'CLOSED') {
-          best = candidate;
-          bestStatus = cStatus;
-        } else if (cStatus === 'OPEN' && bestStatus !== 'OPEN') {
-          best = candidate;
-          bestStatus = cStatus;
-        }
+          if (cTime > bestTime) { best = candidate; bestStatus = cStatus; }
+        } else if (cStatus === 'CLOSED' && bestStatus !== 'CLOSED') { best = candidate; bestStatus = cStatus; }
+        else if (cStatus === 'OPEN' && bestStatus !== 'OPEN') { best = candidate; bestStatus = cStatus; }
+      }
+
+      if (tombstoned.has(best.key)) continue;
+
+      const lc = best.content;
+      const options = Array.isArray(best.content.options) ? best.content.options : [];
+
+      const votesMap = Object.assign({}, lc.votes || {});
+      for (const o of options) if (!(o in votesMap)) votesMap[o] = 0;
+      const voters = Array.isArray(lc.voters) ? lc.voters.slice() : [];
+      const voterSet = new Set(voters);
+      let totalVotes = parseInt(lc.totalVotes || 0, 10) || voters.length;
+      for (const cv of (cvByRoot.get(root) || [])) {
+        if (voterSet.has(cv.author)) continue;
+        if (!options.includes(cv.choice)) continue;
+        voterSet.add(cv.author); voters.push(cv.author);
+        votesMap[cv.choice] = (votesMap[cv.choice] || 0) + 1;
+        totalVotes += 1;
+      }
+
+      const opinions = Object.assign({}, lc.opinions || {});
+      const opInh = Array.isArray(lc.opinions_inhabitants) ? lc.opinions_inhabitants.slice() : [];
+      const opSet = new Set(opInh);
+      for (const co of (coByRoot.get(root) || [])) {
+        if (opSet.has(co.author)) continue;
+        opSet.add(co.author); opInh.push(co.author);
+        opinions[co.category] = (opinions[co.category] || 0) + 1;
       }
 
       result.push({
         id: best.key,
         latestId: best.key,
         ...best.content,
+        votes: votesMap,
+        voters,
+        totalVotes,
+        opinions,
+        opinions_inhabitants: opInh,
         status: bestStatus
       });
     }
@@ -128,18 +148,12 @@ module.exports = ({ cooler }) => {
   async function resolveCurrentId(voteId) {
     const ssbClient = await openSsb();
     const messages = await getAllMessages(ssbClient);
-    const forward = new Map();
-
-    for (const m of messages) {
-      const c = m.value && m.value.content;
-      if (!c) continue;
-      if (c.type === TYPE && c.replaces) {
-        forward.set(c.replaces, m.key);
-      }
-    }
-
-    let cur = voteId;
-    while (forward.has(cur)) cur = forward.get(cur);
+    const nodeByKey = new Map();
+    for (const m of messages) { const c = m.value && m.value.content; if (c && c.type === TYPE) nodeByKey.set(m.key, { author: m.value.author, replaces: c.replaces }); }
+    const strictForward = new Map();
+    for (const [key, n] of nodeByKey) { if (n.replaces && nodeByKey.has(n.replaces) && nodeByKey.get(n.replaces).author === n.author) strictForward.set(n.replaces, key); }
+    let cur = voteId, g = 0;
+    while (strictForward.has(cur) && g++ < 100000) cur = strictForward.get(cur);
     return cur;
   }
 
@@ -212,7 +226,9 @@ module.exports = ({ cooler }) => {
       const c = oldMsg.content;
       if (!c || c.type !== TYPE) throw new Error('Invalid type');
       if (c.createdBy !== userId) throw new Error('Not the author');
-      if (Object.keys(c.opinions || {}).length > 0) throw new Error('Cannot edit vote after it has received opinions.');
+      const agg = await this.getVoteById(id);
+      const aggTotalVotes = agg ? (parseInt(agg.totalVotes || 0, 10) || 0) : 0;
+      if (agg && Object.keys(agg.opinions || {}).some(k => (agg.opinions[k] || 0) > 0)) throw new Error('Cannot edit vote after it has received opinions.');
 
       let newDeadline = c.deadline;
       if (deadline != null && deadline !== '') {
@@ -232,7 +248,7 @@ module.exports = ({ cooler }) => {
       );
 
       if (optionsChanged) {
-        if ((c.totalVotes || 0) > 0) {
+        if (aggTotalVotes > 0) {
           throw new Error('Cannot change options after voting has started');
         }
         newOptions = options;
@@ -270,46 +286,15 @@ module.exports = ({ cooler }) => {
     async voteOnVote(id, choice) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
-      const tipId = await resolveCurrentId(id);
-
-      const vote = await new Promise((res, rej) =>
-        ssbClient.get(tipId, (err, msg) => (err || !msg ? rej(new Error('Vote not found')) : res(msg)))
-      );
-
-      const content = vote.content || {};
-      const options = Array.isArray(content.options) ? content.options : [];
+      const vote = await this.getVoteById(id);
+      if (!vote) throw new Error('Vote not found');
+      const options = Array.isArray(vote.options) ? vote.options : [];
       if (!options.includes(choice)) throw new Error('Invalid choice');
+      if (Array.isArray(vote.voters) && vote.voters.includes(userId)) throw new Error('Already voted');
 
-      const voters = Array.isArray(content.voters) ? content.voters.slice() : [];
-      if (voters.includes(userId)) throw new Error('Already voted');
-
-      const votesMap = Object.assign({}, content.votes || {});
-      votesMap[choice] = (votesMap[choice] || 0) + 1;
-      voters.push(userId);
-      const totalVotes = (parseInt(content.totalVotes || 0, 10) || 0) + 1;
-
-      const tombstone = {
-        type: 'tombstone',
-        target: tipId,
-        deletedAt: new Date().toISOString(),
-        author: userId
-      };
-
-      const updated = {
-        ...content,
-        votes: votesMap,
-        voters,
-        totalVotes,
-        updatedAt: new Date().toISOString(),
-        replaces: tipId
-      };
-
-      await new Promise((res, rej) =>
-        ssbClient.publish(tombstone, err => (err ? rej(err) : res()))
-      );
-
+      const content = { type: 'votesVote', target: vote.id, choice, createdAt: new Date().toISOString() };
       return new Promise((res, rej) =>
-        ssbClient.publish(updated, (err, result) => (err ? rej(err) : res(result)))
+        ssbClient.publish(content, (err, result) => (err ? rej(err) : res(result)))
       );
     },
 
@@ -324,13 +309,7 @@ module.exports = ({ cooler }) => {
         return byId.get(id);
       }
 
-      const parent = index.parent;
-      const rootOf = key => {
-        let cur = key;
-        while (parent.has(cur)) cur = parent.get(cur);
-        return cur;
-      };
-
+      const rootOf = key => rootOfIn(index.naivePrev, index.votes, key);
       const root = rootOf(id);
       const candidate = activeList.find(v => rootOf(v.id) === root);
       if (candidate) {
@@ -375,41 +354,14 @@ module.exports = ({ cooler }) => {
       if (!categories.includes(category)) throw new Error('Invalid voting category');
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
-      const tipId = await resolveCurrentId(id);
 
-      const vote = await new Promise((res, rej) =>
-        ssbClient.get(tipId, (err, msg) => (err || !msg ? rej(new Error('Vote not found')) : res(msg)))
-      );
+      const vote2 = await this.getVoteById(id);
+      if (!vote2) throw new Error('Vote not found');
+      if (Array.isArray(vote2.opinions_inhabitants) && vote2.opinions_inhabitants.includes(userId)) throw new Error('Already voted');
 
-      const content = vote.content || {};
-      const list = Array.isArray(content.opinions_inhabitants) ? content.opinions_inhabitants : [];
-
-      if (list.includes(userId)) throw new Error('Already voted');
-
-      const opinions = Object.assign({}, content.opinions || {});
-      opinions[category] = (opinions[category] || 0) + 1;
-
-      const tombstone = {
-        type: 'tombstone',
-        target: tipId,
-        deletedAt: new Date().toISOString(),
-        author: userId
-      };
-
-      const updated = {
-        ...content,
-        opinions,
-        opinions_inhabitants: list.concat(userId),
-        updatedAt: new Date().toISOString(),
-        replaces: tipId
-      };
-
-      await new Promise((res, rej) =>
-        ssbClient.publish(tombstone, err => (err ? rej(err) : res()))
-      );
-
+      const content = { type: 'votesOpinion', target: vote2.id, category, createdAt: new Date().toISOString() };
       return new Promise((res, rej) =>
-        ssbClient.publish(updated, (err, result) => (err ? rej(err) : res(result)))
+        ssbClient.publish(content, (err, result) => (err ? rej(err) : res(result)))
       );
     }
   };

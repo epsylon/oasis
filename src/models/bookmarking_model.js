@@ -3,7 +3,7 @@ const moment = require("../server/node_modules/moment");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('./dedupe');
+const { dedupeBy, norm } = require('../backend/dedupe');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -54,6 +54,8 @@ module.exports = ({ cooler }) => {
     const nodes = new Map();
     const parent = new Map();
     const child = new Map();
+    const strictChild = new Map();
+    const opinionMsgs = [];
 
     for (const m of messages) {
       const k = m.key;
@@ -62,13 +64,13 @@ module.exports = ({ cooler }) => {
       if (!c) continue;
 
       if (c.type === 'tombstone') continue;
-
+      if (c.type === 'bookmarkOpinion') { opinionMsgs.push({ target: c.target, author: v.author, category: c.category }); continue; }
       if (c.type !== "bookmark") continue;
 
       const ts = v.timestamp || m.timestamp || 0;
       let sizeBytes = 0;
       try { sizeBytes = Buffer.byteLength(JSON.stringify(v), "utf8"); } catch (_) { sizeBytes = 0; }
-      nodes.set(k, { key: k, ts, c, sizeBytes });
+      nodes.set(k, { key: k, ts, c, sizeBytes, author: v.author });
 
       if (c.replaces) {
         parent.set(k, c.replaces);
@@ -76,33 +78,58 @@ module.exports = ({ cooler }) => {
       }
     }
 
+    for (const [k, node] of nodes) {
+      const t = node.c.replaces;
+      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
+    }
+
     const rootOf = (id) => {
-      let cur = id;
-      while (parent.has(cur)) cur = parent.get(cur);
+      let cur = id, g = 0;
+      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
       return cur;
     };
 
-    const tipOf = (id) => {
-      let cur = id;
-      while (child.has(cur)) cur = child.get(cur);
-      return cur;
+    const contentTipOf = (root) => {
+      let cur = root, g = 0;
+      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
+      const n = nodes.get(cur), rn = nodes.get(root);
+      return (n && rn && n.author === rn.author) ? cur : root;
     };
 
     const roots = new Set();
     for (const id of nodes.keys()) roots.add(rootOf(id));
 
-    const tipByRoot = new Map();
-    for (const r of roots) tipByRoot.set(r, tipOf(r));
+    const opinionsByRoot = new Map();
+    for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
 
     const forward = new Map();
     for (const [newId, oldId] of parent.entries()) forward.set(oldId, newId);
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot, forward };
+    const resolveGroup = (root) => {
+      const contentTip = contentTipOf(root);
+      const contentNode = nodes.get(contentTip) || nodes.get(root);
+      const lc = contentNode ? contentNode.c : {};
+      const opinions = { ...(lc.opinions || {}) };
+      const voters = safeArr(lc.opinions_inhabitants).slice();
+      const voterSet = new Set(voters);
+      for (const op of (opinionsByRoot.get(root) || [])) {
+        if (voterSet.has(op.author)) continue;
+        voterSet.add(op.author); voters.push(op.author);
+        opinions[op.category] = (opinions[op.category] || 0) + 1;
+      }
+      return { contentTip, contentNode, opinions, voters };
+    };
+
+    const tipByRoot = new Map();
+    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
+
+    return { tomb, nodes, parent, child, rootOf, tipByRoot, forward, resolveGroup };
   };
 
-  const buildBookmark = (node, rootId, viewerId) => {
+  const buildBookmark = (node, rootId, viewerId, agg) => {
     const c = node.c || {};
-    const voters = safeArr(c.opinions_inhabitants);
+    const opinions = agg ? agg.opinions : (c.opinions || {});
+    const voters = agg ? agg.voters : safeArr(c.opinions_inhabitants);
     return {
       id: node.key,
       rootId,
@@ -113,7 +140,7 @@ module.exports = ({ cooler }) => {
       tags: safeArr(c.tags),
       category: c.category || "",
       description: c.description || "",
-      opinions: c.opinions || {},
+      opinions,
       opinions_inhabitants: voters,
       author: c.author,
       hasVoted: viewerId ? voters.includes(viewerId) : false,
@@ -129,8 +156,7 @@ module.exports = ({ cooler }) => {
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(messages);
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
+      const tip = idx.tipByRoot.get(idx.rootOf(id)) || id;
       if (idx.tomb.has(tip)) throw new Error("Bookmark not found");
       return tip;
     },
@@ -183,8 +209,9 @@ module.exports = ({ cooler }) => {
       const oldMsg = await getMsg(ssbClient, tipId);
 
       if (!oldMsg || oldMsg.content?.type !== "bookmark") throw new Error("Bookmark not found");
-      if (Object.keys(oldMsg.content.opinions || {}).length > 0) throw new Error("Cannot edit bookmark after it has received opinions.");
       if (String(oldMsg.content.author) !== String(userId)) throw new Error("Not the author");
+      const aggBm = await this.getBookmarkById(id, userId);
+      if (aggBm && Object.keys(aggBm.opinions || {}).some(k => (aggBm.opinions[k] || 0) > 0)) throw new Error("Cannot edit bookmark after it has received opinions.");
 
       const url = safeText(updatedData.url || oldMsg.content.url);
       if (!url) throw new Error("URL is required");
@@ -245,7 +272,7 @@ module.exports = ({ cooler }) => {
         if (idx.tomb.has(tipId)) continue;
         const node = idx.nodes.get(tipId);
         if (!node) continue;
-        items.push(buildBookmark(node, rootId, viewerId));
+        items.push(buildBookmark(node, rootId, viewerId, idx.resolveGroup(rootId)));
       }
 
       let list = dedupeBy(items, x => x.url ? [norm(x.author), norm(x.url)].join('|') : null);
@@ -287,13 +314,13 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const viewer = viewerId || ssbClient.id;
 
-      const tipId = await this.resolveCurrentId(id);
-      const rootId = await this.resolveRootId(id);
+      const messages = await getAllMessages(ssbClient);
+      const idx = buildIndex(messages);
+      const rootId = idx.rootOf(id);
+      const agg = idx.resolveGroup(rootId);
+      if (!agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error("Bookmark not found");
 
-      const msg = await getMsg(ssbClient, tipId);
-      if (!msg || msg.content?.type !== "bookmark") throw new Error("Bookmark not found");
-
-      return buildBookmark({ key: tipId, ts: msg.timestamp || 0, c: msg.content }, rootId, viewer);
+      return buildBookmark(agg.contentNode, rootId, viewer, agg);
     },
 
     async createOpinion(id, category) {
@@ -302,31 +329,13 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
-      const tipId = await this.resolveCurrentId(id);
-      const msg = await getMsg(ssbClient, tipId);
+      const bm = await this.getBookmarkById(id, userId);
+      if (!bm) throw new Error("Bookmark not found");
+      if (safeArr(bm.opinions_inhabitants).includes(userId)) throw new Error("Already voted");
 
-      if (!msg || msg.content?.type !== "bookmark") throw new Error("Bookmark not found");
-
-      const voters = safeArr(msg.content.opinions_inhabitants);
-      if (voters.includes(userId)) throw new Error("Already voted");
-
-      const now = new Date().toISOString();
-      const updated = {
-        ...msg.content,
-        replaces: tipId,
-        opinions: {
-          ...msg.content.opinions,
-          [category]: (msg.content.opinions?.[category] || 0) + 1
-        },
-        opinions_inhabitants: voters.concat(userId),
-        updatedAt: now
-      };
-
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };
-      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
-
+      const content = { type: "bookmarkOpinion", target: bm.rootId, category, createdAt: new Date().toISOString() };
       return new Promise((resolve, reject) => {
-        ssbClient.publish(updated, (err, result) => (err ? reject(err) : resolve(result)));
+        ssbClient.publish(content, (err, result) => (err ? reject(err) : resolve(result)));
       });
     }
   };

@@ -67,26 +67,67 @@ module.exports = ({ cooler, tribeCrypto }) => {
     )
   }
 
-  const resolveGraph = async () => {
-    const ssbClient = await openSsb()
-    const messages = await readAll(ssbClient)
-
+  const buildMarketIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages)
-    const fwd = new Map()
-    const parent = new Map()
-
+    const nodes = new Map()
+    const bids = []
+    const purchases = []
     for (const m of messages) {
       const c = m.value && m.value.content
       if (!c) continue
       if (c.type === "tombstone") continue
+      if (c.type === "marketBid") { bids.push({ target: c.target, author: m.value.author, amount: c.amount, time: c.time, ts: (m.value && m.value.timestamp) || 0 }); continue }
+      if (c.type === "marketPurchase") { purchases.push({ target: c.target, author: m.value.author, ts: (m.value && m.value.timestamp) || 0 }); continue }
       if (c.type !== "market") continue
-      if (c.replaces) {
-        fwd.set(c.replaces, m.key)
-        parent.set(m.key, c.replaces)
-      }
+      nodes.set(m.key, { key: m.key, ts: (m.value && m.value.timestamp) || m.timestamp || 0, c, author: m.value.author })
     }
+    const naivePrev = new Map(), strictNext = new Map()
+    for (const [key, n] of nodes) {
+      const t = n.c.replaces
+      if (!t) continue
+      naivePrev.set(key, t)
+      const orig = nodes.get(t)
+      if (orig && orig.author === n.author) strictNext.set(t, key)
+    }
+    return { tomb, nodes, bids, purchases, naivePrev, strictNext }
+  }
 
-    return { tomb, fwd, parent }
+  const resolveGroups = (idx) => {
+    const { tomb, nodes, bids, purchases, naivePrev, strictNext } = idx
+    const rootOf = (key) => { let x = key, g = 0; while (naivePrev.has(x) && nodes.has(naivePrev.get(x)) && g++ < 100000) x = naivePrev.get(x); return x }
+    const followStrict = (key) => { let x = key, g = 0; while (strictNext.has(x) && g++ < 100000) x = strictNext.get(x); return x }
+
+    const groups = new Map()
+    for (const key of nodes.keys()) { const r = rootOf(key); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(key) }
+    const bidsByRoot = new Map()
+    for (const bd of bids) { if (!nodes.has(bd.target)) continue; const r = rootOf(bd.target); if (!bidsByRoot.has(r)) bidsByRoot.set(r, []); bidsByRoot.get(r).push(bd) }
+    const soldByRoot = new Map()
+    for (const pu of purchases) { if (!nodes.has(pu.target)) continue; const r = rootOf(pu.target); soldByRoot.set(r, (soldByRoot.get(r) || 0) + 1) }
+
+    const out = new Map()
+    for (const [root, keys] of groups) {
+      const rootNode = nodes.get(root)
+      const sellerId = rootNode ? rootNode.c.seller : null
+      const sellerKeys = keys.filter(k => { const n = nodes.get(k); return n && n.author === sellerId })
+      let tip = followStrict(root)
+      const tipNode0 = nodes.get(tip)
+      if (!tipNode0 || tipNode0.author !== sellerId) tip = root
+      if (tomb.has(tip)) continue
+      let best = nodes.get(tip)
+      if (!best) continue
+      let bestS = N(best.c.status || "FOR_SALE")
+      for (const k of (sellerKeys.length ? sellerKeys : keys)) {
+        const n = nodes.get(k); if (!n) continue
+        const s = N(n.c.status || "")
+        if (OI(s) > OI(bestS)) { best = n; bestS = s }
+      }
+      const pollSet = new Set(); const poll = []
+      const addLine = (line) => { const b = parseBidEntry(line); if (!b) return; const kk = `${b.bidder}|${b.amount}|${b.time}`; if (pollSet.has(kk)) return; pollSet.add(kk); poll.push(line) }
+      for (const k of (sellerKeys.length ? sellerKeys : keys)) { const n = nodes.get(k); if (n && Array.isArray(n.c.auctions_poll)) for (const line of n.c.auctions_poll) addLine(line) }
+      for (const bd of (bidsByRoot.get(root) || [])) { const amt = Number(bd.amount); addLine(`${bd.author}|${Number.isFinite(amt) ? amt.toFixed(6) : bd.amount}|${bd.time}`) }
+      out.set(root, { tip, rootId: root, best, statusN: bestS, poll, soldCount: soldByRoot.get(root) || 0 })
+    }
+    return out
   }
 
   return {
@@ -149,9 +190,11 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async resolveCurrentId(itemId) {
-      const { tomb, fwd } = await resolveGraph()
-      let cur = itemId
-      while (fwd.has(cur)) cur = fwd.get(cur)
+      const ssbClient = await openSsb()
+      const messages = await readAll(ssbClient)
+      const { tomb, strictNext } = buildMarketIndex(messages)
+      let cur = itemId, g = 0
+      while (strictNext.has(cur) && g++ < 100000) cur = strictNext.get(cur)
       if (tomb.has(cur)) throw new Error("Item not found")
       return cur
     },
@@ -245,68 +288,22 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const userId = ssbClient.id
       const messages = await readAll(ssbClient)
 
-      const tomb = buildValidatedTombstoneSet(messages)
-      const nodes = new Map()
-      const parent = new Map()
-      const child = new Map()
-
-      for (const m of messages) {
-        const k = m.key
-        const c = m.value && m.value.content
-        if (!c) continue
-        if (c.type === "tombstone") continue
-        if (c.type !== "market") continue
-        nodes.set(k, { key: k, ts: (m.value && m.value.timestamp) || m.timestamp || 0, c })
-        if (c.replaces) {
-          parent.set(k, c.replaces)
-          child.set(c.replaces, k)
-        }
-      }
-
-      const rootOf = (id) => {
-        let cur = id
-        while (parent.has(cur)) cur = parent.get(cur)
-        return cur
-      }
-
-      const groups = new Map()
-      for (const id of nodes.keys()) {
-        const r = rootOf(id)
-        if (!groups.has(r)) groups.set(r, new Set())
-        groups.get(r).add(id)
-      }
-
       const items = []
       const now = moment()
 
-      for (const [rootId, ids] of groups.entries()) {
-        const leaf = Array.from(ids).find((id) => !child.has(id)) || Array.from(ids)[0]
-        if (!leaf) continue
-        if (tomb.has(leaf)) continue
-
-        let best = nodes.get(leaf)
-        if (!best) continue
-
-        let bestS = N(best.c.status || "FOR_SALE")
-        for (const id of ids) {
-          const n = nodes.get(id)
-          if (!n) continue
-          const s = N(n.c.status || "")
-          if (OI(s) > OI(bestS)) {
-            best = n
-            bestS = s
-          }
-        }
-
+      for (const { tip, rootId, best, statusN, poll, soldCount } of resolveGroups(buildMarketIndex(messages)).values()) {
+        const leaf = tip
         const c = best.c
-        let status = D(bestS)
+        let status = D(statusN)
+        const stock = Math.max(0, (Number(c.stock) || 0) - (soldCount || 0))
+        if (status === "FOR SALE" && soldCount > 0 && stock === 0) status = "SOLD"
 
         if (c.deadline) {
           const dl = moment(c.deadline)
           if (dl.isValid() && dl.isBefore(now)) {
             if (status !== "SOLD" && status !== "DISCARDED") {
               if (String(c.item_type || "").toLowerCase() === "auction") {
-                status = highestBidAmount(c.auctions_poll) > 0 ? "SOLD" : "DISCARDED"
+                status = highestBidAmount(poll) > 0 ? "SOLD" : "DISCARDED"
               } else {
                 status = "DISCARDED"
               }
@@ -314,7 +311,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
           }
         }
 
-        if (status === "FOR SALE" && (Number(c.stock) || 0) === 0) continue
+        if (status === "FOR SALE" && stock === 0) continue
 
         const visibility = String(c.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
         if (visibility === "HIDDEN" && c.seller !== userId) continue
@@ -335,9 +332,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
           updatedAt: c.updatedAt,
           seller: c.seller,
           includesShipping: !!c.includesShipping,
-          stock: Number(c.stock) || 0,
+          stock,
           deadline: c.deadline || null,
-          auctions_poll: (tribeCrypto && tribeCrypto.getKey(rootId)) ? (Array.isArray(c.auctions_poll) ? c.auctions_poll : []) : [],
+          auctions_poll: (tribeCrypto && tribeCrypto.getKey(rootId)) ? poll : [],
           mapUrl: c.mapUrl || "",
           shopProductId: c.shopProductId || "",
           shopId: c.shopId || "",
@@ -392,55 +389,16 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const userId = ssbClient.id
       const messages = await readAll(ssbClient)
 
-      const tomb = buildValidatedTombstoneSet(messages)
-      const nodes = new Map()
-      const parent = new Map()
-      const child = new Map()
-
-      for (const m of messages) {
-        const k = m.key
-        const c = m.value && m.value.content
-        if (!c) continue
-        if (c.type === "tombstone") continue
-        if (c.type !== "market") continue
-        nodes.set(k, { key: k, ts: (m.value && m.value.timestamp) || m.timestamp || 0, c })
-        if (c.replaces) {
-          parent.set(k, c.replaces)
-          child.set(c.replaces, k)
-        }
-      }
-
-      let tip = itemId
-      while (child.has(tip)) tip = child.get(tip)
-      if (tomb.has(tip)) return null
-
-      let rootId = tip
-      while (parent.has(rootId)) rootId = parent.get(rootId)
-
-      const ids = new Set()
-      let cur = tip
-      ids.add(cur)
-      while (parent.has(cur)) {
-        cur = parent.get(cur)
-        ids.add(cur)
-      }
-
-      let best = nodes.get(tip) || null
-      if (!best || !best.c) return null
-
-      let bestS = N(best.c.status || "FOR_SALE")
-      for (const id of ids) {
-        const n = nodes.get(id)
-        if (!n) continue
-        const s = N(n.c.status || "")
-        if (OI(s) > OI(bestS)) {
-          best = n
-          bestS = s
-        }
-      }
+      const idx = buildMarketIndex(messages)
+      const rootOf = (key) => { let x = key, g = 0; while (idx.naivePrev.has(x) && idx.nodes.has(idx.naivePrev.get(x)) && g++ < 100000) x = idx.naivePrev.get(x); return x }
+      const grp = resolveGroups(idx).get(rootOf(itemId))
+      if (!grp) return null
+      const { tip, rootId, best, statusN, poll, soldCount } = grp
 
       const c = best.c
-      let status = D(bestS)
+      let status = D(statusN)
+      const stock = Math.max(0, (Number(c.stock) || 0) - (soldCount || 0))
+      if (status === "FOR SALE" && soldCount > 0 && stock === 0) status = "SOLD"
 
       const visibility = String(c.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
       if (visibility === "HIDDEN" && c.seller !== userId) return null
@@ -451,7 +409,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (dl.isValid() && dl.isBefore(now)) {
           if (status !== "SOLD" && status !== "DISCARDED") {
             if (String(c.item_type || "").toLowerCase() === "auction") {
-              status = highestBidAmount(c.auctions_poll) > 0 ? "SOLD" : "DISCARDED"
+              status = highestBidAmount(poll) > 0 ? "SOLD" : "DISCARDED"
             } else {
               status = "DISCARDED"
             }
@@ -475,9 +433,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
         updatedAt: c.updatedAt,
         seller: c.seller,
         includesShipping: !!c.includesShipping,
-        stock: Number(c.stock) || 0,
+        stock,
         deadline: c.deadline,
-        auctions_poll: (tribeCrypto && tribeCrypto.getKey(rootId)) ? (Array.isArray(c.auctions_poll) ? c.auctions_poll : []) : [],
+        auctions_poll: (tribeCrypto && tribeCrypto.getKey(rootId)) ? poll : [],
         mapUrl: c.mapUrl || "",
         shopProductId: c.shopProductId || "",
         shopId: c.shopId || "",
@@ -569,87 +527,50 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async addBidToAuction(itemId, userId, bidAmount) {
-      const tipId = await this.resolveCurrentId(itemId)
       const ssbClient = await openSsb()
-      const me = ssbClient.id
+      const messages = await readAll(ssbClient)
+      const idx = buildMarketIndex(messages)
+      const rootOf = (key) => { let x = key, g = 0; while (idx.naivePrev.has(x) && idx.nodes.has(idx.naivePrev.get(x)) && g++ < 100000) x = idx.naivePrev.get(x); return x }
+      const grp = resolveGroups(idx).get(rootOf(itemId))
+      if (!grp) throw new Error("Item not found")
+      const c = grp.best.c
 
-      return new Promise((resolve, reject) => {
-        ssbClient.get(tipId, (err, item) => {
-          if (err || !item || !item.content) return reject(new Error("Item not found"))
-          const c = item.content
+      if (String(c.item_type || "").toLowerCase() !== "auction") throw new Error("Not an auction")
+      if (c.seller === userId) throw new Error("Cannot bid on your own item")
+      if (D(N(c.status || "FOR_SALE")) !== "FOR SALE") throw new Error("Auction is not active")
 
-          if (String(c.item_type || "").toLowerCase() !== "auction") return reject(new Error("Not an auction"))
-          if (c.seller === userId) return reject(new Error("Cannot bid on your own item"))
+      const dl = c.deadline ? moment(c.deadline) : null
+      if (!dl || !dl.isValid()) throw new Error("Invalid deadline")
+      if (dl.isBefore(moment())) throw new Error("Auction closed")
 
-          const curStatus = D(N(c.status || "FOR_SALE"))
-          if (curStatus !== "FOR SALE") return reject(new Error("Auction is not active"))
+      if ((Number(c.stock) || 0) <= 0) throw new Error("Out of stock")
 
-          const dl = c.deadline ? moment(c.deadline) : null
-          if (!dl || !dl.isValid()) return reject(new Error("Invalid deadline"))
-          if (dl.isBefore(moment())) return reject(new Error("Auction closed"))
+      const basePrice = parseFloat(String(c.price || "0").replace(",", "."))
+      const bid = parseFloat(String(bidAmount || "").replace(",", "."))
+      if (!Number.isFinite(bid) || bid <= 0) throw new Error("Invalid bid")
 
-          const stock = Number(c.stock) || 0
-          if (stock <= 0) return reject(new Error("Out of stock"))
+      const highest = highestBidAmount(grp.poll)
+      const min = Number.isFinite(highest) && highest > 0 ? highest : Number.isFinite(basePrice) ? basePrice : 0
+      if (bid <= min) throw new Error("Bid not highest")
 
-          const basePrice = parseFloat(String(c.price || "0").replace(",", "."))
-          const bid = parseFloat(String(bidAmount || "").replace(",", "."))
-          if (!Number.isFinite(bid) || bid <= 0) return reject(new Error("Invalid bid"))
-
-          const highest = highestBidAmount(c.auctions_poll)
-          const min = Number.isFinite(highest) && highest > 0 ? highest : Number.isFinite(basePrice) ? basePrice : 0
-          if (bid <= min) return reject(new Error("Bid not highest"))
-
-          const bidLine = `${userId}|${bid.toFixed(6)}|${new Date().toISOString()}`
-
-          const updated = {
-            ...c,
-            auctions_poll: [...(Array.isArray(c.auctions_poll) ? c.auctions_poll : []), bidLine],
-            updatedAt: new Date().toISOString(),
-            replaces: tipId
-          }
-
-          const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: me }
-
-          ssbClient.publish(tombstone, (err1) => {
-            if (err1) return reject(err1)
-            ssbClient.publish(updated, (err2, res) => (err2 ? reject(err2) : resolve(res)))
-          })
-        })
-      })
+      const content = { type: "marketBid", target: grp.rootId, amount: bid.toFixed(6), time: new Date().toISOString(), createdAt: new Date().toISOString() }
+      return new Promise((resolve, reject) =>
+        ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)))
+      )
     },
 
     async decrementStock(itemId) {
-      const tipId = await this.resolveCurrentId(itemId)
       const ssbClient = await openSsb()
-      const userId = ssbClient.id
+      const item = await this.getItemById(itemId)
+      if (!item) throw new Error("Item not found")
+      const curStatus = String(item.status).toUpperCase().replace(/\s+/g, "_")
+      if (["SOLD", "DISCARDED"].includes(curStatus)) return { ok: true, noop: true }
+      if ((Number(item.stock) || 0) <= 0) return { ok: true, noop: true }
 
-      return new Promise((resolve, reject) => {
-        ssbClient.get(tipId, (err, item) => {
-          if (err || !item || !item.content) return reject(new Error("Item not found"))
-
-          const curStatus = String(item.content.status).toUpperCase().replace(/\s+/g, "_")
-          if (["SOLD", "DISCARDED"].includes(curStatus)) return resolve({ ok: true, noop: true })
-
-          const current = Number(item.content.stock) || 0
-          if (current <= 0) return resolve({ ok: true, noop: true })
-
-          const newStock = current - 1
-          const updated = {
-            ...item.content,
-            stock: newStock,
-            status: newStock === 0 ? "SOLD" : item.content.status,
-            updatedAt: new Date().toISOString(),
-            replaces: tipId
-          }
-
-          const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-
-          ssbClient.publish(tombstone, (e1) => {
-            if (e1) return reject(e1)
-            ssbClient.publish(updated, (e2, res) => (e2 ? reject(e2) : resolve(res)))
-          })
-        })
-      })
+      const content = { type: "marketPurchase", target: item.rootId, createdAt: new Date().toISOString() }
+      return new Promise((resolve, reject) =>
+        ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)))
+      )
     }
   }
 }

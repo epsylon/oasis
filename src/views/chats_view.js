@@ -277,6 +277,24 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
             button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
           )
         : null,
+      (() => {
+        if (!(isAuthor && chat.status === "INVITE-ONLY")) return null
+        const openInvite = safeArr(chat.invites).find(inv => typeof inv === "object" && inv && inv.public === true && inv.code)
+        if (openInvite) return [
+          div({ class: "tribe-open-invite" },
+            span({ class: "card-label" }, i18n.tribeInviteCodeText),
+            span({ class: "tribe-open-invite-code" }, openInvite.code)
+          ),
+          form({ method: "POST", action: `/chats/open-invite/remove` },
+            input({ type: "hidden", name: "chatId", value: chat.key }),
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
+          )
+        ]
+        return form({ method: "POST", action: `/chats/open-invite/create` },
+          input({ type: "hidden", name: "chatId", value: chat.key }),
+          button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
+        )
+      })(),
       form(
         { method: "POST", action: chat.isFavorite ? `/chats/favorites/remove/${encodeURIComponent(chat.key)}` : `/chats/favorites/add/${encodeURIComponent(chat.key)}` },
         input({ type: "hidden", name: "returnTo", value: returnTo }),

@@ -46,7 +46,7 @@ describe('ai: routes_index.resolveTopK', (t) => {
     const q = await fakeEmbed('shop store vendor');
     const allEnabled = await routesIndex.resolveTopK(q, { embed: fakeEmbed, threshold: 0, isModuleEnabled: () => true }, 60);
     ok(allEnabled.find(r => r.path === '/shops'));
-    const shopsDisabled = await routesIndex.resolveTopK(q, { embed: fakeEmbed, threshold: 0, isModuleEnabled: (m) => m !== 'shopMod' }, 60);
+    const shopsDisabled = await routesIndex.resolveTopK(q, { embed: fakeEmbed, threshold: 0, isModuleEnabled: (m) => m !== 'shopsMod' }, 60);
     ok(!shopsDisabled.find(r => r.path === '/shops'));
   });
 

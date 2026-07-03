@@ -1,7 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('./dedupe');
+const { dedupeBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const normU = (v) => String(v || '').trim().toUpperCase();
@@ -49,6 +49,130 @@ module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
+  const getAllMessages = async (ssbClient) =>
+    new Promise((resolve, reject) => {
+      pull(
+        ssbClient.createLogStream({ limit: logLimit }),
+        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
+      );
+    });
+
+  const buildIndex = (messages) => {
+    const tomb = buildValidatedTombstoneSet(messages);
+    const nodes = new Map();
+    const parent = new Map();
+    const child = new Map();
+    const strictChild = new Map();
+    const confirms = [];
+    const opinionMsgs = [];
+
+    for (const m of messages) {
+      const k = m.key;
+      const v = m.value || {};
+      const c = v.content;
+      if (!c) continue;
+
+      if (c.type === 'tombstone') continue;
+      if (c.type === 'reportConfirm') { confirms.push({ target: c.target, author: v.author }); continue; }
+      if (c.type === 'reportOpinion') { opinionMsgs.push({ target: c.target, author: v.author, category: c.category }); continue; }
+      if (c.type !== 'report') continue;
+
+      const ts = v.timestamp || m.timestamp || 0;
+      nodes.set(k, { key: k, ts, c, author: v.author });
+
+      if (c.replaces) {
+        parent.set(k, c.replaces);
+        child.set(c.replaces, k);
+      }
+    }
+
+    for (const [k, node] of nodes) {
+      const t = node.c.replaces;
+      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
+    }
+
+    const rootOf = (id) => {
+      let cur = id, g = 0;
+      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
+      return cur;
+    };
+
+    const contentTipOf = (root) => {
+      let cur = root, g = 0;
+      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
+      const n = nodes.get(cur), rn = nodes.get(root);
+      return (n && rn && n.author === rn.author) ? cur : root;
+    };
+
+    const roots = new Set();
+    for (const id of nodes.keys()) roots.add(rootOf(id));
+
+    const confirmsByRoot = new Map(), opinionsByRoot = new Map();
+    for (const cf of confirms) { if (!nodes.has(cf.target)) continue; const r = rootOf(cf.target); if (!confirmsByRoot.has(r)) confirmsByRoot.set(r, []); confirmsByRoot.get(r).push(cf); }
+    for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
+
+    const tipByRoot = new Map();
+    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
+
+    const resolveGroup = (root) => {
+      const contentTip = contentTipOf(root);
+      const contentNode = nodes.get(contentTip) || nodes.get(root);
+      if (!contentNode) return null;
+      const rootAuthor = nodes.get(root) ? nodes.get(root).author : null;
+      const lc = contentNode.c || {};
+
+      const opinions = { ...(lc.opinions || {}) };
+      const voterSet = new Set(ensureArray(lc.opinions_inhabitants));
+      const confirmSet = new Set(ensureArray(lc.confirmations));
+
+      const groupKeys = []; { let x = root, g = 0; groupKeys.push(x); while (child.has(x) && g++ < 100000) { x = child.get(x); groupKeys.push(x); } }
+      for (const k of groupKeys) {
+        const n = nodes.get(k); if (!n) continue; if (n.author !== rootAuthor) continue; const c = n.c || {};
+        for (const cb of ensureArray(c.confirmations)) confirmSet.add(cb);
+        for (const vv of ensureArray(c.opinions_inhabitants)) voterSet.add(vv);
+        if (c.opinions && typeof c.opinions === 'object') for (const kk of Object.keys(c.opinions)) opinions[kk] = Math.max(opinions[kk] || 0, Number(c.opinions[kk]) || 0);
+      }
+
+      for (const op of (opinionsByRoot.get(root) || [])) {
+        if (voterSet.has(op.author)) continue;
+        voterSet.add(op.author);
+        opinions[op.category] = (opinions[op.category] || 0) + 1;
+      }
+      for (const cf of (confirmsByRoot.get(root) || [])) confirmSet.add(cf.author);
+
+      return {
+        contentTip,
+        contentNode,
+        opinions,
+        opinions_inhabitants: [...voterSet],
+        confirmations: [...confirmSet],
+        tombstoned: tomb.has(contentTip)
+      };
+    };
+
+    return { tomb, nodes, parent, child, rootOf, tipByRoot, resolveGroup };
+  };
+
+  const buildReport = (node, agg) => {
+    const c = node.c || {};
+    const cat = normU(c.category);
+    const opinions = agg ? agg.opinions : (c.opinions || {});
+    const voters = agg ? agg.opinions_inhabitants : ensureArray(c.opinions_inhabitants);
+    const confirmations = agg ? agg.confirmations : ensureArray(c.confirmations);
+    return {
+      id: node.key,
+      ...c,
+      category: cat,
+      status: normalizeStatus(c.status || 'OPEN'),
+      severity: normalizeSeverity(c.severity) || 'low',
+      confirmations,
+      tags: ensureArray(c.tags),
+      template: normalizeTemplate(cat, c.template || {}),
+      opinions,
+      opinions_inhabitants: voters
+    };
+  };
+
   return {
     async createReport(title, description, category, image, tagsRaw = [], severity = 'low', template = {}) {
       const ssb = await openSsb();
@@ -88,11 +212,16 @@ module.exports = ({ cooler }) => {
       const ssb = await openSsb();
       const userId = ssb.id;
 
-      const report = await new Promise((res, rej) =>
-        ssb.get(id, (err, r) => err ? rej(new Error('Report not found')) : res(r))
-      );
+      const messages = await getAllMessages(ssb);
+      const idx = buildIndex(messages);
+      const root = idx.rootOf(id);
+      const agg = idx.resolveGroup(root);
+      if (!agg || agg.tombstoned) throw new Error('Report not found');
 
-      if (report.content.author !== userId) throw new Error('Not the author');
+      const report = { content: agg.contentNode.c };
+      const tipId = agg.contentTip;
+
+      if (agg.contentNode.author !== userId) throw new Error('Not the author');
 
       const tags = Object.prototype.hasOwnProperty.call(updatedContent, 'tags')
         ? String(updatedContent.tags || '').split(',').map(t => t.trim()).filter(Boolean)
@@ -115,7 +244,7 @@ module.exports = ({ cooler }) => {
         ? normU(updatedContent.category)
         : normU(report.content.category);
 
-      const confirmations = ensureArray(report.content.confirmations);
+      const confirmations = ensureArray(agg.confirmations);
 
       const baseTemplate = Object.prototype.hasOwnProperty.call(updatedContent, 'template')
         ? updatedContent.template
@@ -127,10 +256,12 @@ module.exports = ({ cooler }) => {
         ...report.content,
         ...updatedContent,
         type: 'report',
-        replaces: id,
+        replaces: tipId,
         image: blobId,
         tags,
         confirmations,
+        opinions: agg.opinions,
+        opinions_inhabitants: agg.opinions_inhabitants,
         severity: nextSeverity,
         status: nextStatus,
         category: nextCategory,
@@ -146,62 +277,45 @@ module.exports = ({ cooler }) => {
       const ssb = await openSsb();
       const userId = ssb.id;
 
-      const report = await new Promise((res, rej) =>
-        ssb.get(id, (err, r) => err ? rej(new Error('Report not found')) : res(r))
-      );
+      const messages = await getAllMessages(ssb);
+      const idx = buildIndex(messages);
+      const root = idx.rootOf(id);
+      const agg = idx.resolveGroup(root);
+      if (!agg || agg.tombstoned) throw new Error('Report not found');
 
-      if (report.content.author !== userId) throw new Error('Not the author');
+      if (agg.contentNode.author !== userId) throw new Error('Not the author');
 
-      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
+      const tombstone = { type: 'tombstone', target: agg.contentTip, deletedAt: new Date().toISOString(), author: userId };
       return new Promise((res, rej) => ssb.publish(tombstone, (err, result) => err ? rej(err) : res(result)));
     },
 
     async getReportById(id) {
       const ssb = await openSsb();
 
-      const report = await new Promise((res, rej) =>
-        ssb.get(id, (err, r) => err ? rej(new Error('Report not found')) : res(r))
-      );
+      const messages = await getAllMessages(ssb);
+      const idx = buildIndex(messages);
+      const root = idx.rootOf(id);
+      const agg = idx.resolveGroup(root);
+      if (!agg || agg.tombstoned) throw new Error('Report not found');
 
-      const c = report.content || {};
-      const cat = normU(c.category);
-      return {
-        id,
-        ...c,
-        category: cat,
-        status: normalizeStatus(c.status || 'OPEN'),
-        severity: normalizeSeverity(c.severity) || 'low',
-        confirmations: ensureArray(c.confirmations),
-        tags: ensureArray(c.tags),
-        template: normalizeTemplate(cat, c.template || {})
-      };
+      return buildReport(agg.contentNode, agg);
     },
 
     async confirmReportById(id) {
       const ssb = await openSsb();
       const userId = ssb.id;
 
-      const report = await new Promise((res, rej) =>
-        ssb.get(id, (err, r) => err ? rej(new Error('Report not found')) : res(r))
-      );
+      const messages = await getAllMessages(ssb);
+      const idx = buildIndex(messages);
+      const root = idx.rootOf(id);
+      const agg = idx.resolveGroup(root);
+      if (!agg || agg.tombstoned) throw new Error('Report not found');
 
-      const confirmations = ensureArray(report.content.confirmations);
-      if (confirmations.includes(userId)) throw new Error('Already confirmed');
+      if (agg.contentNode.author === userId) throw new Error('Cannot confirm own report');
+      if (ensureArray(agg.confirmations).includes(userId)) throw new Error('Already confirmed');
 
-      const cat = normU(report.content.category);
-      const updated = {
-        ...report.content,
-        type: 'report',
-        replaces: id,
-        confirmations: [...confirmations, userId],
-        updatedAt: new Date().toISOString(),
-        status: normalizeStatus(report.content.status || 'OPEN'),
-        category: cat,
-        severity: normalizeSeverity(report.content.severity) || 'low',
-        template: normalizeTemplate(cat, report.content.template || {})
-      };
-
-      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+      const content = { type: 'reportConfirm', target: root, createdAt: new Date().toISOString() };
+      return new Promise((res, rej) => ssb.publish(content, (err, result) => err ? rej(err) : res(result)));
     },
 
     async createOpinion(id, category) {
@@ -209,75 +323,31 @@ module.exports = ({ cooler }) => {
       if (!categories.includes(category)) throw new Error('Invalid opinion category');
       const ssb = await openSsb();
       const userId = ssb.id;
-      const report = await new Promise((res, rej) => ssb.get(id, (err, r) => err || !r || !r.content ? rej(new Error('Report not found')) : res(r)));
-      const c = report.content;
-      const list = Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [];
-      if (list.includes(userId)) throw new Error('Already opined');
-      const opinions = Object.assign({}, c.opinions || {});
-      opinions[category] = (opinions[category] || 0) + 1;
-      const cat = normU(c.category);
-      const updated = {
-        ...c,
-        type: 'report',
-        replaces: id,
-        opinions,
-        opinions_inhabitants: list.concat(userId),
-        updatedAt: new Date().toISOString(),
-        status: normalizeStatus(c.status || 'OPEN'),
-        category: cat,
-        severity: normalizeSeverity(c.severity) || 'low',
-        template: normalizeTemplate(cat, c.template || {})
-      };
-      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
-      await new Promise((res, rej) => ssb.publish(tombstone, err => err ? rej(err) : res()));
-      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+
+      const messages = await getAllMessages(ssb);
+      const idx = buildIndex(messages);
+      const root = idx.rootOf(id);
+      const agg = idx.resolveGroup(root);
+      if (!agg || agg.tombstoned) throw new Error('Report not found');
+      if (ensureArray(agg.opinions_inhabitants).includes(userId)) throw new Error('Already opined');
+
+      const content = { type: 'reportOpinion', target: root, category, createdAt: new Date().toISOString() };
+      return new Promise((res, rej) => ssb.publish(content, (err, result) => err ? rej(err) : res(result)));
     },
 
     async listAll() {
       const ssb = await openSsb();
+      const messages = await getAllMessages(ssb);
+      const idx = buildIndex(messages);
 
-      return new Promise((resolve, reject) => {
-        pull(
-          ssb.createLogStream({ limit: logLimit }),
-          pull.collect((err, results) => {
-            if (err) return reject(err);
+      const reports = [];
+      for (const root of idx.tipByRoot.keys()) {
+        const agg = idx.resolveGroup(root);
+        if (!agg || agg.tombstoned) continue;
+        reports.push(buildReport(agg.contentNode, agg));
+      }
 
-            const tombstoned = buildValidatedTombstoneSet(results);
-            const replaced = new Map();
-            const reports = new Map();
-
-            for (const r of results) {
-              const key = r && r.key;
-              const c = r && r.value && r.value.content ? r.value.content : null;
-              if (!key || !c) continue;
-
-              if (c.type === 'tombstone') continue;
-
-              if (c.type === 'report') {
-                if (c.replaces) replaced.set(c.replaces, key);
-
-                const cat = normU(c.category);
-                reports.set(key, {
-                  id: key,
-                  ...c,
-                  category: cat,
-                  status: normalizeStatus(c.status || 'OPEN'),
-                  severity: normalizeSeverity(c.severity) || 'low',
-                  confirmations: ensureArray(c.confirmations),
-                  tags: ensureArray(c.tags),
-                  template: normalizeTemplate(cat, c.template || {})
-                });
-              }
-            }
-
-            tombstoned.forEach(id => reports.delete(id));
-            replaced.forEach((_, oldId) => reports.delete(oldId));
-
-            resolve(dedupeBy([...reports.values()], x => x.title ? [norm(x.author), norm(x.title), norm(x.category)].join('|') : null));
-          })
-        );
-      });
+      return dedupeBy(reports, x => x.title ? [norm(x.author), norm(x.title), norm(x.category)].join('|') : null);
     }
   };
 };
-

@@ -337,6 +337,19 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
               ? form({ method: 'POST', action: `/forum/generate-invite/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
                   button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite))
               : null,
+            (forum.isPrivate && forum.author === userId && !forum.openInviteCode)
+              ? form({ method: 'POST', action: `/forum/open-invite/create/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
+                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeOpenInvitation))
+              : null,
+            (forum.isPrivate && forum.author === userId && forum.openInviteCode)
+              ? span({ class: 'tribe-open-invite' },
+                  span({ class: 'card-label' }, i18n.tribeInviteCodeText),
+                  span({ class: 'tribe-open-invite-code' }, forum.openInviteCode))
+              : null,
+            (forum.isPrivate && forum.author === userId && forum.openInviteCode)
+              ? form({ method: 'POST', action: `/forum/open-invite/remove/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
+                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeRemoveInvitation))
+              : null,
             (forum.isPrivate && forum.author !== userId)
               ? a({ class: 'tribe-action-btn', href: '/invites#invites-forums' }, i18n.tribeEnterInvite)
               : null,

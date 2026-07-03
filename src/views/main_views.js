@@ -48,6 +48,10 @@ const userLink = (feedId, knownName) => {
 exports.userLink = userLink;
 exports.userLinkLabel = userLinkLabel;
 
+const renderInviteQrCard = ({ qrDataUrl }) =>
+  qrDataUrl ? div({ class: 'invite-qr-card' }, img({ src: qrDataUrl, alt: 'QR', class: 'invite-qr-img' })) : null;
+exports.renderInviteQrCard = renderInviteQrCard;
+
 const renderStateChip = (variant, icon, text) =>
   span({ class: `pm-exposition-chip pm-exposition-${variant}` },
     icon ? span({ class: "pm-exposition-icon" }, icon) : null,
@@ -2413,6 +2417,7 @@ const renderUserSensors = (u, opts = {}) => {
         return div({ class: 'profile-reach' },
           renderReachChip(true, i18n, path),
           renderClearnetUrlBlock({ path, i18nObj: i18n }),
+          renderInviteQrCard({ qrDataUrl: `/qr-clearnet/${encodeURIComponent(u.id)}` }),
           isMe ? form({ method: 'POST', action: '/profile/clearnet-toggle', class: 'profile-reach-toggle' }, button({ type: 'submit', class: 'btn' }, i18n.profileSwitchToOasis || 'Return to Oasis')) : null
         );
       })()
@@ -2430,6 +2435,7 @@ exports.authorView = async ({
   firstPost,
   lastPost,
   name,
+  oasisVersion,
   relationship,
   ecoAddress,
   karmaScore = 0,
@@ -2535,7 +2541,11 @@ exports.authorView = async ({
     div({ class: "profile-side-mention" },
       a({ href: `/author/${encodeURIComponent(feedId)}` }, strong(feedId))
     ),
-    qrSrc ? img({ src: qrSrc, alt: feedId, class: "profile-side-qr", width: "180", height: "180" }) : null,
+    oasisVersion ? div({ class: "profile-side-version" },
+      '🌴 ' + (i18n.oasisVersionLabel || 'Oasis Version') + ': ',
+      strong(oasisVersion)
+    ) : null,
+    feedId ? renderInviteQrCard({ qrDataUrl: `/qr/${encodeURIComponent(feedId)}` }) : null,
     description !== ""
       ? div({ class: "profile-side-description", innerHTML: sanitizeHtml(markdown(description)) })
       : null,

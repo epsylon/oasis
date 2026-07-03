@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('./dedupe');
+const { dedupeBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, pmModel }) => {
@@ -20,6 +20,122 @@ module.exports = ({ cooler, pmModel }) => {
     const vv = String(v || '').toUpperCase();
     if (vv === 'OPEN' || vv === 'IN-PROGRESS' || vv === 'CLOSED') return vv;
     return fallback;
+  };
+
+  const getAllMessages = async (ssbClient) =>
+    new Promise((resolve, reject) => {
+      pull(
+        ssbClient.createLogStream({ limit: logLimit }),
+        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
+      );
+    });
+
+  const getMsg = async (ssbClient, key) =>
+    new Promise((resolve, reject) => {
+      ssbClient.get(key, (err, msg) => (err ? reject(err) : resolve(msg)));
+    });
+
+  const buildIndex = (messages) => {
+    const tomb = buildValidatedTombstoneSet(messages);
+    const nodes = new Map();
+    const parent = new Map();
+    const child = new Map();
+    const strictChild = new Map();
+    const opinionMsgs = [];
+    const assignMsgs = [];
+
+    for (const m of messages) {
+      const k = m.key;
+      const v = m.value || {};
+      const c = v.content;
+      if (!c) continue;
+
+      if (c.type === 'tombstone') continue;
+      if (c.type === 'taskOpinion') { opinionMsgs.push({ target: c.target, author: v.author, category: c.category }); continue; }
+      if (c.type === 'taskAssign') { assignMsgs.push({ target: c.target, author: v.author, on: c.on !== false, ts: v.timestamp || m.timestamp || 0 }); continue; }
+      if (c.type !== 'task') continue;
+
+      const ts = v.timestamp || m.timestamp || 0;
+      nodes.set(k, { key: k, ts, c, author: v.author });
+
+      if (c.replaces) {
+        parent.set(k, c.replaces);
+        child.set(c.replaces, k);
+      }
+    }
+
+    for (const [k, node] of nodes) {
+      const t = node.c.replaces;
+      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
+    }
+
+    const rootOf = (id) => {
+      let cur = id, g = 0;
+      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
+      return cur;
+    };
+
+    const contentTipOf = (root) => {
+      let cur = root, g = 0;
+      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
+      const n = nodes.get(cur), rn = nodes.get(root);
+      return (n && rn && n.author === rn.author) ? cur : root;
+    };
+
+    const roots = new Set();
+    for (const id of nodes.keys()) roots.add(rootOf(id));
+
+    const opinionsByRoot = new Map();
+    for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
+
+    const assignByRoot = new Map();
+    for (const as of assignMsgs) { if (!nodes.has(as.target)) continue; const r = rootOf(as.target); if (!assignByRoot.has(r)) assignByRoot.set(r, new Map()); const m2 = assignByRoot.get(r); const p = m2.get(as.author); if (!p || as.ts >= p.ts) m2.set(as.author, { on: as.on, ts: as.ts }); }
+
+    const resolveGroup = (root) => {
+      const contentTip = contentTipOf(root);
+      const contentNode = nodes.get(contentTip) || nodes.get(root);
+      const ownerNode = nodes.get(root);
+      const oc = ownerNode ? ownerNode.c : {};
+
+      const opinions = { ...(oc.opinions || {}) };
+      const voters = uniq(oc.opinions_inhabitants).slice();
+      const voterSet = new Set(voters);
+      for (const op of (opinionsByRoot.get(root) || [])) {
+        if (voterSet.has(op.author)) continue;
+        voterSet.add(op.author); voters.push(op.author);
+        opinions[op.category] = (opinions[op.category] || 0) + 1;
+      }
+
+      const creator = ownerNode ? ownerNode.author : null;
+      const asg = new Set(uniq(oc.assignees));
+      if (creator) asg.add(creator);
+      for (const [au, st] of (assignByRoot.get(root) || new Map())) { if (st.on) asg.add(au); else if (au !== creator) asg.delete(au); }
+      const assignees = [...asg];
+
+      return { contentTip, contentNode, opinions, voters, assignees };
+    };
+
+    const tipByRoot = new Map();
+    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
+
+    return { tomb, nodes, parent, child, rootOf, tipByRoot, resolveGroup };
+  };
+
+  const buildTask = (node, rootId, agg, now) => {
+    const c = node.c || {};
+    const opinions = agg ? agg.opinions : (c.opinions || {});
+    const voters = agg ? agg.voters : (Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : []);
+    const assignees = agg ? agg.assignees : (Array.isArray(c.assignees) ? c.assignees : []);
+    const status = c.status === 'OPEN' && moment(c.endTime).isBefore(now) ? 'CLOSED' : c.status;
+    return {
+      id: node.key,
+      rootId,
+      ...c,
+      assignees,
+      opinions,
+      opinions_inhabitants: voters,
+      status
+    };
   };
 
   return {
@@ -74,6 +190,9 @@ module.exports = ({ cooler, pmModel }) => {
       const ssb = await openSsb();
       const userId = ssb.id;
 
+      const keys = Object.keys(updatedData || {}).filter(k => updatedData[k] !== undefined);
+      if (keys.length === 1 && keys[0] === 'assignees') return this.toggleAssignee(taskId);
+
       const old = await new Promise((res, rej) =>
         ssb.get(taskId, (err, msg) => err || !msg ? rej(new Error('Task not found')) : res(msg))
       );
@@ -81,28 +200,12 @@ module.exports = ({ cooler, pmModel }) => {
       const c = old.content;
       if (c.type !== 'task') throw new Error('Invalid type');
 
-      const keys = Object.keys(updatedData || {}).filter(k => updatedData[k] !== undefined);
-      const assigneesOnly = keys.length === 1 && keys[0] === 'assignees';
-
       const taskCreator = c.author || old.author;
-      if (!assigneesOnly && taskCreator !== userId) throw new Error('Not the author');
+      if (taskCreator !== userId) throw new Error('Not the author');
 
       if (c.status === 'CLOSED') throw new Error('Cannot edit a closed task');
 
-      let nextAssignees = Array.isArray(c.assignees) ? uniq(c.assignees) : [];
-
-      if (assigneesOnly) {
-        const proposed = uniq(updatedData.assignees);
-        const oldNoSelf = uniq(nextAssignees.filter(x => x !== userId)).sort();
-        const newNoSelf = uniq(proposed.filter(x => x !== userId)).sort();
-        if (oldNoSelf.length !== newNoSelf.length || oldNoSelf.some((v, i) => v !== newNoSelf[i])) {
-          throw new Error('Not allowed');
-        }
-        const hadSelf = nextAssignees.includes(userId);
-        const hasSelfNow = proposed.includes(userId);
-        if (hadSelf === hasSelfNow) throw new Error('Not allowed');
-        nextAssignees = proposed;
-      }
+      const nextAssignees = Array.isArray(c.assignees) ? uniq(c.assignees) : [];
 
       let newStart = c.startTime;
       if (updatedData.startTime != null && updatedData.startTime !== '') {
@@ -150,7 +253,7 @@ module.exports = ({ cooler, pmModel }) => {
         tags: newTags,
         isPublic: newVisibility,
         status: newStatus,
-        assignees: assigneesOnly ? nextAssignees : (updatedData.assignees !== undefined ? uniq(updatedData.assignees) : nextAssignees),
+        assignees: nextAssignees,
         updatedAt: new Date().toISOString(),
         replaces: taskId
       };
@@ -167,10 +270,12 @@ module.exports = ({ cooler, pmModel }) => {
     async getTaskById(taskId) {
       const ssb = await openSsb();
       const now = moment();
-      const task = await new Promise((res, rej) => ssb.get(taskId, (err, task) => err ? rej(new Error('Task not found')) : res(task)));
-      const c = task.content;
-      const status = c.status === 'OPEN' && moment(c.endTime).isBefore(now) ? 'CLOSED' : c.status;
-      return { id: taskId, ...c, status };
+      const messages = await getAllMessages(ssb);
+      const idx = buildIndex(messages);
+      const rootId = idx.rootOf(taskId);
+      const agg = idx.resolveGroup(rootId);
+      if (!agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error('Task not found');
+      return buildTask(agg.contentNode, rootId, agg, now);
     },
 
     async createOpinion(id, category) {
@@ -178,16 +283,11 @@ module.exports = ({ cooler, pmModel }) => {
       if (!categories.includes(category)) throw new Error('Invalid opinion category');
       const ssb = await openSsb();
       const userId = ssb.id;
-      const task = await new Promise((res, rej) => ssb.get(id, (err, m) => err || !m || !m.content ? rej(new Error('Task not found')) : res(m)));
-      const c = task.content;
-      const list = Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [];
-      if (list.includes(userId)) throw new Error('Already opined');
-      const opinions = Object.assign({}, c.opinions || {});
-      opinions[category] = (opinions[category] || 0) + 1;
-      const updated = { ...c, opinions, opinions_inhabitants: list.concat(userId), updatedAt: new Date().toISOString(), replaces: id };
-      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
-      await new Promise((res, rej) => ssb.publish(tombstone, err => err ? rej(err) : res()));
-      return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
+      const task = await this.getTaskById(id);
+      const voters = Array.isArray(task.opinions_inhabitants) ? task.opinions_inhabitants : [];
+      if (voters.includes(userId)) throw new Error('Already opined');
+      const content = { type: 'taskOpinion', target: task.rootId, category, createdAt: new Date().toISOString() };
+      return new Promise((res, rej) => ssb.publish(content, (err, result) => err ? rej(err) : res(result)));
     },
 
     async toggleAssignee(taskId) {
@@ -195,71 +295,51 @@ module.exports = ({ cooler, pmModel }) => {
       const userId = ssb.id;
       const task = await this.getTaskById(taskId);
       if (task.status === 'CLOSED') throw new Error('Cannot assign users to a closed task');
-      let assignees = Array.isArray(task.assignees) ? [...task.assignees] : [];
-      const idx = assignees.indexOf(userId);
-      if (idx !== -1) assignees.splice(idx, 1);
-      else assignees.push(userId);
-      return this.updateTaskById(taskId, { assignees });
+      const on = !(Array.isArray(task.assignees) && task.assignees.includes(userId));
+      const content = { type: 'taskAssign', target: task.rootId, on, createdAt: new Date().toISOString() };
+      return new Promise((res, rej) => ssb.publish(content, (err, result) => err ? rej(err) : res(result)));
     },
 
     async listAll() {
       const ssb = await openSsb();
       const now = moment();
-      return new Promise((resolve, reject) => {
-        pull(ssb.createLogStream({ limit: logLimit }),
-          pull.collect((err, results) => {
-            if (err) return reject(err);
-            const tombstoned = buildValidatedTombstoneSet(results);
-            const replaced = new Map();
-            const tasks = new Map();
+      const messages = await getAllMessages(ssb);
+      const idx = buildIndex(messages);
 
-            for (const r of results) {
-              const { key, value: { content: c } } = r;
-              if (!c) continue;
-if (c.type === 'task') {
-                if (c.replaces) replaced.set(c.replaces, key);
-                const status = c.status === 'OPEN' && moment(c.endTime).isBefore(now) ? 'CLOSED' : c.status;
-                tasks.set(key, { id: key, ...c, status });
-              }
-            }
+      const tasks = [];
+      for (const [rootId, tipId] of idx.tipByRoot.entries()) {
+        if (idx.tomb.has(tipId)) continue;
+        const node = idx.nodes.get(tipId);
+        if (!node) continue;
+        tasks.push(buildTask(node, rootId, idx.resolveGroup(rootId), now));
+      }
 
-            tombstoned.forEach(id => tasks.delete(id));
-            replaced.forEach((_, oldId) => tasks.delete(oldId));
-
-            resolve(dedupeBy([...tasks.values()], t => t.title ? [norm(t.author), norm(t.title), norm(t.startTime)].join('|') : null));
-          })
-        );
-      });
+      return dedupeBy(tasks, t => t.title ? [norm(t.author), norm(t.title), norm(t.startTime)].join('|') : null);
     },
 
     async checkDueReminders() {
       if (!pmModel) return;
       const ssbClient = await openSsb();
-      const messages = await new Promise((resolve, reject) =>
-        pull(ssbClient.createLogStream({ limit: logLimit }),
-          pull.collect((err, rows) => err ? reject(err) : resolve(rows)))
-      );
+      const messages = await getAllMessages(ssbClient);
       const now = Date.now();
       const sent = new Set();
-      const tombstoned = buildValidatedTombstoneSet(messages);
-      const replaced = new Set();
-      const tasks = new Map();
       for (const m of messages) {
         const c = m.value && m.value.content;
         if (!c) continue;
-        if (c.type === 'tombstone') continue;
         if (c.type === 'taskReminderSent' && c.target) { sent.add(c.target); continue; }
-        if (c.type === 'task') {
-          if (c.replaces) replaced.add(c.replaces);
-          tasks.set(m.key, { id: m.key, ...c });
-        }
       }
-      tombstoned.forEach(id => tasks.delete(id));
-      replaced.forEach(id => tasks.delete(id));
+      const idx = buildIndex(messages);
+      const tasks = [];
+      for (const [rootId, tipId] of idx.tipByRoot.entries()) {
+        if (idx.tomb.has(tipId)) continue;
+        const node = idx.nodes.get(tipId);
+        if (!node) continue;
+        tasks.push(buildTask(node, rootId, idx.resolveGroup(rootId)));
+      }
       const publishMarker = (target) => new Promise((resolve, reject) => {
         ssbClient.publish({ type: 'taskReminderSent', target, sentAt: new Date().toISOString() }, err => err ? reject(err) : resolve());
       });
-      for (const t of tasks.values()) {
+      for (const t of tasks) {
         if (sent.has(t.id)) continue;
         const status = String(t.status || '').toUpperCase();
         if (status !== 'OPEN') continue;
@@ -287,4 +367,3 @@ if (c.type === 'task') {
     }
   };
 };
-

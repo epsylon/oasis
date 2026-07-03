@@ -29,6 +29,18 @@ module.exports = ({ cooler }) => {
     return c.text || c.description || c.title || '';
   };
 
+  const OPINION_MSG_TYPE = {
+    bookmark: 'bookmarkOpinion',
+    votes: 'votesOpinion',
+    transfer: 'transferOpinion',
+    feed: 'feedOpinion',
+    image: 'imageOpinion',
+    audio: 'audioOpinion',
+    video: 'videoOpinion',
+    document: 'documentOpinion',
+    torrent: 'torrentOpinion'
+  };
+
   const createVote = async (contentId, category) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
@@ -38,30 +50,12 @@ module.exports = ({ cooler }) => {
     );
     if (!msg || !msg.content) throw new Error("Opinion not found.");
     const type = msg.content.type;
-    if (!validTypes.includes(type) || ['task', 'event', 'report'].includes(type)) {
-      throw new Error("Voting not allowed on this content type.");
-    }
+    const otype = OPINION_MSG_TYPE[type];
+    if (!otype) throw new Error("Voting not allowed on this content type.");
     if (msg.content.opinions_inhabitants?.includes(userId)) throw new Error("Already voted.");
-    const tombstone = {
-      type: 'tombstone',
-      target: contentId,
-      deletedAt: new Date().toISOString()
-    };
-    const updated = {
-      ...msg.content,
-      opinions: {
-        ...msg.content.opinions,
-        [category]: (msg.content.opinions?.[category] || 0) + 1
-      },
-      opinions_inhabitants: [...(msg.content.opinions_inhabitants || []), userId],
-      updatedAt: new Date().toISOString(),
-      replaces: contentId
-    };
-    await new Promise((resolve, reject) =>
-      ssbClient.publish(tombstone, err => err ? reject(err) : resolve())
-    );
+    const content = { type: otype, target: contentId, category, createdAt: new Date().toISOString() };
     return new Promise((resolve, reject) =>
-      ssbClient.publish(updated, (err, result) => err ? reject(err) : resolve(result))
+      ssbClient.publish(content, (err, result) => err ? reject(err) : resolve(result))
     );
   };
 
@@ -77,6 +71,7 @@ module.exports = ({ cooler }) => {
     const tombstoned = buildValidatedTombstoneSet(messages);
     const replaces = new Map();
     const byId = new Map();
+    const opinionMsgs = [];
 
     for (const msg of messages) {
       const key = msg.key;
@@ -84,6 +79,10 @@ module.exports = ({ cooler }) => {
       if (!c) continue;
       if (c.type === 'tombstone') {
         if (tombstoned.has(c.target)) byId.delete(c.target);
+        continue;
+      }
+      if (typeof c.type === 'string' && c.type.endsWith('Opinion') && c.target) {
+        opinionMsgs.push({ target: c.target, author: msg.value.author, category: c.category });
         continue;
       }
       if (c.opinions && !tombstoned.has(key) && !['task', 'event', 'report'].includes(c.type)) {
@@ -105,6 +104,35 @@ module.exports = ({ cooler }) => {
 
     for (const replacedId of replaces.keys()) {
       byId.delete(replacedId);
+    }
+
+    const tipToChain = new Map();
+    for (const [oldId, newId] of replaces.entries()) {
+      let tip = newId; let g = 0;
+      while (replaces.has(tip) && g++ < 100000) tip = replaces.get(tip);
+      if (!tipToChain.has(tip)) tipToChain.set(tip, new Set([tip]));
+      tipToChain.get(tip).add(oldId); tipToChain.get(tip).add(newId);
+    }
+    const idToTip = new Map();
+    for (const [tip, chain] of tipToChain.entries()) for (const id of chain) idToTip.set(id, tip);
+    const opinionByTip = new Map();
+    for (const op of opinionMsgs) {
+      const tip = idToTip.get(op.target) || op.target;
+      if (!opinionByTip.has(tip)) opinionByTip.set(tip, { opinions: {}, voters: new Set() });
+      const agg = opinionByTip.get(tip);
+      if (agg.voters.has(op.author)) continue;
+      agg.voters.add(op.author);
+      if (op.category) agg.opinions[op.category] = (agg.opinions[op.category] || 0) + 1;
+    }
+    for (const [key, m] of byId.entries()) {
+      const agg = opinionByTip.get(key);
+      if (!agg) continue;
+      const c = m.value.content;
+      const mergedVoters = new Set([...(Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])]);
+      const mergedOpinions = { ...(c.opinions || {}) };
+      for (const [cat, n] of Object.entries(agg.opinions)) mergedOpinions[cat] = (mergedOpinions[cat] || 0) + n;
+      for (const v of agg.voters) mergedVoters.add(v);
+      m.value.content = { ...c, opinions: mergedOpinions, opinions_inhabitants: [...mergedVoters] };
     }
 
     let filtered = Array.from(byId.values()).filter(m => validTypes.includes(m.value?.content?.type));

@@ -46,6 +46,9 @@ module.exports = ({ cooler }) => {
     const nodes = new Map()
     const parent = new Map()
     const child = new Map()
+    const strictChild = new Map()
+    const confirms = []
+    const opinionMsgs = []
     const ubiByPub = new Map()
     const ubiByUser = new Map()
     const ubiClaimNodes = []
@@ -60,6 +63,8 @@ module.exports = ({ cooler }) => {
         tomb.add(c.target)
         continue
       }
+      if (c.type === "transferConfirm") { confirms.push({ target: c.target, author: v.author, ts: v.timestamp || 0 }); continue }
+      if (c.type === "transferOpinion") { opinionMsgs.push({ target: c.target, author: v.author, category: c.category, ts: v.timestamp || 0 }); continue }
 
       if (c.type === "transfer") {
         nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
@@ -109,44 +114,75 @@ module.exports = ({ cooler }) => {
       nodes.set(k, { key: k, ts, c: synthetic, author: claimantId })
     }
 
+    for (const [k, node] of nodes) {
+      const t = node.c.replaces
+      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k) }
+    }
+
     const rootOf = (id) => {
-      let cur = id
-      while (parent.has(cur)) cur = parent.get(cur)
+      let cur = id, g = 0
+      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur)
       return cur
     }
 
-    const tipOf = (id) => {
-      let cur = id
-      while (child.has(cur)) cur = child.get(cur)
-      return cur
+
+    const contentTipOf = (root) => {
+      let cur = root, g = 0
+      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur)
+      const n = nodes.get(cur), rn = nodes.get(root)
+      return (n && rn && n.author === rn.author) ? cur : root
     }
 
     const roots = new Set()
     for (const id of nodes.keys()) roots.add(rootOf(id))
 
-    const tipByRoot = new Map()
-    for (const r of roots) tipByRoot.set(r, tipOf(r))
+    const confirmsByRoot = new Map(), opinionsByRoot = new Map()
+    for (const cf of confirms) { if (!nodes.has(cf.target)) continue; const r = rootOf(cf.target); if (!confirmsByRoot.has(r)) confirmsByRoot.set(r, []); confirmsByRoot.get(r).push(cf) }
+    for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op) }
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot }
+    const tipByRoot = new Map()
+    for (const r of roots) tipByRoot.set(r, contentTipOf(r))
+
+    const resolveGroup = (root) => {
+      const contentTip = contentTipOf(root)
+      const best = nodes.get(contentTip) || nodes.get(root)
+      if (!best) return null
+      const rootAuthor = nodes.get(root) ? nodes.get(root).author : null
+      const groupKeys = []; { let x = root, g = 0; groupKeys.push(x); while (child.has(x) && g++ < 100000) { x = child.get(x); groupKeys.push(x) } }
+      const confirmedBy = new Set()
+      const opinions = {}; const opinionSet = new Set()
+      for (const k of groupKeys) {
+        const n = nodes.get(k); if (!n) continue; if (n.author !== rootAuthor) continue; const c = n.c
+        for (const cb of (Array.isArray(c.confirmedBy) ? c.confirmedBy : [])) confirmedBy.add(cb)
+        for (const v of (Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])) opinionSet.add(v)
+        if (c.opinions && typeof c.opinions === "object") for (const kk of Object.keys(c.opinions)) opinions[kk] = Math.max(opinions[kk] || 0, Number(c.opinions[kk]) || 0)
+      }
+      if (best.c.from) confirmedBy.add(best.c.from)
+      for (const cf of (confirmsByRoot.get(root) || [])) confirmedBy.add(cf.author)
+      for (const op of (opinionsByRoot.get(root) || [])) { if (!opinionSet.has(op.author)) { opinionSet.add(op.author); opinions[op.category] = (opinions[op.category] || 0) + 1 } }
+      return { contentTip, best, confirmedBy: [...confirmedBy], opinions, opinions_inhabitants: [...opinionSet], tombstoned: tomb.has(contentTip) }
+    }
+
+    return { tomb, nodes, parent, child, rootOf, tipByRoot, resolveGroup }
   }
 
   const deriveStatus = (t) => {
     const status = String(t.status || "").toUpperCase()
-    const from = t.from
-    const to = t.to
-    const required = from === to ? 1 : 2
+    const required = t.from === t.to ? 1 : 2
     const confirmedCount = Array.isArray(t.confirmedBy) ? t.confirmedBy.length : 0
 
+    if (status === "DISCARDED") return "DISCARDED"
+    if (confirmedCount >= required) return "CLOSED"
     const dl = t.deadline ? moment(t.deadline) : null
-    if (status === "UNCONFIRMED" && dl && dl.isValid() && dl.isBefore(moment())) {
-      return confirmedCount >= required ? "CLOSED" : "DISCARDED"
-    }
-    if (status === "CLOSED" || status === "DISCARDED" || status === "UNCONFIRMED") return status
-    return status || "UNCONFIRMED"
+    if (dl && dl.isValid() && dl.isBefore(moment())) return "DISCARDED"
+    return status === "CLOSED" ? "CLOSED" : "UNCONFIRMED"
   }
 
-  const buildTransfer = (node) => {
+  const buildTransfer = (node, agg) => {
     const c = node.c || {}
+    const confirmedBy = agg ? agg.confirmedBy : (Array.isArray(c.confirmedBy) ? c.confirmedBy : [])
+    const opinions = agg ? agg.opinions : (c.opinions || {})
+    const opinions_inhabitants = agg ? agg.opinions_inhabitants : (Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])
     return {
       id: node.key,
       from: c.from,
@@ -157,11 +193,11 @@ module.exports = ({ cooler }) => {
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       deadline: c.deadline,
-      confirmedBy: Array.isArray(c.confirmedBy) ? c.confirmedBy : [],
-      status: deriveStatus(c),
+      confirmedBy,
+      status: deriveStatus({ ...c, confirmedBy }),
       tags: Array.isArray(c.tags) ? c.tags : [],
-      opinions: c.opinions || {},
-      opinions_inhabitants: Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : []
+      opinions,
+      opinions_inhabitants
     }
   }
 
@@ -173,8 +209,7 @@ module.exports = ({ cooler }) => {
       const messages = await getAllMessages(ssbClient)
       const idx = buildIndex(messages)
 
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const tip = idx.tipByRoot.get(idx.rootOf(id)) || id
       if (idx.tomb.has(tip)) throw new Error("Not found")
       return tip
     },
@@ -227,9 +262,12 @@ module.exports = ({ cooler }) => {
       if (!old?.content || old.content.type !== "transfer") throw new Error("Transfer not found")
 
       const current = old.content
-      const currentStatus = deriveStatus(current)
+      const idxU = buildIndex(await getAllMessages(ssbClient))
+      const gU = idxU.resolveGroup(idxU.rootOf(tipId))
+      const aggU = gU ? buildTransfer(gU.best, gU) : buildTransfer({ key: tipId, c: current })
+      const currentStatus = aggU.status
 
-      if (Object.keys(current.opinions || {}).length > 0) throw new Error("Cannot edit transfer after it has received opinions.")
+      if (Object.keys(aggU.opinions || {}).some(k => (aggU.opinions[k] || 0) > 0)) throw new Error("Cannot edit transfer after it has received opinions.")
       if (current.from !== userId) throw new Error("Not the author")
       if (currentStatus !== "UNCONFIRMED") throw new Error("Can only edit unconfirmed")
 
@@ -283,61 +321,24 @@ module.exports = ({ cooler }) => {
 
       if (!msg?.content) throw new Error("Not found")
 
-      if (msg.content.type === "ubiClaim") {
-        const c = msg.content
-        const epochId = c.epochId || ""
-        const pubId = c.pubId || ""
-        if (!pubId) throw new Error("Not found")
-        if (pubId === userId) throw new Error("Cannot confirm own claim")
-        const now = new Date().toISOString()
-        const transferContent = {
-          type: "transfer",
-          from: pubId,
-          to: userId,
-          concept: `UBI ${epochId} ${userId}`,
-          amount: String(c.amount || 0),
-          createdAt: c.claimedAt || now,
-          updatedAt: now,
-          deadline: null,
-          confirmedBy: [pubId, userId],
-          status: "CLOSED",
-          tags: ["UBI"],
-          opinions: {},
-          opinions_inhabitants: []
-        }
-        return new Promise((resolve, reject) => ssbClient.publish(transferContent, (e, r) => e ? reject(e) : resolve(r)))
-      }
-
       if (msg.content.type !== "transfer") throw new Error("Not found")
 
-      const t = msg.content
-      const status = deriveStatus(t)
-      if (status !== "UNCONFIRMED") throw new Error("Not unconfirmed")
+      const idx = buildIndex(await getAllMessages(ssbClient))
+      const root = idx.rootOf(tipId)
+      const g = idx.resolveGroup(root)
+      const t = g ? buildTransfer(g.best, g) : buildTransfer({ key: tipId, c: msg.content })
+
+      if (t.status !== "UNCONFIRMED") throw new Error("Not unconfirmed")
       if (t.to !== userId) throw new Error("Not the recipient")
 
       const dl = t.deadline ? moment(t.deadline) : null
       if (dl && dl.isValid() && dl.isBefore(moment())) throw new Error("Expired")
 
-      const existing = Array.isArray(t.confirmedBy) ? t.confirmedBy : []
-      if (existing.includes(userId)) throw new Error("Already confirmed")
+      if ((Array.isArray(t.confirmedBy) ? t.confirmedBy : []).includes(userId)) throw new Error("Already confirmed")
 
-      const required = t.from === t.to ? 1 : 2
-      const newConfirmed = existing.concat(userId).filter((v, i, a) => a.indexOf(v) === i)
-      const newStatus = newConfirmed.length >= required ? "CLOSED" : "UNCONFIRMED"
-
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => e ? rej(e) : res()))
-
-      const upd = {
-        ...t,
-        confirmedBy: newConfirmed,
-        status: newStatus,
-        updatedAt: new Date().toISOString(),
-        replaces: tipId
-      }
-
+      const content = { type: "transferConfirm", target: root, createdAt: new Date().toISOString() }
       return new Promise((resolve, reject) => {
-        ssbClient.publish(upd, (e2, result) => e2 ? reject(e2) : resolve(result))
+        ssbClient.publish(content, (e2, result) => e2 ? reject(e2) : resolve(result))
       })
     },
 
@@ -349,8 +350,10 @@ module.exports = ({ cooler }) => {
 
       if (!msg?.content || msg.content.type !== "transfer") throw new Error("Not found")
 
-      const t = msg.content
-      const st = deriveStatus(t)
+      const idxD = buildIndex(await getAllMessages(ssbClient))
+      const gD = idxD.resolveGroup(idxD.rootOf(tipId))
+      const t = gD ? buildTransfer(gD.best, gD) : buildTransfer({ key: tipId, c: msg.content })
+      const st = t.status
       const confirmedCount = Array.isArray(t.confirmedBy) ? t.confirmedBy.length : 0
       const required = t.from === t.to ? 1 : 2
 
@@ -373,11 +376,10 @@ module.exports = ({ cooler }) => {
       const idx = buildIndex(messages)
 
       const out = []
-      for (const tipId of idx.tipByRoot.values()) {
-        if (idx.tomb.has(tipId)) continue
-        const node = idx.nodes.get(tipId)
-        if (!node) continue
-        out.push(buildTransfer(node))
+      for (const root of idx.tipByRoot.keys()) {
+        const g = idx.resolveGroup(root)
+        if (!g || g.tombstoned) continue
+        out.push(buildTransfer(g.best, g))
       }
       return out
     },
@@ -387,17 +389,15 @@ module.exports = ({ cooler }) => {
       const messages = await getAllMessages(ssbClient)
       const idx = buildIndex(messages)
 
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
-      if (idx.tomb.has(tip)) throw new Error("Not found")
+      const root = idx.rootOf(id)
+      const g = idx.resolveGroup(root)
+      if (g && !g.tombstoned) return buildTransfer(g.best, g)
+      if (g && g.tombstoned) throw new Error("Not found")
 
-      const node = idx.nodes.get(tip)
-      if (node) return buildTransfer(node)
-
-      const msg = await getMsg(ssbClient, tip)
+      const msg = await getMsg(ssbClient, id)
       if (!msg?.content || msg.content.type !== "transfer") throw new Error("Not found")
 
-      const tmpNode = { key: tip, ts: msg.timestamp || 0, c: msg.content, author: msg.author }
+      const tmpNode = { key: id, ts: msg.timestamp || 0, c: msg.content, author: msg.author }
       return buildTransfer(tmpNode)
     },
 
@@ -405,31 +405,15 @@ module.exports = ({ cooler }) => {
       if (!categories.includes(category)) throw new Error("Invalid voting category")
       const ssbClient = await openSsb()
       const userId = ssbClient.id
-      const tipId = await this.resolveCurrentId(id)
-      const msg = await getMsg(ssbClient, tipId)
+      const idx = buildIndex(await getAllMessages(ssbClient))
+      const root = idx.rootOf(id)
+      const g = idx.resolveGroup(root)
+      if (!g || g.tombstoned) throw new Error("Transfer not found")
+      if ((g.opinions_inhabitants || []).includes(userId)) throw new Error("Already voted")
 
-      if (!msg?.content || msg.content.type !== "transfer") throw new Error("Transfer not found")
-
-      const t = msg.content
-      const voters = Array.isArray(t.opinions_inhabitants) ? t.opinions_inhabitants : []
-      if (voters.includes(userId)) throw new Error("Already voted")
-
-      const updated = {
-        ...t,
-        opinions: {
-          ...(t.opinions || {}),
-          [category]: ((t.opinions || {})[category] || 0) + 1
-        },
-        opinions_inhabitants: voters.concat(userId),
-        updatedAt: new Date().toISOString(),
-        replaces: tipId
-      }
-
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => e ? rej(e) : res()))
-
+      const content = { type: "transferOpinion", target: root, category, createdAt: new Date().toISOString() }
       return new Promise((resolve, reject) => {
-        ssbClient.publish(updated, (e2, result) => e2 ? reject(e2) : resolve(result))
+        ssbClient.publish(content, (e2, result) => e2 ? reject(e2) : resolve(result))
       })
     }
   }

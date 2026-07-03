@@ -126,9 +126,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     if (!tribeCrypto) return;
     for (const [k, n] of (idx.nodes ? idx.nodes.entries() : [])) {
       if (!n.c || !n.c.encryptedPayload) continue;
-      let root = k;
-      if (idx.parent) { while (idx.parent.has(root)) root = idx.parent.get(root); }
-      else if (idx.backward) { while (idx.backward.has(root)) root = idx.backward.get(root); }
+      const root = idx.rootOf(k);
       let dec = null;
       if (n.c.tribeId && tribesModel) {
         try {
@@ -166,10 +164,12 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     const nodes = new Map();
     const parent = new Map();
     const child = new Map();
+    const strictChild = new Map();
     const markers = new Map();
     const rawMarkers = new Map();
     const authorByKey = new Map();
     const tombRequests = [];
+    const memberMsgs = [];
 
     for (const m of messages) {
       const k = m.key;
@@ -179,6 +179,11 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
 
       if (c.type === "tombstone" && c.target) {
         tombRequests.push({ target: c.target, author: v.author });
+        continue;
+      }
+
+      if (c.type === "mapMember" && c.target) {
+        memberMsgs.push({ target: c.target, member: c.member, on: c.on !== false, author: v.author, ts: v.timestamp || m.timestamp || 0, code: typeof c.code === "string" ? c.code : "" });
         continue;
       }
 
@@ -200,13 +205,20 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       if (c.type !== "map") continue;
 
       const ts = v.timestamp || m.timestamp || 0;
-      nodes.set(k, { key: k, ts, c });
+      nodes.set(k, { key: k, ts, c, author: v.author });
       authorByKey.set(k, v.author);
 
       if (c.replaces) {
         parent.set(k, c.replaces);
         child.set(c.replaces, k);
       }
+    }
+
+    for (const [k, node] of nodes.entries()) {
+      const t = node.c.replaces;
+      if (!t) continue;
+      const orig = nodes.get(t);
+      if (orig && orig.author === node.author) strictChild.set(t, k);
     }
 
     const rootOf = (id) => {
@@ -221,6 +233,18 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       return cur;
     };
 
+    const contentTipOf = (root) => {
+      let cur = root;
+      while (strictChild.has(cur)) {
+        const next = strictChild.get(cur);
+        const n = nodes.get(next);
+        const rn = nodes.get(root);
+        if (!n || !rn || n.author !== rn.author) break;
+        cur = next;
+      }
+      return cur;
+    };
+
     for (const t of tombRequests) {
       const targetAuthor = authorByKey.get(t.target);
       if (targetAuthor && t.author === targetAuthor) tomb.add(t.target);
@@ -232,10 +256,50 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     const tipByRoot = new Map();
     for (const r of roots) tipByRoot.set(r, tipOf(r));
 
+    const contentTipByRoot = new Map();
+    for (const r of roots) contentTipByRoot.set(r, contentTipOf(r));
+
     const forward = new Map();
     for (const [newId, oldId] of parent.entries()) forward.set(oldId, newId);
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot, forward, markers, rawMarkers };
+    const memberByRoot = new Map();
+    const consumedByRoot = new Map();
+    for (const mm of memberMsgs) {
+      if (!nodes.has(mm.target)) continue;
+      const r = rootOf(mm.target);
+      const ownerAuthor = nodes.get(r) && nodes.get(r).author;
+      if (!ownerAuthor) continue;
+      const self = mm.member === mm.author;
+      const byOwner = mm.author === ownerAuthor;
+      if (!self && !byOwner) continue;
+      if (!mm.member) continue;
+      if (mm.on && mm.code) {
+        if (!consumedByRoot.has(r)) consumedByRoot.set(r, new Set());
+        consumedByRoot.get(r).add(mm.code);
+      }
+      if (!memberByRoot.has(r)) memberByRoot.set(r, new Map());
+      const m2 = memberByRoot.get(r);
+      const prev = m2.get(mm.member);
+      if (!prev || mm.ts >= prev.ts) m2.set(mm.member, { on: mm.on, ts: mm.ts });
+    }
+
+    const isCodeConsumed = (root, code) => {
+      if (!code) return false;
+      const set = consumedByRoot.get(root);
+      return !!(set && set.has(code));
+    };
+
+    const resolveMembers = (root) => {
+      const ownerNode = nodes.get(root);
+      const oc = ownerNode ? ownerNode.c : {};
+      const set = new Set(Array.isArray(oc.members) ? oc.members.filter(x => typeof x === "string" && x) : []);
+      for (const [mem, st] of (memberByRoot.get(root) || new Map())) {
+        if (st.on) set.add(mem); else set.delete(mem);
+      }
+      return [...set];
+    };
+
+    return { tomb, nodes, parent, child, strictChild, rootOf, tipOf, contentTipOf, tipByRoot, contentTipByRoot, forward, markers, rawMarkers, resolveMembers, isCodeConsumed };
   };
 
   const expandMarkers = async (idx) => {
@@ -263,7 +327,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
   };
 
 
-  const buildMap = (node, rootId, viewerId, markerList = []) => {
+  const buildMap = (node, rootId, viewerId, markerList = [], members = null) => {
     const c = node.c || {};
     const undec = c.encryptedPayload && c._decrypted === false;
     return {
@@ -278,7 +342,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       mapType: ALLOWED_MAP_TYPES.has(c.mapType) ? c.mapType : "SINGLE",
       tags: safeArr(c.tags),
       author: c.author,
-      members: Array.isArray(c.members) ? c.members : [],
+      members: Array.isArray(members) ? members : (Array.isArray(c.members) ? c.members : []),
       invites: Array.isArray(c.invites) ? c.invites : [],
       tribeId: c.tribeId || null,
       encrypted: !!undec,
@@ -322,39 +386,13 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const map = await this.getMapById(mapId, userId);
       if (!map) throw new Error("Map not found");
       if (map.author === userId) throw new Error("Author cannot leave their own map");
-      const members = (Array.isArray(map.members) ? map.members : []).filter(m => m !== userId);
       if (!Array.isArray(map.members) || !map.members.includes(userId)) return;
-      const tipId = await this.resolveCurrentId(map.rootId || map.key);
+      const members = map.members.filter(m => m !== userId);
       const rootId = await this.resolveRootId(map.rootId || map.key);
-      const oldMsg = await getMsg(ssbClient, tipId);
-      const isWrapped = tribeCrypto && tribeCrypto.isTribeMsg(oldMsg.content);
-      const oldDecrypted = (isWrapped || (oldMsg.content && oldMsg.content.tribeId))
-        ? await decryptIfTribe(oldMsg.content)
-        : decryptMapRoot(oldMsg.content, rootId);
-      let updated = {
-        type: "map",
-        replaces: tipId,
-        title: oldDecrypted.title || "",
-        lat: oldDecrypted.lat,
-        lng: oldDecrypted.lng,
-        description: oldDecrypted.description || "",
-        markerLabel: oldDecrypted.markerLabel || "",
-        mapType: oldDecrypted.mapType,
-        tags: Array.isArray(oldDecrypted.tags) ? oldDecrypted.tags : [],
-        author: oldDecrypted.author,
-        members,
-        invites: Array.isArray(oldDecrypted.invites) ? oldDecrypted.invites : [],
-        ...(oldDecrypted.tribeId ? { tribeId: oldDecrypted.tribeId } : {}),
-        ...(oldDecrypted.image ? { image: oldDecrypted.image } : {}),
-        createdAt: oldDecrypted.createdAt,
-        updatedAt: new Date().toISOString()
-      };
-      if (oldDecrypted.tribeId) updated = await encryptIfTribe(updated);
-      else updated = encryptStandalone(updated, rootId);
-      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => e ? reject(e) : resolve(r)));
-      const tomb = await tombFor(tipId, oldDecrypted.tribeId, userId);
-      await new Promise((resolve, reject) => ssbClient.publish(tomb, e => e ? reject(e) : resolve()));
+      const content = { type: "mapMember", target: rootId, member: userId, on: false, createdAt: new Date().toISOString() };
+      const result = await new Promise((resolve, reject) => ssbClient.publish(content, (e, r) => e ? reject(e) : resolve(r)));
       try { await rotateMapKey(rootId, members); } catch (_) {}
+      return result;
     },
 
     async resolveCurrentId(id) {
@@ -362,8 +400,9 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(unwrapForIndex(messages));
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
+      let root = id;
+      while (idx.parent.has(root)) root = idx.parent.get(root);
+      const tip = idx.contentTipOf(root);
       if (idx.tomb.has(tip)) throw new Error("Map not found");
       return tip;
     },
@@ -373,12 +412,10 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(unwrapForIndex(messages));
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
-      if (idx.tomb.has(tip)) throw new Error("Map not found");
-
-      let root = tip;
+      let root = id;
       while (idx.parent.has(root)) root = idx.parent.get(root);
+      const tip = idx.contentTipOf(root);
+      if (idx.tomb.has(tip)) throw new Error("Map not found");
       return root;
     },
 
@@ -558,8 +595,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       if (mapType === "CLOSED" && mapAuthor !== userId) throw new Error("Only the map creator can add markers");
 
       const now = new Date().toISOString();
-      let rootId = tipId;
-      while (idx.backward && idx.backward.has(rootId)) rootId = idx.backward.get(rootId);
+      const rootId = idx.rootOf(tipId);
       let content = {
         type: "mapMarker",
         mapId: rootId,
@@ -598,12 +634,12 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       await expandMarkers(idx);
 
       const items = [];
-      for (const [rootId, tipId] of idx.tipByRoot.entries()) {
+      for (const [rootId, tipId] of idx.contentTipByRoot.entries()) {
         if (idx.tomb.has(tipId)) continue;
         const node = idx.nodes.get(tipId);
         if (!node) continue;
         const markerList = safeArr(idx.markers.get(tipId)).concat(safeArr(idx.markers.get(rootId)));
-        items.push(buildMap(node, rootId, viewerId, markerList));
+        items.push(buildMap(node, rootId, viewerId, markerList, idx.resolveMembers(rootId)));
       }
 
       let list = items;
@@ -635,12 +671,10 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       await decryptIndexNodes(idx);
       await expandMarkers(idx);
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
-      if (idx.tomb.has(tip)) throw new Error("Map not found");
-
-      let root = tip;
+      let root = id;
       while (idx.parent.has(root)) root = idx.parent.get(root);
+      const tip = idx.contentTipOf(root);
+      if (idx.tomb.has(tip)) throw new Error("Map not found");
 
       const node = idx.nodes.get(tip);
       if (!node) {
@@ -652,14 +686,14 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
           c = dec && !dec._undecryptable ? { ...dec, _decrypted: true } : { ...c, _decrypted: false };
         }
         const markerList = safeArr(idx.markers.get(tip)).concat(safeArr(idx.markers.get(root)));
-        return buildMap({ key: tip, ts: msg.timestamp || 0, c }, root, viewer, markerList);
+        return buildMap({ key: tip, ts: msg.timestamp || 0, c }, root, viewer, markerList, idx.resolveMembers(root));
       }
 
       const markerList = safeArr(idx.markers.get(tip)).concat(safeArr(idx.markers.get(root)));
-      return buildMap(node, root, viewer, markerList);
+      return buildMap(node, root, viewer, markerList, idx.resolveMembers(root));
     },
 
-    async generateInvite(mapId) {
+    async generateInvite(mapId, opts = {}) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const map = await this.getMapById(mapId, userId);
@@ -670,8 +704,9 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       if (tribeCrypto && !map.tribeId) {
         const inviteSalt = tribeCrypto.generateInviteSalt();
         const ekChain = tribeCrypto.encryptChainForInvite([map.rootId || map.key], code, inviteSalt);
-        if (ekChain) invite = { code, ekChain, salt: inviteSalt, gen: lookupGen(map.rootId || map.key) || 1 };
+        if (ekChain) invite = { code, ekChain, salt: inviteSalt, gen: lookupGen(map.rootId || map.key) || 1, ...(opts.public ? { public: true } : {}) };
       }
+      if (opts.public && typeof invite !== "object") invite = { code, public: true };
       const tipId = await this.resolveCurrentId(mapId);
       const rootId = await this.resolveRootId(mapId);
       const oldMsg = await getMsg(ssbClient, tipId);
@@ -707,6 +742,66 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       return code;
     },
 
+    async getOpenInvite(mapId) {
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const map = await this.getMapById(mapId, userId).catch(() => null);
+      if (!map || !Array.isArray(map.invites)) return null;
+      const pub = map.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code);
+      return pub ? { code: pub.code } : null;
+    },
+
+    async generateOpenInvite(mapId) {
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const map = await this.getMapById(mapId, userId);
+      if (!map) throw new Error("Map not found");
+      if (map.author !== userId) throw new Error("Only the author can generate invites");
+      const existing = (Array.isArray(map.invites) ? map.invites : []).find(inv => typeof inv === "object" && inv.public === true);
+      if (existing) throw new Error("An open invitation already exists");
+      return this.generateInvite(mapId, { public: true });
+    },
+
+    async removeOpenInvite(mapId) {
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const map = await this.getMapById(mapId, userId);
+      if (!map) throw new Error("Map not found");
+      if (map.author !== userId) throw new Error("Only the author can remove invites");
+      const tipId = await this.resolveCurrentId(mapId);
+      const rootId = await this.resolveRootId(mapId);
+      const oldMsg = await getMsg(ssbClient, tipId);
+      const isWrapped = tribeCrypto && tribeCrypto.isTribeMsg(oldMsg.content);
+      const oldDecrypted = (isWrapped || (oldMsg.content && oldMsg.content.tribeId))
+        ? await decryptIfTribe(oldMsg.content)
+        : decryptMapRoot(oldMsg.content, rootId);
+      const effectiveTribeId = oldDecrypted && oldDecrypted.tribeId;
+      const invites = (Array.isArray(oldDecrypted.invites) ? oldDecrypted.invites : []).filter(inv => !(typeof inv === "object" && inv.public === true));
+      let updated = {
+        type: "map",
+        replaces: tipId,
+        title: oldDecrypted.title || "",
+        lat: oldDecrypted.lat,
+        lng: oldDecrypted.lng,
+        description: oldDecrypted.description || "",
+        markerLabel: oldDecrypted.markerLabel || "",
+        mapType: oldDecrypted.mapType,
+        tags: Array.isArray(oldDecrypted.tags) ? oldDecrypted.tags : [],
+        author: oldDecrypted.author,
+        members: Array.isArray(oldDecrypted.members) ? oldDecrypted.members : [userId],
+        invites,
+        ...(effectiveTribeId ? { tribeId: effectiveTribeId } : {}),
+        ...(oldDecrypted.image ? { image: oldDecrypted.image } : {}),
+        createdAt: oldDecrypted.createdAt,
+        updatedAt: new Date().toISOString()
+      };
+      if (effectiveTribeId) updated = await encryptIfTribe(updated);
+      else updated = encryptStandalone(updated, rootId);
+      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => e ? reject(e) : resolve(r)));
+      const tomb1 = await tombFor(tipId, effectiveTribeId, userId);
+      await new Promise((resolve, reject) => ssbClient.publish(tomb1, e => e ? reject(e) : resolve()));
+    },
+
     async joinByInvite(code) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
@@ -723,6 +818,12 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       }
       if (!matched) throw new Error("Invalid or expired invite code");
       if (Array.isArray(matched.members) && matched.members.includes(userId)) throw new Error("Already a member");
+      const isPublic = (typeof matchedInvite === "object" && matchedInvite.public === true);
+      const rootId = await this.resolveRootId(matched.rootId || matched.key);
+      if (!isPublic) {
+        const idx = buildIndex(unwrapForIndex(await getAllMessages(ssbClient)));
+        if (idx.isCodeConsumed(rootId, code)) throw new Error("Invite already used");
+      }
       let mapKey = null;
       if (tribeCrypto && typeof matchedInvite === "object") {
         if (matchedInvite.ekChain) {
@@ -742,44 +843,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
           ownCrypto.setKey(matched.rootId || matched.key, mapKey, matchedInvite.gen || 1);
         }
       }
-      const tipId = await this.resolveCurrentId(matched.rootId || matched.key);
-      const rootId = await this.resolveRootId(matched.rootId || matched.key);
-      const oldMsg = await getMsg(ssbClient, tipId);
-      const isWrapped2 = tribeCrypto && tribeCrypto.isTribeMsg(oldMsg.content);
-      const oldDecrypted = (isWrapped2 || (oldMsg.content && oldMsg.content.tribeId))
-        ? await decryptIfTribe(oldMsg.content)
-        : decryptMapRoot(oldMsg.content, rootId);
-      const effectiveTribeId2 = oldDecrypted && oldDecrypted.tribeId;
-      const isPublicInvite = typeof matchedInvite === "object" && matchedInvite.public === true;
-      const invites = isPublicInvite
-        ? (Array.isArray(oldDecrypted.invites) ? oldDecrypted.invites : [])
-        : (Array.isArray(oldDecrypted.invites) ? oldDecrypted.invites : []).filter(inv => {
-            if (typeof inv === "string") return inv !== code;
-            return inv.code !== code;
-          });
-      let updated = {
-        type: "map",
-        replaces: tipId,
-        title: oldDecrypted.title || "",
-        lat: oldDecrypted.lat,
-        lng: oldDecrypted.lng,
-        description: oldDecrypted.description || "",
-        markerLabel: oldDecrypted.markerLabel || "",
-        mapType: oldDecrypted.mapType,
-        tags: Array.isArray(oldDecrypted.tags) ? oldDecrypted.tags : [],
-        author: oldDecrypted.author,
-        members: [...(Array.isArray(oldDecrypted.members) ? oldDecrypted.members : []), userId],
-        invites,
-        ...(effectiveTribeId2 ? { tribeId: effectiveTribeId2 } : {}),
-        ...(oldDecrypted.image ? { image: oldDecrypted.image } : {}),
-        createdAt: oldDecrypted.createdAt,
-        updatedAt: new Date().toISOString()
-      };
-      if (effectiveTribeId2) updated = await encryptIfTribe(updated);
-      else updated = encryptStandalone(updated, rootId);
-      await new Promise((resolve, reject) => ssbClient.publish(updated, (e, r) => e ? reject(e) : resolve(r)));
-      const tomb2 = await tombFor(tipId, effectiveTribeId2, userId);
-      await new Promise((resolve, reject) => ssbClient.publish(tomb2, e => e ? reject(e) : resolve()));
+      await new Promise((resolve, reject) => ssbClient.publish({ type: "mapMember", target: rootId, member: userId, on: true, createdAt: new Date().toISOString(), ...(isPublic ? {} : { code }) }, (e, r) => e ? reject(e) : resolve(r)));
       if (tribeCrypto && mapKey) {
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys");

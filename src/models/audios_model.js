@@ -1,6 +1,6 @@
 const pull = require("../server/node_modules/pull-stream");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('./dedupe');
+const { dedupeBy, norm } = require('../backend/dedupe');
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 
@@ -46,6 +46,8 @@ module.exports = ({ cooler }) => {
     const nodes = new Map();
     const parent = new Map();
     const child = new Map();
+    const strictChild = new Map();
+    const opinionMsgs = [];
 
     for (const m of messages) {
       const k = m.key;
@@ -54,13 +56,13 @@ module.exports = ({ cooler }) => {
       if (!c) continue;
 
       if (c.type === "tombstone") continue;
-
+      if (c.type === "audioOpinion") { opinionMsgs.push({ target: c.target, author: v.author, category: c.category }); continue; }
       if (c.type !== "audio") continue;
 
       const ts = v.timestamp || m.timestamp || 0;
       let sizeBytes = 0;
       try { sizeBytes = Buffer.byteLength(JSON.stringify(v), 'utf8'); } catch (_) { sizeBytes = 0; }
-      nodes.set(k, { key: k, ts, c, sizeBytes });
+      nodes.set(k, { key: k, ts, c, sizeBytes, author: v.author });
 
       if (c.replaces) {
         parent.set(k, c.replaces);
@@ -68,33 +70,58 @@ module.exports = ({ cooler }) => {
       }
     }
 
+    for (const [k, node] of nodes) {
+      const t = node.c.replaces;
+      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
+    }
+
     const rootOf = (id) => {
-      let cur = id;
-      while (parent.has(cur)) cur = parent.get(cur);
+      let cur = id, g = 0;
+      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
       return cur;
     };
 
-    const tipOf = (id) => {
-      let cur = id;
-      while (child.has(cur)) cur = child.get(cur);
-      return cur;
+    const contentTipOf = (root) => {
+      let cur = root, g = 0;
+      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
+      const n = nodes.get(cur), rn = nodes.get(root);
+      return (n && rn && n.author === rn.author) ? cur : root;
     };
 
     const roots = new Set();
     for (const id of nodes.keys()) roots.add(rootOf(id));
 
-    const tipByRoot = new Map();
-    for (const r of roots) tipByRoot.set(r, tipOf(r));
+    const opinionsByRoot = new Map();
+    for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
 
     const forward = new Map();
     for (const [newId, oldId] of parent.entries()) forward.set(oldId, newId);
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot, forward };
+    const resolveGroup = (root) => {
+      const contentTip = contentTipOf(root);
+      const contentNode = nodes.get(contentTip) || nodes.get(root);
+      const lc = contentNode ? contentNode.c : {};
+      const opinions = { ...(lc.opinions || {}) };
+      const voters = safeArr(lc.opinions_inhabitants).slice();
+      const voterSet = new Set(voters);
+      for (const op of (opinionsByRoot.get(root) || [])) {
+        if (voterSet.has(op.author)) continue;
+        voterSet.add(op.author); voters.push(op.author);
+        opinions[op.category] = (opinions[op.category] || 0) + 1;
+      }
+      return { contentTip, contentNode, opinions, voters };
+    };
+
+    const tipByRoot = new Map();
+    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
+
+    return { tomb, nodes, parent, child, rootOf, tipByRoot, forward, resolveGroup };
   };
 
-  const buildAudio = (node, rootId, viewerId) => {
+  const buildAudio = (node, rootId, viewerId, agg) => {
     const c = node.c || {};
-    const voters = safeArr(c.opinions_inhabitants);
+    const voters = agg ? agg.voters : safeArr(c.opinions_inhabitants);
+    const opinions = agg ? agg.opinions : (c.opinions || {});
     const composition = Array.isArray(c.bcsComposition) ? c.bcsComposition : null;
     const tagsArr = safeArr(c.tags);
     const isBcs = (composition && composition.length > 0) || tagsArr.some(t => String(t).toLowerCase() === 'bcs');
@@ -109,7 +136,7 @@ module.exports = ({ cooler }) => {
       title: c.title || "",
       description: c.description || "",
       mapUrl: c.mapUrl || "",
-      opinions: c.opinions || {},
+      opinions,
       opinions_inhabitants: voters,
       hasVoted: viewerId ? voters.includes(viewerId) : false,
       bcsComposition: composition,
@@ -126,8 +153,7 @@ module.exports = ({ cooler }) => {
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(messages);
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
+      const tip = idx.tipByRoot.get(idx.rootOf(id)) || id;
       if (idx.tomb.has(tip)) throw new Error("Audio not found");
       return tip;
     },
@@ -232,8 +258,9 @@ module.exports = ({ cooler }) => {
       const oldMsg = await getMsg(ssbClient, tipId);
 
       if (!oldMsg || oldMsg.content?.type !== "audio") throw new Error("Audio not found");
-      if (Object.keys(oldMsg.content.opinions || {}).length > 0) throw new Error("Cannot edit audio after it has received opinions.");
       if (oldMsg.content.author !== userId) throw new Error("Not the author");
+      const aggAudio = await this.getAudioById(id, userId);
+      if (aggAudio && Object.keys(aggAudio.opinions || {}).some(k => (aggAudio.opinions[k] || 0) > 0)) throw new Error("Cannot edit audio after it has received opinions.");
 
       const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldMsg.content.tags);
       const blobId = blobMarkdown ? parseBlobId(blobMarkdown) : null;
@@ -292,7 +319,7 @@ module.exports = ({ cooler }) => {
         if (idx.tomb.has(tipId)) continue;
         const node = idx.nodes.get(tipId);
         if (!node) continue;
-        items.push(buildAudio(node, rootId, viewerId));
+        items.push(buildAudio(node, rootId, viewerId, idx.resolveGroup(rootId)));
       }
 
       let list = dedupeBy(items, x => x.url ? [norm(x.author), norm(x.url)].join('|') : null);
@@ -333,52 +360,26 @@ module.exports = ({ cooler }) => {
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(messages);
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
-      if (idx.tomb.has(tip)) throw new Error("Audio not found");
+      const rootId = idx.rootOf(id);
+      const agg = idx.resolveGroup(rootId);
+      if (!agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error("Audio not found");
 
-      let root = tip;
-      while (idx.parent.has(root)) root = idx.parent.get(root);
-
-      const node = idx.nodes.get(tip);
-      if (node) return buildAudio(node, root, viewer);
-
-      const msg = await getMsg(ssbClient, tip);
-      if (!msg || msg.content?.type !== "audio") throw new Error("Audio not found");
-      return buildAudio({ key: tip, ts: msg.timestamp || 0, c: msg.content }, root, viewer);
+      return buildAudio(agg.contentNode, rootId, viewer, agg);
     },
 
     async createOpinion(id, category) {
+      if (!categories.includes(category)) throw new Error("Invalid voting category");
+
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
-      if (!categories.includes(category)) throw new Error("Invalid voting category");
+      const audio = await this.getAudioById(id, userId);
+      if (!audio) throw new Error("Audio not found");
+      if (safeArr(audio.opinions_inhabitants).includes(userId)) throw new Error("Already voted");
 
-      const tipId = await this.resolveCurrentId(id);
-      const msg = await getMsg(ssbClient, tipId);
-
-      if (!msg || msg.content?.type !== "audio") throw new Error("Audio not found");
-
-      const voters = safeArr(msg.content.opinions_inhabitants);
-      if (voters.includes(userId)) throw new Error("Already voted");
-
-      const now = new Date().toISOString();
-      const updated = {
-        ...msg.content,
-        replaces: tipId,
-        opinions: {
-          ...msg.content.opinions,
-          [category]: (msg.content.opinions?.[category] || 0) + 1
-        },
-        opinions_inhabitants: voters.concat(userId),
-        updatedAt: now
-      };
-
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };
-      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
-
+      const content = { type: "audioOpinion", target: audio.rootId, category, createdAt: new Date().toISOString() };
       return new Promise((resolve, reject) => {
-        ssbClient.publish(updated, (err, result) => (err ? reject(err) : resolve(result)));
+        ssbClient.publish(content, (err, result) => (err ? reject(err) : resolve(result)));
       });
     }
   };

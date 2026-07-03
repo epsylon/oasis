@@ -95,4 +95,28 @@ describe('events: crypto', (t) => {
     try { await A.use('events').generateInvite(r.key); } catch (_) { threw = true; }
     ok(threw);
   });
+
+  t('open invitation is multi-use, single, and removable', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('events').createEvent('Gala', 'private', '2030-12-01T20:00:00Z', 'hall', 0, '', [], [], 'private', '');
+    const { code } = await A.use('events').generateOpenInvite(r.key);
+    eq(typeof code, 'string');
+    eq((await A.use('events').getOpenInvite(r.key)).code, code);
+    let dup = false;
+    try { await A.use('events').generateOpenInvite(r.key); } catch (_) { dup = true; }
+    ok(dup, 'a second open invitation is rejected');
+    B.setActor();
+    eq((await B.use('events').joinByInvite(code)).ok, true);
+    C.setActor();
+    eq((await C.use('events').joinByInvite(code)).ok, true);
+    A.setActor();
+    await A.use('events').removeOpenInvite(r.key);
+    eq(await A.use('events').getOpenInvite(r.key), null);
+    const D = makePeer(net); D.setActor();
+    let threw = false;
+    try { await D.use('events').joinByInvite(code); } catch (_) { threw = true; }
+    ok(threw, 'removed open invite no longer works');
+  });
 });

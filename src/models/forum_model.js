@@ -60,6 +60,34 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     return ssb;
   };
 
+  const readForumLog = async () => {
+    const ssbClient = await openSsb();
+    return new Promise((res, rej) => pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? rej(e) : res(m || []))));
+  };
+
+  const scanForumOpenInvite = async (forumId) => {
+    const messages = await readForumLog();
+    const markerTomb = new Set();
+    const invTomb = new Set();
+    for (const m of messages) {
+      const c = m.value && m.value.content;
+      if (!c) continue;
+      if (c.type === 'forum-open-invite-tombstone' && typeof c.target === 'string') markerTomb.add(c.target);
+      if (c.type === 'forum-invite-tombstone' && typeof c.target === 'string') invTomb.add(c.target);
+    }
+    let best = null;
+    for (const m of messages) {
+      const c = m.value && m.value.content;
+      if (!c || c.type !== 'forum-open-invite' || c.v !== 1) continue;
+      if (c.target !== forumId || typeof c.code !== 'string') continue;
+      if (markerTomb.has(m.key)) continue;
+      if (c.inviteKey && invTomb.has(c.inviteKey)) continue;
+      const ts = (m.value && m.value.timestamp) || 0;
+      if (!best || ts > best.ts) best = { code: c.code, by: c.by || m.value.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts };
+    }
+    return best;
+  };
+
   async function collectTombstones(ssbClient) {
     return new Promise((resolve, reject) => {
       pull(
@@ -211,16 +239,68 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       return { code, forumId };
     },
 
+    getOpenInvite: async (forumId) => {
+      const rec = await scanForumOpenInvite(forumId);
+      return rec ? { code: rec.code, by: rec.by, markerKey: rec.markerKey, inviteKey: rec.inviteKey } : null;
+    },
+
+    generateOpenInvite: async (forumId) => {
+      if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
+      const ssbClient = await openSsb();
+      const rawRoot = await new Promise((res, rej) => ssbClient.get(forumId, (e, m) => e ? rej(e) : res(m)));
+      if (!rawRoot || !rawRoot.content) throw new Error('Forum not found');
+      const rawC = rawRoot.content;
+      const dec = rawC && rawC.encryptedPayload ? decryptForumContent(rawC, forumId) : rawC;
+      if (dec && dec._undecryptable) throw new Error('Forum is encrypted and cannot be decrypted');
+      if (dec.author !== userId) throw new Error('Only the author can generate invites');
+      if (dec.isPrivate !== true) throw new Error('Only private forums use invitation codes');
+      if (await scanForumOpenInvite(forumId)) throw new Error('An open invitation already exists');
+      const key = lookupKey(forumId);
+      if (!key) throw new Error('Missing forum key');
+      const code = crypto.randomBytes(16).toString('hex');
+      const inviteSalt = tribeCrypto.generateInviteSalt();
+      const ek = tribeCrypto.encryptForInvite(key, code, inviteSalt);
+      const invitePub = await new Promise((resolve, reject) => {
+        ssbClient.publish({ type: 'forum-invite', target: forumId, ek, salt: inviteSalt, codeHash: tribeCrypto.hashInviteCode(code, inviteSalt), multi: 1 }, (err, r) => err ? reject(err) : resolve(r));
+      });
+      await new Promise((resolve, reject) => {
+        ssbClient.publish({ type: 'forum-open-invite', v: 1, target: forumId, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() }, (err) => err ? reject(err) : resolve());
+      });
+      return { code, forumId };
+    },
+
+    removeOpenInvite: async (forumId) => {
+      const ssbClient = await openSsb();
+      const rec = await scanForumOpenInvite(forumId);
+      if (!rec) return;
+      let author = null;
+      try {
+        const rawRoot = await new Promise((res, rej) => ssbClient.get(forumId, (e, m) => e ? rej(e) : res(m)));
+        const rawC = rawRoot && rawRoot.content;
+        const dec = rawC && rawC.encryptedPayload ? decryptForumContent(rawC, forumId) : rawC;
+        author = dec && dec.author;
+      } catch (_) {}
+      if (rec.by !== userId && author !== userId) throw new Error('Not allowed to remove this invitation');
+      await new Promise((resolve, reject) => ssbClient.publish({ type: 'forum-open-invite-tombstone', target: rec.markerKey, ts: new Date().toISOString() }, (err) => err ? reject(err) : resolve()));
+      if (rec.inviteKey) await new Promise((resolve, reject) => ssbClient.publish({ type: 'forum-invite-tombstone', target: rec.inviteKey, ts: new Date().toISOString() }, (err) => err ? reject(err) : resolve()));
+    },
+
     joinByInvite: async (code) => {
       if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
       const ssbClient = await openSsb();
       const messages = await new Promise((res, rej) =>
         pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? rej(e) : res(m)))
       );
+      const invTomb = new Set();
+      for (const m of messages) {
+        const c = m.value && m.value.content;
+        if (c && c.type === 'forum-invite-tombstone' && typeof c.target === 'string') invTomb.add(c.target);
+      }
       let matched = null;
       for (const m of messages) {
         const c = m.value && m.value.content;
         if (!c || c.type !== 'forum-invite') continue;
+        if (invTomb.has(m.key)) continue;
         try {
           const hash = tribeCrypto.hashInviteCode(code, c.salt);
           if (hash === c.codeHash) { matched = c; break; }

@@ -277,7 +277,8 @@ const renderHousesGrid = (houses, myHouseKey, governingKey) => {
           ),
           p({ class: 'larp-card-motto' }, '“' + h.motto + '”'),
           p({ class: 'larp-card-roles' }, h.roles),
-          p({ class: 'larp-card-count' }, `${i18n.larpMembersCount || 'Members'}: ${h.memberCount || 0}`)
+          p({ class: 'larp-card-count' }, `${i18n.larpMembersCount || 'Members'}: ${h.memberCount || 0}`),
+          h.openInviteCode ? p({ class: 'larp-card-count' }, i18n.tribeInviteCodeText, span({ class: 'tribe-open-invite-code' }, h.openInviteCode)) : null
         )
       );
     })

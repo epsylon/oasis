@@ -11,6 +11,7 @@ const POPULAR_DAYS = 14;
 const FEED_ID_RE = /^@.+\.ed25519$/;
 
 const CASE_FIELDS = ['title', 'accuser', 'respondentId', 'mediatorsAccuser', 'mediatorsRespondent'];
+const MEDIATORS_FIELDS = ['mediators'];
 const EVIDENCE_FIELDS = ['text', 'link', 'imageUrl'];
 const ANSWER_FIELDS = ['stance', 'text'];
 const VERDICT_FIELDS = ['result', 'orders'];
@@ -135,14 +136,18 @@ if (c.type === type) {
     const m = String(method || '').trim().toUpperCase();
     const ALLOWED = new Set(['JUDGE', 'DICTATOR', 'POPULAR', 'MEDIATION', 'KARMATOCRACY']);
     if (!ALLOWED.has(m)) throw new Error('Invalid resolution method.');
-    if (m === 'DICTATOR' && services.parliament && services.parliament.getGovernmentCard) {
+    let dictatorId = null;
+    if (m === 'DICTATOR') {
+      if (!(services.parliament && services.parliament.getGovernmentCard)) throw new Error('DICTATOR method requires DICTATORSHIP government.');
       try {
-        const gov = await services.parliament.getGovernmentCard();
-        const gm = String(gov && gov.method ? gov.method : '').toUpperCase();
-        if (gm !== 'DICTATORSHIP') throw new Error('DICTATOR method requires DICTATORSHIP government.');
+        var gov = await services.parliament.getGovernmentCard();
       } catch (e) {
         throw new Error('Unable to verify government method for DICTATOR.');
       }
+      const gm = String(gov && gov.method ? gov.method : '').toUpperCase();
+      if (gm !== 'DICTATORSHIP') throw new Error('DICTATOR method requires DICTATORSHIP government.');
+      dictatorId = gov && gov.powerType === 'inhabitant' ? gov.powerId : null;
+      if (!dictatorId) throw new Error('No ruling dictator to assign.');
     }
     const openedAt = nowISO();
     const prefix = moment(openedAt).format('MM/YYYY') + '_';
@@ -162,12 +167,15 @@ if (c.type === type) {
       decisionBy,
       mediatorsAccuser: [],
       mediatorsRespondent: [],
+      ...(dictatorId ? { dictatorId } : {}),
       createdAt: openedAt
     };
 
     if (tribeCrypto) {
+      const stub = { ...content };
+      for (const f of CASE_FIELDS) delete stub[f];
       const initialMsg = await new Promise((res, rej) =>
-        ssbClient.publish(content, (err, msg) => (err ? rej(err) : res(msg)))
+        ssbClient.publish(stub, (err, msg) => (err ? rej(err) : res(msg)))
       );
       const caseRootId = initialMsg.key;
       const caseKey = tribeCrypto.generateTribeKey();
@@ -178,6 +186,7 @@ if (c.type === type) {
         ssbClient.publish(update, (err, msg) => (err ? rej(err) : res(msg)))
       );
       await distributeKey(caseKey, caseRootId, resp.id);
+      if (dictatorId) await distributeKey(caseKey, caseRootId, dictatorId);
       return finalMsg;
     }
 
@@ -186,13 +195,20 @@ if (c.type === type) {
     );
   }
 
+  async function loadAllCases() {
+    const msgs = await readLog();
+    const idx = collectCaseNodes(msgs);
+    const out = [];
+    for (const [k, n] of idx.nodes) {
+      if (n.c.replaces) continue;
+      const base = strictCaseBase(msgs, k, idx);
+      if (base) out.push(await assembleCase(msgs, base));
+    }
+    return out;
+  }
+
   async function listCases(filter = 'open') {
-    const all = await listByType('courtsCase');
-    const decrypted = all.map(c => {
-      if (!tribeCrypto) return c;
-      const key = getCaseKey(c);
-      return key ? decryptFields(c, key) : c;
-    });
+    const decrypted = await loadAllCases();
     const sorted = decrypted.sort((a, b) => {
       const ta = new Date(a.openedAt || a.createdAt || 0).getTime();
       const tb = new Date(b.openedAt || b.createdAt || 0).getTime();
@@ -214,18 +230,19 @@ if (c.type === type) {
   }
 
   async function listCasesForUser(uid) {
-    const all = await listByType('courtsCase');
+    const all = await loadAllCases();
     const id = String(uid || userId || '');
+    const supportsMap = await countSupportsByCase();
+    const settlementsMap = await countSettlementsByCase();
     const rows = [];
-    for (const raw of all) {
-      const c = tribeCrypto ? (getCaseKey(raw) ? decryptFields(raw, getCaseKey(raw)) : raw) : raw;
+    for (const c of all) {
       const isAccuser = String(c.accuser || '') === id;
       const isRespondent = String(c.respondentId || '') === id;
       const ma = ensureArray(c.mediatorsAccuser || []);
       const mr = ensureArray(c.mediatorsRespondent || []);
       const isMediator = ma.includes(id) || mr.includes(id);
       const isJudge = String(c.judgeId || '') === id;
-      const isDictator = false;
+      const isDictator = String(c.dictatorId || '') === id;
       const mine = isAccuser || isRespondent || isMediator || isJudge || isDictator;
       if (!mine) continue;
       let myPublicPreference = null;
@@ -234,6 +251,8 @@ if (c.type === type) {
       } else if (isRespondent && typeof c.publicPrefRespondent === 'boolean') {
         myPublicPreference = c.publicPrefRespondent;
       }
+      const rootId = c.rootCaseId || c.id;
+      const tally = c.voteId ? await voteTally(c.voteId) : null;
       rows.push({
         ...c,
         respondent: c.respondentId || c.respondent,
@@ -243,7 +262,13 @@ if (c.type === type) {
         isJudge,
         isDictator,
         mine,
-        myPublicPreference
+        myPublicPreference,
+        supportCount: supportsMap.get(String(rootId)) || supportsMap.get(String(c.id)) || 0,
+        hasSettlement: (settlementsMap.get(String(rootId)) || settlementsMap.get(String(c.id)) || 0) > 0,
+        yes: tally ? tally.yes : 0,
+        no: tally ? tally.no : 0,
+        total: tally ? tally.total : 0,
+        needed: tally ? tally.needed : 0
       });
     }
     rows.sort((a, b) => {
@@ -254,30 +279,114 @@ if (c.type === type) {
     return rows;
   }
 
+  function collectCaseNodes(msgs) {
+    const nodes = new Map();
+    for (const m of msgs) {
+      const c = m.value?.content || m.content;
+      if (!c || c.type !== 'courtsCase') continue;
+      nodes.set(m.key || m.id, { key: m.key || m.id, author: m.value?.author, c });
+    }
+    const strictNext = new Map(), strictPrev = new Map();
+    for (const [k, n] of nodes) {
+      const t = n.c.replaces;
+      if (t) { const o = nodes.get(t); if (o && o.author === n.author) { strictNext.set(t, k); strictPrev.set(k, t); } }
+    }
+    return { nodes, strictNext, strictPrev };
+  }
+
+  function strictCaseBase(msgs, id, idxIn) {
+    const idx = idxIn || collectCaseNodes(msgs);
+    const { nodes, strictNext, strictPrev } = idx;
+    const tomb = buildValidatedTombstoneSet(msgs);
+    let startKey = nodes.has(id) ? id : null;
+    if (!startKey) {
+      for (const [k, n] of nodes) { if (String(n.c.rootCaseId || '') === id) { startKey = k; break; } }
+    }
+    if (!startKey) return null;
+    let root = startKey, g = 0; while (strictPrev.has(root) && g++ < 100000) root = strictPrev.get(root);
+    let tip = root; g = 0; while (strictNext.has(tip) && g++ < 100000) tip = strictNext.get(tip);
+    if (tomb.has(tip) || tomb.has(root)) return null;
+    const node = nodes.get(tip);
+    if (!node) return null;
+    let c = { id: tip, ...node.c };
+    if (tribeCrypto) { const key = getCaseKey(c); if (key) c = decryptFields(c, key); }
+    if (!c.rootCaseId) c.rootCaseId = root;
+    return c;
+  }
+
+  async function assembleCase(msgs, base) {
+    const accuser = String(base.accuser || '');
+    const respondentId = String(base.respondentId || '');
+    const rootCaseId = String(base.rootCaseId || base.id || '');
+    const idStr = String(base.id || '');
+    const method = String(base.method || '').toUpperCase();
+    const dictatorId = String(base.dictatorId || '');
+    const caseKey = getCaseKey(base);
+    const isParty = (a) => a === accuser || a === respondentId;
+    const matchC = (c) => { const cid = String(c.caseId || ''); return cid === rootCaseId || cid === idStr; };
+
+    let medA = ensureArray(base.mediatorsAccuser || []), medR = ensureArray(base.mediatorsRespondent || []);
+    let medATs = 0, medRTs = 0, judgeId = '', judgeTs = 0, voteId = String(base.voteId || ''), voteTs = 0;
+    let prefA = base.publicPrefAccuser, prefATs = 0, prefR = base.publicPrefRespondent, prefRTs = 0;
+    let answered = false, settled = false, verdict = null, verdictTs = 0, verdictAt = null, settledAt = null;
+
+    for (const m of msgs) {
+      const c = m.value?.content || m.content; if (!c) continue;
+      const author = String(m.value?.author || '');
+      const ts = m.value?.timestamp || m.timestamp || 0;
+      if (c.type === 'courtsMediators' && matchC(c)) {
+        let dec = c; if (tribeCrypto && caseKey) dec = decryptFields(c, caseKey);
+        const list = ensureArray(dec.mediators || []).map(x => String(x || '').trim()).filter(Boolean).filter(x => x !== accuser && x !== respondentId);
+        if (c.side === 'accuser' && author === accuser && ts >= medATs) { medA = list; medATs = ts; }
+        else if (c.side === 'respondent' && author === respondentId && ts >= medRTs) { medR = list; medRTs = ts; }
+      } else if (c.type === 'courtsJudge' && matchC(c) && isParty(author) && ts >= judgeTs) {
+        const jid = String(c.judgeId || '').trim();
+        if (jid && jid !== accuser && jid !== respondentId) { judgeId = jid; judgeTs = ts; }
+      } else if (c.type === 'courtsVoteLink' && matchC(c) && isParty(author) && ts >= voteTs) {
+        voteId = String(c.voteId || ''); voteTs = ts;
+      } else if (c.type === 'courtsVisibility' && matchC(c)) {
+        if (c.side === 'accuser' && author === accuser && ts >= prefATs) { prefA = !!c.pref; prefATs = ts; }
+        else if (c.side === 'respondent' && author === respondentId && ts >= prefRTs) { prefR = !!c.pref; prefRTs = ts; }
+      } else if (c.type === 'courtsAnswer' && matchC(c) && author === respondentId) {
+        answered = true;
+      } else if (c.type === 'courtsSettlementAccepted' && matchC(c) && isParty(author)) {
+        settled = true; settledAt = c.createdAt || new Date(ts).toISOString();
+      } else if (c.type === 'courtsVerdict' && matchC(c) && ts >= verdictTs) {
+        verdict = author; verdictTs = ts; verdictAt = c.createdAt || new Date(ts).toISOString();
+      }
+    }
+
+    let verdictValid = false;
+    if (verdict) {
+      if (method === 'JUDGE') verdictValid = (verdict === judgeId);
+      else if (method === 'MEDIATION') verdictValid = (medA.includes(verdict) || medR.includes(verdict));
+      else if (method === 'DICTATOR') verdictValid = (verdict === dictatorId);
+    }
+    let voteDecided = false;
+    if ((method === 'POPULAR' || method === 'KARMATOCRACY') && voteId) {
+      try { const t = await voteTally(voteId); if (t && t.closed && t.total > 0) voteDecided = true; } catch (_) {}
+    }
+
+    base.mediatorsAccuser = medA;
+    base.mediatorsRespondent = medR;
+    if (judgeId) base.judgeId = judgeId; else delete base.judgeId;
+    if (voteId) base.voteId = voteId;
+    if (typeof prefA === 'boolean') base.publicPrefAccuser = prefA;
+    if (typeof prefR === 'boolean') base.publicPrefRespondent = prefR;
+    base.status = (verdictValid || voteDecided) ? 'DECIDED' : settled ? 'CLOSED' : answered ? 'IN_PROGRESS' : 'OPEN';
+    if (verdictValid) { base.verdictAt = verdictAt; base.decidedAt = verdictAt; }
+    else if (voteDecided) { base.decidedAt = base.decidedAt || nowISO(); }
+    else if (settled) { base.closedAt = settledAt; base.decidedAt = settledAt; }
+    return base;
+  }
+
   async function getCaseById(caseId) {
     const id = String(caseId || '').trim();
     if (!id) return null;
-    const all = await listByType('courtsCase');
-    const found = all.find((c) => c.id === id) || null;
-    if (!found || !tribeCrypto) return found;
-    const caseKey = getCaseKey(found);
-    if (!caseKey) return found;
-    return decryptFields(found, caseKey);
-  }
-
-  async function upsertCase(obj) {
-    const ssbClient = await openSsb();
-    const { id, ...rest } = obj;
-    let updated = { ...rest, type: 'courtsCase', replaces: id, updatedAt: nowISO() };
-    if (tribeCrypto) {
-      const caseKey = getCaseKey(updated);
-      if (caseKey) {
-        updated = encryptFields(updated, caseKey, CASE_FIELDS);
-      }
-    }
-    return new Promise((resolve, reject) =>
-      ssbClient.publish(updated, (err, msg) => (err ? reject(err) : resolve(msg)))
-    );
+    const msgs = await readLog();
+    const base = strictCaseBase(msgs, id);
+    if (!base) return null;
+    return await assembleCase(msgs, base);
   }
 
   function getCaseRole(caseObj, uid) {
@@ -308,20 +417,24 @@ if (c.type === type) {
       )
     );
     const clean = list.filter((id) => id !== c.accuser && id !== c.respondentId);
-    if (side === 'accuser') c.mediatorsAccuser = clean;
-    else c.mediatorsRespondent = clean;
-
+    const caseRootId = c.rootCaseId || c.id;
     if (tribeCrypto) {
       const caseKey = getCaseKey(c);
       if (caseKey) {
-        const caseRootId = c.rootCaseId || c.id;
         for (const mediatorId of clean) {
           await distributeKey(caseKey, caseRootId, mediatorId);
         }
       }
     }
-
-    await upsertCase(c);
+    const ssbClient = await openSsb();
+    let content = { type: 'courtsMediators', caseId: caseRootId, side, mediators: clean, author: userId, createdAt: nowISO() };
+    if (tribeCrypto) {
+      const caseKey = getCaseKey(c);
+      if (caseKey) content = encryptFields(content, caseKey, MEDIATORS_FIELDS);
+    }
+    await new Promise((resolve, reject) => ssbClient.publish(content, (err) => (err ? reject(err) : resolve())));
+    if (side === 'accuser') c.mediatorsAccuser = clean;
+    else c.mediatorsRespondent = clean;
     return c;
   }
 
@@ -338,16 +451,17 @@ if (c.type === type) {
     if (id === String(c.accuser || '') || id === String(c.respondentId || '')) {
       throw new Error('Judge cannot be a party of the case.');
     }
-    c.judgeId = id;
-
+    const caseRootId = c.rootCaseId || c.id;
     if (tribeCrypto) {
       const caseKey = getCaseKey(c);
       if (caseKey) {
-        await distributeKey(caseKey, c.rootCaseId || c.id, id);
+        await distributeKey(caseKey, caseRootId, id);
       }
     }
-
-    await upsertCase(c);
+    const ssbClient = await openSsb();
+    const content = { type: 'courtsJudge', caseId: caseRootId, judgeId: id, author: userId, createdAt: nowISO() };
+    await new Promise((resolve, reject) => ssbClient.publish(content, (err) => (err ? reject(err) : resolve())));
+    c.judgeId = id;
     return c;
   }
 
@@ -410,20 +524,26 @@ if (c.type === type) {
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
     c.status = 'IN_PROGRESS';
-    c.answeredAt = nowISO();
-    await upsertCase(c);
     return c;
   }
 
   async function issueVerdict({ caseId, result, orders }) {
     const c = await getCaseById(caseId);
     if (!c) throw new Error('Case not found.');
-    const involved =
-      String(c.accuser || '') === String(userId || '') ||
-      String(c.respondentId || '') === String(userId || '') ||
-      ensureArray(c.mediatorsAccuser || []).includes(userId) ||
-      ensureArray(c.mediatorsRespondent || []).includes(userId);
-    if (involved) throw new Error('You cannot be judge and party in the same case.');
+    const me = String(userId || '');
+    const isParty = String(c.accuser || '') === me || String(c.respondentId || '') === me;
+    if (isParty) throw new Error('A party cannot issue the verdict.');
+    const method = String(c.method || '').toUpperCase();
+    const isMediator = ensureArray(c.mediatorsAccuser || []).includes(me) || ensureArray(c.mediatorsRespondent || []).includes(me);
+    if (method === 'JUDGE') {
+      if (String(c.judgeId || '') !== me) throw new Error('Only the assigned judge can issue the verdict.');
+    } else if (method === 'MEDIATION') {
+      if (!isMediator) throw new Error('Only an appointed mediator can issue the verdict.');
+    } else if (method === 'DICTATOR') {
+      if (String(c.dictatorId || '') !== me) throw new Error('Only the dictator can issue the verdict.');
+    } else {
+      throw new Error('This method is resolved by public vote, not by a verdict.');
+    }
     const r = String(result || '').trim();
     if (!r) throw new Error('Result is required.');
     const o = String(orders || '').trim();
@@ -445,8 +565,7 @@ if (c.type === type) {
     );
     c.status = 'DECIDED';
     c.verdictAt = nowISO();
-    c.judgeId = userId;
-    await upsertCase(c);
+    c.ruledBy = userId;
     return c;
   }
 
@@ -490,9 +609,64 @@ if (c.type === type) {
       ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
     );
     c.status = 'CLOSED';
-    c.closedAt = nowISO();
-    await upsertCase(c);
     return c;
+  }
+
+  async function supportCase({ caseId }) {
+    const c = await getCaseById(caseId);
+    if (!c) throw new Error('Case not found.');
+    if (getCaseRole(c, userId) !== 'OTHER') throw new Error('Parties cannot support their own case.');
+    const rootId = c.rootCaseId || c.id;
+    const supports = await listByType('courtsSupport');
+    const already = supports.find(s => String(s.caseId || '') === String(rootId) && String(s.supporter || '') === String(userId || ''));
+    if (already) throw new Error('You already support this case.');
+    const ssbClient = await openSsb();
+    const content = { type: 'courtsSupport', caseId: rootId, supporter: userId, createdAt: nowISO() };
+    return new Promise((resolve, reject) =>
+      ssbClient.publish(content, (err, msg) => (err ? reject(err) : resolve(msg)))
+    );
+  }
+
+  async function countSupportsByCase() {
+    const supports = await listByType('courtsSupport');
+    const map = new Map();
+    for (const s of supports) {
+      const k = String(s.caseId || '');
+      if (!k) continue;
+      map.set(k, (map.get(k) || 0) + 1);
+    }
+    return map;
+  }
+
+  async function countSettlementsByCase() {
+    const items = await listByType('courtsSettlementProposal');
+    const map = new Map();
+    for (const s of items) {
+      const k = String(s.caseId || '');
+      if (!k) continue;
+      map.set(k, (map.get(k) || 0) + 1);
+    }
+    return map;
+  }
+
+  async function voteTally(voteId) {
+    if (!voteId || !services.votes || !services.votes.getVoteById) return null;
+    try {
+      const v = await services.votes.getVoteById(voteId);
+      const vm = v && v.votes ? v.votes : {};
+      const yes = Number(vm.YES ?? vm.Yes ?? vm.yes ?? 0);
+      const no = Number(vm.NO ?? vm.No ?? vm.no ?? 0);
+      const sum = Object.values(vm).reduce((s, n) => s + Number(n || 0), 0);
+      const total = Number(v.totalVotes ?? v.total ?? sum);
+      const deadline = v.deadline || v.endAt || v.expiresAt || null;
+      const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
+      const needed = Math.floor(total / 2) + 1;
+      return { yes, no, total, needed, closed, deadline };
+    } catch { return null; }
+  }
+
+  async function sweepCases() {
+    return;
   }
 
   async function setPublicPreference({ caseId, preference }) {
@@ -500,14 +674,13 @@ if (c.type === type) {
     if (!c) throw new Error('Case not found.');
     const id = String(userId || '');
     const pref = !!preference;
-    if (String(c.accuser || '') === id) {
-      c.publicPrefAccuser = pref;
-    } else if (String(c.respondentId || '') === id) {
-      c.publicPrefRespondent = pref;
-    } else {
-      throw new Error('Only parties can set visibility preference.');
-    }
-    await upsertCase(c);
+    let side = null;
+    if (String(c.accuser || '') === id) { side = 'accuser'; c.publicPrefAccuser = pref; }
+    else if (String(c.respondentId || '') === id) { side = 'respondent'; c.publicPrefRespondent = pref; }
+    else throw new Error('Only parties can set visibility preference.');
+    const ssbClient = await openSsb();
+    const content = { type: 'courtsVisibility', caseId: c.rootCaseId || c.id, side, pref, author: id, createdAt: nowISO() };
+    await new Promise((resolve, reject) => ssbClient.publish(content, (err) => (err ? reject(err) : resolve())));
     return c;
   }
 
@@ -518,6 +691,8 @@ if (c.type === type) {
     const m = String(c.method || '').toUpperCase();
     if (m !== 'POPULAR' && m !== 'KARMATOCRACY') throw new Error('This case does not use public voting.');
     if (c.voteId) throw new Error('Vote already opened.');
+    const myRole = getCaseRole(c, userId);
+    if (myRole !== 'ACCUSER' && myRole !== 'DEFENCE') throw new Error('Only parties can open the vote.');
     const question = c.title || `Case ${caseId}`;
     const deadline = moment().add(POPULAR_DAYS, 'days').toISOString();
     const voteMsg = await services.votes.createVote(
@@ -526,8 +701,11 @@ if (c.type === type) {
       ['YES', 'NO', 'ABSTENTION'],
       [`courtsCase:${caseId}`, `courtsMethod:${m}`]
     );
-    c.voteId = voteMsg.key || voteMsg.id;
-    await upsertCase(c);
+    const voteId = voteMsg.key || voteMsg.id;
+    const ssbClient = await openSsb();
+    const content = { type: 'courtsVoteLink', caseId: c.rootCaseId || c.id, voteId, author: userId, createdAt: nowISO() };
+    await new Promise((resolve, reject) => ssbClient.publish(content, (err) => (err ? reject(err) : resolve())));
+    c.voteId = voteId;
     return c;
   }
 
@@ -704,7 +882,9 @@ if (c.type === type) {
       (verdict && verdict.createdAt) ||
       base.decidedAt;
     const hasVerdict = !!verdict;
-    const supportCount = typeof base.supportCount !== 'undefined' ? base.supportCount : 0;
+    const supportsMap = await countSupportsByCase();
+    const supportCount = supportsMap.get(String(caseRootId)) || supportsMap.get(String(id)) || 0;
+    const tally = base.voteId ? await voteTally(base.voteId) : null;
     return {
       ...base,
       id,
@@ -724,6 +904,12 @@ if (c.type === type) {
       publicDetails,
       myPublicPreference,
       supportCount,
+      hasSettlement: settlements.length > 0,
+      yes: tally ? tally.yes : 0,
+      no: tally ? tally.no : 0,
+      total: tally ? tally.total : 0,
+      needed: tally ? tally.needed : 0,
+      voteClosed: tally ? tally.closed : false,
       hasVerdict
     };
   }
@@ -765,6 +951,8 @@ if (c.type === type) {
     issueVerdict,
     proposeSettlement,
     acceptSettlement,
+    supportCase,
+    sweepCases,
     setPublicPreference,
     openPopularVote,
     nominateJudge,

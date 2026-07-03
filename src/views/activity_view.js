@@ -540,7 +540,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       const { text, house } = content;
       cardBody.push(
         div({ class: 'card-section post' },
-          house ? a({ href: `/larp/${encodeURIComponent(house)}`, class: 'tag-link' }, `L.A.R.P · ${String(house).toUpperCase()}`) : null,
+          house ? a({ href: `/larp/${encodeURIComponent(house)}`, class: 'larp-house-link' },
+            img({ src: `/assets/larp/images/${encodeURIComponent(String(house).toLowerCase())}.jpg`, alt: house, class: 'larp-house-mini' }),
+            span(`L.A.R.P · ${String(house).toUpperCase()}`)
+          ) : null,
           text ? p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(String(text))) : null
         )
       );
@@ -904,7 +907,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
 			),
 			div({ class: 'card-footer thread-reply-footer' },
 			    span({ class: 'date-link' }, rDate),
-			    userLink(r.author),
+			    userLink(r.author, action.authorNames && action.authorNames[r.author]),
 			    form({ method: 'GET', action: commentHref, class: 'inline-form' },
 				button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
 			    )
@@ -915,7 +918,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         ),
         p({ class: 'card-footer' },
             span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
-            userLink(action.author)
+            userLink(action.author, action.authorNames && action.authorNames[action.author])
         )
         );
     }
@@ -1241,7 +1244,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
           ),
           p({ class: 'card-footer' },
             span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
-            userLink(action.author)
+            userLink(action.author, action.authorNames && action.authorNames[action.author])
           )
         );
       }
@@ -1381,7 +1384,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
     }
 
     if (type === 'parliamentCandidature') {
-      const { targetType, targetId, targetTitle, method, votes, proposer } = content;
+      const { targetType, targetId, targetTitle, method } = content;
       const link = targetType === 'tribe'
         ? a({ href: `/tribe/${encodeURIComponent(targetId)}`, class: 'user-link' }, targetTitle || targetId)
         : userLink(targetId);
@@ -1392,11 +1395,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
 
       cardBody.push(
         div({ class: 'card-section parliament' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (String(i18n.parliamentCandidatureId || 'Candidature').toUpperCase()) + ':'), span({ class: 'card-value' }, link)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'METHOD') + ':'), span({ class: 'card-value' }, methodUpper)),
-          typeof votes !== 'undefined'
-            ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesReceived || 'VOTES RECEIVED') + ':'), span({ class: 'card-value' }, String(votes)))
-            : ''
+          div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.parliamentGovMethod || 'METHOD').toUpperCase() + ':'), span({ class: 'card-value' }, methodUpper)),
+          div({ class: 'card-field' }, span({ class: 'card-value' }, link))
         )
       );
     }
@@ -1602,10 +1602,16 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         const btn = renderSpreadButton(action.id, spreadMap.get(action.id));
         return btn ? div({ class: 'card-spread-left' }, btn) : null;
       })(),
-      p({ class: 'card-footer' },
-        span({ class: 'date-link' }, `${date} ${i18n.performed} `),
-        userLink(action.author)
-      )
+      (() => {
+        const PARLIAMENT_AUTHORED = new Set(['parliamentProposal', 'parliamentRevocation', 'parliamentLaw', 'parliamentCandidature']);
+        const footerAuthorId = (PARLIAMENT_AUTHORED.has(type) && content && content.proposer)
+          ? content.proposer
+          : action.author;
+        return p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${date} ${i18n.performed} `),
+          userLink(footerAuthorId, (action.authorNames && action.authorNames[footerAuthorId]) || getProfile(footerAuthorId).name)
+        );
+      })()
     );
   });
 

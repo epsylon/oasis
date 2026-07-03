@@ -179,6 +179,20 @@ const renderMapOwnerActions = (filter, mapObj, params = {}) => {
     actions.push(form({ method: "POST", action: `/maps/generate-invite/${encodeURIComponent(mapObj.key)}` },
       button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)));
   }
+  const openInvite = Array.isArray(mapObj.invites) ? mapObj.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code) : null;
+  if (!mapObj.tribeId) {
+    if (openInvite) {
+      actions.push(div({ class: 'tribe-open-invite' },
+        span({ class: 'card-label' }, i18n.tribeInviteCodeText),
+        span({ class: 'tribe-open-invite-code' }, openInvite.code)
+      ));
+      actions.push(form({ method: "POST", action: `/maps/open-invite/remove/${encodeURIComponent(mapObj.key)}` },
+        button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)));
+    } else {
+      actions.push(form({ method: "POST", action: `/maps/open-invite/create/${encodeURIComponent(mapObj.key)}` },
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)));
+    }
+  }
   return actions;
 };
 

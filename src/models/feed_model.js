@@ -2,7 +2,7 @@ const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('./dedupe');
+const { dedupeBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
@@ -44,24 +44,36 @@ module.exports = ({ cooler }) => {
     const replacedIds = new Set();
     const tombstoned = buildValidatedTombstoneSet(messages);
     const feedsById = new Map();
+    const authorById = new Map();
     const actions = [];
+    const opinionMsgs = [];
 
     for (const msg of messages) {
       const c = msg?.value?.content;
       const k = msg?.key;
       if (!c || !k) continue;
       if (c.type === 'tombstone') continue;
+      if (c.type === "feedOpinion") {
+        opinionMsgs.push({ target: c.target, author: msg?.value?.author, category: c.category });
+        continue;
+      }
       if (c.type === "feed") {
         feedsById.set(k, msg);
-        if (c.replaces) {
-          forward.set(c.replaces, k);
-          replacedIds.add(c.replaces);
-        }
+        authorById.set(k, msg?.value?.author);
         continue;
       }
       if (c.type === "feed-action") {
         actions.push(msg);
         continue;
+      }
+    }
+
+    for (const [k, msg] of feedsById) {
+      const t = msg?.value?.content?.replaces;
+      if (!t) continue;
+      if (authorById.get(t) === authorById.get(k)) {
+        forward.set(t, k);
+        replacedIds.add(t);
       }
     }
 
@@ -85,7 +97,15 @@ module.exports = ({ cooler }) => {
       actionsByRoot.get(root).push(a);
     }
 
-    return { resolve, tombstoned, feedsById, replacedIds, actionsByRoot };
+    const opinionsByTip = new Map();
+    for (const op of opinionMsgs) {
+      if (!op.target || !feedsById.has(op.target)) continue;
+      const tip = resolve(op.target);
+      if (!opinionsByTip.has(tip)) opinionsByTip.set(tip, []);
+      opinionsByTip.get(tip).push(op);
+    }
+
+    return { resolve, tombstoned, feedsById, replacedIds, actionsByRoot, opinionsByTip };
   };
 
   const resolveCurrentId = async (id) => {
@@ -158,6 +178,37 @@ module.exports = ({ cooler }) => {
     });
   };
 
+  const aggregateOpinions = (idx, tipId, ownerContent) => {
+    const opinions = {};
+    const voters = new Set();
+
+    const cc = ownerContent || idx.feedsById.get(tipId)?.value?.content || {};
+    const ownerVoters = Array.isArray(cc.opinions_inhabitants) ? cc.opinions_inhabitants : [];
+    const ownerOpinions = cc.opinions && typeof cc.opinions === "object" ? cc.opinions : {};
+    for (const [k, v] of Object.entries(ownerOpinions)) opinions[k] = (Number(v) || 0);
+    for (const voter of ownerVoters) voters.add(voter);
+
+    const actions = idx.actionsByRoot.get(tipId) || [];
+    for (const a of actions) {
+      const ac = a?.value?.content || {};
+      if (ac.type !== "feed-action" || ac.action !== "vote") continue;
+      const author = a?.value?.author || ac.author;
+      if (!author || voters.has(author)) continue;
+      voters.add(author);
+      const cat = String(ac.category || "");
+      opinions[cat] = (Number(opinions[cat]) || 0) + 1;
+    }
+
+    for (const op of (idx.opinionsByTip.get(tipId) || [])) {
+      if (!op.author || voters.has(op.author)) continue;
+      voters.add(op.author);
+      const cat = String(op.category || "");
+      opinions[cat] = (Number(opinions[cat]) || 0) + 1;
+    }
+
+    return { opinions, voters };
+  };
+
   const addOpinion = async (contentId, category) => {
     if (!categories.includes(category)) throw new Error("Invalid voting category");
 
@@ -167,40 +218,17 @@ module.exports = ({ cooler }) => {
     const idx = await buildIndex(ssbClient);
     const tipId = idx.resolve(contentId);
 
-    let msg;
-    try {
-      msg = idx.feedsById.get(tipId) || (await getMsg(ssbClient, tipId));
-    } catch {
-      throw new Error("Invalid feed");
-    }
-
+    const msg = idx.feedsById.get(tipId);
     const c = msg?.value?.content;
     if (!c || c.type !== "feed") throw new Error("Invalid feed");
     if (!isValidFeedText(c.text)) throw new Error("Invalid feed");
 
-    const contentVoters = new Set(Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : []);
-    const existing = idx.actionsByRoot.get(tipId) || [];
-    for (const a of existing) {
-      const ac = a?.value?.content || {};
-      if (ac.type === "feed-action" && ac.action === "vote" && a.value?.author === userId) throw new Error("Already voted");
-    }
-    if (contentVoters.has(userId)) throw new Error("Already voted");
+    const agg = aggregateOpinions(idx, tipId, c);
+    if (agg.voters.has(userId)) throw new Error("Already voted");
 
-    const now = new Date().toISOString();
-    const prevOpinions = c.opinions && typeof c.opinions === "object" ? c.opinions : {};
-    const updated = {
-      ...c,
-      replaces: tipId,
-      opinions: { ...prevOpinions, [category]: (Number(prevOpinions[category]) || 0) + 1 },
-      opinions_inhabitants: Array.from(contentVoters).concat(userId),
-      updatedAt: now
-    };
-
-    const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };
-    await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => (e ? rej(e) : res())));
-
+    const content = { type: "feedOpinion", target: tipId, category, createdAt: new Date().toISOString() };
     return new Promise((resolve, reject) => {
-      ssbClient.publish(updated, (err, result) => (err ? reject(err) : resolve(result)));
+      ssbClient.publish(content, (err, result) => (err ? reject(err) : resolve(result)));
     });
   };
 
@@ -238,6 +266,7 @@ module.exports = ({ cooler }) => {
         seen.add(prevId);
         const prev = idx.feedsById.get(prevId);
         if (!prev) break;
+        if (prev?.value?.author !== cur?.value?.author) break;
         const prevText = prev?.value?.content?.text;
         if (typeof lastText === "string" && typeof prevText === "string" && lastText !== prevText) return true;
         cur = prev;
@@ -253,12 +282,6 @@ module.exports = ({ cooler }) => {
 
       let refeeds = Number(content.refeeds || 0) || 0;
       const refeedsInhabitants = new Set(Array.isArray(content.refeeds_inhabitants) ? content.refeeds_inhabitants : []);
-
-      const opinionsCounts = {};
-      const oldOpinions = content.opinions && typeof content.opinions === "object" ? content.opinions : {};
-      for (const [k, v] of Object.entries(oldOpinions)) opinionsCounts[k] = (Number(v) || 0);
-
-      const opinionsInhabitants = new Set(Array.isArray(content.opinions_inhabitants) ? content.opinions_inhabitants : []);
 
       let commentCount = 0;
 
@@ -276,25 +299,18 @@ module.exports = ({ cooler }) => {
           continue;
         }
 
-        if (ac.action === "vote") {
-          if (!opinionsInhabitants.has(author)) {
-            opinionsInhabitants.add(author);
-            const cat = String(ac.category || "");
-            opinionsCounts[cat] = (Number(opinionsCounts[cat]) || 0) + 1;
-          }
-          continue;
-        }
-
         if (ac.action === "comment") {
           commentCount++;
           continue;
         }
       }
 
+      const agg = aggregateOpinions(idx, root, content);
+
       content.refeeds = refeeds;
       content.refeeds_inhabitants = Array.from(refeedsInhabitants);
-      content.opinions = opinionsCounts;
-      content.opinions_inhabitants = Array.from(opinionsInhabitants);
+      content.opinions = agg.opinions;
+      content.opinions_inhabitants = Array.from(agg.voters);
       content.commentCount = commentCount;
 
       if (!Array.isArray(content.tags)) content.tags = extractTags(content.text);
@@ -350,17 +366,11 @@ module.exports = ({ cooler }) => {
     if (!msg) return null;
     const actions = idx.actionsByRoot.get(currentId) || [];
     const content = msg.value?.content || {};
-    const opinions = {};
-    const opinionsInhabitants = [];
     const refeedsInhabitants = [];
     let refeeds = 0;
     let commentCount = 0;
     for (const a of actions) {
       const ac = a?.value?.content || {};
-      if (ac.type === "feed-action" && ac.action === "vote" && ac.category) {
-        opinions[ac.category] = (opinions[ac.category] || 0) + 1;
-        if (ac.author || a?.value?.author) opinionsInhabitants.push(ac.author || a.value.author);
-      }
       if (ac.type === "feed-action" && ac.action === "refeed") {
         refeeds++;
         if (ac.author || a?.value?.author) refeedsInhabitants.push(ac.author || a.value.author);
@@ -369,7 +379,8 @@ module.exports = ({ cooler }) => {
         commentCount++;
       }
     }
-    const merged = { ...content, opinions, opinions_inhabitants: opinionsInhabitants, refeeds_inhabitants: refeedsInhabitants, refeeds, commentCount };
+    const agg = aggregateOpinions(idx, currentId, content);
+    const merged = { ...content, opinions: agg.opinions, opinions_inhabitants: Array.from(agg.voters), refeeds_inhabitants: refeedsInhabitants, refeeds, commentCount };
     return { key: currentId, value: { ...msg.value, content: merged } };
   };
 

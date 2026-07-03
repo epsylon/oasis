@@ -265,6 +265,29 @@ describe('shops: E2E private (CLOSED) + invite', (t) => {
     ok(bList.find(s => s.rootId === shop.key), 'public shop visible to non-owner');
   });
 
+  t('open invitation is multi-use, single, and removable', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const shop = await A.use('shops').createShop('Club', 's', 'd', null, '', '', [], 'CLOSED', '');
+    const { code } = await A.use('shops').generateOpenInvite(shop.key);
+    ok(code, 'got an open invite code');
+    eq((await A.use('shops').getOpenInvite(shop.key)).code, code);
+    let dup = false;
+    try { await A.use('shops').generateOpenInvite(shop.key); } catch (_) { dup = true; }
+    ok(dup, 'a second open invitation is rejected');
+    B.setActor();
+    ok((await B.use('shops').joinByCode(code)).ok, 'B joins via open invite');
+    C.setActor();
+    ok((await C.use('shops').joinByCode(code)).ok, 'C also joins (multi-use)');
+    A.setActor();
+    await A.use('shops').removeOpenInvite(shop.key);
+    eq(await A.use('shops').getOpenInvite(shop.key), null, 'open invite removed');
+    const D = makePeer(net); D.setActor();
+    let threw = false;
+    try { await D.use('shops').joinByCode(code); } catch (_) { threw = true; }
+    ok(threw, 'removed open invite no longer works');
+  });
+
   t('a member can buy from a private shop after joining', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();

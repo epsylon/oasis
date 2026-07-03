@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard } = require('./main_views');
 const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -297,6 +297,13 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
         div({ class: 'tribe-card-members' },
           span({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${t.memberCount != null ? t.memberCount : t.members.length}`)
         ),
+        (t.openInviteCode && !isMember && String(t.author) !== String(userId)) ? div({ class: 'tribe-card-join' },
+          form({ method: 'POST', action: '/tribes/open-invite/join' },
+            input({ type: 'hidden', name: 'tribeId', value: t.id }),
+            button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeJoinOpen)
+          ),
+          renderInviteQrCard({ qrDataUrl: t.openInviteQr, name: t.title })
+        ) : null,
         isMember ? div({ class: 'tribe-card-actions' },
           !isLarpHouseTribe(t)
             ? form({ method: 'POST', action: '/tribes/generate-invite' },
@@ -305,7 +312,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
               )
             : null,
           form({ method: 'POST', action: `/tribes/leave/${encodeURIComponent(t.id)}` },
-            button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeLeaveButton)
+            button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeLeaveButton)
           )
         ) : null,
         filter === 'mine' ? div({ class: 'tribe-actions' },
@@ -325,12 +332,12 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
       (filter === 'create' || filter === 'edit')
         ? createForm
         : filter === 'gallery'
-          ? renderGallery(sorted.filter(t => t.isAnonymous === false))
+          ? renderGallery(sorted)
           : div({ class: 'tribe-grid' },
               tribeCards.length > 0 ? tribeCards : p(i18n.noTribes)
             )
      ),
-    ...renderLightbox(sorted.filter(t => t.isAnonymous === false))
+    ...renderLightbox(sorted)
   );
 };
 
@@ -1257,7 +1264,9 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
 
 const renderSubTribesSection = (tribe, items, query) => {
   const action = query.action;
-  const canCreate = (Array.isArray(tribe.members) && tribe.members.includes(userId)) || tribe.author === userId;
+  const isMemberSub = Array.isArray(tribe.members) && tribe.members.includes(userId);
+  const isAuthorSub = tribe.author === userId;
+  const canCreate = tribe.inviteMode === 'open' ? (isMemberSub || isAuthorSub) : isAuthorSub;
 
   if (action === 'create' && canCreate) {
     return renderCreateForm(tribe, 'subtribes', [
@@ -1522,7 +1531,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
   const isMemberOfTribe = Array.isArray(tribe.members) && tribe.members.includes(userId);
   const isAuthorOfTribe = tribe.author === userId;
   const isOutsider = !isMemberOfTribe && !isAuthorOfTribe;
-  const canCreateSub = !tribe.parentTribeId && (isMemberOfTribe || isAuthorOfTribe);
+  const canCreateSub = !tribe.parentTribeId && (tribe.inviteMode === 'open' ? (isMemberOfTribe || isAuthorOfTribe) : isAuthorOfTribe);
   const isLarpHouse = isLarpHouseTribe(tribe);
   const larpHouseKey = tribe.larpHouseKey || null;
   const canGenerateInvite = isLarpHouse
@@ -1532,6 +1541,8 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
   const showOwnerControls = !isLarpHouse && isAuthorOfTribe;
   const inviteHref = isLarpHouse ? '/invites#invites-houses' : '/invites#invites-tribes';
   const showInviteTop = isOutsider && !tribe.parentTribeId;
+  const hasOpenInvite = !!tribe.openInviteCode;
+  const canManageOpenInvite = hasOpenInvite && (tribe.openInviteBy === userId || isAuthorOfTribe);
   const hasSideActions = canGenerateInvite || showOwnerControls || canLeave || (isOutsider && !showInviteTop);
 
   const tribeDetails = div({ class: 'tribe-details' },
@@ -1567,7 +1578,42 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           td({ class: 'tribe-info-value', colspan: '3' }, ...renderUrl(tribe.location))
         ) : null
       ),
-      h2({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${tribe.members.length}`),
+      h2({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${tribe.memberCount != null ? tribe.memberCount : tribe.members.length}`),
+      (canGenerateInvite || (isOutsider && !showInviteTop)) ? div({ class: 'tribe-side-actions' },
+        canGenerateInvite
+          ? (isLarpHouse
+              ? form({ method: 'POST', action: '/larp/invite/create' },
+                  input({ type: 'hidden', name: 'houseKey', value: larpHouseKey }),
+                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite)
+                )
+              : form({ method: 'POST', action: '/tribes/generate-invite' },
+                  input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
+                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite)
+                ))
+          : null,
+        (canGenerateInvite && !hasOpenInvite)
+          ? form({ method: 'POST', action: '/tribes/open-invite/create' },
+              input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
+              button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeOpenInvitation)
+            )
+          : null,
+        (isOutsider && !showInviteTop)
+          ? a({ class: 'tribe-action-btn', href: inviteHref }, i18n.tribeEnterInvite)
+          : null
+      ) : null,
+      (hasOpenInvite && canManageOpenInvite) ? div({ class: 'tribe-open-invite-panel' },
+        div({ class: 'tribe-open-invite' },
+          span({ class: 'tribe-members-count' }, i18n.tribeInviteCodeText),
+          span({ class: 'tribe-open-invite-code' }, tribe.openInviteCode)
+        ),
+        renderInviteQrCard({ qrDataUrl: tribe.openInviteQr, name: tribe.title }),
+        form({ method: 'POST', action: '/tribes/open-invite/remove' },
+          input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
+          button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeRemoveInvitation)
+        )
+      ) : null,
+      tribe.description ? p({ class: 'tribe-side-description' }, ...renderUrl(tribe.description)) : null,
+      renderMapLocationVisitLabel(tribe.mapUrl),
       (!tribe.parentTribeId && (canCreateSub || subTribes.length > 0 || showInviteTop)) ? div({ class: 'tribe-side-subtribes' },
         canCreateSub
           ? form({ method: 'GET', action: `/tribe/${encodeURIComponent(tribe.id)}` },
@@ -1589,20 +1635,10 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
             )
           : null
       ) : null,
-      tribe.description ? p({ class: 'tribe-side-description' }, ...renderUrl(tribe.description)) : null,
-      renderMapLocationVisitLabel(tribe.mapUrl),
-      hasSideActions ? div({ class: 'tribe-side-actions' },
-        canGenerateInvite
-          ? (isLarpHouse
-              ? form({ method: 'POST', action: '/larp/invite/create' },
-                  input({ type: 'hidden', name: 'houseKey', value: larpHouseKey }),
-                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite)
-                )
-              : form({ method: 'POST', action: '/tribes/generate-invite' },
-                  input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
-                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite)
-                ))
-          : null,
+      tribe.tags && tribe.tags.filter(Boolean).length ? div({ class: 'tribe-side-tags' }, tribe.tags.filter(Boolean).map(tag =>
+        a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
+      )) : null,
+      (showOwnerControls || canLeave) ? div({ class: 'tribe-side-actions tribe-side-actions-bottom' },
         showOwnerControls
           ? form({ method: 'GET', action: `/tribes/edit/${encodeURIComponent(tribe.id)}` },
               button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeUpdateButton)
@@ -1616,19 +1652,13 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
         canLeave
           ? (isLarpHouse
               ? form({ method: 'POST', action: '/larp/leave' },
-                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeLeaveButton)
+                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeLeaveButton)
                 )
               : form({ method: 'POST', action: `/tribes/leave/${encodeURIComponent(tribe.id)}` },
-                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeLeaveButton)
+                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeLeaveButton)
                 ))
-          : null,
-        (isOutsider && !showInviteTop)
-          ? a({ class: 'tribe-action-btn', href: inviteHref }, i18n.tribeEnterInvite)
           : null
       ) : null,
-      tribe.tags && tribe.tags.filter(Boolean).length ? div({ class: 'tribe-side-tags' }, tribe.tags.filter(Boolean).map(tag =>
-        a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
-      )) : null,
     ),
     div({ class: 'tribe-main' },
       query.inviteCode ? div({ class: 'card card-rpg tribe-banner' },
@@ -1758,6 +1788,10 @@ const governmentCard = (tribe, term, leaders) => {
 const candidaturesBlock = (tribe, candidatures, alreadyPublishedThisGlobalCycle) => {
   const list = (Array.isArray(candidatures) ? candidatures : [])
     .filter(c => (c.status || 'OPEN') === 'OPEN')
+    .map(c => {
+      const voters = (Array.isArray(c.voters) ? c.voters : []).filter(v => String(v) !== String(c.candidateId));
+      return { ...c, votes: voters.length };
+    })
     .sort((a, b) => Number(b.votes || 0) - Number(a.votes || 0));
   return div({},
     alreadyPublishedThisGlobalCycle
@@ -1839,10 +1873,18 @@ const renderGovernance = (tribe, data) => {
       ? p(i18n.tribeGovernanceNoLeaders || 'No leaders elected yet.')
       : ul({}, leaders.map(l => li({}, userLink(l))))
   );
-  else body = div({ class: 'card' },
-    h3(i18n[`tribeGovFilter${f.charAt(0).toUpperCase()}${f.slice(1)}`] || i18n[`tribeGov${f.charAt(0).toUpperCase()}${f.slice(1)}`] || f.toUpperCase()),
-    p(i18n.tribeGovernanceComingSoon || 'Coming soon in this tribe\'s governance module.')
-  );
+  else {
+    const govEmptyMsg = {
+      proposals: i18n.tribeGovNoProposals || 'Not any proposal, yet',
+      laws: i18n.tribeGovNoLaws || 'Not any law, yet',
+      revocations: i18n.tribeGovNoRevocations || 'Not any revocation, yet',
+      historical: i18n.tribeGovNoHistorical || 'Not any record, yet'
+    };
+    body = div({ class: 'card' },
+      h3(i18n[`tribeGovFilter${f.charAt(0).toUpperCase()}${f.slice(1)}`] || i18n[`tribeGov${f.charAt(0).toUpperCase()}${f.slice(1)}`] || f.toUpperCase()),
+      p(govEmptyMsg[f] || i18n.tribeGovernanceComingSoon || 'Coming soon in this tribe\'s governance module.')
+    );
+  }
 
   const showPublish = !!(canPublishToGlobal && hasElectedCandidate && !alreadyPublishedThisGlobalCycle);
   return div({ class: 'tribe-governance' }, header, governanceFilterBar(tribe.id, f, showPublish), body);

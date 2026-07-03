@@ -289,10 +289,24 @@ if (c.type === type) {
     return Date.now();
   }
 
+  async function getCandidatureVotesMap() {
+    const msgs = await readLog();
+    const byTarget = new Map();
+    for (const m of msgs || []) {
+      const c = m.value && m.value.content;
+      if (!c || c.type !== 'parliamentCandidatureVote' || !c.target) continue;
+      if (!byTarget.has(c.target)) byTarget.set(c.target, new Set());
+      byTarget.get(c.target).add(m.value.author);
+    }
+    return byTarget;
+  }
+
   async function listCandidaturesOpen() {
     const rows = await listCandidaturesOpenRaw();
+    const votesMap = await getCandidatureVotesMap();
     const enriched = await Promise.all(rows.map(async c => {
-      const cleanVoters = ensureArray(c.voters).filter(v => !(c.targetType === 'inhabitant' && String(v) === String(c.targetId)));
+      const signedVoters = [...(votesMap.get(c.id) || [])];
+      const cleanVoters = signedVoters.filter(v => !(c.targetType === 'inhabitant' && String(v) === String(c.targetId)));
       const base = { ...c, voters: cleanVoters, votes: cleanVoters.length };
       if (c.targetType === 'inhabitant') {
         const karma = await getInhabitantKarma(c.targetId);
@@ -676,8 +690,9 @@ if (c.type === type) {
 
   async function voteCandidature(candidatureMsgId) {
     const ssbClient = await openSsb();
+    const votesMap = await getCandidatureVotesMap();
     const open = await listCandidaturesOpenRaw();
-    const already = open.some(c => ensureArray(c.voters).includes(userId));
+    const already = open.some(c => (votesMap.get(c.id) || new Set()).has(userId));
     if (already) throw new Error('Already voted this cycle');
     const msg = await new Promise((resolve, reject) =>
       ssbClient.get(candidatureMsgId, (e, m) => (e || !m) ? reject(new Error('Candidate not found')) : resolve(m))
@@ -686,8 +701,9 @@ if (c.type === type) {
     const c = msg.content;
     if ((c.status || 'OPEN') !== 'OPEN') throw new Error('Closed');
     if (c.targetType === 'inhabitant' && String(c.targetId) === String(userId)) throw new Error('You cannot vote for yourself');
-    const updated = { ...c, replaces: candidatureMsgId, votes: Number(c.votes || 0) + 1, voters: [...ensureArray(c.voters), userId], updatedAt: nowISO() };
-    return await publishMsg(updated);
+    if ((votesMap.get(candidatureMsgId) || new Set()).has(userId)) throw new Error('Already voted this cycle');
+    const content = { type: 'parliamentCandidatureVote', target: candidatureMsgId, createdAt: nowISO() };
+    return await publishMsg(content);
   }
 
   async function createProposal({ title, description }) {
@@ -768,10 +784,6 @@ if (c.type === type) {
           const deadline = v.deadline || v.endAt || v.expiresAt || null;
           const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
           if (closed) { try { await closeProposal(p.id); } catch {} ; continue; }
-          if (String(p.status || 'OPEN').toUpperCase() !== 'OPEN') {
-            const updated = { ...stripId(p), replaces: p.id, status: 'OPEN', updatedAt: nowISO() };
-            await publishMsg(updated);
-          }
         } catch {}
       }
 
@@ -794,10 +806,6 @@ if (c.type === type) {
           const deadline = v.deadline || v.endAt || v.expiresAt || null;
           const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
           if (closed) { try { await closeRevocation(p.id); } catch {} ; continue; }
-          if (String(p.status || 'OPEN').toUpperCase() !== 'OPEN') {
-            const updated = { ...stripId(p), replaces: p.id, status: 'OPEN', updatedAt: nowISO() };
-            await publishMsg(updated);
-          }
         } catch {}
       }
     })().finally(() => { sweepInFlight = null; });
@@ -842,7 +850,7 @@ if (c.type === type) {
     const cands = await listByType('parliamentCandidature');
     for (const c of cands) {
       const k = `${c.targetType}:${c.targetId}`;
-      if (!map.has(k)) map.set(k, { powerType: c.targetType, powerId: c.targetId, powerTitle: c.targetTitle, inPower: 0, presented: 0, proposed: 0, approved: 0, declined: 0, discarded: 0, revocated: 0 });
+      if (!map.has(k)) continue;
       const rec = map.get(k);
       rec.presented = (rec.presented || 0) + 1;
     }
@@ -1114,6 +1122,12 @@ if (c.type === type) {
       chosen = pick && pick.chosen;
       totalVotes = (pick && pick.totalVotes) || 0;
       winnerVotes = (pick && pick.winnerVotes) || 0;
+      const quorum = await proposalQuorum();
+      if (winnerVotes < quorum) {
+        chosen = null;
+        totalVotes = 0;
+        winnerVotes = 0;
+      }
     }
 
     const startAt = now.toISOString();
@@ -1294,17 +1308,34 @@ if (c.type === type) {
     return await publishMsg(term);
   }
 
+  async function tribeElectionQuorum(tribeId) {
+    let n = 0;
+    try {
+      if (services.tribes && services.tribes.getTribeById) {
+        const t = await services.tribes.getTribeById(tribeId);
+        n = Array.isArray(t && t.members) ? t.members.length : 0;
+      }
+    } catch {}
+    return Math.max(2, Math.ceil(n * 0.25));
+  }
+
   async function tribeResolveElectionImpl(tribeId) {
     const latest = await tribeGetCurrentTerm(tribeId);
     if (latest && !isExpiredTerm(latest)) return latest;
-    const opens = (await tribeListCandidatures(tribeId)).filter(c => (c.status || 'OPEN') === 'OPEN');
+    const opens = (await tribeListCandidatures(tribeId))
+      .filter(c => (c.status || 'OPEN') === 'OPEN')
+      .map(c => {
+        const voters = ensureArray(c.voters).filter(v => String(v) !== String(c.candidateId));
+        return { ...c, voters, votes: voters.length };
+      });
     let chosen = null, totalVotes = 0, winnerVotes = 0;
     if (opens.length) {
       opens.sort((a, b) => Number(b.votes || 0) - Number(a.votes || 0) || new Date(a.createdAt) - new Date(b.createdAt));
       chosen = opens[0];
       totalVotes = opens.reduce((s, c) => s + Number(c.votes || 0), 0);
       winnerVotes = Number(chosen.votes || 0);
-      if (winnerVotes <= 0) chosen = null;
+      const quorum = await tribeElectionQuorum(tribeId);
+      if (winnerVotes < quorum) chosen = null;
     }
     const startAt = moment().toISOString();
     const endAt = moment(startAt).add(TERM_DAYS, 'days').toISOString();
@@ -1371,12 +1402,14 @@ if (c.type === type) {
     if (alreadyThisCycle) throw new Error('Already voted this cycle');
     const cand = all.find(c => c.id === candidatureId);
     if (!cand) throw new Error('Candidate not found');
+    if (String(cand.candidateId) === String(client.id)) throw new Error('You cannot vote for yourself');
+    const cleanVoters = ensureArray(cand.voters).filter(v => String(v) !== String(cand.candidateId));
     const updated = {
       type: 'tribeParliamentCandidature',
       tribeId, replaces: candidatureId,
       candidateId: cand.candidateId, method: cand.method,
-      votes: Number(cand.votes || 0) + 1,
-      voters: [...(cand.voters || []), client.id],
+      votes: cleanVoters.length + 1,
+      voters: [...cleanVoters, client.id],
       proposer: cand.proposer, status: cand.status || 'OPEN',
       createdAt: cand.createdAt, updatedAt: nowISO()
     };

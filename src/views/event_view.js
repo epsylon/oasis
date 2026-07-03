@@ -71,6 +71,21 @@ const renderEventOwnerActions = (e, returnTo) => {
       { method: "POST", action: `/events/generate-invite/${encodeURIComponent(e.id)}` },
       button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
     ));
+    if (e.openInviteCode) {
+      actions.push(div({ class: "tribe-open-invite" },
+        span({ class: "card-label" }, i18n.tribeInviteCodeText),
+        span({ class: "tribe-open-invite-code" }, e.openInviteCode)
+      ));
+      actions.push(form(
+        { method: "POST", action: `/events/open-invite/remove/${encodeURIComponent(e.id)}` },
+        button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
+      ));
+    } else {
+      actions.push(form(
+        { method: "POST", action: `/events/open-invite/create/${encodeURIComponent(e.id)}` },
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
+      ));
+    }
   }
   return actions;
 };

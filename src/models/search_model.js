@@ -74,7 +74,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       case 'task':
         return [content?.title, content?.description, content?.startTime, content?.endTime, content?.priority, content?.location, ...(content?.tags || []), content?.isPublic, content?.assignees?.length, content?.status, content?.author];
       case 'report':
-        return [content?.title, content?.description, content?.category, content?.createdAt, content?.author, content?.image, ...(content?.tags || []), content?.confirmations, content?.severity, content?.status, content?.isAnonymous];
+        return [content?.title, content?.description, content?.category, content?.createdAt, (content?.isAnonymous ? null : content?.author), content?.image, ...(content?.tags || []), content?.confirmations, content?.severity, content?.status];
       case 'transfer':
         return [content?.from, content?.to, content?.concept, content?.amount, content?.deadline, content?.status, ...(content?.tags || []), content?.confirmedBy?.length];
       case 'curriculum':

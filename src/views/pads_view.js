@@ -264,6 +264,23 @@ exports.singlePadView = async (pad, entries, params) => {
             button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
           )
         : null,
+      (() => {
+        if (!(isAuthor && pad.status === "INVITE-ONLY")) return null
+        const invs = Array.isArray(pad.invites) ? pad.invites : []
+        const openInvite = invs.find(inv => typeof inv === "object" && inv && inv.public === true && inv.code)
+        if (openInvite) return [
+          div({ class: "tribe-open-invite" },
+            span({ class: "card-label" }, i18n.tribeInviteCodeText),
+            span({ class: "tribe-open-invite-code" }, openInvite.code)
+          ),
+          form({ method: "POST", action: `/pads/open-invite/remove/${encodeURIComponent(pad.rootId)}` },
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
+          )
+        ]
+        return form({ method: "POST", action: `/pads/open-invite/create/${encodeURIComponent(pad.rootId)}` },
+          button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
+        )
+      })(),
       form(
         { method: "POST", action: pad.isFavorite ? `/pads/favorites/remove/${encodeURIComponent(pad.key)}` : `/pads/favorites/add/${encodeURIComponent(pad.key)}` },
         returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,

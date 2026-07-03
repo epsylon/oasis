@@ -3,7 +3,7 @@ const moment = require('../server/node_modules/moment');
 const crypto = require('crypto');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
-const { dedupeBy, norm } = require('./dedupe');
+const { dedupeBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
@@ -80,6 +80,81 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     return status;
   };
 
+  const buildEventIndex = (messages) => {
+    const eventAuthor = new Map();
+    const eventReplaces = new Map();
+    for (const m of messages) {
+      const c = m.value && m.value.content;
+      if (!c || c.type !== 'event') continue;
+      eventAuthor.set(m.key, m.value.author);
+      if (c.replaces) eventReplaces.set(m.key, c.replaces);
+    }
+    const strictNext = new Map();
+    for (const [key, target] of eventReplaces) {
+      if (eventAuthor.get(target) === eventAuthor.get(key)) strictNext.set(target, key);
+    }
+    const rootOf = (id) => {
+      let cur = id;
+      const seen = new Set();
+      while (eventReplaces.has(cur) && eventAuthor.has(eventReplaces.get(cur))) {
+        if (seen.has(cur)) break;
+        seen.add(cur);
+        cur = eventReplaces.get(cur);
+      }
+      return cur;
+    };
+    const contentTipOf = (root) => {
+      let cur = root;
+      const seen = new Set();
+      while (strictNext.has(cur)) {
+        if (seen.has(cur)) break;
+        seen.add(cur);
+        cur = strictNext.get(cur);
+      }
+      return cur;
+    };
+    return { eventAuthor, eventReplaces, strictNext, rootOf, contentTipOf };
+  };
+
+  const collectCollab = (messages) => {
+    const opinions = new Map();
+    const attend = new Map();
+    for (const m of messages) {
+      const c = m.value && m.value.content;
+      if (!c || typeof c.target !== 'string') continue;
+      const author = m.value.author;
+      const ts = (m.value && m.value.timestamp) || 0;
+      if (c.type === 'eventOpinion' && typeof c.category === 'string') {
+        if (!opinions.has(c.target)) opinions.set(c.target, new Map());
+        const byAuthor = opinions.get(c.target);
+        if (!byAuthor.has(author)) byAuthor.set(author, c.category);
+      } else if (c.type === 'eventAttend') {
+        if (!attend.has(c.target)) attend.set(c.target, new Map());
+        const byAuthor = attend.get(c.target);
+        const prev = byAuthor.get(author);
+        if (!prev || ts >= prev.ts) byAuthor.set(author, { on: c.on !== false, ts });
+      }
+    }
+    return { opinions, attend };
+  };
+
+  const aggregateCollab = (ownerContent, rootId, collab) => {
+    const attendees = new Set(uniq(ownerContent.attendees || []));
+    if (ownerContent.organizer) attendees.add(ownerContent.organizer);
+    const attMap = collab.attend.get(rootId);
+    if (attMap) for (const [author, st] of attMap) { if (st.on) attendees.add(author); else if (author !== ownerContent.organizer) attendees.delete(author); }
+
+    const opinionInh = new Set(Array.isArray(ownerContent.opinions_inhabitants) ? ownerContent.opinions_inhabitants : []);
+    const opinions = Object.assign({}, ownerContent.opinions || {});
+    const opMap = collab.opinions.get(rootId);
+    if (opMap) for (const [author, category] of opMap) {
+      if (opinionInh.has(author)) continue;
+      opinionInh.add(author);
+      opinions[category] = (opinions[category] || 0) + 1;
+    }
+    return { attendees: uniq([...attendees]), opinions, opinions_inhabitants: [...opinionInh] };
+  };
+
   return {
     type: 'event',
 
@@ -88,20 +163,8 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     async resolveRootId(id) {
       const ssbClient = await openSsb();
       const messages = await readAll(ssbClient);
-      const replaces = new Map();
-      for (const m of messages) {
-        const c = m.value && m.value.content;
-        if (!c || c.type !== 'event') continue;
-        if (c.replaces) replaces.set(m.key, c.replaces);
-      }
-      let cur = id;
-      const seen = new Set();
-      while (replaces.has(cur)) {
-        if (seen.has(cur)) break;
-        seen.add(cur);
-        cur = replaces.get(cur);
-      }
-      return cur;
+      const idx = buildEventIndex(messages);
+      return idx.rootOf(id);
     },
 
     async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic, mapUrl = "", clearnetPublic = false) {
@@ -192,15 +255,88 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       return { code, eventId: rid };
     },
 
+    async getOpenInvite(eventId) {
+      const ssbClient = await openSsb();
+      const rid = await this.resolveRootId(eventId).catch(() => eventId);
+      const messages = await readAll(ssbClient);
+      const markerTomb = new Set();
+      const invTomb = new Set();
+      for (const m of messages) {
+        const c = m.value && m.value.content;
+        if (!c) continue;
+        if (c.type === 'event-open-invite-tombstone' && typeof c.target === 'string') markerTomb.add(c.target);
+        if (c.type === 'event-invite-tombstone' && typeof c.target === 'string') invTomb.add(c.target);
+      }
+      let best = null;
+      for (const m of messages) {
+        const c = m.value && m.value.content;
+        if (!c || c.type !== 'event-open-invite' || c.v !== 1) continue;
+        if (c.target !== rid || typeof c.code !== 'string') continue;
+        if (markerTomb.has(m.key)) continue;
+        if (c.inviteKey && invTomb.has(c.inviteKey)) continue;
+        const ts = (m.value && m.value.timestamp) || 0;
+        if (!best || ts > best.ts) best = { code: c.code, by: c.by || m.value.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts };
+      }
+      return best ? { code: best.code, by: best.by, markerKey: best.markerKey, inviteKey: best.inviteKey } : null;
+    },
+
+    async generateOpenInvite(eventId) {
+      if (!ownCrypto || !tribeCrypto) throw new Error("Event crypto unavailable");
+      const ssbClient = await openSsb();
+      const userId = await me();
+      const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, m) => err || !m || !m.content ? rej(new Error("Error retrieving event")) : res(m)));
+      const rid = await this.resolveRootId(eventId);
+      const c = ev.content && ev.content.encryptedPayload ? decryptEventContent(ev.content, rid) : ev.content;
+      if (c && c._undecryptable) throw new Error("Event is encrypted and cannot be decrypted");
+      if (c.organizer !== userId) throw new Error("Only the organizer can generate invites");
+      if (normalizePrivacy(c.isPublic) !== 'private') throw new Error("Only private events use invitation codes");
+      if (await this.getOpenInvite(eventId)) throw new Error("An open invitation already exists");
+      const key = lookupKey(rid);
+      if (!key) throw new Error("Missing event key — cannot generate invite");
+      const code = crypto.randomBytes(16).toString('hex');
+      const inviteSalt = tribeCrypto.generateInviteSalt();
+      const ek = tribeCrypto.encryptForInvite(key, code, inviteSalt);
+      const invitePub = await new Promise((resolve, reject) => {
+        ssbClient.publish({ type: 'event-invite', target: rid, ek, salt: inviteSalt, codeHash: tribeCrypto.hashInviteCode(code, inviteSalt), multi: 1 }, (err, r) => err ? reject(err) : resolve(r));
+      });
+      await new Promise((resolve, reject) => {
+        ssbClient.publish({ type: 'event-open-invite', v: 1, target: rid, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() }, (err) => err ? reject(err) : resolve());
+      });
+      return { code, eventId: rid };
+    },
+
+    async removeOpenInvite(eventId) {
+      const ssbClient = await openSsb();
+      const userId = await me();
+      const rec = await this.getOpenInvite(eventId);
+      if (!rec) return;
+      let organizer = null;
+      try {
+        const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, m) => err || !m || !m.content ? rej(new Error("nf")) : res(m)));
+        const rid = await this.resolveRootId(eventId);
+        const c = ev.content && ev.content.encryptedPayload ? decryptEventContent(ev.content, rid) : ev.content;
+        organizer = c && c.organizer;
+      } catch (_) {}
+      if (rec.by !== userId && organizer !== userId) throw new Error("Not allowed to remove this invitation");
+      await new Promise((resolve, reject) => ssbClient.publish({ type: 'event-open-invite-tombstone', target: rec.markerKey, ts: new Date().toISOString() }, (err) => err ? reject(err) : resolve()));
+      if (rec.inviteKey) await new Promise((resolve, reject) => ssbClient.publish({ type: 'event-invite-tombstone', target: rec.inviteKey, ts: new Date().toISOString() }, (err) => err ? reject(err) : resolve()));
+    },
+
     async joinByInvite(code) {
       if (!ownCrypto || !tribeCrypto) throw new Error("Event crypto unavailable");
       const ssbClient = await openSsb();
       const userId = await me();
       const messages = await readAll(ssbClient);
+      const invTomb = new Set();
+      for (const m of messages) {
+        const c = m.value && m.value.content;
+        if (c && c.type === 'event-invite-tombstone' && typeof c.target === 'string') invTomb.add(c.target);
+      }
       let matched = null;
       for (const m of messages) {
         const c = m.value && m.value.content;
         if (!c || c.type !== 'event-invite') continue;
+        if (invTomb.has(m.key)) continue;
         try {
           const hash = tribeCrypto.hashInviteCode(code, c.salt);
           if (hash === c.codeHash) { matched = c; break; }
@@ -217,36 +353,28 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     async toggleAttendee(eventId) {
       const ssbClient = await openSsb();
       const userId = await me();
-      const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, ev) => err || !ev || !ev.content ? rej(new Error("Error retrieving event")) : res(ev)));
-      const rid = await this.resolveRootId(eventId);
+      const messages = await readAll(ssbClient);
+      const idx = buildEventIndex(messages);
+      const rid = idx.rootOf(eventId);
+      const contentTip = idx.contentTipOf(rid);
+      const ev = await new Promise((res, rej) => ssbClient.get(contentTip, (err, ev) => err || !ev || !ev.content ? rej(new Error("Error retrieving event")) : res(ev)));
       const c = ev.content && ev.content.encryptedPayload ? decryptEventContent(ev.content, rid) : ev.content;
       if (c && c._undecryptable) throw new Error("Event is encrypted and cannot be decrypted");
 
       const status = deriveStatus(c);
       if (status === 'CLOSED') throw new Error("Cannot attend a closed event");
 
-      let attendees = uniq(c.attendees || []);
-      const idx = attendees.indexOf(userId);
-      const isLeaving = idx !== -1;
-      if (isLeaving) attendees.splice(idx, 1); else attendees.push(userId);
-      attendees = uniq(attendees);
+      const collab = collectCollab(messages);
+      const agg = aggregateCollab(c, rid, collab);
+      const isAttending = agg.attendees.includes(userId);
+      const isLeaving = isAttending;
+      const on = !isAttending;
 
       const isPrivate = normalizePrivacy(c.isPublic) === 'private';
       const isOrganizer = c.organizer === userId;
-      let updated = {
-        ...c,
-        attendees,
-        updatedAt: new Date().toISOString(),
-        replaces: eventId
-      };
-      if (isPrivate && ownCrypto && tribeCrypto) {
-        const key = lookupKey(rid);
-        if (!key) throw new Error("Missing event key — cannot update encrypted event");
-        updated = tribeCrypto.encryptContent(updated, [key], true);
-      }
 
       const result = await new Promise((resolve, reject) => {
-        ssbClient.publish(updated, (err2, res2) => err2 ? reject(err2) : resolve(res2));
+        ssbClient.publish({ type: 'eventAttend', target: rid, on, createdAt: new Date().toISOString() }, (err2, res2) => err2 ? reject(err2) : resolve(res2));
       });
 
       if (isPrivate && !isLeaving && ownCrypto && tribeCrypto) {
@@ -267,11 +395,12 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
 
       if (isPrivate && isLeaving && !isOrganizer && ownCrypto && tribeCrypto) {
         try {
+          const remaining = agg.attendees.filter(a => a !== userId);
           const newKey = ownCrypto.generateTribeKey();
           const newGen = ownCrypto.addNewKey(rid, newKey);
           const ssbKeys = require("../server/node_modules/ssb-keys");
           const memberKeys = {};
-          for (const m of attendees) {
+          for (const m of remaining) {
             try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys); } catch (_) {}
           }
           if (Object.keys(memberKeys).length) {
@@ -301,22 +430,26 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
 
     async getEventById(eventId) {
       const ssbClient = await openSsb();
-      const msg = await new Promise((res, rej) => ssbClient.get(eventId, (err, msg) => err || !msg || !msg.content ? rej(new Error("Error retrieving event")) : res(msg)));
-      const rid = await this.resolveRootId(eventId).catch(() => eventId);
+      const messages = await readAll(ssbClient);
+      const idx = buildEventIndex(messages);
+      const rid = idx.rootOf(eventId);
+      const contentTip = idx.contentTipOf(rid);
+      const msg = await new Promise((res, rej) => ssbClient.get(contentTip, (err, msg) => err || !msg || !msg.content ? rej(new Error("Error retrieving event")) : res(msg)));
       const c = msg.content && msg.content.encryptedPayload ? decryptEventContent(msg.content, rid) : msg.content;
       if (c && c._undecryptable) throw new Error("Event is encrypted and cannot be decrypted with available keys");
 
       const status = deriveStatus(c);
+      const agg = aggregateCollab(c, rid, collectCollab(messages));
 
       return {
-        id: eventId,
+        id: contentTip,
         title: c.title || '',
         description: c.description || '',
         date: c.date || '',
         location: c.location || '',
         price: c.price || 0,
         url: c.url || '',
-        attendees: Array.isArray(c.attendees) ? c.attendees : [],
+        attendees: agg.attendees,
         tags: Array.isArray(c.tags) ? c.tags : [],
         createdAt: c.createdAt || new Date().toISOString(),
         updatedAt: c.updatedAt || new Date().toISOString(),
@@ -326,8 +459,8 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
         mapUrl: c.mapUrl || "",
         clearnetPublic: !!c.clearnetPublic,
         encrypted: normalizePrivacy(c.isPublic) === 'private',
-        opinions: c.opinions || {},
-        opinions_inhabitants: Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : []
+        opinions: agg.opinions,
+        opinions_inhabitants: agg.opinions_inhabitants
       };
     },
 
@@ -410,23 +543,16 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       if (!categories.includes(category)) throw new Error('Invalid opinion category');
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
-      const rid = await this.resolveRootId(id).catch(() => id);
-      const ev = await new Promise((res, rej) => ssbClient.get(id, (err, m) => (err || !m || !m.content) ? rej(new Error('Event not found')) : res(m)));
+      const messages = await readAll(ssbClient);
+      const idx = buildEventIndex(messages);
+      const rid = idx.rootOf(id);
+      const contentTip = idx.contentTipOf(rid);
+      const ev = await new Promise((res, rej) => ssbClient.get(contentTip, (err, m) => (err || !m || !m.content) ? rej(new Error('Event not found')) : res(m)));
       const c = ev.content && ev.content.encryptedPayload ? decryptEventContent(ev.content, rid) : ev.content;
       if (c && c._undecryptable) throw new Error('Event is encrypted and cannot be decrypted');
-      const list = Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [];
-      if (list.includes(userId)) throw new Error('Already opined');
-      const opinions = Object.assign({}, c.opinions || {});
-      opinions[category] = (opinions[category] || 0) + 1;
-      let updated = { ...c, opinions, opinions_inhabitants: list.concat(userId), updatedAt: new Date().toISOString(), replaces: id };
-      const isPrivate = normalizePrivacy(c.isPublic) === 'private';
-      if (isPrivate && ownCrypto && tribeCrypto) {
-        const key = lookupKey(rid);
-        if (key) updated = tribeCrypto.encryptContent(updated, [key], true);
-      }
-      const tombstone = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
-      await new Promise((res, rej) => ssbClient.publish(tombstone, err => err ? rej(err) : res()));
-      return new Promise((res, rej) => ssbClient.publish(updated, (err, result) => err ? rej(err) : res(result)));
+      const agg = aggregateCollab(c, rid, collectCollab(messages));
+      if (agg.opinions_inhabitants.includes(userId)) throw new Error('Already opined');
+      return new Promise((res, rej) => ssbClient.publish({ type: 'eventOpinion', target: rid, category, createdAt: new Date().toISOString() }, (err, result) => err ? rej(err) : res(result)));
     },
 
     async listAll(author = null, filter = 'all') {
@@ -438,72 +564,54 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
           pull.collect((err, results) => {
             if (err) return reject(new Error("Error listing events: " + err.message));
             const tombstoned = buildValidatedTombstoneSet(results);
-            const replaces = new Map();
-            const byId = new Map();
-            const replacesChain = new Map();
-            for (const r of results) {
-              const c = r.value && r.value.content;
-              if (c && c.type === 'event' && c.replaces) replacesChain.set(r.key, c.replaces);
-            }
-            const findRoot = (id) => {
-              let cur = id;
-              const seen = new Set();
-              while (replacesChain.has(cur)) {
-                if (seen.has(cur)) break;
-                seen.add(cur);
-                cur = replacesChain.get(cur);
-              }
-              return cur;
-            };
+            const idx = buildEventIndex(results);
+            const collab = collectCollab(results);
 
+            const roots = new Set();
             for (const r of results) {
-              const k = r.key;
+              const rawC = r.value && r.value.content;
+              if (!rawC || rawC.type !== 'event') continue;
+              roots.add(idx.rootOf(r.key));
+            }
+
+            const byRoot = new Map();
+            for (const rid of roots) {
+              if (tombstoned.has(rid)) continue;
+              const contentTip = idx.contentTipOf(rid);
+              if (tombstoned.has(contentTip)) continue;
+              const r = results.find(x => x.key === contentTip);
+              if (!r) continue;
               const rawC = r.value && r.value.content;
               if (!rawC) continue;
+              const c = rawC.encryptedPayload ? decryptEventContent(rawC, rid) : rawC;
+              if (!c || c._undecryptable) continue;
+              if (author && c.organizer !== author) continue;
 
-              if (rawC.type === 'tombstone') continue;
+              const status = deriveStatus(c);
+              const agg = aggregateCollab(c, rid, collab);
 
-              if (rawC.type !== 'event' && !(rawC.encryptedPayload && rawC.type === 'event')) {
-                // either it's not an event, or it's encrypted but type field should still say 'event'
-                if (rawC.type !== 'event' && !rawC.encryptedPayload) continue;
-              }
-
-              if (rawC.type === 'event' || rawC.encryptedPayload) {
-                const rid = findRoot(k);
-                const c = rawC.encryptedPayload ? decryptEventContent(rawC, rid) : rawC;
-                if (!c || c._undecryptable) continue;
-
-                if (c.replaces) replaces.set(c.replaces, k);
-                if (author && c.organizer !== author) continue;
-
-                const status = deriveStatus(c);
-
-                byId.set(k, {
-                  id: k,
-                  title: c.title || '',
-                  description: c.description || '',
-                  date: c.date || '',
-                  location: c.location || '',
-                  price: c.price || 0,
-                  url: c.url || '',
-                  attendees: Array.isArray(c.attendees) ? uniq(c.attendees) : [],
-                  tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
-                  createdAt: c.createdAt || new Date().toISOString(),
-                  organizer: c.organizer || '',
-                  status,
-                  isPublic: normalizePrivacy(c.isPublic),
-                  mapUrl: c.mapUrl || "",
-                  encrypted: normalizePrivacy(c.isPublic) === 'private',
-                  opinions: c.opinions || {},
-                  opinions_inhabitants: Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : []
-                });
-              }
+              byRoot.set(rid, {
+                id: contentTip,
+                title: c.title || '',
+                description: c.description || '',
+                date: c.date || '',
+                location: c.location || '',
+                price: c.price || 0,
+                url: c.url || '',
+                attendees: agg.attendees,
+                tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
+                createdAt: c.createdAt || new Date().toISOString(),
+                organizer: c.organizer || '',
+                status,
+                isPublic: normalizePrivacy(c.isPublic),
+                mapUrl: c.mapUrl || "",
+                encrypted: normalizePrivacy(c.isPublic) === 'private',
+                opinions: agg.opinions,
+                opinions_inhabitants: agg.opinions_inhabitants
+              });
             }
 
-            replaces.forEach((_, oldId) => byId.delete(oldId));
-            tombstoned.forEach(id => byId.delete(id));
-
-            let out = Array.from(byId.values());
+            let out = Array.from(byRoot.values());
             out = dedupeBy(out, e => e.title ? [norm(e.organizer), norm(e.title), norm(e.date)].join('|') : null);
 
             if (filter === 'mine') out = out.filter(e => e.organizer === userId);

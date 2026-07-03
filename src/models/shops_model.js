@@ -80,6 +80,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const nodes = new Map()
     const parent = new Map()
     const child = new Map()
+    const strictChild = new Map()
+    const opinionMsgs = []
+    const purchaseMsgs = []
 
     for (const m of messages) {
       const k = m.key
@@ -87,29 +90,65 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const c = v.content
       if (!c) continue
       if (c.type === "tombstone" && c.target) { tomb.add(c.target); continue }
+      if (c.type === "shopOpinion" && c.target) { opinionMsgs.push({ target: c.target, author: v.author, category: c.category }); continue }
+      if (c.type === "shopPurchase" && c.target) { purchaseMsgs.push({ target: c.target, author: v.author }); continue }
       if (c.type === "shop" || c.type === "shopProduct") {
         nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
         if (c.replaces) { parent.set(k, c.replaces); child.set(c.replaces, k) }
       }
     }
 
-    const rootOf = (id) => { let cur = id; while (parent.has(cur)) cur = parent.get(cur); return cur }
-    const tipOf = (id) => { let cur = id; while (child.has(cur)) cur = child.get(cur); return cur }
+    for (const [k, node] of nodes) {
+      const t = node.c.replaces
+      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k) }
+    }
+
+    const rootOf = (id) => { let cur = id, g = 0; while (parent.has(cur) && g++ < 100000) cur = parent.get(cur); return cur }
+    const tipOf = (id) => { let cur = id, g = 0; while (child.has(cur) && g++ < 100000) cur = child.get(cur); return cur }
+    const strictTipOf = (id) => {
+      const root = rootOf(id)
+      let cur = root, g = 0
+      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur)
+      const n = nodes.get(cur), rn = nodes.get(root)
+      return (n && rn && n.author === rn.author) ? cur : root
+    }
 
     const roots = new Set()
     for (const id of nodes.keys()) roots.add(rootOf(id))
-    const tipByRoot = new Map()
-    for (const r of roots) tipByRoot.set(r, tipOf(r))
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot }
+    const opinionsByRoot = new Map()
+    for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op) }
+    const purchasesByRoot = new Map()
+    for (const pu of purchaseMsgs) { if (!nodes.has(pu.target)) continue; const r = rootOf(pu.target); if (!purchasesByRoot.has(r)) purchasesByRoot.set(r, []); purchasesByRoot.get(r).push(pu) }
+
+    const tipByRoot = new Map()
+    for (const r of roots) tipByRoot.set(r, strictTipOf(r))
+
+    const aggregateFor = (rootId, decrypted) => {
+      const opinions = { ...((decrypted && decrypted.opinions) || {}) }
+      const voters = safeArr(decrypted && decrypted.opinions_inhabitants).slice()
+      const voterSet = new Set(voters)
+      for (const op of (opinionsByRoot.get(rootId) || [])) {
+        if (voterSet.has(op.author)) continue
+        voterSet.add(op.author); voters.push(op.author)
+        if (op.category) opinions[op.category] = (opinions[op.category] || 0) + 1
+      }
+      return { opinions, opinions_inhabitants: voters }
+    }
+
+    const purchaseCountFor = (rootId) => (purchasesByRoot.get(rootId) || []).length
+    const purchaseAuthorsFor = (rootId) => (purchasesByRoot.get(rootId) || []).map(p => p.author)
+
+    return { tomb, nodes, parent, child, strictChild, rootOf, tipOf, strictTipOf, tipByRoot, aggregateFor, purchaseCountFor, purchaseAuthorsFor }
   }
 
-  const buildShop = (node, rootId) => {
+  const buildShop = (node, rootId, idx) => {
     const raw = node.c || {}
     if (raw.type !== "shop") return null
     const encrypted = isEncrypted(raw)
     const c = encrypted ? decryptShopContent(raw, rootId) : raw
     const undecryptable = !!c._undecryptable
+    const agg = idx ? idx.aggregateFor(rootId, c) : { opinions: c.opinions || {}, opinions_inhabitants: safeArr(c.opinions_inhabitants) }
     return {
       key: node.key,
       rootId,
@@ -125,21 +164,26 @@ module.exports = ({ cooler, tribeCrypto }) => {
       author: raw.author || c.author || node.author,
       createdAt: c.createdAt || raw.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || raw.updatedAt || null,
-      opinions: c.opinions || {},
-      opinions_inhabitants: safeArr(c.opinions_inhabitants),
+      opinions: agg.opinions,
+      opinions_inhabitants: agg.opinions_inhabitants,
       mapUrl: c.mapUrl || "",
       encrypted,
       undecryptable
     }
   }
 
-  const buildProduct = (node, rootId) => {
+  const buildProduct = (node, rootId, idx) => {
     const raw = node.c || {}
     if (raw.type !== "shopProduct") return null
     const encrypted = isEncrypted(raw)
     const shopRoot = productShopId(raw)
     const c = encrypted ? decryptShopContent(raw, shopRoot) : raw
     const undecryptable = !!c._undecryptable
+    const agg = idx ? idx.aggregateFor(rootId, c) : { opinions: c.opinions || {}, opinions_inhabitants: safeArr(c.opinions_inhabitants) }
+    const sellerStock = Number(c.stock) || 0
+    const purchaseCount = idx ? idx.purchaseCountFor(rootId) : 0
+    const sellerBuyers = encrypted ? safeArr(c.buyers) : decryptBuyers(c.buyers, tribeCrypto ? tribeCrypto.getKey(rootId) : null)
+    const buyers = Array.from(new Set(sellerBuyers.concat(idx ? idx.purchaseAuthorsFor(rootId) : [])))
     return {
       key: node.key,
       rootId,
@@ -148,14 +192,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
       description: c.description || "",
       image: c.image || null,
       price: c.price || "0.000000",
-      stock: Number(c.stock) || 0,
+      stock: Math.max(0, sellerStock - purchaseCount),
       featured: !!c.featured,
       author: raw.author || c.author || node.author,
       createdAt: c.createdAt || raw.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || raw.updatedAt || null,
-      opinions: c.opinions || {},
-      opinions_inhabitants: safeArr(c.opinions_inhabitants),
-      buyers: encrypted ? safeArr(c.buyers) : decryptBuyers(c.buyers, tribeCrypto ? tribeCrypto.getKey(rootId) : null),
+      opinions: agg.opinions,
+      opinions_inhabitants: agg.opinions_inhabitants,
+      buyers,
       encrypted,
       undecryptable
     }
@@ -179,20 +223,16 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const tip = idx.strictTipOf(id)
       if (idx.tomb.has(tip)) throw new Error("Not found")
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
-      return root
+      return idx.rootOf(tip)
     },
 
     async resolveCurrentId(id) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const tip = idx.strictTipOf(id)
       if (idx.tomb.has(tip)) throw new Error("Not found")
       return tip
     },
@@ -307,17 +347,15 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
 
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const tip = idx.strictTipOf(id)
       if (idx.tomb.has(tip)) return null
 
       const node = idx.nodes.get(tip)
       if (!node || node.c.type !== "shop") return null
 
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
+      const root = idx.rootOf(tip)
 
-      const shop = buildShop(node, root)
+      const shop = buildShop(node, root, idx)
       if (!shop) return null
       shop.productCount = countProductsFromIndex(idx, root)
       return shop
@@ -334,7 +372,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (idx.tomb.has(tipId)) continue
         const node = idx.nodes.get(tipId)
         if (!node || node.c.type !== "shop") continue
-        const shop = buildShop(node, rootId)
+        const shop = buildShop(node, rootId, idx)
         if (!shop) continue
         if (shop.encrypted) {
           if (shop.undecryptable) continue
@@ -484,17 +522,15 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
 
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const tip = idx.strictTipOf(id)
       if (idx.tomb.has(tip)) return null
 
       const node = idx.nodes.get(tip)
       if (!node || node.c.type !== "shopProduct") return null
 
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
+      const root = idx.rootOf(tip)
 
-      return buildProduct(node, root)
+      return buildProduct(node, root, idx)
     },
 
     async listProducts(shopRootId) {
@@ -508,7 +544,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         const node = idx.nodes.get(tipId)
         if (!node || node.c.type !== "shopProduct") continue
         if (productShopId(node.c) !== shopRootId) continue
-        const prod = buildProduct(node, rootId)
+        const prod = buildProduct(node, rootId, idx)
         if (prod && !prod.undecryptable) items.push(prod)
       }
 
@@ -527,7 +563,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (!node || node.c.type !== "shopProduct") continue
         if (productShopId(node.c) !== shopRootId) continue
         if (!node.c.featured) continue
-        const prod = buildProduct(node, rootId)
+        const prod = buildProduct(node, rootId, idx)
         if (prod && !prod.undecryptable) items.push(prod)
       }
 
@@ -544,7 +580,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (idx.tomb.has(tipId)) continue
         const node = idx.nodes.get(tipId)
         if (!node || node.c.type !== "shopProduct") continue
-        const prod = buildProduct(node, rootId)
+        const prod = buildProduct(node, rootId, idx)
         if (prod && !prod.undecryptable) items.push(prod)
       }
 
@@ -558,13 +594,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
 
-      let tip = productId
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
-      if (idx.tomb.has(tip)) throw new Error("Product not found")
-      const tipId = tip
-
-      let rootId = tipId
-      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
+      const tipId = idx.strictTipOf(productId)
+      if (idx.tomb.has(tipId)) throw new Error("Product not found")
+      const rootId = idx.rootOf(tipId)
 
       const node = idx.nodes.get(tipId)
       if (!node) throw new Error("Product not found")
@@ -575,32 +607,11 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const shopRoot = productShopId(raw)
       const c = encrypted ? decryptShopContent(raw, shopRoot) : raw
       if (c._undecryptable) throw new Error("Cannot access product")
-      const stock = Number(c.stock) || 0
+      const stock = Math.max(0, (Number(c.stock) || 0) - idx.purchaseCountFor(rootId))
       if (stock <= 0) throw new Error("Out of stock")
 
-      let updated
-      if (encrypted) {
-        const newBuyers = safeArr(c.buyers).concat(userId)
-        const plain = { ...c, stock: stock - 1, buyers: newBuyers, updatedAt: new Date().toISOString(), replaces: tipId }
-        delete plain._decrypted
-        delete plain._undecryptable
-        delete plain.encryptedPayload
-        updated = encryptForShop({ ...plain, tribeId: shopRoot }, shopRoot)
-      } else {
-        const key = tribeCrypto ? tribeCrypto.getKey(rootId) : null
-        const newBuyers = decryptBuyers(c.buyers, key).concat(userId)
-        updated = {
-          ...c,
-          stock: stock - 1,
-          buyers: key ? tribeCrypto.encryptWithKey(JSON.stringify(newBuyers), key) : newBuyers,
-          updatedAt: new Date().toISOString(),
-          replaces: tipId
-        }
-      }
-
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => e ? rej(e) : res()))
-      return new Promise((res, rej) => ssbClient.publish(updated, (e, m) => e ? rej(e) : res(m)))
+      const content = { type: "shopPurchase", target: rootId, createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => e ? rej(e) : res(m)))
     },
 
     async createPurchaseOrder(productId, deliveryDetails = {}) {
@@ -609,13 +620,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
 
-      let tip = productId
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
-      if (idx.tomb.has(tip)) throw new Error("Product not found")
-      const tipId = tip
-
-      let rootId = tipId
-      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
+      const tipId = idx.strictTipOf(productId)
+      if (idx.tomb.has(tipId)) throw new Error("Product not found")
+      const rootId = idx.rootOf(tipId)
 
       const node = idx.nodes.get(tipId)
       if (!node) throw new Error("Product not found")
@@ -744,13 +751,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
 
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
-      if (idx.tomb.has(tip)) throw new Error("Not found")
-      const tipId = tip
-
-      let rootId = tipId
-      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
+      const tipId = idx.strictTipOf(id)
+      if (idx.tomb.has(tipId)) throw new Error("Not found")
+      const rootId = idx.rootOf(tipId)
 
       const node = idx.nodes.get(tipId)
       if (!node) throw new Error("Not found")
@@ -760,31 +763,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const c = encrypted ? decryptShopContent(raw, keyRoot) : raw
       if (c._undecryptable) throw new Error("Cannot decrypt item")
 
-      const voters = safeArr(c.opinions_inhabitants)
+      const voters = idx.aggregateFor(rootId, c).opinions_inhabitants
       if (voters.includes(userId)) throw new Error("Already voted")
       const myOrders = await this.listMyPurchases()
       const received = myOrders.some(o => o.productId === rootId && String(o.status || "").toUpperCase() === "RECEIVED")
       if (!received) throw new Error("You can rate only after confirming you received the item")
 
-      const plain = {
-        ...c,
-        opinions: { ...(c.opinions || {}), [category]: ((c.opinions || {})[category] || 0) + 1 },
-        opinions_inhabitants: voters.concat(userId),
-        updatedAt: new Date().toISOString(),
-        replaces: tipId
-      }
-      delete plain._decrypted
-      delete plain._undecryptable
-      delete plain.encryptedPayload
-
-      let updated
-      try {
-        updated = encrypted ? encryptForShop(raw.type === "shop" ? plain : { ...plain, tribeId: keyRoot }, keyRoot) : plain
-      } catch (e) { throw e }
-
-      const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
-      await new Promise((res, rej) => ssbClient.publish(tombstone, (e) => e ? rej(e) : res()))
-      return new Promise((res, rej) => ssbClient.publish(updated, (e, m) => e ? rej(e) : res(m)))
+      const content = { type: "shopOpinion", target: rootId, category, createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => e ? rej(e) : res(m)))
     },
 
     async generateInvite(shopId) {
@@ -807,14 +793,85 @@ module.exports = ({ cooler, tribeCrypto }) => {
       return { code, shopId: rootId }
     },
 
+    async getOpenInvite(shopId) {
+      const ssbClient = await openSsb()
+      const rootId = await this.resolveRootId(shopId).catch(() => shopId)
+      const messages = await readAll(ssbClient)
+      const markerTomb = new Set()
+      const invTomb = new Set()
+      for (const m of messages) {
+        const c = m.value && m.value.content
+        if (!c) continue
+        if (c.type === "shop-open-invite-tombstone" && typeof c.target === "string") markerTomb.add(c.target)
+        if (c.type === "shop-invite-tombstone" && typeof c.target === "string") invTomb.add(c.target)
+      }
+      let best = null
+      for (const m of messages) {
+        const c = m.value && m.value.content
+        if (!c || c.type !== "shop-open-invite" || c.v !== 1) continue
+        if (c.target !== rootId || typeof c.code !== "string") continue
+        if (markerTomb.has(m.key)) continue
+        if (c.inviteKey && invTomb.has(c.inviteKey)) continue
+        const ts = (m.value && m.value.timestamp) || 0
+        if (!best || ts > best.ts) best = { code: c.code, by: c.by || m.value.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts }
+      }
+      return best ? { code: best.code, by: best.by, markerKey: best.markerKey, inviteKey: best.inviteKey } : null
+    },
+
+    async generateOpenInvite(shopId) {
+      if (!tribeCrypto) throw new Error("Shop crypto unavailable")
+      const rootId = await this.resolveRootId(shopId)
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const raw = await new Promise((res, rej) => ssbClient.get(rootId, (e, m) => e ? rej(e) : res(m && m.content)))
+      if (!raw) throw new Error("Shop not found")
+      if (!isEncrypted(raw)) throw new Error("Only private shops use invitation codes")
+      if (raw.author !== userId) throw new Error("Only the author can generate invites")
+      if (await this.getOpenInvite(shopId)) throw new Error("An open invitation already exists")
+      const keys = keysForRoot(rootId)
+      if (!keys.length) throw new Error("Missing shop key")
+      const code = require("crypto").randomBytes(16).toString("hex")
+      const salt = tribeCrypto.generateInviteSalt()
+      const ek = tribeCrypto.encryptForInvite(keys[0], code, salt)
+      const invitePub = await new Promise((resolve, reject) =>
+        ssbClient.publish({ type: "shop-invite", target: rootId, ek, salt, codeHash: tribeCrypto.hashInviteCode(code, salt), multi: 1 }, (e, r) => e ? reject(e) : resolve(r))
+      )
+      await new Promise((resolve, reject) =>
+        ssbClient.publish({ type: "shop-open-invite", v: 1, target: rootId, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() }, (e) => e ? reject(e) : resolve())
+      )
+      return { code, shopId: rootId }
+    },
+
+    async removeOpenInvite(shopId) {
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const rec = await this.getOpenInvite(shopId)
+      if (!rec) return
+      let author = null
+      try {
+        const rootId = await this.resolveRootId(shopId)
+        const raw = await new Promise((res, rej) => ssbClient.get(rootId, (e, m) => e ? rej(e) : res(m && m.content)))
+        author = raw && raw.author
+      } catch (_) {}
+      if (rec.by !== userId && author !== userId) throw new Error("Not allowed to remove this invitation")
+      await new Promise((resolve, reject) => ssbClient.publish({ type: "shop-open-invite-tombstone", target: rec.markerKey, ts: new Date().toISOString() }, (e) => e ? reject(e) : resolve()))
+      if (rec.inviteKey) await new Promise((resolve, reject) => ssbClient.publish({ type: "shop-invite-tombstone", target: rec.inviteKey, ts: new Date().toISOString() }, (e) => e ? reject(e) : resolve()))
+    },
+
     async joinByCode(code) {
       if (!tribeCrypto) throw new Error("Shop crypto unavailable")
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
+      const invTomb = new Set()
+      for (const m of messages) {
+        const c = m.value && m.value.content
+        if (c && c.type === "shop-invite-tombstone" && typeof c.target === "string") invTomb.add(c.target)
+      }
       let matched = null
       for (const m of messages) {
         const c = m.value && m.value.content
         if (!c || c.type !== "shop-invite") continue
+        if (invTomb.has(m.key)) continue
         try {
           if (tribeCrypto.hashInviteCode(code, c.salt) === c.codeHash) { matched = c; break }
         } catch (_) {}

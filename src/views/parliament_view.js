@@ -265,34 +265,38 @@ const CandidatureStats = (cands, govCard, leaderMeta, electionQuorum = 2) => {
       span({ class: 'card-label' }, winLbl + ': '),
       span({ class: 'card-value' }, hasQuorum ? idLink : span({ style: 'color:#ffcc00;font-weight:bold;' }, i18n.voteNoQuorum || 'NO QUORUM'))
     ),
-    div({ class: 'card-field card-field--spaced' },
-      span({ class: 'card-label' }, (i18n.parliamentGovMethod + ': ').toUpperCase()),
-      span({ class: 'card-value' }, methodLabel)
-    ),
-    div(
-      { class: 'table-wrap mt-2' },
-      applyEl(table, { class: 'parliament-gov-table' }, [
-        thead(tr(
-          th(i18n.parliamentThLeader),
-          th({ class: 'parliament-method-col' }, i18n.parliamentGovMethod),
-          th({ class: 'parliament-votes-col'  }, i18n.parliamentVotesReceived)
-        )),
-        tbody(tr(
-          td(
-            div({ class: 'parliament-avatar-cell' },
-              avatarHref
-                ? a({ href: avatarHref }, img({ src: avatarSrc, class: 'parliament-leader-avatar' }))
-                : img({ src: avatarSrc, class: 'parliament-leader-avatar' }),
-              idLink ? div({ class: 'parliament-avatar-name' }, idLink) : null
-            )
-          ),
-          td({ class: 'parliament-method-col' },
-            img({ src: methodImageSrc(methodKey), alt: methodLabel, class: 'parliament-method-img' })
-          ),
-          td({ class: 'parliament-votes-col'  }, span({ class: 'votes-value' }, votes))
-        ))
-      ])
-    )
+    hasQuorum
+      ? div({ class: 'card-field card-field--spaced' },
+          span({ class: 'card-label' }, (i18n.parliamentGovMethod + ': ').toUpperCase()),
+          span({ class: 'card-value' }, methodLabel)
+        )
+      : null,
+    hasQuorum
+      ? div(
+          { class: 'table-wrap mt-2' },
+          applyEl(table, { class: 'parliament-gov-table' }, [
+            thead(tr(
+              th(i18n.parliamentThLeader),
+              th({ class: 'parliament-method-col' }, i18n.parliamentGovMethod),
+              th({ class: 'parliament-votes-col'  }, i18n.parliamentVotesReceived)
+            )),
+            tbody(tr(
+              td(
+                div({ class: 'parliament-avatar-cell' },
+                  avatarHref
+                    ? a({ href: avatarHref }, img({ src: avatarSrc, class: 'parliament-leader-avatar' }))
+                    : img({ src: avatarSrc, class: 'parliament-leader-avatar' }),
+                  idLink ? div({ class: 'parliament-avatar-name' }, idLink) : null
+                )
+              ),
+              td({ class: 'parliament-method-col' },
+                img({ src: methodImageSrc(methodKey), alt: methodLabel, class: 'parliament-method-img' })
+              ),
+              td({ class: 'parliament-votes-col'  }, span({ class: 'votes-value' }, votes))
+            ))
+          ])
+        )
+      : null
   );
 };
 
@@ -640,17 +644,40 @@ const HistoricalGovsSummary = (rows = []) => {
   const byMethod = new Map();
   for (const g of rows) {
     const k = String(g.method || 'ANARCHY').toUpperCase();
-    byMethod.set(k, (byMethod.get(k) || 0) + 1);
+    if (!byMethod.has(k)) byMethod.set(k, { cycles: 0, proposed: 0, approved: 0, declined: 0, discarded: 0, revocated: 0 });
+    const rec = byMethod.get(k);
+    rec.cycles += 1;
+    rec.proposed += Number(g.proposed || 0);
+    rec.approved += Number(g.approved || 0);
+    rec.declined += Number(g.declined || 0);
+    rec.discarded += Number(g.discarded || 0);
+    rec.revocated += Number(g.revocated || 0);
   }
   const entries = Array.from(byMethod.entries()).sort((a,b) => String(a[0]).localeCompare(String(b[0])));
-  const lines = entries.map(([method, count]) =>
-    tr(td(method), td(String(count)))
+  const lines = entries.map(([method, rec]) =>
+    tr(
+      td(method),
+      td(String(rec.proposed)),
+      td(String(rec.approved)),
+      td(String(rec.declined)),
+      td(String(rec.discarded)),
+      td(String(rec.revocated)),
+      td(String(rec.cycles))
+    )
   );
   return div(
     { class: 'table-wrap' },
     h2(i18n.parliamentHistoricalGovernmentsTitle || 'Governments'),
     applyEl(table, { class: 'table table--centered' }, [
-      thead(tr(th(i18n.parliamentGovMethod), th(i18n.parliamentThCycles))),
+      thead(tr(
+        th(String(i18n.parliamentGovMethod).toUpperCase()),
+        th(i18n.parliamentPoliciesProposal),
+        th(i18n.parliamentPoliciesApproved),
+        th(i18n.parliamentPoliciesDeclined),
+        th(i18n.parliamentPoliciesDiscarded),
+        th(i18n.parliamentPoliciesRevocated),
+        th(i18n.parliamentThCycles)
+      )),
       applyEl(tbody, null, lines)
     ])
   );
@@ -739,30 +766,17 @@ const HistoricalList = (rows, metasByKey = {}) => {
   );
 };
 
-const countCandidaturesByActor = (cands = []) => {
-  const m = new Map();
-  for (const c of cands) {
-    const key = `${c.targetType}:${c.targetId}`;
-    m.set(key, (m.get(key) || 0) + 1);
-  }
-  return m;
-};
-
-const LeadersSummary = (leaders = [], candidatures = []) => {
-  const candCounts = countCandidaturesByActor(candidatures);
-  const totals = leaders.reduce((acc, l) => {
-    const key = `${l.powerType}:${l.powerId}`;
-    const candsFromMap = candCounts.get(key) || 0;
-    const presentedNorm = Math.max(Number(l.presented || 0), Number(l.inPower || 0), candsFromMap);
-    acc.presented += presentedNorm;
-    acc.inPower += Number(l.inPower || 0);
-    acc.proposed += Number(l.proposed || 0);
-    acc.approved += Number(l.approved || 0);
-    acc.declined += Number(l.declined || 0);
-    acc.discarded += Number(l.discarded || 0);
-    acc.revocated += Number(l.revocated || 0);
+const LeadersSummary = (leaders = [], candidatures = [], allGovCards = [], totalCandidatures = null) => {
+  const timesInPower = leaders.reduce((s, l) => s + Number(l.inPower || 0), 0);
+  const totals = (allGovCards || []).reduce((acc, g) => {
+    acc.proposed += Number(g.proposed || 0);
+    acc.approved += Number(g.approved || 0);
+    acc.declined += Number(g.declined || 0);
+    acc.discarded += Number(g.discarded || 0);
+    acc.revocated += Number(g.revocated || 0);
     return acc;
-  }, { presented:0, inPower:0, proposed:0, approved:0, declined:0, discarded:0, revocated:0 });
+  }, { proposed:0, approved:0, declined:0, discarded:0, revocated:0 });
+  const presented = totalCandidatures != null ? Number(totalCandidatures) : (candidatures || []).length;
   const efficiencyPct = totals.proposed > 0 ? Math.round((totals.approved / totals.proposed) * 100) : 0;
   return div(
     { class: 'table-wrap' },
@@ -780,8 +794,8 @@ const LeadersSummary = (leaders = [], candidatures = []) => {
       )),
       tbody(
         tr(
-          td(String(totals.presented)),
-          td(String(totals.inPower)),
+          td(String(presented)),
+          td(String(timesInPower)),
           td(String(totals.proposed)),
           td(String(totals.approved)),
           td(String(totals.declined)),
@@ -943,6 +957,8 @@ const parliamentView = async (state) => {
 
   const gov = normalizeGovCard(governmentCard, inhabitantsTotal) || fallbackGov;
   const electionQuorum = Math.max(2, Math.ceil((Number(inhabitantsTotal) || 0) * 0.25));
+  const leadersGovCards = [...(historical || []), ...(governmentCard ? [governmentCard] : [])];
+  const leadersTotalCandidatures = governmentCard && governmentCard.presented != null ? governmentCard.presented : null;
 
   const LawsSectionWrap = () =>
     div(
@@ -960,7 +976,7 @@ const parliamentView = async (state) => {
       filter === 'laws' ? LawsSectionWrap() : null,
       filter === 'revocations' ? RevocationsSection(gov, laws, revocations, futureRevocations) : null,
       filter === 'historical' ? div(HistoricalGovsSummary(historical || []), HistoricalList(historical || [], historicalMetas)) : null,
-      filter === 'leaders' ? div(LeadersSummary(leaders || [], candidatures || []), LeadersList(leaders || [], leadersMetas, candidatures || [])) : null,
+      filter === 'leaders' ? div(LeadersSummary(leaders || [], candidatures || [], leadersGovCards, leadersTotalCandidatures), LeadersList(leaders || [], leadersMetas, candidatures || [])) : null,
       filter === 'rules' ? RulesContent() : null
     )
   );

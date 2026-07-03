@@ -68,6 +68,30 @@ describe('forum: crypto', (t) => {
     ok(threw);
   });
 
+  t('open invitation is multi-use, single, and removable', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('forum').createForum('GENERAL', 'Club', 'private', true);
+    const { code } = await A.use('forum').generateOpenInvite(r.key);
+    eq(typeof code, 'string');
+    eq((await A.use('forum').getOpenInvite(r.key)).code, code);
+    let dup = false;
+    try { await A.use('forum').generateOpenInvite(r.key); } catch (_) { dup = true; }
+    ok(dup, 'a second open invitation is rejected');
+    B.setActor();
+    eq((await B.use('forum').joinByInvite(code)).ok, true);
+    C.setActor();
+    eq((await C.use('forum').joinByInvite(code)).ok, true);
+    A.setActor();
+    await A.use('forum').removeOpenInvite(r.key);
+    eq(await A.use('forum').getOpenInvite(r.key), null);
+    const D = makePeer(net); D.setActor();
+    let threw = false;
+    try { await D.use('forum').joinByInvite(code); } catch (_) { threw = true; }
+    ok(threw, 'removed open invite no longer works');
+  });
+
   t('private forum reply encrypts content with the same key', async () => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();
