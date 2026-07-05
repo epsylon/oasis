@@ -2,7 +2,7 @@ const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('../backend/dedupe');
+const { dedupeBy, mergeDuplicatesBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
@@ -322,8 +322,35 @@ module.exports = ({ cooler }) => {
 
     let feeds = dedupeBy(tips.map(materialize), m => {
       const c = (m && m.value && m.value.content) || {};
-      const author = c.author || (m && m.value && m.value.author);
+      const author = (m && m.value && m.value.author) || c.author;
       return c.text ? [norm(author), norm(c.text)].join('|') : null;
+    });
+
+    const tsOf = (m) => m?.value?.timestamp || Date.parse(m?.value?.content?.createdAt || "") || 0;
+    const isOwn = (m) => m?.value?.author === userId;
+    feeds = mergeDuplicatesBy(feeds, m => norm(m?.value?.content?.text) || null, (a, b) => {
+      let keep;
+      if (isOwn(a) !== isOwn(b)) keep = isOwn(a) ? a : b;
+      else keep = tsOf(a) <= tsOf(b) ? a : b;
+      const drop = keep === a ? b : a;
+      const kc = keep.value.content || {};
+      const dc = drop.value.content || {};
+      const voters = new Set([...(kc.opinions_inhabitants || []), ...(dc.opinions_inhabitants || [])]);
+      const ops = { ...(kc.opinions || {}) };
+      for (const [cat, n] of Object.entries(dc.opinions || {})) ops[cat] = (Number(ops[cat]) || 0) + (Number(n) || 0);
+      const refeeders = new Set([...(kc.refeeds_inhabitants || []), ...(dc.refeeds_inhabitants || [])]);
+      keep.value = {
+        ...keep.value,
+        content: {
+          ...kc,
+          opinions: ops,
+          opinions_inhabitants: Array.from(voters),
+          refeeds_inhabitants: Array.from(refeeders),
+          refeeds: refeeders.size,
+          commentCount: (Number(kc.commentCount) || 0) + (Number(dc.commentCount) || 0)
+        }
+      };
+      return keep;
     });
 
     if (q) {
@@ -339,7 +366,7 @@ module.exports = ({ cooler }) => {
     const totalVotes = (m) => Object.values(m?.value?.content?.opinions || {}).reduce((s, x) => s + (Number(x) || 0), 0);
 
     if (filter === "MINE") {
-      feeds = feeds.filter((m) => (m.value?.content?.author || m.value?.author) === userId);
+      feeds = feeds.filter((m) => (m.value?.author || m.value?.content?.author) === userId);
     } else if (filter === "TODAY") {
       feeds = feeds.filter((m) => now - getTs(m) < 86400000);
     }

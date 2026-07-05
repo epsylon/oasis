@@ -16,7 +16,7 @@ const {
   option
 } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
@@ -179,69 +179,72 @@ const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) 
         const title = safeText(audioObj.title);
         const ownerActions = renderAudioOwnerActions(filter, audioObj, params);
 
+        const isOwn = audioObj.author && String(audioObj.author) === String(userId);
         return div(
-          { class: "tags-header audio-card" },
+          { class: "trending-card audio-card" + (isOwn ? " own-content" : "") },
           div(
-            { class: "bookmark-topbar" },
+            { class: "card-header activity-card-header" },
+            span(),
+            renderContentActions(audioObj.key, `/audios/${encodeURIComponent(audioObj.key)}`)
+          ),
+          div(
+            { class: "card-section audio-card-body" },
             div(
-              { class: "bookmark-topbar-left" },
+              { class: "bookmark-topbar" },
+              div(
+                { class: "bookmark-topbar-left" },
+                renderAudioFavoriteToggle(audioObj, returnTo),
+                audioObj.author && String(audioObj.author) !== String(userId)
+                  ? form(
+                      { method: "GET", action: "/pm" },
+                      input({ type: "hidden", name: "recipients", value: audioObj.author }),
+                      button({ type: "submit", class: "filter-btn" }, i18n.audioMessageAuthorButton)
+                    )
+                  : null
+              ),
+              ownerActions.length
+                ? div({ class: "bookmark-topbar-right" }, div({ class: "bookmark-actions" }, ...ownerActions))
+                : null
+            ),
+            title ? h2(title) : null,
+            audioObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(audioObj.lifetime, i18n)) : null,
+            renderAudioPlayer(audioObj),
+            div(
+              { class: "card-comments-summary" },
+              span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
+              span({ class: "card-value" }, String(commentCount)),
+              br(),
+              br(),
               form(
                 { method: "GET", action: `/audios/${encodeURIComponent(audioObj.key)}` },
                 input({ type: "hidden", name: "returnTo", value: returnTo }),
                 input({ type: "hidden", name: "filter", value: filter || "all" }),
                 params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
                 params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-                button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-              ),
-              renderAudioFavoriteToggle(audioObj, returnTo),
-              audioObj.author && String(audioObj.author) !== String(userId)
-                ? form(
-                    { method: "GET", action: "/pm" },
-                    input({ type: "hidden", name: "recipients", value: audioObj.author }),
-                    button({ type: "submit", class: "filter-btn" }, i18n.audioMessageAuthorButton)
-                  )
-                : null
+                button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
+              )
             ),
-            ownerActions.length ? div({ class: "bookmark-actions" }, ...ownerActions) : null
-          ),
-          title ? h2(title) : null,
-          audioObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(audioObj.lifetime, i18n)) : null,
-          renderAudioPlayer(audioObj),
-          div(
-            { class: "card-comments-summary" },
-            span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-            span({ class: "card-value" }, String(commentCount)),
+            div({ class: "card-spread-left" }, renderSpreadButton(audioObj.key, (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads)),
+            renderMapLocationVisitLabel(audioObj.mapUrl),
             br(),
-            br(),
-            form(
-              { method: "GET", action: `/audios/${encodeURIComponent(audioObj.key)}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              input({ type: "hidden", name: "filter", value: filter || "all" }),
-              params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-              params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-              button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-            )
-          ),
-          div({ class: "card-spread-left" }, renderSpreadButton(audioObj.key, (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads)),
-          renderMapLocationVisitLabel(audioObj.mapUrl),
-          br(),
-          (() => {
-            const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;
-            const updatedTs = audioObj.updatedAt ? new Date(audioObj.updatedAt).getTime() : NaN;
-            const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+            (() => {
+              const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;
+              const updatedTs = audioObj.updatedAt ? new Date(audioObj.updatedAt).getTime() : NaN;
+              const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
-            return p(
-              { class: "card-footer" },
-              span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              userLink(audioObj.author),
-              showUpdated
-                ? span(
-                    { class: "votations-comment-date" },
-                    ` | ${i18n.audioUpdatedAt}: ${moment(audioObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
-                  )
-                : null
-            );
-          })()
+              return p(
+                { class: "card-footer" },
+                span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+                userLink(audioObj.author),
+                showUpdated
+                  ? span(
+                      { class: "votations-comment-date" },
+                      ` | ${i18n.audioUpdatedAt}: ${moment(audioObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+                    )
+                  : null
+              );
+            })()
+          )
         );
       })
     : p(params.q ? i18n.audioNoMatch : i18n.noAudios);

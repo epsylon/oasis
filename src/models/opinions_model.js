@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const categories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { buildVoteTally } = require('../backend/vote_tally');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler }) => {
@@ -102,6 +103,16 @@ module.exports = ({ cooler }) => {
       }
     }
 
+    for (const [oldId, newId] of Array.from(replaces.entries())) {
+      const oldM = byId.get(oldId);
+      const newM = byId.get(newId);
+      if (!oldM) { replaces.delete(oldId); continue; }
+      if (!newM || String(newM.value.author) !== String(oldM.value.author)) {
+        replaces.delete(oldId);
+        byId.delete(newId);
+      }
+    }
+
     for (const replacedId of replaces.keys()) {
       byId.delete(replacedId);
     }
@@ -187,9 +198,27 @@ module.exports = ({ cooler }) => {
       }
     };
 
+    const voteTally = buildVoteTally(messages);
+    const votesPrev = new Map();
+    for (const m of messages) {
+      const c = m.value?.content;
+      if (c && c.type === 'votes' && typeof c.replaces === 'string') votesPrev.set(m.key, c.replaces);
+    }
+    const resolveTallyKey = (k) => {
+      let cur = k;
+      let g = 0;
+      while (g++ < 1000 && !voteTally.has(cur) && votesPrev.has(cur)) cur = votesPrev.get(cur);
+      return cur;
+    };
+    filtered = filtered.map(m => {
+      if (m.value?.content?.type !== 'votes') return m;
+      const t = voteTally.get(resolveTallyKey(m.key));
+      return t ? { ...m, value: { ...m.value, content: { ...m.value.content, ...t } } } : m;
+    });
+
     const bySig = new Map();
     for (const m of filtered) {
-      const sig = signatureOf(m);
+      const sig = `${m.value?.author || ''}::${signatureOf(m)}`;
       const prev = bySig.get(sig);
       if (!prev || (m.value?.timestamp || 0) > (prev.value?.timestamp || 0)) {
         bySig.set(sig, m);

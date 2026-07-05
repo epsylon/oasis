@@ -541,15 +541,15 @@ h3 { font-size: 1em !important; }
 .filters .ui-toolbar {
   display: flex !important;
   flex-direction: row !important;
-  flex-wrap: nowrap !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
   width: 100% !important;
+  max-width: 100% !important;
   gap: 6px !important;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  padding-bottom: 6px !important;
-  scroll-snap-type: x proximity !important;
-  -webkit-overflow-scrolling: touch !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
   grid-template-columns: none !important;
+  box-sizing: border-box !important;
 }
 
 .mode-buttons .column,
@@ -557,10 +557,11 @@ h3 { font-size: 1em !important; }
 .activity-filter-col {
   display: flex !important;
   flex-direction: row !important;
-  flex-wrap: nowrap !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
   width: auto !important;
   gap: 6px !important;
-  flex: 0 0 auto !important;
+  flex: 1 1 auto !important;
 }
 
 .mode-buttons form,
@@ -758,3 +759,234 @@ h3 { font-size: 1em !important; }
 .graphos-legend {
   color: #ddd !important;
 }
+
+.oasis-nav-side-toggle {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.header {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 8px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.header .top-bar-left,
+.header .top-bar-right,
+.header .top-bar-mid,
+.header .top-bar-center {
+  display: contents !important;
+}
+
+.header .top-bar-left a.logo-icon {
+  order: 1 !important;
+  flex: 1 1 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  margin: 0 0 4px 0 !important;
+}
+
+.oasis-mobile-menus {
+  order: 2 !important;
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.oasis-menu-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  min-height: 42px !important;
+  padding: 6px 12px !important;
+  border: 1px solid #FFD700 !important;
+  border-radius: 8px !important;
+  background: #161616 !important;
+  color: #FFD700 !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+.oasis-menu-btn .oasis-menu-ico { font-size: 1.05rem !important; }
+
+.header .top-bar-left nav {
+  order: 3 !important;
+  flex: 1 1 100% !important;
+  width: 100% !important;
+}
+.header .top-bar-right nav {
+  order: 4 !important;
+  flex: 1 1 100% !important;
+  width: 100% !important;
+}
+.header .top-bar-left nav ul,
+.header .top-bar-right nav ul,
+.header .top-bar-mid nav ul {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 6px !important;
+  overflow: visible !important;
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.header .top-bar-left nav ul li,
+.header .top-bar-right nav ul li,
+.header .top-bar-mid nav ul li {
+  width: 100% !important;
+  margin: 0 !important;
+}
+.header .top-bar-left nav ul li,
+.header .top-bar-right nav ul li { margin: 0 !important; }
+.header .top-bar-left nav ul li a,
+.header .top-bar-right nav ul li a {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  width: 100% !important;
+  min-height: 42px !important;
+  box-sizing: border-box !important;
+  padding: 6px 8px !important;
+  font-size: 0.85rem !important;
+  white-space: nowrap !important;
+  border: 1px solid #FFD700 !important;
+  border-radius: 8px !important;
+  background: #161616 !important;
+  color: #FFD700 !important;
+  text-decoration: none !important;
+  font-weight: 600 !important;
+}
+.header a,
+.header a:link,
+.header a:visited {
+  text-decoration: none !important;
+}
+.header .top-bar-left nav ul li a .inbox-badge {
+  color: #fff !important;
+}
+
+.main-content {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+.main-content .main-column { order: 0 !important; }
+.main-content .sidebar-left,
+.main-content .sidebar-right {
+  display: none !important;
+}
+#nav-left-toggle:checked ~ .main-content .sidebar-left,
+#nav-right-toggle:checked ~ .main-content .sidebar-right {
+  display: block !important;
+  order: -1 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  background: #0d0d0d !important;
+  border: 1px solid #FFD700 !important;
+  border-radius: 10px !important;
+  padding: 8px !important;
+  margin: 0 0 8px 0 !important;
+}
+.sidebar-left nav ul,
+.sidebar-right nav ul {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.activity-filter-grid,
+.activity-filters,
+.activity-sub-filter,
+.filters .ui-toolbar {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  gap: 6px !important;
+  overflow-x: hidden !important;
+  grid-template-columns: none !important;
+  scroll-snap-type: none !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.activity-filter-col {
+  display: flex !important;
+  flex: 1 1 100% !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.activity-filter-grid form,
+.activity-filter-col form,
+.activity-sub-filter form {
+  flex: 0 1 auto !important;
+  scroll-snap-align: none !important;
+  width: auto !important;
+}
+.activity-filter-grid .filter-btn,
+.activity-filter-col .filter-btn {
+  width: auto !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+}
+
+.oasis-footer,
+.oasis-footer-center {
+  overflow-x: hidden !important;
+  max-width: 100% !important;
+}
+.oasis-footer-center span,
+.oasis-footer-center a {
+  overflow-wrap: anywhere !important;
+  word-break: break-all !important;
+  max-width: 100% !important;
+}
+
+a:not([class]),
+a.mention,
+a.hashtag {
+  color: #FFD700 !important;
+  text-decoration: underline !important;
+}
+
+.module-locked { opacity: 0.45 !important; }
+.module-locked .input-checkbox { cursor: not-allowed !important; }
+
+.game-row {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+.game-row-media,
+.game-row-media img {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+.game-row-body { width: 100% !important; min-width: 0 !important; }
+.game-row-actions { justify-content: center !important; width: 100% !important; }
+.games-grid { grid-template-columns: 1fr !important; }

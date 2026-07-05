@@ -28,7 +28,7 @@ module.exports = ({ cooler }) => {
   return {
     type: 'post',
 
-    async sendMessage(recipients = [], subject = '', text = '') {
+    async sendMessage(recipients = [], subject = '', text = '', crypter = false) {
       const ssbClient = await openSsb();
       const recps = uniqueRecps([userId, ...recipients]);
       const content = {
@@ -38,7 +38,8 @@ module.exports = ({ cooler }) => {
         subject,
         text,
         sentAt: new Date().toISOString(),
-        private: true
+        private: true,
+        ...(crypter ? { crypter: true } : {})
       };
       const publishAsync = util.promisify(ssbClient.private.publish);
       return publishAsync(content, recps);

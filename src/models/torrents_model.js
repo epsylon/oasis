@@ -152,7 +152,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       tags: safeArr(c.tags),
-      author: c.author,
+      author: node.author,
       title: undec ? "" : (c.title || ""),
       description: undec ? "" : (c.description || ""),
       size: c.size || 0,
@@ -356,7 +356,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         c = dec && !dec._undecryptable ? { ...dec, _decrypted: true } : { ...c, _decrypted: false };
       }
       if (!c || c.type !== "torrent") throw new Error("Torrent not found");
-      return buildTorrent({ key: tip, ts: msg.timestamp || 0, c }, root, viewer);
+      return buildTorrent({ key: tip, ts: msg.timestamp || 0, c, author: msg.author }, root, viewer, agg);
     },
 
     async createOpinion(id, category) {

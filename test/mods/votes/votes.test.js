@@ -12,12 +12,14 @@ describe('votes: create + cast + list', (t) => {
     ok(vote);
   });
 
-  t('A casts vote on own proposal', async () => {
+  t('A cannot vote on own proposal', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('votes').createVote('Q?', '2026-12-31', ['YES', 'NO']);
-    await A.use('votes').voteOnVote(r.key, 'YES');
+    let rejected = false;
+    try { await A.use('votes').voteOnVote(r.key, 'YES'); } catch (e) { rejected = true; }
+    ok(rejected, 'creator self-vote is rejected');
     const v = await A.use('votes').getVoteById(r.key);
-    ok(v.totalVotes >= 1);
+    ok(Number(v.totalVotes) === 0, 'no votes counted');
   });
 
   t('A casts opinion on vote', async () => {

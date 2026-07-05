@@ -60,3 +60,34 @@ describe('pads: open (multi-use) invitation', (t) => {
     ok(threw, 'removed open invite no longer works');
   });
 });
+
+describe('pads: encrypted visibility + duplicate collapse', (t) => {
+  t('non-member never sees a blank encrypted pad', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('pads').createPad('Private Pad', 'INVITE-ONLY', '2026-12-31', [], null);
+    B.setActor();
+    const list = await B.use('pads').listAll({ filter: 'all', viewerId: B.keypair.id });
+    ok(!list.some(p => p.undecryptable), 'no blank/undecryptable pad card shown to a non-member');
+    ok(!list.some(p => p.title === 'Private Pad'), 'private pad not shown to a non-member');
+  });
+
+  t('duplicate pad roots are collapsed: original + freshest members', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('pads').createPad('Board', 'OPEN', '2026-12-31', ['t'], null);
+    const before = (await A.use('pads').listAll({ filter: 'all', viewerId: A.keypair.id })).find(p => p.title === 'Board');
+    ok(before, 'original pad exists');
+    const ssbA = await A.cooler.open();
+    await new Promise((res, rej) => ssbA.publish({
+      type: 'pad', title: 'Board', status: 'OPEN', deadline: '2026-12-31', tags: ['t'], encrypted: false,
+      author: A.keypair.id, members: [A.keypair.id, B.keypair.id], invites: [],
+      createdAt: before.createdAt, updatedAt: new Date(Date.now() + 5000).toISOString()
+    }, e => e ? rej(e) : res()));
+    const list = await A.use('pads').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const boards = list.filter(p => p.title === 'Board');
+    eq(boards.length, 1, 'the duplicate pad root is collapsed into a single card');
+    eq(boards[0].key, before.key, 'canonical card keeps the original (first-created) key');
+    eq((boards[0].members || []).length, 2, 'members taken from the freshest duplicate');
+  });
+});

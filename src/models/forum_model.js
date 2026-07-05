@@ -453,12 +453,27 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const base = rawBase.encryptedPayload ? decryptForumContent(rawBase, id) : rawBase;
       if (base && base._undecryptable) throw new Error('Forum is encrypted and cannot be decrypted with available keys');
       const { positives, negatives } = await aggregateVotes(ssbClient, id);
+      const replyAuthors = [];
+      for (const m of msgs) {
+        if (deleted.has(m.key)) continue;
+        const cRaw = m.value && m.value.content;
+        if (!cRaw) continue;
+        let rc = cRaw;
+        if (cRaw.encryptedPayload) {
+          const dec = decryptForumContent(cRaw, id);
+          if (!dec || dec._undecryptable) continue;
+          rc = dec;
+        }
+        if (rc.type === 'forum' && rc.root === id) replyAuthors.push(rc.author);
+      }
+      const participants = Array.from(new Set(replyAuthors.concat(base.author).filter(Boolean)));
       return {
         ...base,
         key: id,
         positiveVotes: positives,
         negativeVotes: negatives,
-        score: positives - negatives
+        score: positives - negatives,
+        participants
       };
     },
 

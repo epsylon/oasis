@@ -47,5 +47,6 @@ module.exports = {
       const decryptedText = decryptText(encrypted, password, iv, salt, authTag);
       return decryptedText;
   },
+  generateKey: (length = 32) => crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length),
   extractComponents
 };

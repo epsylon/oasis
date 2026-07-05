@@ -47,11 +47,19 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
               if (c.type === 'tombstone') continue;
               if (c.type !== targetType) continue;
               if (c.encryptedPayload) continue;
-              nodes.set(k, { key: k, ts: v.timestamp || 0, content: c });
-              if (c.replaces) { parent.set(k, c.replaces); child.set(c.replaces, k); }
+              nodes.set(k, { key: k, ts: v.timestamp || 0, author: v.author, content: c });
+              if (c.replaces) parent.set(k, c.replaces);
             }
 
-            const rootOf = (id) => { let cur = id; while (parent.has(cur)) cur = parent.get(cur); return cur; };
+            for (const [k, p] of Array.from(parent.entries())) {
+              const cn = nodes.get(k);
+              const pn = nodes.get(p);
+              if (!pn) { parent.delete(k); continue; }
+              if (!cn || String(cn.author) !== String(pn.author)) { parent.delete(k); nodes.delete(k); }
+            }
+            for (const [k, p] of parent.entries()) child.set(p, k);
+
+            const rootOf = (id) => { let cur = id; while (parent.has(cur) && nodes.has(parent.get(cur))) cur = parent.get(cur); return cur; };
 
             const groups = new Map();
             for (const id of nodes.keys()) {
@@ -90,6 +98,7 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
                 out.push({
                   ...c,
                   status,
+                  author: chosen.author,
                   id: chosen.key,
                   tipId: chosen.key,
                   createdAt: c.createdAt || chosen.ts
@@ -114,6 +123,7 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
 
                 out.push({
                   ...c,
+                  author: latest.author,
                   id: latest.key,
                   tipId: latest.key,
                   createdAt: c.createdAt || latest.ts
@@ -123,6 +133,7 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
 
               out.push({
                 ...tip.content,
+                author: tip.author,
                 id: tip.key,
                 tipId: tip.key,
                 createdAt: tip.content.createdAt || tip.ts

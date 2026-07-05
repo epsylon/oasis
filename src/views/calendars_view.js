@@ -326,7 +326,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
         : null,
       !isAuthor && isParticipant
         ? form({ method: "POST", action: `/calendars/leave/${encodeURIComponent(calendar.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeLeaveButton)
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeLeaveButton)
           )
         : null
     ),

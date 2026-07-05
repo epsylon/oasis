@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, img, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require('./main_views');
+const { template, i18n, userLink, renderContentActions } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
@@ -185,22 +185,21 @@ const renderAgendaItem = (item, userId, filter) => {
     }
   }
 
-  return div({ class: 'agenda-item trending-card' },
-    div({ class: 'card-chips-row' },
+  const isOwn = author && String(author) === String(userId);
+  return div({ class: 'trending-card agenda-card' + (isOwn ? ' own-content' : '') },
+    div({ class: 'card-header activity-card-header' },
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
         span({ class: 'pm-exposition-text' }, String(item.type || '').toUpperCase())
-      )
-    ),
-    div({ class: 'card-section' },
-      form({ method: "GET", action: getViewDetailsAction(item) },
-        button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
       ),
+      renderContentActions(item.id, getViewDetailsAction(item))
+    ),
+    div({ class: 'card-section agenda-card-body' },
       actionButton,
       br(),
       h2(item.title || item.name || item.concept || ''),
-      ...details
-    ),
-    ...commonFields
+      ...details,
+      ...commonFields
+    )
   );
 };
 

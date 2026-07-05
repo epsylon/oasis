@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { dedupeByPreferring, norm } = require('../backend/dedupe')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -381,7 +382,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         items.push(shop)
       }
 
-      let list = items
+      let list = dedupeByPreferring(items, (s) => (s.author && s.createdAt) ? norm(s.author) + "|" + norm(s.createdAt) : null, (s) => (Number(s.productCount) || 0) + voteSum(s.opinions))
       const now = Date.now()
 
       if (filter === "mine") list = list.filter(s => s.author === uid)

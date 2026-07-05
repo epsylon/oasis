@@ -89,6 +89,10 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       eventAuthor.set(m.key, m.value.author);
       if (c.replaces) eventReplaces.set(m.key, c.replaces);
     }
+    for (const [key, target] of Array.from(eventReplaces.entries())) {
+      if (!eventAuthor.has(target)) { eventReplaces.delete(key); continue; }
+      if (eventAuthor.get(target) !== eventAuthor.get(key)) { eventReplaces.delete(key); eventAuthor.delete(key); }
+    }
     const strictNext = new Map();
     for (const [key, target] of eventReplaces) {
       if (eventAuthor.get(target) === eventAuthor.get(key)) strictNext.set(target, key);
@@ -571,6 +575,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
             for (const r of results) {
               const rawC = r.value && r.value.content;
               if (!rawC || rawC.type !== 'event') continue;
+              if (!idx.eventAuthor.has(r.key)) continue;
               roots.add(idx.rootOf(r.key));
             }
 

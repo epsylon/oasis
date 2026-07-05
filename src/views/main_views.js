@@ -99,6 +99,19 @@ const renderLifespanChip = (lifetime, i18nObj) => {
   );
 };
 
+const renderContentActions = (msgId, viewHref) => {
+  const blockId = (typeof msgId === 'string' && msgId.startsWith('%')) ? msgId : null;
+  const chainBtn = blockId
+    ? a({ href: `/blockexplorer/block/${encodeURIComponent(blockId)}`, class: 'btn-singleview', title: i18n.blockchainViewBlockexplorer || 'View blockexplorer' }, '⦿')
+    : null;
+  const contentBtn = viewHref
+    ? a({ href: viewHref, class: 'btn-singleview btn-content', title: i18n.visitContent || 'Visit content' }, '↗')
+    : null;
+  if (!chainBtn && !contentBtn) return null;
+  return div({ class: 'content-actions' }, chainBtn, contentBtn);
+};
+exports.renderContentActions = renderContentActions;
+
 exports.renderStateChip = renderStateChip;
 exports.renderOpenClosedChip = renderOpenClosedChip;
 exports.renderVisibilityChip = renderVisibilityChip;
@@ -2890,7 +2903,7 @@ exports.mentionsView = ({ messages, myFeedId }) => {
   );
 };
 
-exports.privateView = async (messagesInput, filter) => {
+exports.privateView = async (messagesInput, filter, decrypted = null) => {
   const messagesRaw = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages
   const messages = (messagesRaw || []).filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true)
   const userId = await getUserId()
@@ -2918,7 +2931,16 @@ exports.privateView = async (messagesInput, filter) => {
 
   const chip = (txt) => span({ class: 'chip' }, txt)
 
-  function headerLine({ sentAt, from, toLinks, subject, msgKey, msgSize }) {
+  const e2eChip = () => span({ class: 'pm-exposition-chip pm-exposition-encrypted' },
+    span({ class: 'pm-exposition-icon' }, '🔒'),
+    span({ class: 'pm-exposition-text' }, i18n.encryptedChipLabel || 'E2E')
+  );
+  const doubleEncChip = () => span({ class: 'pm-exposition-chip pm-exposition-encrypted pm-double-enc-chip' },
+    span({ class: 'pm-exposition-icon' }, '🔒'),
+    span({ class: 'pm-exposition-text' }, i18n.pmCrypterChip || '2xE2E')
+  );
+
+  function headerLine({ sentAt, from, toLinks, subject, msgKey, msgSize, crypter }) {
     const ecoChip = msgSize ? renderEcoTax(msgSize, msgKey) : null;
     return table({ class: 'pm-info-table' },
       tr(
@@ -2942,7 +2964,11 @@ exports.privateView = async (messagesInput, filter) => {
             td({ class: 'card-label' }, i18n.ecoTaxLabel || 'ECO Tax'),
             td({ class: 'card-value' }, ecoChip)
           )
-        : null
+        : null,
+      tr(
+        td({ class: 'card-label' }, i18n.pmEncryptionLabel || 'Encryption'),
+        td({ class: 'card-value pm-encryption-cell' }, crypter ? [e2eChip(), doubleEncChip()] : [e2eChip()])
+      )
     )
   }
 
@@ -2962,7 +2988,7 @@ exports.privateView = async (messagesInput, filter) => {
         button({ type: 'submit', class: 'pm-btn reply-btn' }, i18n.pmReply.toUpperCase())
       ),
       form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
-        button({ type: 'submit', class: 'pm-btn delete-btn' }, i18n.privateDelete.toUpperCase())
+        button({ type: 'submit', class: 'pm-btn delete-btn danger-btn' }, i18n.privateDelete.toUpperCase())
       )
     )
   }
@@ -3249,6 +3275,29 @@ exports.privateView = async (messagesInput, filter) => {
             }
             if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
               return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key, msgSize })
+            }
+
+            if (content.crypter === true) {
+              const dec = (decrypted && decrypted.key === msg.key) ? decrypted : null
+              const shownText = dec && typeof dec.text === 'string' ? dec.text : ''
+              return div(
+                { class: 'pm-card normal-pm pm-crypter-card' },
+                headerLine({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, msgKey: msg.key, msgSize, crypter: true }),
+                dec && typeof dec.text === 'string'
+                  ? div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(dec.text)) })
+                  : dec && dec.error
+                    ? div({ class: 'pm-form-error-msg' }, p('✗ ' + i18n.pmCrypterBadKey))
+                    : null,
+                dec && typeof dec.text === 'string'
+                  ? null
+                  : form({ method: 'POST', action: '/inbox/decrypt', class: 'pm-crypter-decrypt-form' },
+                      input({ type: 'hidden', name: 'id', value: msg.key }),
+                      input({ type: 'hidden', name: 'returnFilter', value: filter || 'all' }),
+                      input({ type: 'text', name: 'key', placeholder: 'd66d7d32f4d30f34812aee3d01347154', minlength: 32, maxlength: 32, size: 34, required: true, class: 'pm-crypter-key-input' }),
+                      button({ type: 'submit', class: 'pm-btn pm-crypter-decrypt-btn' }, (i18n.pmCrypterDecryptButton || 'Decrypt').toUpperCase())
+                    ),
+                actions({ key: msg.key, replyId: fromResolved, subjectRaw, text: shownText })
+              )
             }
 
             return div(

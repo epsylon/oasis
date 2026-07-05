@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require('./main_views');
+const { template, i18n, userLink, renderContentActions } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { renderUrl } = require('../backend/renderUrl');
@@ -576,26 +576,27 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           }
 
           const contentId = msg.key;
-          const detailsButton = form({ method: "GET", action: getViewDetailsActionForSearch(content.type, contentId, content) },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          );
+          const isOwn = msg.value.author && String(msg.value.author) === String(userId);
 
-          return div({ class: 'result-item' }, [
-            div({ class: 'card-chips-row' },
-              span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                span({ class: 'pm-exposition-text' }, String(content.type || '').toUpperCase())
-              )
+          return div({ class: 'trending-card search-card' + (isOwn ? ' own-content' : '') }, [
+            div({ class: 'card-header activity-card-header' },
+              div({ class: 'card-chips-row' },
+                span({ class: 'pm-exposition-chip pm-exposition-whole' },
+                  span({ class: 'pm-exposition-text' }, String(content.type || '').toUpperCase())
+                )
+              ),
+              renderContentActions(contentId, getViewDetailsActionForSearch(content.type, contentId, content))
             ),
-            detailsButton,
-            br(),
-            contentHtml,
-            author
-              ? p({ class: 'card-footer' },
-               span({ class: 'date-link' }, `${created} ${i18n.performed} `),
-               (authorUrl && authorUrl !== '#' && authorUrl.startsWith('/author/'))
-                 ? userLink(decodeURIComponent(authorUrl.replace(/^\/author\//, '')))
-                 : a({ href: authorUrl, class: 'user-link' }, `${author}`)
-            ): null,
+            div({ class: 'card-section search-card-body' },
+              contentHtml,
+              author
+                ? p({ class: 'card-footer' },
+                 span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+                 (authorUrl && authorUrl !== '#' && authorUrl.startsWith('/author/'))
+                   ? userLink(decodeURIComponent(authorUrl.replace(/^\/author\//, '')))
+                   : a({ href: authorUrl, class: 'user-link' }, `${author}`)
+              ): null
+            )
           ]);
         })
       )

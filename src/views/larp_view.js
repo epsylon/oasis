@@ -78,12 +78,12 @@ const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cycl
       canLeaveToAcademia
         ? form({ method: 'POST', action: '/larp/join' },
             input({ type: 'hidden', name: 'house', value: 'academia' }),
-            button({ type: 'submit', class: 'filter-btn' }, i18n.larpLeaveToAcademia || 'Leave House')
+            button({ type: 'submit', class: 'filter-btn danger-btn' }, i18n.larpLeaveToAcademia || 'Leave House')
           )
         : null,
       canLeaveLarp
         ? form({ method: 'POST', action: '/larp/leave' },
-            button({ type: 'submit', class: 'filter-btn' }, i18n.larpLeaveToAcademia || 'Leave House')
+            button({ type: 'submit', class: 'filter-btn danger-btn' }, i18n.larpLeaveToAcademia || 'Leave House')
           )
         : null,
       canJoinAcademia

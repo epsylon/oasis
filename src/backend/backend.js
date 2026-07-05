@@ -359,6 +359,34 @@ const refreshInboxCount = async (messagesOpt) => {
   const filtered = messages.filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true);
   sharedState.setInboxCount(filtered.filter(isToUser).length);
 };
+
+const PM_CRYPTER_MAX = 4600;
+
+const buildInboxMessages = async () => {
+  let messages = sanitizeMessages(await pmModel.listAllPrivate());
+  const cfgNow = getConfig();
+  if (cfgNow.pmVisibility === 'mutuals') {
+    const viewer = getViewerId();
+    const mutualCache = new Map();
+    const isMutual = async (id) => {
+      if (id === viewer) return true;
+      if (mutualCache.has(id)) return mutualCache.get(id);
+      let rel;
+      try { rel = await friend.getRelationship(id); } catch (e) { rel = null; }
+      const m = !!(rel && rel.following && rel.followsMe);
+      mutualCache.set(id, m);
+      return m;
+    };
+    const filtered = [];
+    for (const msg of messages) {
+      const author = msg?.value?.author || msg?.author;
+      if (author === viewer) { filtered.push(msg); continue; }
+      if (await isMutual(author)) filtered.push(msg);
+    }
+    messages = filtered;
+  }
+  return messages;
+};
 const mediaFavorites = require("./media-favorites.js");
 const customStyleFile = path.join(envPaths("oasis", { suffix: "" }).config, "/custom-style.css");
 let haveCustomStyle = false;
@@ -2057,30 +2085,24 @@ router
   })
   .get('/inbox', async ctx => {
     if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }
-    let messages = sanitizeMessages(await pmModel.listAllPrivate());
-    const cfgNow = getConfig();
-    if (cfgNow.pmVisibility === 'mutuals') {
-      const viewer = getViewerId();
-      const mutualCache = new Map();
-      const isMutual = async (id) => {
-        if (id === viewer) return true;
-        if (mutualCache.has(id)) return mutualCache.get(id);
-        let rel;
-        try { rel = await friend.getRelationship(id); } catch (e) { rel = null; }
-        const m = !!(rel && rel.following && rel.followsMe);
-        mutualCache.set(id, m);
-        return m;
-      };
-      const filtered = [];
-      for (const msg of messages) {
-        const author = msg?.value?.author || msg?.author;
-        if (author === viewer) { filtered.push(msg); continue; }
-        if (await isMutual(author)) filtered.push(msg);
-      }
-      messages = filtered;
-    }
+    const messages = await buildInboxMessages();
     await refreshInboxCount(messages);
     ctx.body = await privateView({ messages }, ctx.query.filter || undefined);
+  })
+  .post('/inbox/decrypt', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }
+    const { id, key, returnFilter } = ctx.request.body;
+    const messages = await buildInboxMessages();
+    let decrypted = null;
+    const msg = messages.find(m => m && m.key === id);
+    if (msg && msg.value?.content?.crypter && typeof key === 'string' && key) {
+      try {
+        decrypted = { key: id, text: cipherModel.decryptData(msg.value.content.text, key) };
+      } catch (_) {
+        decrypted = { key: id, error: true };
+      }
+    }
+    ctx.body = await privateView({ messages }, returnFilter || 'all', decrypted);
   })
   .get('/tags', async ctx => {
     const filter = qf(ctx), tags = await tagsModel.listTags(filter);
@@ -2108,7 +2130,7 @@ router
     ctx.body = await singleReportView(withCount(report, comments), filter, comments, { spreads: await spreads.forMessage(report.id).catch(() => null) });
   })
   .get('/trending', async (ctx) => {
-    const filter = qf(ctx, 'RECENT');
+    const filter = qf(ctx, 'TOP');
     let { filtered = [] } = await trendingModel.listTrending(filter);
     filtered = await applyListFilters(filtered, ctx);
     const spreadMap = new Map();
@@ -3526,7 +3548,7 @@ router
     ctx.body = await mentionsView({ messages: combined, myFeedId });
   })
   .get('/opinions', async (ctx) => {
-    const filter = qf(ctx, 'RECENT');
+    const filter = qf(ctx, 'TOP');
     let opinions = await opinionsModel.listOpinions(filter);
     if (Array.isArray(opinions)) opinions = await applyListFilters(opinions, ctx);
     const spreadMap = new Map();
@@ -5202,7 +5224,7 @@ router
     ctx.redirect('/pixelia');
   })
   .post('/pm', koaBody(), async ctx => {
-    const { recipients, subject, text } = ctx.request.body;
+    const { recipients, subject, text, crypter, precomputed, crypterKey } = ctx.request.body;
     const recipientsArr = (recipients || '').split(',').map(s => s.trim()).filter(Boolean).filter(id => ssbRef.isFeedId(id));
     if (recipientsArr.length === 0) { ctx.throw(400, 'No valid recipients'); return; }
     const cfgNow = getConfig();
@@ -5216,12 +5238,51 @@ router
         if (!mutual) ctx.throw(403, 'You can only send private messages to habitants with mutual support.');
       }
     }
-    await pmModel.sendMessage(recipientsArr, stripDangerousTags(subject), stripDangerousTags(text));
+    const cleanSubject = stripDangerousTags(subject);
+    const cleanText = stripDangerousTags(text);
+    if (crypter) {
+      let key = (typeof crypterKey === 'string' && crypterKey.length >= 32) ? crypterKey : cipherModel.generateKey();
+      let encryptedText;
+      if (typeof precomputed === 'string' && precomputed) {
+        encryptedText = precomputed;
+      } else {
+        ({ encryptedText } = cipherModel.encryptData(cleanText, key));
+      }
+      if (encryptedText.length > PM_CRYPTER_MAX) {
+        ctx.body = await pmView(recipients, subject, text, false, '', true);
+        return;
+      }
+      try {
+        await pmModel.sendMessage(recipientsArr, cleanSubject, encryptedText, true);
+      } catch (_) {
+        ctx.body = await pmView(recipients, subject, text, false, '', true);
+        return;
+      }
+      await refreshInboxCount();
+      ctx.body = await pmView('', '', '', false, key);
+      return;
+    }
+    await pmModel.sendMessage(recipientsArr, cleanSubject, cleanText);
     await refreshInboxCount();
     ctx.redirect('/inbox?filter=sent');
   })
   .post('/pm/preview', koaBody(), async ctx => {
-    const { recipients = '', subject = '', text = '' } = ctx.request.body;
+    const { recipients = '', subject = '', text = '', crypter } = ctx.request.body;
+    const validRecipients = (recipients || '').split(',').map(s => s.trim()).filter(Boolean).filter(id => ssbRef.isFeedId(id));
+    if (validRecipients.length === 0) {
+      ctx.body = await pmView(recipients, subject, text, false, '', false, null, true);
+      return;
+    }
+    if (crypter) {
+      const key = cipherModel.generateKey();
+      const { encryptedText } = cipherModel.encryptData(stripDangerousTags(text), key);
+      if (encryptedText.length > PM_CRYPTER_MAX) {
+        ctx.body = await pmView(recipients, subject, text, false, '', true);
+        return;
+      }
+      ctx.body = await pmView(recipients, subject, text, true, '', false, { key, cipher: encryptedText });
+      return;
+    }
     ctx.body = await pmView(recipients, subject, text, true);
   })
   .post('/inbox/delete/:id', koaBody(), async ctx => {

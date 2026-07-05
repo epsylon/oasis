@@ -66,7 +66,7 @@ module.exports = ({ cooler }) => {
         )
       );
 
-      if (old.content.author !== userId) {
+      if (old.author !== userId) {
         throw new Error('Not the author');
       }
 
@@ -123,7 +123,7 @@ module.exports = ({ cooler }) => {
         )
       );
 
-      if (msg.content.author !== userId) {
+      if (msg.author !== userId) {
         throw new Error('Not the author');
       }
 
@@ -154,7 +154,7 @@ module.exports = ({ cooler }) => {
             const cvMsgs = msgs
               .filter(m =>
                 m.value?.content?.type === 'curriculum' &&
-                m.value.content.author === authorId &&
+                m.value.author === authorId &&
                 !tombstoned.has(m.key)
               )
               .sort((a, b) => b.value.timestamp - a.value.timestamp);

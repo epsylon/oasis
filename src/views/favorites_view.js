@@ -1,8 +1,11 @@
 const { form, button, div, h2, p, section, input, a, span, img } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink} = require("./main_views");
+const { template, i18n, userLink, renderContentActions } = require("./main_views");
 const moment = require("../server/node_modules/moment");
+const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
+
+const userId = config.keys.id;
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 const safeText = (v) => String(v || "").trim();
@@ -59,42 +62,45 @@ const renderFavoriteCard = (item, filter) => {
   const ts = item.updatedAt || item.createdAt;
   const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
 
+  const isOwn = item.author && String(item.author) === String(userId);
   return div(
-    { class: "tags-header bookmark-card" },
-    div({ class: 'card-chips-row' },
-      span({ class: 'pm-exposition-chip pm-exposition-whole' },
-        span({ class: 'pm-exposition-text' }, String(item.kind || '').toUpperCase())
-      )
+    { class: "trending-card favorites-card" + (isOwn ? " own-content" : "") },
+    div(
+      { class: "card-header activity-card-header" },
+      div({ class: 'card-chips-row' },
+        span({ class: 'pm-exposition-chip pm-exposition-whole' },
+          span({ class: 'pm-exposition-text' }, String(item.kind || '').toUpperCase())
+        )
+      ),
+      renderContentActions(item.favId, item.viewHref)
     ),
     div(
-      { class: "bookmark-topbar" },
+      { class: "card-section favorites-card-body" },
       div(
-        { class: "bookmark-topbar-left" },
-        form(
-          { method: "GET", action: item.viewHref },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        form(
-          {
-            method: "POST",
-            action: `/favorites/remove/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.favId)}`,
-            class: "bookmark-favorite-form"
-          },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ type: "submit", class: "filter-btn" }, i18n.favoritesRemoveButton)
+        { class: "bookmark-topbar" },
+        div(
+          { class: "bookmark-topbar-left" },
+          form(
+            {
+              method: "POST",
+              action: `/favorites/remove/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.favId)}`,
+              class: "bookmark-favorite-form"
+            },
+            input({ type: "hidden", name: "returnTo", value: returnTo }),
+            button({ type: "submit", class: "filter-btn" }, i18n.favoritesRemoveButton)
+          )
         )
+      ),
+      title ? h2(title) : null,
+      renderImagePreview(item),
+      renderBookmarkUrl(item),
+      safeText(item.description) ? p(...renderUrl(item.description)) : null,
+      renderTags(item.tags),
+      p(
+        { class: "card-footer" },
+        absDate ? span({ class: "date-link" }, `${absDate} ${i18n.performed} `) : "",
+        item.author ? userLink(item.author) : ""
       )
-    ),
-    title ? h2(title) : null,
-    renderImagePreview(item),
-    renderBookmarkUrl(item),
-    safeText(item.description) ? p(...renderUrl(item.description)) : null,
-    renderTags(item.tags),
-    p(
-      { class: "card-footer" },
-      absDate ? span({ class: "date-link" }, `${absDate} ${i18n.performed} `) : "",
-      item.author ? userLink(item.author) : ""
     )
   );
 };

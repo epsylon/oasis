@@ -71,6 +71,15 @@ module.exports = ({ cooler }) => {
       }
     }
 
+    for (const [k, t] of Array.from(parent.entries())) {
+      const orig = nodes.get(t);
+      const node = nodes.get(k);
+      if (orig && node && orig.author === node.author) continue;
+      parent.delete(k);
+      if (child.get(t) === k) child.delete(t);
+      if (orig) nodes.delete(k);
+    }
+
     for (const [k, node] of nodes) {
       const t = node.c.replaces;
       if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
@@ -128,7 +137,7 @@ module.exports = ({ cooler }) => {
       createdAt: c.createdAt,
       updatedAt: c.updatedAt || null,
       tags: safeArr(c.tags),
-      author: c.author,
+      author: node.author,
       title: c.title || "",
       description: c.description || "",
       opinions: agg ? agg.opinions : (c.opinions || {}),
@@ -333,7 +342,7 @@ module.exports = ({ cooler }) => {
         createdAt: c.createdAt,
         updatedAt: c.updatedAt || null,
         tags: c.tags || [],
-        author: c.author,
+        author: agg.contentNode.author,
         title: c.title || "",
         description: c.description || "",
         opinions: agg.opinions,

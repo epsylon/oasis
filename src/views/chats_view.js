@@ -325,7 +325,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
       !isAuthor && isMember
         ? form({ method: "POST", action: `/chats/leave/${encodeURIComponent(chat.key)}` },
             input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeLeaveButton)
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeLeaveButton)
           )
         : null
     ),

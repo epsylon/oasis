@@ -2,6 +2,8 @@ const pull = require("../server/node_modules/pull-stream")
 const crypto = require("crypto")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
+const { collabContent, openInviteOf } = require('../backend/collab_content')
+const chatCollab = collabContent({ membersField: 'members', undecField: 'undecryptable', contentFields: ['title', 'description', 'image', 'category', 'status'], listFields: ['tags', 'invites'] })
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -306,6 +308,18 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       ssbClient.publish(content, (e, res) => e ? reject(e) : resolve(res))
     })
 
+  const collectChats = (idx) => {
+    const out = []
+    for (const [rootId, tipId] of idx.tipByRoot.entries()) {
+      if (idx.tomb.has(tipId)) continue
+      const node = idx.nodes.get(tipId)
+      if (!node || node.c.type !== "chat") continue
+      const chat = buildChat(node, rootId, idx)
+      if (chat) out.push(chat)
+    }
+    return out
+  }
+
   return {
     type: "chat",
 
@@ -536,7 +550,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
 
       const chat = buildChat(node, root, idx)
       if (!chat) return null
-      return chat
+      return chatCollab.fold(chat, collectChats(idx))
     },
 
     async listAll({ filter = "all", q = "", sort = "recent", viewerId } = {}) {
@@ -546,19 +560,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const idx = buildIndex(messages)
       const now = Date.now()
 
-      const items = []
-      for (const [rootId, tipId] of idx.tipByRoot.entries()) {
-        if (idx.tomb.has(tipId)) continue
-        const node = idx.nodes.get(tipId)
-        if (!node || node.c.type !== "chat") continue
-        const chat = buildChat(node, rootId, idx)
-        if (!chat) continue
-        const isMember = chat.author === uid || safeArr(chat.members).includes(uid)
-        if (chat.undecryptable && !isMember && chat.status === "INVITE-ONLY") continue
-        items.push(chat)
-      }
-
-      let list = items
+      let list = chatCollab.visibleThenCollapsed(collectChats(idx), uid)
 
       if (filter === "mine") list = list.filter(c => c.author === uid)
       else if (filter === "recent") list = list.filter(c => new Date(c.createdAt).getTime() >= now - 86400000)
@@ -612,10 +614,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     },
 
     async getOpenInvite(chatId) {
-      const chat = await this.getChatById(chatId).catch(() => null)
-      if (!chat || !Array.isArray(chat.invites)) return null
-      const pub = chat.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code)
-      return pub ? { code: pub.code } : null
+      return openInviteOf(await this.getChatById(chatId).catch(() => null))
     },
 
     async generateOpenInvite(chatId) {

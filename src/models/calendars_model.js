@@ -2,6 +2,8 @@ const pull = require("../server/node_modules/pull-stream")
 const crypto = require("crypto")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
+const { collabContent, openInviteOf } = require('../backend/collab_content')
+const calCollab = collabContent({ membersField: 'participants', undecField: 'encrypted', contentFields: ['title', 'deadline', 'status'], listFields: ['tags', 'invites'] })
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 const INVITE_CODE_BYTES = 16
 
@@ -114,6 +116,21 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     return tribeCrypto.decryptContent(content, keys.map(k => [k]))
   }
 
+  const tryDecryptPublicInviteKey = (invites) => {
+    if (!tribeCrypto || !Array.isArray(invites)) return null
+    for (const inv of invites) {
+      if (!inv || typeof inv !== "object" || inv.public !== true) continue
+      if (typeof inv.code !== "string") continue
+      if (typeof inv.ek === "string") {
+        try { const k = tribeCrypto.decryptFromInvite(inv.ek, inv.code, inv.salt); if (k) return k } catch (_) {}
+      }
+      if (typeof inv.ekChain === "string") {
+        try { const chain = tribeCrypto.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt); if (Array.isArray(chain) && chain.length && chain[0].key) return chain[0].key } catch (_) {}
+      }
+    }
+    return null
+  }
+
   const decryptIndexNodes = async (idx) => {
     if (!tribeCrypto) return
     for (const [k, n] of idx.nodes.entries()) {
@@ -130,6 +147,12 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       if (!dec) {
         const r = decryptCalendarRoot(n.c, root)
         if (r && !r._undecryptable) dec = r
+      }
+      if (!dec) {
+        const pubKey = tryDecryptPublicInviteKey(n.c.invites)
+        if (pubKey) {
+          try { const r = tribeCrypto.decryptContent(n.c, [[pubKey]]); if (r && !r._undecryptable) dec = r } catch (_) {}
+        }
       }
       if (dec) {
         idx.nodes.set(k, { ...n, c: { ...dec, _decrypted: true } })
@@ -246,6 +269,25 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     if (calendar.status === "CLOSED") return true
     if (!calendar.deadline) return false
     return new Date(calendar.deadline).getTime() <= Date.now()
+  }
+
+  const collectCalendars = async () => {
+    const ssbClient = await openSsb()
+    const messages = await readAll(ssbClient)
+    const idx = buildIndex(messages)
+    await decryptIndexNodes(idx)
+    const items = []
+    for (const rootId of idx.contentTipByRoot.keys()) {
+      const contentTip = idx.contentTipByRoot.get(rootId) || rootId
+      if (idx.tomb.has(contentTip)) continue
+      const node = idx.nodes.get(contentTip)
+      if (!node || node.c.type !== "calendar") continue
+      const cal = buildCalendar(node, rootId, idx.resolveParticipants(rootId))
+      if (!cal) continue
+      cal.isClosed = isClosed(cal)
+      items.push(cal)
+    }
+    return items
   }
 
   return {
@@ -523,27 +565,13 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const cal = buildCalendar(node, root, idx.resolveParticipants(root))
       if (!cal) return null
       cal.isClosed = isClosed(cal)
-      return cal
+      return calCollab.fold(cal, await collectCalendars())
     },
 
     async listAll({ filter = "all", viewerId } = {}) {
       const ssbClient = await openSsb()
       const uid = viewerId || ssbClient.id
-      const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages)
-      await decryptIndexNodes(idx)
-      const items = []
-      for (const rootId of idx.contentTipByRoot.keys()) {
-        const contentTip = idx.contentTipByRoot.get(rootId) || rootId
-        if (idx.tomb.has(contentTip)) continue
-        const node = idx.nodes.get(contentTip)
-        if (!node || node.c.type !== "calendar") continue
-        const cal = buildCalendar(node, rootId, idx.resolveParticipants(rootId))
-        if (!cal) continue
-        cal.isClosed = isClosed(cal)
-        items.push(cal)
-      }
-      let list = items
+      let list = calCollab.visibleThenCollapsed(await collectCalendars(), uid)
       if (filter === "mine") list = list.filter(c => c.author === uid)
       else if (filter === "recent") {
         const now = Date.now()
@@ -919,10 +947,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     },
 
     async getOpenInvite(calendarId) {
-      const cal = await this.getCalendarById(calendarId).catch(() => null)
-      if (!cal || !Array.isArray(cal.invites)) return null
-      const pub = cal.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code)
-      return pub ? { code: pub.code } : null
+      return openInviteOf(await this.getCalendarById(calendarId).catch(() => null))
     },
 
     async generateOpenInvite(calendarId) {
@@ -969,7 +994,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     async joinByInvite(code) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
-      const calendars = await this.listAll()
+      const calendars = await collectCalendars()
       let matched = null
       let matchedInvite = null
       for (const cal of calendars) {

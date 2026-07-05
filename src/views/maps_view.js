@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, label, br, a, span, textar
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderLifespanChip, renderSpreadButton } = require("./main_views");
+const { template, i18n, userLink, renderLifespanChip, renderSpreadButton, renderContentActions } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapWithPins, renderZoomedMapWithPins, getViewportBounds, latLngToPx, pxToLatLng, MAP_W, MAP_H, getMaxTileZoom } = require("../maps/map_renderer");
@@ -354,37 +354,37 @@ const renderMapCard = (mapObj, filter, params = {}) => {
     renderLifespanChip(mapObj.lifetime, i18n)
   ].filter(Boolean);
 
-  return div({ class: "map-card" },
-    a({ href: `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}`, class: "map-card-thumb-link" },
-      { innerHTML: `<img src="${thumbSrc}" class="map-card-thumb" alt="map">` }),
-    div({ class: "map-card-body" },
-      div({ class: "shop-title-row" },
-        mapObj.title ? h2({ class: "tribe-card-title" }, a({ href: `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}` }, mapObj.title)) : null
-      ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      div({ class: "map-card-header" },
-        div({ class: "map-card-info" },
-          span({ class: "map-type-badge" }, mapObj.mapType),
-          span({ class: "map-coords" }, `📍 ${mapObj.lat.toFixed(4)}, ${mapObj.lng.toFixed(4)}`),
-          markerCount > 0 ? span({ class: "map-marker-count" }, `▾ ${markerCount}`) : null,
-          mapObj.key ? renderMapUrl(mapObj) : null),
-        div({ class: "map-card-actions" },
-          form({ method: "GET", action: `/maps/${encodeURIComponent(mapObj.key)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            input({ type: "hidden", name: "filter", value: filter || "all" }),
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
-          renderMapFavoriteToggle(mapObj, returnTo),
-          renderPMButton(mapObj.author),
-          ...ownerActions)),
-      safeText(mapObj.description) ? p({ class: "map-description" }, mapObj.description) : null,
-      (() => {
-        const btn = renderSpreadButton(mapObj.key, params.spreadMap && params.spreadMap.get(mapObj.key));
-        return btn ? div({ class: "card-spread-left" }, btn) : null;
-      })(),
-      p({ class: "card-footer" },
-        span({ class: "date-link" }, moment(mapObj.createdAt).fromNow()),
-        span(" · "),
-        userLink(mapObj.author))));
+  const isOwn = mapObj.author && String(mapObj.author) === String(userId);
+  return div({ class: "trending-card map-card" + (isOwn ? " own-content" : "") },
+    div({ class: "card-header activity-card-header" },
+      span({ class: "map-type-badge" }, mapObj.mapType),
+      renderContentActions(mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}`)),
+    div({ class: "card-section maps-card-body" },
+      a({ href: `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}`, class: "map-card-thumb-link" },
+        { innerHTML: `<img src="${thumbSrc}" class="map-card-thumb" alt="map">` }),
+      div({ class: "map-card-body" },
+        div({ class: "shop-title-row" },
+          mapObj.title ? h2({ class: "tribe-card-title" }, a({ href: `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}` }, mapObj.title)) : null
+        ),
+        chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+        div({ class: "map-card-header" },
+          div({ class: "map-card-info" },
+            span({ class: "map-coords" }, `📍 ${mapObj.lat.toFixed(4)}, ${mapObj.lng.toFixed(4)}`),
+            markerCount > 0 ? span({ class: "map-marker-count" }, `▾ ${markerCount}`) : null,
+            mapObj.key ? renderMapUrl(mapObj) : null),
+          div({ class: "map-card-actions" },
+            renderMapFavoriteToggle(mapObj, returnTo),
+            renderPMButton(mapObj.author),
+            ...ownerActions)),
+        safeText(mapObj.description) ? p({ class: "map-description" }, mapObj.description) : null,
+        (() => {
+          const btn = renderSpreadButton(mapObj.key, params.spreadMap && params.spreadMap.get(mapObj.key));
+          return btn ? div({ class: "card-spread-left" }, btn) : null;
+        })(),
+        p({ class: "card-footer" },
+          span({ class: "date-link" }, moment(mapObj.createdAt).fromNow()),
+          span(" · "),
+          userLink(mapObj.author)))));
 };
 
 const renderMapList = (maps, filter, params = {}) =>

@@ -68,3 +68,45 @@ describe('chats: open (multi-use) invitation', (t) => {
     ok(threw, 'removed open invite no longer works');
   });
 });
+
+describe('chats: encrypted visibility (no blank duplicate cards)', (t) => {
+  t('non-member does not see a private invite-only chat as a blank card', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('chats').createChat('Secret Room', 'd', null, 'GENERAL', 'INVITE-ONLY', [], null);
+    B.setActor();
+    const list = await B.use('chats').listAll({ filter: 'all', viewerId: B.keypair.id });
+    ok(!list.some(c => c.title === 'Secret Room'), 'non-member cannot see a private invite-only chat');
+    ok(!list.some(c => c.undecryptable), 'no blank/undecryptable chat card shown to a non-member');
+  });
+
+  t('non-member discovers an open-invite chat decrypted (not blank)', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('chats').createChat('Public Club', 'd', null, 'GENERAL', 'INVITE-ONLY', [], null);
+    await A.use('chats').generateOpenInvite(r.key);
+    B.setActor();
+    const list = await B.use('chats').listAll({ filter: 'all', viewerId: B.keypair.id });
+    const club = list.find(c => c.title === 'Public Club');
+    ok(club, 'open-invite chat is discoverable by a non-member');
+    ok(!club.undecryptable, 'and it is decrypted, not a blank card');
+  });
+
+  t('duplicate chat roots are collapsed: original content + freshest members', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('chats').createChat('Town Square', 'the original', null, 'GENERAL', 'OPEN', ['x'], null);
+    const orig = await A.use('chats').getChatById(r.key);
+    const ssbA = await A.cooler.open();
+    await new Promise((res, rej) => ssbA.publish({
+      type: 'chat', title: 'Town Square', description: 'the original', image: null, category: 'GENERAL',
+      status: 'OPEN', tags: ['x'], members: [A.keypair.id, B.keypair.id], invites: [],
+      author: A.keypair.id, createdAt: orig.createdAt, updatedAt: new Date(Date.now() + 5000).toISOString()
+    }, e => e ? rej(e) : res()));
+    const list = await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const towns = list.filter(c => c.title === 'Town Square');
+    eq(towns.length, 1, 'the duplicate root is collapsed into a single card');
+    eq(towns[0].key, r.key, 'canonical card keeps the original (first-created) key');
+    eq((towns[0].members || []).length, 2, 'participants are taken from the freshest duplicate');
+  });
+});

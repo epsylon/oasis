@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderSpreadButton} = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { renderUrl } = require('../backend/renderUrl');
@@ -8,15 +8,26 @@ const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const seenDocumentTitles = new Set();
 
+const detailHref = (type, key) => {
+  switch (type) {
+    case 'bookmark': return `/bookmarks/${encodeURIComponent(key)}`;
+    case 'image': return `/images/${encodeURIComponent(key)}`;
+    case 'video': return `/videos/${encodeURIComponent(key)}`;
+    case 'audio': return `/audios/${encodeURIComponent(key)}`;
+    case 'torrent': return `/torrents/${encodeURIComponent(key)}`;
+    case 'document': return `/documents/${encodeURIComponent(key)}`;
+    case 'feed': return `/feed/${encodeURIComponent(key)}`;
+    case 'votes': return `/votes/${encodeURIComponent(key)}`;
+    case 'transfer': return `/transfers/${encodeURIComponent(key)}`;
+    default: return null;
+  }
+};
+
 const renderContentHtml = (content, key) => {
   switch (content.type) {
     case 'bookmark':
       return div({ class: 'opinion-bookmark' },
         div({ class: 'card-section bookmark' },
-          form({ method: "GET", action: `/bookmarks/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
-          br(),
           h2(content.url ? div({ class: 'card-field' },
             span({ class: 'card-label' }, p(a({ href: content.url, target: '_blank', class: "bookmark-url" }, content.url)))
           ) : ""),
@@ -35,10 +46,6 @@ const renderContentHtml = (content, key) => {
     case 'image':
       return div({ class: 'opinion-image' },
         div({ class: 'card-section image' },
-          form({ method: "GET", action: `/images/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
-          br(),
           content.title ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.imageTitleLabel + ':'),
             span({ class: 'card-value' }, content.title)
@@ -62,10 +69,6 @@ const renderContentHtml = (content, key) => {
     case 'video':
       return div({ class: 'opinion-video' },
         div({ class: 'card-section video' },
-          form({ method: "GET", action: `/videos/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
-          br(),
           content.title ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.videoTitleLabel + ':'),
             span({ class: 'card-value' }, content.title)
@@ -90,10 +93,6 @@ const renderContentHtml = (content, key) => {
     case 'audio':
       return div({ class: 'opinion-audio' },
         div({ class: 'card-section audio' },
-          form({ method: "GET", action: `/audios/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
-          br(),
           content.title ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.audioTitleLabel + ':'),
             span({ class: 'card-value' }, content.title)
@@ -117,9 +116,6 @@ const renderContentHtml = (content, key) => {
     case 'torrent':
       return div({ class: 'opinion-torrent' },
         div({ class: 'card-section' },
-          form({ method: "GET", action: `/torrents/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)),
-          br(),
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, content.title)) : ""
         )
       );
@@ -129,10 +125,6 @@ const renderContentHtml = (content, key) => {
       if (t) seenDocumentTitles.add(t);
       return div({ class: 'opinion-document' },
         div({ class: 'card-section document' },
-          form({ method: "GET", action: `/documents/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
-          br(),
           t ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.documentTitleLabel + ':'),
             span({ class: 'card-value' }, t)
@@ -152,10 +144,6 @@ const renderContentHtml = (content, key) => {
     case 'feed':
       return div({ class: 'opinion-feed' },
         div({ class: 'card-section feed' },
-          form({ method: "GET", action: `/feed/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
-          br,
           div({ class: 'feed-text', innerHTML: sanitizeHtml(renderTextWithStyles(content.text)) }),
           content.refeeds
             ? h2({ class: 'card-field' }, span({ class: 'card-label' }, `${i18n.tribeFeedRefeeds}: `), span({ class: 'card-value' }, content.refeeds))
@@ -168,9 +156,6 @@ const renderContentHtml = (content, key) => {
         : [];
       return div({ class: 'opinion-votes' },
         div({ class: 'card-section votes' },
-          form({ method: "GET", action: `/votes/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.voteQuestionLabel + ':'),
             span({ class: 'card-value' }, content.question)
@@ -193,10 +178,6 @@ const renderContentHtml = (content, key) => {
     case 'transfer':
       return div({ class: 'opinion-transfer' },
         div({ class: 'card-section transfer' },
-          form({ method: "GET", action: `/transfers/${encodeURIComponent(key)}` },
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-          ),
-          br(),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.concept + ':'),
             span({ class: 'card-value' }, content.concept)
@@ -255,7 +236,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map()) => {
     });
 
   const title = i18n.opinionsTitle;
-  const baseFilters = ['RECENT', 'ALL', 'MINE', 'TOP'];
+  const baseFilters = ['TOP', 'ALL', 'MINE', 'RECENT'];
 
   const cards = items
     .map(item => {
@@ -269,46 +250,51 @@ exports.opinionsView = (items, filter, spreadMap = new Map()) => {
       const created = new Date(item.value.timestamp).toLocaleString();
       const allCats = opinionCategories;
 
+      const isOwn = item.value.author && String(item.value.author) === String(config.keys.id);
       return div(
-        { class: 'trending-card' },
-        div({ class: 'card-chips-row' },
+        { class: 'trending-card opinions-card' + (isOwn ? ' own-content' : '') },
+        div({ class: 'card-header activity-card-header' },
           span({ class: 'pm-exposition-chip pm-exposition-whole' },
             span({ class: 'pm-exposition-text' }, String(c.type || '').toUpperCase())
-          )
+          ),
+          renderContentActions(key, detailHref(c.type, key))
         ),
-        contentHtml,
-        div({ class: 'card-spread-left' }, renderSpreadButton(key, spreadMap.get(key))),
-        p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${created} ${i18n.performed} `),
-          userLink(item.value.author)
-        ),
-        (() => {
-          const entries = voteEntries.filter(([, v]) => v > 0);
-          const dominantPart = (() => {
-            if (!entries.length) return null;
-            const maxVal = Math.max(...entries.map(([, v]) => v));
-            const dominant = entries.filter(([, v]) => v === maxVal).map(([k]) => i18n['vote' + k.charAt(0).toUpperCase() + k.slice(1)] || k);
-            return [
-              span({ class: 'trending-dominant-sep' }, '|'),
-              span({ class: 'trending-dominant-text' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
-            ];
-          })();
-          return h2(
-            `${i18n.totalOpinions || i18n.opinionsTotalCount}: `,
-            span({ class: 'trending-total-count' }, String(total)),
-            ...(dominantPart || [])
-          );
-        })(),
-        div({ class: 'voting-buttons' },
-          allCats.map(cat => {
-            const label = `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${c.opinions?.[cat] || 0}]`;
-            if (voted) {
-              return button({ class: 'vote-btn', type: 'button' }, label);
-            }
-            return form({ method: 'POST', action: `/opinions/${encodeURIComponent(key)}/${cat}` },
-              button({ class: 'vote-btn' }, label)
+        div(
+          { class: 'card-section opinions-card-body' },
+          contentHtml,
+          div({ class: 'card-spread-left' }, renderSpreadButton(key, spreadMap.get(key))),
+          p({ class: 'card-footer' },
+            span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+            userLink(item.value.author)
+          ),
+          (() => {
+            const entries = voteEntries.filter(([, v]) => v > 0);
+            const dominantPart = (() => {
+              if (!entries.length) return null;
+              const maxVal = Math.max(...entries.map(([, v]) => v));
+              const dominant = entries.filter(([, v]) => v === maxVal).map(([k]) => i18n['vote' + k.charAt(0).toUpperCase() + k.slice(1)] || k);
+              return [
+                span({ class: 'trending-dominant-sep' }, '|'),
+                span({ class: 'trending-dominant-text' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
+              ];
+            })();
+            return h2(
+              `${i18n.totalOpinions || i18n.opinionsTotalCount}: `,
+              span({ class: 'trending-total-count' }, String(total)),
+              ...(dominantPart || [])
             );
-          })
+          })(),
+          div({ class: 'voting-buttons' },
+            allCats.map(cat => {
+              const label = `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${c.opinions?.[cat] || 0}]`;
+              if (voted) {
+                return button({ class: 'vote-btn', type: 'button' }, label);
+              }
+              return form({ method: 'POST', action: `/opinions/${encodeURIComponent(key)}/${cat}` },
+                button({ class: 'vote-btn' }, label)
+              );
+            })
+          )
         )
       );
     })

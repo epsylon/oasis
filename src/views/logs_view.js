@@ -202,7 +202,7 @@ const renderDetail = (entry) => {
         button({ type: "submit", class: "filter-btn" }, i18n.logsEdit || 'Edit')
       ),
       form({ method: "POST", action: `/logs/delete/${encodeURIComponent(entry.key)}` },
-        button({ type: "submit", class: "filter-btn" }, i18n.logsDelete || 'Delete')
+        button({ type: "submit", class: "filter-btn danger-btn" }, i18n.logsDelete || 'Delete')
       )
     )
   );

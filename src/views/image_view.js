@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -113,66 +113,67 @@ const renderImageList = exports.renderImageList = (images, filter, params = {}) 
         const title = safeText(imgObj.title);
         const ownerActions = renderImageOwnerActions(filter, imgObj, params);
 
+        const isOwn = imgObj.author && String(imgObj.author) === String(userId);
         return div(
-          { class: "tags-header image-card" },
+          { class: "trending-card image-card" + (isOwn ? " own-content" : "") },
           div(
-            { class: "bookmark-topbar" },
+            { class: "card-header activity-card-header" },
+            span(),
+            renderContentActions(imgObj.key, `/images/${encodeURIComponent(imgObj.key)}`)
+          ),
+          div(
+            { class: "card-section image-card-body" },
             div(
-              { class: "bookmark-topbar-left" },
+              { class: "bookmark-topbar" },
+              div(
+                { class: "bookmark-topbar-left" },
+                renderImageFavoriteToggle(imgObj, returnTo),
+                renderPMButton(imgObj.author)
+              ),
+              ownerActions.length ? div({ class: "bookmark-actions" }, ...ownerActions) : null
+            ),
+            title ? h2(title) : null,
+            (imgObj.meme || imgObj.lifetime) ? div({ class: "card-chips-row" },
+              imgObj.meme ? a({ href: "/images?filter=meme", class: "chip-link" }, renderStateChip("mutuals", null, i18n.imageFilterMeme || "MEME")) : null,
+              imgObj.lifetime ? renderLifespanChip(imgObj.lifetime, i18n) : null
+            ) : null,
+            renderImageMedia(imgObj, filter, params),
+            div(
+              { class: "card-comments-summary" },
+              span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
+              span({ class: "card-value" }, String(commentCount)),
+              br(),
+              br(),
               form(
                 { method: "GET", action: `/images/${encodeURIComponent(imgObj.key)}` },
                 input({ type: "hidden", name: "returnTo", value: returnTo }),
                 input({ type: "hidden", name: "filter", value: filter || "all" }),
                 params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
                 params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-                button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-              ),
-              renderImageFavoriteToggle(imgObj, returnTo),
-              renderPMButton(imgObj.author)
+                button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
+              )
             ),
-            ownerActions.length ? div({ class: "bookmark-actions" }, ...ownerActions) : null
-          ),
-          title ? h2(title) : null,
-          (imgObj.meme || imgObj.lifetime) ? div({ class: "card-chips-row" },
-            imgObj.meme ? a({ href: "/images?filter=meme", class: "chip-link" }, renderStateChip("mutuals", null, i18n.imageFilterMeme || "MEME")) : null,
-            imgObj.lifetime ? renderLifespanChip(imgObj.lifetime, i18n) : null
-          ) : null,
-          renderImageMedia(imgObj, filter, params),
-          div(
-            { class: "card-comments-summary" },
-            span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-            span({ class: "card-value" }, String(commentCount)),
+            div({ class: "card-spread-left" }, renderSpreadButton(imgObj.key, (params.spreadMap && params.spreadMap.get(imgObj.key)) || params.spreads)),
+            renderMapLocationVisitLabel(imgObj.mapUrl),
             br(),
-            br(),
-            form(
-              { method: "GET", action: `/images/${encodeURIComponent(imgObj.key)}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              input({ type: "hidden", name: "filter", value: filter || "all" }),
-              params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-              params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-              button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-            )
-          ),
-          div({ class: "card-spread-left" }, renderSpreadButton(imgObj.key, (params.spreadMap && params.spreadMap.get(imgObj.key)) || params.spreads)),
-          renderMapLocationVisitLabel(imgObj.mapUrl),
-          br(),
-          (() => {
-            const createdTs = imgObj.createdAt ? new Date(imgObj.createdAt).getTime() : NaN;
-            const updatedTs = imgObj.updatedAt ? new Date(imgObj.updatedAt).getTime() : NaN;
-            const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+            (() => {
+              const createdTs = imgObj.createdAt ? new Date(imgObj.createdAt).getTime() : NaN;
+              const updatedTs = imgObj.updatedAt ? new Date(imgObj.updatedAt).getTime() : NaN;
+              const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
-            return p(
-              { class: "card-footer" },
-              span({ class: "date-link" }, `${moment(imgObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              userLink(imgObj.author),
-              showUpdated
-                ? span(
-                    { class: "votations-comment-date" },
-                    ` | ${i18n.imageUpdatedAt}: ${moment(imgObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
-                  )
-                : null
-            );
-          })()
+              return p(
+                { class: "card-footer" },
+                span({ class: "date-link" }, `${moment(imgObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+                userLink(imgObj.author),
+                showUpdated
+                  ? span(
+                      { class: "votations-comment-date" },
+                      ` | ${i18n.imageUpdatedAt}: ${moment(imgObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+                    )
+                  : null
+              );
+            })()
+          )
         );
       })
     : p(params.q ? i18n.imageNoMatch : i18n.noImages);

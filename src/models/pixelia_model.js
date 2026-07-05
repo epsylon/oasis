@@ -34,8 +34,15 @@ module.exports = ({ cooler }) => {
       byId.set(k, m);
     }
 
-    for (const r of replaces.keys()) {
-      byId.delete(r);
+    for (const [replacedId, replacingId] of replaces.entries()) {
+      const orig = byId.get(replacedId);
+      if (!orig) continue;
+      const rep = byId.get(replacingId);
+      if (!rep || rep.value.author !== orig.value.author) {
+        byId.delete(replacingId);
+        continue;
+      }
+      byId.delete(replacedId);
     }
 
     return [...byId.values()][0] || null;
@@ -109,15 +116,22 @@ module.exports = ({ cooler }) => {
       }
     }
 
-    for (const replaced of replaces.keys()) {
-      byKey.delete(replaced);
+    for (const [replacedId, replacingId] of replaces.entries()) {
+      const orig = byKey.get(replacedId);
+      if (!orig) continue;
+      const rep = byKey.get(replacingId);
+      if (!rep || rep.value.author !== orig.value.author) {
+        byKey.delete(replacingId);
+        continue;
+      }
+      byKey.delete(replacedId);
     }
 
     return Array.from(byKey.values()).map(m => ({
       x: m.value.content.x + 1,
       y: m.value.content.y + 1,
       color: m.value.content.color,
-      author: m.value.content.author,
+      author: m.value.author,
       contributors_inhabitants: m.value.content.contributors_inhabitants || [],
       timestamp: m.value.timestamp
     }));

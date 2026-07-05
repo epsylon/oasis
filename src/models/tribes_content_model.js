@@ -79,6 +79,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const orig = content.get(t);
       if (orig && orig.author === node.author) strictNext.set(t, key);
     }
+    for (const [t, key] of Array.from(naiveNext.entries())) {
+      const orig = content.get(t);
+      if (!orig) { naiveNext.delete(t); continue; }
+      const node = content.get(key);
+      if (!node || node.author !== orig.author) { naiveNext.delete(t); content.delete(key); }
+    }
     const naivePrev = new Map();
     for (const [t, key] of naiveNext) naivePrev.set(key, t);
     const followTo = (start, nextMap) => { let x = start, g = 0; while (nextMap.has(x) && g++ < 100000) x = nextMap.get(x); return x; };
@@ -114,7 +120,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const lb = tipNode.body;
       const a = collabByRoot.get(root) || EMPTY;
 
-      const item = { id: contentTip, ...body, _ts: tipNode.ts };
+      const item = { id: contentTip, ...body, author: tipNode.author, _ts: tipNode.ts };
 
       const voteAuthors = new Set(); const votes = {};
       const legacyVotes = lb.votes && typeof lb.votes === 'object' ? lb.votes : {};

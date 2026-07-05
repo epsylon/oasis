@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
+const { dedupeByPreferring, norm } = require('../backend/dedupe')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const N = (s) => String(s || "").toUpperCase().replace(/\s+/g, "_")
@@ -86,8 +87,13 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const t = n.c.replaces
       if (!t) continue
       naivePrev.set(key, t)
-      const orig = nodes.get(t)
-      if (orig && orig.author === n.author) strictNext.set(t, key)
+    }
+    for (const [child, parent] of Array.from(naivePrev.entries())) {
+      const cn = nodes.get(child)
+      const pn = nodes.get(parent)
+      if (!pn) { naivePrev.delete(child); continue }
+      if (!cn || cn.author !== pn.author) { naivePrev.delete(child); nodes.delete(child); continue }
+      strictNext.set(parent, child)
     }
     return { tomb, nodes, bids, purchases, naivePrev, strictNext }
   }
@@ -107,7 +113,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const out = new Map()
     for (const [root, keys] of groups) {
       const rootNode = nodes.get(root)
-      const sellerId = rootNode ? rootNode.c.seller : null
+      const sellerId = rootNode ? rootNode.author : null
       const sellerKeys = keys.filter(k => { const n = nodes.get(k); return n && n.author === sellerId })
       let tip = followStrict(root)
       const tipNode0 = nodes.get(tip)
@@ -314,7 +320,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (status === "FOR SALE" && stock === 0) continue
 
         const visibility = String(c.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
-        if (visibility === "HIDDEN" && c.seller !== userId) continue
+        if (visibility === "HIDDEN" && best.author !== userId) continue
 
         items.push({
           id: leaf,
@@ -330,7 +336,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
           visibility,
           createdAt: c.createdAt || new Date(best.ts).toISOString(),
           updatedAt: c.updatedAt,
-          seller: c.seller,
+          seller: best.author,
           includesShipping: !!c.includesShipping,
           stock,
           deadline: c.deadline || null,
@@ -342,7 +348,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         })
       }
 
-      let list = items
+      let list = dedupeByPreferring(items, (i) => (i.seller && i.createdAt) ? norm(i.seller) + "|" + norm(i.createdAt) : null, (i) => (Array.isArray(i.auctions_poll) ? i.auctions_poll.length : 0))
       switch (filter) {
         case "mine":
           list = list.filter((i) => i.seller === userId)
@@ -401,7 +407,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (status === "FOR SALE" && soldCount > 0 && stock === 0) status = "SOLD"
 
       const visibility = String(c.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
-      if (visibility === "HIDDEN" && c.seller !== userId) return null
+      if (visibility === "HIDDEN" && best.author !== userId) return null
 
       const now = moment()
       if (c.deadline) {
@@ -431,7 +437,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         visibility,
         createdAt: c.createdAt || new Date(best.ts).toISOString(),
         updatedAt: c.updatedAt,
-        seller: c.seller,
+        seller: best.author,
         includesShipping: !!c.includesShipping,
         stock,
         deadline: c.deadline,
@@ -536,7 +542,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const c = grp.best.c
 
       if (String(c.item_type || "").toLowerCase() !== "auction") throw new Error("Not an auction")
-      if (c.seller === userId) throw new Error("Cannot bid on your own item")
+      if (grp.best.author === userId) throw new Error("Cannot bid on your own item")
       if (D(N(c.status || "FOR_SALE")) !== "FOR SALE") throw new Error("Auction is not active")
 
       const dl = c.deadline ? moment(c.deadline) : null

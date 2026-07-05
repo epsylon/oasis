@@ -85,6 +85,13 @@ const renderEncryptedChip = (i18nObj = {}) => {
   );
 };
 
+const renderDoubleEncryptionChip = (i18nObj = {}) => {
+  return span({ class: 'pm-exposition-chip pm-exposition-encrypted pm-double-enc-chip' },
+    span({ class: 'pm-exposition-icon' }, '🔒'),
+    span({ class: 'pm-exposition-text' }, i18nObj.pmCrypterChip || '2xE2E')
+  );
+};
+
 const INTERNAL_OASIS_PATHS = [
   'author','thread','hashtag','inbox','pm','profile','settings','banking','wallet',
   'jobs','events','projects','shops','audios','videos','images','documents','torrents',
@@ -294,6 +301,7 @@ module.exports = {
   renderFediverseReach,
   renderContentStats,
   renderEncryptedChip,
+  renderDoubleEncryptionChip,
   renderClearnetUrlBlock,
   renderClearnetSearchForm,
   renderClearnetPage,

@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { dedupeByPreferring } = require('../backend/dedupe')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const norm = (s) => String(s || "").trim().toLowerCase()
@@ -51,6 +52,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const jobNodes = new Map()
     const parent = new Map()
     const child = new Map()
+    const naiveReplaces = new Map()
     const jobSubLatest = new Map()
 
     for (const m of messages) {
@@ -66,10 +68,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
       if (c.type === "job") {
         jobNodes.set(key, { key, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
-        if (c.replaces) {
-          parent.set(key, c.replaces)
-          child.set(c.replaces, key)
-        }
+        if (c.replaces) naiveReplaces.set(key, c.replaces)
         continue
       }
 
@@ -83,6 +82,16 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (!prev || ts > prev.ts) jobSubLatest.set(k, { ts, value: !!c.value, author, jobId })
         continue
       }
+    }
+
+    for (const [key, replacesId] of naiveReplaces.entries()) {
+      const node = jobNodes.get(key)
+      if (!node) continue
+      const orig = jobNodes.get(replacesId)
+      if (!orig) continue
+      if (String(orig.author) !== String(node.author)) { jobNodes.delete(key); continue }
+      parent.set(key, replacesId)
+      child.set(replacesId, key)
     }
 
     const rootOf = (id) => {
@@ -134,7 +143,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   }
 
   const buildJobObject = (node, rootId, subscribers) => {
-    const visibleSubs = (tribeCrypto && tribeCrypto.getKey(rootId)) || ssb?.id === (node.c?.author || node.author) ? subscribers : [];
+    const visibleSubs = (tribeCrypto && tribeCrypto.getKey(rootId)) || ssb?.id === (node.author || node.c?.author) ? subscribers : [];
     const c = node.c || {}
     let blobId = c.image || null
     if (blobId && /\(([^)]+)\)/.test(String(blobId))) blobId = String(blobId).match(/\(([^)]+)\)/)[1]
@@ -162,7 +171,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       hoursRequested: Number.isFinite(hoursRequestedN) ? hoursRequestedN : 0,
       exchangeSkill: String(c.exchangeSkill || ""),
       image: blobId,
-      author: c.author,
+      author: node.author || c.author,
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       status: c.status || "OPEN",
@@ -469,7 +478,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       }
 
       const F = String(filter || "ALL").toUpperCase()
-      let list = jobs
+      let list = dedupeByPreferring(jobs, (j) => (j.author && j.createdAt) ? norm(j.author) + "|" + norm(j.createdAt) : null, (j) => (Array.isArray(j.subscribers) ? j.subscribers.length : 0))
 
       if (F === "MINE") list = list.filter((j) => j.author === viewer)
       else if (F === "REMOTE") list = list.filter((j) => String(j.location || "").toUpperCase() === "REMOTE")

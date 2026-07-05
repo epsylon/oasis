@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 
@@ -167,9 +167,16 @@ const generateTransferCard = (transfer, filter, params = {}) => {
 
   const otherParty = transfer.from === userId ? transfer.to : transfer.from
   const partyDir = transfer.from === userId ? "→" : "←"
+  const returnTo = buildReturnTo(filter, params)
 
-  return div({ class: "tribe-card transfer-card" },
-    div({ class: "tribe-card-body" },
+  const isOwn = transfer.from && String(transfer.from) === String(userId)
+  return div({ class: "trending-card transfer-card" + (isOwn ? " own-content" : "") },
+    div(
+      { class: "card-header activity-card-header" },
+      span(),
+      renderContentActions(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`)
+    ),
+    div({ class: "card-section transfer-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
           a({ href: `/transfers/${encodeURIComponent(transfer.id)}` }, transfer.concept || i18n.transfersTitle)
@@ -185,12 +192,7 @@ const generateTransferCard = (transfer, filter, params = {}) => {
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.transfersConfirmations}: ${confirmedCount}/${required}`)
       ),
-      div({ class: "card-spread-centered" }, renderSpreadButton(transfer.id, params.spreadMap && params.spreadMap.get(transfer.id))),
-      div({ class: "card-visit-btn-centered" },
-        form({ method: "GET", action: `/transfers/${encodeURIComponent(transfer.id)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewTransfer || "View Transfer")
-        )
-      )
+      div({ class: "card-spread-centered" }, renderSpreadButton(transfer.id, params.spreadMap && params.spreadMap.get(transfer.id)))
     )
   )
 }

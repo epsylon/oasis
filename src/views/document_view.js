@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 
@@ -157,64 +157,65 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
               )
             : null;
 
+        const isOwn = doc.author && String(doc.author) === String(userId);
         return div(
-          { class: "tags-header document-card" },
+          { class: "trending-card document-card" + (isOwn ? " own-content" : "") },
           div(
-            { class: "bookmark-topbar" },
+            { class: "card-header activity-card-header" },
+            span(),
+            renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`)
+          ),
+          div(
+            { class: "card-section document-card-body" },
             div(
-              { class: "bookmark-topbar-left" },
+              { class: "bookmark-topbar" },
+              div(
+                { class: "bookmark-topbar-left" },
+                renderFavoriteToggle(doc, returnTo),
+                topbarLeft
+              ),
+              renderDocumentActions(filter, doc, params)
+            ),
+            title ? h2(title) : null,
+            doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
+            doc?.url
+              ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
+              : p(i18n.documentNoFile),
+            div(
+              { class: "card-comments-summary" },
+              span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
+              span({ class: "card-value" }, String(commentCount)),
+              br(),
+              br(),
               form(
                 { method: "GET", action: `/documents/${encodeURIComponent(doc.key)}` },
                 input({ type: "hidden", name: "returnTo", value: returnTo }),
                 input({ type: "hidden", name: "filter", value: filter || "all" }),
                 params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
                 params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-                button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-              ),
-              renderFavoriteToggle(doc, returnTo),
-              topbarLeft
+                button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
+              )
             ),
-            renderDocumentActions(filter, doc, params)
-          ),
-          title ? h2(title) : null,
-          doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
-          doc?.url
-            ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
-            : p(i18n.documentNoFile),
-          div(
-            { class: "card-comments-summary" },
-            span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-            span({ class: "card-value" }, String(commentCount)),
+            div({ class: "card-spread-left" }, renderSpreadButton(doc.key, (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads)),
             br(),
-            br(),
-            form(
-              { method: "GET", action: `/documents/${encodeURIComponent(doc.key)}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              input({ type: "hidden", name: "filter", value: filter || "all" }),
-              params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-              params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-              button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-            )
-          ),
-          div({ class: "card-spread-left" }, renderSpreadButton(doc.key, (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads)),
-          br(),
-          (() => {
-            const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
-            const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
-            const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+            (() => {
+              const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
+              const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
+              const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
-            return p(
-              { class: "card-footer" },
-              span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              userLink(doc.author),
-              showUpdated
-                ? span(
-                    { class: "votations-comment-date" },
-                    ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
-                  )
-                : null
-            );
-          })()
+              return p(
+                { class: "card-footer" },
+                span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+                userLink(doc.author),
+                showUpdated
+                  ? span(
+                      { class: "votations-comment-date" },
+                      ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+                    )
+                  : null
+              );
+            })()
+          )
         );
       })
     : p(params.q ? i18n.documentNoMatch : i18n.noDocuments);

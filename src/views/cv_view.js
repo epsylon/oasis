@@ -161,7 +161,7 @@ exports.cvView = async (cv) => {
               button({ type: "submit" }, i18n.cvEditButton)
             ),
             form({ method: "POST", action: `/cv/delete/${encodeURIComponent(cv.id)}` },
-              button({ type: "submit" }, i18n.cvDeleteButton)
+              button({ type: "submit", class: "danger-btn" }, i18n.cvDeleteButton)
             )
           ),
           div({ class: "cv-meta" },

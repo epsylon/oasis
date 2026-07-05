@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderSpreadButton } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 
 const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent','transfer']);
@@ -241,6 +241,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
     const c0 = a0.value?.content || a0.content || {};
     const id0 = c0.about || a0.author || '';
     if (!id0) continue;
+    if (a0.author && String(a0.author) !== String(id0)) continue;
     const name0 = (typeof c0.name === 'string' && c0.name.trim()) ? c0.name.trim() : id0;
     const image0 = (typeof c0.image === 'string' && c0.image.trim()) ? c0.image.trim() : '';
     const ts0 = a0.ts || 0;
@@ -717,10 +718,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
 
     if (type === 'document') {
       const { url, title, key } = content;
-      if (title && seenDocumentTitles.has(title.trim())) {
+      const docKey = title ? `${action.author || ''}::${title.trim()}` : null;
+      if (docKey && seenDocumentTitles.has(docKey)) {
         return null;
       }
-      if (title) seenDocumentTitles.add(title.trim());
+      if (docKey) seenDocumentTitles.add(docKey);
       cardBody.push(
         div({ class: 'card-section document' },
           title?.trim() ? h2({ class: 'document-title' }, title) : "",
@@ -884,12 +886,14 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         const show = repliesAsc.slice(Math.max(0, repliesAsc.length - limit));
         const lastId = repliesAsc.length ? repliesAsc[repliesAsc.length - 1].id : threadId;
         const viewMoreHref = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(lastId)}`;
-        return div({ class: 'card card-rpg post-thread' },
-            div({ class: 'card-header' },
-                h2({ class: 'card-label' }, `[${String(i18n.typePost || 'POST').toUpperCase()} · THREAD]`),
-                form({ method: 'GET', action: href },
-                    button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
-                )
+        return div({ class: 'trending-card post-thread' + (String(action.author) === String(userId) ? ' own-content' : '') },
+            div({ class: 'card-header activity-card-header' },
+                div({ class: 'card-chips-row' },
+                    span({ class: 'pm-exposition-chip pm-exposition-whole' },
+                        span({ class: 'pm-exposition-text' }, `${String(i18n.typePost || 'POST').toUpperCase()} · THREAD`)
+                    )
+                ),
+                renderContentActions(threadId, href)
             ),
             div({ class: 'card-body' },
 		root && root.text
@@ -899,7 +903,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
 		    : '',
 		div({ class: 'card-section' },
 		show.map(r => {
-		    const commentHref = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(r.id)}`;
 		    const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
 		    return div({ class: 'thread-reply-item' },
 			div({ class: 'thread-reply' },
@@ -907,10 +910,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
 			),
 			div({ class: 'card-footer thread-reply-footer' },
 			    span({ class: 'date-link' }, rDate),
-			    userLink(r.author, action.authorNames && action.authorNames[r.author]),
-			    form({ method: 'GET', action: commentHref, class: 'inline-form' },
-				button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails)
-			    )
+			    userLink(r.author, action.authorNames && action.authorNames[r.author])
 			)
 		    );
 		}),
@@ -1037,10 +1037,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       const imgId = image ? (typeof image === 'string' ? image : (image.link || '')) : '';
       cardBody.push(
         div({ class: 'card-section about' },
-          h2(userLink(about, name)),
           imgId
             ? img({ src: `/blob/${encodeURIComponent(imgId)}`, alt: name, class: 'activity-avatar' })
             : img({ src: '/assets/images/default-avatar.png', alt: name, class: 'activity-avatar' }),
+          h2(userLink(about, name)),
           description ? p({ class: 'tribe-side-description' }, ...renderUrlPreserveNewlines(String(description))) : null
         )
       );
@@ -1537,45 +1537,23 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       return null;
     }
 
-    const viewDetailsForm = type !== 'feed' && type !== 'aiExchange' && type !== 'bankWallet' && (!action.tipId || action.tipId === action.id)
-      ? (
-          isParliamentTarget
-            ? form(
-                { method: "GET", action: "/parliament" },
-                input({ type: "hidden", name: "filter", value: parliamentFilter }),
-                button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-              )
-            : isCourtsTarget
-              ? form(
-                  { method: "GET", action: "/courts" },
-                  input({ type: "hidden", name: "filter", value: courtsFilter }),
-                  button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-                )
-              : form(
-                  { method: "GET", action: viewHref },
-                  button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-                )
-        )
+    const detailHref = (type !== 'feed' && type !== 'aiExchange' && type !== 'bankWallet')
+      ? (isParliamentTarget
+          ? `/parliament?filter=${encodeURIComponent(parliamentFilter)}`
+          : isCourtsTarget
+            ? `/courts?filter=${encodeURIComponent(courtsFilter)}`
+            : viewHref)
       : null;
-    if (viewDetailsForm && cardBody.length > 0 && cardBody[0] && typeof cardBody[0].insertBefore === 'function') {
-      const host = cardBody[0];
-      const spacer = br();
-      const firstChild = host.childNodes && host.childNodes[0];
-      if (firstChild) {
-        host.insertBefore(spacer, firstChild);
-        host.insertBefore(viewDetailsForm, spacer);
-      } else {
-        host.appendChild(viewDetailsForm);
-        host.appendChild(spacer);
-      }
-    } else if (viewDetailsForm) {
-      cardBody.unshift(div({ class: 'card-section' }, viewDetailsForm, br()));
-    }
-    return div({ class: 'trending-card' },
-      div({ class: 'card-chips-row' },
-        span({ class: 'pm-exposition-chip pm-exposition-whole' },
-          span({ class: 'pm-exposition-text' }, String(type || '').toUpperCase())
-        )
+    const msgId = safeMsgId(action.tipId || action.id || action.key);
+    const isOwn = action.author && String(action.author) === String(userId);
+    return div({ class: 'trending-card' + (isOwn ? ' own-content' : '') },
+      div({ class: 'card-header activity-card-header' },
+        div({ class: 'card-chips-row' },
+          span({ class: 'pm-exposition-chip pm-exposition-whole' },
+            span({ class: 'pm-exposition-text' }, String(type || '').toUpperCase())
+          )
+        ),
+        renderContentActions(msgId, detailHref)
       ),
       ...cardBody,
       (() => {
@@ -1603,10 +1581,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         return btn ? div({ class: 'card-spread-left' }, btn) : null;
       })(),
       (() => {
-        const PARLIAMENT_AUTHORED = new Set(['parliamentProposal', 'parliamentRevocation', 'parliamentLaw', 'parliamentCandidature']);
-        const footerAuthorId = (PARLIAMENT_AUTHORED.has(type) && content && content.proposer)
-          ? content.proposer
-          : action.author;
+        const footerAuthorId = action.author || (content && content.proposer) || '';
         return p({ class: 'card-footer' },
           span({ class: 'date-link' }, `${date} ${i18n.performed} `),
           userLink(footerAuthorId, (action.authorNames && action.authorNames[footerAuthorId]) || getProfile(footerAuthorId).name)
@@ -1648,6 +1623,7 @@ function getViewDetailsAction(type, action) {
     case 'votes':      return `/votes/${id}`;
     case 'transfer':   return `/transfers/${id}`;
     case 'pixelia':    return `/pixelia`;
+    case 'larpHousePost': return action.content?.house ? `/larp/${encodeURIComponent(action.content.house)}` : `/activity`;
     case 'tribe':      return `/tribe/${id}`;
     case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
     case 'karmaScore': return `/author/${encodeURIComponent(action.author)}`;

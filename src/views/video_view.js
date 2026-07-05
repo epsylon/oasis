@@ -17,7 +17,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -186,63 +186,66 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
         const title = safeText(videoObj.title);
         const ownerActions = renderVideoOwnerActions(filter, videoObj, params);
 
+        const isOwn = videoObj.author && String(videoObj.author) === String(userId);
         return div(
-          { class: "tags-header video-card" },
+          { class: "trending-card video-card" + (isOwn ? " own-content" : "") },
           div(
-            { class: "bookmark-topbar" },
+            { class: "card-header activity-card-header" },
+            span(),
+            renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`)
+          ),
+          div(
+            { class: "card-section video-card-body" },
             div(
-              { class: "bookmark-topbar-left" },
+              { class: "bookmark-topbar" },
+              div(
+                { class: "bookmark-topbar-left" },
+                renderVideoFavoriteToggle(videoObj, returnTo),
+                renderPMButton(videoObj.author)
+              ),
+              ownerActions.length
+                ? div({ class: "bookmark-topbar-right" }, div({ class: "bookmark-actions" }, ...ownerActions))
+                : null
+            ),
+            title ? h2(title) : null,
+            videoObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(videoObj.lifetime, i18n)) : null,
+            renderVideoPlayer(videoObj),
+            div(
+              { class: "card-comments-summary" },
+              span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
+              span({ class: "card-value" }, String(commentCount)),
+              br(),
+              br(),
               form(
                 { method: "GET", action: `/videos/${encodeURIComponent(videoObj.key)}` },
                 input({ type: "hidden", name: "returnTo", value: returnTo }),
                 input({ type: "hidden", name: "filter", value: filter || "all" }),
                 params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
                 params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-                button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-              ),
-              renderVideoFavoriteToggle(videoObj, returnTo),
-              renderPMButton(videoObj.author)
+                button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
+              )
             ),
-            ownerActions.length ? div({ class: "bookmark-actions" }, ...ownerActions) : null
-          ),
-          title ? h2(title) : null,
-          videoObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(videoObj.lifetime, i18n)) : null,
-          renderVideoPlayer(videoObj),
-          div(
-            { class: "card-comments-summary" },
-            span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-            span({ class: "card-value" }, String(commentCount)),
+            div({ class: "card-spread-left" }, renderSpreadButton(videoObj.key, (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads)),
+            renderMapLocationVisitLabel(videoObj.mapUrl),
             br(),
-            br(),
-            form(
-              { method: "GET", action: `/videos/${encodeURIComponent(videoObj.key)}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              input({ type: "hidden", name: "filter", value: filter || "all" }),
-              params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-              params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-              button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-            )
-          ),
-          div({ class: "card-spread-left" }, renderSpreadButton(videoObj.key, (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads)),
-          renderMapLocationVisitLabel(videoObj.mapUrl),
-          br(),
-          (() => {
-            const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
-            const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
-            const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+            (() => {
+              const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
+              const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
+              const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
-            return p(
-              { class: "card-footer" },
-              span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
-              userLink(videoObj.author),
-              showUpdated
-                ? span(
-                    { class: "votations-comment-date" },
-                    ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
-                  )
-                : null
-            );
-          })()
+              return p(
+                { class: "card-footer" },
+                span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+                userLink(videoObj.author),
+                showUpdated
+                  ? span(
+                      { class: "votations-comment-date" },
+                      ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+                    )
+                  : null
+              );
+            })()
+          )
         );
       })
     : p(params.q ? i18n.videoNoMatch : i18n.noVideos);

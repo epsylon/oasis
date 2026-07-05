@@ -2,6 +2,8 @@ const pull = require("../server/node_modules/pull-stream");
 const crypto = require("crypto");
 const { getConfig } = require("../configs/config-manager.js");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { collabContent, openInviteOf } = require('../backend/collab_content');
+const mapCollab = collabContent({ membersField: 'members', undecField: 'encrypted', contentFields: ['title', 'description', 'image'], listFields: ['tags', 'invites', 'markers'] });
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const INVITE_CODE_BYTES = 16;
@@ -317,7 +319,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
           lng: parseFloat(c.lng) || 0,
           label: c.label || "",
           image: c.image || "",
-          author: c.author || r.envAuthor,
+          author: r.envAuthor,
           encrypted: !!(r.c.encryptedPayload && (!c || c._undecryptable)),
           createdAt: c.createdAt || new Date(r.ts).toISOString()
         });
@@ -341,7 +343,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       image: undec ? "" : (c.image || ""),
       mapType: ALLOWED_MAP_TYPES.has(c.mapType) ? c.mapType : "SINGLE",
       tags: safeArr(c.tags),
-      author: c.author,
+      author: node.author,
       members: Array.isArray(members) ? members : (Array.isArray(c.members) ? c.members : []),
       invites: Array.isArray(c.invites) ? c.invites : [],
       tribeId: c.tribeId || null,
@@ -350,6 +352,18 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       updatedAt: c.updatedAt || null,
       markers: markerList.filter((mk) => !mk.tombstoned)
     };
+  };
+
+  const collectMaps = (idx, viewerId) => {
+    const items = [];
+    for (const [rootId, tipId] of idx.contentTipByRoot.entries()) {
+      if (idx.tomb.has(tipId)) continue;
+      const node = idx.nodes.get(tipId);
+      if (!node) continue;
+      const markerList = safeArr(idx.markers.get(tipId)).concat(safeArr(idx.markers.get(rootId)));
+      items.push(buildMap(node, rootId, viewerId, markerList, idx.resolveMembers(rootId)));
+    }
+    return items;
   };
 
   return {
@@ -633,16 +647,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       await decryptIndexNodes(idx);
       await expandMarkers(idx);
 
-      const items = [];
-      for (const [rootId, tipId] of idx.contentTipByRoot.entries()) {
-        if (idx.tomb.has(tipId)) continue;
-        const node = idx.nodes.get(tipId);
-        if (!node) continue;
-        const markerList = safeArr(idx.markers.get(tipId)).concat(safeArr(idx.markers.get(rootId)));
-        items.push(buildMap(node, rootId, viewerId, markerList, idx.resolveMembers(rootId)));
-      }
-
-      let list = items;
+      let list = mapCollab.visibleThenCollapsed(collectMaps(idx, viewerId), viewerId);
       const now = Date.now();
 
       if (filter === "mine") list = list.filter((m) => String(m.author) === String(viewerId));
@@ -686,11 +691,12 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
           c = dec && !dec._undecryptable ? { ...dec, _decrypted: true } : { ...c, _decrypted: false };
         }
         const markerList = safeArr(idx.markers.get(tip)).concat(safeArr(idx.markers.get(root)));
-        return buildMap({ key: tip, ts: msg.timestamp || 0, c }, root, viewer, markerList, idx.resolveMembers(root));
+        return buildMap({ key: tip, ts: msg.timestamp || 0, c, author: msg.author }, root, viewer, markerList, idx.resolveMembers(root));
       }
 
       const markerList = safeArr(idx.markers.get(tip)).concat(safeArr(idx.markers.get(root)));
-      return buildMap(node, root, viewer, markerList, idx.resolveMembers(root));
+      const map = buildMap(node, root, viewer, markerList, idx.resolveMembers(root));
+      return mapCollab.fold(map, collectMaps(idx, viewer));
     },
 
     async generateInvite(mapId, opts = {}) {
@@ -745,10 +751,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     async getOpenInvite(mapId) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
-      const map = await this.getMapById(mapId, userId).catch(() => null);
-      if (!map || !Array.isArray(map.invites)) return null;
-      const pub = map.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code);
-      return pub ? { code: pub.code } : null;
+      return openInviteOf(await this.getMapById(mapId, userId).catch(() => null));
     },
 
     async generateOpenInvite(mapId) {
@@ -805,7 +808,10 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     async joinByInvite(code) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
-      const maps = await this.listAll({ filter: "all", viewerId: userId });
+      const joinIdx = buildIndex(unwrapForIndex(await getAllMessages(ssbClient)));
+      await decryptIndexNodes(joinIdx);
+      await expandMarkers(joinIdx);
+      const maps = collectMaps(joinIdx, userId);
       let matched = null;
       let matchedInvite = null;
       for (const m of maps) {

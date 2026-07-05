@@ -847,3 +847,70 @@ a.create-button {
   border-color: #e6b800 !important;
   color: #000 !important;
 }
+
+.peers-list .block-info-table,
+.peers-technical-block .block-info-table,
+.gov-overview {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.peers-list .block-info-table tbody,
+.peers-technical-block .block-info-table tbody,
+.gov-overview tbody {
+  display: block !important;
+  width: 100% !important;
+}
+.gov-overview thead { display: none !important; }
+.peers-list .block-info-table tr:first-child,
+.peers-technical-block .block-info-table tr:first-child {
+  display: none !important;
+}
+.peers-list .block-info-table tr,
+.peers-technical-block .block-info-table tr,
+.gov-overview tbody tr {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border: 1px solid rgba(255, 165, 0, 0.35) !important;
+  border-radius: 8px !important;
+  margin: 0 0 8px 0 !important;
+  padding: 6px 10px !important;
+  background: rgba(255, 165, 0, 0.04) !important;
+}
+.peers-list .block-info-table td,
+.peers-technical-block .block-info-table td,
+.gov-overview tbody td {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: baseline !important;
+  gap: 10px !important;
+  width: 100% !important;
+  border: 0 !important;
+  padding: 3px 0 !important;
+  font-size: 12px !important;
+  text-align: right !important;
+  word-break: break-all !important;
+  overflow-wrap: anywhere !important;
+}
+.peers-list .block-info-table td::before,
+.peers-technical-block .block-info-table td::before,
+.gov-overview tbody td::before {
+  content: attr(data-label);
+  flex: 0 0 auto !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  font-size: 10px !important;
+  letter-spacing: .03em;
+  opacity: .7 !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+  word-break: normal !important;
+}
+.peers-technical-block .block-info-table td[data-label=""] { justify-content: center !important; }
+.peers-technical-block .block-info-table td[data-label=""]::before { content: none !important; }
+.peers-list .block-info-table td .peer-key,
+.peers-technical-block .block-info-table td .peer-key { text-align: right !important; }

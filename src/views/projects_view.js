@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -383,7 +383,6 @@ const renderProjectStatusChip = (status) => {
 
 const renderProjectList = exports.renderProjectList = (projects, filter, spreadMap = new Map()) => {
   const list = safeArr(projects)
-  const currentFilter = String(filter || "ALL").toUpperCase()
 
   if (!list.length) return p(i18n.projectNoProjectsFound)
 
@@ -404,9 +403,15 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
         renderLifespanChip(pr.lifetime, i18n)
       ].filter(Boolean)
 
-      return div({ class: "tribe-card project-card" },
-        heroNode,
-        div({ class: "tribe-card-body" },
+      const isOwn = pr.author && String(pr.author) === String(userId)
+      return div({ class: "trending-card project-card" + (isOwn ? " own-content" : "") },
+        div(
+          { class: "card-header activity-card-header" },
+          span(),
+          renderContentActions(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`)
+        ),
+        div({ class: "card-section project-card-body" },
+          heroNode,
           div({ class: "shop-title-row" },
             h2({ class: "tribe-card-title" },
               a({ href: `/projects/${encodeURIComponent(pr.id)}` }, pr.title || i18n.projectsTitle)
@@ -422,13 +427,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
           div({ class: "tribe-card-members" },
             span({ class: "tribe-members-count" }, `${i18n.projectFollowers}: ${followersCount(pr)}`)
           ),
-          div({ class: "card-spread-centered" }, renderSpreadButton(pr.id || pr.key, spreadMap.get(pr.id || pr.key))),
-          div({ class: "card-visit-btn-centered" },
-            form({ method: "GET", action: `/projects/${encodeURIComponent(pr.id)}` },
-              input({ type: "hidden", name: "filter", value: currentFilter }),
-              button({ type: "submit", class: "filter-btn" }, i18n.viewProject || i18n.viewDetailsButton || "View Project")
-            )
-          )
+          div({ class: "card-spread-centered" }, renderSpreadButton(pr.id || pr.key, spreadMap.get(pr.id || pr.key)))
         )
       )
     })

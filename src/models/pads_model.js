@@ -2,6 +2,8 @@ const pull = require("../server/node_modules/pull-stream")
 const crypto = require("crypto")
 const fs = require("fs")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
+const { collabContent, openInviteOf } = require('../backend/collab_content')
+const padCollab = collabContent({ membersField: 'members', undecField: 'undecryptable', contentFields: ['title', 'deadline', 'status'], listFields: ['tags', 'invites'] })
 const path = require("path")
 const { getConfig } = require("../configs/config-manager.js")
 const logLimit = getConfig().ssbLogStream?.limit || 1000
@@ -288,26 +290,26 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
 
   const decryptPadFields = (c, rootId, tribeKeys) => {
     if (c.encrypted !== true) {
-      return { title: safeText(c.title), deadline: c.deadline ? String(c.deadline) : "", tags: normalizeTags(c.tags) }
+      return { title: safeText(c.title), deadline: c.deadline ? String(c.deadline) : "", tags: normalizeTags(c.tags), _undec: false }
     }
     if (c.tribeId && Array.isArray(tribeKeys) && tribeKeys.length) {
       const viaTribe = decryptWithKeys(c, tribeKeys)
-      if (viaTribe) return viaTribe
+      if (viaTribe) return { ...viaTribe, _undec: false }
     }
     let keyHex = getPadKey(rootId)
     if (!keyHex) keyHex = tryDecryptPublicInviteKey(c.invites)
-    if (!keyHex) return { title: "", deadline: "", tags: [] }
+    if (!keyHex) return { title: "", deadline: "", tags: [], _undec: true }
     const title = c.title ? decryptField(c.title, keyHex) : ""
     const deadline = c.deadline ? decryptField(c.deadline, keyHex) : ""
     const tagsRaw = c.tags ? decryptField(c.tags, keyHex) : ""
     const tags = normalizeTags(tagsRaw)
-    return { title, deadline, tags }
+    return { title, deadline, tags, _undec: false }
   }
 
   const buildPad = (node, rootId, tribeKeys, members) => {
     const c = node.c || {}
     if (c.type !== "pad") return null
-    const { title, deadline, tags } = decryptPadFields(c, rootId, tribeKeys)
+    const { title, deadline, tags, _undec } = decryptPadFields(c, rootId, tribeKeys)
     return {
       key: node.key,
       rootId,
@@ -321,7 +323,8 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       tribeId: c.tribeId || null,
-      encrypted: c.encrypted === true
+      encrypted: c.encrypted === true,
+      undecryptable: !!_undec
     }
   }
 
@@ -329,6 +332,26 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     if (pad.status === "CLOSED") return true
     if (!pad.deadline) return false
     return new Date(pad.deadline).getTime() <= Date.now()
+  }
+
+  const collectPads = async (idx) => {
+    const tribeKeyCache = new Map()
+    const items = []
+    for (const [rootId, tipId] of idx.tipByRoot.entries()) {
+      if (idx.tomb.has(tipId)) continue
+      const node = idx.nodes.get(tipId)
+      if (!node || node.c.type !== "pad") continue
+      let tKeys = []
+      if (node.c.tribeId) {
+        if (!tribeKeyCache.has(node.c.tribeId)) tribeKeyCache.set(node.c.tribeId, await getTribeKeysFor(node.c.tribeId))
+        tKeys = tribeKeyCache.get(node.c.tribeId)
+      }
+      const pad = buildPad(node, rootId, tKeys, idx.resolveMembers(rootId))
+      if (!pad) continue
+      pad.isClosed = isClosed(pad)
+      items.push(pad)
+    }
+    return items
   }
 
   return {
@@ -615,7 +638,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const pad = buildPad(node, root, tKeys, idx.resolveMembers(root))
       if (!pad) return null
       pad.isClosed = isClosed(pad)
-      return pad
+      return padCollab.fold(pad, await collectPads(idx))
     },
 
     async listAll({ filter = "all", viewerId } = {}) {
@@ -623,26 +646,8 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const uid = viewerId || ssbClient.id
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      const tribeKeyCache = new Map()
-      const items = []
-      for (const [rootId, tipId] of idx.tipByRoot.entries()) {
-        if (idx.tomb.has(tipId)) continue
-        const node = idx.nodes.get(tipId)
-        if (!node || node.c.type !== "pad") continue
-        let tKeys = []
-        if (node.c.tribeId) {
-          if (!tribeKeyCache.has(node.c.tribeId)) {
-            tribeKeyCache.set(node.c.tribeId, await getTribeKeysFor(node.c.tribeId))
-          }
-          tKeys = tribeKeyCache.get(node.c.tribeId)
-        }
-        const pad = buildPad(node, rootId, tKeys, idx.resolveMembers(rootId))
-        if (!pad) continue
-        pad.isClosed = isClosed(pad)
-        items.push(pad)
-      }
       const now = Date.now()
-      let list = items
+      let list = padCollab.visibleThenCollapsed(await collectPads(idx), uid)
       if (filter === "mine") list = list.filter(p => p.author === uid)
       else if (filter === "recent") list = list.filter(p => new Date(p.createdAt).getTime() >= now - 86400000)
       else if (filter === "open") list = list.filter(p => !p.isClosed)
@@ -673,10 +678,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     },
 
     async getOpenInvite(padId) {
-      const pad = await this.getPadById(padId).catch(() => null)
-      if (!pad || !Array.isArray(pad.invites)) return null
-      const pub = pad.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code)
-      return pub ? { code: pub.code } : null
+      return openInviteOf(await this.getPadById(padId).catch(() => null))
     },
 
     async generateOpenInvite(padId) {

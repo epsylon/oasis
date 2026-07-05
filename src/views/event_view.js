@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -193,8 +193,14 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
 
   const dateText = e.date ? moment(e.date).format("YYYY/MM/DD HH:mm") : "";
 
-  return div({ class: "tribe-card event-card" },
-    div({ class: "tribe-card-body" },
+  const isOwn = e.organizer && String(e.organizer) === String(userId);
+  return div({ class: "trending-card event-card" + (isOwn ? " own-content" : "") },
+    div(
+      { class: "card-header activity-card-header" },
+      span(),
+      renderContentActions(e.id, `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`)
+    ),
+    div({ class: "card-section event-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
           a({ href: `/events/${encodeURIComponent(e.id)}` }, e.title || i18n.eventsTitle)
@@ -211,13 +217,7 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
       ),
-      div({ class: "card-spread-centered" }, renderSpreadButton(e.id, spreadInfo)),
-      div({ class: "card-visit-btn-centered" },
-        form({ method: "GET", action: `/events/${encodeURIComponent(e.id)}` },
-          input({ type: "hidden", name: "filter", value: currentFilter }),
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        )
-      )
+      div({ class: "card-spread-centered" }, renderSpreadButton(e.id, spreadInfo))
     )
   );
 };

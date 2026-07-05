@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { dedupeByPreferring, norm } = require('../backend/dedupe')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const isValidId = (to) => /^@[A-Za-z0-9+/]+={0,2}\.ed25519$/.test(String(to || ""))
@@ -114,6 +115,13 @@ module.exports = ({ cooler }) => {
       nodes.set(k, { key: k, ts, c: synthetic, author: claimantId })
     }
 
+    for (const [k, t] of Array.from(parent.entries())) {
+      const cn = nodes.get(k)
+      const pn = nodes.get(t)
+      if (!pn) { parent.delete(k); if (child.get(t) === k) child.delete(t); continue }
+      if (!cn || cn.author !== pn.author) { parent.delete(k); if (child.get(t) === k) child.delete(t); nodes.delete(k) }
+    }
+
     for (const [k, node] of nodes) {
       const t = node.c.replaces
       if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k) }
@@ -185,6 +193,7 @@ module.exports = ({ cooler }) => {
     const opinions_inhabitants = agg ? agg.opinions_inhabitants : (Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])
     return {
       id: node.key,
+      author: node.author,
       from: c.from,
       to: c.to,
       concept: c.concept,
@@ -381,7 +390,7 @@ module.exports = ({ cooler }) => {
         if (!g || g.tombstoned) continue
         out.push(buildTransfer(g.best, g))
       }
-      return out
+      return dedupeByPreferring(out, (t) => (t.author && t.createdAt) ? norm(t.author) + "|" + norm(t.createdAt) : null, (t) => (Array.isArray(t.confirmedBy) ? t.confirmedBy.length : 0))
     },
 
     async getTransferById(id) {

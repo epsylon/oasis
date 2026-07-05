@@ -3,6 +3,7 @@ const moment = require('../server/node_modules/moment');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
 const { dedupeBy, norm } = require('../backend/dedupe');
+const { buildVoteTally } = require('../backend/vote_tally');
 const categories = require('../backend/opinion_categories');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const MIN_VOTE_DAYS = 7;
@@ -51,7 +52,7 @@ module.exports = ({ cooler }) => {
       if (t) { naivePrev.set(key, t); }
     }
 
-    return { tombstoned, votes, naivePrev, collabVotes, collabOpinions };
+    return { tombstoned, votes, naivePrev, collabVotes, collabOpinions, voteTallyByKey: buildVoteTally(messages) };
   }
 
   const rootOfIn = (naivePrev, votes, key) => { let x = key, g = 0; while (naivePrev.has(x) && votes.has(naivePrev.get(x)) && g++ < 100000) x = naivePrev.get(x); return x; };
@@ -107,17 +108,28 @@ module.exports = ({ cooler }) => {
       const lc = best.content;
       const options = Array.isArray(best.content.options) ? best.content.options : [];
 
-      const votesMap = Object.assign({}, lc.votes || {});
-      for (const o of options) if (!(o in votesMap)) votesMap[o] = 0;
-      const voters = Array.isArray(lc.voters) ? lc.voters.slice() : [];
-      const voterSet = new Set(voters);
-      let totalVotes = parseInt(lc.totalVotes || 0, 10) || voters.length;
-      for (const cv of (cvByRoot.get(root) || [])) {
-        if (voterSet.has(cv.author)) continue;
-        if (!options.includes(cv.choice)) continue;
-        voterSet.add(cv.author); voters.push(cv.author);
-        votesMap[cv.choice] = (votesMap[cv.choice] || 0) + 1;
-        totalVotes += 1;
+      const tally = index.voteTallyByKey ? index.voteTallyByKey.get(best.key) : null;
+      let votesMap;
+      let voters;
+      let totalVotes;
+      if (tally) {
+        votesMap = Object.assign({}, tally.votes || {});
+        for (const o of options) if (!(o in votesMap)) votesMap[o] = 0;
+        voters = tally.voters.slice();
+        totalVotes = tally.totalVotes;
+      } else {
+        votesMap = Object.assign({}, lc.votes || {});
+        for (const o of options) if (!(o in votesMap)) votesMap[o] = 0;
+        voters = Array.isArray(lc.voters) ? lc.voters.slice() : [];
+        const voterSet = new Set(voters);
+        totalVotes = parseInt(lc.totalVotes || 0, 10) || voters.length;
+        for (const cv of (cvByRoot.get(root) || [])) {
+          if (voterSet.has(cv.author)) continue;
+          if (!options.includes(cv.choice)) continue;
+          voterSet.add(cv.author); voters.push(cv.author);
+          votesMap[cv.choice] = (votesMap[cv.choice] || 0) + 1;
+          totalVotes += 1;
+        }
       }
 
       const opinions = Object.assign({}, lc.opinions || {});
@@ -288,6 +300,7 @@ module.exports = ({ cooler }) => {
       const userId = ssbClient.id;
       const vote = await this.getVoteById(id);
       if (!vote) throw new Error('Vote not found');
+      if (vote.createdBy === userId) throw new Error('Creator cannot vote');
       const options = Array.isArray(vote.options) ? vote.options : [];
       if (!options.includes(choice)) throw new Error('Invalid choice');
       if (Array.isArray(vote.voters) && vote.voters.includes(userId)) throw new Error('Already voted');

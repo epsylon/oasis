@@ -300,6 +300,16 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       latestByKey.set(k, msg);
     }
 
+    for (const [oldId, newId] of Array.from(replacesMap.entries())) {
+      const orig = latestByKey.get(oldId);
+      const repl = latestByKey.get(newId);
+      if (!orig) { replacesMap.delete(oldId); continue; }
+      if (!repl || String(repl?.value?.author) !== String(orig?.value?.author)) {
+        replacesMap.delete(oldId);
+        latestByKey.delete(newId);
+      }
+    }
+
     for (const oldId of replacesMap.keys()) {
       latestByKey.delete(oldId);
     }

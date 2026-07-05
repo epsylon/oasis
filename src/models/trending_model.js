@@ -3,6 +3,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const opinionCategories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { buildVoteTally } = require('../backend/vote_tally');
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -61,7 +62,14 @@ module.exports = ({ cooler }) => {
       }
     }
 
-    for (const replacedId of replaces.keys()) {
+    for (const [replacedId, newId] of replaces.entries()) {
+      const oldMsg = itemsById.get(replacedId);
+      const newMsg = itemsById.get(newId);
+      if (!oldMsg) continue;
+      if (!newMsg || String(newMsg.value?.author) !== String(oldMsg.value?.author)) {
+        itemsById.delete(newId);
+        continue;
+      }
       itemsById.delete(replacedId);
     }
 
@@ -100,6 +108,24 @@ module.exports = ({ cooler }) => {
           return `key::${m.key}`;
       }
     };
+
+    const voteTally = buildVoteTally(messages);
+    const votesPrev = new Map();
+    for (const m of messages) {
+      const c = m.value?.content;
+      if (c && c.type === 'votes' && typeof c.replaces === 'string') votesPrev.set(m.key, c.replaces);
+    }
+    const resolveTallyKey = (k) => {
+      let cur = k;
+      let g = 0;
+      while (g++ < 1000 && !voteTally.has(cur) && votesPrev.has(cur)) cur = votesPrev.get(cur);
+      return cur;
+    };
+    items = items.map(m => {
+      if (m.value?.content?.type !== 'votes') return m;
+      const t = voteTally.get(resolveTallyKey(m.key));
+      return t ? { ...m, value: { ...m.value, content: { ...m.value.content, ...t } } } : m;
+    });
 
     const bySig = new Map();
     for (const m of items) {

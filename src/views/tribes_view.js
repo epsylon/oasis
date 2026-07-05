@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions } = require('./main_views');
 const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -261,64 +261,71 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     const isMember = t.members.includes(userId);
     const parentTribe = t.parentTribeId ? allT.find(p => p.id === t.parentTribeId) : null;
 
-    return div({ class: 'tribe-card' },
-      div({ class: 'tribe-card-image-wrapper' },
-        a({ href: `/tribe/${encodeURIComponent(t.id)}` },
-          renderMediaBlob(t.image, '/assets/images/default-tribe.png', { class: 'tribe-card-hero-image' })
-        ),
-        isMember
-          ? form({ method: 'GET', action: `/tribe/${encodeURIComponent(t.id)}`, class: 'tribe-visit-btn-wrapper' },
-              button({ type: 'submit', class: 'filter-btn' }, t.parentTribeId ? String(i18n.tribeviewSubTribeButton || 'VISIT SUB-TRIBE').toUpperCase() : String(i18n.tribeviewTribeButton || '').toUpperCase())
-            )
-          : null
+    const isOwn = String(t.author) === String(userId);
+    return div({ class: 'trending-card tribes-card' + (isOwn ? ' own-content' : '') },
+      div({ class: 'card-header activity-card-header' },
+        span(),
+        renderContentActions(t.id, `/tribe/${encodeURIComponent(t.id)}`)
       ),
-      div({ class: 'tribe-card-body' },
-        div({ class: 'shop-title-row' },
-          h2({ class: 'tribe-card-title' }, a({ href: `/tribe/${encodeURIComponent(t.id)}` }, t.title))
-        ),
-        div({ class: 'card-chips-row' },
-          t.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
-          t.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
-          renderModeChip(t.inviteMode, i18n),
-          renderLifespanChip(t.lifetime, i18n)
-        ),
-        t.description ? p({ class: 'tribe-card-description' }, ...renderUrl(t.description)) : null,
-        renderMapLocationVisitLabel(t.mapUrl),
-        (parentTribe || t.location) ? table({ class: 'tribe-info-table' },
-          parentTribe ? tr(
-            td({ class: 'tribe-info-label' }, i18n.tribeRootLabel || 'ROOT'),
-            td({ class: 'tribe-info-value', colspan: '3' }, a({ href: `/tribe/${encodeURIComponent(parentTribe.id)}` }, parentTribe.title))
-          ) : null,
-          t.location ? tr(
-            td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
-            td({ class: 'tribe-info-value', colspan: '3' }, ...renderUrl(t.location))
-          ) : null
-        ) : null,
-        div({ class: 'tribe-card-members' },
-          span({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${t.memberCount != null ? t.memberCount : t.members.length}`)
-        ),
-        (t.openInviteCode && !isMember && String(t.author) !== String(userId)) ? div({ class: 'tribe-card-join' },
-          form({ method: 'POST', action: '/tribes/open-invite/join' },
-            input({ type: 'hidden', name: 'tribeId', value: t.id }),
-            button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeJoinOpen)
+      div({ class: 'card-section tribes-card-body' },
+        div({ class: 'tribe-card-image-wrapper' },
+          a({ href: `/tribe/${encodeURIComponent(t.id)}` },
+            renderMediaBlob(t.image, '/assets/images/default-tribe.png', { class: 'tribe-card-hero-image' })
           ),
-          renderInviteQrCard({ qrDataUrl: t.openInviteQr, name: t.title })
-        ) : null,
-        isMember ? div({ class: 'tribe-card-actions' },
-          !isLarpHouseTribe(t)
-            ? form({ method: 'POST', action: '/tribes/generate-invite' },
-                input({ type: 'hidden', name: 'tribeId', value: t.id }),
-                button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite)
+          isMember
+            ? form({ method: 'GET', action: `/tribe/${encodeURIComponent(t.id)}`, class: 'tribe-visit-btn-wrapper' },
+                button({ type: 'submit', class: 'filter-btn' }, t.parentTribeId ? String(i18n.tribeviewSubTribeButton || 'VISIT SUB-TRIBE').toUpperCase() : String(i18n.tribeviewTribeButton || '').toUpperCase())
               )
-            : null,
-          form({ method: 'POST', action: `/tribes/leave/${encodeURIComponent(t.id)}` },
-            button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeLeaveButton)
-          )
-        ) : null,
-        filter === 'mine' ? div({ class: 'tribe-actions' },
-          form({ method: 'GET', action: `/tribes/edit/${encodeURIComponent(t.id)}` }, button({ type: 'submit' }, i18n.tribeUpdateButton)),
-          form({ method: 'POST', action: `/tribes/delete/${encodeURIComponent(t.id)}` }, button({ type: 'submit' }, i18n.tribeDeleteButton))
-        ) : null
+            : null
+        ),
+        div({ class: 'tribe-card-body' },
+          div({ class: 'shop-title-row' },
+            h2({ class: 'tribe-card-title' }, a({ href: `/tribe/${encodeURIComponent(t.id)}` }, t.title))
+          ),
+          div({ class: 'card-chips-row' },
+            t.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
+            t.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
+            renderModeChip(t.inviteMode, i18n),
+            renderLifespanChip(t.lifetime, i18n)
+          ),
+          t.description ? p({ class: 'tribe-card-description' }, ...renderUrl(t.description)) : null,
+          renderMapLocationVisitLabel(t.mapUrl),
+          (parentTribe || t.location) ? table({ class: 'tribe-info-table' },
+            parentTribe ? tr(
+              td({ class: 'tribe-info-label' }, i18n.tribeRootLabel || 'ROOT'),
+              td({ class: 'tribe-info-value', colspan: '3' }, a({ href: `/tribe/${encodeURIComponent(parentTribe.id)}` }, parentTribe.title))
+            ) : null,
+            t.location ? tr(
+              td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
+              td({ class: 'tribe-info-value', colspan: '3' }, ...renderUrl(t.location))
+            ) : null
+          ) : null,
+          div({ class: 'tribe-card-members' },
+            span({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${t.memberCount != null ? t.memberCount : t.members.length}`)
+          ),
+          (t.openInviteCode && !isMember && String(t.author) !== String(userId)) ? div({ class: 'tribe-card-join' },
+            form({ method: 'POST', action: '/tribes/open-invite/join' },
+              input({ type: 'hidden', name: 'tribeId', value: t.id }),
+              button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeJoinOpen)
+            ),
+            renderInviteQrCard({ qrDataUrl: t.openInviteQr, name: t.title })
+          ) : null,
+          isMember ? div({ class: 'tribe-card-actions' },
+            !isLarpHouseTribe(t)
+              ? form({ method: 'POST', action: '/tribes/generate-invite' },
+                  input({ type: 'hidden', name: 'tribeId', value: t.id }),
+                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite)
+                )
+              : null,
+            form({ method: 'POST', action: `/tribes/leave/${encodeURIComponent(t.id)}` },
+              button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeLeaveButton)
+            )
+          ) : null,
+          filter === 'mine' ? div({ class: 'tribe-actions' },
+            form({ method: 'GET', action: `/tribes/edit/${encodeURIComponent(t.id)}` }, button({ type: 'submit' }, i18n.tribeUpdateButton)),
+            form({ method: 'POST', action: `/tribes/delete/${encodeURIComponent(t.id)}` }, button({ type: 'submit', class: 'danger-btn' }, i18n.tribeDeleteButton))
+          ) : null
+        )
       )
     );
   });
@@ -800,7 +807,7 @@ const renderEventsSection = (tribe, items, query) => {
             )
           ),
           e.author === userId ? form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(e.id)}` },
-            button({ type: 'submit', class: 'filter-btn' }, i18n.tribeContentDelete)
+            button({ type: 'submit', class: 'filter-btn danger-btn' }, i18n.tribeContentDelete)
           ) : null
         )
       ))
@@ -868,7 +875,7 @@ const renderTasksSection = (tribe, items, query) => {
             button({ type: 'submit', class: 'filter-btn' }, i18n.tribeTaskStatusClosed)
           ) : null,
           t.author === userId ? form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(t.id)}` },
-            button({ type: 'submit', class: 'filter-btn' }, i18n.tribeContentDelete)
+            button({ type: 'submit', class: 'filter-btn danger-btn' }, i18n.tribeContentDelete)
           ) : null
         )
       ))
@@ -952,7 +959,7 @@ const renderVotationsSection = (tribe, items, query) => {
               button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeVotationClose)
             ) : null,
             form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(v.id)}` },
-              button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeContentDelete)
+              button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeContentDelete)
             )
           ) : null
         );
@@ -1046,7 +1053,7 @@ const renderForumSection = (tribe, items, query) => {
               ),
               r.author === userId ? div({ class: 'tribe-content-actions' },
                 form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(r.id)}` },
-                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeContentDelete)
+                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeContentDelete)
                 )
               ) : null
             )
@@ -1106,7 +1113,7 @@ const renderForumSection = (tribe, items, query) => {
               ),
               t.author === userId ? div({ class: 'forum-owner-actions' },
                 form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(t.id)}`, class: 'forum-delete-form' },
-                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeContentDelete)
+                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeContentDelete)
                 )
               ) : null
             )
@@ -1175,7 +1182,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
     p({ class: 'tribe-media-date' }, span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString())),
     p({ class: 'tribe-media-author' }, userLink(m.author)),
     m.author === userId ? form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(m.id)}` },
-      button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeContentDelete)
+      button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeContentDelete)
     ) : null
   ];
 
@@ -1849,7 +1856,7 @@ const rulesBlock = (tribe, rules, isCreator) => div({},
           isCreator
             ? form({ method: 'POST', action: `/tribe/${encodeURIComponent(tribe.id)}/governance/rule/delete`, class: 'inline-form' },
                 input({ type: 'hidden', name: 'ruleId', value: r.id }),
-                button({ type: 'submit', class: 'filter-btn' }, i18n.delete || 'Delete')
+                button({ type: 'submit', class: 'filter-btn danger-btn' }, i18n.delete || 'Delete')
               )
             : null
         )

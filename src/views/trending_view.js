@@ -1,5 +1,5 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderSpreadButton} = require('./main_views');
+const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span} = require("../server/node_modules/hyperaxe");
+const { template, i18n, userLink, renderSpreadButton, renderContentActions} = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -8,16 +8,12 @@ const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const userId = config.keys.id;
 
-const generateFilterButtons = (filters, currentFilter, action) =>
-  div({ class: 'filter-buttons-container', style: 'display: flex; gap: 16px; flex-wrap: wrap;' },
-    filters.map(mode =>
-      form({ method: 'GET', action },
-        input({ type: 'hidden', name: 'filter', value: mode }),
-        button(
-          { type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' },
-          i18n[mode + 'Button'] || mode
-        )
-      )
+const filterButton = (mode, currentFilter) =>
+  form({ method: 'GET', action: '/trending' },
+    input({ type: 'hidden', name: 'filter', value: mode }),
+    button(
+      { type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' },
+      i18n[mode + 'Button'] || mode
     )
   );
 
@@ -34,10 +30,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { url, description, lastVisit } = c;
     contentHtml = div({ class: 'trending-bookmark' },
       div({ class: 'card-section bookmark' },
-        form({ method: "GET", action: `/bookmarks/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        br(),
         url ? h2(p(a({ href: url, target: '_blank', class: "bookmark-url" }, url))) : "",
         lastVisit
           ? div(
@@ -53,10 +45,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { url, title, description, meme } = c;
     contentHtml = div({ class: 'trending-image' },
       div({ class: 'card-section image' },
-        form({ method: "GET", action: `/images/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        br(),
         title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"), p(...renderUrl(description))] : null,
         meme ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.trendingCategory + ':'), span({ class: 'card-value' }, i18n.meme)) : "",
@@ -67,10 +55,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { url, mimeType, title, description } = c;
     contentHtml = div({ class: 'trending-audio' },
       div({ class: 'card-section audio' },
-        form({ method: "GET", action: `/audios/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        br(),
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.audioTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, i18n.audioDescriptionLabel + ":"), p(...renderUrl(description))] : null,
         url
@@ -82,10 +66,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { url, mimeType, title, description } = c;
     contentHtml = div({ class: 'trending-video' },
       div({ class: 'card-section video' },
-        form({ method: "GET", action: `/videos/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        br(),
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.videoTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, i18n.videoDescriptionLabel + ":"), p(...renderUrl(description))] : null,
         br(),
@@ -98,10 +78,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { url, title, description } = c;
     contentHtml = div({ class: 'trending-torrent' },
       div({ class: 'card-section torrent' },
-        form({ method: "GET", action: `/torrents/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        br(),
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, (i18n.torrentDescriptionLabel || 'Description') + ":"), p(...renderUrl(description))] : null,
         url && url.startsWith("&")
@@ -117,10 +93,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
 
     contentHtml = div({ class: 'trending-document' },
       div({ class: 'card-section document' },
-        form({ method: "GET", action: `/documents/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        br(),
         t ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.documentTitleLabel + ':'), span({ class: 'card-value' }, t)) : "",
         description ? [span({ class: 'card-label' }, i18n.documentDescriptionLabel + ":"), p(...renderUrl(description))] : null,
         div({ id: `pdf-container-${item.key}`, class: 'pdf-viewer-container', 'data-pdf-url': `/blob/${encodeURIComponent(url)}` })
@@ -130,10 +102,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { text, refeeds } = c;
     contentHtml = div({ class: 'trending-feed' },
       div({ class: 'card-section feed' },
-        form({ method: "GET", action: `/feed/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        br,
         div({ class: 'feed-text', innerHTML: sanitizeHtml(renderTextWithStyles(text)) }),
         refeeds
             ? h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-value' }, refeeds))
@@ -147,9 +115,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       : [];
     contentHtml = div({ class: 'trending-votes' },
       div({ class: 'card-section votes' },
-        form({ method: "GET", action: `/votes/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteQuestionLabel + ':'), span({ class: 'card-value' }, question)),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteDeadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteTotalVotes + ':'), span({ class: 'card-value' }, totalVotes)),
@@ -163,10 +128,6 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { from, to, concept, amount, deadline, status, confirmedBy = [] } = c;
     contentHtml = div({ class: 'trending-transfer' },
       div({ class: 'card-section transfer' },
-        form({ method: "GET", action: `/transfers/${encodeURIComponent(item.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-        ),
-        br(),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.concept + ':'), span({ class: 'card-value' }, concept)),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)),
@@ -187,45 +148,66 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     );
   }
 
+  const detailPaths = {
+    bookmark: 'bookmarks',
+    image: 'images',
+    audio: 'audios',
+    video: 'videos',
+    torrent: 'torrents',
+    document: 'documents',
+    feed: 'feed',
+    votes: 'votes',
+    transfer: 'transfers'
+  };
+  const detailHref = detailPaths[c.type]
+    ? `/${detailPaths[c.type]}/${encodeURIComponent(item.key)}`
+    : `/thread/${encodeURIComponent(item.key)}`;
+  const isOwn = item.value.author && String(item.value.author) === String(userId);
+
   return div(
-    { class: 'trending-card' },
-    div({ class: 'card-chips-row' },
+    { class: 'trending-card' + (isOwn ? ' own-content' : '') },
+    div(
+      { class: 'card-header activity-card-header' },
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
         span({ class: 'pm-exposition-text' }, String(c.type || '').toUpperCase())
-      )
+      ),
+      renderContentActions(item.key, detailHref)
     ),
-    contentHtml,
-    div({ class: 'card-spread-left' }, renderSpreadButton(item.key, spreadMap.get(item.key))),
-    p(
-      { class: 'card-footer' },
-      span({ class: 'date-link' }, `${created} ${i18n.performed} `),
-      userLink(item.value.author)
-    ),
-    (() => {
-      const ops = c.opinions || {};
-      const entries = Object.entries(ops).filter(([, v]) => v > 0);
-      const dominantPart = (() => {
-        if (!entries.length) return null;
-        const maxVal = Math.max(...entries.map(([, v]) => v));
-        const dominant = entries.filter(([, v]) => v === maxVal).map(([k]) => voteLabelFor(k));
-        return [
-          span({ class: 'trending-dominant-sep' }, '|'),
-          span({ class: 'trending-dominant-text' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
-        ];
-      })();
-      return h2(
-        `${i18n.trendingTotalOpinions || i18n.trendingTotalCount}: `,
-        span({ class: 'trending-total-count' }, String(votes)),
-        ...(dominantPart || [])
-      );
-    })(),
     div(
-      { class: 'voting-buttons' },
-      categories.map(cat =>
-        form({ method: 'POST', action: `/trending/${encodeURIComponent(item.key)}/${cat}` },
-          button(
-            { class: 'vote-btn' },
-            `${voteLabelFor(cat)} [${c.opinions?.[cat] || 0}]`
+      { class: 'card-section trending-card-body' },
+      contentHtml,
+      div({ class: 'card-spread-left' }, renderSpreadButton(item.key, spreadMap.get(item.key))),
+      p(
+        { class: 'card-footer' },
+        span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+        userLink(item.value.author)
+      ),
+      (() => {
+        const ops = c.opinions || {};
+        const entries = Object.entries(ops).filter(([, v]) => v > 0);
+        const dominantPart = (() => {
+          if (!entries.length) return null;
+          const maxVal = Math.max(...entries.map(([, v]) => v));
+          const dominant = entries.filter(([, v]) => v === maxVal).map(([k]) => voteLabelFor(k));
+          return [
+            span({ class: 'trending-dominant-sep' }, '|'),
+            span({ class: 'trending-dominant-text' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
+          ];
+        })();
+        return h2(
+          `${i18n.trendingTotalOpinions || i18n.trendingTotalCount}: `,
+          span({ class: 'trending-total-count' }, String(votes)),
+          ...(dominantPart || [])
+        );
+      })(),
+      div(
+        { class: 'voting-buttons' },
+        categories.map(cat =>
+          form({ method: 'POST', action: `/trending/${encodeURIComponent(item.key)}/${cat}` },
+            button(
+              { class: 'vote-btn' },
+              `${voteLabelFor(cat)} [${c.opinions?.[cat] || 0}]`
+            )
           )
         )
       )
@@ -237,7 +219,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
-  const baseFilters = ['RECENT', 'ALL', 'MINE', 'TOP'];
+  const baseFilters = ['TOP', 'ALL', 'MINE', 'RECENT'];
   const contentFilters = [
     ['votes', 'feed', 'transfer'],
     ['bookmark', 'image', 'video', 'audio', 'document', 'torrent']
@@ -289,29 +271,10 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
     section(
       header,
       div(
-        { class: 'mode-buttons', style: 'margin-bottom:24px;' },
-        div({ style: 'display:flex;gap:16px;flex-wrap:wrap;' },
-          generateFilterButtons(baseFilters, filter, '/trending')
-        ),
-        details(
-          Object.assign({ class: 'opinions-collapse', style: 'margin-top:12px;' }, contentFilters.flat().includes(filter) ? { open: true } : {}),
-          summary({ class: 'filter-btn opinions-summary', style: 'cursor:pointer;display:inline-block;' },
-            `${i18n.opinionsTitle || 'Opinions'} (${contentFilters.flat().length})`),
-          div({ style: 'display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;' },
-            ...contentFilters.map(row =>
-              div({ style: 'display:flex;flex-direction:column;gap:8px;' },
-                row.map(mode =>
-                  form({ method: 'GET', action: '/trending' },
-                    input({ type: 'hidden', name: 'filter', value: mode }),
-                    button(
-                      { type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' },
-                      i18n[mode + 'Button'] || mode
-                    )
-                  )
-                )
-              )
-            )
-          )
+        { class: 'mode-buttons' },
+        div({ class: 'column' }, baseFilters.map(mode => filterButton(mode, filter))),
+        ...contentFilters.map(row =>
+          div({ class: 'column' }, row.map(mode => filterButton(mode, filter)))
         )
       ),
       section(

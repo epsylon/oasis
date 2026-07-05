@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -148,22 +148,6 @@ const renderJobAppliedChip = () =>
 const renderJobHiddenChip = () =>
   renderVisibilityChip("HIDDEN", i18n)
 
-const buildJobReturnInputs = (filter, params = {}) => [
-  input({ type: "hidden", name: "filter", value: filter || "ALL" }),
-  params.search ? input({ type: "hidden", name: "search", value: params.search }) : null,
-  params.minSalary !== undefined ? input({ type: "hidden", name: "minSalary", value: String(params.minSalary ?? "") }) : null,
-  params.maxSalary !== undefined ? input({ type: "hidden", name: "maxSalary", value: String(params.maxSalary ?? "") }) : null,
-  params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null
-].filter(Boolean)
-
-const renderJobViewDetailsForm = (job, filter, params, returnTo, btnClass) =>
-  form(
-    { method: "GET", action: `/jobs/${encodeURIComponent(job.id)}` },
-    input({ type: "hidden", name: "returnTo", value: returnTo }),
-    ...buildJobReturnInputs(filter, params),
-    button({ type: "submit", class: btnClass || "filter-btn" }, i18n.viewDetailsButton)
-  )
-
 const renderJobApplyToggle = (job, returnTo) => {
   const isAuthor = String(job.author) === String(userId)
   const isOpen = String(job.status || "").toUpperCase() === "OPEN"
@@ -228,7 +212,6 @@ const renderJobExtraDetails = (job) => {
 }
 
 const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
-  const returnTo = buildReturnTo(filter, params)
   const list = safeArr(jobs)
 
   if (!list.length) return p(i18n.noJobsMatch || i18n.noJobsFound)
@@ -256,22 +239,27 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
         ? `${Number(job.hoursOffered) || 0}h ⇄ ${Number(job.hoursRequested) || 0}h`
         : `${fmtSalary(job.salary)} ECO`
 
-      return div({ class: "tribe-card job-card" },
-        heroNode,
-        div({ class: "tribe-card-body" },
-          div({ class: "shop-title-row" },
-            h2({ class: "tribe-card-title" },
-              a({ href: `/jobs/${encodeURIComponent(job.id)}` }, safeText(job.title) || i18n.jobsTitle)
-            )
-          ),
-          chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-          div({ class: "card-date-highlight" }, compensationText),
-          div({ class: "tribe-card-members" },
-            span({ class: "tribe-members-count" }, `${i18n.jobSubscribers}: ${subs.length}`)
-          ),
-          div({ class: "card-spread-centered" }, renderSpreadButton(job.id, params.spreadMap && params.spreadMap.get(job.id))),
-          div({ class: "card-visit-btn-centered" },
-            renderJobViewDetailsForm(job, filter, params, returnTo)
+      const isOwn = job.author && String(job.author) === String(userId)
+      return div({ class: "trending-card job-card" + (isOwn ? " own-content" : "") },
+        div(
+          { class: "card-header activity-card-header" },
+          span(),
+          renderContentActions(job.id, `/jobs/${encodeURIComponent(job.id)}`)
+        ),
+        div({ class: "card-section job-card-body" },
+          heroNode,
+          div({ class: "tribe-card-body" },
+            div({ class: "shop-title-row" },
+              h2({ class: "tribe-card-title" },
+                a({ href: `/jobs/${encodeURIComponent(job.id)}` }, safeText(job.title) || i18n.jobsTitle)
+              )
+            ),
+            chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+            div({ class: "card-date-highlight" }, compensationText),
+            div({ class: "tribe-card-members" },
+              span({ class: "tribe-members-count" }, `${i18n.jobSubscribers}: ${subs.length}`)
+            ),
+            div({ class: "card-spread-centered" }, renderSpreadButton(job.id, params.spreadMap && params.spreadMap.get(job.id)))
           )
         )
       )

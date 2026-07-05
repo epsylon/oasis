@@ -18,7 +18,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
   const getDedupeKey = (msg) => {
     const c = msg?.value?.content || {};
     const t = c?.type || 'unknown';
-    const author = c.author || msg?.value?.author || '';
+    const author = msg?.value?.author || c.author || '';
 
     if (t === 'post') return `post:${msg.key}`;
 
@@ -30,10 +30,10 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
     if (t === 'bankWallet') return `bankWallet:${c?.address || msg.key}`;
     if (t === 'bankClaim') return `bankClaim:${c?.txid || `${c?.epochId || ''}:${c?.allocationId || ''}:${c?.amount || ''}` || msg.key}`;
 
-    if (t === 'document') return `document:${c.key || c.url || `${author}|${norm(c.title)}` || msg.key}`;
-    if (t === 'image') return `image:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
-    if (t === 'audio') return `audio:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
-    if (t === 'video') return `video:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
+    if (t === 'document') return `document:${author}|${c.key || c.url || norm(c.title) || msg.key}`;
+    if (t === 'image') return `image:${author}|${c.url || `${norm(c.title)}|${norm(c.description)}` || msg.key}`;
+    if (t === 'audio') return `audio:${author}|${c.url || `${norm(c.title)}|${norm(c.description)}` || msg.key}`;
+    if (t === 'video') return `video:${author}|${c.url || `${norm(c.title)}|${norm(c.description)}` || msg.key}`;
     if (t === 'bookmark') return `bookmark:${author}|${c.url || norm(c.description) || msg.key}`;
 
     if (t === 'tribe') {
@@ -122,6 +122,16 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
         if (t === 'tombstone') continue;
         if (c.replaces) replacesMap.set(c.replaces, k);
         latestByKey.set(k, msg);
+      }
+
+      for (const [oldId, newId] of Array.from(replacesMap.entries())) {
+        const oldMsg = latestByKey.get(oldId);
+        if (!oldMsg) { replacesMap.delete(oldId); continue; }
+        const newMsg = latestByKey.get(newId);
+        if (!newMsg || String(newMsg?.value?.author) !== String(oldMsg?.value?.author)) {
+          replacesMap.delete(oldId);
+          latestByKey.delete(newId);
+        }
       }
 
       for (const oldId of replacesMap.keys()) latestByKey.delete(oldId);

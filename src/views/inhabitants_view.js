@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, br, span, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderUserSensors } = require('./main_views');
+const { template, i18n, userLink, renderUserSensors, renderContentActions } = require('./main_views');
 const { renderContentStats } = require('./clearnet_view');
 const { renderUrl } = require('../backend/renderUrl');
 const { getConfig } = require('../configs/config-manager');
@@ -107,7 +107,14 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
     fediverse: raw.fediverse === true,
     fediverseHandle: typeof raw.fediverseHandle === 'string' ? raw.fediverseHandle : ''
   };
-  return div({ class: 'inhabitant-card' },
+  return div({ class: 'trending-card inhabitants-card' + (isMe ? ' own-content' : '') },
+    div(
+      { class: 'card-header activity-card-header' },
+      span(),
+      renderContentActions(user.id, `/inhabitant/${encodeURIComponent(user.id)}`)
+    ),
+    div({ class: 'card-section inhabitants-card-body' },
+      div({ class: 'inhabitant-card' },
     div({ class: 'inhabitant-left' },
       a(
          { href: `/author/${encodeURIComponent(user.id)}` },
@@ -124,10 +131,6 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
       !isMe
         ? div(
             { class: 'cv-actions' },
-            form(
-              { method: 'GET', action: `/inhabitant/${encodeURIComponent(user.id)}` },
-              button({ type: 'submit', class: 'btn' }, i18n.inhabitantviewDetails)
-            ),
             form(
               { method: 'GET', action: '/pm' },
               input({ type: 'hidden', name: 'recipients', value: user.id }),
@@ -183,6 +186,8 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
         )
       })() : null,
       renderContentStats(user.stats, i18n)
+    )
+      )
     )
   );
 };

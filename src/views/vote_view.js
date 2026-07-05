@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderOpinionsVoting, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -65,8 +65,9 @@ const renderVoteOwnerActions = (v, returnTo, mode) => {
 
 const renderVoteButtons = (v, voteOptions, firstRow, secondRow, returnTo) => {
   if (normalizeStatus(v.status) !== "OPEN") return null;
+  if (v.createdBy && String(v.createdBy) === String(userId)) return null;
 
-  const allOptions = [...firstRow, ...secondRow];
+  const allOptions = Array.isArray(v.options) && v.options.length ? v.options : [...firstRow, ...secondRow];
   return div(
     { class: "vote-buttons-block" },
     div(
@@ -90,7 +91,8 @@ const renderVoteStatusChip = (status) => {
   return renderOpenClosedChip(status, { statusChipOPEN: localized, statusChipCLOSED: localized });
 };
 
-const renderVoteListItem = (v, voteOptions, activeFilter, spreadInfo) => {
+const renderVoteListItem = (v, voteOptionsDefault, activeFilter, spreadInfo) => {
+  const voteOptions = Array.isArray(v.options) && v.options.length ? v.options : voteOptionsDefault;
   const baseCounts = voteOptions.reduce((acc, opt) => {
     acc[opt] = (v.votes && v.votes[opt]) ? v.votes[opt] : 0;
     return acc;
@@ -101,9 +103,16 @@ const renderVoteListItem = (v, voteOptions, activeFilter, spreadInfo) => {
     renderVoteStatusChip(v.status),
     renderLifespanChip(v.lifetime, i18n)
   ].filter(Boolean);
+  const returnTo = `/votes?filter=${encodeURIComponent(activeFilter || "all")}`;
+  const totalOpinions = Object.values(v.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+  const isOwn = v.createdBy && String(v.createdBy) === String(userId);
 
-  return div({ class: "tribe-card vote-card" },
-    div({ class: "tribe-card-body" },
+  return div({ class: "trending-card vote-card" + (isOwn ? " own-content" : "") },
+    div({ class: "card-header activity-card-header" },
+      span(),
+      renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`)
+    ),
+    div({ class: "card-section vote-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
           a({ href: `/votes/${encodeURIComponent(v.id)}` }, v.question || i18n.votationsTitle)
@@ -115,18 +124,13 @@ const renderVoteListItem = (v, voteOptions, activeFilter, spreadInfo) => {
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
       ),
       div({ class: "job-meta-line", style: `color:${outcome.color};font-weight:bold;` }, `${i18n.voteResults || "Results"}: ${outcome.text}`),
-      div({ class: "card-spread-centered" }, renderSpreadButton(v.id, spreadInfo)),
-      div({ class: "card-visit-btn-centered" },
-        form({ method: "GET", action: `/votes/${encodeURIComponent(v.id)}` },
-          input({ type: "hidden", name: "filter", value: activeFilter || "all" }),
-          button({ type: "submit", class: "filter-btn" }, i18n.viewVotation || "View Votation")
-        )
-      )
+      div({ class: "card-spread-centered" }, renderSpreadButton(v.id, spreadInfo))
     )
   );
 };
 
-const renderVoteDetail = (v, voteOptions, firstRow, secondRow, mode, activeFilter, params = {}) => {
+const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, activeFilter, params = {}) => {
+  const voteOptions = Array.isArray(v.options) && v.options.length ? v.options : voteOptionsDefault;
   const baseCounts = voteOptions.reduce((acc, opt) => {
     acc[opt] = (v.votes && v.votes[opt]) ? v.votes[opt] : 0;
     return acc;

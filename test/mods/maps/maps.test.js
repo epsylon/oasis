@@ -96,3 +96,32 @@ describe('maps: open (multi-use) invitation', (t) => {
     ok(threw, 'removed open invite no longer works');
   });
 });
+
+describe('maps: encrypted visibility + duplicate collapse', (t) => {
+  t('non-member never sees a blank encrypted map', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('maps').createMap(10, 20, 'secret', 'SINGLE', [], 'Secret Map', null, '', null);
+    B.setActor();
+    const list = await B.use('maps').listAll({ filter: 'all', viewerId: B.keypair.id });
+    ok(!list.some(m => m.encrypted), 'no blank/undecryptable map card shown to a non-member');
+  });
+
+  t('duplicate map roots are collapsed: original + freshest members', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('maps').createMap(1, 2, 'd', 'OPEN', ['t'], 'Atlas', null, '', null);
+    const before = (await A.use('maps').listAll({ filter: 'all', viewerId: A.keypair.id })).find(m => m.title === 'Atlas');
+    ok(before, 'original map exists');
+    const ssbA = await A.cooler.open();
+    await new Promise((res, rej) => ssbA.publish({
+      type: 'map', title: 'Atlas', lat: 1, lng: 2, description: 'd', mapType: 'OPEN', tags: ['t'],
+      author: A.keypair.id, members: [A.keypair.id, B.keypair.id], invites: [],
+      createdAt: before.createdAt, updatedAt: new Date(Date.now() + 5000).toISOString()
+    }, e => e ? rej(e) : res()));
+    const list = await A.use('maps').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const atlases = list.filter(m => m.title === 'Atlas');
+    eq(atlases.length, 1, 'the duplicate map root is collapsed into a single card');
+    eq((atlases[0].members || []).length, 2, 'members taken from the freshest duplicate');
+  });
+});

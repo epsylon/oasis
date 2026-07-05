@@ -73,3 +73,49 @@ describe('calendars: open (multi-use) invitation', (t) => {
     ok(threw, 'removed open invite no longer works');
   });
 });
+
+describe('calendars: encrypted visibility (no blank duplicate cards)', (t) => {
+  const future = (d) => new Date(Date.now() + d * 864e5).toISOString();
+
+  t('non-member sees open calendars decrypted and never a blank encrypted card', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('calendars').createCalendar({ title: 'Open One', status: 'OPEN', deadline: future(30), tags: [], firstDate: future(3), firstDateLabel: 'D', firstNote: 'n', tribeId: null });
+    await A.use('calendars').createCalendar({ title: 'Private One', status: 'CLOSED', deadline: future(30), tags: [], firstDate: future(3), firstDateLabel: 'D', firstNote: 'n', tribeId: null });
+    B.setActor();
+    const list = await B.use('calendars').listAll({ filter: 'all', viewerId: B.keypair.id });
+    ok(list.some(c => c.title === 'Open One'), 'non-member discovers the open calendar via its public invite');
+    ok(!list.some(c => c.encrypted), 'no undecryptable (blank) calendar card is shown to a non-member');
+    ok(!list.some(c => c.title === 'Private One'), 'the private calendar is not shown to a non-member');
+  });
+
+  t('owner still sees all of their own calendars', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    A.setActor();
+    await A.use('calendars').createCalendar({ title: 'Mine Open', status: 'OPEN', deadline: future(30), tags: [], firstDate: future(3), firstDateLabel: 'D', firstNote: 'n', tribeId: null });
+    await A.use('calendars').createCalendar({ title: 'Mine Closed', status: 'CLOSED', deadline: future(30), tags: [], firstDate: future(3), firstDateLabel: 'D', firstNote: 'n', tribeId: null });
+    const list = await A.use('calendars').listAll({ filter: 'all', viewerId: A.keypair.id });
+    ok(list.some(c => c.title === 'Mine Open'), 'owner sees own open calendar');
+    ok(list.some(c => c.title === 'Mine Closed'), 'owner sees own closed calendar');
+    ok(!list.some(c => c.encrypted), 'owner never sees a blank encrypted card for own calendars');
+  });
+
+  t('duplicate calendar roots are collapsed: original + freshest participants', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('calendars').createCalendar({ title: 'Fair', status: 'OPEN', deadline: future(30), tags: ['t'], firstDate: future(3), firstDateLabel: 'D', firstNote: 'n', tribeId: null });
+    const before = (await A.use('calendars').listAll({ filter: 'all', viewerId: A.keypair.id })).find(c => c.title === 'Fair');
+    ok(before, 'original calendar exists');
+    const ssbA = await A.cooler.open();
+    await new Promise((res, rej) => ssbA.publish({
+      type: 'calendar', title: 'Fair', status: 'OPEN', deadline: before.deadline || '', tags: ['t'],
+      author: A.keypair.id, participants: [A.keypair.id, B.keypair.id], invites: [],
+      createdAt: before.createdAt, updatedAt: new Date(Date.now() + 5000).toISOString()
+    }, e => e ? rej(e) : res()));
+    const list = await A.use('calendars').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const fairs = list.filter(c => c.title === 'Fair');
+    eq(fairs.length, 1, 'the duplicate calendar root is collapsed into a single card');
+    eq(fairs[0].key, before.key, 'canonical card keeps the original (first-created) key');
+    eq((fairs[0].participants || []).length, 2, 'participants are taken from the freshest duplicate');
+  });
+});
