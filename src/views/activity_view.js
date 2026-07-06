@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 
@@ -1561,10 +1561,14 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         const routeFn = OPINION_ROUTES[type];
         if (!routeFn) return null;
         const ops = (action.value?.content?.opinions) || (action.content?.opinions) || {};
-        return div({ class: 'voting-buttons' },
-          opinionCategories.map(cat =>
-            form({ method: 'POST', action: `${routeFn(action.id)}/${cat}` },
-              button({ class: 'vote-btn' }, `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${ops[cat] || 0}]`)
+        const opsTotal = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
+        return details({ class: 'opinions-voting-collapse' },
+          summary({ class: 'opinions-summary' }, `${i18n.opinionsTitle || 'Opinions'} (${opsTotal})`),
+          div({ class: 'voting-buttons' },
+            opinionCategories.map(cat =>
+              form({ method: 'POST', action: `${routeFn(action.id)}/${cat}` },
+                button({ class: 'vote-btn' }, `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${ops[cat] || 0}]`)
+              )
             )
           )
         );

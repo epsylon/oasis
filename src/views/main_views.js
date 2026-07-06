@@ -2367,7 +2367,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
 };
 
 const renderUserSensors = (u, opts = {}) => {
-  const { renderReachChip, renderClearnetUrlBlock, renderFediverseReach, renderContentStats } = require('./clearnet_view');
+  const { renderReachChip, renderFediverseReach, renderContentStats } = require('./clearnet_view');
   const prefs = u.prefs || {};
   const isMe = !!u.isMe;
   const show = (k) => prefs[k];
@@ -2429,7 +2429,6 @@ const renderUserSensors = (u, opts = {}) => {
         const path = `/c/inhabitant/${encodeURIComponent(u.id)}`;
         return div({ class: 'profile-reach' },
           renderReachChip(true, i18n, path),
-          renderClearnetUrlBlock({ path, i18nObj: i18n }),
           renderInviteQrCard({ qrDataUrl: `/qr-clearnet/${encodeURIComponent(u.id)}` }),
           isMe ? form({ method: 'POST', action: '/profile/clearnet-toggle', class: 'profile-reach-toggle' }, button({ type: 'submit', class: 'btn' }, i18n.profileSwitchToOasis || 'Return to Oasis')) : null
         );

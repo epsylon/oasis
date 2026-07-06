@@ -201,15 +201,20 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     const rootOf = (id) => { let cur = id; while (parent.has(cur)) cur = parent.get(cur); return cur }
     const tipOf = (id) => { let cur = id; while (child.has(cur)) cur = child.get(cur); return cur }
     const contentTipOf = (root) => {
+      const rn = nodes.get(root)
+      if (!rn) return root
       let cur = root
-      while (strictChild.has(cur)) {
-        const next = strictChild.get(cur)
+      let best = root
+      const seen = new Set()
+      while (child.has(cur) && !seen.has(cur)) {
+        seen.add(cur)
+        const next = child.get(cur)
         const n = nodes.get(next)
-        const rn = nodes.get(root)
-        if (!n || !rn || n.author !== rn.author) break
+        if (!n) break
+        if (n.author === rn.author && !tomb.has(next)) best = next
         cur = next
       }
-      return cur
+      return best
     }
 
     const roots = new Set()

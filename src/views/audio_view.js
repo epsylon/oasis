@@ -224,6 +224,15 @@ const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) 
                 button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
               )
             ),
+                        div(
+              { class: "card-comments-summary feed-opinions-section" },
+              div(
+                { class: "comments-count" },
+                span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
+                span({ class: "card-value" }, String(Object.values(audioObj.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)))
+              ),
+              renderOpinionsVoting('/audios/opinions', audioObj.key, audioObj.opinions, returnTo, audioObj.opinions_inhabitants)
+            ),
             div({ class: "card-spread-left" }, renderSpreadButton(audioObj.key, (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads)),
             renderMapLocationVisitLabel(audioObj.mapUrl),
             br(),

@@ -990,3 +990,16 @@ a.hashtag {
 .game-row-body { width: 100% !important; min-width: 0 !important; }
 .game-row-actions { justify-content: center !important; width: 100% !important; }
 .games-grid { grid-template-columns: 1fr !important; }
+
+.profile-sensors-box { display: flex !important; flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 6px !important; max-width: 100% !important; }
+.profile-sensors-box span { display: block !important; max-width: 100% !important; overflow-wrap: anywhere !important; }
+.larp-sign-block { display: block !important; max-width: 100% !important; overflow: hidden !important; text-align: center !important; }
+.larp-sign-large { max-width: 100% !important; height: auto !important; display: block !important; margin: 0 auto !important; }
+.profile-side-mention { max-width: 100% !important; overflow-wrap: anywhere !important; word-break: break-all !important; }
+.profile-side-mention a, .profile-side-mention strong { max-width: 100% !important; overflow-wrap: anywhere !important; word-break: break-all !important; display: inline-block !important; }
+.inhabitant-stats-box { max-width: 100% !important; overflow: hidden !important; }
+.inhabitant-stats-grid { display: flex !important; flex-wrap: wrap !important; justify-content: center !important; gap: 6px !important; max-width: 100% !important; }
+.inhabitant-stat { max-width: 100% !important; overflow-wrap: anywhere !important; }
+.profile-reach { max-width: 100% !important; overflow: hidden !important; text-align: center !important; }
+.feed-card .card-footer { display: flex !important; flex-wrap: wrap !important; align-items: center !important; gap: 6px !important; row-gap: 4px !important; }
+.feed-card .date-link { max-width: 100% !important; overflow-wrap: anywhere !important; font-size: 0.85em !important; padding: 6px 10px !important; }

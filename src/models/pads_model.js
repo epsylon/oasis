@@ -117,7 +117,39 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
         let tagsRaw = ""
         try { deadline = c.deadline ? tryDecryptField(c.deadline, k) : "" } catch (_) {}
         try { tagsRaw = c.tags ? tryDecryptField(c.tags, k) : "" } catch (_) {}
-        return { title: safeText(title), deadline, tags: normalizeTags(tagsRaw) }
+        const ensureMemberKeys = async (ssbClient, messages, items) => {
+    if (!tribeCrypto) return
+    const distributed = new Map()
+    for (const m of messages) {
+      const c = m.value && m.value.content
+      if (!c || c.type !== "tribe-keys" || !c.tribeId) continue
+      const mk = c.memberKeys
+      if (!mk || typeof mk !== "object") continue
+      if (!distributed.has(c.tribeId)) distributed.set(c.tribeId, new Set())
+      for (const id of Object.keys(mk)) distributed.get(c.tribeId).add(id)
+    }
+    const ssbKeys = require("../server/node_modules/ssb-keys")
+    for (const item of (Array.isArray(items) ? items : [])) {
+      if (!item || item.undecryptable) continue
+      const rootId = item.rootId
+      if (!rootId) continue
+      const key = lookupKey(rootId)
+      if (!key) continue
+      const have = distributed.get(rootId) || new Set()
+      const missing = (Array.isArray(item.members) ? item.members : []).filter(m => m && m !== ssbClient.id && !have.has(m))
+      if (!missing.length) continue
+      const memberKeys = {}
+      for (const m of missing) {
+        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
+      }
+      if (!Object.keys(memberKeys).length) continue
+      await new Promise((resolve) => {
+        ssbClient.publish({ type: "tribe-keys", tribeId: rootId, generation: lookupGen(rootId) || 1, memberKeys }, () => resolve())
+      })
+    }
+  }
+
+  return { title: safeText(title), deadline, tags: normalizeTags(tagsRaw) }
       } catch (_) {}
     }
     return null
@@ -238,10 +270,19 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     const tipOf = (id) => { let cur = id, g = 0; while (child.has(cur) && g++ < 100000) cur = child.get(cur); return cur }
     const strictRootOf = (id) => { let cur = id, g = 0; while (strictParent.has(cur) && g++ < 100000) cur = strictParent.get(cur); return cur }
     const contentTipOf = (root) => {
-      let cur = root, g = 0
-      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur)
-      const n = nodes.get(cur), rn = nodes.get(root)
-      return (n && rn && n.author === rn.author) ? cur : root
+      const rn = nodes.get(root)
+      if (!rn) return root
+      let cur = root, best = root, g = 0
+      const seen = new Set()
+      while (child.has(cur) && !seen.has(cur) && g++ < 100000) {
+        seen.add(cur)
+        const next = child.get(cur)
+        const n = nodes.get(next)
+        if (!n) break
+        if (n.author === rn.author && !tomb.has(next)) best = next
+        cur = next
+      }
+      return best
     }
 
     const roots = new Set()
@@ -652,7 +693,9 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       else if (filter === "recent") list = list.filter(p => new Date(p.createdAt).getTime() >= now - 86400000)
       else if (filter === "open") list = list.filter(p => !p.isClosed)
       else if (filter === "closed") list = list.filter(p => p.isClosed)
-      return list.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      list = list.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      try { await ensureMemberKeys(ssbClient, messages, list) } catch (_) {}
+      return list
     },
 
     async generateInvite(padId, opts = {}) {
@@ -792,6 +835,8 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     async getEntries(padRootId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
+      const wantRoot = idx.rootOf(padRootId)
       const pad = await this.getPadById(padRootId)
       const padKey = getPadKey(padRootId)
       let tribeKeys = []
@@ -803,7 +848,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
         const v = m.value || {}
         const c = v.content
         if (!c || c.type !== "padEntry") continue
-        if (c.padId !== padRootId) continue
+        if (c.padId !== padRootId && idx.rootOf(c.padId) !== wantRoot) continue
         let text = c.text || ""
         if (c.encrypted && c.text) {
           let decoded = ""

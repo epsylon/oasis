@@ -162,7 +162,9 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
 
     const isCodeConsumed = (rootId, code) => !!(code && consumedByRoot.has(rootId) && consumedByRoot.get(rootId).has(code))
 
-    return { tomb, nodes, parent: strictParent, child: strictChild, rootOf, tipOf, tipByRoot, msgNodes, memberByRoot, consumedByRoot, isCodeConsumed }
+    const rawRootOf = (id) => { let cur = id, g = 0; while (parent.has(cur) && g++ < 100000) cur = parent.get(cur); return cur }
+
+    return { tomb, nodes, parent: strictParent, child: strictChild, rawParent: parent, rawChild: child, rawRootOf, rootOf, tipOf, tipByRoot, msgNodes, memberByRoot, consumedByRoot, isCodeConsumed }
   }
 
   const resolveKeyChainSets = (chatRootId) => {
@@ -300,6 +302,38 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: ssbClient.id }
       ssbClient.publish(tombstone, (e) => e ? reject(e) : resolve())
     })
+
+  const ensureMemberKeys = async (ssbClient, messages, chats) => {
+    if (!tribeCrypto) return
+    const distributed = new Map()
+    for (const m of messages) {
+      const c = m.value && m.value.content
+      if (!c || c.type !== "tribe-keys" || !c.tribeId) continue
+      const mk = c.memberKeys
+      if (!mk || typeof mk !== "object") continue
+      if (!distributed.has(c.tribeId)) distributed.set(c.tribeId, new Set())
+      for (const id of Object.keys(mk)) distributed.get(c.tribeId).add(id)
+    }
+    const ssbKeys = require("../server/node_modules/ssb-keys")
+    for (const chat of safeArr(chats)) {
+      if (!chat || chat.undecryptable) continue
+      const rootId = chat.rootId
+      if (!rootId) continue
+      const key = lookupKey(rootId)
+      if (!key) continue
+      const have = distributed.get(rootId) || new Set()
+      const missing = safeArr(chat.members).filter(m => m && m !== ssbClient.id && !have.has(m))
+      if (!missing.length) continue
+      const memberKeys = {}
+      for (const m of missing) {
+        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
+      }
+      if (!Object.keys(memberKeys).length) continue
+      await new Promise((resolve) => {
+        ssbClient.publish({ type: "tribe-keys", tribeId: rootId, generation: lookupGen(rootId) || 1, memberKeys }, () => resolve())
+      })
+    }
+  }
 
   const publishMemberToggle = async (ssbClient, rootId, member, on, code) =>
     new Promise((resolve, reject) => {
@@ -579,6 +613,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       }
 
       list = list.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      try { await ensureMemberKeys(ssbClient, messages, list) } catch (_) {}
       return list
     },
 
@@ -818,9 +853,11 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       if (chatNode?.c?.tribeId) tribeId = chatNode.c.tribeId
       const tribeKeys = tribeId ? await getTribeKeysFor(tribeId) : []
 
+      const wantRoot = idx.rawRootOf(chatRootId)
       const result = []
       for (const [k, node] of idx.msgNodes.entries()) {
-        if (node.c.chatId !== chatRootId) continue
+        const cid = node.c.chatId
+        if (cid !== chatRootId && idx.rawRootOf(cid) !== wantRoot) continue
         const msg = buildMessage(node, chatRootId, tribeKeys)
         if (msg) result.push(msg)
       }

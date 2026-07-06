@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span} = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderSpreadButton, renderContentActions} = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
@@ -200,13 +200,16 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
           ...(dominantPart || [])
         );
       })(),
-      div(
-        { class: 'voting-buttons' },
-        categories.map(cat =>
-          form({ method: 'POST', action: `/trending/${encodeURIComponent(item.key)}/${cat}` },
-            button(
-              { class: 'vote-btn' },
-              `${voteLabelFor(cat)} [${c.opinions?.[cat] || 0}]`
+      details({ class: 'opinions-voting-collapse' },
+        summary({ class: 'opinions-summary' }, `${i18n.opinionsTitle || 'Opinions'} (${Object.values(c.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)})`),
+        div(
+          { class: 'voting-buttons' },
+          categories.map(cat =>
+            form({ method: 'POST', action: `/trending/${encodeURIComponent(item.key)}/${cat}` },
+              button(
+                { class: 'vote-btn' },
+                `${voteLabelFor(cat)} [${c.opinions?.[cat] || 0}]`
+              )
             )
           )
         )

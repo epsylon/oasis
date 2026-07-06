@@ -110,3 +110,80 @@ describe('chats: encrypted visibility (no blank duplicate cards)', (t) => {
     eq((towns[0].members || []).length, 2, 'participants are taken from the freshest duplicate');
   });
 });
+
+describe('chats: cross-author replaces does not hide content (regression)', (t) => {
+  t('messages stay visible when the chat has a foreign-authored replaces version', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Cantina', 'd', null, '', 'OPEN', [], null);
+    await A.use('chats').sendMessage(chat.key, 'hello from A');
+
+    const ssbB = await B.cooler.open();
+    const v1 = await new Promise((res, rej) => ssbB.publish({
+      type: 'chat', title: 'Cantina', description: 'd', category: '', status: 'OPEN', tags: [],
+      members: [A.keypair.id, B.keypair.id], invites: [], author: A.keypair.id,
+      replaces: chat.key, createdAt: new Date().toISOString()
+    }, (e, r) => e ? rej(e) : res(r)));
+
+    A.setActor();
+    const viaRoot = await A.use('chats').listMessages(chat.key);
+    ok(viaRoot.some(m => m.text === 'hello from A'), 'message visible via the original root');
+    const viaVersion = await A.use('chats').listMessages(v1.key);
+    ok(viaVersion.some(m => m.text === 'hello from A'), 'message visible when opened via the foreign-authored version id');
+    eq(viaVersion.length, viaRoot.length, 'same message count regardless of which chain version id is used');
+  });
+
+  t('a foreign tombstone cannot delete the chat from listing', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Persist', 'd', null, '', 'OPEN', [], null);
+    const ssbB = await B.cooler.open();
+    await new Promise((res, rej) => ssbB.publish({ type: 'tombstone', target: chat.key, deletedAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    A.setActor();
+    const list = await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+    ok(list.some(c => c.title === 'Persist'), 'foreign tombstone ignored; chat still listed');
+  });
+});
+
+describe('chats: E2E crypto round-trip and key auto-heal (regression)', (t) => {
+  t('invited member receives the key and both sides decrypt messages', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Secret', 'd', null, '', 'INVITE-ONLY', [], null);
+    const code = await A.use('chats').generateOpenInvite(chat.key);
+    await A.use('chats').sendMessage(chat.key, 'from A encrypted');
+
+    B.setActor();
+    await B.use('chats').joinByInvite(code);
+    await B.use('chats').ingestKeys();
+    await B.use('chats').sendMessage(chat.key, 'from B encrypted');
+
+    const bView = await B.use('chats').listMessages(chat.rootId || chat.key);
+    ok(bView.some(m => m.text === 'from A encrypted'), 'B (invited) decrypts A message');
+
+    A.setActor();
+    const aView = await A.use('chats').listMessages(chat.key);
+    ok(aView.some(m => m.text === 'from B encrypted'), 'A decrypts B message');
+  });
+
+  t('a member without a key distribution gets healed by a keyholder listing', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Healme', 'd', null, '', 'INVITE-ONLY', [], null);
+    await A.use('chats').sendMessage(chat.key, 'secret from A');
+
+    B.setActor();
+    await B.use('chats').joinChat(chat.key);
+    await B.use('chats').ingestKeys();
+    let before = await B.use('chats').listMessages(chat.rootId || chat.key);
+    ok(!before.some(m => m.text === 'secret from A'), 'B cannot yet read (no key distributed)');
+
+    A.setActor();
+    await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+
+    B.setActor();
+    await B.use('chats').ingestKeys();
+    const after = await B.use('chats').listMessages(chat.rootId || chat.key);
+    ok(after.some(m => m.text === 'secret from A'), 'after keyholder listed, B is healed and decrypts');
+  });
+});

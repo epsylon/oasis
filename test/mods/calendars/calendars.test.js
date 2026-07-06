@@ -119,3 +119,41 @@ describe('calendars: encrypted visibility (no blank duplicate cards)', (t) => {
     eq((fairs[0].participants || []).length, 2, 'participants are taken from the freshest duplicate');
   });
 });
+
+describe('calendars: owner edits survive foreign versions (regression)', (t) => {
+  t('owner title edit renders even after a foreign-authored replaces version', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const cal = await A.use('calendars').createCalendar({ title: 'Original', status: 'OPEN', deadline: '2026-12-31', tags: [], firstDate: '2030-01-01', firstDateLabel: 'NY', firstNote: 'n', tribeId: null });
+
+    const ssbB = await B.cooler.open();
+    await new Promise((res, rej) => ssbB.publish({
+      type: 'calendar', title: 'Original', status: 'OPEN', deadline: '2026-12-31', tags: [],
+      author: A.keypair.id, participants: [A.keypair.id, B.keypair.id], invites: [],
+      replaces: cal.key, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    }, (e, r) => e ? rej(e) : res(r)));
+
+    A.setActor();
+    await A.use('calendars').updateCalendarById(cal.key, { title: 'Edited by owner' });
+    const got = await A.use('calendars').getCalendarById(cal.key);
+    eq(got.title, 'Edited by owner', 'owner edit is the displayed content tip, not stranded by the foreign version');
+  });
+
+  t('dates stay visible when the calendar has a foreign-authored replaces version', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const cal = await A.use('calendars').createCalendar({ title: 'Cal', status: 'OPEN', deadline: '2026-12-31', tags: [], firstDate: '2030-01-01', firstDateLabel: 'NY', firstNote: 'n', tribeId: null });
+    await A.use('calendars').addDate(cal.key, '2030-06-01', 'mid', null, null, null, null);
+
+    const ssbB = await B.cooler.open();
+    const v1 = await new Promise((res, rej) => ssbB.publish({
+      type: 'calendar', title: 'Cal', status: 'OPEN', deadline: '2026-12-31', tags: [],
+      author: A.keypair.id, participants: [A.keypair.id, B.keypair.id], invites: [],
+      replaces: cal.key, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    }, (e, r) => e ? rej(e) : res(r)));
+
+    A.setActor();
+    const viaVersion = await A.use('calendars').getDatesForCalendar(v1.key);
+    ok(viaVersion.some(d => d.label === 'mid'), 'date visible when opened via the foreign-authored version id');
+  });
+});

@@ -192,6 +192,15 @@ const generateTransferCard = (transfer, filter, params = {}) => {
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.transfersConfirmations}: ${confirmedCount}/${required}`)
       ),
+            div(
+        { class: "card-comments-summary feed-opinions-section" },
+        div(
+          { class: "comments-count" },
+          span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
+          span({ class: "card-value" }, String(Object.values(transfer.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)))
+        ),
+        renderOpinionsVoting('/transfers/opinions', transfer.id, transfer.opinions, returnTo, transfer.opinions_inhabitants)
+      ),
       div({ class: "card-spread-centered" }, renderSpreadButton(transfer.id, params.spreadMap && params.spreadMap.get(transfer.id)))
     )
   )

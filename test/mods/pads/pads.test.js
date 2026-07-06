@@ -91,3 +91,26 @@ describe('pads: encrypted visibility + duplicate collapse', (t) => {
     eq((boards[0].members || []).length, 2, 'members taken from the freshest duplicate');
   });
 });
+
+describe('pads: cross-author replaces does not hide entries (regression)', (t) => {
+  t('entries stay visible when the pad has a foreign-authored replaces version', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const pad = await A.use('pads').createPad('Notes', 'OPEN', '2026-12-31', [], null);
+    await A.use('pads').addEntry(pad.key, 'first entry by A');
+
+    const ssbB = await B.cooler.open();
+    const v1 = await new Promise((res, rej) => ssbB.publish({
+      type: 'pad', title: 'Notes', status: 'OPEN', deadline: '2026-12-31', tags: [],
+      members: [A.keypair.id, B.keypair.id], invites: [], author: A.keypair.id,
+      encrypted: false, replaces: pad.key, createdAt: new Date().toISOString()
+    }, (e, r) => e ? rej(e) : res(r)));
+
+    A.setActor();
+    const viaRoot = await A.use('pads').getEntries(pad.key);
+    ok(viaRoot.some(e => e.text === 'first entry by A'), 'entry visible via the original root');
+    const viaVersion = await A.use('pads').getEntries(v1.key);
+    ok(viaVersion.some(e => e.text === 'first entry by A'), 'entry visible when opened via the foreign-authored version id');
+    eq(viaVersion.length, viaRoot.length, 'same entry count regardless of which chain version id is used');
+  });
+});

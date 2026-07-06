@@ -236,15 +236,19 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     };
 
     const contentTipOf = (root) => {
-      let cur = root;
-      while (strictChild.has(cur)) {
-        const next = strictChild.get(cur);
+      const rn = nodes.get(root);
+      if (!rn) return root;
+      let cur = root, best = root, g = 0;
+      const seen = new Set();
+      while (child.has(cur) && !seen.has(cur) && g++ < 100000) {
+        seen.add(cur);
+        const next = child.get(cur);
         const n = nodes.get(next);
-        const rn = nodes.get(root);
-        if (!n || !rn || n.author !== rn.author) break;
+        if (!n) break;
+        if (n.author === rn.author && !tomb.has(next)) best = next;
         cur = next;
       }
-      return cur;
+      return best;
     };
 
     for (const t of tombRequests) {
@@ -301,7 +305,39 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       return [...set];
     };
 
-    return { tomb, nodes, parent, child, strictChild, rootOf, tipOf, contentTipOf, tipByRoot, contentTipByRoot, forward, markers, rawMarkers, resolveMembers, isCodeConsumed };
+    const ensureMemberKeys = async (ssbClient, messages, items) => {
+    if (!tribeCrypto) return;
+    const distributed = new Map();
+    for (const m of messages) {
+      const c = m.value && m.value.content;
+      if (!c || c.type !== "tribe-keys" || !c.tribeId) continue;
+      const mk = c.memberKeys;
+      if (!mk || typeof mk !== "object") continue;
+      if (!distributed.has(c.tribeId)) distributed.set(c.tribeId, new Set());
+      for (const id of Object.keys(mk)) distributed.get(c.tribeId).add(id);
+    }
+    const ssbKeys = require("../server/node_modules/ssb-keys");
+    for (const item of (Array.isArray(items) ? items : [])) {
+      if (!item || item.encrypted) continue;
+      const rootId = item.rootId;
+      if (!rootId) continue;
+      const key = lookupKey(rootId);
+      if (!key) continue;
+      const have = distributed.get(rootId) || new Set();
+      const missing = (Array.isArray(item.members) ? item.members : []).filter(m => m && m !== ssbClient.id && !have.has(m));
+      if (!missing.length) continue;
+      const memberKeys = {};
+      for (const m of missing) {
+        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
+      }
+      if (!Object.keys(memberKeys).length) continue;
+      await new Promise((resolve) => {
+        ssbClient.publish({ type: "tribe-keys", tribeId: rootId, generation: lookupGen(rootId) || 1, memberKeys }, () => resolve())
+      });
+    }
+  }
+
+  return { tomb, nodes, parent, child, strictChild, rootOf, tipOf, contentTipOf, tipByRoot, contentTipByRoot, forward, markers, rawMarkers, resolveMembers, isCodeConsumed };
   };
 
   const expandMarkers = async (idx) => {
@@ -664,6 +700,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
 
       list = list.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+      try { await ensureMemberKeys(ssbClient, messages, list); } catch (_) {}
       return list;
     },
 

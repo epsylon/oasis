@@ -216,6 +216,15 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
                 button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
               )
             ),
+                        div(
+              { class: "card-comments-summary feed-opinions-section" },
+              div(
+                { class: "comments-count" },
+                span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
+                span({ class: "card-value" }, String(Object.values(bookmark.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)))
+              ),
+              renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants)
+            ),
             div({ class: "card-spread-left" }, renderSpreadButton(bookmark.id, (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads)),
             (() => {
               const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;

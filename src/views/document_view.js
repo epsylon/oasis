@@ -196,6 +196,15 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
                 button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
               )
             ),
+                        div(
+              { class: "card-comments-summary feed-opinions-section" },
+              div(
+                { class: "comments-count" },
+                span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
+                span({ class: "card-value" }, String(Object.values(doc.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)))
+              ),
+              renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants)
+            ),
             div({ class: "card-spread-left" }, renderSpreadButton(doc.key, (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads)),
             br(),
             (() => {

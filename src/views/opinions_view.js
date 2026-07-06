@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderSpreadButton, renderContentActions } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
@@ -284,16 +284,19 @@ exports.opinionsView = (items, filter, spreadMap = new Map()) => {
               ...(dominantPart || [])
             );
           })(),
-          div({ class: 'voting-buttons' },
-            allCats.map(cat => {
-              const label = `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${c.opinions?.[cat] || 0}]`;
-              if (voted) {
-                return button({ class: 'vote-btn', type: 'button' }, label);
-              }
-              return form({ method: 'POST', action: `/opinions/${encodeURIComponent(key)}/${cat}` },
-                button({ class: 'vote-btn' }, label)
-              );
-            })
+          details({ class: 'opinions-voting-collapse' },
+            summary({ class: 'opinions-summary' }, `${i18n.opinionsTitle || 'Opinions'} (${Object.values(c.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)})`),
+            div({ class: 'voting-buttons' },
+              allCats.map(cat => {
+                const label = `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${c.opinions?.[cat] || 0}]`;
+                if (voted) {
+                  return button({ class: 'vote-btn', type: 'button' }, label);
+                }
+                return form({ method: 'POST', action: `/opinions/${encodeURIComponent(key)}/${cat}` },
+                  button({ class: 'vote-btn' }, label)
+                );
+              })
+            )
           )
         )
       );
