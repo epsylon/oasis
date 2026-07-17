@@ -576,9 +576,28 @@ const extractBlobId = (md) => md ? (md.match(/\((&[^)]+)\)/)?.[1] ?? null) : nul
 const exportmodeModel = require('../models/exportmode_model');
 const panicmodeModel = require('../models/panicmode_model');
 const cipherModel = require('../models/cipher_model');
+const pmPolicy = require('./pm_policy');
 const legacyModel = require('../models/legacy_model');
 const walletModel = require('../models/wallet_model')
 const pmModel = require('../models/pm_model')({ cooler, isPublic: config.public });
+const fileshareModel = require('../models/fileshare_model')({ cooler });
+const FILESHARE_MAX_SIZE = (getConfig().fileShare && Number(getConfig().fileShare.maxSize)) || (1024 * 1024 * 1024);
+const FILESHARE_TTL_MS = (((getConfig().fileShare && Number(getConfig().fileShare.ttlDays)) || 30)) * 24 * 60 * 60 * 1000;
+const runFileshareCleanup = async () => {
+  try {
+    const ssbClient = await cooler.open();
+    const me = ssbClient.id;
+    const msgs = await pmModel.listAllPrivate();
+    const mine = (msgs || [])
+      .filter(m => m && m.value && m.value.author === me && m.value.content && m.value.content.fileShare)
+      .map(m => ({ pointer: m.value.content.fileShare, sentAt: m.value.content.sentAt }));
+    if (mine.length) await fileshareModel.pruneExpired(mine, FILESHARE_TTL_MS, Date.now());
+  } catch (_) {}
+};
+const fsCleanupTimer = setTimeout(() => { runFileshareCleanup(); }, 120000);
+if (fsCleanupTimer.unref) fsCleanupTimer.unref();
+const fsCleanupInterval = setInterval(() => { runFileshareCleanup(); }, 12 * 60 * 60 * 1000);
+if (fsCleanupInterval.unref) fsCleanupInterval.unref();
 const bookmarksModel = require("../models/bookmarking_model")({ cooler, isPublic: config.public });
 const opinionsModel = require('../models/opinions_model')({ cooler, isPublic: config.public });
 const tasksModel = require('../models/tasks_model')({ cooler, isPublic: config.public, pmModel });
@@ -1283,7 +1302,18 @@ const koaBodyMiddleware = koaBody({
     maxFileSize: maxSize,
     hash: 'sha256',
   },
-  parsedMethods: ['POST'], 
+  parsedMethods: ['POST'],
+});
+const koaBodyFileshare = koaBody({
+  multipart: true,
+  formidable: {
+    uploadDir: blobsPath,
+    keepExtensions: true,
+    maxFieldsSize: maxSize,
+    maxFileSize: FILESHARE_MAX_SIZE,
+    hash: false,
+  },
+  parsedMethods: ['POST'],
 });
 const resolveCommentComponents = async function (ctx) {
   let parentId;
@@ -2078,16 +2108,17 @@ router
     ctx.body = await createCVView(cv, true)
   })
   .get('/pm', async ctx => {
-    const { recipients = '', subject = '', quote = '', preview = '' } = ctx.query;
+    const { recipients = '', subject = '', quote = '', preview = '', fileerror = '' } = ctx.query;
     const quoted = quote ? quote.split('\n').map(l => '> ' + l).join('\n') + '\n\n' : '';
     const showPreview = preview === '1';
-    ctx.body = await pmView(recipients, subject, quoted, showPreview);
+    ctx.body = await pmView(recipients, subject, quoted, showPreview, '', false, null, false, String(fileerror || ''));
   })
   .get('/inbox', async ctx => {
     if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }
     const messages = await buildInboxMessages();
     await refreshInboxCount(messages);
-    ctx.body = await privateView({ messages }, ctx.query.filter || undefined);
+    const notice = ctx.query.filestatus === 'unavailable' ? 'unavailable' : (ctx.query.filekey === 'bad' ? 'badkey' : '');
+    ctx.body = await privateView({ messages }, ctx.query.filter || undefined, null, notice);
   })
   .post('/inbox/decrypt', koaBody(), async ctx => {
     if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }
@@ -5232,10 +5263,11 @@ router
       const viewer = getViewerId();
       for (const rid of recipientsArr) {
         if (rid === viewer) continue;
-        let rel;
+        let rel = null;
         try { rel = await friend.getRelationship(rid); } catch (e) { rel = null; }
-        const mutual = !!(rel && rel.following && rel.followsMe);
-        if (!mutual) ctx.throw(403, 'You can only send private messages to habitants with mutual support.');
+        if (!pmPolicy.isRecipientAllowed({ pmVisibility: cfgNow.pmVisibility, viewerId: viewer, recipientId: rid, relationship: rel })) {
+          ctx.throw(403, 'You can only send private messages to habitants with mutual support.');
+        }
       }
     }
     const cleanSubject = stripDangerousTags(subject);
@@ -5284,6 +5316,136 @@ router
       return;
     }
     ctx.body = await pmView(recipients, subject, text, true);
+  })
+  .post('/pm/file/preview', koaBodyFileshare, async ctx => {
+    const b = ctx.request.body || {};
+    const file = ctx.request.files && (ctx.request.files.file || ctx.request.files.blob);
+    const cleanup = () => { try { if (file && file.filepath) fs.unlinkSync(file.filepath); } catch (_) {} };
+    const recipient = String(b.recipient || '').trim();
+    if (!ssbRef.isFeedId(recipient)) { cleanup(); ctx.redirect('/pm?fileerror=recipient#fileshare'); return; }
+    const cfgNow = getConfig();
+    if (cfgNow.pmVisibility === 'mutuals' && recipient !== getViewerId()) {
+      let rel = null;
+      try { rel = await friend.getRelationship(recipient); } catch (_) { rel = null; }
+      if (!pmPolicy.isRecipientAllowed({ pmVisibility: cfgNow.pmVisibility, viewerId: getViewerId(), recipientId: recipient, relationship: rel })) {
+        cleanup(); ctx.redirect('/pm?fileerror=mutual#fileshare'); return;
+      }
+    }
+    const fmtB = (n) => { const x = Number(n) || 0; if (x < 1024) return x + ' B'; const u = ['KB','MB','GB','TB']; let v = x / 1024, i = 0; while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; } return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + ' ' + u[i]; };
+    if (!file || !file.filepath || !file.size) { cleanup(); ctx.redirect('/pm?fileerror=nofile#fileshare'); return; }
+    if (file.size > FILESHARE_MAX_SIZE) { cleanup(); ctx.redirect('/pm?fileerror=size#fileshare'); return; }
+    let pointer;
+    try {
+      pointer = await fileshareModel.createShareFromFile({
+        filepath: file.filepath,
+        filename: file.originalFilename || file.name || 'file',
+        mime: file.mimetype || null
+      });
+    } catch (_) { cleanup(); ctx.redirect('/pm?fileerror=failed#fileshare'); return; }
+    cleanup();
+    const useCrypter = !!b.crypter;
+    const sharedKey = useCrypter ? cipherModel.generateKey() : '';
+    ctx.body = await pmView(recipient, stripDangerousTags(b.subject || ''), '', false, '', false, null, false, '', {
+      recipient, subject: stripDangerousTags(b.subject || ''),
+      manifestBlobId: pointer.manifestBlobId, keyHex: pointer.key,
+      filename: pointer.filename, mime: pointer.mime, size: pointer.size,
+      sizeLabel: fmtB(pointer.size), crypter: useCrypter, sharedKey
+    });
+  })
+  .post('/pm/file', koaBodyFileshare, async ctx => {
+    const b = ctx.request.body || {};
+    const file = ctx.request.files && (ctx.request.files.file || ctx.request.files.blob);
+    const cleanup = () => { try { if (file && file.filepath) fs.unlinkSync(file.filepath); } catch (_) {} };
+    const recipient = String(b.recipient || '').trim();
+    if (!ssbRef.isFeedId(recipient)) { cleanup(); ctx.redirect('/pm?fileerror=recipient#fileshare'); return; }
+    const cfgNow = getConfig();
+    if (cfgNow.pmVisibility === 'mutuals' && recipient !== getViewerId()) {
+      let rel = null;
+      try { rel = await friend.getRelationship(recipient); } catch (_) { rel = null; }
+      if (!pmPolicy.isRecipientAllowed({ pmVisibility: cfgNow.pmVisibility, viewerId: getViewerId(), recipientId: recipient, relationship: rel })) {
+        cleanup(); ctx.redirect('/pm?fileerror=mutual#fileshare'); return;
+      }
+    }
+    if (!file && b.manifestBlobId) {
+      let pointer = {
+        type: 'fileShare', v: 1, key: String(b.keyHex || ''),
+        manifestBlobId: String(b.manifestBlobId), filename: String(b.filename || 'file'),
+        mime: String(b.mime || 'application/octet-stream'), size: Number(b.size) || 0
+      };
+      const useCrypter = !!b.crypter;
+      if (useCrypter) {
+        const sk = String(b.sharedKey || '');
+        if (sk.length >= 32) { const { encryptedText } = cipherModel.encryptData(pointer.key, sk); pointer = { ...pointer, key: encryptedText, crypter: true }; }
+      }
+      try { await pmModel.sendFileShare([recipient], stripDangerousTags(b.subject || ''), pointer, useCrypter); }
+      catch (_) { ctx.redirect('/pm?fileerror=send#fileshare'); return; }
+      await refreshInboxCount();
+      ctx.redirect('/inbox?filter=sent'); return;
+    }
+    if (!file || !file.filepath || !file.size) { cleanup(); ctx.redirect('/pm?fileerror=nofile#fileshare'); return; }
+    if (file.size > FILESHARE_MAX_SIZE) { cleanup(); ctx.redirect('/pm?fileerror=size#fileshare'); return; }
+    let pointer;
+    try {
+      pointer = await fileshareModel.createShareFromFile({
+        filepath: file.filepath,
+        filename: file.originalFilename || file.name || 'file',
+        mime: file.mimetype || null
+      });
+    } catch (_) { cleanup(); ctx.redirect('/pm?fileerror=failed#fileshare'); return; }
+    cleanup();
+    const useCrypter = !!b.crypter;
+    let sharedKey = '';
+    if (useCrypter) {
+      sharedKey = (typeof b.crypterKey === 'string' && b.crypterKey.length >= 32) ? b.crypterKey : cipherModel.generateKey();
+      const { encryptedText } = cipherModel.encryptData(pointer.key, sharedKey);
+      pointer = { ...pointer, key: encryptedText, crypter: true };
+    }
+    try {
+      await pmModel.sendFileShare([recipient], stripDangerousTags(b.subject || ''), pointer, useCrypter);
+    } catch (_) { ctx.redirect('/pm?fileerror=send#fileshare'); return; }
+    await refreshInboxCount();
+    if (useCrypter) { ctx.body = await pmView('', '', '', false, sharedKey); return; }
+    ctx.redirect('/inbox?filter=sent');
+  })
+  .get('/inbox/file/:id', async ctx => {
+    if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }
+    const messages = await buildInboxMessages();
+    const msg = messages.find(m => m && m.key === ctx.params.id);
+    const fileShare = msg && msg.value && msg.value.content && msg.value.content.fileShare;
+    if (!fileShare || fileShare.crypter) { ctx.redirect('/inbox'); return; }
+    if (!(await fileshareModel.ensureAvailable(fileShare))) { ctx.redirect('/inbox?filestatus=unavailable'); return; }
+    const safeName = String(fileShare.filename || 'file').replace(/["\r\n\\]/g, '');
+    ctx.type = fileShare.mime || 'application/octet-stream';
+    ctx.set('Content-Disposition', `attachment; filename="${safeName}"`);
+    const stream = fileshareModel.readShareStream(fileShare);
+    if (msg.value.author && msg.value.author !== getViewerId()) {
+      stream.on('end', () => { fileshareModel.removeLocalBlobs(fileShare).catch(() => {}); });
+    }
+    ctx.body = stream;
+  })
+  .post('/inbox/file/:id', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }
+    const { key } = ctx.request.body || {};
+    const messages = await buildInboxMessages();
+    const msg = messages.find(m => m && m.key === ctx.params.id);
+    const fileShare = msg && msg.value && msg.value.content && msg.value.content.fileShare;
+    if (!fileShare) { ctx.redirect('/inbox'); return; }
+    let pointer = fileShare;
+    if (fileShare.crypter) {
+      if (typeof key !== 'string' || !key) { ctx.redirect('/inbox'); return; }
+      try {
+        pointer = { ...fileShare, key: cipherModel.decryptData(fileShare.key, key) };
+      } catch (_) { ctx.redirect('/inbox?filekey=bad'); return; }
+    }
+    if (!(await fileshareModel.ensureAvailable(pointer))) { ctx.redirect('/inbox?filestatus=unavailable'); return; }
+    const safeName = String(fileShare.filename || 'file').replace(/["\r\n\\]/g, '');
+    ctx.type = fileShare.mime || 'application/octet-stream';
+    ctx.set('Content-Disposition', `attachment; filename="${safeName}"`);
+    const stream = fileshareModel.readShareStream(pointer);
+    if (msg.value.author && msg.value.author !== getViewerId()) {
+      stream.on('end', () => { fileshareModel.removeLocalBlobs(pointer).catch(() => {}); });
+    }
+    ctx.body = stream;
   })
   .post('/inbox/delete/:id', koaBody(), async ctx => {
     await pmModel.deleteMessageById(ctx.params.id);

@@ -3310,6 +3310,8 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .pm-card.normal-pm { padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #ffa300; background: transparent }
 .pm-btn { padding: 6px 16px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; cursor: pointer; border: 1px solid #ffa300; background: transparent; color: #ffa300; transition: background 0.15s, color 0.15s }
 .pm-btn:hover { background: #ffa300; color: #000 }
+a.pm-btn { text-decoration: none; display: inline-block; line-height: 1.2 }
+a.pm-btn:hover { text-decoration: none }
 .pm-thread { margin-bottom: 12px }
 .pm-thread-details { margin-top: 0 }
 .pm-thread-details[open] .pm-thread-icon { display: inline-block; transform: rotate(90deg) }
@@ -3333,7 +3335,10 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .pm-actions {
   display: flex;
   gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
+.pm-actions .pm-btn { margin: 0 }
 .pm-crypter-row {
   border: none;
   background: transparent;
@@ -6439,3 +6444,11 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .activitySpreadInhabitant2,.activityVotePost{padding:8px 16px;border-radius:5px;font-weight:bold;text-decoration:none;display:inline-block;border:2px solid transparent}
 .danger-btn,.delete-btn{border:1px solid #d9534f;color:#d9534f;background:transparent}
 .danger-btn:hover,.delete-btn:hover{background:#d9534f;color:#000}
+.pm-fileshare-form-wrap{margin-top:16px}
+.pm-fileshare-form input[type=file]{display:block;margin:10px 0 15px}
+.pm-fileshare-info{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0}
+.pm-fileshare-icon{font-size:1.2em}
+.pm-fileshare-name{font-weight:bold;word-break:break-all}
+.pm-fileshare-meta{font-size:.85em;opacity:.75}
+.pm-fileshare-download-form{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;border:0;background:transparent;padding:0}
+.pm-fileshare-download{text-decoration:none;display:inline-block}

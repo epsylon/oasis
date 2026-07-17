@@ -47,6 +47,7 @@ const FACTORIES = {
   shops: '../../src/models/shops_model',
   pixelia: '../../src/models/pixelia_model',
   pm: '../../src/models/pm_model',
+  fileshare: '../../src/models/fileshare_model',
   feed: '../../src/models/feed_model',
   tags: '../../src/models/tags_model',
   search: '../../src/models/search_model',

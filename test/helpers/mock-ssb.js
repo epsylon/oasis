@@ -16,6 +16,8 @@ function makeNetwork() {
   const liveListeners = new Set();
   return {
     log,
+    blobs: new Map(),
+    blobsRemoved: new Set(),
     publish(msg) {
       log.push(msg);
       for (const cb of liveListeners) {
@@ -128,7 +130,26 @@ function makeNode(network, keypair, opts = {}) {
         } catch (_) { return null; }
       }
     },
-    blobs: { has(_url, cb) { cb(null, true); } },
+    blobs: {
+      has(ref, cb) {
+        if (network.blobsRemoved.has(ref)) return cb(null, false);
+        if (network.blobs.has(ref)) return cb(null, true);
+        cb(null, true);
+      },
+      add(cb) {
+        return pull.collect((err, parts) => {
+          if (err) return cb(err);
+          const buf = Buffer.concat(parts.map(p => Buffer.isBuffer(p) ? p : Buffer.from(p)));
+          const ref = '&' + crypto.createHash('sha256').update(buf).digest('base64') + '.sha256';
+          network.blobs.set(ref, buf);
+          network.blobsRemoved.delete(ref);
+          cb(null, ref);
+        });
+      },
+      get(ref) { const buf = network.blobs.get(ref); return pull.values(buf ? [buf] : []); },
+      want(ref, cb) { if (cb) cb(null); },
+      rm(ref, cb) { const had = network.blobs.delete(ref); network.blobsRemoved.add(ref); if (cb) cb(null, had); }
+    },
     conn: { hub() { return { listen: () => null }; } },
     replicate: { upto(cb) { if (cb) cb(null, {}); } },
     whoami(cb) { cb(null, { id: keypair.id }); },

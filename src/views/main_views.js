@@ -2902,7 +2902,12 @@ exports.mentionsView = ({ messages, myFeedId }) => {
   );
 };
 
-exports.privateView = async (messagesInput, filter, decrypted = null) => {
+exports.privateView = async (messagesInput, filter, decrypted = null, notice = '') => {
+  const noticeText = notice === 'unavailable'
+    ? (i18n.fileShareUnavailable || 'This file is not available right now. Try again later.')
+    : notice === 'badkey'
+      ? (i18n.pmCrypterBadKey || 'Your shared key is incorrect!')
+      : ''
   const messagesRaw = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages
   const messages = (messagesRaw || []).filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true)
   const userId = await getUserId()
@@ -2929,6 +2934,15 @@ exports.privateView = async (messagesInput, filter, decrypted = null) => {
   }
 
   const chip = (txt) => span({ class: 'chip' }, txt)
+
+  const fmtBytes = (n) => {
+    const b = Number(n) || 0
+    if (b < 1024) return `${b} B`
+    const units = ['KB', 'MB', 'GB', 'TB']
+    let v = b / 1024, i = 0
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+    return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`
+  }
 
   const e2eChip = () => span({ class: 'pm-exposition-chip pm-exposition-encrypted' },
     span({ class: 'pm-exposition-icon' }, '🔒'),
@@ -2975,7 +2989,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null) => {
     try { return Buffer.byteLength(JSON.stringify(m && m.value), 'utf8'); } catch (_) { return 0; }
   }
 
-  function actions({ key, replyId, subjectRaw, text }) {
+  function actions({ key, replyId, subjectRaw, text, extra = null }) {
     const stop = { onclick: 'event.stopPropagation()' }
     const subjectReply = /^(\s*RE:\s*)/i.test(subjectRaw || '') ? (subjectRaw || '') : `RE: ${subjectRaw || ''}`
     const isSelf = replyId === userId
@@ -2986,6 +3000,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null) => {
         input({ type: 'hidden', name: 'quote', value: text || '' }),
         button({ type: 'submit', class: 'pm-btn reply-btn' }, i18n.pmReply.toUpperCase())
       ),
+      extra || null,
       form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
         button({ type: 'submit', class: 'pm-btn delete-btn danger-btn' }, i18n.privateDelete.toUpperCase())
       )
@@ -3199,6 +3214,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null) => {
         div({ class: 'title-with-chip' }, h2(i18n.private), renderEncryptedChip(i18n)),
         p(i18n.privateDescription)
       ),
+      noticeText ? div({ class: 'pm-form-error-msg' }, p('✗ ' + noticeText)) : null,
       (() => {
         const pmVis = getConfig().pmVisibility === 'mutuals' ? 'mutuals' : 'whole'
         const pmVisLabel = pmVis === 'mutuals' ? i18n.settingsPmVisibilityMutuals : i18n.settingsPmVisibilityWhole
@@ -3262,6 +3278,35 @@ exports.privateView = async (messagesInput, filter, decrypted = null) => {
             const toLinks = Array.isArray(content.to) ? content.to.map(addr => linkAuthor(addr)) : []
             const level = threadLevel(subjectRaw)
             const msgSize = msgSizeBytes(msg)
+
+            if (content.fileShare && typeof content.fileShare === 'object') {
+              const fsp = content.fileShare
+              const dblKey = (decrypted && decrypted.key === msg.key) ? decrypted : null
+              return div(
+                { class: 'pm-card normal-pm pm-fileshare-card' },
+                headerLine({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, msgKey: msg.key, msgSize, crypter: !!fsp.crypter }),
+                div({ class: 'pm-fileshare-info' },
+                  span({ class: 'pm-fileshare-icon' }, '📎'),
+                  span({ class: 'pm-fileshare-name' }, String(fsp.filename || 'file')),
+                  span({ class: 'pm-fileshare-meta' }, `${fmtBytes(fsp.size)} · ${String(fsp.mime || 'application/octet-stream')}`)
+                ),
+                fsp.crypter
+                  ? form({ method: 'POST', action: `/inbox/file/${encodeURIComponent(msg.key)}`, class: 'pm-fileshare-download-form' },
+                      dblKey && dblKey.error ? div({ class: 'pm-form-error-msg' }, p('✗ ' + (i18n.pmCrypterBadKey || 'Your shared key is incorrect!'))) : null,
+                      input({ type: 'text', name: 'key', placeholder: 'd66d7d32f4d30f34812aee3d01347154', minlength: 32, maxlength: 32, size: 34, required: true, class: 'pm-crypter-key-input' }),
+                      button({ type: 'submit', class: 'pm-btn pm-fileshare-download' }, (i18n.fileShareDownload || 'Download').toUpperCase())
+                    )
+                  : null,
+                actions({
+                  key: msg.key, replyId: fromResolved, subjectRaw, text: '',
+                  extra: fsp.crypter
+                    ? null
+                    : form({ method: 'GET', action: `/inbox/file/${encodeURIComponent(msg.key)}`, class: 'pm-action-form', onclick: 'event.stopPropagation()' },
+                        button({ type: 'submit', class: 'pm-btn pm-fileshare-download' }, (i18n.fileShareDownload || 'Download').toUpperCase())
+                      )
+                })
+              )
+            }
 
             if (subjectU === 'JOB_SUBSCRIBED' || subjectU === 'JOB_UNSUBSCRIBED') {
               return JobCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
