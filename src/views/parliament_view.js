@@ -4,8 +4,9 @@ const { template, i18n, userLink} = require('./main_views');
 
 const TERM_DAYS = 60;
 
-const fmt = (d) => moment(d).format('YYYY-MM-DD HH:mm:ss');
+const fmt = (d) => d ? moment(d).format('YYYY-MM-DD HH:mm:ss') : '—';
 const timeLeft = (end) => {
+  if (!end) return '—';
   const diff = moment(end).diff(moment());
   if (diff <= 0) return '0d 00:00:00';
   const dur = moment.duration(diff);
@@ -75,8 +76,8 @@ const Tabs = (active) =>
   );
 
 const GovHeader = (g) => {
-  const termStart = g && g.since ? g.since : moment().toISOString();
-  const termEnd = g && g.end ? g.end : moment(termStart).add(TERM_DAYS, 'days').toISOString();
+  const termStart = g && g.since ? g.since : null;
+  const termEnd = g && g.end ? g.end : null;
   const methodKeyRaw = g && g.method ? String(g.method) : 'ANARCHY';
   const methodKey = methodKeyRaw.toUpperCase();
   const i18nMeth = i18n[`parliamentMethod${methodKey}`];
@@ -118,8 +119,8 @@ const GovHeader = (g) => {
 };
 
 const GovernmentCard = (g, meta) => {
-  const termStart = g && g.since ? g.since : moment().toISOString();
-  const termEnd = g && g.end ? g.end : moment(termStart).add(TERM_DAYS, 'days').toISOString();
+  const termStart = g && g.since ? g.since : null;
+  const termEnd = g && g.end ? g.end : null;
   const actorLabel =
     g.powerType === 'tribe'
       ? (i18n.parliamentActorInPowerTribe || i18n.parliamentActorInPower || 'TRIBE RULING')
@@ -950,8 +951,8 @@ const parliamentView = async (state) => {
     powerType: 'none',
     powerId: null,
     powerTitle: 'ANARCHY',
-    since: moment().toISOString(),
-    end: moment().add(TERM_DAYS, 'days').toISOString(),
+    since: null,
+    end: null,
     inhabitantsTotal: Number(inhabitantsTotal ?? 0) || 0
   };
 

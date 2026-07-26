@@ -2920,7 +2920,8 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   const hrefFor = {
     job: (id) => `/jobs/${encodeURIComponent(id)}`,
     project: (id) => `/projects/${encodeURIComponent(id)}`,
-    market: (id) => `/market/${encodeURIComponent(id)}`
+    market: (id) => `/market/${encodeURIComponent(id)}`,
+    shopProduct: (id) => `/shops/product/${encodeURIComponent(id)}`
   }
 
   const clickableCardProps = (href, extraClass = '') => {
@@ -3044,6 +3045,10 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       const m = str.match(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/)
       return m ? m[1] : ''
     }
+    if (kind === 'shopProduct') {
+      const m = str.match(/\/shops\/product\/([%A-Za-z0-9/+._=-]+\.sha256)/)
+      return m ? m[1] : ''
+    }
     return ''
   }
 
@@ -3066,15 +3071,27 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       }
     }
     flushQuote()
-    return parts.join('<br>')
+    const mdLinks = []
+    const masked = parts.join('<br>')
+      .replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^)\s]+|\/[^)\s]+)\)/g, (match, label, href) => {
+        const idx = mdLinks.length
+        const safeHref = String(href).replace(/"/g, '%22')
+        const ext = /^https?:/.test(href) ? ' target="_blank" rel="noopener noreferrer"' : ''
+        mdLinks.push(`<a class="oasis-md-link" href="${safeHref}"${ext}>${label}</a>`)
+        return ` MD${idx} `
+      })
+    return masked
       .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g, (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${userLinkLabel(id)}</a>`)
       .replace(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="job-link" href="${hrefFor.job(id)}">${match}</a>`)
       .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`)
       .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`)
       .replace(/\/calendars\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="calendar-link" href="/calendars/${encodeURIComponent(id)}">${match}</a>`)
       .replace(/\/ai\/ask\?[^\s<"]+/g, (match) => `<a class="ai-ask-link" href="${match}">${match}</a>`)
-      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|melody|audios|videos|images|documents|bookmarks|torrents|forum|feed|fediverse|events|tasks|votes|reports|market|jobs|projects|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
+      .replace(/\/tribe\/([%A-Za-z0-9/+._=-]+\.sha256)(\?section=[a-zA-Z]+)?/g, (match) => `<a class="tribe-link" href="${match}">${match}</a>`)
+      .replace(/\/larp\/([a-zA-Z]+)/g, (match) => `<a class="larp-link" href="${match}">${match}</a>`)
+      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|parliament|courts|melody|audios|videos|images|documents|bookmarks|torrents|forum|feed|fediverse|events|tasks|votes|reports|market|jobs|projects|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
       .replace(/(https?:\/\/[^\s<"]+)/g, (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`)
+      .replace(/ MD(\d+) /g, (m, i) => mdLinks[Number(i)] !== undefined ? ` ${mdLinks[Number(i)]} ` : m)
   }
 
   const threads = {}
@@ -3125,7 +3142,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const href = jobId ? hrefFor.job(jobId) : null
     return div(
       clickableCardProps(href, `job-notification thread-level-0`),
-      headerLine({ sentAt, from, toLinks, subject: type, msgKey: key, msgSize }),
+      headerLine({ sentAt, from, toLinks, subject: titleH, msgKey: key, msgSize }),
       h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotJobs} · ${titleH}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -3149,7 +3166,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const href = projectId ? hrefFor.project(projectId) : null
     return div(
       clickableCardProps(href, `project-${isFollow ? 'follow' : 'unfollow'}-notification thread-level-0`),
-      headerLine({ sentAt, from, toLinks, subject: type, msgKey: key, msgSize }),
+      headerLine({ sentAt, from, toLinks, subject: titleH, msgKey: key, msgSize }),
       h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotProjects} · ${titleH}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -3163,23 +3180,28 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
-  function MarketSoldCard({ sentAt, from, toLinks, subject, text, key, msgSize }) {
+  function MarketSoldCard({ sentAt, from, toLinks, subject, text, key, msgSize, variant = 'market' }) {
+    const isShop = variant === 'shop'
     const itemTitle = quoted(subject) || quoted(text) || 'item'
     const buyerId = (text.match(/OASIS ID:\s*([\w=/+.-]+)/) || [])[1] || from
-    const price = (text.match(/for:\s*\$([\d.]+)/) || [])[1] || ''
+    const price = (text.match(/for:\s*\$?([\d.]+)/) || [])[1] || ''
     const marketId = pickLink(text, 'market')
-    const href = marketId ? hrefFor.market(marketId) : null
+    const shopProductId = pickLink(text, 'shopProduct')
+    const href = isShop ? (shopProductId ? hrefFor.shopProduct(shopProductId) : null) : (marketId ? hrefFor.market(marketId) : null)
+    const icon = isShop ? '🛍️' : '💰'
+    const botLabel = isShop ? i18n.pmBotShops : i18n.pmBotMarket
+    const soldTitle = isShop ? (i18n.inboxShopSoldTitle || 'Product Sold') : i18n.inboxMarketItemSoldTitle
     return div(
-      clickableCardProps(href, 'market-sold-notification thread-level-0'),
-      headerLine({ sentAt, from, toLinks, subject, msgKey: key, msgSize }),
-      h2({ class: 'pm-title' }, `💰 ${i18n.pmBotMarket} · ${i18n.inboxMarketItemSoldTitle}`),
+      clickableCardProps(href, (isShop ? 'shop-sold-notification' : 'market-sold-notification') + ' thread-level-0'),
+      headerLine({ sentAt, from, toLinks, subject: soldTitle, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `${icon} ${botLabel} · ${soldTitle}`),
       p(
         i18n.pmYourItem, ' ',
-        href ? a({ class: 'market-link', href }, `"${itemTitle}"`) : `"${itemTitle}"`,
+        href ? a({ class: isShop ? 'shop-link' : 'market-link', href }, `"${itemTitle}"`) : `"${itemTitle}"`,
         ' ',
         i18n.pmHasBeenSoldTo, ' ',
         linkAuthor(buyerId),
-        price ? ` ${i18n.pmFor} $${price}.` : '.'
+        price ? ` ${i18n.pmFor} ${price} ECO.` : '.'
       ),
       actions({ key, replyId: buyerId, subjectRaw: itemTitle, text })
     )
@@ -3192,7 +3214,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const href = projectId ? hrefFor.project(projectId) : null
     return div(
       clickableCardProps(href, 'project-pledge-notification thread-level-0'),
-      headerLine({ sentAt, from, toLinks, subject: 'PROJECT_PLEDGE', msgKey: key, msgSize }),
+      headerLine({ sentAt, from, toLinks, subject: i18n.inboxProjectPledgedTitle, msgKey: key, msgSize }),
       h2({ class: 'pm-title' }, `💚 ${i18n.pmBotProjects} · ${i18n.inboxProjectPledgedTitle}`),
       p(
         i18n.pmInhabitantWithId, ' ',
@@ -3203,6 +3225,22 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
         href ? a({ class: 'project-link', href }, `"${projectTitle}"`) : `"${projectTitle}"`
       ),
       actions({ key, replyId: from, subjectRaw: projectTitle, text })
+    )
+  }
+
+  function PoliticalBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const titleMap = {
+      LARP_RULING: i18n.politicalBotLarpTitle || 'The ruling house of the L.A.R.P has changed.',
+      PARLIAMENT_GOV: i18n.politicalBotParliamentTitle || 'A new government cycle has begun in the Parliament.',
+      TRIBE_GOV: i18n.politicalBotTribeTitle || 'A new government cycle has begun in one of your Tribes.'
+    }
+    const title = titleMap[subjectU] || (i18n.pmBotPolitical || 'PoliticalBot')
+    return div(
+      { class: 'pm-card political-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `🏛️ ${i18n.pmBotPolitical} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
     )
   }
 
@@ -3315,7 +3353,13 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
               return ProjectFollowCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'MARKET_SOLD') {
-              return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key, msgSize })
+              return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key, msgSize, variant: 'market' })
+            }
+            if (subjectU === 'SHOP_SOLD') {
+              return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key, msgSize, variant: 'shop' })
+            }
+            if (subjectU === 'LARP_RULING' || subjectU === 'PARLIAMENT_GOV' || subjectU === 'TRIBE_GOV') {
+              return PoliticalBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
               return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key, msgSize })

@@ -923,6 +923,52 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         );
     }
 
+    if (type === 'chatThread') {
+        const c = action.content || {};
+        const chatRoot = c.chatRoot;
+        const href = `/chats/${encodeURIComponent(chatRoot)}`;
+        const chatTitle = c.title || chatRoot;
+        const chatDesc = c.description || '';
+        const replies = Array.isArray(c.replies) ? c.replies : [];
+        const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        const limit = 6;
+        const show = repliesAsc.slice(Math.max(0, repliesAsc.length - limit));
+        return div({ class: 'trending-card post-thread chat-thread' + (String(action.author) === String(userId) ? ' own-content' : '') },
+            div({ class: 'card-header activity-card-header' },
+                div({ class: 'card-chips-row' },
+                    span({ class: 'pm-exposition-chip pm-exposition-whole' },
+                        span({ class: 'pm-exposition-text' }, `${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD`)
+                    )
+                ),
+                renderContentActions(chatRoot, href)
+            ),
+            div({ class: 'card-body' },
+                div({ class: 'card-section chat' },
+                    div({ class: 'card-field' }, span({ class: 'card-value' }, a({ href, class: 'user-link' }, chatTitle))),
+                    chatDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, chatDesc)) : ''
+                ),
+                div({ class: 'card-section' },
+                    show.map(r => {
+                        const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
+                        return div({ class: 'thread-reply-item' },
+                            div({ class: 'thread-reply' },
+                                r.text ? p({ class: 'post-text', style: 'white-space:pre-wrap;' }, ...renderUrlPreserveNewlines(r.text)) : ''
+                            ),
+                            div({ class: 'card-footer thread-reply-footer' },
+                                span({ class: 'date-link' }, rDate),
+                                userLink(r.author, action.authorNames && action.authorNames[r.author])
+                            )
+                        );
+                    })
+                )
+            ),
+            p({ class: 'card-footer' },
+                span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
+                userLink(action.author, action.authorNames && action.authorNames[action.author])
+            )
+        );
+    }
+
     if (type === 'forum') {
       const { root, category, title, text, key, rootTitle, rootKey } = content;
       if (!root) {
@@ -1709,7 +1755,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     task:       ['task', 'taskAssignment'],
     shop:       ['shop', 'shopProduct'],
     larp:       ['larpHousePost'],
-    inhabitants:['about']
+    inhabitants:['about'],
+    chat:       ['chat', 'chatThread']
   };
   const ALLOWED_TYPES = new Set();
   for (const { type } of activityTypes) {
@@ -1744,6 +1791,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment'));
   } else if (filter === 'torrent') {
     filteredActions = actions.filter(action => action.type === 'torrent');
+  } else if (filter === 'chat') {
+    filteredActions = actions.filter(action => (action.type === 'chat' || action.type === 'chatThread') && action.type !== 'tombstone');
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all' || (filter === 'shop' && action.type === 'shopProduct')) && action.type !== 'tombstone');
   }

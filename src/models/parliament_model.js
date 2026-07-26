@@ -474,7 +474,12 @@ if (c.type === type) {
     const pol = await summarizePoliciesForTerm({ ...term });
     const eff = pol.proposed > 0 ? Math.round((pol.approved / pol.proposed) * 100) : 0;
     const cands = await listByType('parliamentCandidature');
-    const presented = cands.length;
+    const cycleStartMs = term.startAt ? new Date(term.startAt).getTime() : 0;
+    const cycleEndMs = term.endAt ? new Date(term.endAt).getTime() : Number.MAX_SAFE_INTEGER;
+    const presented = cands.filter(c => {
+      const t = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+      return t >= cycleStartMs && t <= cycleEndMs;
+    }).length;
     return {
       method,
       powerType: term.powerType,
@@ -1210,6 +1215,50 @@ if (c.type === type) {
     return await computeGovernmentCard({ ...term, id: term.id || term.startAt });
   }
 
+  async function getLatestTerm() {
+    return await getLatestTermAny();
+  }
+
+  async function getLatestGovernmentCard() {
+    const term = await getLatestTermAny();
+    if (!term) return null;
+    const card = await computeGovernmentCard({ ...term, id: term.id || term.startAt });
+    const now = moment();
+    let start = moment(term.startAt);
+    let end = term.endAt ? moment(term.endAt) : start.clone().add(TERM_DAYS, 'days');
+    let rolled = false;
+    while (start.isValid() && end.isValid() && end.isSameOrBefore(now)) {
+      start = end.clone();
+      end = end.clone().add(TERM_DAYS, 'days');
+      rolled = true;
+    }
+    if (rolled) {
+      return {
+        ...card,
+        id: term.id || term.startAt,
+        since: start.toISOString(),
+        end: end.toISOString(),
+        method: 'ANARCHY',
+        powerType: 'none',
+        powerId: null,
+        powerTitle: 'ANARCHY',
+        winnerVotes: 0,
+        totalVotes: 0,
+        votesReceived: 0,
+        presented: 0,
+        proposed: 0,
+        approved: 0,
+        declined: 0,
+        discarded: 0,
+        revocated: 0,
+        efficiency: 0,
+        expired: false,
+        rolled: true
+      };
+    }
+    return { ...card, id: term.id || term.startAt, since: term.startAt, end: term.endAt, expired: false, rolled: false };
+  }
+
   async function listLaws() {
     const items = await listByType('parliamentLaw');
     return items.sort((a, b) => new Date(b.enactedAt) - new Date(a.enactedAt));
@@ -1464,6 +1513,8 @@ if (c.type === type) {
     listCandidatures,
     listTerms,
     getCurrentTerm,
+    getLatestTerm,
+    getLatestGovernmentCard,
     listLeaders,
     sweepProposals,
     getActorMeta,

@@ -143,6 +143,72 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
     return t.length > max ? t.slice(0, max - 1) + '…' : t;
   };
 
+  // Builds self-contained chatThread items (title + recent messages embedded) for
+  // general (non-tribe) OPEN chats that have activity. Emitted as one item per chat
+  // with ts = latest message, so it survives the recent/all/mine filters intact.
+  const CHAT_THREAD_LIMIT = 6;
+  const buildChatThreads = async (ssbClient, idToAction, rootOf) => {
+    const replacedChatIds = new Set();
+    for (const a of idToAction.values()) {
+      if (a.type !== 'chat') continue;
+      const rep = a.content && a.content.replaces;
+      if (rep) replacedChatIds.add(rep);
+    }
+    const stateByRoot = new Map();
+    for (const a of idToAction.values()) {
+      if (a.type !== 'chat') continue;
+      const root = rootOf(a.id);
+      const isTip = !replacedChatIds.has(a.id);
+      const prev = stateByRoot.get(root);
+      // Resolve the chain tip by replaces (a non-replaced action wins), breaking ts
+      // ties correctly — the mock and real SSB can stamp equal timestamps.
+      if (prev && !((isTip && !prev.isTip) || (isTip === prev.isTip && (a.ts || 0) >= prev.ts))) continue;
+      const cc = a.content || {};
+      stateByRoot.set(root, { ts: a.ts || 0, isTip, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || '') });
+    }
+    const msgsByRoot = new Map();
+    for (const a of idToAction.values()) {
+      if (a.type !== 'chatMessage') continue;
+      const c = a.content || {};
+      if (c.tribeId || c.encryptedText) continue;
+      const root = c.chatId;
+      if (!root || typeof c.text !== 'string' || !c.text) continue;
+      if (!msgsByRoot.has(root)) msgsByRoot.set(root, []);
+      msgsByRoot.get(root).push(a);
+    }
+    for (const root of msgsByRoot.keys()) {
+      if (stateByRoot.has(root)) continue;
+      const val = await getMsg(ssbClient, root);
+      const cc = val && val.content;
+      if (cc && typeof cc === 'object' && cc.type === 'chat') {
+        stateByRoot.set(root, { ts: 0, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || '') });
+      } else {
+        stateByRoot.set(root, null);
+      }
+    }
+    const items = [];
+    for (const [root, msgs] of msgsByRoot.entries()) {
+      const info = stateByRoot.get(root);
+      if (!info || info.tribeId || info.status !== 'OPEN') continue;
+      const asc = msgs.slice().sort((x, y) => (x.ts || 0) - (y.ts || 0));
+      const last = asc[asc.length - 1];
+      items.push({
+        id: `chatthread:${root}`,
+        type: 'chatThread',
+        author: last.author,
+        ts: last.ts || 0,
+        content: {
+          type: 'chatThread',
+          chatRoot: root,
+          title: info.title || '',
+          description: info.description || '',
+          replies: asc.slice(-CHAT_THREAD_LIMIT).map(m => ({ id: m.id, author: m.author, ts: m.ts || 0, text: (m.content && m.content.text) || '' }))
+        }
+      });
+    }
+    return items;
+  };
+
   return {
     invalidateCache() {
       _feedCache = null;
@@ -600,6 +666,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
 
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
       const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'gameScore']);
+      const chatThreadItems = await buildChatThreads(ssbClient, idToAction, rootOf, deduped);
+      deduped = deduped.concat(chatThreadItems);
       const isAllowedTribeActivity = (a) => {
         if (tribeInternalTypes.has(a.type)) return false;
         const c = a.content || {};
@@ -628,6 +696,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         if (a.type === 'shop' && String(c.visibility || '').toUpperCase() === 'CLOSED' && a.author !== userId) return false;
         if (a.type === 'curriculum' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId) return false;
         if (a.type === 'shopProduct' && c.shopVisibility && String(c.shopVisibility).toUpperCase() === 'CLOSED' && a.author !== userId) return false;
+        if (a.type === 'transfer' && String(c.status || '').toUpperCase() === 'UNCONFIRMED' && a.author !== userId && c.from !== userId && c.to !== userId) return false;
         return true;
       };
       const isVisible = (a) => {
@@ -665,8 +734,9 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
       else if (filter === 'task')
         out = deduped.filter(a => a.type === 'task' || a.type === 'taskAssignment');
       else if (filter === 'pad') out = deduped.filter(a => a.type === 'pad' && (a.content || {}).status === 'OPEN');
-      else if (filter === 'chat') out = deduped.filter(a => a.type === 'chat' && (a.content || {}).status === 'OPEN');
+      else if (filter === 'chat') out = deduped.filter(a => (a.type === 'chat' || a.type === 'chatThread') && isAllowedTribeActivity(a) && isVisible(a));
       else if (filter === 'calendar') out = deduped.filter(a => a.type === 'calendar' && (a.content || {}).status === 'OPEN');
+      else if (filter === 'transfer') out = deduped.filter(a => a.type === 'transfer' && isVisible(a));
       else out = deduped.filter(a => a.type === filter);
 
       out.sort((a, b) => (b.ts || 0) - (a.ts || 0));

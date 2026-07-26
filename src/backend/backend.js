@@ -2374,7 +2374,11 @@ router
       inhabitantsModel.listInhabitants({ filter: 'all', includeInactive: true })
     ]);
     const inhabitantsTotal = Array.isArray(inhabitantsAll) ? inhabitantsAll.length : 0;
-    const governmentCard = governmentCardRaw ? { ...governmentCardRaw, inhabitantsTotal } : null;
+    let governmentCard = governmentCardRaw ? { ...governmentCardRaw, inhabitantsTotal, expired: false } : null;
+    if (!governmentCard) {
+      const latest = await parliamentModel.getLatestGovernmentCard().catch(() => null);
+      if (latest) governmentCard = { ...latest, inhabitantsTotal };
+    }
     const leader = pickLeader(candidatures || []);
     const getActorMeta = async (type, id) => (type === 'tribe' || type === 'inhabitant') ? parliamentModel.getActorMeta({ targetType: type, targetId: id }) : null;
     const leaderMeta = leader ? await getActorMeta(leader.targetType || leader.powerType || 'inhabitant', leader.targetId || leader.powerId) : null;
@@ -2540,7 +2544,34 @@ router
         ...allMapsRaw.filter(m => tribeChainSet.has(m.tribeId)).map(toStandalone('map', m => `/maps/${encodeURIComponent(m.key || m.id)}`)),
         ...allTorrentsRaw.filter(t => tribeChainSet.has(t.tribeId)).map(toStandalone('torrent', t => `/torrents/${encodeURIComponent(t.rootId || t.key)}`))
       ];
-      const combined = [...allContent, ...subContent, ...standaloneItems];
+      const subTribeNameById = new Map(subTribes.map(st => [st.id, st.title]));
+      const chatThreadItems = [];
+      for (const c of allChatsRaw) {
+        const inChain = tribeChainSet.has(c.tribeId);
+        const inSub = subTribeNameById.has(c.tribeId);
+        if (!inChain && !inSub) continue;
+        const root = c.rootId || c.key;
+        if (!root) continue;
+        let msgs = [];
+        try { msgs = await chatsModel.listMessages(root); } catch (_) { msgs = []; }
+        const withText = (msgs || []).filter(m => m && typeof m.text === 'string' && m.text.trim());
+        if (!withText.length) continue;
+        withText.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        const last = withText[withText.length - 1];
+        chatThreadItems.push({
+          contentType: 'chatThread',
+          id: root,
+          title: c.title || '',
+          author: c.author,
+          createdAt: last.createdAt,
+          _ts: Date.parse(last.createdAt) || 0,
+          directUrl: `/chats/${encodeURIComponent(root)}`,
+          ...(inSub ? { tribeName: subTribeNameById.get(c.tribeId) } : {}),
+          description: c.description || '',
+          replies: withText.slice(-6).map(m => ({ author: m.author, text: m.text, createdAt: m.createdAt }))
+        });
+      }
+      const combined = [...allContent, ...subContent, ...standaloneItems, ...chatThreadItems];
       const allInhabitants = await inhabitantsModel.listInhabitants({ filter: 'all', includeInactive: true });
       const allMembers = [...new Set([...tribe.members, ...subTribes.flatMap(st => st.members || [])])];
       const memberMap = new Map(allInhabitants.filter(u => allMembers.includes(u.id)).map(u => [u.id, u]));
@@ -2673,12 +2704,21 @@ router
       const isCreator = tribe.author === uid;
       const isMember = Array.isArray(tribe.members) && tribe.members.includes(uid);
       if (isCreator) { try { await parliamentModel.tribe.ensureTerm(tribe.id); } catch (_) {} }
-      const [term, candidatures, rules, globalTermBase] = await Promise.all([
+      let [term, candidatures, rules, globalTermBase] = await Promise.all([
         parliamentModel.tribe.getCurrentTerm(tribe.id).catch(() => null),
         parliamentModel.tribe.listCandidatures(tribe.id).catch(() => []),
         parliamentModel.tribe.listRules(tribe.id).catch(() => []),
         parliamentModel.getCurrentTerm().catch(() => null)
       ]);
+      if (term && term.startAt) {
+        const tribeTermDays = parliamentModel.tribe.TERM_DAYS || 60;
+        let cStart = moment(term.startAt);
+        let cEnd = term.endAt ? moment(term.endAt) : cStart.clone().add(tribeTermDays, 'days');
+        const now = moment();
+        let rolled = false;
+        while (cEnd.isValid() && cEnd.isSameOrBefore(now)) { cStart = cEnd.clone(); cEnd = cEnd.clone().add(tribeTermDays, 'days'); rolled = true; }
+        if (rolled) term = { ...term, startAt: cStart.toISOString(), endAt: cEnd.toISOString(), method: 'ANARCHY', powerType: 'none', powerId: null, leaders: [], winnerVotes: 0, totalVotes: 0 };
+      }
       const globalStart = globalTermBase?.startAt || null;
       const alreadyPublishedThisGlobalCycle = await parliamentModel.tribe.hasCandidatureInGlobalCycle(tribe.id, globalStart).catch(() => false);
       const leaders = Array.isArray(term?.leaders) ? term.leaders : [];
@@ -6964,6 +7004,11 @@ router
     await shopsModel.buyProduct(ctx.params.id);
     try {
       const pr = await shopsModel.getProductById(ctx.params.id).catch(() => null);
+      if (pr && pr.author && String(pr.author) !== String(getViewerId())) {
+        try {
+          await pmModel.sendMessage([pr.author], "SHOP_SOLD", `product "${pr.title}" has been sold -> /shops/product/${ctx.params.id}  OASIS ID: ${getViewerId()}  for: ${pr.price} ECO`);
+        } catch (_) {}
+      }
       await mediaFavorites.addFavorite('shopProducts', (pr && pr.rootId) || ctx.params.id);
     } catch (_) {}
     if (checkMod(ctx, 'marketMod')) {
@@ -8168,6 +8213,7 @@ const middleware = [
         try { await refreshInboxCount(); } catch (_) {}
         try { await calendarsModel.checkDueReminders(); } catch (_) {}
         try { await tasksModel.checkDueReminders(); } catch (_) {}
+        try { await checkPoliticalChanges(); } catch (_) {}
         try {
           const peers = await meta.connectedPeers();
           sharedState.setOnlinePeerCount(Array.isArray(peers) ? peers.length : 0);
@@ -8279,6 +8325,139 @@ async function sendWelcomePmIfFirstLaunch() {
 }
 setTimeout(() => { sendWelcomePmIfFirstLaunch(); }, 20000);
 
+const pbFmtDate = (iso) => iso ? moment(iso).format('YYYY-MM-DD HH:mm:ss') : '';
+const pbFmtRemaining = (endIso) => {
+  if (!endIso) return '';
+  const ms = moment(endIso).diff(moment());
+  if (ms <= 0) return '0d 00:00:00';
+  const d = Math.floor(ms / 86400000);
+  const h = Math.floor((ms % 86400000) / 3600000);
+  const mi = Math.floor((ms % 3600000) / 60000);
+  const se = Math.floor((ms % 60000) / 1000);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d}d ${pad(h)}:${pad(mi)}:${pad(se)}`;
+};
+const pbFill = (tpl, vars) => String(tpl || '').replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+const pbTitleCase = (s) => { const t = String(s || ''); return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : ''; };
+const pbAtId = (id) => id ? '@' + String(id).replace(/^@/, '') : '';
+function buildLarpRulingMsg(data = {}, t = {}) {
+  const house = data.house || {};
+  const name = house.name || data.houseKey || '';
+  const intro = pbFill(t.politicalBotLarpIntro || 'Now {house} rules during this cycle: {cycle}', {
+    house: `[${name}](/larp/${encodeURIComponent(data.houseKey || '')})`,
+    cycle: `[${data.cycleFormatted || ''}](/larp)`
+  });
+  const lines = [
+    intro, '', name, house.description || '',
+    `${t.larpRolesLabel || 'Roles'}: ${house.roles || ''}`,
+    `${t.larpFunctionLabel || 'Function'}: ${house.function || ''}`,
+    `${t.larpMonthLabel || 'Governance cycle'}: ${house.month != null ? house.month : ''}`,
+    `${t.larpMembersCount || 'Members'}: ${data.memberCount || 0}`,
+    house.motto ? `“${house.motto}”` : ''
+  ];
+  return { subject: 'LARP_RULING', body: lines.filter(l => l != null && l !== '').join('\n') };
+}
+function pbGovBlock(gov = {}, t = {}) {
+  const lines = [`${t.parliamentGovernmentCard || 'Current Government'}: ${String(gov.method || '').toUpperCase()}`];
+  if (gov.leaderId) lines.push(`${t.politicalBotLeaderLabel || 'Leader'}: ${pbAtId(gov.leaderId)}`);
+  lines.push(`${t.parliamentLegSince || 'CYCLE SINCE'}: ${pbFmtDate(gov.since)}`);
+  lines.push(`${t.parliamentLegEnd || 'CYCLE END'}: ${pbFmtDate(gov.end)}`);
+  lines.push(`${t.parliamentTimeRemaining || 'Time remaining'}: ${pbFmtRemaining(gov.end)}`);
+  lines.push(`${t.parliamentPopulation || 'Population'}: ${gov.population || 0}`);
+  return lines;
+}
+function buildParliamentGovMsg(gov = {}, t = {}) {
+  const govLink = `[${pbTitleCase(gov.method)}](/parliament)`;
+  const intro = gov.leaderId
+    ? pbFill(t.politicalBotParliamentIntroLeader || 'The current government is {gov}, led by {leader}', { gov: govLink, leader: pbAtId(gov.leaderId) })
+    : pbFill(t.politicalBotParliamentIntro || 'The current government is {gov}', { gov: govLink });
+  return { subject: 'PARLIAMENT_GOV', body: [intro, ''].concat(pbGovBlock(gov, t)).join('\n') };
+}
+function buildTribeGovMsg(gov = {}, t = {}) {
+  const govLink = `[${pbTitleCase(gov.method)}](/tribe/${encodeURIComponent(gov.tribeId || '')}?section=governance)`;
+  const vars = { tribe: gov.tribeName || '', gov: govLink, leader: pbAtId(gov.leaderId) };
+  const intro = gov.leaderId
+    ? pbFill(t.politicalBotTribeIntroLeader || 'The current government in the Tribe {tribe} is {gov}, led by {leader}', vars)
+    : pbFill(t.politicalBotTribeIntro || 'The current government in the Tribe {tribe} is {gov}', vars);
+  return { subject: 'TRIBE_GOV', body: [intro, ''].concat(pbGovBlock(gov, t)).join('\n') };
+}
+const politicalStatePath = () => path.join(ssbConfig.path, 'oasis-political-bot.json');
+const readPoliticalState = () => { try { return JSON.parse(fs.readFileSync(politicalStatePath(), 'utf8')); } catch (_) { return {}; } };
+const writePoliticalState = (st) => { try { fs.writeFileSync(politicalStatePath(), JSON.stringify(st, null, 2)); } catch (_) {} };
+let politicalCheckRunning = false;
+async function checkPoliticalChanges() {
+  if (politicalCheckRunning) return;
+  politicalCheckRunning = true;
+  try {
+    const ssbClient = await cooler.open().catch(() => null);
+    if (!ssbClient || !ssbClient.id) return;
+    const ownId = ssbClient.id;
+    const i18nAll = require('../client/assets/translations/i18n');
+    const lang = (getConfig() && getConfig().language) || 'en';
+    const t = i18nAll[lang] || i18nAll.en;
+    const st = readPoliticalState();
+    if (!st.tribes || typeof st.tribes !== 'object') st.tribes = {};
+    const send = async (subject, body) => { try { await pmModel.sendMessage([], subject, body); } catch (e) { console.error('[political-bot] send failed:', e && e.message); } };
+
+    try {
+      const houseKey = larpModel.getGoverningHouseKey();
+      if (houseKey && st.larpHouse && st.larpHouse !== houseKey) {
+        const house = (larpModel.getHouse && larpModel.getHouse(houseKey)) || {};
+        let memberCount = 0;
+        try { const hc = await larpModel.listHousesWithCounts(); const h = (hc || []).find(x => x.key === houseKey); memberCount = h ? (h.memberCount || 0) : 0; } catch (_) {}
+        let cycleFormatted = '';
+        try { cycleFormatted = larpModel.computeCycle().formatted; } catch (_) {}
+        const { subject, body } = buildLarpRulingMsg({ houseKey, house, memberCount, cycleFormatted }, t);
+        await send(subject, body);
+      }
+      if (houseKey) st.larpHouse = houseKey;
+    } catch (e) { console.error('[political-bot] larp:', e && e.message); }
+
+    try {
+      const card = await parliamentModel.getLatestGovernmentCard().catch(() => null);
+      if (card) {
+        const key = String(card.id || card.since || card.method || '');
+        if (st.parliamentTerm && st.parliamentTerm !== key) {
+          let population = 0;
+          try { const inh = await inhabitantsModel.listInhabitants({ filter: 'all', includeInactive: true }); population = Array.isArray(inh) ? inh.length : 0; } catch (_) {}
+          const leaderId = (card.powerType === 'inhabitant' && card.powerId) ? card.powerId : null;
+          const { subject, body } = buildParliamentGovMsg({ method: card.method, since: card.since, end: card.end, population, leaderId }, t);
+          await send(subject, body);
+        }
+        st.parliamentTerm = key;
+      }
+    } catch (e) { console.error('[political-bot] parliament:', e && e.message); }
+
+    try {
+      let tribes = [];
+      try { tribes = await tribesModel.listAll(); } catch (_) { tribes = []; }
+      for (const tribe of (tribes || [])) {
+        if (!tribe || !tribe.id) continue;
+        if (!Array.isArray(tribe.members) || !tribe.members.includes(ownId)) continue;
+        if (tribe.parentTribeId) continue;
+        let term = null;
+        try { term = await parliamentModel.tribe.getCurrentTerm(tribe.id); } catch (_) { term = null; }
+        if (!term) continue;
+        const key = String(term.id || term.startAt || term.method || '');
+        const prev = st.tribes[tribe.id];
+        if (prev && prev !== key) {
+          const lead = Array.isArray(term.leaders) && term.leaders.length ? term.leaders[0] : null;
+          const leaderId = lead && typeof lead === 'object' ? (lead.id || lead.powerId || null) : lead;
+          const population = Array.isArray(tribe.members) ? tribe.members.length : 0;
+          const { subject, body } = buildTribeGovMsg({ method: term.method, since: term.startAt, end: term.endAt, population, leaderId, tribeId: tribe.id, tribeName: tribe.title || tribe.name || tribe.id }, t);
+          await send(subject, body);
+        }
+        st.tribes[tribe.id] = key;
+      }
+    } catch (e) { console.error('[political-bot] tribe:', e && e.message); }
+
+    writePoliticalState(st);
+  } catch (err) {
+    console.error('[political-bot] unexpected:', err && err.message);
+  } finally {
+    politicalCheckRunning = false;
+  }
+}
 async function logClearnetStatus() {
   try {
     const ssbClient = await cooler.open();

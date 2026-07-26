@@ -12,7 +12,7 @@
     "hops": 2
   },
   "gossip": {
-    "connections": 20,
+    "connections": 30,
     "local": true,
     "friends": true,
     "seed": true,

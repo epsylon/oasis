@@ -507,6 +507,34 @@ const renderTribeActivitySection = (tribe, sectionData) => {
   return div({ class: 'tribe-content-list tribe-content-list-spaced' },
     activities.slice(0, 50).map(item => {
       if (item.encrypted) return div({ class: 'card card-rpg' }, div({ class: 'tribe-card-body' }, p({ class: 'tribe-meta-label' }, i18n.tribeContentEncrypted || 'Encrypted content')));
+      if (item.contentType === 'chatThread') {
+        const replies = Array.isArray(item.replies) ? item.replies : [];
+        const tDate = item.timestamp ? new Date(item.timestamp).toLocaleString() : '';
+        const headerText = item.tribeName
+          ? `[${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD · ${item.tribeName}]`
+          : `[${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD]`;
+        return div({ class: 'card card-rpg tribe-card-padded chat-thread' },
+          div({ class: 'card-header' },
+            h2({ class: 'card-label' }, headerText),
+            a({ href: item.directUrl, class: 'filter-btn' }, i18n.viewDetails || 'View Details')
+          ),
+          div({ class: 'tribe-card-body' },
+            item.title ? div({ class: 'card-field' }, span({ class: 'card-value' }, item.title)) : null,
+            item.description ? p(String(item.description).substring(0, 200)) : null,
+            replies.map(r => div({ class: 'thread-reply-item' },
+              r.text ? p({ class: 'post-text', style: 'white-space:pre-wrap;' }, String(r.text)) : null,
+              div({ class: 'card-footer thread-reply-footer' },
+                span({ class: 'date-link' }, r.createdAt ? new Date(r.createdAt).toLocaleString() : ''),
+                userLink(r.author, '')
+              )
+            ))
+          ),
+          p({ class: 'card-footer' },
+            span({ class: 'date-link' }, `${tDate} ${i18n.performed || ''} `),
+            userLink(item.author, item.authorName)
+          )
+        );
+      }
       const date = item.timestamp ? new Date(item.timestamp).toLocaleString() : '';
       const typeLabel = item.contentType === 'media' && item.mediaType
         ? activityMediaTypeName(item.mediaType)
@@ -1719,8 +1747,9 @@ const governanceFilterBar = (tribeId, currentFilter, showPublish) => {
   );
 };
 
-const fmtTermDate = (d) => moment(d).format('YYYY-MM-DD HH:mm:ss');
+const fmtTermDate = (d) => d ? moment(d).format('YYYY-MM-DD HH:mm:ss') : '—';
 const fmtTimeLeft = (end) => {
+  if (!end) return '—';
   const diff = moment(end).diff(moment());
   if (diff <= 0) return '0d 00:00:00';
   const dur = moment.duration(diff);
@@ -1743,9 +1772,9 @@ const governmentCard = (tribe, term, leaders) => {
   const isAnarchy = method === 'ANARCHY';
   const i18nMeth = i18n[`parliamentMethod${method}`];
   const methodLabel = (i18nMeth && String(i18nMeth).trim() ? String(i18nMeth) : method).toUpperCase();
-  const termStart = term.startAt || moment().toISOString();
-  const termEnd = term.endAt || moment(termStart).add(60, 'days').toISOString();
-  const population = Array.isArray(tribe.members) ? tribe.members.length : 0;
+  const termStart = term.startAt || null;
+  const termEnd = term.endAt || null;
+  const population = tribe.memberCount != null ? tribe.memberCount : (Array.isArray(tribe.members) ? tribe.members.length : 0);
   const winnerVotes = Number(term.winnerVotes || 0);
   const totalVotes = Number(term.totalVotes || 0);
   const votesDisplay = `${winnerVotes} (${totalVotes})`;

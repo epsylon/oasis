@@ -3,6 +3,11 @@ const fs = require('fs')
 
 const ROUTES = [
   { path: '/public/latest', mod: null,         description: 'home, latest posts, public timeline, news, recent activity' },
+  { path: '/public/popular/day', mod: 'popularMod', description: 'popular, trending posts, most liked, top voted, best posts, popular today this week most spread' },
+  { path: '/public/latest/topics', mod: 'topicsMod', description: 'topics, browse by topic, subjects, categories of discussion, what people talk about' },
+  { path: '/public/latest/summaries', mod: 'summariesMod', description: 'summaries, AI summaries, digest, recap, tldr, overview of the latest posts' },
+  { path: '/public/latest/threads', mod: 'threadsMod', description: 'threads, threaded conversations, discussion threads, replies grouped, conversation trees' },
+  { path: '/public/latest/extended', mod: 'multiverseMod', description: 'multiverse, extended network, wider timeline, beyond my follows, posts from the whole network, extended public feed' },
   { path: '/feed',          mod: 'feedMod',    description: 'feed, microblog, opinions, share thoughts, vote on posts, refeeds' },
   { path: '/forum',         mod: 'forumMod',   description: 'forum, discussions, threads, debates, conversation by category' },
   { path: '/inhabitants',   mod: null, description: 'inhabitants, users, people, profiles, contacts, follow, block' },
@@ -93,18 +98,18 @@ const ROUTES = [
   { path: '/fediverse',     mod: 'fediverseMod', description: 'fediverse, mastodon, activitypub, external social networks, federated timeline, cross-post, fediverse handle, follow external accounts' },
   { path: '/stats?filter=ALL',  mod: null, description: 'global stats, network kpis, total carbon footprint, total inhabitants, network size' },
   { path: '/stats?filter=MINE', mod: null, description: 'my stats, my carbon footprint, my activity numbers, personal kpis' },
-  { path: '/tribes/new',    mod: 'tribesMod',   description: 'create tribe, new tribe, new group, start community, create private room' },
-  { path: '/chats/new',     mod: 'chatsMod',    description: 'create chat, new chat, start conversation, new encrypted room' },
-  { path: '/pads/new',      mod: 'padsMod',     description: 'create pad, new pad, new collaborative document, start shared note' },
-  { path: '/calendars/new', mod: 'calendarsMod', description: 'create calendar, new calendar, start schedule' },
-  { path: '/maps/new',      mod: 'mapsMod',     description: 'create map, new map, new offline map' },
-  { path: '/events/new',    mod: 'eventsMod',   description: 'create event, new event, schedule meetup' },
-  { path: '/projects/new',  mod: 'projectsMod', description: 'create project, new project, start crowdfunding' },
-  { path: '/jobs/new',      mod: 'jobsMod',     description: 'create job, post job offer, new vacancy, hire' },
-  { path: '/market/new',    mod: 'marketMod',  description: 'create market item, sell something, new auction, list for sale' },
-  { path: '/shops/new',     mod: 'shopsMod',    description: 'create shop, open store, new vendor, list products' },
-  { path: '/tasks/new',     mod: 'tasksMod',    description: 'create task, new todo, new assignment' },
-  { path: '/reports/new',   mod: 'reportsMod', description: 'create report, file bug, report issue, report abuse' }
+  { path: '/tribes/create', mod: 'tribesMod',   description: 'create tribe, new tribe, new group, start community, create private room' },
+  { path: '/chats',         mod: 'chatsMod',    description: 'create chat, new chat, start conversation, new encrypted room' },
+  { path: '/pads',          mod: 'padsMod',     description: 'create pad, new pad, new collaborative document, start shared note' },
+  { path: '/calendars',     mod: 'calendarsMod', description: 'create calendar, new calendar, start schedule' },
+  { path: '/maps',          mod: 'mapsMod',     description: 'create map, new map, new offline map' },
+  { path: '/events',        mod: 'eventsMod',   description: 'create event, new event, schedule meetup' },
+  { path: '/projects',      mod: 'projectsMod', description: 'create project, new project, start crowdfunding' },
+  { path: '/jobs',          mod: 'jobsMod',     description: 'create job, post job offer, new vacancy, hire' },
+  { path: '/market',        mod: 'marketMod',  description: 'create market item, sell something, new auction, list for sale' },
+  { path: '/shops',         mod: 'shopsMod',    description: 'create shop, open store, new vendor, list products' },
+  { path: '/tasks',         mod: 'tasksMod',    description: 'create task, new todo, new assignment' },
+  { path: '/reports',       mod: 'reportsMod', description: 'create report, file bug, report issue, report abuse' }
 ]
 
 const CACHE_FILE = path.join(__dirname, 'embeddings', 'routes_cache.json')
@@ -158,6 +163,17 @@ const descriptionByPath = (p) => {
   return r ? r.description : ''
 }
 
+const dedupeByPath = (list) => {
+  const seen = new Set()
+  const out = []
+  for (const item of list) {
+    if (seen.has(item.path)) continue
+    seen.add(item.path)
+    out.push(item)
+  }
+  return out
+}
+
 const resolveBest = async (queryVector, { isModuleEnabled, threshold = 0.4, embed } = {}) => {
   const idx = await ensureIndex({ embed })
   if (!idx) return null
@@ -182,7 +198,7 @@ const resolveTopK = async (queryVector, { isModuleEnabled, threshold = 0.35, emb
     all.push({ path: entry.path, mod: entry.mod, score, description: descriptionByPath(entry.path) })
   }
   all.sort((a, b) => b.score - a.score)
-  return all.slice(0, Math.max(1, k|0))
+  return dedupeByPath(all).slice(0, Math.max(1, k|0))
 }
 
 const resolveKeywordTopK = ({ isModuleEnabled } = {}, query, k = 8) => {
@@ -200,7 +216,7 @@ const resolveKeywordTopK = ({ isModuleEnabled } = {}, query, k = 8) => {
     all.push({ path: entry.path, mod: entry.mod, score: hits / tokens.length, description: entry.description })
   }
   all.sort((a, b) => b.score - a.score)
-  return all.slice(0, Math.max(1, k|0))
+  return dedupeByPath(all).slice(0, Math.max(1, k|0))
 }
 
 module.exports = { ROUTES, ensureIndex, resolveBest, resolveTopK, resolveKeywordTopK }

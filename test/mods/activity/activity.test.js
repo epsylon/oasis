@@ -160,3 +160,101 @@ describe('activity: foreign tombstone cannot hide content', (t) => {
     ok(!mine, 'self tombstone still hides the content');
   });
 });
+
+describe('activity: unconfirmed transfer does not leak to third parties', (t) => {
+  t('sender sees own unconfirmed transfer in activity', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('transfers').createTransfer(B.keypair.id, 'Invoice - Shop order: Widget', '1.5', '2026-12-31', [], 'ECONOMIC');
+    const feed = await A.use('activity').listFeed('all');
+    ok(feed.find(a => a.type === 'transfer'), 'sender sees the unconfirmed transfer');
+  });
+
+  t('recipient sees the unconfirmed transfer in activity', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('transfers').createTransfer(B.keypair.id, 'Invoice - Shop order: Widget', '1.5', '2026-12-31', [], 'ECONOMIC');
+    B.setActor();
+    const feed = await B.use('activity').listFeed('all');
+    ok(feed.find(a => a.type === 'transfer'), 'recipient sees the unconfirmed transfer');
+  });
+
+  t('third party does NOT see the unconfirmed transfer in activity (all)', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    await A.use('transfers').createTransfer(B.keypair.id, 'Invoice - Shop order: Widget', '1.5', '2026-12-31', [], 'ECONOMIC');
+    C.setActor();
+    const feed = await C.use('activity').listFeed('all');
+    ok(!feed.find(a => a.type === 'transfer'), 'third party sees no unconfirmed transfer');
+  });
+
+  t('third party does NOT see the unconfirmed transfer in the transfer filter tab', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    await A.use('transfers').createTransfer(B.keypair.id, 'Invoice - Shop order: Widget', '1.5', '2026-12-31', [], 'ECONOMIC');
+    C.setActor();
+    const feed = await C.use('activity').listFeed('transfer');
+    ok(!feed.find(a => a.type === 'transfer'), 'third party sees no unconfirmed transfer in transfer tab');
+  });
+
+  t('a self-transfer (CLOSED) stays visible to third parties', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    await A.use('transfers').createTransfer(A.keypair.id, 'self note', '2', '2026-12-31', [], 'ECONOMIC');
+    C.setActor();
+    const feed = await C.use('activity').listFeed('all');
+    ok(feed.find(a => a.type === 'transfer'), 'CLOSED self-transfer remains public');
+  });
+});
+
+describe('activity: general OPEN chat replies surface in activity as a thread', (t) => {
+  t('a general OPEN chat with messages appears as a chatThread (all)', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('chats').createChat('Lobby', 'general chat', null, 'general', 'OPEN', [], null);
+    await A.use('chats').sendMessage(r.key, 'hello everyone');
+    const feed = await A.use('activity').listFeed('all');
+    const th = feed.find(a => a.type === 'chatThread' && a.content.chatRoot === r.key);
+    ok(th, 'chatThread present in activity all');
+    eq(th.content.title, 'Lobby');
+    ok(th.content.replies.some(m => m.text === 'hello everyone'), 'reply text embedded');
+  });
+
+  t('the chatThread appears in the chat filter and carries the title', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('chats').createChat('Lobby2', 'general chat', null, 'general', 'OPEN', [], null);
+    await A.use('chats').sendMessage(r.key, 'first message');
+    const feed = await A.use('activity').listFeed('chat');
+    const th = feed.find(a => a.type === 'chatThread' && a.content.chatRoot === r.key);
+    ok(th, 'chatThread in chat filter');
+    eq(th.content.title, 'Lobby2');
+  });
+
+  t('both the creation card and the thread appear when a chat has messages', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('chats').createChat('BothCard', 'g', null, 'general', 'OPEN', [], null);
+    await A.use('chats').sendMessage(r.key, 'a message');
+    const feed = await A.use('activity').listFeed('all');
+    ok(feed.find(a => a.type === 'chat' && (a.rootId || a.id) === r.key), 'creation card present');
+    ok(feed.find(a => a.type === 'chatThread' && a.content.chatRoot === r.key), 'thread present');
+  });
+
+  t('a third party sees the general OPEN chat thread', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('chats').createChat('PublicRoom', 'g', null, 'general', 'OPEN', [], null);
+    await A.use('chats').sendMessage(r.key, 'anyone can read this');
+    C.setActor();
+    const feed = await C.use('activity').listFeed('all');
+    ok(feed.find(a => a.type === 'chatThread' && a.content.chatRoot === r.key), 'third party sees the thread');
+  });
+
+  t('closing the chat removes its thread from activity', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('chats').createChat('Temp', 'g', null, 'general', 'OPEN', [], null);
+    await A.use('chats').sendMessage(r.key, 'to be hidden');
+    await A.use('chats').closeChatById(r.key);
+    const feed = await A.use('activity').listFeed('all');
+    ok(!feed.find(a => a.type === 'chatThread' && a.content.chatRoot === r.key), 'closed chat thread hidden');
+    ok(!feed.find(a => a.type === 'chat' && (a.rootId || a.id) === r.key), 'closed chat card hidden');
+  });
+});
