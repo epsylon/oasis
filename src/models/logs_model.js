@@ -23,7 +23,7 @@ const ACTION_TYPES = new Set([
   'post', 'about', 'contact', 'feed', 'bookmark', 'image', 'audio', 'video',
   'document', 'torrent', 'event', 'task', 'taskAssignment',
   'votes', 'vote', 'report', 'tribe', 'chat', 'chatMessage', 'pad', 'padEntry',
-  'forum', 'market', 'job', 'project', 'pixelia', 'map', 'mapMarker',
+  'forum', 'market', 'job', 'project', 'industry', 'industryBuild', 'pixelia', 'map', 'mapMarker',
   'shop', 'shopProduct', 'curriculum', 'gameScore',
   'calendar', 'calendarDate', 'calendarNote',
   'transfer', 'bankClaim', 'ubiClaim',
@@ -61,6 +61,8 @@ const ACTION_PHRASES = {
   forum: 'posted in the forum',
   job: 'posted a job opportunity',
   project: 'advanced a project',
+  industry: 'founded a network-owned facility',
+  industryBuild: 'proposed a production build',
   pixelia: 'placed a pixel in pixelia',
   map: 'contributed to a map',
   mapMarker: 'placed a marker on a map',
@@ -291,7 +293,10 @@ module.exports = ({ cooler }) => {
       const c = v?.content;
       if (!c) continue;
       if (v.author !== userId) continue;
-      if (c.type === 'tombstone') continue;
+      if (c.type === 'tombstone') {
+        if (typeof c.target === 'string' && c.target) tombstoned.add(c.target);
+        continue;
+      }
       if (c.type !== 'log') continue;
       if (c.replaces) replaced.set(c.replaces, dec.key || keyIn);
       items.push({

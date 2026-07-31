@@ -180,6 +180,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         shopProductId: shopOpts.shopProductId || "",
         shopId: shopOpts.shopId || "",
         shopTitle: shopOpts.shopTitle || "",
+        industry: shopOpts.industry || "",
         visibility: String(visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC"
       }
 
@@ -344,7 +345,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
           mapUrl: c.mapUrl || "",
           shopProductId: c.shopProductId || "",
           shopId: c.shopId || "",
-          shopTitle: c.shopTitle || ""
+          shopTitle: c.shopTitle || "",
+          industry: c.industry || ""
         })
       }
 
@@ -445,7 +447,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
         mapUrl: c.mapUrl || "",
         shopProductId: c.shopProductId || "",
         shopId: c.shopId || "",
-        shopTitle: c.shopTitle || ""
+        shopTitle: c.shopTitle || "",
+        industry: c.industry || ""
       }
     },
 

@@ -10,7 +10,7 @@ const FILTER_LABELS = {
   image: i18n.typeImage, audio: i18n.typeAudio, video: i18n.typeVideo, post: i18n.typePost,
   forum: i18n.typeForum, about: i18n.typeAbout, contact: i18n.typeContact, pub: i18n.typePub,
   transfer: i18n.typeTransfer, market: i18n.typeMarket, job: i18n.typeJob, tribe: i18n.typeTribe,
-  project: i18n.typeProject, banking: i18n.typeBanking, bankWallet: i18n.typeBankWallet, bankClaim: i18n.typeBankClaim,
+  project: i18n.typeProject, industry: i18n.typeIndustry, industryBlueprint: i18n.industryBlueprints, banking: i18n.typeBanking, bankWallet: i18n.typeBankWallet, bankClaim: i18n.typeBankClaim,
   aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts,
   map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product',
   pad: i18n.typePad || 'PAD', chat: i18n.typeChat || 'CHAT', gameScore: i18n.typeGameScore || 'GAME SCORE',
@@ -20,7 +20,7 @@ const FILTER_LABELS = {
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone', 'logs'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
-const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
+const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'industry', 'industryBlueprint', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
 const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map', 'torrent'];
 
 const SEARCH_FIELDS = ['author','id','from','to'];
@@ -180,6 +180,8 @@ const getViewDetailsAction = (type, block) => {
     case 'market': return `/market/${encodeURIComponent(block.id)}`;
     case 'job': return `/jobs/${encodeURIComponent(block.id)}`;
     case 'project': return `/projects/${encodeURIComponent(block.id)}`;
+    case 'industry': return `/industry/${encodeURIComponent(block.id)}`;
+    case 'industryBlueprint': return `/industry/blueprint/${encodeURIComponent(block.id)}`;
     case 'report': return `/reports/${encodeURIComponent(block.id)}`;
     case 'calendar': return `/calendars/${encodeURIComponent(block.id)}`;
     case 'bankWallet': return `/wallet`;

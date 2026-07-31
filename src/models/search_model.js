@@ -40,7 +40,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
     'image', 'audio', 'video', 'torrent', 'market', 'bankWallet', 'bankClaim',
-    'project', 'job', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad'
+    'project', 'job', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad'
   ];
 
   const getRelevantFields = (type, content) => {
@@ -87,6 +87,10 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
         return [content?.title, content?.status, content?.progress, content?.goal, content?.pledged, content?.deadline, (content?.followers || []).length, (content?.backers || []).length, (content?.milestones || []).length, content?.bounty, content?.bountyAmount, content?.bounty_currency, content?.activity?.kind, content?.activityActor];
       case 'job':
         return [content?.title, content?.job_type, ...(content?.tasks || []), content?.location, content?.vacants, content?.salary, content?.status, (content?.subscribers || []).length];
+      case 'industry':
+        return [content?.name, content?.sector, content?.description, content?.membershipPolicy, content?.status, content?.license, ...(content?.tags || [])];
+      case 'industryBlueprint':
+        return [content?.name, content?.description, content?.sector, content?.outItem, content?.outKind, content?.license, ...(content?.skills || []), ...((content?.materials || []).map(m => m && m.item))];
       case 'forum':
         return [content?.root, content?.category, content?.title, content?.text, content?.key];
       case 'vote':
@@ -237,6 +241,14 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
         norm(c.salary),
         norm(c.job_type)
       ].join('|');
+    }
+
+    if (t === 'industry') {
+      return ['industry', author, norm(c.name), norm(c.sector)].join('|');
+    }
+
+    if (t === 'industryBlueprint') {
+      return ['industryBlueprint', author, norm(c.facility), norm(c.name)].join('|');
     }
 
     if (t === 'forum') {

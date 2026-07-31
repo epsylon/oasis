@@ -445,3 +445,18 @@ describe('shops: My Orders end-to-end (seller creates shop+item, buyer buys)', (
     eq((await other.use('shops').listMyPurchases()).length, 0, 'unrelated user has no orders in My Orders');
   });
 });
+
+describe('shops: CLOSED shop survives keyring prune (persistence)', (t) => {
+  t('a CLOSED (encrypted) shop is NOT dropped by tribes pruneOrphanKeys', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('shops').createShop('SecretShop', 'sd', 'desc', null, '', '', [], 'CLOSED', '');
+    ok(r);
+    const before = await A.use('shops').listAll({ filter: 'all', viewerId: A.keypair.id });
+    ok(before.find(s => s.title === 'SecretShop' && !s.undecryptable), 'closed shop visible to owner before prune');
+    await A.use('tribes').pruneOrphanKeys();
+    const after = await A.use('shops').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const shop = after.find(s => s.title === 'SecretShop');
+    ok(shop, 'closed shop still present after pruneOrphanKeys');
+    ok(!shop.undecryptable, 'closed shop still decryptable after pruneOrphanKeys (key not pruned)');
+  });
+});

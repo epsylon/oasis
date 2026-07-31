@@ -258,3 +258,22 @@ describe('activity: general OPEN chat replies surface in activity as a thread', 
     ok(!feed.find(a => a.type === 'chat' && (a.rootId || a.id) === r.key), 'closed chat card hidden');
   });
 });
+
+describe('activity: industry builds gated by approval', (t) => {
+  t('a proposed build is hidden; it appears once the member vote approves it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const created = await A.use('industry').createFacility({ name: 'GateBuild', sector: 'software', membershipPolicy: 'open', quorum: 2, majority: 0.5 });
+    const facId = created.key || created.id;
+    B.setActor(); await B.use('industry').joinFacility(facId); A.setActor();
+    const bpForBuild = await A.use('industry').createBlueprint(facId, { name: 'Recipe', laborHours: 1 });
+    const build = await A.use('industry').createBuild(facId, { blueprintId: bpForBuild.key, title: 'Batch', notes: 'go', startDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10), endDate: new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10) });
+    const buildId = build.key || build.id;
+    const feedA = await A.use('activity').listFeed('all');
+    ok(!feedA.find(a => a.type === 'industryBuild'), 'proposed build hidden');
+    await A.use('industry').voteBuild(buildId, 'yes');
+    B.setActor(); await B.use('industry').voteBuild(buildId, 'yes');
+    const feedB = await B.use('activity').listFeed('all');
+    ok(feedB.find(a => a.type === 'industryBuild' && a.id === buildId), 'approved build visible');
+  });
+});

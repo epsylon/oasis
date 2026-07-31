@@ -314,14 +314,17 @@ const renderOverviewSummaryTable = (s, rules, userEcoinTax) => {
     table({ class: "bank-info-table" },
       tbody(
         kvRow(i18n.bankUserBalance, `${Number(s.userBalance || 0).toFixed(6)} ECO`),
+        kvRow(i18n.bankIndustryBalance || 'Industry Production (estimated)', a({ href: '/industry' }, `${Number(s.industryNetworkTotal || 0).toFixed(6)} ECO`)),
         kvRow(i18n.bankUbiAvailability, span({ class: availClass }, availLabel)),
         s.pubId ? kvRow(i18n.pubIdLabel, userLink(s.pubId)) : null,
         kvRow(i18n.bankEpoch, String(s.epochId || "-")),
         kvRow(i18n.bankPool, `${pool.toFixed(6)} ECO`),
         kvRow(i18n.bankWeightsSum, String(W.toFixed(6))),
         kvRow(i18n.bankingUserEngagementScore, String(score)),
+        kvRow(i18n.bankYourUbiMonth || 'Your UBI (this month)', `${future.toFixed(6)} ECO`),
+        kvRow(i18n.bankYourIndustryBalance || 'Your Industry Share', a({ href: '/industry?filter=MEMBER' }, `${Number(s.industryBalance || 0).toFixed(6)} ECO`)),
         kvRow(i18n.bankOverviewYourTaxes || 'Your taxes', a({ href: '/banking?filter=taxes' }, `${tax.toFixed(6)} ECO`)),
-        kvRow(i18n.bankUbiThisMonth, `${future.toFixed(6)} ECO`)
+        kvRow(i18n.bankYourFundsMonth || 'Your Funds (this month)', `${(future + Number(s.industryBalance || 0) - tax).toFixed(6)} ECO`)
       )
     )
   );

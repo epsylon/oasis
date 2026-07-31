@@ -54,7 +54,7 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
             br(),
             label({ for: "text" }, i18n.pmText),
             br(),
-            textarea({ name: "text", rows: "6", cols: "50", id: "pm-text", maxlength: "8096", placeholder: i18n.pmTextPlaceholder || '' }, initialText),
+            textarea({ name: "text", rows: "6", cols: "50", id: "pm-text", maxlength: "7000", placeholder: i18n.pmTextPlaceholder || '' }, initialText),
             div({ class: "pm-crypter-row" },
               label({ for: "pm-crypter" },
                 input({ type: "checkbox", name: "crypter", value: "1", id: "pm-crypter", ...(crypterPreview ? { checked: true } : {}) }),
@@ -96,7 +96,7 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
                   )
                 : div({ id: "pm-preview-area", class: "pm-preview" },
                     div({ class: "title-with-chip" }, h2(i18n.pmPreviewTitle), renderEncryptedChip(i18n)),
-                    p({ id: "pm-preview-count", class: "pm-preview-count" }, `${textLen}/8096`),
+                    p({ id: "pm-preview-count", class: "pm-preview-count" }, `${textLen}/7000`),
                     div({ id: "pm-preview-content", class: "pm-preview-content" },
                       pre({ class: "pm-pre" }, initialText || '')
                     ),

@@ -58,11 +58,9 @@ module.exports = {
       const encrypted = encryptBuffer(original, pw);
       const roundtrip = decryptBuffer(encrypted, pw);
       if (!roundtrip.equals(original)) {
-        throw new Error('Backup verification failed; nothing was written.');
+        throw new Error('Backup verification failed; nothing was exported.');
       }
-      const encryptedFilePath = path.join(homeDir, 'oasis.enc');
-      fs.writeFileSync(encryptedFilePath, encrypted, { mode: 0o600 });
-      return encryptedFilePath;
+      return { filename: 'oasis.enc', data: encrypted };
     } catch (error) {
       throw new Error("Error exporting data: " + error.message);
     }

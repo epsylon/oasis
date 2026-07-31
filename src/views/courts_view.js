@@ -67,7 +67,7 @@ const Tabs = (active) =>
     )
   );
 
-const CaseForm = () =>
+const CaseForm = (prefill = {}) =>
   div(
     { class: 'div-center' },
     h2(i18n.courtsCaseFormTitle),
@@ -82,14 +82,15 @@ const CaseForm = () =>
         type: 'text',
         name: 'titleSuffix',
         required: true,
-        placeholder: 'Subject or short description'
+        placeholder: 'Subject or short description',
+        value: prefill.titleSuffix || ''
       }),
       br(),
       label('Case type'),
       br(),
       select(
         { name: 'titlePreset', required: true },
-        CASE_TITLE_PRESETS.map((t) => option({ value: t }, t))
+        CASE_TITLE_PRESETS.map((t) => option({ value: t, ...(prefill.titlePreset === t ? { selected: true } : {}) }, t))
       ),
       br(),
       br(),
@@ -101,7 +102,8 @@ const CaseForm = () =>
         placeholder: i18n.courtsCaseRespondentPh,
         required: true,
         pattern: '^@[A-Za-z0-9+/]+=*\\.ed25519$',
-        title: i18n.courtsRespondentInvalid || 'Must be a valid SSB ID (@...ed25519)'
+        title: i18n.courtsRespondentInvalid || 'Must be a valid SSB ID (@...ed25519)',
+        value: prefill.respondentId || ''
       }),
       br(),
       label(i18n.courtsCaseMethod),
@@ -109,7 +111,7 @@ const CaseForm = () =>
       select(
         { name: 'method', required: true },
         ['JUDGE', 'DICTATOR', 'POPULAR', 'MEDIATION', 'KARMATOCRACY'].map((m) =>
-          option({ value: m }, i18n[`courtsMethod${m}`])
+          option({ value: m, ...(prefill.method === m ? { selected: true } : {}) }, i18n[`courtsMethod${m}`])
         )
       ),
       br(),
@@ -1382,7 +1384,7 @@ const courtsView = async (state) => {
       filter === 'judges' ? JudgesSection(nominations, userId) : null,
       filter === 'history' ? HistoryList(history) : null,
       filter === 'rules' ? RulesContent() : null,
-      filter === 'open' ? CaseForm() : null
+      filter === 'open' ? CaseForm(state.prefill || {}) : null
     )
   );
 };

@@ -58,7 +58,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   };
 
   const types = [
-    'bookmark','event','task','votes','report','feed','project',
+    'bookmark','event','task','votes','report','feed','project','industry','industryBlueprint',
     'image','torrent','audio','video','document','transfer','post','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
     'pad','padEntry','gameScore','calendar','calendarDate','calendarNote','log',
@@ -281,6 +281,14 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       else if (t === 'chat') score += 1;
       else if (t === 'gamescore') score += 2;
       else if (t === 'pixelia') score += 2;
+      else if (rawType === 'industry') score += 8;
+      else if (rawType === 'industryblueprint') score += 6;
+      else if (rawType === 'industrybuild') score += 8;
+      else if (rawType === 'industrycontribution') score += 4;
+      else if (rawType === 'industryallocation') score += 10;
+      else if (rawType === 'industryvote') score += 2;
+      else if (rawType === 'industrymember') score += 2;
+      else if (rawType === 'industryopinion') score += 1;
     }
     return Math.max(0, Math.round(score));
   };

@@ -482,7 +482,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
               ? div(
                   label(i18n.reportsTitleLabel),
                   br(),
-                  input({ type: "text", name: "title", required: true, value: "", form: "report-create-form" }),
+                  input({ type: "text", name: "title", required: true, value: params.prefillTitle || "", form: "report-create-form" }),
                   br(),
                   br(),
                   form(

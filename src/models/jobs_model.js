@@ -177,6 +177,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       status: c.status || "OPEN",
       tags: Array.isArray(c.tags) ? c.tags : normalizeTags(c.tags),
       subscribers: Array.isArray(visibleSubs) ? visibleSubs : [],
+      industry: c.industry || "",
       mapUrl: c.mapUrl || "",
       visibility: String(c.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC",
       clearnetPublic: !!c.clearnetPublic
@@ -235,6 +236,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         status: "OPEN",
+        industry: String(jobData.industry || "").trim(),
         mapUrl: String(jobData.mapUrl || "").trim(),
         visibility: String(jobData.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? "HIDDEN" : "PUBLIC",
         clearnetPublic: jobData.clearnetPublic === true || jobData.clearnetPublic === 'true' || jobData.clearnetPublic === 'on'

@@ -615,17 +615,11 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       try {
         const ssbClient = await openSsb()
         const messages = await readAll(ssbClient)
-        const live = new Set()
         const tomb = buildValidatedTombstoneSet(messages)
-        for (const m of messages) {
-          const c = m.value && m.value.content
-          if (!c) continue
-          if (c.type === "pad") live.add(m.key)
-        }
         const all = ownCrypto.getAllRootIds()
         let removed = 0
         for (const rid of all) {
-          if (!live.has(rid) || tomb.has(rid)) {
+          if (tomb.has(rid)) {
             try { ownCrypto.dropKey(rid); removed += 1 } catch (_) {}
           }
         }

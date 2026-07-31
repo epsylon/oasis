@@ -589,6 +589,14 @@ function scoreFromActions(actions) {
     else if (t === "chat") score += 1 * decay;
     else if (t === "gamescore") score += 2 * decay;
     else if (t === "pixelia") score += 2 * decay;
+    else if (rawType === "industry") score += 8 * decay;
+    else if (rawType === "industryblueprint") score += 6 * decay;
+    else if (rawType === "industrybuild") score += 8 * decay;
+    else if (rawType === "industrycontribution") score += 4 * decay;
+    else if (rawType === "industryallocation") score += 10 * decay;
+    else if (rawType === "industryvote") score += 2 * decay;
+    else if (rawType === "industrymember") score += 2 * decay;
+    else if (rawType === "industryopinion") score += 1 * decay;
   }
   return Math.max(0, Math.round(score));
 }
@@ -752,6 +760,35 @@ async function getUserArchTax(userId) {
     : Date.now();
   const ageDays = Math.max(0, (newestTs - firstTs) / ONE_DAY_MS);
   return archTaxFromDays(ageDays);
+}
+
+let _industryModel = null;
+function industryModel() {
+  if (_industryModel) return _industryModel;
+  if (!services || !services.cooler) return null;
+  try { _industryModel = require("./industry_model")({ cooler: services.cooler }); } catch (_) { _industryModel = null; }
+  return _industryModel;
+}
+
+async function getIndustryBalance(userId) {
+  const uid = resolveUserId(userId);
+  const industry = industryModel();
+  if (!industry) return { received: 0, sent: 0, net: 0, networkTotal: 0 };
+  const builds = await industry.listAllBuilds().catch(() => []);
+  let production = 0;
+  let earned = 0;
+  for (const b of (builds || [])) {
+    const est = parseFloat(b && b.estTotal);
+    if (Number.isFinite(est) && est > 0) production += est;
+    const mine = parseFloat(b && b.points && b.points[uid]);
+    if (Number.isFinite(mine) && mine > 0) earned += mine;
+  }
+  return {
+    received: Number(earned.toFixed(6)),
+    sent: 0,
+    net: Number(earned.toFixed(6)),
+    networkTotal: Number(production.toFixed(6))
+  };
 }
 
 async function getUserEngagementScore(userId) {
@@ -1062,6 +1099,7 @@ async function getLastPublishedTimestamp(userId) {
       allocations = await getUbiAllocationsFromSSB();
     }
     const userBalance = await safeGetBalance("user");
+    const industryBal = await getIndustryBalance(uid).catch(() => ({ received: 0, sent: 0, net: 0, networkTotal: 0 }));
     const epochs = await epochsRepo.list();
     let computed = null;
     try { computed = await computeEpoch({ epochId, userId: uid, rules: DEFAULT_RULES }); } catch {}
@@ -1080,6 +1118,10 @@ async function getLastPublishedTimestamp(userId) {
     const hasValidWallet = !!(userAddress && isValidEcoinAddress(userAddress) && userWalletCfg.url);
     const summary = {
       userBalance,
+      industryBalance: industryBal.net,
+      industryNetworkTotal: industryBal.networkTotal,
+      industryReceived: industryBal.received,
+      industrySent: industryBal.sent,
       epochId,
       pool: poolForEpoch,
       weightsSum: computed?.epoch?.weightsSum || 0,

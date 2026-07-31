@@ -24,6 +24,7 @@ function getViewDetailsAction(item) {
     case 'report': return `/reports/${encodeURIComponent(item.id)}`;
     case 'job': return `/jobs/${encodeURIComponent(item.id)}`;
     case 'project': return `/projects/${encodeURIComponent(item.id)}`;
+    case 'industry': return `/industry/build/${encodeURIComponent(item.id)}`;
     case 'calendar': return `/calendars/${encodeURIComponent(item.id)}`;
     default: return `/messages/${encodeURIComponent(item.id)}`;
   }
@@ -185,6 +186,14 @@ const renderAgendaItem = (item, userId, filter) => {
     }
   }
 
+  if (item.type === 'industry') {
+    const st = String(item.status || 'PROPOSED').toUpperCase();
+    details = [
+      renderCardField((i18n.industryFacility || 'Facility') + ":", item.facilityName || ''),
+      renderCardField((i18n.industryStatusLabel || 'Status') + ":", i18n['industryBuildStatus_' + st] || st)
+    ];
+  }
+
   const isOwn = author && String(author) === String(userId);
   return div({ class: 'trending-card agenda-card' + (isOwn ? ' own-content' : '') },
     div({ class: 'card-header activity-card-header' },
@@ -241,6 +250,8 @@ exports.agendaView = async (data, filter) => {
             `${i18n.agendaFilterMarket} (${counts.market})`),
           button({ type: 'submit', name: 'filter', value: 'projects', class: filter === 'projects' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterProjects} (${counts.projects})`),
+          button({ type: 'submit', name: 'filter', value: 'industry', class: filter === 'industry' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterIndustry || 'INDUSTRY'} (${counts.industry || 0})`),
           button({ type: 'submit', name: 'filter', value: 'calendars', class: filter === 'calendars' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterCalendars || 'CALENDARS'} (${counts.calendars})`),
           button({ type: 'submit', name: 'filter', value: 'transfers', class: filter === 'transfers' ? 'filter-btn active' : 'filter-btn' },

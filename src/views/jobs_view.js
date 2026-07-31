@@ -232,6 +232,7 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
         renderJobStatusChip(job.status),
         isHidden ? renderJobHiddenChip() : null,
         isSubscribed ? renderJobAppliedChip() : null,
+        job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
         renderLifespanChip(job.lifetime, i18n)
       ].filter(Boolean)
       const isExchange = String(job.job_type || "").toLowerCase() === "exchange"
@@ -278,6 +279,7 @@ const renderJobForm = (job = {}, mode = "create") => {
         enctype: "multipart/form-data"
       },
       input({ type: "hidden", name: "returnTo", value: "/jobs?filter=MINE" }),
+      job.industry ? input({ type: "hidden", name: "industry", value: job.industry }) : null,
       label(i18n.jobType),
       br(),
       select(
@@ -481,7 +483,15 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
           )
         : filter === "CREATE" || filter === "EDIT"
           ? (() => {
-              const jobToEdit = filter === "EDIT" ? (Array.isArray(jobsOrCVs) ? jobsOrCVs[0] : {}) : {}
+              const jobToEdit = filter === "EDIT"
+                ? (Array.isArray(jobsOrCVs) ? jobsOrCVs[0] : {})
+                : {
+                    ...(params.industry ? { industry: params.industry } : {}),
+                    ...(params.title ? { title: params.title } : {}),
+                    ...(params.description ? { description: params.description } : {}),
+                    ...(params.tasks ? { tasks: params.tasks } : {}),
+                    ...(params.salary ? { salary: params.salary } : {})
+                  }
               return renderJobForm(jobToEdit, filter === "EDIT" ? "edit" : "create")
             })()
           : section(
@@ -639,6 +649,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     renderJobStatusChip(job.status),
     visibility === 'HIDDEN' ? renderJobHiddenChip() : null,
     isSubscribed ? renderJobAppliedChip() : null,
+    job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
     renderLifespanChip(job.lifetime, i18n),
     renderEcoTax(job.msgSize, job.id),
     renderReachChip(isClearnet, i18n)

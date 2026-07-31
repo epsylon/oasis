@@ -929,7 +929,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const all = tribeCrypto.getAllRootIds();
       let removed = 0;
       for (const rid of all) {
-        if (!idx.tribes.has(rid) || idx.effectivelyTombstoned.has(rid)) {
+        if (idx.effectivelyTombstoned.has(rid)) {
           try { tribeCrypto.dropKey(rid); removed++; } catch (_) {}
         }
       }

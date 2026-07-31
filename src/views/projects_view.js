@@ -530,7 +530,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
       ),
       f === "CREATE" || f === "EDIT"
         ? (() => {
-            const prToEdit = f === "EDIT" ? (safeArr(projectsOrForm)[0] || {}) : {}
+            const prToEdit = f === "EDIT" ? (safeArr(projectsOrForm)[0] || {}) : (params.prefill || {})
             return renderProjectForm(prToEdit, f === "EDIT" ? "edit" : "create")
           })()
         : (f === "BACKERS"

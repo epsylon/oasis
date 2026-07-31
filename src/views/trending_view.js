@@ -98,6 +98,27 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         div({ id: `pdf-container-${item.key}`, class: 'pdf-viewer-container', 'data-pdf-url': `/blob/${encodeURIComponent(url)}` })
       )
     );
+  } else if (c.type === 'industry') {
+    contentHtml = div({ class: 'trending-industry' },
+      div({ class: 'card-section industry' },
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryName + ':'), span({ class: 'card-value' }, c.name || '')),
+        c.sector ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industrySector + ':'), span({ class: 'card-value' }, String(c.sector).toUpperCase())) : "",
+        c.membershipPolicy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryMembershipPolicy + ':'), span({ class: 'card-value' }, String(i18n['industryPolicy_' + c.membershipPolicy] || c.membershipPolicy).toUpperCase())) : "",
+        c.description ? p(...renderUrl(c.description)) : null,
+        Array.isArray(c.tags) && c.tags.length
+          ? div({ class: 'card-tags' }, c.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+          : null
+      )
+    );
+  } else if (c.type === 'industryBlueprint') {
+    contentHtml = div({ class: 'trending-industry' },
+      div({ class: 'card-section industry' },
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryBlueprint + ':'), span({ class: 'card-value' }, c.name || '')),
+        c.outKind ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryOutputKind + ':'), span({ class: 'card-value' }, String(i18n['industryKind_' + c.outKind] || c.outKind).toUpperCase())) : "",
+        c.laborHours ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryLaborHours + ':'), span({ class: 'card-value' }, String(c.laborHours))) : "",
+        c.description ? p(...renderUrl(c.description)) : null
+      )
+    );
   } else if (c.type === 'feed') {
     const { text, refeeds } = c;
     contentHtml = div({ class: 'trending-feed' },
@@ -142,7 +163,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       div({ class: 'card-section styled-text-content' },
         div(
           { class: 'card-field' },
-          span({ class: 'card-value', innerHTML: sanitizeHtml(renderTextWithStyles(c.text || c.description || c.title || '[no content]')) })
+          span({ class: 'card-value', innerHTML: sanitizeHtml(renderTextWithStyles(c.title || c.name || c.text || c.description || '[no content]')) })
         )
       )
     );
@@ -157,7 +178,13 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     document: 'documents',
     feed: 'feed',
     votes: 'votes',
-    transfer: 'transfers'
+    transfer: 'transfers',
+    industry: 'industry',
+    project: 'projects',
+    report: 'reports',
+    task: 'tasks',
+    event: 'events',
+    shopProduct: 'shops/product'
   };
   const detailHref = detailPaths[c.type]
     ? `/${detailPaths[c.type]}/${encodeURIComponent(item.key)}`
@@ -224,8 +251,9 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
 
   const baseFilters = ['TOP', 'ALL', 'MINE', 'RECENT'];
   const contentFilters = [
-    ['votes', 'feed', 'transfer'],
-    ['bookmark', 'image', 'video', 'audio', 'document', 'torrent']
+    ['feed', 'votes', 'event', 'task', 'report'],
+    ['project', 'industry', 'transfer', 'shopProduct'],
+    ['audio', 'bookmark', 'document', 'image', 'torrent', 'video']
   ];
 
   let filteredItems = items.filter(item => {

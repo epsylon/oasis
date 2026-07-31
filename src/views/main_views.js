@@ -508,6 +508,21 @@ const renderWalletLink = () => {
   return "";
 };
 
+const renderDevLink = () => {
+  const devMod = getConfig().modules.devMod === "on";
+  if (devMod) {
+    return [
+      navLink({
+        href: "/dev",
+        emoji: "⌘",
+        text: i18n.developer,
+        class: "dev-link enabled"
+      })
+    ];
+  }
+  return "";
+};
+
 const renderLegacyLink = () => {
   const legacyMod = getConfig().modules.legacyMod === "on";
   if (legacyMod) {
@@ -754,6 +769,19 @@ const renderProjectsLink = () => {
           href: "/projects",
           emoji: "ꕧ",
           text: i18n.projectsTitle
+        })
+      ]
+    : "";
+};
+
+const renderIndustryLink = () => {
+  const industryMod = getConfig().modules.industryMod === "on";
+  return industryMod
+    ? [
+        navLink({
+          href: "/industry",
+          emoji: "ꖴ",
+          text: i18n.industryTitle
         })
       ]
     : "";
@@ -1192,6 +1220,24 @@ const template = (titlePrefix, ...elements) => {
         }
         return null;
       })(),
+      (() => {
+        try {
+          const onboarding = require('../models/onboarding_model');
+          if (!onboarding.bannerVisible(config && config.path)) return null;
+          return div(
+            { class: "update-banner welcome-banner" },
+            span({ class: "update-banner-icon" }, "🌴"),
+            span({ class: "update-banner-text" }, i18n.welcomeBannerText),
+            a({ href: "/welcome", class: "update-banner-link" }, i18n.welcomeBannerAction),
+            form(
+              { method: "POST", action: "/welcome/dismiss", class: "welcome-banner-close" },
+              button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
+            )
+          );
+        } catch (_) {
+          return null;
+        }
+      })(),
       div(
         { class: uxMode === "ainav" ? "main-content ainav-only" : "main-content" },
         uxMode === "ainav" ? null : div(
@@ -1266,6 +1312,7 @@ const template = (titlePrefix, ...elements) => {
                 renderBankingLink(),
                 renderMarketLink(),
                 renderProjectsLink(),
+                renderIndustryLink(),
                 renderJobsLink(),
                 renderShopsLink(),
                 renderTransfersLink()
@@ -1282,6 +1329,7 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "ꖸ",
                   text: i18n.blockchain
                 }),
+                renderDevLink(),
                 renderCipherLink(),
                 renderInvitesLink(),
                 renderLegacyLink(),
@@ -3078,7 +3126,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
         const safeHref = String(href).replace(/"/g, '%22')
         const ext = /^https?:/.test(href) ? ' target="_blank" rel="noopener noreferrer"' : ''
         mdLinks.push(`<a class="oasis-md-link" href="${safeHref}"${ext}>${label}</a>`)
-        return ` MD${idx} `
+        return `\u0000MD${idx}\u0000`
       })
     return masked
       .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g, (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${userLinkLabel(id)}</a>`)
@@ -3089,9 +3137,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       .replace(/\/ai\/ask\?[^\s<"]+/g, (match) => `<a class="ai-ask-link" href="${match}">${match}</a>`)
       .replace(/\/tribe\/([%A-Za-z0-9/+._=-]+\.sha256)(\?section=[a-zA-Z]+)?/g, (match) => `<a class="tribe-link" href="${match}">${match}</a>`)
       .replace(/\/larp\/([a-zA-Z]+)/g, (match) => `<a class="larp-link" href="${match}">${match}</a>`)
-      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|parliament|courts|melody|audios|videos|images|documents|bookmarks|torrents|forum|feed|fediverse|events|tasks|votes|reports|market|jobs|projects|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
+      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|parliament|courts|melody|audios|videos|images|documents|bookmarks|torrents|forum|feed|fediverse|events|tasks|votes|reports|market|jobs|projects|industry|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games|search)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
       .replace(/(https?:\/\/[^\s<"]+)/g, (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`)
-      .replace(/ MD(\d+) /g, (m, i) => mdLinks[Number(i)] !== undefined ? ` ${mdLinks[Number(i)]} ` : m)
+      .replace(/\u0000MD(\d+)\u0000/g, (m, i) => mdLinks[Number(i)] !== undefined ? mdLinks[Number(i)] : m)
   }
 
   const threads = {}
@@ -3244,6 +3292,25 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
+  function IndustryBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const titleMap = {
+      INDUSTRY_ADMITTED: i18n.industryBotAdmittedTitle || 'You have been admitted to a facility.',
+      INDUSTRY_APPLICATION: i18n.industryBotApplicationTitle || 'New membership application in your facility.',
+      INDUSTRY_INVITED: i18n.industryBotInvitedTitle || 'You have been invited to a facility.',
+      INDUSTRY_DISSOLVED: i18n.industryBotDissolvedTitle || 'A facility you belong to has been dissolved.',
+      INDUSTRY_BUILD_APPROVED: i18n.industryBotBuildApprovedTitle || 'A build has been approved.',
+      INDUSTRY_DISTRIBUTED: i18n.industryBotDistributedTitle || 'A build output has been distributed.'
+    }
+    const title = titleMap[subjectU] || (i18n.pmBotIndustry || 'IndustryBot')
+    return div(
+      { class: 'pm-card industry-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `🏭 ${i18n.pmBotIndustry || 'IndustryBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
   const { renderEncryptedChip } = require('./clearnet_view');
   return template(
     i18n.private,
@@ -3360,6 +3427,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             }
             if (subjectU === 'LARP_RULING' || subjectU === 'PARLIAMENT_GOV' || subjectU === 'TRIBE_GOV') {
               return PoliticalBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU === 'INDUSTRY_ADMITTED' || subjectU === 'INDUSTRY_APPLICATION' || subjectU === 'INDUSTRY_INVITED' || subjectU === 'INDUSTRY_DISSOLVED' || subjectU === 'INDUSTRY_BUILD_APPROVED' || subjectU === 'INDUSTRY_DISTRIBUTED') {
+              return IndustryBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
               return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key, msgSize })
@@ -3540,7 +3610,7 @@ exports.publishView = (preview, text, contentWarning) => {
                 cols: "50",
                 placeholder: i18n.publishWarningPlaceholder,
                 class: "publish-textarea",
-                maxlength: "8096"
+                maxlength: "7000"
               },
               text || ""
             ),

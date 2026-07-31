@@ -60,6 +60,8 @@ async function step(name, fn) {
     market: require(path.join(__dirname, '..', 'src', 'models', 'market_model'))({ cooler: sCooler, tribeCrypto }),
     jobs: require(path.join(__dirname, '..', 'src', 'models', 'jobs_model'))({ cooler: sCooler, tribeCrypto }),
     projects: require(path.join(__dirname, '..', 'src', 'models', 'projects_model'))({ cooler: sCooler, tribeCrypto }),
+    industry: require(path.join(__dirname, '..', 'src', 'models', 'industry_model'))({ cooler: sCooler }),
+    cv: require(path.join(__dirname, '..', 'src', 'models', 'cv_model'))({ cooler: sCooler }),
     reports: require(path.join(__dirname, '..', 'src', 'models', 'reports_model'))({ cooler: sCooler, tribeCrypto }),
     shops: require(path.join(__dirname, '..', 'src', 'models', 'shops_model'))({ cooler: sCooler, tribeCrypto }),
     pixelia: require(path.join(__dirname, '..', 'src', 'models', 'pixelia_model'))({ cooler: sCooler, tribeCrypto }),
@@ -138,8 +140,20 @@ async function step(name, fn) {
   console.log('\nSEED: projects');
   await step('project', () => models.projects.createProject({ title: `Project ${hash(2)}`, description: 'demo', goal: '100', deadline: futureISO(60), tags: ['demo'], status: 'ACTIVE' }));
 
+  console.log('\nSEED: industry');
+  const facility = await step('facility', () => models.industry.createFacility({ name: `Facility ${hash(2)}`, sector: 'hardware', description: 'demo network-owned facility', membershipPolicy: 'open', laborRate: 10, quorum: 1, majority: 0.5, tags: ['demo', 'oasis'] }));
+  if (facility && facility.key) {
+    const blueprint = await step('blueprint', () => models.industry.createBlueprint(facility.key, { name: `Blueprint ${hash(2)}`, description: 'A sturdy demo widget, 2kg, open hardware docs included.', outKind: 'physical', laborHours: 5, materialsText: 'steel:2:12\nbolt:8:0.5' }));
+    if (blueprint && blueprint.key) {
+      await step('build', () => models.industry.createBuild(facility.key, { title: `Build ${hash(2)}`, notes: 'demo build', blueprintId: blueprint.key, startDate: futureISO(1).slice(0, 10), endDate: futureISO(20).slice(0, 10) }));
+    }
+  }
+
   console.log('\nSEED: reports');
   await step('report', () => models.reports.createReport(`Issue ${hash(2)}`, `report demo ${longHash()}`, 'tech', null, ['demo'], 'low', {}));
+
+  console.log('\nSEED: cv');
+  await step('cv', () => models.cv.createCV({ name: `Seed CV ${hash(2)}`, description: 'demo curriculum', personalSkills: 'p2p, libre', professionalSkills: 'welding, coding', oasisSkills: 'seeding', educationalSkills: 'self-taught', languages: 'en, es', location: 'remote', status: 'LOOKING FOR WORK', visibility: 'PUBLIC' }, null));
 
   console.log('\nSEED: shops');
   const shop = await step('shop', () => models.shops.createShop(`Shop ${hash(2)}`, 'short', 'long', null, '', 'remote', ['demo'], 'OPEN', ''));

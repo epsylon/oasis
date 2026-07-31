@@ -20,7 +20,8 @@ module.exports = ({ cooler }) => {
 
   const types = [
     'bookmark', 'votes', 'feed',
-    'image', 'audio', 'video', 'document', 'torrent', 'transfer'
+    'image', 'audio', 'video', 'document', 'torrent', 'transfer',
+    'industry', 'project', 'report', 'task', 'event', 'shopProduct'
   ];
 
   const categories = opinionCategories;
@@ -39,6 +40,8 @@ module.exports = ({ cooler }) => {
     const tombstoned = buildValidatedTombstoneSet(messages);
     const replaces = new Map();
     const itemsById = new Map();
+    const authorOf = new Map();
+    const opinionMsgs = [];
 
     for (const m of messages) {
       const k = m.key;
@@ -48,6 +51,13 @@ module.exports = ({ cooler }) => {
       if (c.type === 'tombstone' && c.target) {
         tombstoned.add(c.target);
         itemsById.delete(c.target);
+        continue;
+      }
+
+      if (k) authorOf.set(k, m.value?.author);
+
+      if (typeof c.type === 'string' && c.type.endsWith('Opinion') && c.target) {
+        opinionMsgs.push({ target: c.target, author: m.value?.author, category: c.category });
         continue;
       }
 
@@ -62,15 +72,45 @@ module.exports = ({ cooler }) => {
       }
     }
 
-    for (const [replacedId, newId] of replaces.entries()) {
-      const oldMsg = itemsById.get(replacedId);
+    for (const [replacedId, newId] of Array.from(replaces.entries())) {
+      const oldAuthor = authorOf.get(replacedId);
       const newMsg = itemsById.get(newId);
-      if (!oldMsg) continue;
-      if (!newMsg || String(newMsg.value?.author) !== String(oldMsg.value?.author)) {
+      if (oldAuthor === undefined) { replaces.delete(replacedId); continue; }
+      if (!newMsg || String(newMsg.value?.author) !== String(oldAuthor)) {
+        replaces.delete(replacedId);
         itemsById.delete(newId);
         continue;
       }
       itemsById.delete(replacedId);
+    }
+
+    const tipToChain = new Map();
+    for (const [oldId, newId] of replaces.entries()) {
+      let tip = newId; let g = 0;
+      while (replaces.has(tip) && g++ < 100000) tip = replaces.get(tip);
+      if (!tipToChain.has(tip)) tipToChain.set(tip, new Set([tip]));
+      tipToChain.get(tip).add(oldId); tipToChain.get(tip).add(newId);
+    }
+    const idToTip = new Map();
+    for (const [tip, chain] of tipToChain.entries()) for (const id of chain) idToTip.set(id, tip);
+    const opinionByTip = new Map();
+    for (const op of opinionMsgs) {
+      const tip = idToTip.get(op.target) || op.target;
+      if (!opinionByTip.has(tip)) opinionByTip.set(tip, { opinions: {}, voters: new Set() });
+      const agg = opinionByTip.get(tip);
+      if (agg.voters.has(op.author)) continue;
+      agg.voters.add(op.author);
+      if (op.category) agg.opinions[op.category] = (agg.opinions[op.category] || 0) + 1;
+    }
+    for (const [k, m] of Array.from(itemsById.entries())) {
+      const agg = opinionByTip.get(k);
+      if (!agg) continue;
+      const c = m.value?.content || {};
+      const mergedVoters = new Set([...(Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])]);
+      const mergedOpinions = { ...(c.opinions || {}) };
+      for (const [cat, n] of Object.entries(agg.opinions)) mergedOpinions[cat] = (mergedOpinions[cat] || 0) + n;
+      for (const v of agg.voters) mergedVoters.add(v);
+      itemsById.set(k, { ...m, value: { ...m.value, content: { ...c, opinions: mergedOpinions, opinions_inhabitants: [...mergedVoters] } } });
     }
 
     let rawItems = Array.from(itemsById.values()).filter(m => types.includes(m.value?.content?.type));
@@ -148,9 +188,7 @@ module.exports = ({ cooler }) => {
       items = items.filter(m => m.value.content.type === filter);
     }
 
-    if (filter !== 'ALL' && !types.includes(filter)) {
-      items = items.filter(m => (m.value.content.opinions_inhabitants || []).length > 0);
-    }
+    items = items.filter(m => (m.value.content.opinions_inhabitants || []).length > 0);
 
     if (filter === 'TOP') {
       items.sort((a, b) => {

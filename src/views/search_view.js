@@ -11,6 +11,13 @@ const decodeMaybe = (s) => {
   try { return decodeURIComponent(String(s || '')); } catch { return String(s || ''); }
 };
 
+const industryStatusLabel = (status) => {
+  const s = String(status || 'ACTIVE').toUpperCase();
+  if (s === 'PAUSED') return i18n.industryStatusPaused || 'PAUSED';
+  if (s === 'DISSOLVED') return i18n.industryStatusDissolved || 'DISSOLVED';
+  return i18n.industryStatusActive || 'WORKING';
+};
+
 const rewriteHashtagLinks = (html) => {
   const s = String(html || '');
   return s.replace(/href=(["'])(?:https?:\/\/[^"']+)?\/hashtag\/([^"'?#]+)([^"']*)\1/g, (m, q, tag, rest) => {
@@ -34,7 +41,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
     "report", "task", "event", "bookmark", "image", "audio", "video", "document", "torrent",
-    "bankWallet", "bankClaim", "project", "job", "forum", "vote", "contact", "pub", "map", "shop", "shopProduct", "chat", "pad", "all"
+    "bankWallet", "bankClaim", "project", "job", "industry", "industryBlueprint", "forum", "vote", "contact", "pub", "map", "shop", "shopProduct", "chat", "pad", "all"
   ];
 
   const filterSelect = select(
@@ -84,6 +91,8 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'report': return `/reports/${encodeURIComponent(contentId)}`;
       case 'project': return `/projects/${encodeURIComponent(contentId)}`;
       case 'job': return `/jobs/${encodeURIComponent(contentId)}`;
+      case 'industry': return `/industry/${encodeURIComponent(contentId)}`;
+      case 'industryBlueprint': return `/industry/blueprint/${encodeURIComponent(contentId)}`;
       case 'forum': return `/forum/${encodeURIComponent(contentId)}`;
       case 'vote': return content && content.vote && content.vote.link ? `/thread/${encodeURIComponent(content.vote.link)}#${encodeURIComponent(content.vote.link)}` : '#';
       case 'contact': return content && content.contact ? `/author/${encodeURIComponent(content.contact)}` : '#';
@@ -447,6 +456,19 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.jobLocation + ':'), span({ class: 'card-value' }, String(content.location).toUpperCase())) : null,
           content.vacants ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.jobVacants + ':'), span({ class: 'card-value' }, content.vacants)) : null,
           Array.isArray(content.subscribers) ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.jobSubscribers + ':'), span({ class: 'card-value' }, `${content.subscribers.length}`)) : null
+        );
+      case 'industry':
+        return div({ class: 'search-industry' },
+          content.name ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryName + ':'), span({ class: 'card-value' }, content.name)) : null,
+          content.sector ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industrySector + ':'), span({ class: 'card-value' }, String(content.sector).toUpperCase())) : null,
+          content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryStatusLabel + ':'), span({ class: 'card-value' }, industryStatusLabel(content.status))) : null,
+          content.description ? div({ class: "card-field card-field-stacked" }, span({ class: "card-value" }, content.description)) : null
+        );
+      case "industryBlueprint":
+        return div({ class: 'search-industry' },
+          content.name ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryBlueprint + ':'), span({ class: 'card-value' }, content.name)) : null,
+          content.outKind ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryOutputKind + ':'), span({ class: 'card-value' }, String(i18n['industryKind_' + content.outKind] || content.outKind).toUpperCase())) : null,
+          content.description ? div({ class: 'card-field card-field-stacked' }, span({ class: 'card-value' }, content.description)) : null
         );
       case 'forum':
         return div({ class: 'search-forum' },

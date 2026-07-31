@@ -82,7 +82,7 @@ const HIDDEN_ENVELOPE_TYPES = new Set([
   'courts-key'
 ]);
 
-module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
+module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb };
 
@@ -322,7 +322,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         const target = String(c.target || '');
         const author = v.author;
         if (!target || !author) continue;
-        const key = `${target} ${author}`;
+        const key = `${target}\u0000${author}`;
         const prev = aiHelpfulSeen.get(key);
         const curTs = v.timestamp || 0;
         if (!prev || curTs > prev.ts) aiHelpfulSeen.set(key, { target, ts: curTs, helpful: c.helpful !== false });
@@ -557,7 +557,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         if (tombstoned.has(a.id)) continue;
         if (a.type === 'tribe' && parentOf.has(a.id)) continue;
         const c = a.content || {};
-        if (c.root && tombstoned.has(c.root)) continue;
+        if (c.root && tombstoned.has(c.root) && !c.replaces) continue;
         if (a.type === 'vote' && tombstoned.has(c.vote?.link)) continue;
         if (a.type === 'spread' && (c.spreadTargetId || c.vote?.link) && tombstoned.has(c.spreadTargetId || c.vote?.link)) continue;
         if (c.key && tombstoned.has(c.key)) continue;
@@ -664,6 +664,29 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
 
       deduped = Array.from(byKey.values()).map(x => { delete x.__effTs; delete x.__hasImage; return x });
 
+      if (industryModel && deduped.some(a => a.type === 'industryBuild')) {
+        const builds = await industryModel.listAllBuilds().catch(() => []);
+        const buildStatusById = new Map();
+        for (const b of (builds || [])) buildStatusById.set(b.id || b.key, String(b.status || 'PROPOSED').toUpperCase());
+        deduped = deduped.filter(a => {
+          if (a.type !== 'industryBuild') return true;
+          const st = buildStatusById.get(a.id);
+          if (st === undefined || st === 'PROPOSED' || st === 'REJECTED') return false;
+          a.content = { ...a.content, buildStatus: st };
+          return true;
+        });
+      }
+
+      if (industryModel && deduped.some(a => a.type === 'industryBlueprint')) {
+        const bps = await industryModel.listAllBlueprints().catch(() => []);
+        const bpById = new Map((bps || []).map(b => [b.id || b.key, b]));
+        for (const a of deduped) {
+          if (a.type !== 'industryBlueprint') continue;
+          const b = bpById.get(a.id);
+          if (b && b.estTotal != null) a.content = { ...a.content, estTotal: b.estTotal };
+        }
+      }
+
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
       const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'gameScore']);
       const chatThreadItems = await buildChatThreads(ssbClient, idToAction, rootOf, deduped);
@@ -733,6 +756,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel }) => {
         });
       else if (filter === 'task')
         out = deduped.filter(a => a.type === 'task' || a.type === 'taskAssignment');
+      else if (filter === 'industry')
+        out = deduped.filter(a => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(a.type) && isVisible(a));
       else if (filter === 'pad') out = deduped.filter(a => a.type === 'pad' && (a.content || {}).status === 'OPEN');
       else if (filter === 'chat') out = deduped.filter(a => (a.type === 'chat' || a.type === 'chatThread') && isAllowedTribeActivity(a) && isVisible(a));
       else if (filter === 'calendar') out = deduped.filter(a => a.type === 'calendar' && (a.content || {}).status === 'OPEN');

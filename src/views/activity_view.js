@@ -1189,6 +1189,100 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       );
     }
 
+    if (type === 'industry') {
+      const { name, sector, description, image, tags, membershipPolicy, status } = content;
+      const facKey = action.id || action.key || '';
+      const validTags = Array.isArray(tags) ? tags : [];
+      const statusValue = (() => {
+        const u = String(status || 'ACTIVE').toUpperCase();
+        if (u === 'PAUSED') return i18n.industryStatusPaused || 'PAUSED';
+        if (u === 'DISSOLVED') return i18n.industryStatusDissolved || 'DISSOLVED';
+        return i18n.industryStatusActive || 'WORKING';
+      })();
+      const policyValue = String(i18n[`industryPolicy_${membershipPolicy}`] || membershipPolicy || '').toUpperCase();
+      cardBody.push(
+        div({ class: 'card-section tribe industry' },
+          h2({ class: 'tribe-title' },
+            a({ href: `/industry/${encodeURIComponent(facKey)}`, class: "user-link" }, name || (i18n.industryTitle || 'Industry'))
+          ),
+          div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
+            sector ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industrySector || 'Sector').toUpperCase() + ':'), span({ class: 'card-value' }, String(sector).toUpperCase())) : "",
+            status ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryStatusLabel || 'Status').toUpperCase() + ':'), span({ class: 'card-value' }, statusValue)) : "",
+            membershipPolicy ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryMembershipPolicy || 'Membership policy').toUpperCase() + ':'), span({ class: 'card-value' }, policyValue)) : ""
+          ),
+          image
+            ? (/^(\/|https?:)/.test(String(image))
+                ? img({ src: image, class: 'feed-image tribe-image' })
+                : renderMediaBlob(image, null))
+            : null,
+          p({ class: 'tribe-description' }, ...renderUrl(description || '')),
+          validTags.length
+            ? div({ class: 'card-tags' }, validTags.map(tag =>
+              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
+            : ""
+        )
+      );
+    }
+
+    if (type === 'industryBuild') {
+      const { title, notes, image, startDate, endDate, buildStatus } = content;
+      const buildKey = action.id || action.key || '';
+      const daysLeft = endDate ? Math.max(0, Math.ceil((new Date(endDate) - Date.now()) / 86400000)) : null;
+      cardBody.push(
+        div({ class: 'card-section tribe industry' },
+          h2({ class: 'tribe-title' },
+            a({ href: `/industry/build/${encodeURIComponent(buildKey)}`, class: "user-link" }, title || (i18n.industryBuild || 'Build'))
+          ),
+          (buildStatus || startDate || endDate) ? div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
+            buildStatus ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryStatusLabel || 'Status').toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['industryBuildStatus_' + buildStatus] || buildStatus).toUpperCase())) : "",
+            startDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildStart || 'Start date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(startDate).format('YYYY-MM-DD'))) : "",
+            endDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildEnd || 'End date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(endDate).format('YYYY-MM-DD'))) : "",
+            daysLeft != null ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryTimeLeft || 'Time left').toUpperCase() + ':'), span({ class: 'card-value' }, `${daysLeft}d`)) : ""
+          ) : null,
+          image
+            ? (/^(\/|https?:)/.test(String(image))
+                ? img({ src: image, class: 'feed-image tribe-image' })
+                : renderMediaBlob(image, null))
+            : null,
+          notes ? p({ class: 'tribe-description' }, ...renderUrl(notes)) : ""
+        )
+      );
+    }
+
+    if (type === 'industryBlueprint') {
+      const { name, facility, description, outKind, laborHours, image, estTotal } = content;
+      cardBody.push(
+        div({ class: 'card-section tribe industry' },
+          h2({ class: 'tribe-title' },
+            facility
+              ? a({ href: `/industry/${encodeURIComponent(facility)}`, class: "user-link" }, name || (i18n.industryBlueprint || 'Blueprint'))
+              : (name || (i18n.industryBlueprint || 'Blueprint'))
+          ),
+          div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
+            outKind ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryOutputKind || 'Product type').toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['industryKind_' + outKind] || outKind).toUpperCase())) : "",
+            laborHours ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryLaborHours || 'Labor hours').toUpperCase() + ':'), span({ class: 'card-value' }, String(laborHours))) : "",
+            estTotal != null ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryEstTotal || 'Estimated price').toUpperCase() + ':'), span({ class: 'card-value' }, `${Number(estTotal).toFixed(2)} ECO`)) : ""
+          ),
+          image
+            ? (/^(\/|https?:)/.test(String(image))
+                ? img({ src: image, class: 'feed-image tribe-image' })
+                : renderMediaBlob(image, null))
+            : null,
+          description ? p({ class: 'tribe-description' }, ...renderUrl(description)) : ""
+        )
+      );
+    }
+
+    if (type === 'industryAllocation') {
+      const { target, pot } = content;
+      cardBody.push(
+        div({ class: 'card-section industry' },
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.industryDistribution || 'Distribution') + ':'), span({ class: 'card-value' }, target ? a({ href: `/industry/build/${encodeURIComponent(target)}`, class: 'user-link' }, i18n.industryBuild || 'Build') : '')),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.industryPot || 'Pot') + ':'), span({ class: 'card-value' }, `${Number(pot || 0).toFixed(6)} ECO`))
+        )
+      );
+    }
+
     if (type === 'chat') {
       const { title, description, image, category, status } = content;
       const chatKey = action.id || action.key || '';
@@ -1623,7 +1717,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         const SPREADABLE = new Set([
           'post','audio','video','image','document','torrent','bookmark',
           'event','calendar','task','votes','vote','market','shop','shopProduct',
-          'project','transfer','job','report',
+          'project','transfer','job','report','industry','industryBuild','industryBlueprint',
           'chat','chatMessage','pad','padEntry','forum','map'
         ]);
         if (!SPREADABLE.has(type)) return null;
@@ -1699,6 +1793,10 @@ function getViewDetailsAction(type, action) {
     case 'calendar':   return `/calendars/${id}`;
     case 'job':        return `/jobs/${id}`;
     case 'project':    return `/projects/${id}`;
+    case 'industry':   return `/industry/${id}`;
+    case 'industryBuild': return `/industry/build/${id}`;
+    case 'industryBlueprint': return `/industry/blueprint/${id}`;
+    case 'industryAllocation': return action.content?.target ? `/industry/build/${encodeURIComponent(action.content.target)}` : '/industry?filter=BUILDS';
     case 'report':     return `/reports/${id}`;
     case 'bankWallet': return `/wallet`;
     case 'bankClaim':  return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
@@ -1735,6 +1833,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'banking',   label: i18n.typeBanking },
     { type: 'market',    label: i18n.typeMarket },
     { type: 'project',   label: i18n.typeProject },
+    { type: 'industry',  label: i18n.typeIndustry },
     { type: 'job',       label: i18n.typeJob },
     { type: 'shop',      label: i18n.typeShop },
     { type: 'transfer',  label: i18n.typeTransfer },
@@ -1756,7 +1855,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     shop:       ['shop', 'shopProduct'],
     larp:       ['larpHousePost'],
     inhabitants:['about'],
-    chat:       ['chat', 'chatThread']
+    chat:       ['chat', 'chatThread'],
+    industry:   ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation']
   };
   const ALLOWED_TYPES = new Set();
   for (const { type } of activityTypes) {
@@ -1793,6 +1893,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action => action.type === 'torrent');
   } else if (filter === 'chat') {
     filteredActions = actions.filter(action => (action.type === 'chat' || action.type === 'chatThread') && action.type !== 'tombstone');
+  } else if (filter === 'industry') {
+    filteredActions = actions.filter(action => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(action.type) && action.type !== 'tombstone');
   } else {
     filteredActions = actions.filter(action => (action.type === filter || filter === 'all' || (filter === 'shop' && action.type === 'shopProduct')) && action.type !== 'tombstone');
   }
@@ -1874,6 +1976,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     shop:    { url: '/shops',      filters: ['all', 'mine', 'recent'] },
     job:     { url: '/jobs',       filters: ['ALL', 'MINE', 'REMOTE', 'PRESENCIAL', 'OPEN', 'CLOSED'] },
     project: { url: '/projects',   filters: ['all', 'mine', 'active', 'completed'] },
+    industry:{ url: '/industry',   filters: ['ALL', 'MINE', 'ACTIVE', 'PAUSED', 'DISSOLVED', 'BLUEPRINTS', 'BUILDS', 'MEMBER', 'RULES'] },
     chat:    { url: '/chats',      filters: ['all', 'mine'] },
     pad:     { url: '/pads',       filters: ['all', 'mine'] },
     calendar:{ url: '/calendars',  filters: ['all', 'mine'] },

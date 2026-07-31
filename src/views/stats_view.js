@@ -36,7 +36,7 @@ exports.statsView = (stats, filter) => {
   const description = i18n.statsDescription;
   const modes = ['ALL', 'MINE', 'TOMBSTONE'];
   const types = [
-    'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project',
+    'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project', 'industry', 'industryBlueprint',
     'image', 'torrent', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
     'chat', 'chatMessage', 'pad', 'padEntry', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
@@ -51,6 +51,8 @@ exports.statsView = (stats, filter) => {
     report: i18n.statsReport,
     feed: i18n.statsFeed,
     project: i18n.statsProject,
+    industry: i18n.industryTitle,
+    industryBlueprint: i18n.industryBlueprints,
     image: i18n.statsImage,
     torrent: i18n.statsTorrent,
     audio: i18n.statsAudio,

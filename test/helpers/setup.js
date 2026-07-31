@@ -40,6 +40,7 @@ const FACTORIES = {
   market: '../../src/models/market_model',
   jobs: '../../src/models/jobs_model',
   projects: '../../src/models/projects_model',
+  industry: '../../src/models/industry_model',
   opinions: '../../src/models/opinions_model',
   inhabitants: '../../src/models/inhabitants_model',
   parliament: '../../src/models/parliament_model',
@@ -60,7 +61,9 @@ const FACTORIES = {
   stats: '../../src/models/stats_model',
   blockchain: '../../src/models/blockchain_model',
   larp: '../../src/models/larp_model',
-  melody: '../../src/models/melody_model'
+  melody: '../../src/models/melody_model',
+  games: '../../src/models/games_model',
+  logs: '../../src/models/logs_model'
 };
 
 function loadFactory(name) {
@@ -97,7 +100,9 @@ function makePeer(network, keypair) {
       deps = { ...baseDeps, mapCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'calendars') {
       deps = { ...baseDeps, calendarCrypto, tribesModel: requireOnce('tribes') };
-    } else if (name === 'activity' || name === 'stats' || name === 'blockchain' || name === 'larp') {
+    } else if (name === 'activity') {
+      deps = { ...baseDeps, tribesModel: requireOnce('tribes'), industryModel: requireOnce('industry') };
+    } else if (name === 'stats' || name === 'blockchain' || name === 'larp') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes') };
     } else if (name === 'events') {
       deps = { ...baseDeps, eventCrypto, tribesModel: requireOnce('tribes') };

@@ -74,6 +74,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Chats: Module to discover and manage encrypted chats.
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
  + Courts: Module to resolve conflicts and emit veredicts.	
+ + Developer: Module to manage the Oasis source code.
  + Documents: Module to discover and manage documents.	
  + Events: Module to discover and manage events.
  + Favorites: Module to manage your favorite content.
@@ -84,6 +85,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Governance: Module to discover and manage votes.	
  + Graphos: Module to explore the network as an interactive map of peers.
  + Images: Module to discover and manage images.
+ + Industry: Module to manage the means of production collectively.
  + Invites: Module to manage and apply invite codes.
  + Jobs: Module to discover and manage jobs.	
  + Legacy: Module to manage your secret (private key) quickly and securely.	
@@ -160,6 +162,14 @@ Oasis contains its own UBI (Universal Basic Income), distributed weekly using EC
 
   ![SNH](https://solarnethub.com/git/oasis-banking.png "SolarNET.HuB")
   
+----------
+
+## Industry
+
+Oasis lets its inhabitants collectively own and manage the means of production, organized as network-owned facilities governed by their own members.
+
+  ![SNH](https://solarnethub.com/git/oasis-industry.png "SolarNET.HuB")
+
 ----------
 
 ## Carbon Footprinting

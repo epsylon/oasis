@@ -19,7 +19,7 @@ function writeAgendaConfig(cfg) {
   fs.writeFileSync(agendaConfigPath, JSON.stringify(cfg, null, 2));
 }
 
-module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel }) => {
+module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel, industryModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -184,7 +184,11 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
         ? projectsModel.listProjects('all').then(normalize).catch(() => [])
         : fetchItems('project');
 
-      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll, projectsAll, calendarsAll] = await Promise.all([
+      const industryViaModel = industryModel && typeof industryModel.listMyBuilds === 'function'
+        ? industryModel.listMyBuilds().then(normalize).catch(() => [])
+        : [];
+
+      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll, projectsAll, calendarsAll, industryAll] = await Promise.all([
         tasksViaModel,
         eventsViaModel,
         fetchItems('transfer'),
@@ -193,7 +197,8 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
         fetchItems('report'),
         jobsViaModel,
         projectsViaModel,
-        calendarsViaModel
+        calendarsViaModel,
+        industryViaModel
       ]);
 
       const tasks = tasksAll.filter(c => Array.isArray(c.assignees) && c.assignees.includes(userId)).map(t => ({ ...t, type: 'task' }));
@@ -206,6 +211,7 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
       const reports = reportsAll.filter(c => c.author === userId || (Array.isArray(c.confirmations) && c.confirmations.includes(userId))).map(r => ({ ...r, type: 'report' }));
       const jobs = jobsAll.filter(c => c.author === userId || (Array.isArray(c.subscribers) && c.subscribers.includes(userId))).map(j => ({ ...j, type: 'job', title: j.title }));
       const projects = projectsAll.map(p => ({ ...p, type: 'project' }));
+      const industryBuilds = industryAll.map(b => ({ ...b, type: 'industry', title: b.title }));
       const myCalendars = calendarsAll
         .filter(c => c.author === userId || (Array.isArray(c.participants) && c.participants.includes(userId)));
       const calendars = myCalendars.map(c => ({ ...c, type: 'calendar' }));
@@ -241,6 +247,7 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
         ...reports,
         ...jobs,
         ...projects,
+        ...industryBuilds,
         ...calendars,
         ...calendarDates
       ];
@@ -260,6 +267,7 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
         else if (filter === 'closed') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'CLOSED');
         else if (filter === 'jobs') filtered = filtered.filter(i => i.type === 'job');
         else if (filter === 'projects') filtered = filtered.filter(i => i.type === 'project');
+        else if (filter === 'industry') filtered = filtered.filter(i => i.type === 'industry');
         else if (filter === 'calendars') filtered = filtered.filter(i => i.type === 'calendar' || i.type === 'calendarDate');
         else if (filter === 'today') {
           const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
@@ -313,6 +321,7 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
           reports: mainItems.filter(i => i.type === 'report').length,
           jobs: mainItems.filter(i => i.type === 'job').length,
           projects: mainItems.filter(i => i.type === 'project').length,
+          industry: mainItems.filter(i => i.type === 'industry').length,
           calendars: mainItems.filter(i => i.type === 'calendar' || i.type === 'calendarDate').length,
           today: mainItems.filter(i => { const d = itemTs(i); return d >= startOfDay.getTime() && d <= endOfDay.getTime(); }).length,
           upcoming: mainItems.filter(i => itemTs(i) > now).length,

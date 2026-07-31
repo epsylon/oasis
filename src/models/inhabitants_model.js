@@ -407,7 +407,7 @@ module.exports = ({ cooler }) => {
       const isOwner = viewer === target;
       const arr = (v) => Array.isArray(v) ? v : [];
       const up = (v) => String(v || '').toUpperCase();
-      const COUNTED = new Set(['post','event','task','forum','tribe','market','job','project','shop','image','video','audio','document','bookmark','transfer','map']);
+      const COUNTED = new Set(['post','event','task','forum','tribe','market','job','project','industry','shop','image','video','audio','document','bookmark','transfer','map']);
       const accessible = (type, c) => {
         if (c.encryptedPayload) return false;
         switch (type) {

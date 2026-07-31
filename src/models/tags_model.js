@@ -78,6 +78,10 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
       return ['job', author, norm(c.title), norm(c.location), norm(c.salary), norm(c.job_type)].join('|');
     }
 
+    if (t === 'industry') {
+      return ['industry', author, norm(c.name), norm(c.sector)].join('|');
+    }
+
     if (t === 'forum') {
       return `forum:${c.key || c.root || `${author}|${norm(c.title)}` || msg.key}`;
     }

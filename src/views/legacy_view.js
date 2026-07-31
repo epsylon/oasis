@@ -29,6 +29,7 @@ const legacyView = async () => {
             id: "exportForm"
           },
           label(i18n.exportPasswordLabel),
+          br(),
           input({
             type: "password",
             name: "password",

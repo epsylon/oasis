@@ -15,6 +15,7 @@ const modulesView = () => {
     { name: 'chats', label: i18n.modulesChatsLabel, description: i18n.modulesChatsDescription },
     { name: 'cipher', label: i18n.modulesCipherLabel, description: i18n.modulesCipherDescription },
     { name: 'courts', label: i18n.modulesCourtsLabel, description: i18n.modulesCourtsDescription },
+    { name: 'dev', label: i18n.modulesDevLabel, description: i18n.modulesDevDescription },
     { name: 'docs', label: i18n.modulesDocsLabel, description: i18n.modulesDocsDescription },
     { name: 'events', label: i18n.modulesEventsLabel, description: i18n.modulesEventsDescription },
     { name: 'favorites', label: i18n.modulesFavoritesLabel, description: i18n.modulesFavoritesDescription },
@@ -24,10 +25,12 @@ const modulesView = () => {
     { name: 'games', label: i18n.modulesGamesLabel, description: i18n.modulesGamesDescription },
     { name: 'graphos', label: i18n.modulesGraphosLabel, description: i18n.modulesGraphosDescription },
     { name: 'images', label: i18n.modulesImagesLabel, description: i18n.modulesImagesDescription },
+    { name: 'industry', label: i18n.modulesIndustryLabel, description: i18n.modulesIndustryDescription },
     { name: 'invites', label: i18n.modulesInvitesLabel, description: i18n.modulesInvitesDescription },
     { name: 'jobs', label: i18n.modulesJobsLabel, description: i18n.modulesJobsDescription },
-    { name: 'legacy', label: i18n.modulesLegacyLabel, description: i18n.modulesLegacyDescription },
+    { name: 'larp', label: i18n.modulesLarpLabel, description: i18n.modulesLarpDescription },
     { name: 'latest', label: i18n.modulesLatestLabel, description: i18n.modulesLatestDescription },
+    { name: 'legacy', label: i18n.modulesLegacyLabel, description: i18n.modulesLegacyDescription },
     { name: 'logs', label: i18n.modulesLogsLabel, description: i18n.modulesLogsDescription },
     { name: 'maps', label: i18n.modulesMapLabel, description: i18n.modulesMapDescription },
     { name: 'market', label: i18n.modulesMarketLabel, description: i18n.modulesMarketDescription },
@@ -37,23 +40,22 @@ const modulesView = () => {
     { name: 'pads', label: i18n.modulesPadsLabel, description: i18n.modulesPadsDescription },
     { name: 'parliament', label: i18n.modulesParliamentLabel, description: i18n.modulesParliamentDescription },
     { name: 'pixelia', label: i18n.modulesPixeliaLabel, description: i18n.modulesPixeliaDescription },
-    { name: 'projects', label: i18n.modulesProjectsLabel, description: i18n.modulesProjectsDescription },
     { name: 'popular', label: i18n.modulesPopularLabel, description: i18n.modulesPopularDescription },
+    { name: 'projects', label: i18n.modulesProjectsLabel, description: i18n.modulesProjectsDescription },
     { name: 'reports', label: i18n.modulesReportsLabel, description: i18n.modulesReportsDescription },
     { name: 'shops', label: i18n.modulesShopsLabel, description: i18n.modulesShopsDescription },
     { name: 'summaries', label: i18n.modulesSummariesLabel, description: i18n.modulesSummariesDescription },
     { name: 'tags', label: i18n.modulesTagsLabel, description: i18n.modulesTagsDescription },
     { name: 'tasks', label: i18n.modulesTasksLabel, description: i18n.modulesTasksDescription },
     { name: 'threads', label: i18n.modulesThreadsLabel, description: i18n.modulesThreadsDescription },
+    { name: 'topics', label: i18n.modulesTopicsLabel, description: i18n.modulesTopicsDescription },
     { name: 'torrents', label: i18n.modulesTorrentsLabel, description: i18n.modulesTorrentsDescription },
     { name: 'transfers', label: i18n.modulesTransfersLabel, description: i18n.modulesTransfersDescription },
     { name: 'trending', label: i18n.modulesTrendingLabel, description: i18n.modulesTrendingDescription },
     { name: 'tribes', label: i18n.modulesTribesLabel, description: i18n.modulesTribesDescription },
-    { name: 'larp', label: i18n.modulesLarpLabel, description: i18n.modulesLarpDescription },
     { name: 'videos', label: i18n.modulesVideosLabel, description: i18n.modulesVideosDescription },
     { name: 'votes', label: i18n.modulesVotationsLabel, description: i18n.modulesVotationsDescription },
-    { name: 'wallet', label: i18n.modulesWalletLabel, description: i18n.modulesWalletDescription },
-    { name: 'topics', label: i18n.modulesTopicsLabel, description: i18n.modulesTopicsDescription }
+    { name: 'wallet', label: i18n.modulesWalletLabel, description: i18n.modulesWalletDescription }
   ];
 
   const moduleStates = modules.reduce((acc, mod) => {
@@ -87,7 +89,7 @@ const modulesView = () => {
   const PRESETS = {
     minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
     social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops'],
+    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops', 'industry'],
     full: modules.map(m => m.name)
   };
 

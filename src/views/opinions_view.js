@@ -19,12 +19,58 @@ const detailHref = (type, key) => {
     case 'feed': return `/feed/${encodeURIComponent(key)}`;
     case 'votes': return `/votes/${encodeURIComponent(key)}`;
     case 'transfer': return `/transfers/${encodeURIComponent(key)}`;
+    case 'industry': return `/industry/${encodeURIComponent(key)}`;
+    case 'project': return `/projects/${encodeURIComponent(key)}`;
+    case 'report': return `/reports/${encodeURIComponent(key)}`;
+    case 'task': return `/tasks/${encodeURIComponent(key)}`;
+    case 'event': return `/events/${encodeURIComponent(key)}`;
+    case 'shopProduct': return `/shops/product/${encodeURIComponent(key)}`;
     default: return null;
   }
 };
 
 const renderContentHtml = (content, key) => {
   switch (content.type) {
+    case 'industry':
+      return div({ class: 'opinion-industry' },
+        div({ class: 'card-section industry' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.industryName + ':'),
+            span({ class: 'card-value' }, content.name || '')
+          ),
+          content.sector ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.industrySector + ':'),
+            span({ class: 'card-value' }, String(content.sector).toUpperCase())
+          ) : "",
+          content.membershipPolicy ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.industryMembershipPolicy + ':'),
+            span({ class: 'card-value' }, String(i18n['industryPolicy_' + content.membershipPolicy] || content.membershipPolicy).toUpperCase())
+          ) : "",
+          content.description ? p(...renderUrl(content.description)) : null,
+          Array.isArray(content.tags) && content.tags.length
+            ? div({ class: 'card-tags' }, content.tags.map(tag =>
+                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+            : null
+        )
+      );
+    case 'industryBlueprint':
+      return div({ class: 'opinion-industry' },
+        div({ class: 'card-section industry' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.industryBlueprint + ':'),
+            span({ class: 'card-value' }, content.name || '')
+          ),
+          content.outKind ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.industryOutputKind + ':'),
+            span({ class: 'card-value' }, String(i18n['industryKind_' + content.outKind] || content.outKind).toUpperCase())
+          ) : "",
+          content.laborHours ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.industryLaborHours + ':'),
+            span({ class: 'card-value' }, String(content.laborHours))
+          ) : "",
+          content.description ? p(...renderUrl(content.description)) : null
+        )
+      );
     case 'bookmark':
       return div({ class: 'opinion-bookmark' },
         div({ class: 'card-section bookmark' },
@@ -212,7 +258,7 @@ const renderContentHtml = (content, key) => {
       return div({ class: 'styled-text' },
         div({ class: 'card-section styled-text-content' },
           div({ class: 'card-field' },
-            span({ class: 'card-value', innerHTML: sanitizeHtml(content.text || content.description || content.title || '[no content]') })
+            span({ class: 'card-value', innerHTML: sanitizeHtml(content.title || content.name || content.text || content.description || '[no content]') })
           )
         )
       );
