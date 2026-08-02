@@ -715,6 +715,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         if (a.type === 'task' && String(c.isPublic || '').toUpperCase() === 'PRIVATE' && a.author !== userId && !(Array.isArray(c.assignees) && c.assignees.includes(userId))) return false;
         if (a.type === 'forum' && c.isPrivate === true && a.author !== userId) return false;
         if (a.type === 'job' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId && !(Array.isArray(c.subscribers) && c.subscribers.includes(userId))) return false;
+        if (a.type === 'housing' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId) return false;
         if (a.type === 'market' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && c.seller !== userId) return false;
         if (a.type === 'shop' && String(c.visibility || '').toUpperCase() === 'CLOSED' && a.author !== userId) return false;
         if (a.type === 'curriculum' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId) return false;

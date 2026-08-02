@@ -239,6 +239,7 @@ module.exports = ({ cooler }) => {
       if (goal < 0) goal = 0
 
       const deadlineISO = data.deadline ? new Date(data.deadline).toISOString() : null
+      if (deadlineISO && new Date(deadlineISO).getTime() < Date.now()) throw new Error("The deadline cannot be in the past")
 
       const content = {
         type: TYPE,
@@ -323,7 +324,11 @@ module.exports = ({ cooler }) => {
       }
 
       let deadline = patch.deadline === undefined ? current.deadline : patch.deadline
-      if (deadline != null && deadline !== "") deadline = new Date(deadline).toISOString()
+      if (deadline != null && deadline !== "") {
+        deadline = new Date(deadline).toISOString()
+        const changed = !current.deadline || new Date(current.deadline).getTime() !== new Date(deadline).getTime()
+        if (changed && new Date(deadline).getTime() < Date.now()) throw new Error("The deadline cannot be in the past")
+      }
       else if (deadline === "") deadline = null
 
       const updated = {

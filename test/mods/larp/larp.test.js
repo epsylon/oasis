@@ -104,6 +104,37 @@ describe('larp: governance cycle', (t) => {
       eq(lm.getGoverningHouseKey(d), HOUSES[i % 9]);
     }
   });
+
+  t('the governing period does not change while the same house rules', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const lm = A.use('larp');
+    const first = lm.getGoverningPeriodId(new Date(2026, 7, 1));
+    for (let day = 2; day <= 31; day += 1) {
+      eq(lm.getGoverningPeriodId(new Date(2026, 7, day)), first);
+    }
+    ok(first.startsWith(lm.getGoverningHouseKey(new Date(2026, 7, 1)) + ':'));
+  });
+
+  t('the governing period changes when the ruling house changes', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const lm = A.use('larp');
+    const seen = new Set();
+    for (let i = 0; i < 12; i += 1) seen.add(lm.getGoverningPeriodId(new Date(2026, i, 15)));
+    eq(seen.size, 12);
+    notOk(seen.has(lm.getGoverningPeriodId(new Date(2027, 0, 15))));
+  });
+
+  t('the cycle string changes every day, so it cannot identify a governing period', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const lm = A.use('larp');
+    const a = lm.computeCycle(new Date(2026, 7, 1)).formatted;
+    const b = lm.computeCycle(new Date(2026, 7, 2)).formatted;
+    notOk(a === b);
+    eq(lm.getGoverningHouseKey(new Date(2026, 7, 1)), lm.getGoverningHouseKey(new Date(2026, 7, 2)));
+  });
 });
 
 describe('larp: house wall posts', (t) => {

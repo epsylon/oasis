@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -115,6 +115,7 @@ const renderCreateForm = (calendarToEdit, params) => {
   const sectionTitle = isEdit ? (i18n.calendarUpdateSectionTitle || "Update Calendar") : (i18n.calendarCreateSectionTitle || "Create New Calendar")
   return div({ class: "div-center audio-form" },
     h2(sectionTitle),
+    (params && params.spreadWarning) || null,
     form({ method: "POST", action },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       span(i18n.calendarTitleLabel || "Title"), br(),
@@ -192,6 +193,7 @@ exports.renderCalendarInvitePage = (code) => {
 }
 
 exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
+  if (calendarToEdit) params = { ...(params || {}), spreadWarning: await renderSpreadEditWarning(calendarToEdit.id || calendarToEdit.key || calendarToEdit.rootId) };
   const q = (params && params.q) || ""
   const showForm = filter === "create" || filter === "edit" || !!calendarToEdit
   const headerMap = {

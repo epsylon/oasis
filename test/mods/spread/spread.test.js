@@ -300,3 +300,30 @@ describe('spreads.forMessage', (t) => {
     ok(r.alreadySpread === false || r.alreadySpread === true);
   });
 });
+
+describe('spreads and edits', (t) => {
+  t('editing the content drops its spreads, because the spread points at the buried version', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const created = await A.use('housing').createHousing({
+      housing_type: 'rent', property_type: 'apartment', title: 'Flat', description: 'd',
+      price: 300, availableFrom: new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+    });
+    B.setActor();
+    const ssbB = await B.cooler.open();
+    await publishSpread(ssbB, created.key);
+    const mainB = mainModelsFactory({ cooler: B.cooler, isPublic: false });
+    eq((await mainB.spreads.forMessage(created.key)).count, 1, 'counted on the version that was spread');
+
+    A.setActor();
+    await A.use('housing').updateHousing(created.key, { price: 350 });
+    const tip = (await A.use('housing').listHousing('ALL'))[0].id;
+    ok(tip !== created.key, 'the edit produced a new message');
+
+    const mainA = mainModelsFactory({ cooler: A.cooler, isPublic: false });
+    eq((await mainA.spreads.forMessage(tip)).count, 0, 'the new version starts with no spreads');
+
+    B.setActor();
+    eq((await mainB.spreads.forMessage(tip)).alreadySpread, false, 'B can spread the new version if they still want to');
+  });
+});

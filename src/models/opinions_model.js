@@ -23,7 +23,7 @@ module.exports = ({ cooler }) => {
   const validTypes = [
     'bookmark', 'votes', 'transfer',
     'feed', 'image', 'audio', 'video', 'document', 'torrent',
-    'industry', 'project', 'report', 'task', 'event', 'shopProduct'
+    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market'
   ];
 
   const getPreview = c => {
@@ -46,7 +46,9 @@ module.exports = ({ cooler }) => {
     report: 'reportOpinion',
     task: 'taskOpinion',
     event: 'eventOpinion',
-    shopProduct: 'shopOpinion'
+    shopProduct: 'shopOpinion',
+    housing: 'housingOpinion',
+    market: 'marketOpinion'
   };
 
   const createVote = async (contentId, category) => {

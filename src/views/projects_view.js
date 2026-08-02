@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -308,8 +308,8 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
                       br(),
                       select(
                         { name: "milestoneIndex" },
-                        option({ value: "", selected: b.milestoneIndex == null }, "-"),
-                        ...milestones.map((m2, idx2) => option({ value: String(idx2), selected: b.milestoneIndex === idx2 }, m2.title))
+                        option({ value: "", ...(b.milestoneIndex == null ? { selected: true } : {})}, "-"),
+                        ...milestones.map((m2, idx2) => option({ value: String(idx2), ...(b.milestoneIndex === idx2 ? { selected: true } : {})}, m2.title))
                       ),
                       br(),
                       br(),
@@ -434,7 +434,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
   )
 }
 
-const renderProjectForm = (project, mode) => {
+const renderProjectForm = (project, mode, spreadWarning = null) => {
   const pr = project || {}
   const isEdit = mode === "edit"
   const nowLocal = moment().format("YYYY-MM-DDTHH:mm")
@@ -444,6 +444,7 @@ const renderProjectForm = (project, mode) => {
 
   return div(
     { class: "div-center project-form" },
+    isEdit ? spreadWarning : null,
     form(
       {
         action: isEdit ? `/projects/update/${encodeURIComponent(pr.id)}` : "/projects/create",
@@ -505,6 +506,10 @@ const renderProjectForm = (project, mode) => {
 }
 
 exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
+  if (String(filter).toUpperCase() === "EDIT") {
+    const editing = Array.isArray(projectsOrForm) ? projectsOrForm[0] : projectsOrForm
+    params = { ...params, spreadWarning: await renderSpreadEditWarning(editing && (editing.id || editing.key)) }
+  }
   const f = String(filter || "ALL").toUpperCase()
   const filterObj = FILTERS.find((x) => x.key === f) || FILTERS[0]
   const sectionTitle = i18n[filterObj.title] || i18n.projectAllTitle
@@ -531,7 +536,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
       f === "CREATE" || f === "EDIT"
         ? (() => {
             const prToEdit = f === "EDIT" ? (safeArr(projectsOrForm)[0] || {}) : (params.prefill || {})
-            return renderProjectForm(prToEdit, f === "EDIT" ? "edit" : "create")
+            return renderProjectForm(prToEdit, f === "EDIT" ? "edit" : "create", params.spreadWarning)
           })()
         : (f === "BACKERS"
             ? renderBackersLeaderboard(projectsOrForm)
@@ -595,10 +600,10 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       select(
         { name: "status", class: "project-control-select" },
-        option({ value: "ACTIVE", selected: statusUpper === "ACTIVE" }, i18n.projectStatusACTIVE),
-        option({ value: "PAUSED", selected: statusUpper === "PAUSED" }, i18n.projectStatusPAUSED),
-        option({ value: "COMPLETED", selected: statusUpper === "COMPLETED" }, i18n.projectStatusCOMPLETED),
-        option({ value: "CANCELLED", selected: statusUpper === "CANCELLED" }, i18n.projectStatusCANCELLED)
+        option({ value: "ACTIVE", ...(statusUpper === "ACTIVE" ? { selected: true } : {})}, i18n.projectStatusACTIVE),
+        option({ value: "PAUSED", ...(statusUpper === "PAUSED" ? { selected: true } : {})}, i18n.projectStatusPAUSED),
+        option({ value: "COMPLETED", ...(statusUpper === "COMPLETED" ? { selected: true } : {})}, i18n.projectStatusCOMPLETED),
+        option({ value: "CANCELLED", ...(statusUpper === "CANCELLED" ? { selected: true } : {})}, i18n.projectStatusCANCELLED)
       ),
       button({ class: "status-btn project-control-btn", type: "submit" }, i18n.projectSetStatus)
     ))

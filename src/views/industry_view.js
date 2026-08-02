@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, img, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderMapEmbedWithZoom } = require("./maps_view")
@@ -148,13 +148,14 @@ const renderFacilityList = exports.renderFacilityList = (facilities, filter, spr
   )
 }
 
-const renderFacilityForm = (facility, mode) => {
+const renderFacilityForm = (facility, mode, spreadWarning = null) => {
   const fc = facility || {}
   const isEdit = mode === "edit"
   const returnTo = "/industry?filter=MINE"
   const curPolicy = fc.membershipPolicy || "vote"
   const curSector = fc.sector || "other"
   return div({ class: "div-center industry-form" },
+    isEdit ? spreadWarning : null,
     form({
       action: isEdit ? `/industry/update/${encodeURIComponent(fc.id)}` : "/industry/create",
       method: "POST",
@@ -308,6 +309,7 @@ const renderGlobalBuilds = (builds, spreadMap = new Map()) => {
 
 exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
   const f = String(filter || "ALL").toUpperCase()
+  const facilityEditWarning = f === "EDIT" ? await renderSpreadEditWarning((safeArr(facilitiesOrForm)[0] || {}).id) : null
   const search = safeText(params.search)
   const sectorSel = safeText(params.sector)
   const isForm = f === "CREATE" || f === "EDIT"
@@ -331,7 +333,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
       isRules
         ? renderIndustryRules()
         : isForm
-        ? renderFacilityForm(f === "EDIT" ? (safeArr(facilitiesOrForm)[0] || {}) : {}, f === "EDIT" ? "edit" : "create")
+        ? renderFacilityForm(f === "EDIT" ? (safeArr(facilitiesOrForm)[0] || {}) : {}, f === "EDIT" ? "edit" : "create", facilityEditWarning)
         : f === "BLUEPRINTS"
         ? div({ class: "industry-list" }, renderGlobalBlueprints(facilitiesOrForm, params.spreadMap || new Map()))
         : f === "BUILDS"
@@ -532,12 +534,13 @@ const renderBlueprintsSection = (fc, blueprints, isMember, spreadMap = new Map()
   )
 }
 
-const renderBlueprintForm = (fc, bp, mode) => {
+const renderBlueprintForm = (fc, bp, mode, spreadWarning = null) => {
   const isEdit = mode === "edit"
   const curKind = bp.outKind || "physical"
   const materialsText = safeArr(bp.materials).map(m => `${m.item}:${m.qty}:${m.price != null ? m.price : 0}`).join("\n")
   return div({ class: "industry-form industry-blueprint-form" },
     h2(isEdit ? (i18n.industryEditBlueprint || "Edit blueprint") : (i18n.industryNewBlueprint || "New blueprint")),
+    isEdit ? spreadWarning : null,
     form({ method: "POST", action: isEdit ? `/industry/blueprints/${encodeURIComponent(bp.id)}/update` : `/industry/${encodeURIComponent(fc.id)}/blueprints`, enctype: "multipart/form-data" },
       label(i18n.industryName || "Name"),
       br(), input({ type: "text", name: "name", required: true, maxlength: "80", value: bp.name || "" }), br(),
@@ -558,12 +561,13 @@ const renderBlueprintForm = (fc, bp, mode) => {
   )
 }
 
-const renderBuildForm = (fc, blueprints, build, mode) => {
+const renderBuildForm = (fc, blueprints, build, mode, spreadWarning = null) => {
   const b = build || {}
   const isEdit = mode === "edit"
   const today = new Date().toISOString().slice(0, 10)
   return div({ class: "industry-form industry-build-form" },
     h2(isEdit ? (i18n.industryEditBuild || "Edit build") : (i18n.industryNewBuild || "Propose a build")),
+    isEdit ? spreadWarning : null,
     form({ method: "POST", action: isEdit ? `/industry/builds/${encodeURIComponent(b.id)}/update` : `/industry/${encodeURIComponent(fc.id)}/builds`, enctype: "multipart/form-data" },
       label(i18n.industryBuildTitle || "Title"),
       br(), input({ type: "text", name: "title", required: true, maxlength: "120", value: safeText(b.title) }), br(),
@@ -718,7 +722,7 @@ exports.blueprintEditView = async (bp, fc) => template(
           .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
       )
     ),
-    renderBlueprintForm(fc, bp, "edit")
+    renderBlueprintForm(fc, bp, "edit", await renderSpreadEditWarning(bp && bp.id))
   )
 )
 
@@ -736,7 +740,7 @@ exports.buildEditView = async (b, fc) => template(
           .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
       )
     ),
-    renderBuildForm(fc, [], b, "edit")
+    renderBuildForm(fc, [], b, "edit", await renderSpreadEditWarning(b && b.id))
   )
 )
 

@@ -470,11 +470,11 @@ const CaseCard = (c) => {
         select(
           { name: 'preference' },
           option(
-            { value: 'YES', selected: c.myPublicPreference === true },
+            { value: 'YES', ...(c.myPublicPreference === true ? { selected: true } : {})},
             i18n.courtsPublicPrefYes
           ),
           option(
-            { value: 'NO', selected: c.myPublicPreference === false },
+            { value: 'NO', ...(c.myPublicPreference === false ? { selected: true } : {})},
             i18n.courtsPublicPrefNo
           )
         ),
@@ -685,11 +685,11 @@ const MyCaseCard = (c) => {
         select(
           { name: 'preference' },
           option(
-            { value: 'YES', selected: c.myPublicPreference === true },
+            { value: 'YES', ...(c.myPublicPreference === true ? { selected: true } : {})},
             i18n.courtsPublicPrefYes
           ),
           option(
-            { value: 'NO', selected: c.myPublicPreference === false },
+            { value: 'NO', ...(c.myPublicPreference === false ? { selected: true } : {})},
             i18n.courtsPublicPrefNo
           )
         ),

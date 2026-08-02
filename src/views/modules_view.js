@@ -24,6 +24,7 @@ const modulesView = () => {
     { name: 'forum', label: i18n.modulesForumLabel, description: i18n.modulesForumDescription },
     { name: 'games', label: i18n.modulesGamesLabel, description: i18n.modulesGamesDescription },
     { name: 'graphos', label: i18n.modulesGraphosLabel, description: i18n.modulesGraphosDescription },
+    { name: 'housing', label: i18n.modulesHousingLabel, description: i18n.modulesHousingDescription },
     { name: 'images', label: i18n.modulesImagesLabel, description: i18n.modulesImagesDescription },
     { name: 'industry', label: i18n.modulesIndustryLabel, description: i18n.modulesIndustryDescription },
     { name: 'invites', label: i18n.modulesInvitesLabel, description: i18n.modulesInvitesDescription },
@@ -89,7 +90,7 @@ const modulesView = () => {
   const PRESETS = {
     minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
     social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops', 'industry'],
+    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry'],
     full: modules.map(m => m.name)
   };
 

@@ -40,7 +40,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
     'image', 'audio', 'video', 'torrent', 'market', 'bankWallet', 'bankClaim',
-    'project', 'job', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad'
+    'project', 'job', 'housing', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad'
   ];
 
   const getRelevantFields = (type, content) => {
@@ -85,6 +85,8 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
         return [content?.amount, content?.epochId, content?.allocationId, content?.txid];
       case 'project':
         return [content?.title, content?.status, content?.progress, content?.goal, content?.pledged, content?.deadline, (content?.followers || []).length, (content?.backers || []).length, (content?.milestones || []).length, content?.bounty, content?.bountyAmount, content?.bounty_currency, content?.activity?.kind, content?.activityActor];
+      case 'housing':
+        return [content?.title, content?.housing_type, content?.property_type, content?.place, content?.price, content?.rooms, content?.size, content?.capacity, content?.status];
       case 'job':
         return [content?.title, content?.job_type, ...(content?.tasks || []), content?.location, content?.vacants, content?.salary, content?.status, (content?.subscribers || []).length];
       case 'industry':
@@ -229,6 +231,17 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
         norm(c.title),
         norm(c.deadline),
         norm(c.goal)
+      ].join('|');
+    }
+
+    if (t === 'housing') {
+      return [
+        'housing',
+        author,
+        norm(c.title),
+        norm(c.place),
+        norm(c.price),
+        norm(c.housing_type)
       ].join('|');
     }
 

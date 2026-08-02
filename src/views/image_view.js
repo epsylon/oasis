@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -195,6 +195,7 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
 
   return div(
     { class: "div-center image-form" },
+    params.spreadWarning || null,
     form(
       {
         action: filter === "edit" ? `/images/update/${encodeURIComponent(imageId)}` : "/images/create",
@@ -333,6 +334,7 @@ const renderImageCommentsSection = (imageKey, comments = [], returnTo = null) =>
 };
 
 exports.imageView = async (images, filter = "all", imageId = null, params = {}) => {
+  if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(imageId) };
   const title =
     filter === "mine"
       ? i18n.imageMineSectionTitle
@@ -414,9 +416,9 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
                   { class: "filter-box__controls" },
                   select(
                     { name: "sort", class: "filter-box__select" },
-                    option({ value: "recent", selected: sort === "recent" }, i18n.imageSortRecent),
-                    option({ value: "oldest", selected: sort === "oldest" }, i18n.imageSortOldest),
-                    option({ value: "top", selected: sort === "top" }, i18n.imageSortTop)
+                    option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.imageSortRecent),
+                    option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.imageSortOldest),
+                    option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.imageSortTop)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.imageSearchButton)
                 )

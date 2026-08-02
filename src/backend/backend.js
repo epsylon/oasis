@@ -578,7 +578,7 @@ const { about, blob, friend, meta, post, vote, spreads, lifetime } = models({
   cooler,
   isPublic: config.public,
 });
-const { handleBlobUpload, serveBlob, FileTooLargeError } = require('../backend/blobHandler.js');
+const { handleBlobUpload, handleBlobUploads, serveBlob, FileTooLargeError } = require('../backend/blobHandler.js');
 const extractBlobId = (md) => md ? (md.match(/\((&[^)]+)\)/)?.[1] ?? null) : null;
 const exportmodeModel = require('../models/exportmode_model');
 const panicmodeModel = require('../models/panicmode_model');
@@ -647,10 +647,11 @@ const melodyModel = require('../models/melody_model')({ cooler });
 const marketModel = require('../models/market_model')({ cooler, isPublic: config.public, tribeCrypto });
 const forumModel = require('../models/forum_model')({ cooler, isPublic: config.public, tribeCrypto, forumCrypto });
 const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.public, tribeCrypto });
+const housingModel = require('../models/housing_model')({ cooler });
 const shopsModel = require('../models/shops_model')({ cooler, isPublic: config.public, tribeCrypto });
 const chatsModel = require('../models/chats_model')({ cooler, tribeCrypto, chatCrypto, tribesModel });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
-const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config.public, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel, industryModel });
+const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config.public, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel, industryModel, housingModel });
 const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public, tribeCrypto, mapCrypto, tribesModel });
 const gamesModel = require('../models/games_model')({ cooler });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
@@ -892,6 +893,39 @@ const favAction = async (ctx, kind, action) => {
   } catch (_) {}
   ctx.redirect(safeReturnTo(ctx, `/${kind}`, [`/${kind}`]));
 };
+const voteFormRedirect = (mode, id, err, body = {}) => {
+  const params = new URLSearchParams();
+  params.set('error', err && err.code === 'VOTE_DEADLINE_MIN' ? 'deadline' : 'generic');
+  if (body.question) params.set('question', String(body.question).slice(0, 300));
+  if (body.deadline) params.set('deadline', String(body.deadline).slice(0, 40));
+  if (body.tags) params.set('tags', String(body.tags).slice(0, 300));
+  return mode === 'edit' && id
+    ? `/votes/edit/${encodeURIComponent(id)}?${params.toString()}`
+    : `/votes?filter=create&${params.toString()}`;
+};
+
+const voteFormState = (ctx) => ({
+  error: typeof ctx.query.error === 'string' ? ctx.query.error : '',
+  minVoteDays: votesModel.MIN_VOTE_DAYS,
+  draft: {
+    question: typeof ctx.query.question === 'string' ? ctx.query.question : '',
+    deadline: typeof ctx.query.deadline === 'string' ? ctx.query.deadline : '',
+    tags: typeof ctx.query.tags === 'string' ? ctx.query.tags : ''
+  }
+});
+
+const notifyHousingRequesters = async (item, reason) => {
+  if (!item || String(item.author) !== String(getViewerId())) return;
+  const requesters = Array.isArray(item.requests) ? item.requests.filter(id => id && id !== item.author) : [];
+  if (!requesters.length) return;
+  const label = reason === 'deleted' ? 'has been removed' : 'is no longer available';
+  for (const requester of requesters) {
+    try {
+      await pmModel.sendMessage([requester], 'HOUSING_UNAVAILABLE', `The place [${item.title || 'a place'}](/housing/${encodeURIComponent(item.id)}) you requested ${label}`);
+    } catch (_) {}
+  }
+};
+
 const commentAction = async (ctx, kind, idParam) => {
   const modKey = mediaModCheck[kind];
   if (modKey && !checkMod(ctx, modKey)) { ctx.redirect('/modules'); return; }
@@ -1403,6 +1437,7 @@ const { aiView } = require("../views/AI_view");
 const { forumView, singleForumView, renderForumInvitePage } = require("../views/forum_view");
 const { renderBlockchainView, renderSingleBlockView } = require("../views/blockchain_view");
 const { jobsView, singleJobsView, renderJobForm, clearnetJobView } = require("../views/jobs_view");
+const { housingView, singleHousingView } = require("../views/housing_view");
 const { shopsView, singleShopView, singleProductView, editProductView, shopOrdersView, myPurchasesView, clearnetShopView, renderShopInvitePage } = require("../views/shops_view");
 const { chatsView, singleChatView, renderChatInvitePage } = require("../views/chats_view");
 const { padsView, singlePadView, renderPadInvitePage } = require("../views/pads_view");
@@ -1545,7 +1580,7 @@ router
     ctx.body = await popularView({ messages, prefix: nav(div({ class: "filters" }, ul(['day','week','month','year'].map(p => li(form({ method: "GET", action: `/public/popular/${p}` }, button({ type: "submit", class: "filter-btn" }, t[p]))))))), spreadMap });
   })
   .get("/modules", async (ctx) => {
-    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'dev', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'industry', 'shops', 'banking', 'parliament', 'courts'];
+    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'dev', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'housing', 'jobs', 'projects', 'industry', 'shops', 'banking', 'parliament', 'courts'];
     const cfg = getConfig().modules;
     ctx.body = modulesView(modules.reduce((acc, m) => { acc[`${m}Mod`] = cfg[`${m}Mod`]; return acc; }, {}));
   })
@@ -1813,7 +1848,7 @@ router
     const { bucket: lastActivityBucket } = inhabitantsModel.bucketLastActivity(fullLastTs || null);
     const profileItems = await fetchProfileItems(feedId, rawPrefs);
     const profileFilterType = String(ctx.query.type || '').toLowerCase();
-    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','job','report','chat','chatMessage','pad','padEntry','forum','map']);
+    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
     await warmAuthorNames(allActions, sanitizedMsgs, profileItems);
@@ -2149,8 +2184,9 @@ router
     ctx.body = await privateView({ messages }, returnFilter || 'all', decrypted);
   })
   .get('/tags', async ctx => {
-    const filter = qf(ctx), tags = await tagsModel.listTags(filter);
-    ctx.body = await tagsView(tags, filter);
+    const filter = qf(ctx), search = String(ctx.query.search || '').trim();
+    const tags = await tagsModel.listTags(filter, search);
+    ctx.body = await tagsView(tags, filter, search);
   })
   .get('/reports', async ctx => {
     const filter = qf(ctx);
@@ -2829,7 +2865,7 @@ router
     }
     allActions = await applyListFilters(allActions, ctx);
     const spreadMap = new Map();
-    const SPREADABLE = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','job','report','chat','chatMessage','pad','padEntry','forum','map']);
+    const SPREADABLE = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map']);
     const targets = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && SPREADABLE.has(a.type));
     const results = await Promise.all(targets.map(a => spreads.forMessage(a.id).catch(() => null)));
     targets.forEach((a, i) => { if (results[i]) spreadMap.set(a.id, results[i]); });
@@ -2896,7 +2932,7 @@ router
     const baseUrl = resolveExternalBaseUrl(ctx);
     const profileItems = await fetchProfileItems(myFeedId, rawPrefs);
     const profileFilterType = String(ctx.query.type || '').toLowerCase();
-    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','job','report','chat','chatMessage','pad','padEntry','forum','map']);
+    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
     ctx.body = await authorView({ feedId: myFeedId, oasisVersion: OASIS_VERSION || await getOasisVersion(myFeedId), messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, stats, baseUrl, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
@@ -4025,13 +4061,13 @@ router
     await enrichMsgSize(voteList);
     const spreadMap = await spreads.forMessages((voteList || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(voteList);
-    ctx.body = await voteView(voteList, filter, null, [], filter, { spreadMap });
+    ctx.body = await voteView(voteList, filter, null, [], filter, { spreadMap, ...voteFormState(ctx) });
   })
   .get('/votes/edit/:id', async ctx => {
     const id = ctx.params.id;
     const activeFilter = (ctx.query.filter || 'mine');
     const voteData = await votesModel.getVoteById(id);
-    ctx.body = await voteView([voteData], 'edit', id, [], activeFilter);
+    ctx.body = await voteView([voteData], 'edit', id, [], activeFilter, voteFormState(ctx));
   })
   .get('/votes/:voteId', async ctx => {
     const { voteId } = ctx.params, filter = qf(ctx), voteData = await votesModel.getVoteById(voteId);
@@ -4174,6 +4210,62 @@ router
     const jobAuthorPrefs2 = await about.visibilityPrefs(job.author).catch(() => null);
     await enrichItemLifetime(job)
     ctx.body = await singleJobsView(withCount(job, comments), filter, comments, { ...params, mapData, candidates, baseUrl: resolveExternalBaseUrl(ctx), authorPrefs: jobAuthorPrefs2, spreads: await spreads.forMessage(job.id).catch(() => null) })
+  })
+  .get('/housing', async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    const filter = String(ctx.query.filter || 'ALL').toUpperCase()
+    const query = {
+      search: ctx.query.search || '',
+      minPrice: ctx.query.minPrice ?? '',
+      maxPrice: ctx.query.maxPrice ?? '',
+      place: ctx.query.place || '',
+      sort: ctx.query.sort || 'recent'
+    }
+    query.maxImages = housingModel.MAX_IMAGES
+    if (filter === 'CREATE') { ctx.body = await housingView([], 'CREATE', query); return }
+    const viewerId = getViewerId()
+    let items = await housingModel.listHousing(filter, viewerId, query)
+    await enrichWithComments(items)
+    items = await applyListFilters(items, ctx)
+    if (filter !== 'MINE') {
+      try { items = await lifetime.enrichAndFilter(items); } catch (_) {}
+    }
+    await enrichMsgSize(items)
+    const spreadMap = await spreads.forMessages((items || []).map(x => x && (x.id || x.key)));
+    await warmAuthorNames(items);
+    ctx.body = await housingView(items, filter, { ...query, spreadMap })
+  })
+  .get('/housing/edit/:id', async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    let item;
+    try { item = await housingModel.getHousingById(ctx.params.id, getViewerId()); } catch (_) { ctx.redirect('/housing?filter=MINE'); return; }
+    if (!item || String(item.author) !== String(getViewerId())) { ctx.redirect('/housing?filter=MINE'); return; }
+    ctx.body = await housingView([item], 'EDIT', { maxImages: housingModel.MAX_IMAGES })
+  })
+  .get('/housing/:housingId', async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    let housingId = ctx.params.housingId
+    if (housingId && housingId.startsWith('%25')) {
+      try { housingId = decodeURIComponent(housingId); } catch (_) {}
+    }
+    const filter = String(ctx.query.filter || 'ALL').toUpperCase()
+    const params = {
+      search: ctx.query.search || '',
+      minPrice: ctx.query.minPrice ?? '',
+      maxPrice: ctx.query.maxPrice ?? '',
+      place: ctx.query.place || '',
+      sort: ctx.query.sort || 'recent',
+      returnTo: safeReturnTo(ctx, `/housing?filter=${encodeURIComponent(filter)}`, ['/housing'])
+    }
+    let item;
+    try { item = await housingModel.getHousingById(housingId, getViewerId()); } catch (e) {
+      sendErrorPage(ctx, `Housing not found or invalid id: ${housingId}`, { status: 404 }); return;
+    }
+    if (!item) { sendErrorPage(ctx, `Housing not found: ${housingId}`, { status: 404 }); return; }
+    const [comments, mapData] = await Promise.all([getVoteComments(housingId), resolveMapUrl(item.mapUrl)])
+    await enrichMsgSize([item])
+    await enrichItemLifetime(item)
+    ctx.body = await singleHousingView(withCount(item, comments), filter, comments, { ...params, mapData, spreads: await spreads.forMessage(item.id).catch(() => null) })
   })
   .get('/c/jobs/:jobId', async (ctx) => {
     let job;
@@ -4903,7 +4995,7 @@ router
       await industryModel.joinFacility(ctx.params.id)
       if (before && before.membershipPolicy === 'vote') {
         const me = getViewerId()
-        for (const m of (before.members || [])) { if (m !== me) { try { await pmModel.sendMessage([m], "INDUSTRY_APPLICATION", `A new habitant requested to join "${before.name}" -> /industry/${ctx.params.id}`); } catch (_) {} } }
+        for (const m of (before.members || [])) { if (m !== me) { try { await pmModel.sendMessage([m], "INDUSTRY_APPLICATION", `A new habitant requested to join [${before.name || 'a facility'}](/industry/${encodeURIComponent(ctx.params.id)})`); } catch (_) {} } }
       }
       safeRefererRedirect(ctx, `/industry/${encodeURIComponent(ctx.params.id)}`)
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }) }
@@ -4918,7 +5010,7 @@ router
     const invitee = ctx.request.body.invitee
     try {
       await industryModel.inviteToFacility(ctx.params.id, invitee)
-      try { const fc = await industryModel.getFacilityById(ctx.params.id); await pmModel.sendMessage([invitee], "INDUSTRY_INVITED", `You have been invited to join "${fc.name}" -> /industry/${ctx.params.id}`); } catch (_) {}
+      try { const fc = await industryModel.getFacilityById(ctx.params.id); await pmModel.sendMessage([invitee], "INDUSTRY_INVITED", `You have been invited to join [${fc.name || 'a facility'}](/industry/${encodeURIComponent(ctx.params.id)})`); } catch (_) {}
       safeRefererRedirect(ctx, `/industry/${encodeURIComponent(ctx.params.id)}`)
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }) }
   })
@@ -4931,10 +5023,10 @@ router
       const after = await industryModel.getFacilityById(ctx.params.id).catch(() => null)
       const me = getViewerId()
       if (subject === 'admit' && ref && before && after && !before.members.includes(ref) && after.members.includes(ref)) {
-        try { await pmModel.sendMessage([ref], "INDUSTRY_ADMITTED", `You have been admitted to "${after.name}" -> /industry/${ctx.params.id}`); } catch (_) {}
+        try { await pmModel.sendMessage([ref], "INDUSTRY_ADMITTED", `You have been admitted to [${after.name || 'a facility'}](/industry/${encodeURIComponent(ctx.params.id)})`); } catch (_) {}
       }
       if (subject === 'dissolve' && before && after && before.status !== 'DISSOLVED' && after.status === 'DISSOLVED') {
-        for (const m of (after.members || [])) { if (m !== me) { try { await pmModel.sendMessage([m], "INDUSTRY_DISSOLVED", `The facility "${after.name}" has been dissolved by collective vote -> /industry/${ctx.params.id}`); } catch (_) {} } }
+        for (const m of (after.members || [])) { if (m !== me) { try { await pmModel.sendMessage([m], "INDUSTRY_DISSOLVED", `The facility [${after.name || 'a facility'}](/industry/${encodeURIComponent(ctx.params.id)}) has been dissolved by collective vote`); } catch (_) {} } }
       }
       safeRefererRedirect(ctx, `/industry/${encodeURIComponent(ctx.params.id)}`)
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }) }
@@ -4995,7 +5087,7 @@ router
       await industryModel.voteBuild(ctx.params.id, ctx.request.body.choice)
       const after = await industryModel.getBuild(ctx.params.id).catch(() => null)
       if (before && after && before.status !== 'APPROVED' && after.status === 'APPROVED' && after.proposer !== getViewerId()) {
-        try { await pmModel.sendMessage([after.proposer], "INDUSTRY_BUILD_APPROVED", `Your build "${after.title}" has been approved -> /industry/build/${ctx.params.id}`); } catch (_) {}
+        try { await pmModel.sendMessage([after.proposer], "INDUSTRY_BUILD_APPROVED", `Your build [${after.title || 'a build'}](/industry/build/${encodeURIComponent(ctx.params.id)}) has been approved`); } catch (_) {}
       }
       safeRefererRedirect(ctx, `/industry/build/${encodeURIComponent(ctx.params.id)}`)
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }) }
@@ -5020,7 +5112,7 @@ router
       const res = await industryModel.distributeBuild(ctx.params.id, { outputValue: ctx.request.body.outputValue })
       for (const alloc of res.plan.allocations) {
         if (!alloc || !alloc.to || alloc.to === viewer || !(alloc.amount > 0)) continue
-        try { await pmModel.sendMessage([alloc.to], "INDUSTRY_DISTRIBUTED", `Build "${res.build.title}" allocated you ${alloc.amount.toFixed(2)} ECO -> /industry/build/${ctx.params.id}`) } catch (_) {}
+        try { await pmModel.sendMessage([alloc.to], "INDUSTRY_DISTRIBUTED", `Build [${res.build.title || 'a build'}](/industry/build/${encodeURIComponent(ctx.params.id)}) allocated you ${alloc.amount.toFixed(2)} ECO`) } catch (_) {}
       }
       safeRefererRedirect(ctx, `/industry/build/${encodeURIComponent(ctx.params.id)}`)
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }) }
@@ -6861,12 +6953,22 @@ router
   .post('/votes/create', koaBody(), async ctx => {
     const b = ctx.request.body, defaultOptions = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'];
     const parsedOptions = b.options ? b.options.split(',').map(o => o.trim()).filter(Boolean) : defaultOptions;
-    await votesModel.createVote(stripDangerousTags(b.question), b.deadline, parsedOptions, String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean));
+    try {
+      await votesModel.createVote(stripDangerousTags(b.question), b.deadline, parsedOptions, String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean));
+    } catch (err) {
+      ctx.redirect(voteFormRedirect('create', null, err, b));
+      return;
+    }
     ctx.redirect(safeReturnTo(ctx, '/votes?filter=mine', ['/votes']));
   })
   .post('/votes/update/:id', koaBody(), async ctx => {
     const b = ctx.request.body, parsedOptions = b.options ? b.options.split(',').map(o => o.trim()).filter(Boolean) : undefined;
-    await votesModel.updateVoteById(ctx.params.id, { question: stripDangerousTags(b.question), deadline: b.deadline, options: parsedOptions, tags: b.tags ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : [] });
+    try {
+      await votesModel.updateVoteById(ctx.params.id, { question: stripDangerousTags(b.question), deadline: b.deadline, options: parsedOptions, tags: b.tags ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : [] });
+    } catch (err) {
+      ctx.redirect(voteFormRedirect('edit', ctx.params.id, err, b));
+      return;
+    }
     ctx.redirect(safeReturnTo(ctx, '/votes?filter=mine', ['/votes']));
   })
   .post('/votes/delete/:id', koaBody(), async ctx => {
@@ -7193,7 +7295,133 @@ router
     await marketModel.addBidToAuction(ctx.params.id, getViewerId(), ctx.request.body.bidAmount)
     ctx.redirect(safeReturnTo(ctx, "/market?filter=auctions", ["/market"]))
   })
+  .post("/market/opinions/:itemId/:category", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'marketMod')) { ctx.redirect('/modules'); return; }
+    try { await marketModel.createOpinion(ctx.params.itemId, ctx.params.category) } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/market/${encodeURIComponent(ctx.params.itemId)}`, ['/market']))
+  })
   .post("/market/:itemId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'market', 'itemId'))
+  .post('/housing/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body
+    const images = await handleBlobUploads(ctx, 'images')
+    const clip = ctx.request.files?.video ? await handleBlobUpload(ctx, 'video') : null
+    let created = null
+    try {
+      created = await housingModel.createHousing({
+        housing_type: stripDangerousTags(b.housing_type),
+        property_type: stripDangerousTags(b.property_type),
+        title: stripDangerousTags(b.title),
+        description: stripDangerousTags(b.description),
+        rules: stripDangerousTags(b.rules),
+        place: stripDangerousTags(b.place),
+        mapUrl: stripDangerousTags(b.mapUrl),
+        price: b.price,
+        rooms: b.rooms,
+        size: b.size,
+        capacity: b.capacity,
+        availableFrom: b.availableFrom,
+        availableTo: b.availableTo,
+        images,
+        video: clip || '',
+        tags: b.tags,
+        visibility: b.visibility
+      })
+    } catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return }
+    if ((b.action === 'addPhoto' || b.action === 'addVideo') && created && created.key) { ctx.redirect(`/housing/edit/${encodeURIComponent(created.key)}`); return }
+    ctx.redirect(safeReturnTo(ctx, '/housing?filter=MINE', ['/housing']))
+  })
+  .post('/housing/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body
+    const uploaded = await handleBlobUploads(ctx, 'images')
+    const newClip = ctx.request.files?.video ? await handleBlobUpload(ctx, 'video') : null
+    const patch = {
+      housing_type: stripDangerousTags(b.housing_type),
+      property_type: stripDangerousTags(b.property_type),
+      title: stripDangerousTags(b.title),
+      description: stripDangerousTags(b.description),
+      rules: stripDangerousTags(b.rules),
+      place: stripDangerousTags(b.place),
+      mapUrl: stripDangerousTags(b.mapUrl),
+      price: b.price,
+      rooms: b.rooms,
+      size: b.size,
+      capacity: b.capacity,
+      availableFrom: b.availableFrom,
+      availableTo: b.availableTo,
+      tags: b.tags,
+      visibility: b.visibility
+    }
+    const removeIndex = b.removePhoto !== undefined && b.removePhoto !== '' ? parseInt(b.removePhoto, 10) : -1
+    if (uploaded.length || removeIndex >= 0) {
+      let current = []
+      try { current = (await housingModel.getHousingById(ctx.params.id, getViewerId())).images || [] } catch (_) { current = [] }
+      if (removeIndex >= 0) current = current.filter((_, i) => i !== removeIndex)
+      patch.images = [...current, ...uploaded]
+    }
+    if (newClip) patch.video = newClip
+    else if (b.action === 'removeVideo') patch.video = ''
+    try { await housingModel.updateHousing(ctx.params.id, patch) }
+    catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return }
+    if (b.action === 'addPhoto' || b.action === 'addVideo' || b.action === 'removeVideo' || removeIndex >= 0) { ctx.redirect(`/housing/edit/${encodeURIComponent(ctx.params.id)}`); return }
+    ctx.redirect(safeReturnTo(ctx, '/housing?filter=MINE', ['/housing']))
+  })
+  .post('/housing/delete/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    let item = null
+    try { item = await housingModel.getHousingById(ctx.params.id, getViewerId()) } catch (_) {}
+    try { await housingModel.deleteHousing(ctx.params.id) } catch (_) {}
+    await notifyHousingRequesters(item, 'deleted')
+    ctx.redirect(safeReturnTo(ctx, '/housing?filter=MINE', ['/housing']))
+  })
+  .post('/housing/status/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    const nextStatus = String(ctx.request.body.status || '').toUpperCase()
+    let item = null
+    try { item = await housingModel.getHousingById(ctx.params.id, getViewerId()) } catch (_) {}
+    try { await housingModel.updateHousingStatus(ctx.params.id, nextStatus) } catch (_) {}
+    if (nextStatus === 'CLOSED') await notifyHousingRequesters(item, 'closed')
+    ctx.redirect(safeReturnTo(ctx, '/housing?filter=MINE', ['/housing']))
+  })
+  .post('/housing/visibility/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    const next = String(ctx.request.body?.visibility || '').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC'
+    try { await housingModel.updateHousing(ctx.params.id, { visibility: next }) } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/housing/${encodeURIComponent(ctx.params.id)}`, ['/housing']))
+  })
+  .post('/housing/request/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    let item = null
+    try { item = await housingModel.getHousingById(ctx.params.id, getViewerId()) } catch (_) {}
+    if (!item) { ctx.redirect(safeReturnTo(ctx, '/housing', ['/housing'])); return }
+    try {
+      const res = await housingModel.requestHousing(ctx.params.id)
+      if (!res || !res.alreadyRequested) {
+        try { await pmModel.sendMessage([item.author], 'HOUSING_REQUESTED', `A new habitant has requested your place [${item.title || 'a place'}](/housing/${encodeURIComponent(item.id)})`) } catch (_) {}
+      }
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, '/housing', ['/housing']))
+  })
+  .post('/housing/cancel/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    let item = null
+    try { item = await housingModel.getHousingById(ctx.params.id, getViewerId()) } catch (_) {}
+    if (!item) { ctx.redirect(safeReturnTo(ctx, '/housing', ['/housing'])); return }
+    try {
+      const res = await housingModel.cancelRequest(ctx.params.id)
+      if (!res || !res.notRequested) {
+        try { await pmModel.sendMessage([item.author], 'HOUSING_CANCELLED', `A habitant has cancelled the request on your place [${item.title || 'a place'}](/housing/${encodeURIComponent(item.id)})`) } catch (_) {}
+      }
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, '/housing', ['/housing']))
+  })
+  .post('/housing/opinions/:housingId/:category', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
+    try { await housingModel.createOpinion(ctx.params.housingId, ctx.params.category) } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/housing/${encodeURIComponent(ctx.params.housingId)}`, ['/housing']))
+  })
+  .post('/housing/:housingId/comments', koaBodyMiddleware, async ctx => commentAction(ctx, 'housing', 'housingId'))
   .post('/jobs/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'jobsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
@@ -8433,11 +8661,11 @@ router
   .post("/settings/rebuild", async ctx => { meta.rebuild(); ctx.redirect("/settings"); })
   .post("/modules/preset", koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
-    const ALL_MODULES = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'dev', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'jobs', 'projects', 'industry', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
+    const ALL_MODULES = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'dev', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'housing', 'jobs', 'projects', 'industry', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
     const PRESETS = {
       minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'popular', 'latest', 'threads', 'opinions', 'cipher', 'legacy'],
       social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes'],
-      economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'jobs', 'shops', 'industry'],
+      economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'multiverse', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'threads', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry'],
       full: ALL_MODULES
     };
     const preset = String(ctx.request.body.preset || '');
@@ -8450,7 +8678,7 @@ router
   })
   .post("/save-modules", koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
-    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'dev', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'graphos', 'jobs', 'projects', 'industry', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
+    const modules = ['popular', 'topics', 'summaries', 'latest', 'threads', 'multiverse', 'fediverse', 'invites', 'wallet', 'legacy', 'dev', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'graphos', 'housing', 'jobs', 'projects', 'industry', 'shops', 'banking', 'parliament', 'courts', 'logs', 'torrents'];
     const cfg = getConfig();
     modules.forEach(mod => cfg.modules[`${mod}Mod`] = ctx.request.body[`${mod}Form`] === 'on' ? 'on' : 'off');
     saveConfig(cfg);
@@ -8727,15 +8955,22 @@ function buildLarpRulingMsg(data = {}, t = {}) {
     house: `[${name}](/larp/${encodeURIComponent(data.houseKey || '')})`,
     cycle: `[${data.cycleFormatted || ''}](/larp)`
   });
-  const lines = [
-    intro, '', name, house.description || '',
-    `${t.larpRolesLabel || 'Roles'}: ${house.roles || ''}`,
-    `${t.larpFunctionLabel || 'Function'}: ${house.function || ''}`,
-    `${t.larpMonthLabel || 'Governance cycle'}: ${house.month != null ? house.month : ''}`,
-    `${t.larpMembersCount || 'Members'}: ${data.memberCount || 0}`,
-    house.motto ? `“${house.motto}”` : ''
+  const blocks = [
+    [intro],
+    [name, house.description || ''],
+    [
+      `${t.larpRolesLabel || 'Roles'}: ${house.roles || ''}`,
+      `${t.larpFunctionLabel || 'Function'}: ${house.function || ''}`,
+      `${t.larpMonthLabel || 'Governance cycle'}: ${house.month != null ? house.month : ''}`,
+      `${t.larpMembersCount || 'Members'}: ${data.memberCount || 0}`
+    ],
+    [house.motto ? `“${house.motto}”` : '']
   ];
-  return { subject: 'LARP_RULING', body: lines.filter(l => l != null && l !== '').join('\n') };
+  const body = blocks
+    .map(block => block.filter(l => l != null && String(l).trim() !== '').join('\n'))
+    .filter(Boolean)
+    .join('\n\n');
+  return { subject: 'LARP_RULING', body };
 }
 function pbGovBlock(gov = {}, t = {}) {
   const lines = [`${t.parliamentGovernmentCard || 'Current Government'}: ${String(gov.method || '').toUpperCase()}`];
@@ -8785,7 +9020,7 @@ async function checkPoliticalChanges() {
       if (houseKey) {
         let cycleFormatted = '';
         try { cycleFormatted = larpModel.computeCycle().formatted; } catch (_) {}
-        const ref = `${houseKey}:${cycleFormatted}`;
+        const ref = larpModel.getGoverningPeriodId();
         if (!alreadyAnnounced('LARP_RULING', ref)) {
           const house = (larpModel.getHouse && larpModel.getHouse(houseKey)) || {};
           let memberCount = 0;
@@ -8799,7 +9034,7 @@ async function checkPoliticalChanges() {
     try {
       const card = await parliamentModel.getLatestGovernmentCard().catch(() => null);
       if (card) {
-        const ref = String(card.id || card.since || card.method || '');
+        const ref = [String(card.id || card.method || ''), String(card.since || '')].filter(Boolean).join(':');
         if (ref && !alreadyAnnounced('PARLIAMENT_GOV', ref)) {
           let population = 0;
           try { const inh = await inhabitantsModel.listInhabitants({ filter: 'all', includeInactive: true }); population = Array.isArray(inh) ? inh.length : 0; } catch (_) {}

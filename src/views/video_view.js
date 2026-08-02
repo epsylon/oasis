@@ -17,7 +17,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -265,6 +265,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
 
   return div(
     { class: "div-center video-form" },
+    params.spreadWarning || null,
     form(
       {
         action: filter === "edit" ? `/videos/update/${encodeURIComponent(videoId)}` : "/videos/create",
@@ -305,6 +306,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
 };
 
 exports.videoView = async (videos, filter = "all", videoId = null, params = {}) => {
+  if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(videoId) };
   const title =
     filter === "mine"
       ? i18n.videoMineSectionTitle
@@ -377,9 +379,9 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
                   { class: "filter-box__controls" },
                   select(
                     { name: "sort", class: "filter-box__select" },
-                    option({ value: "recent", selected: sort === "recent" }, i18n.videoSortRecent),
-                    option({ value: "oldest", selected: sort === "oldest" }, i18n.videoSortOldest),
-                    option({ value: "top", selected: sort === "top" }, i18n.videoSortTop)
+                    option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.videoSortRecent),
+                    option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.videoSortOldest),
+                    option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.videoSortTop)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.videoSearchButton)
                 )

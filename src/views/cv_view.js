@@ -81,19 +81,19 @@ exports.createCVView = async (cv = {}, editMode = false) => {
             input({ type: "text", name: "location", required: true, value: cv.location || "UNKNOWN" }), br(),
             label(i18n.cvStatusLabel), br(),
             select({ name: "status", required: true },
-              option({ value: "AVAILABLE", selected: cv.status === "AVAILABLE FOR COLLABORATION" }, "AVAILABLE FOR COLLABORATION"),
-              option({ value: "UNAVAILABLE", selected: cv.status === "NOT CURRENTLY AVAILABLE" }, "NOT CURRENTLY AVAILABLE"),
-              option({ value: "LOOKING FOR WORK", selected: !cv.status || cv.status === "LOOKING FOR WORK" }, "LOOKING FOR WORK")
+              option({ value: "AVAILABLE", ...(cv.status === "AVAILABLE FOR COLLABORATION" ? { selected: true } : {})}, "AVAILABLE FOR COLLABORATION"),
+              option({ value: "UNAVAILABLE", ...(cv.status === "NOT CURRENTLY AVAILABLE" ? { selected: true } : {})}, "NOT CURRENTLY AVAILABLE"),
+              option({ value: "LOOKING FOR WORK", ...(!cv.status || cv.status === "LOOKING FOR WORK" ? { selected: true } : {})}, "LOOKING FOR WORK")
             ), br(), br(),
             label(i18n.cvPreferencesLabel), br(),
             select({ name: "preferences", required: true },
-              option({ value: "IN PERSON", selected: cv.preferences === "IN-PERSON ONLY" }, "IN-PERSON ONLY"),
-              option({ value: "REMOTE WORKING", selected: !cv.preferences || cv.preferences === "REMOTE WORKING" }, "REMOTE-WORKING")
+              option({ value: "IN PERSON", ...(cv.preferences === "IN-PERSON ONLY" ? { selected: true } : {})}, "IN-PERSON ONLY"),
+              option({ value: "REMOTE WORKING", ...(!cv.preferences || cv.preferences === "REMOTE WORKING" ? { selected: true } : {})}, "REMOTE-WORKING")
             ), br(), br(),
             label(i18n.visibilityLabel || "Visibility"), br(),
             select({ name: "visibility" },
-              option({ value: "PUBLIC", selected: (cv.visibility || "PUBLIC") === "PUBLIC" }, i18n.visibilityPublic || "Public"),
-              option({ value: "HIDDEN", selected: cv.visibility === "HIDDEN" }, i18n.visibilityHidden || "Hidden")
+              option({ value: "PUBLIC", ...((cv.visibility || "PUBLIC") === "PUBLIC" ? { selected: true } : {})}, i18n.visibilityPublic || "Public"),
+              option({ value: "HIDDEN", ...(cv.visibility === "HIDDEN" ? { selected: true } : {})}, i18n.visibilityHidden || "Hidden")
             ), br()
           ], "availability"),
 

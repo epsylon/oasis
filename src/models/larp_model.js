@@ -165,6 +165,11 @@ function getGoverningHouseKey(now = new Date()) {
   return HOUSE_KEYS[now.getMonth() % HOUSE_KEYS.length];
 }
 
+function getGoverningPeriodId(now = new Date()) {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${getGoverningHouseKey(now)}:${now.getFullYear()}-${month}`;
+}
+
 module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
@@ -917,6 +922,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     PROFILE_QUESTIONS,
     computeCycle,
     getGoverningHouseKey,
+    getGoverningPeriodId,
     publishJoin,
     publishLeaveLarp,
     getUserHouse,

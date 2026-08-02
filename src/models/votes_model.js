@@ -170,12 +170,18 @@ module.exports = ({ cooler }) => {
   }
 
   return {
+    MIN_VOTE_DAYS,
+
     async createVote(question, deadline, options = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'], tagsRaw = []) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const parsedDeadline = moment(deadline, moment.ISO_8601, true);
       if (!parsedDeadline.isValid()) throw new Error('Invalid deadline');
-      if (parsedDeadline.isBefore(moment().add(MIN_VOTE_DAYS, 'days').subtract(2, 'minutes'))) throw new Error(`Deadline must be at least ${MIN_VOTE_DAYS} days from now`);
+      if (parsedDeadline.isBefore(moment().add(MIN_VOTE_DAYS, 'days').subtract(2, 'minutes'))) {
+        const err = new Error(`Deadline must be at least ${MIN_VOTE_DAYS} days from now`);
+        err.code = 'VOTE_DEADLINE_MIN';
+        throw err;
+      }
 
       const tags = Array.isArray(tagsRaw)
         ? tagsRaw.filter(Boolean)
@@ -246,7 +252,11 @@ module.exports = ({ cooler }) => {
       if (deadline != null && deadline !== '') {
         const parsed = moment(deadline, moment.ISO_8601, true);
         if (!parsed.isValid()) throw new Error('Invalid deadline');
-        if (parsed.isBefore(moment().add(MIN_VOTE_DAYS, 'days').subtract(2, 'minutes'))) throw new Error(`Deadline must be at least ${MIN_VOTE_DAYS} days from now`);
+        if (parsed.isBefore(moment().add(MIN_VOTE_DAYS, 'days').subtract(2, 'minutes'))) {
+          const err = new Error(`Deadline must be at least ${MIN_VOTE_DAYS} days from now`);
+          err.code = 'VOTE_DEADLINE_MIN';
+          throw err;
+        }
         newDeadline = parsed.toISOString();
       }
 

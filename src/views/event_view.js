@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -18,7 +18,7 @@ exports.renderEventInvitePage = (code) => {
 };
 
 const opt = (value, isSelected, text) =>
-  option(Object.assign({ value }, isSelected ? { selected: "selected" } : {}), text);
+  option(Object.assign({ value }, isSelected ? { ...("selected" ? { selected: true } : {})} : {}), text);
 
 const safeArray = (v) => (Array.isArray(v) ? v : []);
 
@@ -235,6 +235,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
     i18n.eventAllSectionTitle;
 
   const eventToEdit = list.find((e) => e.id === eventId) || {};
+  const spreadWarning = currentFilter === "edit" ? await renderSpreadEditWarning(eventToEdit && eventToEdit.id) : null;
   const editTags = Array.isArray(eventToEdit.tags) ? eventToEdit.tags.filter(Boolean) : [];
 
   const canSee = (e) => {
@@ -300,6 +301,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
       currentFilter === "edit" || currentFilter === "create"
         ? div(
             { class: "event-form" },
+            spreadWarning,
             form(
               {
                 action: currentFilter === "edit" ? `/events/update/${encodeURIComponent(eventId)}` : "/events/create",

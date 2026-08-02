@@ -262,6 +262,7 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
 
   return div(
     { class: "div-center bookmark-form" },
+    params.spreadWarning || null,
     form(
       { action: filter === "edit" ? `/bookmarks/update/${encodeURIComponent(bookmarkId)}` : "/bookmarks/create", method: "POST" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -321,6 +322,7 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
 };
 
 exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, params = {}) => {
+  const bookmarkEditWarning = filter === "edit" ? await renderSpreadEditWarning(bookmarkId) : null;
   const title =
     filter === "mine"
       ? i18n.bookmarkMineSectionTitle
@@ -370,7 +372,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
     ),
     section(
       filter === "edit" || filter === "create"
-        ? renderBookmarkForm(filter, bookmarkId, bookmarkToEdit || {}, tags, { ...params, filter })
+        ? renderBookmarkForm(filter, bookmarkId, bookmarkToEdit || {}, tags, { ...params, filter, spreadWarning: bookmarkEditWarning })
         : section(
             div(
               { class: "bookmarks-search" },
@@ -382,9 +384,9 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
                   { class: "filter-box__controls" },
                   select(
                     { name: "sort", class: "filter-box__select" },
-                    option({ value: "recent", selected: sort === "recent" }, i18n.bookmarkSortRecent),
-                    option({ value: "oldest", selected: sort === "oldest" }, i18n.bookmarkSortOldest),
-                    option({ value: "top", selected: sort === "top" }, i18n.bookmarkSortTop)
+                    option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.bookmarkSortRecent),
+                    option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.bookmarkSortOldest),
+                    option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.bookmarkSortTop)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.bookmarkSearchButton)
                 )

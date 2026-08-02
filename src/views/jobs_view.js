@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -268,10 +268,11 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
   )
 }
 
-const renderJobForm = (job = {}, mode = "create") => {
+const renderJobForm = (job = {}, mode = "create", spreadWarning = null) => {
   const isEdit = mode === "edit"
   return div(
     { class: "div-center job-form" },
+    isEdit ? spreadWarning : null,
     form(
       {
         action: isEdit ? `/jobs/update/${encodeURIComponent(job.id)}` : "/jobs/create",
@@ -325,8 +326,8 @@ const renderJobForm = (job = {}, mode = "create") => {
       br(),
       select(
         { name: "job_time", required: true },
-        option({ value: "partial", selected: job.job_time === "partial" }, i18n.jobTimePartial),
-        option({ value: "complete", selected: job.job_time === "complete" }, i18n.jobTimeComplete)
+        option({ value: "partial", ...(job.job_time === "partial" ? { selected: true } : {})}, i18n.jobTimePartial),
+        option({ value: "complete", ...(job.job_time === "complete" ? { selected: true } : {})}, i18n.jobTimeComplete)
       ),
       br(),
       br(),
@@ -339,8 +340,8 @@ const renderJobForm = (job = {}, mode = "create") => {
       br(),
       select(
         { name: "location", required: true },
-        option({ value: "remote", selected: job.location === "remote" }, i18n.jobLocationRemote),
-        option({ value: "presencial", selected: job.location === "presencial" }, i18n.jobLocationPresencial)
+        option({ value: "remote", ...(job.location === "remote" ? { selected: true } : {})}, i18n.jobLocationRemote),
+        option({ value: "presencial", ...(job.location === "presencial" ? { selected: true } : {})}, i18n.jobLocationPresencial)
       ),
       br(),
       br(),
@@ -353,8 +354,8 @@ const renderJobForm = (job = {}, mode = "create") => {
       br(),
       select(
         { name: "visibility" },
-        option({ value: "PUBLIC", selected: (job.visibility || "PUBLIC") === "PUBLIC" }, i18n.visibilityPublic || "Public"),
-        option({ value: "HIDDEN", selected: job.visibility === "HIDDEN" }, i18n.visibilityHidden || "Hidden")
+        option({ value: "PUBLIC", ...((job.visibility || "PUBLIC") === "PUBLIC" ? { selected: true } : {})}, i18n.visibilityPublic || "Public"),
+        option({ value: "HIDDEN", ...(job.visibility === "HIDDEN" ? { selected: true } : {})}, i18n.visibilityHidden || "Hidden")
       ),
       br(),
       br(),
@@ -431,6 +432,10 @@ const renderCVList = (inhabitants) =>
   )
 
 exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
+  if (filter === "EDIT") {
+    const editing = Array.isArray(jobsOrCVs) ? jobsOrCVs[0] : jobsOrCVs
+    params = { ...params, spreadWarning: await renderSpreadEditWarning(editing && editing.id) }
+  }
   const search = safeText(params.search || "")
   const minSalary = params.minSalary ?? ""
   const maxSalary = params.maxSalary ?? ""
@@ -492,7 +497,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
                     ...(params.tasks ? { tasks: params.tasks } : {}),
                     ...(params.salary ? { salary: params.salary } : {})
                   }
-              return renderJobForm(jobToEdit, filter === "EDIT" ? "edit" : "create")
+              return renderJobForm(jobToEdit, filter === "EDIT" ? "edit" : "create", params.spreadWarning)
             })()
           : section(
               div(
@@ -510,9 +515,9 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
                     ),
                     select(
                       { name: "sort", class: "filter-box__select" },
-                      option({ value: "recent", selected: sort === "recent" }, i18n.jobsSortRecent),
-                      option({ value: "salary", selected: sort === "salary" }, i18n.jobsSortSalary),
-                      option({ value: "subscribers", selected: sort === "subscribers" }, i18n.jobsSortSubscribers)
+                      option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.jobsSortRecent),
+                      option({ value: "salary", ...(sort === "salary" ? { selected: true } : {})}, i18n.jobsSortSalary),
+                      option({ value: "subscribers", ...(sort === "subscribers" ? { selected: true } : {})}, i18n.jobsSortSubscribers)
                     ),
                     button({ type: "submit", class: "filter-box__button" }, i18n.jobsSearchButton)
                   )

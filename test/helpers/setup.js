@@ -38,6 +38,7 @@ const FACTORIES = {
   calendars: '../../src/models/calendars_model',
   reports: '../../src/models/reports_model',
   market: '../../src/models/market_model',
+  housing: '../../src/models/housing_model',
   jobs: '../../src/models/jobs_model',
   projects: '../../src/models/projects_model',
   industry: '../../src/models/industry_model',
@@ -100,6 +101,10 @@ function makePeer(network, keypair) {
       deps = { ...baseDeps, mapCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'calendars') {
       deps = { ...baseDeps, calendarCrypto, tribesModel: requireOnce('tribes') };
+    } else if (name === 'housing') {
+      deps = { ...baseDeps, tribeCrypto };
+    } else if (name === 'agenda') {
+      deps = { ...baseDeps, housingModel: requireOnce('housing') };
     } else if (name === 'activity') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes'), industryModel: requireOnce('industry') };
     } else if (name === 'stats' || name === 'blockchain' || name === 'larp') {

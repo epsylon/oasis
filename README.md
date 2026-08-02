@@ -84,6 +84,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Games: Module to play and share your scores in various mini-games.	
  + Governance: Module to discover and manage votes.	
  + Graphos: Module to explore the network as an interactive map of peers.
+ + Housing: Module to discover and manage places.
  + Images: Module to discover and manage images.
  + Industry: Module to manage the means of production collectively.
  + Invites: Module to manage and apply invite codes.

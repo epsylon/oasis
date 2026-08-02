@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require("../backend/renderUrl");
@@ -39,7 +39,7 @@ const STATUS_BY_FILTER = {
 };
 
 const opt = (value, isSelected, text) =>
-  option(Object.assign({ value }, isSelected ? { selected: "selected" } : {}), text);
+  option(Object.assign({ value }, isSelected ? { ...("selected" ? { selected: true } : {})} : {}), text);
 
 const hasAnyTemplateValue = (t) => {
   if (!t || typeof t !== "object") return false;
@@ -478,6 +478,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
       filter === "edit" || filter === "create"
         ? div(
             { class: "report-form" },
+            filter === "edit" ? await renderSpreadEditWarning(reportToEdit && (reportToEdit.id || reportToEdit.key)) : null,
             filter === "create"
               ? div(
                   label(i18n.reportsTitleLabel),

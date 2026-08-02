@@ -49,7 +49,7 @@ module.exports = ({ cooler }) => {
     async sentRefs() {
       const out = new Set();
       let messages = [];
-      try { messages = await this.listAllPrivate(); } catch (_) { return out; }
+      try { messages = await this.listAllPrivate({ includeDeleted: true }); } catch (_) { return out; }
       for (const m of (messages || [])) {
         const c = m && m.value && m.value.content;
         if (!c || !c.ref) continue;
@@ -116,7 +116,8 @@ module.exports = ({ cooler }) => {
       return publishAsync(tombstone, tombstoneRecps);
     },
 
-    async listAllPrivate() {
+    async listAllPrivate(opts = {}) {
+      const includeDeleted = !!(opts && opts.includeDeleted);
       const ssbClient = await openSsb();
       const raw = await new Promise((resolve, reject) => {
         pull(
@@ -174,7 +175,7 @@ module.exports = ({ cooler }) => {
           }
         }
       }
-      return posts.filter(m => m && m.key && !tombed.has(m.key));
+      return posts.filter(m => m && m.key && (includeDeleted || !tombed.has(m.key)));
     }
   };
 };

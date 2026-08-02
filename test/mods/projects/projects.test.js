@@ -1,11 +1,17 @@
 const { eq, ok, notOk, throwsAsync } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
+const inDays = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
 describe('projects: create + list + follow + pledge', (t) => {
   t('A creates project', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('projects').createProject({
-      title: 'Mission', description: 'd', goal: '1000', deadline: '2026-12-31',
+      title: 'Mission', description: 'd', goal: '1000', deadline: inDays(30),
       tags: ['nonprofit'], status: 'ACTIVE'
     });
     ok(r);
@@ -15,7 +21,7 @@ describe('projects: create + list + follow + pledge', (t) => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
     const r = await A.use('projects').createProject({
-      title: 'P', description: '', goal: '100', deadline: '2026-12-31', tags: [], status: 'ACTIVE'
+      title: 'P', description: '', goal: '100', deadline: inDays(30), tags: [], status: 'ACTIVE'
     });
     B.setActor();
     await B.use('projects').followProject(r.key, B.keypair.id);
@@ -25,7 +31,7 @@ describe('projects: create + list + follow + pledge', (t) => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
     const r = await A.use('projects').createProject({
-      title: 'P', description: '', goal: '100', deadline: '2026-12-31', tags: [], status: 'ACTIVE'
+      title: 'P', description: '', goal: '100', deadline: inDays(30), tags: [], status: 'ACTIVE'
     });
     B.setActor();
     await B.use('projects').pledgeToProject(r.key, B.keypair.id, 10);
@@ -185,5 +191,26 @@ describe('projects: permissions + validation', (t) => {
     });
     await A.use('projects').addBounty(r.key, { title: 'B', amount: 10 });
     await throwsAsync(() => A.use('projects').claimBounty(r.key, 0, A.keypair.id), /Authors cannot claim/);
+  });
+});
+
+describe('projects: deadlines never point at the past', (t) => {
+  t('a project cannot be created with a deadline already gone', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await throwsAsync(() => A.use('projects').createProject({ title: 'Late', description: 'd', goal: '10', deadline: inDays(-1), status: 'ACTIVE' }), /past/);
+  });
+
+  t('an edit cannot move the deadline into the past', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('projects').createProject({ title: 'Solar', description: 'd', goal: '10', deadline: inDays(20), status: 'ACTIVE' });
+    await throwsAsync(() => A.use('projects').updateProject(r.key, { deadline: inDays(-3) }), /past/);
+  });
+
+  t('other fields can still be edited without touching the deadline', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('projects').createProject({ title: 'Wind', description: 'd', goal: '10', deadline: inDays(20), status: 'ACTIVE' });
+    await A.use('projects').updateProject(r.key, { title: 'Wind II' });
+    const list = await A.use('projects').listProjects('all');
+    ok(list.some(p => p.title === 'Wind II'));
   });
 });

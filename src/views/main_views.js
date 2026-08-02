@@ -277,6 +277,28 @@ const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters) => {
 };
 exports.renderOpinionsVoting = renderOpinionsVoting;
 
+let spreadsModel = null;
+const spreadsFor = async (msgId) => {
+  if (!msgId || typeof msgId !== 'string' || !msgId.startsWith('%')) return 0;
+  try {
+    if (!spreadsModel) spreadsModel = require('../models/main_models')({ cooler, isPublic: config.public }).spreads;
+    const info = await spreadsModel.forMessage(msgId);
+    return info && Number(info.count) > 0 ? Number(info.count) : 0;
+  } catch (_) {
+    return 0;
+  }
+};
+
+const renderSpreadEditWarning = async (msgId) => {
+  const count = await spreadsFor(msgId);
+  if (!count) return null;
+  return div({ class: 'error-box spread-edit-warning' },
+    p(`${i18n.spreadEditWarning} (${count})`)
+  );
+};
+exports.renderSpreadEditWarning = renderSpreadEditWarning;
+
+
 // markdown
 const markdownUrl = "https://commonmark.org/help/";
 
@@ -730,6 +752,19 @@ const renderMarketLink = () => {
           href: "/market",
           emoji: "ꕻ",
           text: i18n.marketTitle
+        })
+      ]
+    : "";
+};
+
+const renderHousingLink = () => {
+  const housingMod = getConfig().modules.housingMod === "on";
+  return housingMod
+    ? [
+        navLink({
+          href: "/housing",
+          emoji: "⌂",
+          text: i18n.housingTitle
         })
       ]
     : "";
@@ -1311,6 +1346,7 @@ const template = (titlePrefix, ...elements) => {
                 },
                 renderBankingLink(),
                 renderMarketLink(),
+                renderHousingLink(),
                 renderProjectsLink(),
                 renderIndustryLink(),
                 renderJobsLink(),
@@ -2677,7 +2713,7 @@ exports.authorView = async ({
         const { renderActionCards } = require('./activity_view');
         mainColumnContent.push(filterRow);
         mainColumnContent.push(div({ class: 'feed-container profile-module-section' },
-          renderActionCards(limited, feedId, allActions || limited, spreadMap instanceof Map ? spreadMap : new Map())
+          renderActionCards(limited, (config.keys && config.keys.id) ? config.keys.id : '', allActions || limited, spreadMap instanceof Map ? spreadMap : new Map())
         ));
       }
     }
@@ -3311,6 +3347,30 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
+  function HousingBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const myId = (config.keys && config.keys.id) ? config.keys.id : ''
+    const mine = String(from) === String(myId)
+    const titleMap = mine
+      ? {
+          HOUSING_REQUESTED: i18n.housingBotYouRequestedTitle || 'You have requested a place.',
+          HOUSING_CANCELLED: i18n.housingBotYouCancelledTitle || 'You have cancelled a request.',
+          HOUSING_UNAVAILABLE: i18n.housingBotUnavailableSentTitle || 'You have told the people who requested this place.'
+        }
+      : {
+          HOUSING_REQUESTED: i18n.housingBotRequestedTitle || 'Somebody has requested one of your places.',
+          HOUSING_CANCELLED: i18n.housingBotCancelledTitle || 'A request on one of your places was cancelled.',
+          HOUSING_UNAVAILABLE: i18n.housingBotUnavailableTitle || 'A place you requested is no longer available.'
+        }
+    const title = titleMap[subjectU] || (i18n.pmBotHousing || 'HousingBot')
+    return div(
+      { class: 'pm-card housing-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `🏠 ${i18n.pmBotHousing || 'HousingBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
   const { renderEncryptedChip } = require('./clearnet_view');
   return template(
     i18n.private,
@@ -3430,6 +3490,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             }
             if (subjectU === 'INDUSTRY_ADMITTED' || subjectU === 'INDUSTRY_APPLICATION' || subjectU === 'INDUSTRY_INVITED' || subjectU === 'INDUSTRY_DISSOLVED' || subjectU === 'INDUSTRY_BUILD_APPROVED' || subjectU === 'INDUSTRY_DISTRIBUTED') {
               return IndustryBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU === 'HOUSING_REQUESTED' || subjectU === 'HOUSING_CANCELLED' || subjectU === 'HOUSING_UNAVAILABLE') {
+              return HousingBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
               return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key, msgSize })

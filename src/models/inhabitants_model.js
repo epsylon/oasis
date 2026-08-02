@@ -407,7 +407,7 @@ module.exports = ({ cooler }) => {
       const isOwner = viewer === target;
       const arr = (v) => Array.isArray(v) ? v : [];
       const up = (v) => String(v || '').toUpperCase();
-      const COUNTED = new Set(['post','event','task','forum','tribe','market','job','project','industry','shop','image','video','audio','document','bookmark','transfer','map']);
+      const COUNTED = new Set(['post','event','task','forum','tribe','market','job','housing','project','industry','shop','image','video','audio','document','bookmark','transfer','map']);
       const accessible = (type, c) => {
         if (c.encryptedPayload) return false;
         switch (type) {
@@ -415,6 +415,7 @@ module.exports = ({ cooler }) => {
           case 'event':  return String(c.isPublic || '').toLowerCase() !== 'private' || isOwner || arr(c.attendees).includes(viewer);
           case 'forum':  return c.isPrivate !== true || isOwner;
           case 'job':    return up(c.visibility) !== 'HIDDEN' || isOwner || arr(c.subscribers).includes(viewer);
+          case 'housing': return up(c.visibility) !== 'HIDDEN' || isOwner;
           case 'market': return up(c.visibility) !== 'HIDDEN' || isOwner;
           case 'shop':   return up(c.visibility) !== 'CLOSED' || isOwner;
           case 'tribe':  { const st = up(c.status); return !(st === 'PRIVATE' || st === 'INVITE-ONLY') || isOwner || arr(c.members).includes(viewer); }

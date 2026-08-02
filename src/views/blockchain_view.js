@@ -9,7 +9,7 @@ const FILTER_LABELS = {
   feed: i18n.typeFeed, event: i18n.typeEvent, task: i18n.typeTask, report: i18n.typeReport,
   image: i18n.typeImage, audio: i18n.typeAudio, video: i18n.typeVideo, post: i18n.typePost,
   forum: i18n.typeForum, about: i18n.typeAbout, contact: i18n.typeContact, pub: i18n.typePub,
-  transfer: i18n.typeTransfer, market: i18n.typeMarket, job: i18n.typeJob, tribe: i18n.typeTribe,
+  transfer: i18n.typeTransfer, market: i18n.typeMarket, job: i18n.typeJob, housing: i18n.typeHousing, tribe: i18n.typeTribe,
   project: i18n.typeProject, industry: i18n.typeIndustry, industryBlueprint: i18n.industryBlueprints, banking: i18n.typeBanking, bankWallet: i18n.typeBankWallet, bankClaim: i18n.typeBankClaim,
   aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts,
   map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product',
@@ -20,7 +20,7 @@ const FILTER_LABELS = {
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone', 'logs'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
-const CAT_BLOCK3  = ['banking', 'job', 'market', 'project', 'industry', 'industryBlueprint', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
+const CAT_BLOCK3  = ['banking', 'job', 'housing', 'market', 'project', 'industry', 'industryBlueprint', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
 const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map', 'torrent'];
 
 const SEARCH_FIELDS = ['author','id','from','to'];
@@ -179,6 +179,7 @@ const getViewDetailsAction = (type, block) => {
     case 'pub': return `/invites`;
     case 'market': return `/market/${encodeURIComponent(block.id)}`;
     case 'job': return `/jobs/${encodeURIComponent(block.id)}`;
+    case 'housing': return `/housing/${encodeURIComponent(block.id)}`;
     case 'project': return `/projects/${encodeURIComponent(block.id)}`;
     case 'industry': return `/industry/${encodeURIComponent(block.id)}`;
     case 'industryBlueprint': return `/industry/blueprint/${encodeURIComponent(block.id)}`;
@@ -221,7 +222,7 @@ const TYPE_COLORS = {
   post:'#3498db', vote:'#9b59b6', votes:'#9b59b6', about:'#1abc9c', contact:'#16a085',
   pub:'#2ecc71', tribe:'#e67e22', event:'#e74c3c', task:'#f39c12', report:'#c0392b',
   image:'#2980b9', audio:'#8e44ad', video:'#d35400', document:'#27ae60', bookmark:'#f1c40f',
-  forum:'#1abc9c', feed:'#95a5a6', transfer:'#e74c3c', market:'#e67e22', job:'#3498db',
+  forum:'#1abc9c', feed:'#95a5a6', transfer:'#e74c3c', market:'#e67e22', job:'#3498db', housing:'#16a085',
   project:'#2ecc71', banking:'#f39c12', bankWallet:'#f39c12', bankClaim:'#f39c12',
   pixelia:'#9b59b6', curriculum:'#1abc9c', aiExchange:'#3498db', tombstone:'#7f8c8d',
   parliamentTerm:'#8e44ad', parliamentProposal:'#8e44ad', parliamentLaw:'#8e44ad',

@@ -33,11 +33,11 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
   const currentPmVisibility = currentConfig.pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
 
   const themeElements = [
-    option({ value: "Dark-SNH", selected: theme === "Dark-SNH" ? true : undefined }, "Dark-SNH"),
-    option({ value: "Clear-SNH", selected: theme === "Clear-SNH" ? true : undefined }, "Clear-SNH"),
-    option({ value: "Purple-SNH", selected: theme === "Purple-SNH" ? true : undefined }, "Purple-SNH"),
-    option({ value: "Matrix-SNH", selected: theme === "Matrix-SNH" ? true : undefined }, "Matrix-SNH"),
-    option({ value: "OasisMobile", selected: theme === "OasisMobile" ? true : undefined }, "Oasis-Mobile")
+    option({ value: "Dark-SNH", ...(theme === "Dark-SNH" ? true : undefined ? { selected: true } : {})}, "Dark-SNH"),
+    option({ value: "Clear-SNH", ...(theme === "Clear-SNH" ? true : undefined ? { selected: true } : {})}, "Clear-SNH"),
+    option({ value: "Purple-SNH", ...(theme === "Purple-SNH" ? true : undefined ? { selected: true } : {})}, "Purple-SNH"),
+    option({ value: "Matrix-SNH", ...(theme === "Matrix-SNH" ? true : undefined ? { selected: true } : {})}, "Matrix-SNH"),
+    option({ value: "OasisMobile", ...(theme === "OasisMobile" ? true : undefined ? { selected: true } : {})}, "Oasis-Mobile")
   ];
 
   const languageOption = (longName, shortName) => {
@@ -116,10 +116,10 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
           (() => {
             const aiNavEnabled = currentConfig.modules && currentConfig.modules.aiNavMod === 'on';
             const opts = [
-              option({ value: "blocks", selected: (currentConfig.ux?.current !== "ainav") ? true : undefined }, i18n.uxModeMenus || "Blocks")
+              option({ value: "blocks", ...((currentConfig.ux?.current !== "ainav") ? true : undefined ? { selected: true } : {})}, i18n.uxModeMenus || "Blocks")
             ];
             if (aiNavEnabled) {
-              opts.push(option({ value: "ainav", selected: currentConfig.ux?.current === "ainav" ? true : undefined }, i18n.uxModeAINav || "AI"));
+              opts.push(option({ value: "ainav", ...(currentConfig.ux?.current === "ainav" ? true : undefined ? { selected: true } : {})}, i18n.uxModeAINav || "AI"));
             }
             return select({ name: "ux" }, ...opts);
           })(),
@@ -135,18 +135,18 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         form(
           { action: "/settings/home-page", method: "POST" },
           select({ name: "homePage" },
-            option({ value: "activity", selected: currentConfig.homePage === "activity" ? true : undefined }, i18n.activityTitle),
-            option({ value: "ai", selected: currentConfig.homePage === "ai" ? true : undefined }, i18n.aiTitle),
-            option({ value: "trending", selected: currentConfig.homePage === "trending" ? true : undefined }, i18n.trendingTitle),
-            option({ value: "opinions", selected: currentConfig.homePage === "opinions" ? true : undefined }, i18n.opinionsTitle),
-            option({ value: "forum", selected: currentConfig.homePage === "forum" ? true : undefined }, i18n.forumTitle),
-            option({ value: "feed", selected: currentConfig.homePage === "feed" ? true : undefined }, i18n.feedTitle),
-            option({ value: "mentions", selected: currentConfig.homePage === "mentions" ? true : undefined }, i18n.mentions),
-            option({ value: "inbox", selected: currentConfig.homePage === "inbox" ? true : undefined }, i18n.inbox),
-            option({ value: "agenda", selected: currentConfig.homePage === "agenda" ? true : undefined }, i18n.agendaTitle),
-            option({ value: "favorites", selected: currentConfig.homePage === "favorites" ? true : undefined }, i18n.favoritesTitle),
-            option({ value: "stats", selected: currentConfig.homePage === "stats" ? true : undefined }, i18n.statsTitle),
-            option({ value: "blockexplorer", selected: currentConfig.homePage === "blockexplorer" ? true : undefined }, i18n.blockchain)
+            option({ value: "activity", ...(currentConfig.homePage === "activity" ? true : undefined ? { selected: true } : {})}, i18n.activityTitle),
+            option({ value: "ai", ...(currentConfig.homePage === "ai" ? true : undefined ? { selected: true } : {})}, i18n.aiTitle),
+            option({ value: "trending", ...(currentConfig.homePage === "trending" ? true : undefined ? { selected: true } : {})}, i18n.trendingTitle),
+            option({ value: "opinions", ...(currentConfig.homePage === "opinions" ? true : undefined ? { selected: true } : {})}, i18n.opinionsTitle),
+            option({ value: "forum", ...(currentConfig.homePage === "forum" ? true : undefined ? { selected: true } : {})}, i18n.forumTitle),
+            option({ value: "feed", ...(currentConfig.homePage === "feed" ? true : undefined ? { selected: true } : {})}, i18n.feedTitle),
+            option({ value: "mentions", ...(currentConfig.homePage === "mentions" ? true : undefined ? { selected: true } : {})}, i18n.mentions),
+            option({ value: "inbox", ...(currentConfig.homePage === "inbox" ? true : undefined ? { selected: true } : {})}, i18n.inbox),
+            option({ value: "agenda", ...(currentConfig.homePage === "agenda" ? true : undefined ? { selected: true } : {})}, i18n.agendaTitle),
+            option({ value: "favorites", ...(currentConfig.homePage === "favorites" ? true : undefined ? { selected: true } : {})}, i18n.favoritesTitle),
+            option({ value: "stats", ...(currentConfig.homePage === "stats" ? true : undefined ? { selected: true } : {})}, i18n.statsTitle),
+            option({ value: "blockexplorer", ...(currentConfig.homePage === "blockexplorer" ? true : undefined ? { selected: true } : {})}, i18n.blockchain)
           ),
           br(), br(),
           button({ type: "submit" }, i18n.saveHomePage)
@@ -221,9 +221,9 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         form(
           { action: "/settings/wish", method: "POST" },
           select({ name: "wish" },
-            option({ value: "whole", selected: currentWish === "whole" ? true : undefined }, i18n.settingsWishWhole),
-            option({ value: "mutuals", selected: currentWish === "mutuals" ? true : undefined }, i18n.settingsWishMutuals),
-            option({ value: "only-lan", selected: currentWish === "only-lan" ? true : undefined }, i18n.settingsWishOnlyLan || "Only LAN")
+            option({ value: "whole", ...(currentWish === "whole" ? true : undefined ? { selected: true } : {})}, i18n.settingsWishWhole),
+            option({ value: "mutuals", ...(currentWish === "mutuals" ? true : undefined ? { selected: true } : {})}, i18n.settingsWishMutuals),
+            option({ value: "only-lan", ...(currentWish === "only-lan" ? true : undefined ? { selected: true } : {})}, i18n.settingsWishOnlyLan || "Only LAN")
           ), br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
         )
@@ -236,8 +236,8 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         form(
           { action: "/settings/pm-visibility", method: "POST" },
           select({ name: "pmVisibility" },
-            option({ value: "whole", selected: currentPmVisibility === "whole" ? true : undefined }, i18n.settingsPmVisibilityWhole),
-            option({ value: "mutuals", selected: currentPmVisibility === "mutuals" ? true : undefined }, i18n.settingsPmVisibilityMutuals)
+            option({ value: "whole", ...(currentPmVisibility === "whole" ? true : undefined ? { selected: true } : {})}, i18n.settingsPmVisibilityWhole),
+            option({ value: "mutuals", ...(currentPmVisibility === "mutuals" ? true : undefined ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals)
           ), br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
         )

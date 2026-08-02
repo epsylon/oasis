@@ -67,3 +67,52 @@ describe('tags: aggregate from content with tags', (t) => {
     eq(find(tags, 'music').count, 2, 'Music and #music collapse to one tag');
   });
 });
+
+describe('tags: search', (t) => {
+  const seed = async (A, base) => {
+    await A.use('audios').createAudio(`[a](&aud0000000000000000000000000000000000000000000${base}0.sha256)`, ['solarpunk', 'energy'], 'A', '', '');
+    await A.use('audios').createAudio(`[a](&aud0000000000000000000000000000000000000000000${base}1.sha256)`, ['solar', 'music'], 'B', '', '');
+  };
+
+  t('an empty search returns everything', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await seed(A, '07');
+    const all = await A.use('tags').listTags('all');
+    eq((await A.use('tags').listTags('all', '')).length, all.length);
+    eq((await A.use('tags').listTags('all', '   ')).length, all.length);
+  });
+
+  t('search keeps the tags containing the text', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await seed(A, '08');
+    const names = (await A.use('tags').listTags('all', 'sol')).map(x => x.name.toLowerCase());
+    ok(names.includes('solarpunk'));
+    ok(names.includes('solar'));
+    notOk(names.includes('music'));
+  });
+
+  t('search is case-insensitive and tolerates a leading hash', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await seed(A, '09');
+    eq((await A.use('tags').listTags('all', 'ENERGY')).length, 1);
+    eq((await A.use('tags').listTags('all', '#energy')).length, 1);
+  });
+
+  t('search that matches nothing returns an empty list', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await seed(A, '10');
+    eq((await A.use('tags').listTags('all', 'zzzznope')).length, 0);
+  });
+
+  t('search composes with the top and cloud filters', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await A.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000110.sha256)', ['solar', 'moon'], 'A', '', '');
+    await A.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000111.sha256)', ['solar', 'solarpunk'], 'B', '', '');
+    const top = await A.use('tags').listTags('top', 'solar');
+    eq(top.length, 2);
+    eq(top[0].name.toLowerCase(), 'solar', 'most used match first');
+    const cloud = await A.use('tags').listTags('cloud', 'solar');
+    eq(cloud.length, 2);
+    ok(cloud.every(x => typeof x.weight === 'number'), 'weights still computed');
+  });
+});

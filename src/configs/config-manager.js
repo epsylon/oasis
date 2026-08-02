@@ -49,6 +49,7 @@ if (!fs.existsSync(configFilePath)) {
       "aiNavMod": "on",
       "forumMod": "on",
       "gamesMod": "on",
+      "housingMod": "on",
       "jobsMod": "on",
       "shopsMod": "on",
       "projectsMod": "on",

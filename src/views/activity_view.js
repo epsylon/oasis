@@ -1483,6 +1483,51 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       );
     }
 
+    if (type === 'housing') {
+      const { title, housing_type, property_type, price, place, status, rooms, size, capacity } = content;
+      const isFree = String(housing_type || '').toLowerCase() === 'couchsurfing';
+      cardBody.push(
+        div({ class: 'card-section report' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.title + ':'),
+            span({ class: 'card-value' }, title)
+          ),
+          housing_type ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingType + ':'),
+            span({ class: 'card-value' }, String(housing_type).toUpperCase())
+          ) : null,
+          property_type ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingProperty + ':'),
+            span({ class: 'card-value' }, String(property_type).toUpperCase())
+          ) : null,
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingPrice + ':'),
+            span({ class: 'card-value' }, isFree ? (i18n.housingFree || 'FREE') : `${Number(price || 0).toFixed(2)} ECO`)
+          ),
+          place ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingPlace + ':'),
+            span({ class: 'card-value' }, place)
+          ) : null,
+          Number(rooms) > 0 ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingRooms + ':'),
+            span({ class: 'card-value' }, String(rooms))
+          ) : null,
+          Number(size) > 0 ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingSize + ':'),
+            span({ class: 'card-value' }, `${size} m²`)
+          ) : null,
+          Number(capacity) > 0 ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingCapacity + ':'),
+            span({ class: 'card-value' }, String(capacity))
+          ) : null,
+          status ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingStatus + ':'),
+            span({ class: 'card-value' }, String(status).toUpperCase())
+          ) : null
+        )
+      );
+    }
+
     if (type === 'job') {
       const { title, job_type, tasks, location, vacants, salary, status, subscribers } = content;
       cardBody.push(
@@ -1491,26 +1536,26 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
             span({ class: 'card-label' }, i18n.title + ':'),
             span({ class: 'card-value' }, title)
           ),
-          salary && div({ class: 'card-field' },
+          salary ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.jobSalary + ':'),
             span({ class: 'card-value' }, salary + ' ECO')
-          ),
-          status && div({ class: 'card-field' },
+          ) : null,
+          status ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.jobStatus + ':'),
-            span({ class: 'card-value' }, status.toUpperCase())
-          ),
-          job_type && div({ class: 'card-field' },
+            span({ class: 'card-value' }, String(status).toUpperCase())
+          ) : null,
+          job_type ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.jobType + ':'),
-            span({ class: 'card-value' }, job_type.toUpperCase())
-          ),
-          location && div({ class: 'card-field' },
+            span({ class: 'card-value' }, String(job_type).toUpperCase())
+          ) : null,
+          location ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.jobLocation + ':'),
-            span({ class: 'card-value' }, location.toUpperCase())
-          ),
-          vacants && div({ class: 'card-field' },
+            span({ class: 'card-value' }, String(location).toUpperCase())
+          ) : null,
+          Number(vacants) > 0 ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.jobVacants + ':'),
-            span({ class: 'card-value' }, vacants)
-          ),
+            span({ class: 'card-value' }, String(vacants))
+          ) : null,
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.jobSubscribers + ':'),
             span({ class: 'card-value' },
@@ -1717,7 +1762,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         const SPREADABLE = new Set([
           'post','audio','video','image','document','torrent','bookmark',
           'event','calendar','task','votes','vote','market','shop','shopProduct',
-          'project','transfer','job','report','industry','industryBuild','industryBlueprint',
+          'project','transfer','housing','job','report','industry','industryBuild','industryBlueprint',
           'chat','chatMessage','pad','padEntry','forum','map'
         ]);
         if (!SPREADABLE.has(type)) return null;
@@ -1791,6 +1836,7 @@ function getViewDetailsAction(type, action) {
     case 'chat':       return `/chats/${id}`;
     case 'pad':        return `/pads/${id}`;
     case 'calendar':   return `/calendars/${id}`;
+    case 'housing':    return `/housing/${id}`;
     case 'job':        return `/jobs/${id}`;
     case 'project':    return `/projects/${id}`;
     case 'industry':   return `/industry/${id}`;
@@ -1834,6 +1880,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'market',    label: i18n.typeMarket },
     { type: 'project',   label: i18n.typeProject },
     { type: 'industry',  label: i18n.typeIndustry },
+    { type: 'housing',   label: i18n.typeHousing },
     { type: 'job',       label: i18n.typeJob },
     { type: 'shop',      label: i18n.typeShop },
     { type: 'transfer',  label: i18n.typeTransfer },

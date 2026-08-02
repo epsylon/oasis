@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 
@@ -19,7 +19,7 @@ const renderTaskMediaBlob = (value, attrs = {}) => {
 const userId = config.keys.id;
 
 const opt = (value, isSelected, text) =>
-  option(Object.assign({ value }, isSelected ? { selected: "selected" } : {}), text);
+  option(Object.assign({ value }, isSelected ? { ...("selected" ? { selected: true } : {})} : {}), text);
 
 const safeArray = (v) => Array.isArray(v) ? v : [];
 
@@ -62,9 +62,9 @@ const renderTaskOwnerActions = (task, returnTo) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       select(
         { name: "status", class: "project-control-select" },
-        option({ value: "OPEN", selected: st === "OPEN" }, i18n.taskStatusOpen),
-        option({ value: "IN-PROGRESS", selected: st === "IN-PROGRESS" }, i18n.taskStatusInProgress),
-        option({ value: "CLOSED", selected: st === "CLOSED" }, i18n.taskStatusClosed)
+        option({ value: "OPEN", ...(st === "OPEN" ? { selected: true } : {})}, i18n.taskStatusOpen),
+        option({ value: "IN-PROGRESS", ...(st === "IN-PROGRESS" ? { selected: true } : {})}, i18n.taskStatusInProgress),
+        option({ value: "CLOSED", ...(st === "CLOSED" ? { selected: true } : {})}, i18n.taskStatusClosed)
       ),
       button({ class: "status-btn project-control-btn", type: "submit" }, setStatusLabel)
     )
@@ -305,6 +305,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
       currentFilter === "edit" || currentFilter === "create"
         ? div(
             { class: "task-form" },
+            currentFilter === "edit" ? await renderSpreadEditWarning(taskId) : null,
             form(
               { action: currentFilter === "edit" ? `/tasks/update/${encodeURIComponent(taskId)}` : "/tasks/create", method: "POST", enctype: "multipart/form-data" },
               input({ type: "hidden", name: "returnTo", value: ret }),

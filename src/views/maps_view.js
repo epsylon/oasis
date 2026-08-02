@@ -223,6 +223,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
 
   return div({ class: "map-create-layout" },
     div({ class: "map-form map-form-full" },
+      params.spreadWarning || null,
       form({
         action: filter === "edit" ? `/maps/update/${encodeURIComponent(mapId)}` : "/maps/create",
         method: "POST",
@@ -393,6 +394,7 @@ const renderMapList = (maps, filter, params = {}) =>
     : p(params.q ? i18n.mapNoMatch : i18n.noMaps);
 
 exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
+  if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(mapId) };
   const title = filter === "mine" ? i18n.mapMineSectionTitle
     : filter === "create" ? i18n.mapCreateSectionTitle
       : filter === "edit" ? i18n.mapUpdateSectionTitle

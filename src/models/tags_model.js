@@ -102,7 +102,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
   };
 
   return {
-    async listTags(filter = 'all') {
+    async listTags(filter = 'all', search = '') {
       const ssbClient = await openSsb();
 
       const messages = await new Promise((resolve, reject) => {
@@ -158,6 +158,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
         if (c.type === 'task' && String(c.isPublic).toUpperCase() === 'PRIVATE') return false;
         if ((c.type === 'chat' || c.type === 'pad' || c.type === 'map' || c.type === 'calendar') && c.status === 'INVITE-ONLY' && c.author !== viewerId && !(Array.isArray(c.members) && c.members.includes(viewerId))) return false;
         if (c.type === 'shop' && c.visibility === 'CLOSED') return false;
+        if (c.type === 'housing' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && c.author !== viewerId) return false;
         return true;
       });
 
@@ -194,6 +195,9 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
       }
 
       let tags = Array.from(counts.values());
+
+      const q = String(search || '').trim().toLowerCase().replace(/^#/, '');
+      if (q) tags = tags.filter(t => String(t.name || '').toLowerCase().includes(q));
 
       if (filter === 'top') {
         tags.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));

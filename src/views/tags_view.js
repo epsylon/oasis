@@ -1,4 +1,4 @@
-const { form, button, div, h2, p, section, table, thead, tr, th, td, a, tbody } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, table, thead, tr, th, td, a, tbody, input } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 
 const getFilteredTags = (filter, tags) => {
@@ -56,8 +56,9 @@ const renderTagsCloud = (mergedTags) => {
   );
 };
 
-exports.tagsView = async (tags, filter) => {
+exports.tagsView = async (tags, filter, search = '') => {
   const filteredTags = getFilteredTags(filter, tags);
+  const query = String(search || '').trim();
 
   const title =
     filter === 'top'    ? i18n.tagsTopSectionTitle :
@@ -72,15 +73,23 @@ exports.tagsView = async (tags, filter) => {
         p(i18n.tagsDescription)
       ),
       div({ class: 'filters' },
-        form({ method: 'GET', action: '/tags' },
+        form({ method: 'GET', action: '/tags', class: 'ui-toolbar ui-toolbar--filters' },
+          input({ type: 'hidden', name: 'search', value: query }),
           button({ type: 'submit', name: 'filter', value: 'all', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' }, i18n.tagsFilterAll),
           button({ type: 'submit', name: 'filter', value: 'top', class: filter === 'top' ? 'filter-btn active' : 'filter-btn' }, i18n.tagsFilterTop),
           button({ type: 'submit', name: 'filter', value: 'cloud', class: filter === 'cloud' ? 'filter-btn active' : 'filter-btn' }, i18n.tagsFilterCloud)
         )
       ),
+      div({ class: 'tags-search' },
+        form({ method: 'GET', action: '/tags', class: 'filter-box' },
+          input({ type: 'hidden', name: 'filter', value: filter || 'all' }),
+          input({ type: 'text', name: 'search', value: query, placeholder: i18n.tagsSearchPlaceholder, class: 'filter-box__input' }),
+          button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+        )
+      ),
       div({ class: 'tags-list' },
         filteredTags.length === 0
-          ? p(i18n.tagsNoItems)
+          ? p(query ? i18n.noResultsFound : i18n.tagsNoItems)
           : filter !== 'cloud'
             ? renderTagsTable(filteredTags)
             : renderTagsCloud(filteredTags)

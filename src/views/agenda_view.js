@@ -25,6 +25,7 @@ function getViewDetailsAction(item) {
     case 'job': return `/jobs/${encodeURIComponent(item.id)}`;
     case 'project': return `/projects/${encodeURIComponent(item.id)}`;
     case 'industry': return `/industry/build/${encodeURIComponent(item.id)}`;
+    case 'housing': return `/housing/${encodeURIComponent(item.id)}`;
     case 'calendar': return `/calendars/${encodeURIComponent(item.id)}`;
     default: return `/messages/${encodeURIComponent(item.id)}`;
   }
@@ -150,6 +151,21 @@ const renderAgendaItem = (item, userId, filter) => {
     ];
   }
 
+  if (item.type === 'housing') {
+    const isOwner = String(item.author) === String(userId);
+    const requestCount = Number(item.requestCount) || 0;
+    details = [
+      renderCardField(i18n.housingType + ":", (i18n["housingType" + String(item.housing_type || '').toUpperCase()] || item.housing_type || '').toUpperCase()),
+      renderCardField(i18n.housingStatus + ":", String(item.status || '').toUpperCase() === 'CLOSED' ? i18n.housingStatusCLOSED : i18n.housingStatusOPEN),
+      item.place ? renderCardField(i18n.housingPlace + ":", item.place) : null,
+      renderCardField(i18n.housingPrice + ":", String(item.housing_type) === 'couchsurfing' ? (i18n.housingFree || 'FREE') : `${item.price} ECO`),
+      item.availableFrom ? renderCardField(i18n.housingAvailableFrom + ":", moment(item.availableFrom).format('YYYY/MM/DD')) : null,
+      isOwner
+        ? renderCardField(i18n.housingRequests + ":", String(requestCount))
+        : renderCardField(i18n.housingRequests + ":", i18n.housingRequestedBadge || 'REQUESTED')
+    ].filter(Boolean);
+  }
+
   if (item.type === 'job') {
     const subs = Array.isArray(item.subscribers)
       ? item.subscribers
@@ -214,7 +230,7 @@ const renderAgendaItem = (item, userId, filter) => {
 
 exports.agendaView = async (data, filter) => {
   const { items = [], counts: _c = {} } = data || {};
-  const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, calendars: 0, discarded: 0, ..._c };
+  const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, calendars: 0, housing: 0, discarded: 0, ..._c };
   return template(
     i18n.agendaTitle,
     section(
@@ -252,6 +268,8 @@ exports.agendaView = async (data, filter) => {
             `${i18n.agendaFilterProjects} (${counts.projects})`),
           button({ type: 'submit', name: 'filter', value: 'industry', class: filter === 'industry' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterIndustry || 'INDUSTRY'} (${counts.industry || 0})`),
+          button({ type: 'submit', name: 'filter', value: 'housing', class: filter === 'housing' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterHousing || 'HOUSING'} (${counts.housing || 0})`),
           button({ type: 'submit', name: 'filter', value: 'calendars', class: filter === 'calendars' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterCalendars || 'CALENDARS'} (${counts.calendars})`),
           button({ type: 'submit', name: 'filter', value: 'transfers', class: filter === 'transfers' ? 'filter-btn active' : 'filter-btn' },

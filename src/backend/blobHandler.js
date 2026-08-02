@@ -58,25 +58,30 @@ class FileTooLargeError extends Error {
   }
 }
 
-const handleBlobUpload = async function (ctx, fileFieldName) {
-  if (!ctx.request.files || !ctx.request.files[fileFieldName]) {
-    return null;
-  }
+const OGG_VIDEO_MARKERS = ['theora', 'VP80', 'OggDS', 'Dirac'];
+const OGG_AUDIO_MARKERS = ['vorbis', 'OpusHead', 'FLAC', 'Speex'];
 
-  const blobUpload = ctx.request.files[fileFieldName];
-  if (!blobUpload) return null;
+const oggMime = (buffer) => {
+  const head = buffer.slice(0, 65536);
+  for (const marker of OGG_VIDEO_MARKERS) if (head.includes(Buffer.from(marker))) return 'video/ogg';
+  for (const marker of OGG_AUDIO_MARKERS) if (head.includes(Buffer.from(marker))) return 'audio/ogg';
+  return 'video/ogg';
+};
+
+const storeUploadedFile = async function (blobUpload) {
+  if (!blobUpload || !blobUpload.filepath) return null;
 
   let data = await promisesFs.readFile(blobUpload.filepath);
   if (data.length === 0) return null;
 
   if (data.length > MAX_BLOB_SIZE) {
-    throw new FileTooLargeError(blobUpload.originalFilename || blobUpload.name || fileFieldName, data.length);
+    throw new FileTooLargeError(blobUpload.originalFilename || blobUpload.name || 'file', data.length);
   }
 
   const EXTENSION_MIME_MAP = {
     '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
-    '.ogv': 'video/ogg', '.avi': 'video/x-msvideo', '.mov': 'video/quicktime',
-    '.mkv': 'video/x-matroska', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+    '.ogv': 'video/ogg', '.oga': 'audio/ogg', '.mkv': 'video/x-matroska', '.avi': 'video/x-msvideo', '.mov': 'video/quicktime',
+    '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
     '.flac': 'audio/flac', '.aac': 'audio/aac', '.opus': 'audio/opus',
     '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
@@ -93,9 +98,12 @@ const handleBlobUpload = async function (ctx, fileFieldName) {
     blob.mime = null;
   }
 
-  if (!blob.mime && blob.name) {
+  if (blob.mime === 'application/ogg') blob.mime = oggMime(data);
+
+  const GENERIC_MIMES = new Set(['application/octet-stream', 'video/x-matroska']);
+  if ((!blob.mime || GENERIC_MIMES.has(blob.mime)) && blob.name) {
     const ext = (blob.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
-    blob.mime = EXTENSION_MIME_MAP[ext] || 'application/octet-stream';
+    blob.mime = EXTENSION_MIME_MAP[ext] || blob.mime || 'application/octet-stream';
   }
 
   if (!blob.mime) {
@@ -124,6 +132,25 @@ const handleBlobUpload = async function (ctx, fileFieldName) {
   if (blob.mime === "application/x-bittorrent") return `\n[torrent:${blob.name}](${blob.id})`;
 
   return `\n[${blob.name}](${blob.id})`;
+};
+
+const handleBlobUpload = async function (ctx, fileFieldName) {
+  if (!ctx.request.files || !ctx.request.files[fileFieldName]) return null;
+  const entry = ctx.request.files[fileFieldName];
+  const first = Array.isArray(entry) ? entry[0] : entry;
+  return storeUploadedFile(first);
+};
+
+const handleBlobUploads = async function (ctx, fileFieldName, max = 8) {
+  if (!ctx.request.files || !ctx.request.files[fileFieldName]) return [];
+  const entry = ctx.request.files[fileFieldName];
+  const files = (Array.isArray(entry) ? entry : [entry]).slice(0, Math.max(0, max));
+  const out = [];
+  for (const file of files) {
+    const stored = await storeUploadedFile(file);
+    if (stored) out.push(stored);
+  }
+  return out;
 };
 
 function waitForBlob(ssbClient, blobId, timeoutMs = 8000) {
@@ -229,6 +256,8 @@ const serveBlob = async function (ctx) {
     }
   }
 
+  if (mime === 'application/ogg') mime = oggMime(buffer);
+
   const isSvg = mime === 'image/svg+xml';
   const qName = ctx.query.name ? String(ctx.query.name).replace(/["\r\n\\]/g, '').trim() : '';
   const safeRaw = String(raw).replace(/["\r\n\\]/g, '');
@@ -275,5 +304,5 @@ const serveBlob = async function (ctx) {
   }
 };
 
-module.exports = { handleBlobUpload, serveBlob, FileTooLargeError };
+module.exports = { handleBlobUpload, handleBlobUploads, serveBlob, oggMime, FileTooLargeError };
 

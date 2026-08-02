@@ -113,9 +113,11 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   app.use(mount("/js", koaStatic(path.join(__dirname, 'public/js'))));
   app.use(koaStatic(path.join(__dirname, 'public')));
 
+  const httpDebug = process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
+
   app.use(async (ctx, next) => {
-  
-    //console.log("Requesting:", ctx.path); // uncomment to check for HTTP requests
+
+    if (httpDebug) console.log(`[http] ${ctx.method} ${ctx.path}`);
     
     const isClearnet = isClearnetPath(ctx.request);
     const csp = isClearnet

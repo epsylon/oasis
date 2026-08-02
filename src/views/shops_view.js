@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderInviteQrCard } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderInviteQrCard , renderSpreadEditWarning } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -176,6 +176,7 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
   const returnTo = safeText(params.returnTo) || buildReturnTo("all")
   return div({ class: "create-tribe-form" },
     h2(isEdit ? i18n.shopUpdateSectionTitle : i18n.shopCreateSectionTitle),
+    isEdit ? (params.spreadWarning || null) : null,
     form({ action: isEdit ? `/shops/update/${encodeURIComponent(shop.key || "")}` : "/shops/create", method: "POST", enctype: "multipart/form-data" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       label(i18n.title || "Title"), br,
@@ -197,8 +198,8 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       isEdit ? null : label(i18n.shopVisibility),
       isEdit ? null : br,
       isEdit ? null : select({ name: "visibility" },
-        option({ value: "OPEN", selected: (shop.visibility || "OPEN") === "OPEN" }, i18n.shopOpen),
-        option({ value: "CLOSED", selected: shop.visibility === "CLOSED" }, i18n.shopClosed)
+        option({ value: "OPEN", ...((shop.visibility || "OPEN") === "OPEN" ? { selected: true } : {})}, i18n.shopOpen),
+        option({ value: "CLOSED", ...(shop.visibility === "CLOSED" ? { selected: true } : {})}, i18n.shopClosed)
       ),
       isEdit ? null : br(),
       br(),
@@ -207,9 +208,10 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
   )
 }
 
-const renderProductForm = (shopId, product = {}, isEdit = false, returnTo = "") => {
+const renderProductForm = (shopId, product = {}, isEdit = false, returnTo = "", spreadWarning = null) => {
   return div({ class: "create-tribe-form" },
     h2(isEdit ? i18n.shopProductUpdate : i18n.shopProductAdd),
+    isEdit ? spreadWarning : null,
     form({ action: isEdit ? `/shops/product/update/${encodeURIComponent(product.key || "")}` : "/shops/product/create", method: "POST", enctype: "multipart/form-data" },
       input({ type: "hidden", name: "shopId", value: shopId }),
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -241,6 +243,7 @@ const renderProductForm = (shopId, product = {}, isEdit = false, returnTo = "") 
 }
 
 exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
+  if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(shopToEdit && (shopToEdit.key || shopToEdit.id)) };
   const q = safeText(params.q || "")
   const sort = safeText(params.sort || "recent")
   const list = safeArr(shops)
@@ -533,7 +536,7 @@ exports.editProductView = async (product, shopId, params = {}) => {
     i18n.shopProductUpdate,
     section(
       div({ class: "tags-header" }, h2(i18n.shopProductUpdate)),
-      renderProductForm(shopId, product, true, returnTo)
+      renderProductForm(shopId, product, true, returnTo, await renderSpreadEditWarning(product && (product.key || product.id)))
     )
   )
 }

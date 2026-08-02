@@ -337,16 +337,22 @@ describe('industry: blueprint price estimate', (t) => {
   });
 });
 
+const inDays = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
 describe('industry: build metadata (dates, media, blueprint ref)', (t) => {
   t('a build stores start/end dates and image; listings expose blueprintName and estimate', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const ind = A.use('industry');
     const fc = await ind.createFacility({ name: 'MetaFac', sector: 'hardware', membershipPolicy: 'open', laborRate: 10 });
     const bp = await ind.createBlueprint(fc.key, { name: 'Widget plan', laborHours: 2, materialsText: 'steel:1:10', image: '&img0000000000000000000000000000000000000000000.sha256' });
-    const build = await ind.createBuild(fc.key, { title: 'Run', blueprintId: bp.key, startDate: '2026-08-01', endDate: '2026-08-15', image: '&img1111111111111111111111111111111111111111111.sha256' });
+    const build = await ind.createBuild(fc.key, { title: 'Run', blueprintId: bp.key, startDate: inDays(1), endDate: inDays(15), image: '&img1111111111111111111111111111111111111111111.sha256' });
     const got = await ind.getBuild(build.key);
-    eq(got.startDate, '2026-08-01', 'start date stored');
-    eq(got.endDate, '2026-08-15', 'end date stored');
+    eq(got.startDate, inDays(1), 'start date stored');
+    eq(got.endDate, inDays(15), 'end date stored');
     ok(got.image, 'build image stored');
     eq(got.blueprintName, 'Widget plan', 'blueprint name resolved');
     eq(got.estMaterialsCost, 10, 'estimate follows the referenced blueprint');
@@ -361,7 +367,7 @@ describe('industry: build metadata (dates, media, blueprint ref)', (t) => {
     const ind = A.use('industry');
     const fc = await ind.createFacility({ name: 'DateFac', sector: 'software', membershipPolicy: 'open' });
     const bpFor7 = await ind.createBlueprint(fc.key, { name: 'Recipe 7', laborHours: 1 });
-    await throwsAsync(() => ind.createBuild(fc.key, { blueprintId: bpFor7.key, title: 'Bad', startDate: '2026-08-15', endDate: '2026-08-01' }), /End date/);
+    await throwsAsync(() => ind.createBuild(fc.key, { blueprintId: bpFor7.key, title: 'Bad', startDate: inDays(15), endDate: inDays(1) }), /End date/);
   });
 });
 

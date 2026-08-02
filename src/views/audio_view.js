@@ -16,7 +16,7 @@ const {
   option
 } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
@@ -263,6 +263,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
   const returnTo = safeText(params.returnTo) || buildReturnTo("all", params);
   return div(
     { class: "div-center audio-form" },
+    params.spreadWarning || null,
     form(
       {
         action: filter === "edit" ? `/audios/update/${encodeURIComponent(audioId)}` : "/audios/create",
@@ -303,6 +304,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
 };
 
 exports.audioView = async (audios, filter = "all", audioId = null, params = {}) => {
+  if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(audioId) };
   const title =
     filter === "mine"
       ? i18n.audioMineSectionTitle
@@ -376,9 +378,9 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
                   { class: "filter-box__controls" },
                   select(
                     { name: "sort", class: "filter-box__select" },
-                    option({ value: "recent", selected: sort === "recent" }, i18n.audioSortRecent),
-                    option({ value: "oldest", selected: sort === "oldest" }, i18n.audioSortOldest),
-                    option({ value: "top", selected: sort === "top" }, i18n.audioSortTop)
+                    option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.audioSortRecent),
+                    option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.audioSortOldest),
+                    option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.audioSortTop)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.audioSearchButton)
                 )

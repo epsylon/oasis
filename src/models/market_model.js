@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
+const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
@@ -73,12 +74,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const nodes = new Map()
     const bids = []
     const purchases = []
+    const opinionMsgs = []
     for (const m of messages) {
       const c = m.value && m.value.content
       if (!c) continue
       if (c.type === "tombstone") continue
       if (c.type === "marketBid") { bids.push({ target: c.target, author: m.value.author, amount: c.amount, time: c.time, ts: (m.value && m.value.timestamp) || 0 }); continue }
       if (c.type === "marketPurchase") { purchases.push({ target: c.target, author: m.value.author, ts: (m.value && m.value.timestamp) || 0 }); continue }
+      if (c.type === "marketOpinion" && c.target) { opinionMsgs.push({ target: c.target, author: m.value.author, category: c.category }); continue }
       if (c.type !== "market") continue
       nodes.set(m.key, { key: m.key, ts: (m.value && m.value.timestamp) || m.timestamp || 0, c, author: m.value.author })
     }
@@ -95,11 +98,11 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!cn || cn.author !== pn.author) { naivePrev.delete(child); nodes.delete(child); continue }
       strictNext.set(parent, child)
     }
-    return { tomb, nodes, bids, purchases, naivePrev, strictNext }
+    return { tomb, nodes, bids, purchases, opinionMsgs, naivePrev, strictNext }
   }
 
   const resolveGroups = (idx) => {
-    const { tomb, nodes, bids, purchases, naivePrev, strictNext } = idx
+    const { tomb, nodes, bids, purchases, opinionMsgs, naivePrev, strictNext } = idx
     const rootOf = (key) => { let x = key, g = 0; while (naivePrev.has(x) && nodes.has(naivePrev.get(x)) && g++ < 100000) x = naivePrev.get(x); return x }
     const followStrict = (key) => { let x = key, g = 0; while (strictNext.has(x) && g++ < 100000) x = strictNext.get(x); return x }
 
@@ -108,7 +111,21 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const bidsByRoot = new Map()
     for (const bd of bids) { if (!nodes.has(bd.target)) continue; const r = rootOf(bd.target); if (!bidsByRoot.has(r)) bidsByRoot.set(r, []); bidsByRoot.get(r).push(bd) }
     const soldByRoot = new Map()
-    for (const pu of purchases) { if (!nodes.has(pu.target)) continue; const r = rootOf(pu.target); soldByRoot.set(r, (soldByRoot.get(r) || 0) + 1) }
+    const buyersByRoot = new Map()
+    for (const pu of purchases) {
+      if (!nodes.has(pu.target)) continue
+      const r = rootOf(pu.target)
+      soldByRoot.set(r, (soldByRoot.get(r) || 0) + 1)
+      if (!buyersByRoot.has(r)) buyersByRoot.set(r, new Set())
+      buyersByRoot.get(r).add(pu.author)
+    }
+    const opinionsByRoot = new Map()
+    for (const op of (opinionMsgs || [])) {
+      if (!nodes.has(op.target)) continue
+      const r = rootOf(op.target)
+      if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, [])
+      opinionsByRoot.get(r).push(op)
+    }
 
     const out = new Map()
     for (const [root, keys] of groups) {
@@ -131,7 +148,16 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const addLine = (line) => { const b = parseBidEntry(line); if (!b) return; const kk = `${b.bidder}|${b.amount}|${b.time}`; if (pollSet.has(kk)) return; pollSet.add(kk); poll.push(line) }
       for (const k of (sellerKeys.length ? sellerKeys : keys)) { const n = nodes.get(k); if (n && Array.isArray(n.c.auctions_poll)) for (const line of n.c.auctions_poll) addLine(line) }
       for (const bd of (bidsByRoot.get(root) || [])) { const amt = Number(bd.amount); addLine(`${bd.author}|${Number.isFinite(amt) ? amt.toFixed(6) : bd.amount}|${bd.time}`) }
-      out.set(root, { tip, rootId: root, best, statusN: bestS, poll, soldCount: soldByRoot.get(root) || 0 })
+      const opinions = {}
+      const voters = []
+      for (const op of (opinionsByRoot.get(root) || [])) {
+        if (!op.author || op.author === sellerId) continue
+        if (voters.includes(op.author)) continue
+        if (!categories.includes(op.category)) continue
+        voters.push(op.author)
+        opinions[op.category] = (opinions[op.category] || 0) + 1
+      }
+      out.set(root, { tip, rootId: root, best, statusN: bestS, poll, soldCount: soldByRoot.get(root) || 0, buyers: Array.from(buyersByRoot.get(root) || []), opinions, voters })
     }
     return out
   }
@@ -228,9 +254,13 @@ module.exports = ({ cooler, tribeCrypto }) => {
         normalized.price = p.toFixed(6)
       }
 
+      const currentItem = await new Promise((resolve) => ssbClient.get(tipId, (e, m) => resolve(e ? null : (m && m.content) || null)))
+
       if (normalized.deadline !== undefined && normalized.deadline !== null && normalized.deadline !== "") {
         const dl = moment(normalized.deadline, moment.ISO_8601, true)
         if (!dl.isValid()) throw new Error("Invalid deadline")
+        const changed = !currentItem || !currentItem.deadline || !moment(currentItem.deadline).isSame(dl)
+        if (changed && dl.isBefore(moment(), "minute")) throw new Error("The deadline cannot be in the past")
         normalized.deadline = dl.toISOString()
       }
 
@@ -298,7 +328,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const items = []
       const now = moment()
 
-      for (const { tip, rootId, best, statusN, poll, soldCount } of resolveGroups(buildMarketIndex(messages)).values()) {
+      for (const { tip, rootId, best, statusN, poll, soldCount, buyers, opinions, voters } of resolveGroups(buildMarketIndex(messages)).values()) {
         const leaf = tip
         const c = best.c
         let status = D(statusN)
@@ -346,7 +376,11 @@ module.exports = ({ cooler, tribeCrypto }) => {
           shopProductId: c.shopProductId || "",
           shopId: c.shopId || "",
           shopTitle: c.shopTitle || "",
-          industry: c.industry || ""
+          industry: c.industry || "",
+          opinions: opinions || {},
+          opinions_inhabitants: voters || [],
+          purchasedByViewer: Array.isArray(buyers) && buyers.includes(userId),
+          ratedByViewer: Array.isArray(voters) && voters.includes(userId)
         })
       }
 
@@ -401,7 +435,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const rootOf = (key) => { let x = key, g = 0; while (idx.naivePrev.has(x) && idx.nodes.has(idx.naivePrev.get(x)) && g++ < 100000) x = idx.naivePrev.get(x); return x }
       const grp = resolveGroups(idx).get(rootOf(itemId))
       if (!grp) return null
-      const { tip, rootId, best, statusN, poll, soldCount } = grp
+      const { tip, rootId, best, statusN, poll, soldCount, buyers, opinions, voters } = grp
 
       const c = best.c
       let status = D(statusN)
@@ -448,7 +482,11 @@ module.exports = ({ cooler, tribeCrypto }) => {
         shopProductId: c.shopProductId || "",
         shopId: c.shopId || "",
         shopTitle: c.shopTitle || "",
-        industry: c.industry || ""
+        industry: c.industry || "",
+        opinions: opinions || {},
+        opinions_inhabitants: voters || [],
+        purchasedByViewer: Array.isArray(buyers) && buyers.includes(userId),
+        ratedByViewer: Array.isArray(voters) && voters.includes(userId)
       }
     },
 
@@ -487,6 +525,24 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!shopProductId) return null
       const items = await this.listAllItems("all")
       return items.find((i) => i.shopProductId === shopProductId) || null
+    },
+
+    async createOpinion(itemId, category) {
+      if (!categories.includes(category)) throw new Error("Invalid category")
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const messages = await readAll(ssbClient)
+      const groups = resolveGroups(buildMarketIndex(messages))
+      let group = null
+      for (const g of groups.values()) {
+        if (g.rootId === itemId || g.tip === itemId) { group = g; break }
+      }
+      if (!group) throw new Error("Item not found")
+      if (group.best.author === userId) throw new Error("You cannot rate your own item")
+      if ((group.voters || []).includes(userId)) throw new Error("Already voted")
+      if (!(group.buyers || []).includes(userId)) throw new Error("You can rate only an item you have bought")
+      const content = { type: "marketOpinion", target: group.rootId, category, createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => e ? rej(e) : res(m)))
     },
 
     async setItemAsSold(itemId) {

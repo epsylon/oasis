@@ -79,7 +79,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         const jobId = c.jobId
         const k = `${jobId}::${author}`
         const prev = jobSubLatest.get(k)
-        if (!prev || ts > prev.ts) jobSubLatest.set(k, { ts, value: !!c.value, author, jobId })
+        if (!prev || ts >= prev.ts) jobSubLatest.set(k, { ts, value: !!c.value, author, jobId })
         continue
       }
     }
@@ -134,7 +134,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
           const jobId = c.jobId
           const k = `${jobId}::${author}`
           const prev = jobSubLatest.get(k)
-          if (!prev || ts > prev.ts) jobSubLatest.set(k, { ts, value: !!c.value, author, jobId })
+          if (!prev || ts >= prev.ts) jobSubLatest.set(k, { ts, value: !!c.value, author, jobId })
         } catch {}
       }
     }

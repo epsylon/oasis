@@ -25,6 +25,8 @@ const detailHref = (type, key) => {
     case 'task': return `/tasks/${encodeURIComponent(key)}`;
     case 'event': return `/events/${encodeURIComponent(key)}`;
     case 'shopProduct': return `/shops/product/${encodeURIComponent(key)}`;
+    case 'housing': return `/housing/${encodeURIComponent(key)}`;
+    case 'market': return `/market/${encodeURIComponent(key)}`;
     default: return null;
   }
 };
@@ -69,6 +71,76 @@ const renderContentHtml = (content, key) => {
             span({ class: 'card-value' }, String(content.laborHours))
           ) : "",
           content.description ? p(...renderUrl(content.description)) : null
+        )
+      );
+    case 'housing': {
+      const free = String(content.housing_type || '').toLowerCase() === 'couchsurfing';
+      return div({ class: 'opinion-housing' },
+        div({ class: 'card-section housing' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.title + ':'),
+            span({ class: 'card-value' }, content.title || '')
+          ),
+          content.housing_type ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingType + ':'),
+            span({ class: 'card-value' }, String(i18n['housingType' + String(content.housing_type).toUpperCase()] || content.housing_type).toUpperCase())
+          ) : null,
+          content.property_type ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingProperty + ':'),
+            span({ class: 'card-value' }, String(i18n['housingProperty' + String(content.property_type).toUpperCase()] || content.property_type).toUpperCase())
+          ) : null,
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingPrice + ':'),
+            span({ class: 'card-value' }, free ? (i18n.housingFree || 'FREE') : `${Number(content.price || 0).toFixed(2)} ECO`)
+          ),
+          content.place ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingPlace + ':'),
+            span({ class: 'card-value' }, content.place)
+          ) : null,
+          Number(content.rooms) > 0 ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingRooms + ':'),
+            span({ class: 'card-value' }, String(content.rooms))
+          ) : null,
+          Number(content.size) > 0 ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingSize + ':'),
+            span({ class: 'card-value' }, `${content.size} m²`)
+          ) : null,
+          Number(content.capacity) > 0 ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.housingCapacity + ':'),
+            span({ class: 'card-value' }, String(content.capacity))
+          ) : null,
+          content.description ? p(...renderUrl(content.description)) : null,
+          Array.isArray(content.tags) && content.tags.length
+            ? div({ class: 'card-tags' }, content.tags.map(tag =>
+                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+            : null
+        )
+      );
+    }
+    case 'market':
+      return div({ class: 'opinion-market' },
+        div({ class: 'card-section market' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.title + ':'),
+            span({ class: 'card-value' }, content.title || '')
+          ),
+          content.item_type ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.marketItemType + ':'),
+            span({ class: 'card-value' }, String(content.item_type).toUpperCase())
+          ) : null,
+          content.item_status ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.marketItemCondition || i18n.status) + ':'),
+            span({ class: 'card-value' }, String(content.item_status).toUpperCase())
+          ) : null,
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.marketItemPrice || i18n.price) + ':'),
+            span({ class: 'card-value' }, `${content.price} ECO`)
+          ),
+          content.description ? p(...renderUrl(content.description)) : null,
+          Array.isArray(content.tags) && content.tags.length
+            ? div({ class: 'card-tags' }, content.tags.map(tag =>
+                a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+            : null
         )
       );
     case 'bookmark':

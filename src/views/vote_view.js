@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderOpinionsVoting, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -317,8 +317,19 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
 
   const listReturnTo = standardFilters.includes(activeFilter) ? `/votes?filter=${encodeURIComponent(activeFilter)}` : "/votes";
 
-  const deadlineMin = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm");
-  const deadlineValue = voteToEdit.deadline ? moment(voteToEdit.deadline).format("YYYY-MM-DDTHH:mm") : "";
+  const minVoteDays = Number(params.minVoteDays) > 0 ? Number(params.minVoteDays) : 7;
+  const deadlineMin = moment().add(minVoteDays, "days").format("YYYY-MM-DDTHH:mm");
+  const draft = params.draft || {};
+  const deadlineValue = draft.deadline
+    ? String(draft.deadline)
+    : (voteToEdit.deadline ? moment(voteToEdit.deadline).format("YYYY-MM-DDTHH:mm") : "");
+  const questionValue = draft.question !== undefined && draft.question !== "" ? String(draft.question) : (voteToEdit.question || "");
+  const tagsValue = draft.tags ? String(draft.tags) : editTags.join(", ");
+  const formError = params.error === "deadline"
+    ? String(i18n.voteErrorDeadlineMin || "The deadline must be at least {days} days from now.").replace("{days}", String(minVoteDays))
+    : params.error
+      ? (i18n.voteErrorGeneric || "The vote could not be saved.")
+      : "";
 
   return template(
     title,
@@ -340,11 +351,18 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
       (mode === "edit" || mode === "create")
         ? div(
             { class: "vote-form" },
+            mode === "edit" ? await renderSpreadEditWarning(voteId) : null,
+            formError
+              ? div({ class: "error-box vote-form-error" },
+                  p({ class: "error-title" }, i18n.voteErrorTitle || "Check the form"),
+                  p(formError)
+                )
+              : null,
             form(
               { action: mode === "edit" ? `/votes/update/${encodeURIComponent(voteId)}` : "/votes/create", method: "POST" },
               input({ type: "hidden", name: "returnTo", value: listReturnTo }),
               h2(i18n.voteQuestionLabel),
-              input({ type: "text", name: "question", id: "question", required: true, value: voteToEdit.question || "" }), br(), br(),
+              input({ type: "text", name: "question", id: "question", required: true, value: questionValue }), br(), br(),
               label(i18n.voteDeadlineLabel), br(),
               input({
                 type: "datetime-local",
@@ -355,7 +373,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
                 value: deadlineValue
               }), br(), br(),
               label(i18n.voteTagsLabel), br(),
-              input({ type: "text", name: "tags", id: "tags", value: editTags.join(", ") }), br(), br(),
+              input({ type: "text", name: "tags", id: "tags", value: tagsValue }), br(), br(),
               button({ type: "submit" }, mode === "edit" ? i18n.voteUpdateButton : i18n.voteCreateButton)
             )
           )

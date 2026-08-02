@@ -34,6 +34,16 @@ describe('pm: notifications that must not repeat', (t) => {
     eq(inbox.filter(m => m.value.content.subject === 'TRIBE_GOV').length, 2);
   });
 
+  t('deleting the notification does not make the bot announce it again', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const pm = A.use('pm');
+    const sent = await pm.sendMessage([], 'LARP_RULING', 'the house rules', false, 'quark:2026-08');
+    ok((await pm.sentRefs()).has('LARP_RULING|quark:2026-08'));
+    await pm.deleteMessageById(sent.key);
+    eq((await pm.listAllPrivate()).filter(m => m.value.content.subject === 'LARP_RULING').length, 0, 'it left the inbox');
+    ok((await pm.sentRefs()).has('LARP_RULING|quark:2026-08'), 'but it is still remembered as announced');
+  });
+
   t('references of other inhabitants do not count as mine', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     B.setActor();

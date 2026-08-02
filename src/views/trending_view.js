@@ -119,6 +119,36 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         c.description ? p(...renderUrl(c.description)) : null
       )
     );
+  } else if (c.type === 'housing') {
+    const free = String(c.housing_type || '').toLowerCase() === 'couchsurfing';
+    contentHtml = div({ class: 'trending-housing' },
+      div({ class: 'card-section housing' },
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, c.title || '')),
+        c.housing_type ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingType + ':'), span({ class: 'card-value' }, String(i18n['housingType' + String(c.housing_type).toUpperCase()] || c.housing_type).toUpperCase())) : "",
+        c.property_type ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingProperty + ':'), span({ class: 'card-value' }, String(i18n['housingProperty' + String(c.property_type).toUpperCase()] || c.property_type).toUpperCase())) : "",
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingPrice + ':'), span({ class: 'card-value' }, free ? (i18n.housingFree || 'FREE') : `${Number(c.price || 0).toFixed(2)} ECO`)),
+        c.place ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingPlace + ':'), span({ class: 'card-value' }, c.place)) : "",
+        Number(c.rooms) > 0 ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingRooms + ':'), span({ class: 'card-value' }, String(c.rooms))) : "",
+        Number(c.size) > 0 ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingSize + ':'), span({ class: 'card-value' }, `${c.size} m²`)) : "",
+        c.description ? p(...renderUrl(c.description)) : null,
+        Array.isArray(c.tags) && c.tags.length
+          ? div({ class: 'card-tags' }, c.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+          : null
+      )
+    );
+  } else if (c.type === 'market') {
+    contentHtml = div({ class: 'trending-market' },
+      div({ class: 'card-section market' },
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, c.title || '')),
+        c.item_type ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, String(c.item_type).toUpperCase())) : "",
+        c.item_status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.marketItemCondition || i18n.status) + ':'), span({ class: 'card-value' }, String(c.item_status).toUpperCase())) : "",
+        div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.marketItemPrice || i18n.price) + ':'), span({ class: 'card-value' }, `${c.price} ECO`)),
+        c.description ? p(...renderUrl(c.description)) : null,
+        Array.isArray(c.tags) && c.tags.length
+          ? div({ class: 'card-tags' }, c.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+          : null
+      )
+    );
   } else if (c.type === 'feed') {
     const { text, refeeds } = c;
     contentHtml = div({ class: 'trending-feed' },
@@ -184,7 +214,9 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     report: 'reports',
     task: 'tasks',
     event: 'events',
-    shopProduct: 'shops/product'
+    shopProduct: 'shops/product',
+    housing: 'housing',
+    market: 'market'
   };
   const detailHref = detailPaths[c.type]
     ? `/${detailPaths[c.type]}/${encodeURIComponent(item.key)}`

@@ -19,7 +19,7 @@ const {
   td
 } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -206,6 +206,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
   const tribeId = safeText(params.tribeId || "");
   return div(
     { class: "div-center audio-form" },
+    params.spreadWarning || null,
     form(
       {
         action: filter === "edit" ? `/torrents/update/${encodeURIComponent(torrentId)}` : "/torrents/create",
@@ -243,6 +244,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
 };
 
 exports.torrentsView = async (torrents, filter = "all", torrentId = null, params = {}) => {
+  if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(torrentId) };
   const title =
     filter === "mine"
       ? i18n.torrentMineSectionTitle
@@ -315,9 +317,9 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
                   { class: "filter-box__controls" },
                   select(
                     { name: "sort", class: "filter-box__select" },
-                    option({ value: "recent", selected: sort === "recent" }, i18n.torrentSortRecent),
-                    option({ value: "oldest", selected: sort === "oldest" }, i18n.torrentSortOldest),
-                    option({ value: "top", selected: sort === "top" }, i18n.torrentSortTop)
+                    option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.torrentSortRecent),
+                    option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.torrentSortOldest),
+                    option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.torrentSortTop)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.torrentSearchButton)
                 )

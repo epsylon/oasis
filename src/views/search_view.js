@@ -54,7 +54,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     contentTypes.map(type =>
       option({
         value: type === 'all' ? "" : type,
-        selected: (types.length === 0 && type === 'all') || types.includes(type)
+        ...((types.length === 0 && type === 'all') || types.includes(type) ? { selected: true } : {})
       }, i18n[type + "Label"] || type.toUpperCase())
     )
   );
@@ -90,6 +90,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'market': return `/market/${encodeURIComponent(contentId)}`;
       case 'report': return `/reports/${encodeURIComponent(contentId)}`;
       case 'project': return `/projects/${encodeURIComponent(contentId)}`;
+      case 'housing': return `/housing/${encodeURIComponent(contentId)}`;
       case 'job': return `/jobs/${encodeURIComponent(contentId)}`;
       case 'industry': return `/industry/${encodeURIComponent(contentId)}`;
       case 'industryBlueprint': return `/industry/blueprint/${encodeURIComponent(contentId)}`;
@@ -446,6 +447,14 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
             span({ class: 'card-label' }, i18n.bankTx + ':' ),
             a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${content.txid}`, target: '_blank' }, content.txid)
           ) : null
+        );
+      case 'housing':
+        return div({ class: 'search-housing' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, content.title)) : null,
+          content.housing_type ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingType + ':'), span({ class: 'card-value' }, String(content.housing_type).toUpperCase())) : null,
+          content.place ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingPlace + ':'), span({ class: 'card-value' }, content.place)) : null,
+          String(content.housing_type || '').toLowerCase() !== 'couchsurfing' && content.price ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingPrice + ':'), span({ class: 'card-value' }, `${content.price} ECO`)) : null,
+          content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingStatus + ':'), span({ class: 'card-value' }, String(content.status).toUpperCase())) : null
         );
       case 'job':
         return div({ class: 'search-job' },

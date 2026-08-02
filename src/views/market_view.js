@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting } = require("./main_views")
+const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -93,6 +94,17 @@ const buildReturnTo = (filter, q, minPrice, maxPrice, sort) => {
   if (maxPrice !== undefined && maxPrice !== null && String(maxPrice) !== "") params.push(`maxPrice=${encodeURIComponent(String(maxPrice))}`)
   if (sort) params.push(`sort=${encodeURIComponent(sort)}`)
   return `/market${params.length ? `?${params.join("&")}` : ""}`
+}
+
+
+const sumCats = (opinions = {}, cats = []) => (cats || []).reduce((acc, c) => acc + (Number((opinions || {})[c]) || 0), 0)
+
+const renderStarRating = (opinions, voterCount) => {
+  const pos = sumCats(opinions, opinionCategories.positive)
+  const neg = sumCats(opinions, opinionCategories.constructive) + sumCats(opinions, opinionCategories.moderation)
+  const total = pos + neg
+  const full = total > 0 ? Math.round((pos / total) * 5) : 0
+  return span({ class: "shop-product-stars" }, "★".repeat(full) + "☆".repeat(5 - full) + ` (${voterCount})`)
 }
 
 const renderCardField = (labelText, value = "") =>
@@ -231,9 +243,9 @@ const renderMarketOwnerActions = (item, returnTo) => {
         input({ type: "hidden", name: "returnTo", value: returnTo }),
         select(
           { name: "status", class: "project-control-select" },
-          option({ value: "FOR SALE", selected: cur === "FOR SALE" }, i18n.marketFilterForSale),
-          option({ value: "SOLD", selected: cur === "SOLD" }, i18n.marketFilterSold),
-          option({ value: "DISCARDED", selected: cur === "DISCARDED" }, i18n.marketFilterDiscarded)
+          option({ value: "FOR SALE", ...(cur === "FOR SALE" ? { selected: true } : {})}, i18n.marketFilterForSale),
+          option({ value: "SOLD", ...(cur === "SOLD" ? { selected: true } : {})}, i18n.marketFilterSold),
+          option({ value: "DISCARDED", ...(cur === "DISCARDED" ? { selected: true } : {})}, i18n.marketFilterDiscarded)
         ),
         button({ class: "status-btn project-control-btn", type: "submit" }, i18n.marketActionsChangeStatus)
       )
@@ -337,6 +349,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
   ]
 
   const isFormMode = filter === "create" || filter === "edit"
+  const spreadWarning = filter === "edit" ? await renderSpreadEditWarning(itemEdit && (itemEdit.id || itemEdit.key)) : null
 
   return template(
     title,
@@ -394,9 +407,9 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                 ),
                 select(
                   { name: "sort", class: "filter-box__select" },
-                  option({ value: "recent", selected: sort === "recent" }, i18n.marketSortRecent),
-                  option({ value: "price", selected: sort === "price" }, i18n.marketSortPrice),
-                  option({ value: "deadline", selected: sort === "deadline" }, i18n.marketSortDeadline)
+                  option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.marketSortRecent),
+                  option({ value: "price", ...(sort === "price" ? { selected: true } : {})}, i18n.marketSortPrice),
+                  option({ value: "deadline", ...(sort === "deadline" ? { selected: true } : {})}, i18n.marketSortDeadline)
                 ),
                 button({ type: "submit", class: "filter-box__button" }, i18n.marketSearchButton)
               )
@@ -408,6 +421,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
       isFormMode
         ? div(
             { class: "market-form" },
+            spreadWarning,
             form(
               { action: filter === "edit" ? `/market/update/${encodeURIComponent(itemEdit.id)}` : "/market/create", method: "POST", enctype: "multipart/form-data" },
               input({ type: "hidden", name: "returnTo", value: "/market?filter=mine" }),
@@ -416,8 +430,8 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               br(),
               select(
                 { name: "item_type", id: "item_type", required: true },
-                option({ value: "auction", selected: itemEdit && itemEdit.item_type === "auction" }, "Auction"),
-                option({ value: "exchange", selected: itemEdit && itemEdit.item_type === "exchange" }, "Exchange")
+                option({ value: "auction", ...(itemEdit && itemEdit.item_type === "auction" ? { selected: true } : {})}, "Auction"),
+                option({ value: "exchange", ...(itemEdit && itemEdit.item_type === "exchange" ? { selected: true } : {})}, "Exchange")
               ),
               br(),
               br(),
@@ -440,9 +454,9 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               br(),
               select(
                 { name: "item_status", id: "item_status" },
-                option({ value: "BROKEN", selected: itemEdit && itemEdit.item_status === "BROKEN" }, "BROKEN"),
-                option({ value: "USED", selected: itemEdit && itemEdit.item_status === "USED" }, "USED"),
-                option({ value: "NEW", selected: itemEdit && itemEdit.item_status === "NEW" }, "NEW")
+                option({ value: "BROKEN", ...(itemEdit && itemEdit.item_status === "BROKEN" ? { selected: true } : {})}, "BROKEN"),
+                option({ value: "USED", ...(itemEdit && itemEdit.item_status === "USED" ? { selected: true } : {})}, "USED"),
+                option({ value: "NEW", ...(itemEdit && itemEdit.item_status === "NEW" ? { selected: true } : {})}, "NEW")
               ),
               br(),
               br(),
@@ -460,8 +474,8 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               br(),
               select(
                 { name: "visibility" },
-                option({ value: "PUBLIC", selected: (itemEdit?.visibility || "PUBLIC") === "PUBLIC" }, i18n.visibilityPublic || "Public"),
-                option({ value: "HIDDEN", selected: itemEdit?.visibility === "HIDDEN" }, i18n.visibilityHidden || "Hidden")
+                option({ value: "PUBLIC", ...((itemEdit?.visibility || "PUBLIC") === "PUBLIC" ? { selected: true } : {})}, i18n.visibilityPublic || "Public"),
+                option({ value: "HIDDEN", ...(itemEdit?.visibility === "HIDDEN" ? { selected: true } : {})}, i18n.visibilityHidden || "Hidden")
               ),
               br(),
               br(),
@@ -545,6 +559,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       div({ class: "shop-title-row" },
                         h2({ class: "tribe-card-title" }, a({ href: `/market/${encodeURIComponent(item.id)}` }, item.title))
                       ),
+                      renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
                       div({ class: "card-chips-row" },
                         renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
                         item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
@@ -643,6 +658,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           div({ class: "shop-title-row" },
             h2({ class: "tribe-card-title" }, item.title)
           ),
+          renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
           chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
           div({ class: "card-spread-centered" }, renderSpreadButton(item.id, params.spreads)),
           renderMediaBlob(item.image, "/assets/images/default-market.png"),
@@ -727,6 +743,11 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
                   input({ type: "hidden", name: "returnTo", value: "/inbox?filter=sent" }),
                   button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
                 )
+              )
+            : null,
+          String(item.seller) !== String(userId) && item.purchasedByViewer
+            ? div({ class: "market-opinions" },
+                renderOpinionsVoting("/market/opinions", item.id, item.opinions, returnTo, item.opinions_inhabitants)
               )
             : null,
           renderMarketCommentsSection(item.id, returnTo, comments)

@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 
@@ -237,6 +237,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
 
   return div(
     { class: "div-center document-form" },
+    params.spreadWarning || null,
     form(
       {
         action: filter === "edit" ? `/documents/update/${encodeURIComponent(documentId)}` : "/documents/create",
@@ -268,6 +269,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
 };
 
 exports.documentView = async (documents, filter = "all", documentId = null, params = {}) => {
+  if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(documentId) };
   const title =
     filter === "mine"
       ? i18n.documentMineSectionTitle
@@ -334,9 +336,9 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
                   { class: "filter-box__controls" },
                   select(
                     { name: "sort", class: "filter-box__select" },
-                    option({ value: "recent", selected: sort === "recent" }, i18n.documentSortRecent),
-                    option({ value: "oldest", selected: sort === "oldest" }, i18n.documentSortOldest),
-                    option({ value: "top", selected: sort === "top" }, i18n.documentSortTop)
+                    option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.documentSortRecent),
+                    option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.documentSortOldest),
+                    option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.documentSortTop)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.documentSearchButton)
                 )

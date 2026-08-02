@@ -2898,6 +2898,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .comment-textarea {
   resize: vertical;
   width: 100%;
+  box-sizing: border-box;
   padding: 8px;
   background: #1e1e1e;
   color: #ffd740;
@@ -6477,7 +6478,7 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .industry-hero-image,.tribe-card-hero-image{max-width:100%;height:auto;border-radius:6px}
 .industry-search{margin:8px 0}
 .industry-card-noimage{display:flex;align-items:center;justify-content:center;min-height:120px;font-size:48px;opacity:.5}
-.industry-bot-notification .pm-title{margin-top:4px}
+.industry-bot-notification .pm-title,.housing-bot-notification .pm-title{margin-top:4px}
 .industry-table{width:100%;border-collapse:collapse;margin:8px 0}
 .industry-table th,.industry-table td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(128,128,128,.3)}
 .industry-contrib-form{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
@@ -6584,3 +6585,43 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .welcome-step-warning{margin:0 0 12px 0}
 .welcome-oasisid{border:none !important;background:transparent !important;padding:0 !important;box-shadow:none !important;margin:0 0 14px 0;word-break:break-all}
 .welcome-oasisid .user-link{user-select:all}
+.housing-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:20px}
+.housing-grid .tribe-card{margin-bottom:0}
+.housing-card .tribe-card-members{background:transparent;padding:4px 0;text-align:left;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.housing-card .card-field{border-bottom:none}
+.housing-info-table{table-layout:auto}
+.housing-info-table .tribe-info-label{width:1%;white-space:nowrap}
+.housing-info-table .tribe-info-value{white-space:normal;word-break:normal;overflow-wrap:anywhere}
+.housing-stars{color:#FFA500;font-size:14px;letter-spacing:1px}
+.housing-gallery{border:none !important;background:transparent !important;padding:0 !important;box-shadow:none !important;margin:0 0 12px 0}
+.housing-gallery .gallery{padding:0}
+.housing-search .filter-box{margin:0}
+.housing-place-input{height:36px;min-width:170px;width:auto;flex:1 1 170px}
+.housing-form-gallery{padding:0;margin:10px 0}
+.housing-form-gallery .gallery-item{cursor:default}
+.housing-keep-photos{display:inline-flex;align-items:center;gap:6px;margin:0 0 10px 0}
+.housing-keep-photos input[type="checkbox"]{width:auto;margin:0}
+.tribe-main .housing-opinions{border:none;background:transparent}
+.housing-form input[type="file"]{width:auto}
+.vote-form-error{margin:0 0 14px 0}
+.vote-form-error .error-title{margin:0 0 4px 0;font-weight:bold}
+.vote-form-error p{margin:0}
+.housing-file-row{border:none !important;background:transparent !important;padding:0 !important;box-shadow:none !important;display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 6px 0}
+.housing-file-row input[type="file"]{width:auto;margin:0}
+.housing-add-media{margin:0}
+.housing-video{border:none !important;background:transparent !important;padding:0 !important;box-shadow:none !important;margin:0 0 10px 0}
+.housing-video-player{max-width:100%;border-radius:6px;display:block}
+.housing-form-video{max-width:320px}
+.housing-video-centered{display:flex;justify-content:center;margin-top:12px}
+.housing-video-centered .housing-video-player{max-width:720px;width:100%}
+.housing-card-video{display:flex;justify-content:center}
+.housing-card-hero-video{width:100%;max-height:220px;border-radius:6px;display:block}
+.housing-status-row,.housing-visibility-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.housing-status-row form,.housing-visibility-row form{flex-basis:100%;margin:4px 0 0 0}
+.housing-stars{display:block;margin:2px 0 6px 0}
+.housing-form-gallery .gallery-item{display:flex;flex-direction:column;align-items:center;gap:6px}
+.housing-remove-media{height:28px;padding:0 10px;border:1px solid rgba(128,128,128,.5);border-radius:4px;background:transparent;color:inherit;cursor:pointer;font-size:.8em}
+.housing-form-video{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.spread-edit-warning{margin:0 0 14px 0}
+.spread-edit-warning p{margin:0}
+.market-opinions{border:none !important;background:transparent !important;padding:0 !important;margin:12px 0}
