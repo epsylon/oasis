@@ -1,4 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
+const { normalizeImages, normalizeVideo } = require('./media_gallery');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
@@ -39,7 +40,7 @@ const normalizeTemplate = (category, tpl) => {
   }
 
   if (cat === 'CONTENT') {
-    return pick(['contentLocation', 'whyInappropriate', 'requestedAction', 'evidenceLinks']);
+    return pick(['contentLocation', 'whyInappropriate', 'evidenceLinks']);
   }
 
   return {};
@@ -164,6 +165,8 @@ module.exports = ({ cooler }) => {
       ...c,
       category: cat,
       status: normalizeStatus(c.status || 'OPEN'),
+      images: normalizeImages(c.images && c.images.length ? c.images : c.image),
+      video: normalizeVideo(c.video),
       severity: normalizeSeverity(c.severity) || 'low',
       confirmations,
       tags: ensureArray(c.tags),
@@ -174,14 +177,13 @@ module.exports = ({ cooler }) => {
   };
 
   return {
-    async createReport(title, description, category, image, tagsRaw = [], severity = 'low', template = {}) {
+    async createReport(title, description, category, image, tagsRaw = [], severity = 'low', template = {}, media = {}) {
       const ssb = await openSsb();
       const userId = ssb.id;
 
-      let blobId = null;
-      if (image) {
-        blobId = String(image).trim() || null;
-      }
+      const images = normalizeImages((media && media.images && media.images.length) ? media.images : image);
+      const blobId = images[0] || null;
+      const clip = normalizeVideo(media && media.video);
 
       const tags = Array.isArray(tagsRaw)
         ? tagsRaw.filter(Boolean)
@@ -196,6 +198,8 @@ module.exports = ({ cooler }) => {
         createdAt: new Date().toISOString(),
         author: userId,
         image: blobId,
+        images,
+        video: clip,
         tags,
         confirmations: [],
         severity: normalizeSeverity(severity) || 'low',
@@ -227,10 +231,15 @@ module.exports = ({ cooler }) => {
         ? String(updatedContent.tags || '').split(',').map(t => t.trim()).filter(Boolean)
         : ensureArray(report.content.tags);
 
-      let blobId = report.content.image || null;
-      if (updatedContent.image) {
-        blobId = String(updatedContent.image).trim() || null;
-      }
+      const nextImages = normalizeImages(
+        Object.prototype.hasOwnProperty.call(updatedContent, 'images')
+          ? updatedContent.images
+          : (report.content.images && report.content.images.length ? report.content.images : (updatedContent.image || report.content.image))
+      );
+      const blobId = nextImages[0] || null;
+      const nextVideo = Object.prototype.hasOwnProperty.call(updatedContent, 'video')
+        ? normalizeVideo(updatedContent.video)
+        : normalizeVideo(report.content.video);
 
       const nextStatus = Object.prototype.hasOwnProperty.call(updatedContent, 'status')
         ? normalizeStatus(updatedContent.status)
@@ -258,6 +267,8 @@ module.exports = ({ cooler }) => {
         type: 'report',
         replaces: tipId,
         image: blobId,
+        images: nextImages,
+        video: nextVideo,
         tags,
         confirmations,
         opinions: agg.opinions,

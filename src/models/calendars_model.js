@@ -14,25 +14,26 @@ const normalizeTags = (raw) => {
   return String(raw).split(",").map(t => t.trim()).filter(Boolean)
 }
 const hasAnyInterval = (w, m, y) => !!(w || m || y)
-const expandRecurrence = (firstDate, deadline, weekly, monthly, yearly) => {
-  const start = new Date(firstDate)
-  const out = [start]
-  if (!deadline || !hasAnyInterval(weekly, monthly, yearly)) return out
-  const end = new Date(deadline).getTime()
-  const seen = new Set([start.getTime()])
-  const walk = (mutate) => {
-    const n = new Date(start)
-    mutate(n)
-    while (n.getTime() <= end) {
-      const t = n.getTime()
-      if (!seen.has(t)) { seen.add(t); out.push(new Date(n)) }
-      mutate(n)
-    }
-  }
-  if (weekly)  walk((d) => d.setDate(d.getDate() + 7))
-  if (monthly) walk((d) => d.setMonth(d.getMonth() + 1))
-  if (yearly)  walk((d) => d.setFullYear(d.getFullYear() + 1))
-  return out.sort((a, b) => a.getTime() - b.getTime())
+const { expandRecurrence } = require('./recurrence')
+
+const ts = (v) => {
+  const t = new Date(v).getTime()
+  return Number.isFinite(t) ? t : null
+}
+
+const assertCalendarDates = ({ deadline, date, until }) => {
+  const now = Date.now()
+  const dl = deadline ? ts(deadline) : null
+  const dt = date ? ts(date) : null
+  const un = until ? ts(until) : null
+  if (deadline && dl === null) throw new Error("Deadline is not a valid date")
+  if (date && dt === null) throw new Error("Date is not a valid date")
+  if (until && un === null) throw new Error("The recurrence end is not a valid date")
+  if (dl !== null && dl <= now) throw new Error("Deadline must be in the future")
+  if (dt !== null && dt <= now) throw new Error("Date must be in the future")
+  if (dt !== null && dl !== null && dt > dl) throw new Error("Date cannot be later than the deadline")
+  if (un !== null && dt !== null && un < dt) throw new Error("The recurrence cannot end before it starts")
+  if (un !== null && dl !== null && un > dl) throw new Error("The recurrence cannot end after the deadline")
 }
 
 module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel }) => {
@@ -106,6 +107,12 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     const key = lookupKey(rootId)
     if (!key) return content
     return tribeCrypto.encryptContent(content, [key], true)
+  }
+
+  const decryptScoped = async (content, rootId) => {
+    if (!content) return content
+    if (content.tribeId) return await decryptIfTribe(content)
+    return decryptCalendarRoot(content, rootId)
   }
 
   const decryptCalendarRoot = (content, rootId) => {
@@ -259,6 +266,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       status: c.status || "OPEN",
       deadline: undec ? "" : (c.deadline || ""),
       tags: Array.isArray(c.tags) ? c.tags : [],
+      mapUrl: typeof c.mapUrl === "string" ? c.mapUrl : "",
       author: c.author || node.author,
       participants: Array.isArray(participants) ? participants : (Array.isArray(c.participants) ? c.participants : []),
       invites: Array.isArray(c.invites) ? c.invites : [],
@@ -339,14 +347,18 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       return tip
     },
 
-    async createCalendar({ title, status, deadline, tags, firstDate, firstDateLabel, firstNote, intervalWeekly, intervalMonthly, intervalYearly, tribeId }) {
+    async createCalendar({ title, status, deadline, tags, firstDate, firstDateLabel, firstNote, intervalWeekly, intervalMonthly, intervalYearly, intervalDeadline, mapUrl, tribeId }) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const now = new Date().toISOString()
       const validStatus = ["OPEN", "CLOSED"].includes(String(status).toUpperCase()) ? String(status).toUpperCase() : "OPEN"
 
-      if (deadline && new Date(deadline).getTime() <= Date.now()) throw new Error("Deadline must be in the future")
-      if (!firstDate || new Date(firstDate).getTime() <= Date.now()) throw new Error("First date must be in the future")
+      if (!firstDate) throw new Error("First date must be in the future")
+      assertCalendarDates({
+        deadline,
+        date: firstDate,
+        until: hasAnyInterval(intervalWeekly, intervalMonthly, intervalYearly) ? intervalDeadline : ""
+      })
 
       let plainContent = {
         type: "calendar",
@@ -354,6 +366,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         status: validStatus,
         deadline: deadline || "",
         tags: normalizeTags(tags),
+        mapUrl: safeText(mapUrl),
         author: userId,
         participants: [userId],
         invites: [],
@@ -400,6 +413,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
               status: validStatus,
               deadline: dec.deadline || "",
               tags: Array.isArray(dec.tags) ? dec.tags : [],
+              mapUrl: dec.mapUrl || "",
               author: userId,
               participants: [userId],
               invites: [{ code: pubCode, ek, salt: inviteSalt, gen: 1, public: true }],
@@ -424,7 +438,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         ...(intervalWeekly ? { intervalWeekly: true } : {}),
         ...(intervalMonthly ? { intervalMonthly: true } : {}),
         ...(intervalYearly ? { intervalYearly: true } : {}),
-        ...(deadline && hasAnyInterval(intervalWeekly, intervalMonthly, intervalYearly) ? { intervalDeadline: deadline } : {}),
+        ...(hasAnyInterval(intervalWeekly, intervalMonthly, intervalYearly) && (intervalDeadline || deadline) ? { intervalDeadline: intervalDeadline || deadline } : {}),
         ...(tribeId ? { tribeId } : {})
       }
       if (tribeId) dateContent = await encryptIfTribe(dateContent)
@@ -467,12 +481,15 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         : decryptCalendarRoot(item.content, rootId)
       assertReadable(oldDec, "Calendar")
       if ((oldDec.author || item.content.author) !== userId) throw new Error("Not the author")
+      const nextDeadline = data.deadline !== undefined ? data.deadline : (oldDec.deadline || "")
+      if (nextDeadline !== (oldDec.deadline || "")) assertCalendarDates({ deadline: nextDeadline })
       let updated = {
         type: "calendar",
         title: data.title !== undefined ? safeText(data.title) : (oldDec.title || ""),
         status: data.status !== undefined ? (["OPEN","CLOSED"].includes(String(data.status).toUpperCase()) ? String(data.status).toUpperCase() : oldDec.status) : (oldDec.status || "OPEN"),
-        deadline: data.deadline !== undefined ? data.deadline : (oldDec.deadline || ""),
+        deadline: nextDeadline,
         tags: data.tags !== undefined ? normalizeTags(data.tags) : (Array.isArray(oldDec.tags) ? oldDec.tags : []),
+        mapUrl: data.mapUrl !== undefined ? safeText(data.mapUrl) : (oldDec.mapUrl || ""),
         author: oldDec.author || userId,
         participants: oldDec.participants || [userId],
         invites: Array.isArray(oldDec.invites) ? oldDec.invites : [],
@@ -495,7 +512,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const userId = ssbClient.id
       const item = await new Promise((resolve, reject) => ssbClient.get(tipId, (e, it) => e ? reject(e) : resolve(it)))
       if (!item || !item.content) throw new Error("Calendar not found")
-      const dec = await decryptIfTribe(item.content)
+      const rootId = await this.resolveRootId(id)
+      const dec = await decryptScoped(item.content, rootId)
       assertReadable(dec, "Calendar")
       const contentAuthor = (dec && dec.author) || (typeof item.content === 'object' && item.content.author)
       if (contentAuthor !== userId) throw new Error("Not the author")
@@ -588,9 +606,14 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const cal = await this.getCalendarById(rootId)
       if (!cal) throw new Error("Calendar not found")
       if (cal.status === "CLOSED" && userId !== cal.author) throw new Error("Only the author can add dates to a CLOSED calendar")
-      if (!date || new Date(date).getTime() <= Date.now()) throw new Error("Date must be in the future")
-
+      if (!date) throw new Error("Date must be in the future")
       const hasInterval = hasAnyInterval(intervalWeekly, intervalMonthly, intervalYearly)
+      assertCalendarDates({
+        deadline: cal.deadline || "",
+        date,
+        until: hasInterval ? intervalDeadline : ""
+      })
+
       const ruleDeadline = hasInterval ? (intervalDeadline || cal.deadline || "") : ""
       let dateContent = {
         type: "calendarDate",
@@ -748,8 +771,9 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const userId = ssbClient.id
       const item = await new Promise((resolve, reject) => ssbClient.get(noteId, (e, it) => e ? reject(e) : resolve(it)))
       if (!item || !item.content) throw new Error("Note not found")
-      const dec = await decryptIfTribe(item.content)
-      if ((dec.author || item.content.author) !== userId) throw new Error("Not the author")
+      const noteRoot = item.content.calendarId || null
+      const dec = await decryptScoped(item.content, noteRoot)
+      if (((dec && dec.author) || item.content.author) !== userId) throw new Error("Not the author")
       return new Promise((resolve, reject) => {
         ssbClient.publish({ type: "tombstone", target: noteId, deletedAt: new Date().toISOString(), author: userId }, (e, msg) => e ? reject(e) : resolve(msg))
       })
@@ -777,8 +801,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         if (tombstoned.has(m.key)) continue
         if (c.calendarId !== rootId || c.dateId !== dateId) continue
         let dec = c
-        if (c.encryptedPayload && tribeCrypto && tribesModel) {
-          const r = await tribeCrypto.decryptFromTribe(c, tribesModel)
+        if (c.encryptedPayload) {
+          const r = await decryptScoped(c, rootId)
           if (r && !r._undecryptable) dec = r
           else continue
         }
@@ -929,6 +953,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         status: dec.status || "OPEN",
         deadline: dec.deadline || "",
         tags: Array.isArray(dec.tags) ? dec.tags : [],
+        mapUrl: dec.mapUrl || "",
         author: dec.author,
         participants: Array.isArray(dec.participants) ? dec.participants : [userId],
         invites,
@@ -975,6 +1000,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         status: dec.status || "OPEN",
         deadline: dec.deadline || "",
         tags: Array.isArray(dec.tags) ? dec.tags : [],
+        mapUrl: dec.mapUrl || "",
         author: dec.author,
         participants: Array.isArray(dec.participants) ? dec.participants : [userId],
         invites,
@@ -1009,7 +1035,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       let calKey = null
       if (tribeCrypto && typeof matchedInvite === "object") {
         if (matchedInvite.ekChain) {
-          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code, matchedInvite.salt)
+          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code, matchedInvite.salt, 3)
           if (Array.isArray(chain) && chain.length) {
             for (const entry of chain) {
               if (Array.isArray(entry.keys) && entry.keys.length) {
@@ -1043,6 +1069,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         status: dec.status || "OPEN",
         deadline: dec.deadline || "",
         tags: Array.isArray(dec.tags) ? dec.tags : [],
+        mapUrl: dec.mapUrl || "",
         author: dec.author,
         participants: [...(Array.isArray(dec.participants) ? dec.participants : []), userId],
         invites,

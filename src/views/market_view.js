@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting } = require("./main_views")
+const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
+const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -133,59 +134,12 @@ const renderStockBar = (stockValue, maxValue) => {
 }
 
 const renderMarketCommentsSection = (itemId, returnTo, comments = []) => {
-  const commentsCount = Array.isArray(comments) ? comments.length : 0
-
-  return div(
-    { class: "vote-comments-section market-comments" },
-    div({ class: "comments-count" }, span({ class: "card-label" }, i18n.voteCommentsLabel + ": "), span({ class: "card-value" }, String(commentsCount))),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form(
-        { method: "POST", action: `/market/${encodeURIComponent(itemId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        textarea({ id: "comment-text", name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    (() => {
-      const visibleComments = (comments || []).filter(c => {
-        const t = c && c.value && c.value.content && c.value.content.text
-        return t && String(t).trim()
-      })
-      return visibleComments.length
-      ? div(
-          { class: "comments-list" },
-          visibleComments.map((c) => {
-            const author = c.value && c.value.author ? c.value.author : ""
-            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : ""
-            const relDate = ts ? moment(ts).fromNow() : ""
-            const userName = author && author.includes("@") ? author.split("@")[1] : author
-            const rootId = c.value && c.value.content ? c.value.content.fork || c.value.content.root : null
-            const text = c.value && c.value.content && c.value.content.text ? c.value.content.text : ""
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && rootId ? a({ href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}` }, relDate) : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            )
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
-    })()
-  )
-}
+  return renderSharedCommentsSection({
+    action: `/market/${encodeURIComponent(itemId)}/comments`,
+    comments: comments,
+    returnTo: returnTo
+  });
+};
 
 const isMyBidItem = (item) => {
   const polls = Array.isArray(item.auctions_poll) ? item.auctions_poll : []
@@ -360,18 +314,18 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
         form(
           { method: "GET", action: "/market", class: "ui-toolbar ui-toolbar--filters" },
           ...hiddenCtx,
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterMine),
-          button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterItems),
-          button({ type: "submit", name: "filter", value: "auctions", class: filter === "auctions" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterAuctions),
-          button({ type: "submit", name: "filter", value: "mybids", class: filter === "mybids" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterMyBids),
-          button({ type: "submit", name: "filter", value: "new", class: filter === "new" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterNew),
-          button({ type: "submit", name: "filter", value: "used", class: filter === "used" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterUsed),
-          button({ type: "submit", name: "filter", value: "broken", class: filter === "broken" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterBroken),
-          button({ type: "submit", name: "filter", value: "for sale", class: filter === "for sale" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterForSale),
-          button({ type: "submit", name: "filter", value: "sold", class: filter === "sold" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterSold),
-          button({ type: "submit", name: "filter", value: "discarded", class: filter === "discarded" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterDiscarded),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterRecent),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterItems).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "auctions", class: filter === "auctions" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAuctions).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mybids", class: filter === "mybids" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMyBids).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "new", class: filter === "new" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterNew).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "used", class: filter === "used" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterUsed).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "broken", class: filter === "broken" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterBroken).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "for sale", class: filter === "for sale" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterForSale).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sold", class: filter === "sold" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterSold).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "discarded", class: filter === "discarded" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterDiscarded).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.marketCreateButton)
         )
       ),
@@ -555,6 +509,10 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                         renderMediaBlob(item.image, '/assets/images/default-market.png', { class: 'tribe-card-hero-image' })
                       )
                     ),
+                    div({ class: "card-header activity-card-header" },
+                      span(),
+                      renderContentActions(item.id, `/market/${encodeURIComponent(item.id)}`, { spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title })
+                    ),
                     div({ class: "tribe-card-body" },
                       div({ class: "shop-title-row" },
                         h2({ class: "tribe-card-title" }, a({ href: `/market/${encodeURIComponent(item.id)}` }, item.title))
@@ -568,18 +526,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                         item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
                         renderLifespanChip(item.lifetime, i18n)
                       ),
-                      div({ class: "market-card-price card-date-highlight" }, `${item.price} ECO`),
-                      div({ class: "card-visit-btn-centered" },
-                        form({ method: 'GET', action: `/market/${encodeURIComponent(item.id)}` },
-                          input({ type: "hidden", name: "returnTo", value: returnTo }),
-                          input({ type: "hidden", name: "filter", value: filter || "all" }),
-                          input({ type: "hidden", name: "q", value: q }),
-                          input({ type: "hidden", name: "minPrice", value: String(minPrice ?? "") }),
-                          input({ type: "hidden", name: "maxPrice", value: String(maxPrice ?? "") }),
-                          input({ type: "hidden", name: "sort", value: sort }),
-                          button({ type: 'submit', class: 'filter-btn' }, i18n.viewItem || i18n.marketVisitItem || 'View Item')
-                        )
-                      )
+                      div({ class: "market-card-price card-date-highlight" }, `${item.price} ECO`)
                     )
                   )
                 })
@@ -604,6 +551,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
 
   return template(
     item.title,
+    section(div({ class: "tags-header" }, h2(i18n.marketTitle), p(i18n.marketDescription))),
     section(
       div(
         { class: "filters" },
@@ -613,18 +561,18 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           input({ type: "hidden", name: "minPrice", value: minPrice ?? "" }),
           input({ type: "hidden", name: "maxPrice", value: maxPrice ?? "" }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterMine),
-          button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterItems),
-          button({ type: "submit", name: "filter", value: "auctions", class: filter === "auctions" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterAuctions),
-          button({ type: "submit", name: "filter", value: "mybids", class: filter === "mybids" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterMyBids),
-          button({ type: "submit", name: "filter", value: "new", class: filter === "new" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterNew),
-          button({ type: "submit", name: "filter", value: "used", class: filter === "used" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterUsed),
-          button({ type: "submit", name: "filter", value: "broken", class: filter === "broken" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterBroken),
-          button({ type: "submit", name: "filter", value: "for sale", class: filter === "for sale" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterForSale),
-          button({ type: "submit", name: "filter", value: "sold", class: filter === "sold" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterSold),
-          button({ type: "submit", name: "filter", value: "discarded", class: filter === "discarded" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterDiscarded),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.marketFilterRecent),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterItems).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "auctions", class: filter === "auctions" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAuctions).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mybids", class: filter === "mybids" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMyBids).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "new", class: filter === "new" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterNew).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "used", class: filter === "used" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterUsed).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "broken", class: filter === "broken" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterBroken).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "for sale", class: filter === "for sale" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterForSale).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sold", class: filter === "sold" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterSold).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "discarded", class: filter === "discarded" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterDiscarded).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.marketCreateButton)
         )
       ),
@@ -652,27 +600,31 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           ))
         pushRow(i18n.marketItemSeller, userLink(item.seller))
         if (item.shopId && item.shopTitle) pushRow(i18n.marketShopLabel || "Shop", a({ href: `/shops/${encodeURIComponent(item.shopId)}`, class: "user-link" }, item.shopTitle))
-        if (item.deadline) pushRow(i18n.marketItemAvailable, moment(item.deadline).format("YYYY/MM/DD HH:mm:ss"))
+        if (item.deadline) pushRow(i18n.marketItemAvailable, moment(item.deadline).format("YYYY/MM/DD HH:mm"))
 
         const itemSide = div({ class: "tribe-side" },
+          div({ class: "card-header activity-card-header" },
+            renderContentActions(item.id, null, { spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title })
+          ),
           div({ class: "shop-title-row" },
             h2({ class: "tribe-card-title" }, item.title)
           ),
           renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
           chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-          div({ class: "card-spread-centered" }, renderSpreadButton(item.id, params.spreads)),
           renderMediaBlob(item.image, "/assets/images/default-market.png"),
           div({ class: "card-date-highlight" }, `${item.price} ECO`),
           renderStockBar(item.stock, maxStock),
           table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
-          tagsNode
+          tagsNode,
+          visibilityRow,
+          marketActions.length ? div({ class: "tribe-side-actions" }, ...marketActions) : null
         )
 
         const visibilityRow = String(item.seller) === String(userId)
           ? (() => {
               const vis = isHidden ? 'HIDDEN' : 'PUBLIC'
               const next = vis === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC'
-              return div({ class: "tribe-side-actions" },
+              return div({ class: "tribe-side-actions housing-status-row" },
                 span({ class: "card-label" }, `${i18n.visibilityLabel || 'Visibility'}: `),
                 renderVisibilityChip(vis, i18n),
                 form({ method: "POST", action: `/market/visibility/${encodeURIComponent(item.id)}`, class: "inline-form" },
@@ -701,8 +653,6 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           ))
         }
         const itemMain = div({ class: "tribe-main" },
-          marketActions.length ? div({ class: "tribe-side-actions" }, ...marketActions) : null,
-          visibilityRow,
           item.description
             ? div({ class: "job-section" },
                 h2({ class: "job-section-title" }, i18n.marketItemDescription),
@@ -720,7 +670,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
                       { class: "auction-bid-table" },
                       tr(th(i18n.marketAuctionBidTime), th(i18n.marketAuctionUser), th(i18n.marketAuctionBidAmount)),
                       parsedBids.map((bid) =>
-                        tr(td(moment(bid.time).format("YYYY-MM-DD HH:mm:ss")), td(a({ href: `/author/${encodeURIComponent(bid.bidder)}` }, bid.bidder)), td(`${parseFloat(bid.amount).toFixed(6)} ECO`))
+                        tr(td(moment(bid.time).format("YYYY/MM/DD HH:mm")), td(a({ href: `/author/${encodeURIComponent(bid.bidder)}` }, bid.bidder)), td(`${parseFloat(bid.amount).toFixed(6)} ECO`))
                       )
                     )
                   : p({ class: "tribe-side-description" }, i18n.marketNoBids || "No bids yet"),
@@ -745,12 +695,12 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
                 )
               )
             : null,
-          String(item.seller) !== String(userId) && item.purchasedByViewer
-            ? div({ class: "market-opinions" },
-                renderOpinionsVoting("/market/opinions", item.id, item.opinions, returnTo, item.opinions_inhabitants)
-              )
-            : null,
-          renderMarketCommentsSection(item.id, returnTo, comments)
+          renderEngagement(item.id,
+            String(item.seller) !== String(userId) && item.purchasedByViewer
+              ? renderOpinionsVoting("/market/opinions", item.id, item.opinions, returnTo, item.opinions_inhabitants)
+              : null,
+            renderMarketCommentsSection(item.id, returnTo, comments)
+          )
         )
 
         return div({ class: "tribe-details" }, itemSide, itemMain)

@@ -573,10 +573,14 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     });
   }
 
+  function wallIsPublic(houseKey, { isGoverning = false } = {}) {
+    return houseKey === 'academia' || isGoverning === true;
+  }
+
   async function listHousePosts(houseKey, { viewerHouse = null, isGoverning = false } = {}) {
     if (!VALID_KEY(houseKey)) return [];
     const viewerIsMember = viewerHouse === houseKey;
-    if (!viewerIsMember && !isGoverning) return [];
+    if (!viewerIsMember && !wallIsPublic(houseKey, { isGoverning })) return [];
     const client = await openSsb();
     const memberships = await listAllMemberships();
     return new Promise((resolve) => {
@@ -917,6 +921,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
   return {
     HOUSES,
     HOUSE_KEYS,
+    wallIsPublic,
     TEST_COOLDOWN_MS,
     TEST_QUESTIONS_COUNT,
     PROFILE_QUESTIONS,

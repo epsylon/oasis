@@ -7,6 +7,9 @@ const tmpRoot = path.join(os.tmpdir(), 'oasis-tests-' + process.pid);
 const bankingStoreDir = path.join(tmpRoot, 'banking-store');
 fs.mkdirSync(bankingStoreDir, { recursive: true });
 process.env.OASIS_BANKING_DIR = bankingStoreDir;
+const stateDir = path.join(tmpRoot, 'state');
+fs.mkdirSync(stateDir, { recursive: true });
+process.env.OASIS_STATE_DIR = stateDir;
 let counter = 0;
 const fresh = () => {
   counter++;
@@ -64,7 +67,11 @@ const FACTORIES = {
   larp: '../../src/models/larp_model',
   melody: '../../src/models/melody_model',
   games: '../../src/models/games_model',
-  logs: '../../src/models/logs_model'
+  logs: '../../src/models/logs_model',
+  blogs: '../../src/models/blog_model',
+  polls: '../../src/models/polls_model',
+  data: '../../src/models/data_model',
+  mentions: '../../src/models/mentions_model'
 };
 
 function loadFactory(name) {
@@ -93,6 +100,8 @@ function makePeer(network, keypair) {
     let deps;
     if (name === 'tribesContent' || name === 'torrents') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes') };
+    } else if (name === 'polls') {
+      deps = { ...baseDeps, chatsModel: requireOnce('chats') };
     } else if (name === 'chats') {
       deps = { ...baseDeps, chatCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'pads') {
@@ -128,7 +137,18 @@ function makePeer(network, keypair) {
         padsModel: requireOnce('pads'),
         chatsModel: requireOnce('chats'),
         calendarsModel: requireOnce('calendars'),
-        torrentsModel: requireOnce('torrents')
+        torrentsModel: requireOnce('torrents'),
+        marketModel: requireOnce('market'),
+        shopsModel: requireOnce('shops'),
+        eventsModel: requireOnce('events'),
+        tasksModel: requireOnce('tasks'),
+        reportsModel: requireOnce('reports'),
+        votesModel: requireOnce('votes'),
+        jobsModel: requireOnce('jobs'),
+        housingModel: requireOnce('housing'),
+        projectsModel: requireOnce('projects'),
+        transfersModel: requireOnce('transfers'),
+        forumModel: requireOnce('forum')
       };
     } else if (name === 'banking') {
       deps = { services: { cooler, feed: { listAll: async () => [] }, activity: { list: async () => [] } } };

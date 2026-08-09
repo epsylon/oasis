@@ -85,7 +85,7 @@ describe('security: replaces-overwrite hijack (CWE content spoofing)', (t) => {
   t('bookmarks: B cannot overwrite A bookmark url via replaces', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    const r = await A.use('bookmarks').createBookmark('https://original.example', 'tag', 'desc', 'news', null);
+    const r = await A.use('bookmarks').createBookmark('https://original.example', 'tag', 'desc', null);
     const aId = r.key; const aAuthor = await idOf(A);
     B.setActor();
     await publishRaw(B, { type: 'bookmark', replaces: aId, url: 'https://hijacked.evil', author: aAuthor, tags: [], description: '', category: '', opinions: {}, opinions_inhabitants: [], createdAt: new Date().toISOString() });
@@ -96,7 +96,7 @@ describe('security: replaces-overwrite hijack (CWE content spoofing)', (t) => {
   t('bookmarks: B legitimate opinion is preserved', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    const r = await A.use('bookmarks').createBookmark('https://x.example', 'tag', 'desc', 'news', null);
+    const r = await A.use('bookmarks').createBookmark('https://x.example', 'tag', 'desc', null);
     B.setActor();
     await B.use('bookmarks').createOpinion(r.key, 'interesting');
     const bm = await B.use('bookmarks').getBookmarkById(r.key);
@@ -251,7 +251,7 @@ describe('security: replaces-overwrite hijack (CWE content spoofing)', (t) => {
   });
 
   const MEDIA = [
-    { mod: 'images', type: 'image', create: (m) => m.createImage('&x.sha256', ['t'], 'Original', 'd', false, ''), get: (m, id) => m.getImageById(id) },
+    { mod: 'images', type: 'image', create: (m) => m.createImage('&x.sha256', ['t'], 'Original', 'd', ''), get: (m, id) => m.getImageById(id) },
     { mod: 'audios', type: 'audio', create: (m) => m.createAudio('&x.sha256', ['t'], 'Original', 'd', ''), get: (m, id) => m.getAudioById(id) },
     { mod: 'videos', type: 'video', create: (m) => m.createVideo('&x.sha256', ['t'], 'Original', 'd', ''), get: (m, id) => m.getVideoById(id) },
     { mod: 'documents', type: 'document', create: (m) => m.createDocument('&x.sha256', ['t'], 'Original', 'd'), get: (m, id) => m.getDocumentById(id) },

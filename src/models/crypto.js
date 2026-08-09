@@ -223,14 +223,27 @@ module.exports = (configPath, namespace = 'tribes') => {
     return decryptWithKey(encryptedKey, derived.toString('hex'), inviteAad(inviteCode, salt));
   };
 
+  const INVITE_ENCRYPT_ATTEMPTS = 3;
+
   const encryptChainForInvite = (ancestryRootIds, code, salt) => {
     const chain = ancestryRootIds.map(rid => ({ rootId: rid, keys: getKeys(rid), gen: getGen(rid) }));
     if (chain.some(e => !Array.isArray(e.keys) || !e.keys.length)) return null;
-    const k = deriveInviteKey(code, salt);
-    return encryptWithKey(JSON.stringify(chain), k.toString('hex'), inviteAad(code, salt));
+    const plain = JSON.stringify(chain);
+    const aad = inviteAad(code, salt);
+    for (let attempt = 0; attempt < INVITE_ENCRYPT_ATTEMPTS; attempt++) {
+      const k = deriveInviteKey(code, salt);
+      const payload = encryptWithKey(plain, k.toString('hex'), aad);
+      if (!payload) continue;
+      const readBack = decryptChainFromInvite(payload, code, salt);
+      if (readBack && JSON.stringify(readBack.map(e => ({ rootId: e.rootId, keys: e.keys, gen: e.gen })))
+        === JSON.stringify(chain.map(e => ({ rootId: e.rootId, keys: e.keys, gen: e.gen })))) {
+        return payload;
+      }
+    }
+    throw new Error('Could not produce a verifiable invite on this machine');
   };
 
-  const decryptChainFromInvite = (encryptedPayload, code, salt) => {
+  const decryptChainOnce = (encryptedPayload, code, salt) => {
     const k = deriveInviteKey(code, salt);
     try {
       const json = decryptWithKey(encryptedPayload, k.toString('hex'), inviteAad(code, salt));
@@ -244,6 +257,15 @@ module.exports = (configPath, namespace = 'tribes') => {
         }));
       }
     } catch (_) {}
+    return null;
+  };
+
+  const decryptChainFromInvite = (encryptedPayload, code, salt, attempts = 1) => {
+    const tries = Math.max(1, Number(attempts) || 1);
+    for (let i = 0; i < tries; i++) {
+      const chain = decryptChainOnce(encryptedPayload, code, salt);
+      if (chain) return chain;
+    }
     return null;
   };
 

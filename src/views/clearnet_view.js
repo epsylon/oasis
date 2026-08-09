@@ -71,7 +71,7 @@ const renderFediverseReach = (prefs, i18nObj = {}) => {
     a({ href: url, target: '_blank', rel: 'noopener noreferrer', class: 'pm-exposition-chip-link' },
       span({ class: 'pm-exposition-chip pm-exposition-fediverse' },
         span({ class: 'pm-exposition-icon' }, '🐘'),
-        span({ class: 'pm-exposition-text' }, i18nObj.fediverse || 'Fediverse')
+        span({ class: 'pm-exposition-text' }, i18nObj.fediverse || 'Multiverse')
       )
     ),
     a({ href: url, target: '_blank', rel: 'noopener noreferrer', class: 'fediverse-reach-url' }, handle)

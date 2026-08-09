@@ -12,12 +12,8 @@ if (!fs.existsSync(configFilePath)) {
       "current": "blocks"
     },
     "modules": {
-      "popularMod": "on",
-      "topicsMod": "on",
-      "summariesMod": "on",
-      "latestMod": "on",
-      "threadsMod": "on",
-      "multiverseMod": "on",
+      "blogsMod": "on",
+      "pollsMod": "on",
       "fediverseMod": "off",
       "invitesMod": "on",
       "walletMod": "on",

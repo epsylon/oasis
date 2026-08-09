@@ -81,14 +81,21 @@ pins = json.loads(sys.argv[1])
 im = Image.open(sys.argv[2]).copy()
 draw = ImageDraw.Draw(im)
 
-for p in pins:
-    x, y, main = p['x'], p['y'], p.get('main', False)
-    sw = 3 if main else 2
-    sh = 18 if main else 13
+def draw_pin(draw, x, y, main):
+    sw = 7 if main else 5
+    sh = 34 if main else 26
+    head = 11 if main else 8
     clr = '#e74c3c' if main else '#3498db'
     dark = '#c0392b' if main else '#2980b9'
-    draw.polygon([(x, y + 2), (x - sw, y - sh + sw * 2), (x + sw, y - sh + sw * 2)], fill=clr)
-    draw.ellipse([x - sw - 1, y - sh - sw, x + sw + 1, y - sh + sw], fill=dark, outline='white', width=1)
+    cy = y - sh
+    draw.polygon([(x, y + 2), (x - sw - 1, cy + sw), (x + sw + 1, cy + sw)], fill='white')
+    draw.polygon([(x, y), (x - sw, cy + sw), (x + sw, cy + sw)], fill=clr)
+    draw.ellipse([x - head - 2, cy - head - 2, x + head + 2, cy + head + 2], fill='white')
+    draw.ellipse([x - head, cy - head, x + head, cy + head], fill=clr, outline=dark, width=2)
+    draw.ellipse([x - head // 3, cy - head // 3, x + head // 3, cy + head // 3], fill='white')
+
+for p in pins:
+    draw_pin(draw, p['x'], p['y'], p.get('main', False))
 
 im.save(sys.argv[3], optimize=True)
 `;
@@ -193,15 +200,23 @@ cropped = canvas.crop((int(crop_x), int(crop_y), int(crop_x + vw), int(crop_y + 
 result = cropped.resize((1024, 1024), Image.LANCZOS)
 
 draw = ImageDraw.Draw(result)
+def draw_pin(draw, x, y, main):
+    sw = 7 if main else 5
+    sh = 34 if main else 26
+    head = 11 if main else 8
+    clr = '#e74c3c' if main else '#3498db'
+    dark = '#c0392b' if main else '#2980b9'
+    cy = y - sh
+    draw.polygon([(x, y + 2), (x - sw - 1, cy + sw), (x + sw + 1, cy + sw)], fill='white')
+    draw.polygon([(x, y), (x - sw, cy + sw), (x + sw, cy + sw)], fill=clr)
+    draw.ellipse([x - head - 2, cy - head - 2, x + head + 2, cy + head + 2], fill='white')
+    draw.ellipse([x - head, cy - head, x + head, cy + head], fill=clr, outline=dark, width=2)
+    draw.ellipse([x - head // 3, cy - head // 3, x + head // 3, cy + head // 3], fill='white')
+
 for p in pins:
     px, py, main = p['px'], p['py'], p.get('main', False)
-    if -20 <= px <= 1044 and -20 <= py <= 1044:
-        sw = 3 if main else 2
-        sh = 18 if main else 13
-        clr = '#e74c3c' if main else '#3498db'
-        dark = '#c0392b' if main else '#2980b9'
-        draw.polygon([(px, py + 2), (px - sw, py - sh + sw * 2), (px + sw, py - sh + sw * 2)], fill=clr)
-        draw.ellipse([px - sw - 1, py - sh - sw, px + sw + 1, py - sh + sw], fill=dark, outline='white', width=1)
+    if -40 <= px <= 1064 and -40 <= py <= 1064:
+        draw_pin(draw, px, py, main)
 
 result.save(out_file, optimize=True)
 `;

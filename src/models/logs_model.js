@@ -6,6 +6,7 @@ const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 const MONTH_MS = 30 * DAY_MS;
@@ -311,7 +312,16 @@ module.exports = ({ cooler }) => {
         ref: c.ref || null
       });
     }
+    const parentOf = new Map();
+    for (const i of items) if (i.replaces) parentOf.set(i.key, i.replaces);
+    const rootOf = (key) => {
+      let cur = key;
+      const seen = new Set();
+      while (parentOf.has(cur) && !seen.has(cur)) { seen.add(cur); cur = parentOf.get(cur); }
+      return cur;
+    };
     const survivors = items.filter(i => !tombstoned.has(i.key) && !replaced.has(i.key));
+    for (const i of survivors) i.rootId = rootOf(i.key);
     survivors.sort((a, b) => b.ts - a.ts);
     return survivors;
   }
@@ -332,11 +342,14 @@ module.exports = ({ cooler }) => {
   async function updateLog(id, { text, label, mode }) {
     const current = await getLogById(id);
     if (!current) return { status: 'not_found' };
-    await republishLog({
-      replaces: current.key,
+    const next = {
       text: text !== undefined ? text : current.text,
       label: label !== undefined ? label : current.label,
-      mode: mode || current.mode,
+      mode: mode || current.mode
+    };
+    await republishLog({
+      replaces: current.key,
+      ...next,
       createdAt: current.createdAt
     });
     return { status: 'ok' };

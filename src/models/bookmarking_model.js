@@ -145,7 +145,6 @@ module.exports = ({ cooler }) => {
       updatedAt: c.updatedAt || null,
       lastVisit: c.lastVisit || null,
       tags: safeArr(c.tags),
-      category: c.category || "",
       description: c.description || "",
       opinions,
       opinions_inhabitants: voters,
@@ -182,7 +181,7 @@ module.exports = ({ cooler }) => {
       return root;
     },
 
-    async createBookmark(url, tagsRaw, description, category, lastVisit) {
+    async createBookmark(url, tagsRaw, description, lastVisit) {
       const ssbClient = await openSsb();
       const now = new Date().toISOString();
 
@@ -195,7 +194,6 @@ module.exports = ({ cooler }) => {
         url: u,
         tags: normalizeTags(tagsRaw),
         description: description || "",
-        category: category || "",
         createdAt: now,
         updatedAt: now,
         lastVisit: coerceLastVisit(lastVisit),
@@ -231,7 +229,6 @@ module.exports = ({ cooler }) => {
         url,
         tags: updatedData.tags !== undefined ? normalizeTags(updatedData.tags) : safeArr(oldMsg.content.tags),
         description: updatedData.description !== undefined ? updatedData.description || "" : oldMsg.content.description || "",
-        category: updatedData.category !== undefined ? updatedData.category || "" : oldMsg.content.category || "",
         lastVisit: coerceLastVisit(updatedData.lastVisit || oldMsg.content.lastVisit),
         createdAt: oldMsg.content.createdAt,
         updatedAt: now
@@ -296,11 +293,10 @@ module.exports = ({ cooler }) => {
       if (q) {
         list = list.filter((b) => {
           const url = String(b.url || "").toLowerCase();
-          const cat = String(b.category || "").toLowerCase();
           const desc = String(b.description || "").toLowerCase();
           const tags = safeArr(b.tags).join(" ").toLowerCase();
           const author = String(b.author || "").toLowerCase();
-          return url.includes(q) || cat.includes(q) || desc.includes(q) || tags.includes(q) || author.includes(q);
+          return url.includes(q) || desc.includes(q) || tags.includes(q) || author.includes(q);
         });
       }
 

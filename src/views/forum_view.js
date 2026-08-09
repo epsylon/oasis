@@ -3,7 +3,7 @@ const {
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -22,9 +22,9 @@ exports.renderForumInvitePage = (code) => {
   return template(i18n.invitesForumsTitle || 'Forums', section(pageContent));
 };
 
-const BASE_FILTERS = ['hot','all','mine','recent','top'];
-const CAT_BLOCK1 = ['GENERAL','OASIS','L.A.R.P.','POLITICS','TECH'];
-const CAT_BLOCK2 = ['SCIENCE','MUSIC','ART','GAMING','BOOKS','FILMS'];
+const BASE_FILTERS = ['all','mine','recent','top'];
+const CAT_BLOCK1 = ['GENERAL','OASIS','L.A.R.P.'];
+const CAT_BLOCK2 = ['POLITICS','TECH','SCIENCE','MUSIC','ART','GAMING','BOOKS','FILMS'];
 const CAT_BLOCK3 = ['PHILOSOPHY','SOCIETY','PRIVACY','CYBERWARFARE','SURVIVALISM'];
 const ALL_CATS = [...CAT_BLOCK1, ...CAT_BLOCK2, ...CAT_BLOCK3];
 
@@ -44,9 +44,6 @@ function getFilteredForums(filter, forums) {
   if (filter === 'mine')    return forums.filter(f => f.author === userId);
   if (filter === 'recent')  return forums.filter(f => new Date(f.createdAt).getTime() >= now - 86400000);
   if (filter === 'top')     return forums.slice().sort((a,b) => b.score - a.score);
-  if (filter === 'hot')     return forums
-    .filter(f => new Date(f.createdAt).getTime() >= now - 86400000)
-    .sort((a,b) => b.score - a.score);
   if (ALL_CATS.includes(filter))
     return forums.filter(f => f.category === filter);
   return forums;
@@ -138,7 +135,7 @@ const renderThread = (nodes, level = 0, forumId) => {
           userLink(m.author),
           div({ class: 'comment-votes' },
             span({ class: 'votes-count' }, `▲: ${m.positiveVotes || 0}`),
-            span({ class: 'votes-count', style: 'margin-left:12px;' },
+            span({ class: 'votes-count votes-count-negative' },
               `▼: ${m.negativeVotes || 0}`)
           )
         ),
@@ -190,6 +187,9 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
             renderVotes(f.key, f.score, f.key)
           ),
           div({ class: 'forum-main-col' },
+            div({ class: 'card-header activity-card-header' },
+              renderContentActions(f.key, `/forum/${encodeURIComponent(f.key)}`, { spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title })
+            ),
             div({ class: 'forum-header-row' },
               a({
                 class: 'forum-category',
@@ -210,20 +210,13 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
             div({ class: 'forum-meta' },
               span({ class: 'forum-positive-votes' },
                 `▲: ${f.positiveVotes || 0}`),
-              span({ class: 'forum-negative-votes', style: 'margin-left:12px;' },
+              span({ class: 'forum-negative-votes' },
                 `▼: ${f.negativeVotes || 0}`),
               span({ class: 'forum-participants' },
                 `${i18n.forumParticipants.toUpperCase()}: ${f.participants?.length || 1}`),
               span({ class: 'forum-messages' },
-                `${i18n.forumMessages.toUpperCase()}: ${(f.messagesCount || 1) - 1}`),
-              form({ method: 'GET', action: `/forum/${encodeURIComponent(f.key)}`, class: 'visit-forum-form' },
-                button({ type: 'submit', class: 'filter-btn' }, i18n.forumVisitButton)
-              )
+                `${i18n.forumMessages.toUpperCase()}: ${(f.messagesCount || 1) - 1}`)
             ),
-            (() => {
-              const btn = renderSpreadButton(f.key, spreadMap.get(f.key));
-              return btn ? div({ class: 'card-spread-left' }, btn) : null;
-            })(),
             div({ class: 'forum-footer' },
               span({ class: 'date-link' },
                 `${moment(f.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
@@ -260,7 +253,6 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
       ),
       div({ class: 'mode-buttons-cols' },
         generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
-          hot: i18n.forumFilterHot,
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,
           recent: i18n.forumFilterRecent,
@@ -271,6 +263,17 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
         generateFilterButtons(CAT_BLOCK3, currentFilter, '/forum', CAT_I18N_MAP_UP),
         renderCreateForumButton()
       ),
+      currentFilter === 'create'
+        ? null
+        : div({ class: 'filters' },
+            form({ method: 'GET', action: '/forum', class: 'filter-box' },
+              input({ type: 'hidden', name: 'filter', value: currentFilter || 'all' }),
+              input({ type: 'text', name: 'q', value: params.q || '', placeholder: i18n.forumSearchPlaceholder, class: 'filter-box__input' }),
+              div({ class: 'filter-box__controls' },
+                button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+              )
+            )
+          ),
       currentFilter === 'create'
         ? renderForumForm()
         : renderForumList(
@@ -292,7 +295,6 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
       ),
        div({ class: 'mode-buttons-cols' },
         generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
-          hot: i18n.forumFilterHot,
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,
           recent: i18n.forumFilterRecent,
@@ -305,22 +307,22 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
       )
     ),
     div({ class: 'forum-thread-container' },
-      div({
-        class: 'forum-card forum-thread-header',
-        style: 'display:flex;align-items:flex-start;'
-      },
-        div({
-          class: 'root-vote-col',
-          style: 'width:60px;text-align:center;'
-        }, renderVotes(
+      div({ class: 'forum-card forum-thread-header' },
+        div({ class: 'root-vote-col' }, renderVotes(
           forum.key,
           messagesData.totalScore,
           forum.key
         )),
-        div({
-          class: 'forum-main-col',
-          style: 'flex:1;padding-left:10px;'
-        },
+        div({ class: 'forum-main-col' },
+          div({ class: 'card-header activity-card-header' },
+            renderContentActions(forum.key, null, {
+              author: forum.author,
+              favKind: 'forum',
+              isFavorite: forum.isFavorite,
+              spread: null,
+              reportTitle: forum.title
+            })
+          ),
           div({ class: 'forum-header-row' },
             a({
               class: 'forum-category',
@@ -363,21 +365,15 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
 	    innerHTML: sanitizeHtml(renderTextWithStyles(forum.text || ''))
 	  }),
           div({ class: 'forum-meta' },
-            span({ class: 'votes-count' },
+            span({ class: 'forum-positive-votes' },
               `▲: ${messagesData.positiveVotes}`),
-            span({
-              class: 'votes-count',
-              style: 'margin-left:12px;'
-            }, `▼: ${messagesData.negativeVotes}`),
+            span({ class: 'forum-negative-votes' },
+              `▼: ${messagesData.negativeVotes}`),
             span({ class: 'forum-participants' },
               `${i18n.forumParticipants.toUpperCase()}: ${forum.participants?.length || 1}`),
             span({ class: 'forum-messages' },
               `${i18n.forumMessages.toUpperCase()}: ${messagesData.total}`)
           ),
-          (() => {
-            const btn = renderSpreadButton(forum.key);
-            return btn ? div({ class: 'card-spread-left' }, btn) : null;
-          })(),
           div({ class: 'forum-footer' },
             span({ class: 'date-link' },
               `${moment(forum.createdAt).format('YYYY/MM/DD HH:mm:ss')} ${i18n.performed}`),
@@ -385,10 +381,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
           )
         )
       ),
-      div({
-        class: 'new-message-wrapper',
-        style: 'margin-top:12px;'
-      },
+      div({ class: 'new-message-wrapper' },
         form({
           method: 'POST',
           action: `/forum/${encodeURIComponent(forum.key)}/message`,
@@ -399,13 +392,9 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
             rows: 4,
             required: true,
             placeholder: i18n.forumMessagePlaceholder,
-            style: 'width:100%;'
+            class: 'new-message-textarea'
           }), br(),
-          button({
-            type: 'submit',
-            class: 'forum-send-btn',
-            style: 'margin-top:4px;'
-          }, i18n.forumSendButton)
+          button({ type: 'submit', class: 'forum-send-btn' }, i18n.forumSendButton)
         )
       ),
       ...renderThread(messagesData.messages, 0, forum.key)

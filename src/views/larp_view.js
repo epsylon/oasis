@@ -1,5 +1,8 @@
-const { div, h1, h2, h3, p, section, button, form, input, span, img, a, br, table, tr, td, textarea, label, strong } = require("../server/node_modules/hyperaxe");
+const { div, h1, h2, h3, p, section, button, form, input, span, img, a, br, table, tr, td, textarea, label, strong, details, summary } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink } = require("./main_views");
+const { config } = require("../server/SSB_server.js");
+
+const userId = config.keys.id;
 const moment = require("../server/node_modules/moment");
 
 const fmtCycle = (c) => c && c.formatted ? c.formatted : '';
@@ -11,16 +14,24 @@ const renderCycleBanner = (cycle) => div({ class: 'larp-cycle-banner' },
   span({ class: 'larp-cycle-value' }, fmtCycle(cycle))
 );
 
-const renderHouseBadges = ({ myHouse, governingHouse }) => div({ class: 'larp-house-badges' },
-  myHouse ? div({ class: 'larp-my-house' },
-    span({ class: 'larp-my-house-label' }, i18n.larpMyHouse || 'My House'),
-    a({ href: `/larp/${myHouse.key}`, class: 'larp-my-house-link' }, myHouse.name)
-  ) : null,
-  governingHouse ? div({ class: 'larp-my-house' },
-    span({ class: 'larp-my-house-label' }, i18n.larpGoverning || 'Governing'),
-    a({ href: `/larp/${governingHouse.key}`, class: 'larp-my-house-link' }, governingHouse.name)
-  ) : null
-);
+const renderHouseBadges = ({ myHouse, governingHouse, houses }) => {
+  const academia = Array.isArray(houses) ? houses.find(h => h.key === 'academia') : null;
+  const isNewcomer = !myHouse;
+  return div({ class: 'larp-house-badges' },
+    myHouse ? div({ class: 'larp-my-house' },
+      span({ class: 'larp-my-house-label' }, i18n.larpMyHouse || 'My House'),
+      a({ href: `/larp/${myHouse.key}`, class: 'larp-my-house-link' }, myHouse.name)
+    ) : null,
+    governingHouse ? div({ class: 'larp-my-house' },
+      span({ class: 'larp-my-house-label' }, i18n.larpGoverning || 'Ruling:'),
+      a({ href: `/larp/${governingHouse.key}`, class: 'larp-my-house-link' }, governingHouse.name)
+    ) : null,
+    isNewcomer && academia ? div({ class: 'larp-my-house larp-academia-hint' },
+      span({ class: 'larp-my-house-label' }, i18n.larpStartHere),
+      a({ href: `/larp/${academia.key}`, class: 'larp-my-house-link' }, academia.name)
+    ) : null
+  );
+};
 
 const renderHouseNav = (houses, currentKey) => div({ class: 'larp-house-nav' },
   span({ class: 'larp-house-nav-label' }, i18n.larpAllHouses || 'Houses:'),
@@ -31,7 +42,7 @@ const renderHouseNav = (houses, currentKey) => div({ class: 'larp-house-nav' },
   }, h.name))
 );
 
-const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cyclesUntilRuling }) => {
+const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cyclesUntilRuling, canTakeTest = false }) => {
   const { renderEncryptedChip } = require('./clearnet_view');
   const isInHouse = viewerHouseKey === house.key;
   const isInLarp = viewerHouseKey !== null && viewerHouseKey !== undefined;
@@ -66,6 +77,9 @@ const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cycl
     ),
     p({ class: 'larp-detail-description' }, house.description),
     div({ class: 'larp-actions' },
+      isAcademia && isInHouse && canTakeTest
+        ? a({ href: '/larp/test', class: 'filter-btn larp-start-journey' }, i18n.larpStartJourney)
+        : null,
       isInHouse
         ? a({ href: `/larp/tribe/${encodeURIComponent(house.key)}`, class: 'filter-btn' }, i18n.larpVisitTribe || 'Visit Tribe')
         : null,
@@ -162,53 +176,62 @@ const renderAcademiaJoinPanel = (allHouses, testStatus, housesById, questions, m
     div({ class: 'larp-academia-grid' },
       ordered.map(h => a({ href: `/larp/${h.key}`, class: h.key === myKey ? 'larp-academia-thumb larp-academia-thumb-mine' : 'larp-academia-thumb' },
         img({ src: houseImageSrc(h), alt: h.name, class: 'larp-academia-thumb-image' }),
-        span({ class: 'larp-academia-thumb-name' }, h.name)
+        span({ class: 'larp-academia-thumb-name' }, h.name),
+        table({ class: 'larp-info-table larp-academia-thumb-table' },
+          tr(td({ class: 'card-label' }, i18n.larpRolesLabel || 'Roles'), td({ class: 'card-value' }, h.roles)),
+          tr(td({ class: 'card-label' }, i18n.larpFunctionLabel || 'Function'), td({ class: 'card-value' }, h.function)),
+          tr(td({ class: 'card-label' }, i18n.larpMembersCount || 'Members'), td({ class: 'card-value' }, String(h.memberCount || 0)))
+        )
       ))
     ),
-    canTake && qs.length
-      ? [
-        h2(i18n.larpWillTestTitle || 'WILL test'),
-        p({ class: 'larp-will-test-hint' }, i18n.larpWillTestHint || 'Once completed, you will be assigned the house that best matches your answers. Your individual answers are processed locally and never stored — only the resulting house assignment is published to your feed.'),
-        form({ method: 'POST', action: '/larp/test', class: 'larp-test-form larp-test-form-compact' },
-          qs.map((q, idx) => div({ class: 'larp-test-question' },
-            p({ class: 'larp-test-q-text' }, strong(`${idx + 1}. `), i18n[q.key] || q.question),
-            div({ class: 'larp-test-options' },
-              q.options.map((opt, oi) => label({ class: 'larp-test-option' },
-                input({ type: 'radio', name: `q${idx}`, value: String(oi), required: 'required' }),
-                ' ', i18n[opt.key] || opt.text
-              ))
-            )
-          )),
-          div({ class: 'larp-actions' },
-            button({ type: 'submit', class: 'filter-btn' }, i18n.larpTestSubmit || 'Join House')
-          )
-        )
-      ]
-      : null
   );
 };
 
-const renderPostsBlock = (posts, house, canPost) => div({ class: 'larp-posts-block' },
-  h2(i18n.larpPostsTitle || 'Wall'),
-  canPost
-    ? form({ method: 'POST', action: '/larp/post', class: 'larp-post-form' },
-        input({ type: 'hidden', name: 'house', value: house.key }),
-        textarea({ id: 'larp_post_text', name: 'text', rows: '3', maxlength: '4000', placeholder: i18n.larpPostPlaceholder || 'What does this house need to say?' }),
-        button({ type: 'submit', class: 'filter-btn larp-post-submit' }, i18n.larpPostSubmit || 'Publish')
-      )
-    : null,
-  posts.length === 0
-    ? p({ class: 'empty' }, i18n.larpPostsEmpty || 'No posts yet.')
-    : div({ class: 'larp-posts-list' },
-        posts.map(post => div({ class: 'larp-post' },
-          div({ class: 'larp-post-head' },
-            userLink(post.author),
-            span({ class: 'larp-post-time' }, moment(post.createdAt).format('YYYY-MM-DD HH:mm'))
-          ),
-          p({ class: 'larp-post-text' }, post.text)
-        ))
-      )
+
+const renderPostsBlock = (posts, house, canPost) => {
+  const stream = (Array.isArray(posts) ? posts : [])
+    .map(post => ({ ts: Date.parse(post.createdAt) || post.ts || 0, post }))
+    .sort((a, b) => b.ts - a.ts);
+
+  return div({ class: 'larp-posts-block' },
+    h2(i18n.larpPostsTitle || 'Wall'),
+    canPost
+      ? form({ method: 'POST', action: '/larp/post', class: 'larp-post-form' },
+          input({ type: 'hidden', name: 'house', value: house.key }),
+          textarea({ id: 'larp_post_text', name: 'text', rows: '3', maxlength: '4000', placeholder: i18n.larpPostPlaceholder || 'What does this house need to say?' }),
+          button({ type: 'submit', class: 'filter-btn larp-post-submit' }, i18n.larpPostSubmit || 'Publish')
+        )
+      : null,
+    stream.length === 0
+      ? p({ class: 'empty' }, i18n.larpPostsEmpty || 'No posts yet.')
+      : div({ class: 'larp-posts-list' },
+          stream.map(entry => div({ class: 'larp-post' },
+            div({ class: 'larp-post-head' },
+              userLink(entry.post.author),
+              span({ class: 'larp-post-time' }, moment(entry.post.createdAt).format('YYYY/MM/DD HH:mm'))
+            ),
+            p({ class: 'larp-post-text' }, entry.post.text)
+          ))
+        )
+  );
+};
+
+const renderHouseSearch = (q) => div({ class: 'filters' },
+  form({ method: 'GET', action: '/larp', class: 'filter-box' },
+    input({ type: 'hidden', name: 'filter', value: 'houses' }),
+    input({ type: 'text', name: 'q', value: q || '', placeholder: i18n.larpSearchPlaceholder, class: 'filter-box__input' }),
+    div({ class: 'filter-box__controls' },
+      button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+    )
+  )
 );
+
+const matchesHouse = (house, q) => {
+  const needle = String(q || '').trim().toLowerCase();
+  if (!needle) return true;
+  return ['name', 'motto', 'roles', 'function', 'description']
+    .some(f => String(house[f] || '').toLowerCase().includes(needle));
+};
 
 const renderModeButtons = (filter) => div({ class: 'mode-buttons stats-mode-row' },
   ['ruling', 'houses', 'rules'].map(m =>
@@ -226,33 +249,29 @@ const renderModeButtons = (filter) => div({ class: 'mode-buttons stats-mode-row'
   )
 );
 
-const renderRules = () => div({ class: 'larp-rules' },
-  h2(i18n.larpRulesTitle || 'F.A.Q.'),
-  div({ class: 'larp-rules-section' },
-    h3(i18n.larpRulesEntryTitle || 'Starting house'),
-    p(i18n.larpRulesEntryText || 'Every inhabitant begins in ACADEMIA by default.')
-  ),
-  div({ class: 'larp-rules-section' },
-    h3(i18n.larpRulesOneHouseTitle || 'One house at a time'),
-    p(i18n.larpRulesOneHouseText || 'You can belong to at most one house at any given moment. If you belong to none, you are in ACADEMIA. Every non-ACADEMIA house page shows a "Leave House" button to its members that resets membership back to ACADEMIA. Leaving does NOT waive the test cooldown.')
-  ),
-  div({ class: 'larp-rules-section' },
-    h3(i18n.larpRulesTestEntry || 'WILL test'),
-    p(i18n.larpRulesTestEntryText || 'Each option weights one or more houses; when you submit, the system tallies the scores and auto-admits you into the highest-scoring house.')
-  ),
-  div({ class: 'larp-rules-section' },
-    h3(i18n.larpRulesInviteEntry || 'Invitation code'),
-    p(i18n.larpRulesInviteEntryText || 'House members can generate invitation codes that grant direct access to the house.')
-  ),
-  div({ class: 'larp-rules-section' },
-    h3(i18n.larpRulesGovernanceTitle || 'Governance Wall'),
-    p(i18n.larpRulesGovernanceText || 'During its cycle, the governing house wears the "Ruling" badge and is the only one whose Wall is surfaced publicly under the RULING tab.')
-  ),
-  div({ class: 'larp-rules-section' },
-    h3(i18n.larpRulesSignTitle || 'L.A.R.P. Emblem'),
-    p(i18n.larpRulesSignText || 'Inhabitants can choose whether to add a sensor on their avatar with the emblem of their current house.')
-  )
-);
+const renderRules = () => {
+  const points = [
+    i18n.larpRulesEntryText,
+    i18n.larpRulesOneHouseText,
+    i18n.larpRulesTestEntryText,
+    i18n.larpRulesInviteEntryText,
+    i18n.larpRulesGovernanceText,
+    i18n.larpRulesWallText,
+    i18n.larpRulesSignText
+  ];
+  return div(
+    { class: 'card' },
+    h2(i18n.larpRulesTitle || 'F.A.Q.'),
+    div({ class: 'rules-points' },
+      points.filter(Boolean).map((text, i) =>
+        div({ class: 'rules-point' },
+          span({ class: 'rules-point-num' }, String(i + 1)),
+          span({ class: 'rules-point-text' }, text)
+        )
+      )
+    )
+  );
+};
 
 const renderHousesGrid = (houses, myHouseKey, governingKey) => {
   const inLarp = !!myHouseKey;
@@ -277,7 +296,9 @@ const renderHousesGrid = (houses, myHouseKey, governingKey) => {
           ),
           p({ class: 'larp-card-motto' }, '“' + h.motto + '”'),
           p({ class: 'larp-card-roles' }, h.roles),
-          p({ class: 'larp-card-count' }, `${i18n.larpMembersCount || 'Members'}: ${h.memberCount || 0}`),
+          div({ class: 'tribe-card-members' },
+            span({ class: 'tribe-members-count' }, `${i18n.larpMembersCount || 'Members'}: ${h.memberCount || 0}`)
+          ),
           h.openInviteCode ? p({ class: 'larp-card-count' }, i18n.tribeInviteCodeText, span({ class: 'tribe-open-invite-code' }, h.openInviteCode)) : null
         )
       );
@@ -285,11 +306,13 @@ const renderHousesGrid = (houses, myHouseKey, governingKey) => {
   );
 };
 
-exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, governingHouse, governingMembers, governingPosts, canPost }) => {
+exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, governingHouse, governingMembers, governingPosts, canPost, q }) => {
   const title = i18n.larpTitle || 'L.A.R.P.';
   const description = i18n.larpDescription || 'A live action role-playing layer for collaborative experimentation.';
   const myHouse = houses.find(h => h.key === myHouseKey) || null;
-  const mode = filter === 'houses' ? 'houses' : filter === 'rules' ? 'rules' : 'ruling';
+  const search = String(q || '').trim();
+  const mode = search ? 'houses' : filter === 'houses' ? 'houses' : filter === 'rules' ? 'rules' : 'ruling';
+  const matched = search ? houses.filter(h => matchesHouse(h, search)) : houses;
 
   return template(
     title,
@@ -299,10 +322,13 @@ exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, gover
         p(description)
       ),
       renderCycleBanner(cycle),
-      renderHouseBadges({ myHouse, governingHouse }),
+      renderHouseBadges({ myHouse, governingHouse, houses }),
       renderModeButtons(mode),
+      renderHouseSearch(search),
       mode === 'houses'
-        ? renderHousesGrid(houses, myHouseKey, governingKey)
+        ? (matched.length
+            ? renderHousesGrid(matched, myHouseKey, governingKey)
+            : p({ class: 'no-content' }, i18n.larpNoHousesMatch))
         : mode === 'rules'
           ? renderRules()
           : [
@@ -330,7 +356,8 @@ exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, hous
   const isAcademia = house.key === 'academia';
   const viewerInAcademia = myHouseKey === 'academia';
   const viewerIsMember = myHouseKey === house.key && house.key !== 'academia';
-  const showWall = viewerIsMember || house.key === governingKey;
+  const canWriteWall = myHouseKey === house.key;
+  const showWall = viewerIsMember || house.key === governingKey || house.key === 'academia';
   const cycles = computeCyclesUntilRuling(house, governingKey);
   const housesById = Object.fromEntries(houses.map(h => [h.key, h]));
 
@@ -342,9 +369,14 @@ exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, hous
         p({ class: 'larp-detail-motto' }, '“' + house.motto + '”')
       ),
       renderCycleBanner(cycle),
-      renderHouseBadges({ myHouse, governingHouse }),
+      renderHouseBadges({ myHouse, governingHouse, houses }),
       renderHouseNav(houses, house.key),
-      renderHousePanel(house, members, posts, { canPost, viewerHouseKey: myHouseKey, cyclesUntilRuling: cycles }),
+      renderHousePanel(house, members, posts, {
+        canPost,
+        viewerHouseKey: myHouseKey,
+        cyclesUntilRuling: cycles,
+        canTakeTest: isAcademia && viewerInAcademia && !!(testStatus && testStatus.allowed)
+      }),
       inviteCode
         ? div({ class: 'larp-invite-banner' },
             p({ class: 'larp-invite-banner-title' }, strong(i18n.larpInviteBannerTitle || 'New invitation code')),
@@ -352,10 +384,10 @@ exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, hous
             p({ class: 'larp-invite-banner-code' }, inviteCode)
           )
         : null,
+      isAcademia && viewerInAcademia ? renderAcademiaJoinPanel(houses, testStatus, housesById, questions, myHouseKey) : null,
       showWall
-        ? renderPostsBlock(posts, house, viewerIsMember)
-        : null,
-      isAcademia && viewerInAcademia ? renderAcademiaJoinPanel(houses, testStatus, housesById, questions, myHouseKey) : null
+        ? renderPostsBlock(posts, house, canWriteWall)
+        : null
     )
   );
 };
@@ -363,17 +395,19 @@ exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, hous
 exports.larpTestView = ({ questions, cycle, houses, myHouseKey, governingKey, testStatus }) => {
   const myHouse = houses.find(h => h.key === myHouseKey) || null;
   const governingHouse = houses.find(h => h.key === governingKey) || null;
-  const titleText = i18n.larpTestTitle || 'Profile test';
+  const title = i18n.larpTitle || 'L.A.R.P.';
+  const description = i18n.larpDescription || 'A live action role-playing layer for collaborative experimentation.';
 
   return template(
-    titleText,
+    title,
     section(
       div({ class: 'tags-header' },
-        h1(titleText),
-        p(i18n.larpTestIntro || 'Answer the psychological questions. The system will pick the house that best fits your answers. You can attempt one test every 30 cycles.')
+        h1(title),
+        p(description)
       ),
       renderCycleBanner(cycle),
-      renderHouseBadges({ myHouse, governingHouse }),
+      renderHouseBadges({ myHouse, governingHouse, houses }),
+      renderModeButtons(''),
       testStatus && !testStatus.allowed
         ? div({ class: 'larp-test-cooldown' },
             p((i18n.larpTestCooldownActive || 'Next test available in') + ' ' + formatCooldown(testStatus.nextAt - Date.now()) + ' ' + (i18n.larpTestCooldownDays || 'cycles')),
@@ -409,7 +443,7 @@ exports.larpTestResultView = ({ house, result, cycle, houses, myHouseKey, govern
     section(
       div({ class: 'tags-header' }, h1(titleText)),
       renderCycleBanner(cycle),
-      renderHouseBadges({ myHouse, governingHouse }),
+      renderHouseBadges({ myHouse, governingHouse, houses }),
       div({ class: 'larp-test-result' },
         ranking.length
           ? div({ class: 'larp-test-ranking' },

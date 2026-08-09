@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, img, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, img, input, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderContentActions } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
@@ -228,7 +228,7 @@ const renderAgendaItem = (item, userId, filter) => {
   );
 };
 
-exports.agendaView = async (data, filter) => {
+exports.agendaView = async (data, filter, q = '') => {
   const { items = [], counts: _c = {} } = data || {};
   const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, calendars: 0, housing: 0, discarded: 0, ..._c };
   return template(
@@ -276,6 +276,15 @@ exports.agendaView = async (data, filter) => {
             `${i18n.agendaFilterTransfers} (${counts.transfers})`),
           button({ type: 'submit', name: 'filter', value: 'discarded', class: filter === 'discarded' ? 'filter-btn active' : 'filter-btn' },
             `DISCARDED (${counts.discarded})`)
+        )
+      ),
+      div({ class: 'filters' },
+        form({ method: 'GET', action: '/agenda', class: 'filter-box' },
+          input({ type: 'hidden', name: 'filter', value: filter }),
+          input({ type: 'text', name: 'q', value: q, placeholder: i18n.agendaSearchPlaceholder, class: 'filter-box__input' }),
+          div({ class: 'filter-box__controls' },
+            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+          )
         )
       ),
       div({ class: 'agenda-list' },

@@ -20,7 +20,7 @@ const FILTER_LABELS = {
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone', 'logs'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
-const CAT_BLOCK3  = ['banking', 'job', 'housing', 'market', 'project', 'industry', 'industryBlueprint', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
+const CAT_BLOCK3  = ['banking', 'job', 'housing', 'market', 'project', 'industry', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
 const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map', 'torrent'];
 
 const SEARCH_FIELDS = ['author','id','from','to'];
@@ -100,7 +100,7 @@ const computeStats = (blocks) => {
 
 const renderStatsPanel = (stats, currentFilter, search) => {
   if (!stats || stats.total === 0) return null;
-  const topTypes = stats.typeBreakdown.slice(0, 10);
+  const topTypes = stats.typeBreakdown.filter(t => t.type !== 'industryBlueprint').slice(0, 10);
   return div({ class: 'blockchain-stats' },
     div({ class: 'tags-header' },
       h3(`${i18n.blockchainStatsTitle || 'Stats'} (${stats.total})`)
@@ -210,6 +210,7 @@ const getViewDetailsAction = (type, block) => {
     case 'chat': return `/chats/${encodeURIComponent(block.id)}`;
     case 'gameScore': return `/games?filter=scoring`;
     case 'log': return `/logs/view/${encodeURIComponent(block.id)}`;
+    case 'poll': return `/polls/${encodeURIComponent(block.id)}`;
     case 'calendarDate':
     case 'calendarNote': return block.content?.calendarId ? `/calendars/${encodeURIComponent(block.content.calendarId)}` : `/calendars`;
     case 'padEntry': return block.content?.padId ? `/pads/${encodeURIComponent(block.content.padId)}` : `/pads`;
@@ -417,9 +418,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
           button({ type:'submit', class:'filter-btn' }, `← ${i18n.blockchainBack}`)
         ),
         !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
-          form({ method:'GET', action:getViewDetailsAction(block.type, block) },
-            button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
-          )
+          a({ href:getViewDetailsAction(block.type, block), class:'btn-singleview btn-content', title:i18n.visitContent }, '↗')
         : (block.isTombstoned || block.isReplaced) ?
           div({ class: 'deleted-label' },
             i18n.blockchainContentDeleted || "This content has been deleted."
@@ -527,11 +526,9 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
               div({ class:'block' },
                 div({ class:'block-buttons' },
                   block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}`, class:'btn-singleview', title:i18n.blockchainDetails }, '⦿'),
-                  block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}&view=datagram`, class:'btn-singleview btn-datagram', title:i18n.blockchainDatagram || 'Datagram' }, '⊞'),
+                  block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}&view=datagram`, class:'btn-singleview btn-datagram', title:i18n.blockchainDatagram }, '⊞'),
                   !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
-                    form({ method:'GET', action:getViewDetailsAction(block.type, block) },
-                      button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
-                    )
+                    a({ href:getViewDetailsAction(block.type, block), class:'btn-singleview btn-content', title:i18n.visitContent }, '↗')
                   : (block.isTombstoned || block.isReplaced) ?
                     div({ class: 'deleted-label' },
                       i18n.blockchainContentDeleted || "This content has been deleted."

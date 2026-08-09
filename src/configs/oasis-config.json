@@ -6,12 +6,8 @@
     "current": "blocks"
   },
   "modules": {
-    "popularMod": "on",
-    "topicsMod": "on",
-    "summariesMod": "on",
-    "latestMod": "on",
-    "threadsMod": "on",
-    "multiverseMod": "on",
+    "blogsMod": "on",
+    "pollsMod": "on",
     "fediverseMod": "on",
     "invitesMod": "on",
     "walletMod": "on",

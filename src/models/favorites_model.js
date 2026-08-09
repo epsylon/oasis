@@ -1,4 +1,4 @@
-const mediaFavorites = require("../backend/media-favorites");
+const contentFavorites = require("../backend/content_favorites");
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 const safeText = (v) => String(v || "").trim();
@@ -15,7 +15,7 @@ const toTs = (d) => {
   return Number.isFinite(t) ? t : 0;
 };
 
-module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel }) => {
+module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel, pollsModel }) => {
   const kindConfig = {
     audios: {
       base: "/audios/",
@@ -64,10 +64,58 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     shopProducts: {
       base: "/shops/product/",
       getById: getFn(shopsModel, ["getProductById"])
+    },
+    events: {
+      base: "/events/",
+      getById: getFn(eventsModel, ["getEventById", "getById"])
+    },
+    tasks: {
+      base: "/tasks/",
+      getById: getFn(tasksModel, ["getTaskById", "getById"])
+    },
+    reports: {
+      base: "/reports/",
+      getById: getFn(reportsModel, ["getReportById", "getById"])
+    },
+    votes: {
+      base: "/votes/",
+      getById: getFn(votesModel, ["getVoteById", "getById"])
+    },
+    jobs: {
+      base: "/jobs/",
+      getById: getFn(jobsModel, ["getJobById", "getById"])
+    },
+    housing: {
+      base: "/housing/",
+      getById: getFn(housingModel, ["getHousingById", "getById"])
+    },
+    projects: {
+      base: "/projects/",
+      getById: getFn(projectsModel, ["getProjectById", "getById"])
+    },
+    transfers: {
+      base: "/transfers/",
+      getById: getFn(transfersModel, ["getTransferById", "getById"])
+    },
+    forum: {
+      base: "/forum/",
+      getById: getFn(forumModel, ["getForumById", "getById"])
+    },
+    blogs: {
+      base: "/blogs/",
+      getById: getFn(blogsModel, ["getBlogById", "getById"])
+    },
+    polls: {
+      base: "/polls/",
+      getById: getFn(pollsModel, ["getPollById", "getById"])
+    },
+    shops: {
+      base: "/shops/",
+      getById: getFn(shopsModel, ["getShopById", "getById"])
     }
   };
 
-  const kindOrder = ["audios", "bookmarks", "calendars", "chats", "documents", "images", "maps", "pads", "torrents", "videos", "market", "shopProducts"];
+  const kindOrder = ["audios", "blogs", "bookmarks", "calendars", "chats", "documents", "events", "forum", "housing", "images", "jobs", "maps", "market", "pads", "polls", "projects", "reports", "shopProducts", "shops", "tasks", "torrents", "transfers", "videos", "votes"];
 
   const hydrateKind = async (kind, ids) => {
     const cfg = kindConfig[kind];
@@ -79,9 +127,11 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
         if (!id) return null;
         try {
           const obj = await cfg.getById(id);
+          if (!obj || typeof obj !== "object") return null;
           const viewId = safeText(obj?.key || obj?.id || id);
 
           return {
+            content: obj,
             kind,
             favId: id,
             viewHref: `${cfg.base}${encodeURIComponent(viewId)}`,
@@ -104,7 +154,7 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
   };
 
   const loadAll = async () => {
-    const sets = await Promise.all(kindOrder.map((k) => mediaFavorites.getFavoriteSet(k)));
+    const sets = await Promise.all(kindOrder.map((k) => contentFavorites.getFavoriteSet(k)));
     const idsByKind = {};
     kindOrder.forEach((k, i) => {
       idsByKind[k] = Array.from(sets[i] || []);
@@ -118,21 +168,8 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
 
     const flat = kindOrder.flatMap((k) => byKind[k]);
 
-    const counts = {
-      audios: byKind.audios.length,
-      bookmarks: byKind.bookmarks.length,
-      calendars: byKind.calendars.length,
-      chats: byKind.chats.length,
-      documents: byKind.documents.length,
-      images: byKind.images.length,
-      maps: byKind.maps.length,
-      pads: byKind.pads.length,
-      torrents: byKind.torrents.length,
-      videos: byKind.videos.length,
-      market: byKind.market.length,
-      shopProducts: byKind.shopProducts.length,
-      all: flat.length
-    };
+    const counts = { all: flat.length };
+    for (const k of kindOrder) counts[k] = (byKind[k] || []).length;
 
     const recentFlat = flat
       .slice()
@@ -167,11 +204,13 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
       return { items: grouped, counts };
     },
 
+    kinds: kindOrder.slice(),
+
     async removeFavorite(kind, id) {
       const k = safeText(kind);
       const favId = safeText(id);
       if (!k || !favId) return;
-      await mediaFavorites.removeFavorite(k, favId);
+      await contentFavorites.removeFavorite(k, favId);
     }
   };
 };

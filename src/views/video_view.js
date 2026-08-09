@@ -15,9 +15,10 @@ const {
   select,
   option
 } = require("../server/node_modules/hyperaxe");
+const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -59,25 +60,10 @@ const renderTags = (tags) => {
     : null;
 };
 
-const renderVideoFavoriteToggle = (videoObj, returnTo = "") =>
-  form(
-    {
-      method: "POST",
-      action: videoObj.isFavorite
-        ? `/videos/favorites/remove/${encodeURIComponent(videoObj.key)}`
-        : `/videos/favorites/add/${encodeURIComponent(videoObj.key)}`
-    },
-    returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-    button(
-      { type: "submit", class: "filter-btn" },
-      videoObj.isFavorite ? i18n.videoRemoveFavoriteButton : i18n.videoAddFavoriteButton
-    )
-  );
-
 const renderVideoPlayer = (videoObj) =>
   videoObj?.url
     ? div(
-        { class: "video-container", style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" },
+        { class: "video-container video-container-row" },
         videoHyperaxe({
           controls: true,
           src: `/blob/${encodeURIComponent(videoObj.url)}`,
@@ -115,66 +101,11 @@ const renderVideoOwnerActions = (filter, videoObj, params = {}) => {
 };
 
 const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => {
-  const list = safeArr(comments).filter(c => {
-    const t = c && c.value && c.value.content && c.value.content.text;
-    return t && String(t).trim();
+  return renderSharedCommentsSection({
+    action: `/videos/${encodeURIComponent(videoId)}/comments`,
+    comments: comments,
+    returnTo: returnTo
   });
-  const commentsCount = list.length;
-
-  return div(
-    { class: "vote-comments-section" },
-    div(
-      { class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(commentsCount))
-    ),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form(
-        { method: "POST", action: `/videos/${encodeURIComponent(videoId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-        textarea({
-          id: "comment-text",
-          name: "text",
-          rows: 4,
-          class: "comment-textarea",
-          placeholder: i18n.voteNewCommentPlaceholder
-        }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    list.length
-      ? div(
-          { class: "comments-list" },
-          list.map((c) => {
-            const author = c?.value?.author || "";
-            const ts = c?.value?.timestamp || c?.timestamp;
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
-            const relDate = ts ? moment(ts).fromNow() : "";
-            const content = c?.value?.content || {};
-            const rootId = content.fork || content.root || null;
-            const text = content.text || "";
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && rootId ? a({ href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}` }, relDate) : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            );
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
-  );
 };
 
 const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) => {
@@ -184,7 +115,6 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
     ? videos.map((videoObj) => {
         const commentCount = typeof videoObj.commentCount === "number" ? videoObj.commentCount : 0;
         const title = safeText(videoObj.title);
-        const ownerActions = renderVideoOwnerActions(filter, videoObj, params);
 
         const isOwn = videoObj.author && String(videoObj.author) === String(userId);
         return div(
@@ -192,49 +122,17 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`)
+            renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads || null, author: videoObj.author, favKind: 'videos', isFavorite: videoObj.isFavorite, reportTitle: videoObj.title })
           ),
           div(
             { class: "card-section video-card-body" },
-            div(
-              { class: "bookmark-topbar" },
-              div(
-                { class: "bookmark-topbar-left" },
-                renderVideoFavoriteToggle(videoObj, returnTo),
-                renderPMButton(videoObj.author)
-              ),
-              ownerActions.length
-                ? div({ class: "bookmark-topbar-right" }, div({ class: "bookmark-actions" }, ...ownerActions))
-                : null
-            ),
             title ? h2(title) : null,
             videoObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(videoObj.lifetime, i18n)) : null,
             renderVideoPlayer(videoObj),
-            div(
-              { class: "card-comments-summary" },
-              span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-              span({ class: "card-value" }, String(commentCount)),
-              br(),
-              br(),
-              form(
-                { method: "GET", action: `/videos/${encodeURIComponent(videoObj.key)}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                input({ type: "hidden", name: "filter", value: filter || "all" }),
-                params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-                params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-                button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-              )
+            renderEngagement(videoObj.key,
+              renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants),
+              renderCommentsLink({ href: `/videos/${encodeURIComponent(videoObj.key)}`, count: commentCount })
             ),
-                        div(
-              { class: "card-comments-summary feed-opinions-section" },
-              div(
-                { class: "comments-count" },
-                span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
-                span({ class: "card-value" }, String(Object.values(videoObj.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)))
-              ),
-              renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants)
-            ),
-            div({ class: "card-spread-left" }, renderSpreadButton(videoObj.key, (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads)),
             renderMapLocationVisitLabel(videoObj.mapUrl),
             br(),
             (() => {
@@ -244,12 +142,12 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
 
               return p(
                 { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+                span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
                 userLink(videoObj.author),
                 showUpdated
                   ? span(
                       { class: "votations-comment-date" },
-                      ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+                      ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
                     )
                   : null
               );
@@ -347,14 +245,14 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
           { method: "GET", action: "/videos", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.videoFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.videoFilterMine),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.videoFilterRecent),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.videoFilterTop),
-          button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase()),          button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
-            i18n.videoFilterFavorites
+            String(i18n.videoFilterFavorites).toUpperCase()
           ),
+
+          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.videoCreateButton)
         )
       )
@@ -409,13 +307,23 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
 
   const ownerActions = renderVideoOwnerActions(filter, videoObj, { q, sort });
   const sideActions = [];
-  sideActions.push(renderVideoFavoriteToggle(videoObj, returnTo));
   if (videoObj.author && String(videoObj.author) !== String(userId)) {
     sideActions.push(renderPMButton(videoObj.author));
   }
   for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(videoObj.tags);
+
+  const detailActions = div({ class: "card-header activity-card-header" },
+    renderContentActions(videoObj.key, null, {
+      author: videoObj.author,
+      favKind: 'videos',
+      isFavorite: videoObj.isFavorite,
+      spread: params.spreads || null,
+      returnTo,
+      reportTitle: videoObj.title
+    })
+  );
 
   const videoSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
@@ -427,12 +335,12 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       ? p({ class: "tribe-side-description" }, ...renderUrl(videoObj.description))
       : null,
     tagsNode,
-    div({ class: "card-spread-centered" }, renderSpreadButton(videoObj.key, params.spreads)),
     renderMapLocationVisitLabel(videoObj.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const videoMain = div({ class: "tribe-main" },
+    detailActions,
     renderVideoPlayer(videoObj),
     (() => {
       const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
@@ -441,18 +349,20 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
 
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
         userLink(videoObj.author),
         showUpdated
           ? span(
               { class: "votations-comment-date" },
-              ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+              ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
             )
           : null
       );
     })(),
-    renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants),
-    renderVideoCommentsSection(videoObj.key, comments, returnTo)
+    renderEngagement(videoObj.key,
+      renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants),
+      renderVideoCommentsSection(videoObj.key, comments, returnTo)
+    )
   );
 
   return template(
@@ -468,14 +378,14 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
           { method: "GET", action: "/videos", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.videoFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.videoFilterMine),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.videoFilterRecent),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.videoFilterTop),
-          button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase()),          button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
-            i18n.videoFilterFavorites
+            String(i18n.videoFilterFavorites).toUpperCase()
           ),
+
+          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.videoCreateButton)
         )
       ),

@@ -69,6 +69,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Audios: Module to discover and manage audios.
  + Banking: Module to determine the real value of ECOIN and distribute a UBI using the common treasury.
  + BlockExplorer: Module to navigate the blockchain.
+ + Blogs: Module to discover and manage blogs.
  + Bookmarks: Module to discover and manage bookmarks.	
  + Calendars: Module to discover and manage calendars.
  + Chats: Module to discover and manage encrypted chats.
@@ -90,26 +91,22 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Invites: Module to manage and apply invite codes.
  + Jobs: Module to discover and manage jobs.	
  + Legacy: Module to manage your secret (private key) quickly and securely.	
- + Latest: Module to receive the most recent posts and discussions.
  + L.A.R.P.: Module for a live-action role-playing layer with 9 houses.
  + Logs: Module to record (via AI assistant) your experiences.
  + Maps: Module to manage and share offline maps.
  + Market: Module to exchange goods or services.
+ + Matches: Module to explore and visualize the matches in the blockchain.
  + Melody: Module to generate and share the "sound" of your blockchain.
- + Multiverse: Module to receive content from other federated peers.
  + Opinions: Module to discover and vote on opinions.	
  + Pads: Module to manage collaborative encrypted text editors.
  + Parliament: Module to elect governments and vote on laws.	
  + Pixelia: Module to draw on a collaborative grid.	
  + Projects: Module to explore, crowd-funding and manage projects.
- + Popular: Module to receive posts that are trending, most viewed, or most commented on.
+ + Polls: Module to ask the network and count the answers.
  + Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.	
  + Shops: Module to manage and discover shops.	
- + Summaries: Module to receive summaries of long discussions or posts.	
  + Tags: Module to discover and explore taxonomy patterns (tags).	
  + Tasks: Module to discover and manage tasks.	
- + Threads: Module to receive conversations grouped by topic or question.
- + Topics: Module to receive discussion categories based on shared interests.	
  + Torrents: Module to explore and manage torrents.
  + Transfers: Module to discover and manage smart-contracts (transfers).	
  + Trending: Module to explore the most popular content.	

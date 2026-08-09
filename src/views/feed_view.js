@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderOpinionsVoting, userLink, renderContentActions } = require("./main_views");
+const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
+const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
 const moment = require("../server/node_modules/moment");
@@ -56,7 +57,7 @@ const generateFilterButtons = (filters, currentFilter, action, extra = {}) => {
       { method: "GET", action },
       input({ type: "hidden", name: "filter", value: mode }),
       ...hiddenInputs(extra),
-      button({ type: "submit", class: cur === mode ? "filter-btn active" : "filter-btn" }, i18n[mode + "Button"] || mode)
+      button({ type: "submit", class: cur === mode ? "filter-btn active" : "filter-btn" }, String(i18n[mode + "Button"] || mode).toUpperCase())
     )
   );
 };
@@ -79,65 +80,11 @@ const renderCardField = (labelText, value) =>
   );
 
 const renderFeedCommentsSection = (feedKey, comments = []) => {
-  const list = Array.isArray(comments) ? comments : [];
-  const commentsCount = list.length;
-
-  return div(
-    { class: "vote-comments-section" },
-    div(
-      { class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(commentsCount))
-    ),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel || i18n.feedPostComment || "Post a comment"),
-      form(
-        { method: "POST", action: `/feed/${encodeURIComponent(feedKey)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        textarea({
-          id: "comment-text",
-          name: "text",
-          rows: 4,
-          class: "comment-textarea",
-          placeholder: i18n.voteNewCommentPlaceholder || ""
-        }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia || "Upload media"), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton || i18n.feedPostComment || "Send")
-      )
-    ),
-    list.length
-      ? div(
-          { class: "comments-list" },
-          list.map((c) => {
-            const author = c?.value?.author || "";
-            const ts = c?.value?.timestamp || c?.timestamp;
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
-            const relDate = ts ? moment(ts).fromNow() : "";
-
-            const content = c?.value?.content || {};
-            const text = content.text || c?.value?.text || "";
-            const threadRoot = content.fork || content.root || null;
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && threadRoot
-                  ? a({ href: `/thread/${encodeURIComponent(threadRoot)}#${encodeURIComponent(c.key)}` }, relDate)
-                  : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            );
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet || i18n.noComments || "")
-  );
+  return renderSharedCommentsSection({
+    action: `/feed/${encodeURIComponent(feedKey)}/comments`,
+    comments: comments,
+    returnTo: null
+  });
 };
 
 const renderFeedCard = (feed) => {
@@ -163,7 +110,7 @@ const renderFeedCard = (feed) => {
         div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(feed.key, `/feed/${encodeURIComponent(feed.key)}`)
+            renderContentActions(feed.key, `/feed/${encodeURIComponent(feed.key)}`, { author: authorId, reportTitle: safeText })
         ),
         div(
             { class: "card-section feed-card-body" },
@@ -189,8 +136,8 @@ const renderFeedCard = (feed) => {
                         const maxVal = Math.max(...entries.map(([, v]) => Number(v)));
                         const dominant = entries.filter(([, v]) => Number(v) === maxVal).map(([k]) => i18n['vote' + k.charAt(0).toUpperCase() + k.slice(1)] || k);
                         return [
-                            span({ style: 'margin:0 8px;opacity:0.5;' }, '|'),
-                            span({ style: 'font-weight:700;' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
+                            span({ class: 'feed-vote-sep' }, '|'),
+                            span({ class: 'feed-vote-dominant' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
                         ];
                     })()
                 ),
@@ -202,25 +149,9 @@ const renderFeedCard = (feed) => {
                 )
             )
         ),
-        div(
-            { class: "card-comments-summary" },
-            span({ class: "card-label" }, `${i18n.voteCommentsLabel || "Comments"}:`),
-            span({ class: "card-value" }, String(commentCount)),
-            br(),
-            br(),
-            form(
-                { method: "GET", action: `/feed/${encodeURIComponent(feed.key)}` },
-                button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton || i18n.feedOpenDiscussion || "Open Discussion")
-            )
-        ),
-        div(
-            { class: "card-comments-summary feed-opinions-section" },
-            div(
-                { class: "comments-count" },
-                span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
-                span({ class: "card-value" }, String(totalCount))
-            ),
-            renderOpinionsVoting('/feed/opinions', feed.key, content.opinions, null, content.opinions_inhabitants)
+        renderEngagement(feed.key,
+            renderOpinionsVoting('/feed/opinions', feed.key, content.opinions, null, content.opinions_inhabitants),
+            renderCommentsLink({ href: `/feed/${encodeURIComponent(feed.key)}`, count: commentCount })
         )
         )
     );
@@ -264,11 +195,13 @@ exports.feedView = (feeds, opts = "ALL") => {
       div(
         { class: "feed-tools-row" },
         form(
-          { method: "GET", action: "/feed", class: "feed-search-form" },
+          { method: "GET", action: "/feed", class: "filter-box" },
           input({ type: "hidden", name: "filter", value: filter }),
           tag ? input({ type: "hidden", name: "tag", value: tag }) : null,
-          input({ type: "text", name: "q", value: q, placeholder: i18n.searchPlaceholder || "Search", class: "feed-search-input" }),
-          button({ type: "submit", class: "filter-btn feed-search-btn" }, i18n.searchButton || "Search")
+          input({ type: "text", name: "q", value: q, placeholder: i18n.searchPlaceholder || "Search", class: "filter-box__input" }),
+          div({ class: "filter-box__controls" },
+            button({ type: "submit", class: "filter-box__button" }, i18n.searchButton || "Search")
+          )
         )
       ),
       section(
@@ -321,7 +254,7 @@ exports.feedCreateView = (opts = {}) => {
   );
 };
 
-exports.singleFeedView = (feed, comments = []) => {
+exports.singleFeedView = (feed, comments = [], params = {}) => {
   const content = feed.value?.content || {};
   const rawText = typeof content.text === "string" ? content.text : "";
   const safeText = rawText.trim();
@@ -335,6 +268,7 @@ exports.singleFeedView = (feed, comments = []) => {
 
   return template(
     i18n.feedDetailTitle || "Feed",
+    section(div({ class: "tags-header" }, h2(i18n.feedTitle), p(i18n.FeedshareYourOpinions))),
     section(
       div(
         { class: "filters" },
@@ -349,6 +283,10 @@ exports.singleFeedView = (feed, comments = []) => {
       ),
       div(
         { class: "bookmark-item card feed-detail-card" },
+        div({ class: "card-header activity-card-header" },
+          span(),
+          renderContentActions(feed.key, null, { spread: params.spreads || null, author: authorId, reportTitle: safeText })
+        ),
         br,
         div(
           { class: "feed-row" },
@@ -380,15 +318,9 @@ exports.singleFeedView = (feed, comments = []) => {
           )
         )
       ),
-      renderFeedCommentsSection(feed.key, comments),
-      div(
-        { class: "card-comments-summary feed-opinions-section" },
-        div(
-          { class: "comments-count" },
-          span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
-          span({ class: "card-value" }, String(Object.values(content.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)))
-        ),
-        renderOpinionsVoting('/feed/opinions', feed.key, content.opinions, null, content.opinions_inhabitants)
+      renderEngagement(feed.key,
+        renderOpinionsVoting('/feed/opinions', feed.key, content.opinions, null, content.opinions_inhabitants),
+        renderFeedCommentsSection(feed.key, comments)
       )
     )
   );

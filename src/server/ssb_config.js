@@ -23,4 +23,9 @@ const megabyte = Math.pow(2, 20);
 config.blobs = config.blobs || {};
 config.blobs.max = 50 * megabyte;
 
+config.statePath = (name) => {
+  if (process.env.OASIS_STATE_DIR) return path.join(process.env.OASIS_STATE_DIR, name);
+  return config.path ? path.join(config.path, name) : null;
+};
+
 module.exports = config;

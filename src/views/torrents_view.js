@@ -18,8 +18,9 @@ const {
   th,
   td
 } = require("../server/node_modules/hyperaxe");
+const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -48,21 +49,6 @@ const renderTags = (tags) => {
       )
     : null;
 };
-
-const renderTorrentFavoriteToggle = (torrentObj, returnTo = "") =>
-  form(
-    {
-      method: "POST",
-      action: torrentObj.isFavorite
-        ? `/torrents/favorites/remove/${encodeURIComponent(torrentObj.key)}`
-        : `/torrents/favorites/add/${encodeURIComponent(torrentObj.key)}`
-    },
-    returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-    button(
-      { type: "submit", class: "filter-btn" },
-      torrentObj.isFavorite ? i18n.torrentRemoveFavoriteButton : i18n.torrentAddFavoriteButton
-    )
-  );
 
 const renderTorrentOwnerActions = (filter, torrentObj, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
@@ -93,63 +79,11 @@ const renderTorrentOwnerActions = (filter, torrentObj, params = {}) => {
 };
 
 const renderTorrentCommentsSection = (torrentId, comments = [], returnTo = null) => {
-  const list = safeArr(comments);
-  const commentsCount = list.length;
-
-  return div(
-    { class: "vote-comments-section" },
-    div(
-      { class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(commentsCount))
-    ),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form(
-        { method: "POST", action: `/torrents/${encodeURIComponent(torrentId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-        textarea({
-          id: "comment-text",
-          name: "text",
-          rows: 4,
-          class: "comment-textarea",
-          placeholder: i18n.voteNewCommentPlaceholder
-        }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    list.length
-      ? div(
-          { class: "comments-list" },
-          list.map((c) => {
-            const author = c?.value?.author || "";
-            const ts = c?.value?.timestamp || c?.timestamp;
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
-            const relDate = ts ? moment(ts).fromNow() : "";
-            const content = c?.value?.content || {};
-            const rootId = content.fork || content.root || null;
-            const text = content.text || "";
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && rootId ? a({ href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}` }, relDate) : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            );
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
-  );
+  return renderSharedCommentsSection({
+    action: `/torrents/${encodeURIComponent(torrentId)}/comments`,
+    comments: comments,
+    returnTo: returnTo
+  });
 };
 
 const formatSize = (bytes) => {
@@ -285,14 +219,14 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
           { method: "GET", action: "/torrents", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.torrentFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.torrentFilterMine),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.torrentFilterRecent),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.torrentFilterTop),
-          button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase()),          button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
-            i18n.torrentFilterFavorites
+            String(i18n.torrentFilterFavorites).toUpperCase()
           ),
+
+          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.torrentCreateButton)
         )
       )
@@ -347,7 +281,6 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
 
   const ownerActions = renderTorrentOwnerActions(filter, torrentObj, { q, sort });
   const sideActions = [];
-  sideActions.push(renderTorrentFavoriteToggle(torrentObj, returnTo));
   if (torrentObj.author && String(torrentObj.author) !== String(userId)) {
     sideActions.push(form(
       { method: "GET", action: "/pm" },
@@ -359,6 +292,17 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
 
   const tagsNode = renderTags(torrentObj.tags);
 
+  const detailActions = div({ class: "card-header activity-card-header" },
+    renderContentActions(torrentObj.key, null, {
+      author: torrentObj.author,
+      favKind: 'torrents',
+      isFavorite: torrentObj.isFavorite,
+      spread: params.spreads || null,
+      returnTo,
+      reportTitle: torrentObj.title
+    })
+  );
+
   const torrentSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
@@ -369,11 +313,11 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
       ? p({ class: "tribe-side-description" }, ...renderUrl(torrentObj.description))
       : null,
     tagsNode,
-    div({ class: "card-spread-centered" }, renderSpreadButton(torrentObj.key, params.spreads)),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const torrentMain = div({ class: "tribe-main" },
+    detailActions,
     torrentObj.url && torrentObj.url.startsWith("&")
       ? div({ class: "torrent-download" },
           a({ href: `/blob/${encodeURIComponent(torrentObj.url)}?name=${encodeURIComponent((torrentObj.title || 'download').replace(/\.torrent$/i, '') + '.torrent')}` , class: "filter-btn" }, i18n.torrentDownloadButton || "DOWNLOAD IT!")
@@ -386,18 +330,20 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
 
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(torrentObj.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(torrentObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
         userLink(torrentObj.author),
         showUpdated
           ? span(
               { class: "votations-comment-date" },
-              ` | ${i18n.torrentUpdatedAt}: ${moment(torrentObj.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+              ` | ${i18n.torrentUpdatedAt}: ${moment(torrentObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
             )
           : null
       );
     })(),
-    renderOpinionsVoting('/torrents/opinions', torrentObj.key, torrentObj.opinions, returnTo, torrentObj.opinions_inhabitants),
-    renderTorrentCommentsSection(torrentObj.key, comments, returnTo)
+    renderEngagement(torrentObj.key,
+      renderOpinionsVoting('/torrents/opinions', torrentObj.key, torrentObj.opinions, returnTo, torrentObj.opinions_inhabitants),
+      renderTorrentCommentsSection(torrentObj.key, comments, returnTo)
+    )
   );
 
   return template(
@@ -413,14 +359,14 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
           { method: "GET", action: "/torrents", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.torrentFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.torrentFilterMine),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.torrentFilterRecent),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.torrentFilterTop),
-          button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase()),          button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
-            i18n.torrentFilterFavorites
+            String(i18n.torrentFilterFavorites).toUpperCase()
           ),
+
+          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.torrentCreateButton)
         )
       ),

@@ -104,7 +104,7 @@ const renderBcsList = (bcsAudios) => {
           span({ class: "card-label" }, `${i18n.melodyByLabel || "By"}: `),
           userLink(a.author),
           span({ class: "melody-meta-sep" }, " · "),
-          span({ class: "card-value" }, moment(a.createdAt).format("YYYY/MM/DD HH:mm:ss"))
+          span({ class: "card-value" }, moment(a.createdAt).format("YYYY/MM/DD HH:mm"))
         )
       ),
       a.url

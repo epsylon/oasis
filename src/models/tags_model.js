@@ -13,7 +13,10 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
   const norm = (v) => String(v == null ? '' : v).trim().toLowerCase();
 
   const normalizeTag = (tag) => String(tag == null ? '' : tag).trim().replace(/^#/, '');
-  const tagKey = (tag) => normalizeTag(tag).toLowerCase();
+  const tagKey = (tag) => {
+    const k = normalizeTag(tag).toLowerCase();
+    return k.includes(':') ? '' : k;
+  };
 
   const getDedupeKey = (msg) => {
     const c = msg?.value?.content || {};
@@ -159,21 +162,34 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
         if ((c.type === 'chat' || c.type === 'pad' || c.type === 'map' || c.type === 'calendar') && c.status === 'INVITE-ONLY' && c.author !== viewerId && !(Array.isArray(c.members) && c.members.includes(viewerId))) return false;
         if (c.type === 'shop' && c.visibility === 'CLOSED') return false;
         if (c.type === 'housing' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && c.author !== viewerId) return false;
+        if (c.type === 'poll' && c.chatId) return false;
         return true;
       });
 
       filtered = dedupeKeepLatest(filtered);
 
       const counts = new Map();
+      const DAY = 24 * 60 * 60 * 1000;
+
+      const bump = (k, display, { mine, ts }) => {
+        const prev = counts.get(k);
+        if (!prev) counts.set(k, { name: display, count: 1, mine: mine ? 1 : 0, lastTs: ts || 0 });
+        else counts.set(k, {
+          name: prev.name || display,
+          count: prev.count + 1,
+          mine: prev.mine + (mine ? 1 : 0),
+          lastTs: Math.max(prev.lastTs || 0, ts || 0)
+        });
+      };
 
       for (const record of filtered) {
         const tagsArr = record?.value?.content?.tags || [];
         const uniqueTags = new Set(tagsArr.map(tagKey).filter(Boolean));
+        const mine = String(record?.value?.author || '') === String(viewerId);
+        const ts = Number(record?.value?.timestamp || record?.timestamp || 0);
         for (const k of uniqueTags) {
           const display = normalizeTag(tagsArr.find(t => tagKey(t) === k) || k) || k;
-          const prev = counts.get(k);
-          if (!prev) counts.set(k, { name: display, count: 1 });
-          else counts.set(k, { name: prev.name || display, count: prev.count + 1 });
+          bump(k, display, { mine, ts });
         }
       }
 
@@ -187,9 +203,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
           const uniquePadTags = new Set(pad.tags.map(tagKey).filter(Boolean));
           for (const k of uniquePadTags) {
             const display = normalizeTag(pad.tags.find(t => tagKey(t) === k) || k) || k;
-            const prev = counts.get(k);
-            if (!prev) counts.set(k, { name: display, count: 1 });
-            else counts.set(k, { name: prev.name || display, count: prev.count + 1 });
+            bump(k, display, { mine: String(pad.author || '') === String(viewerId), ts: Number(pad.createdAt ? new Date(pad.createdAt).getTime() : 0) });
           }
         }
       }
@@ -199,7 +213,12 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
       const q = String(search || '').trim().toLowerCase().replace(/^#/, '');
       if (q) tags = tags.filter(t => String(t.name || '').toLowerCase().includes(q));
 
-      if (filter === 'top') {
+      if (filter === 'mine') {
+        tags = tags.filter(t => (t.mine || 0) > 0).sort((a, b) => b.mine - a.mine || a.name.localeCompare(b.name));
+      } else if (filter === 'recent') {
+        const since = Date.now() - 7 * DAY;
+        tags = tags.filter(t => (t.lastTs || 0) >= since).sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
+      } else if (filter === 'top') {
         tags.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
       } else if (filter === 'cloud') {
         const max = Math.max(...tags.map(t => t.count), 1);

@@ -6,7 +6,7 @@ const moment = require("../server/node_modules/moment");
 const fmtDate = (ts) => {
   if (!ts) return "";
   const m = moment(ts);
-  return m.isValid() ? m.format("YYYY-MM-DD HH:mm") : "";
+  return m.isValid() ? m.format("YYYY/MM/DD HH:mm") : "";
 };
 
 const renderMedia = (m) => {
@@ -111,7 +111,7 @@ const mastodonBox = (account, stats, actions, showLabel) => {
 
 const disconnectedBlock = () => {
   const text = String(i18n.fediverseDisconnected || "");
-  const settingsLink = a({ href: "/settings#fediverse" }, i18n.fediverseEmptyLink || "settings");
+  const settingsLink = a({ href: "/settings#multiverse" }, i18n.fediverseEmptyLink || "settings");
   const parts = text.split("%LINK%");
   const para = parts.length > 1
     ? p(parts[0], settingsLink, parts.slice(1).join("%LINK%"))

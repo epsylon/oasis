@@ -1,6 +1,8 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
+const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions } = require("./main_views");
+const { renderPhotoGallery, renderGalleryFields, imagesOf } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 
@@ -57,6 +59,14 @@ const renderTaskOwnerActions = (task, returnTo) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ type: "submit", class: "delete-btn" }, i18n.taskDeleteButton)
     ),
+  ];
+};
+
+const renderTaskStatusRow = (task, returnTo) => {
+  const st = normalizeStatus(task.status || "OPEN");
+  return div({ class: "tribe-side-actions housing-status-row" },
+    span({ class: "card-label" }, `${i18n.taskStatus}: `),
+    renderStateChip(st === "CLOSED" ? "hidden" : "mutuals", st === "CLOSED" ? "🔒" : "👁", statusLabel(task.status)),
     form(
       { method: "POST", action: `/tasks/status/${encodeURIComponent(task.id)}`, class: "project-control-form project-control-form--status" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -66,86 +76,33 @@ const renderTaskOwnerActions = (task, returnTo) => {
         option({ value: "IN-PROGRESS", ...(st === "IN-PROGRESS" ? { selected: true } : {})}, i18n.taskStatusInProgress),
         option({ value: "CLOSED", ...(st === "CLOSED" ? { selected: true } : {})}, i18n.taskStatusClosed)
       ),
-      button({ class: "status-btn project-control-btn", type: "submit" }, setStatusLabel)
+      button({ class: "status-btn project-control-btn", type: "submit" }, i18n.taskSetStatus)
     )
-  ];
+  );
 };
 
 const renderTaskAssignAction = (task, isAssignedToMe, returnTo) => {
   const st = normalizeStatus(task.status || "OPEN");
   if (st === "CLOSED") return null;
-  return form(
-    { method: "POST", action: `/tasks/assign/${encodeURIComponent(task.id)}` },
-    input({ type: "hidden", name: "returnTo", value: returnTo }),
-    button({ type: "submit", class: "filter-btn" }, isAssignedToMe ? i18n.taskUnassignButton : i18n.taskAssignButton)
-  );
+  return [
+    span({ class: "card-label" }, `${i18n.taskAssignedTo}: `),
+    renderStateChip(isAssignedToMe ? "mutuals" : "whole", isAssignedToMe ? "👤" : "○",
+      String(isAssignedToMe ? i18n.taskAssignedChip : i18n.taskUnassignedChip).toUpperCase()),
+    form(
+      { method: "POST", action: `/tasks/assign/${encodeURIComponent(task.id)}`, class: "project-control-form" },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ type: "submit", class: "status-btn project-control-btn" }, isAssignedToMe ? i18n.taskUnassignButton : i18n.taskAssignButton)
+    )
+  ];
 };
 
 const renderTaskCommentsSection = (taskId, comments = [], currentFilter = "all") => {
-  const commentsCount = Array.isArray(comments) ? comments.length : 0;
   const returnTo = `/tasks/${encodeURIComponent(taskId)}?filter=${encodeURIComponent(currentFilter || "all")}`;
-
-  return div(
-    { class: "vote-comments-section" },
-    div(
-      { class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(commentsCount))
-    ),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form(
-        { method: "POST", action: `/tasks/${encodeURIComponent(taskId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        textarea({
-          id: "comment-text",
-          name: "text",
-          rows: 4,
-          class: "comment-textarea",
-          placeholder: i18n.voteNewCommentPlaceholder
-        }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    (() => {
-      const visibleComments = (comments || []).filter(c => {
-        const t = c && c.value && c.value.content && c.value.content.text;
-        return t && String(t).trim();
-      });
-      return visibleComments.length
-      ? div(
-          { class: "comments-list" },
-          visibleComments.map((c) => {
-            const author = c.value && c.value.author ? c.value.author : "";
-            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
-            const relDate = ts ? moment(ts).fromNow() : "";
-
-            const content = c.value && c.value.content ? c.value.content : {};
-            const root = content.fork || content.root || "";
-            const text = content.text || "";
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && root ? a({ href: `/thread/${encodeURIComponent(root)}#${encodeURIComponent(c.key)}` }, relDate) : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(String(text)))
-            );
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet);
-    })()
-  );
+  return renderSharedCommentsSection({
+    action: `/tasks/${encodeURIComponent(taskId)}/comments`,
+    comments: comments,
+    returnTo: returnTo
+  });
 };
 
 const renderTaskStatusChip = (status) => {
@@ -176,10 +133,11 @@ const renderTaskItem = (task, filter, spreadInfo) => {
   const assignees = safeArray(task.assignees);
   const isPrivate = String(task.isPublic || "").toUpperCase() === "PRIVATE";
 
-  const heroNode = task.image
+  const cover = imagesOf(task)[0]
+  const heroNode = cover
     ? div({ class: "tribe-card-image-wrapper" },
         a({ href: `/tasks/${encodeURIComponent(task.id)}` },
-          renderTaskMediaBlob(task.image, { class: "tribe-card-hero-image" })
+          renderTaskMediaBlob(cover, { class: "tribe-card-hero-image" })
         ),
         div({ class: "tribe-visit-btn-wrapper" },
           form({ method: "GET", action: `/tasks/${encodeURIComponent(task.id)}` },
@@ -201,6 +159,10 @@ const renderTaskItem = (task, filter, spreadInfo) => {
   const end = task.endTime ? moment(task.endTime).format("YYYY/MM/DD HH:mm") : "";
 
   return div({ class: "tribe-card task-card" },
+    div({ class: "card-header activity-card-header" },
+      span(),
+      renderContentActions(task.id, `/tasks/${encodeURIComponent(task.id)}`, { spread: spreadInfo || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title })
+    ),
     heroNode,
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
@@ -212,16 +174,7 @@ const renderTaskItem = (task, filter, spreadInfo) => {
       (start || end) ? p({ class: "card-date-highlight" }, start && end ? `${start} → ${end}` : (start || end)) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
-      ),
-      div({ class: "card-spread-centered" }, renderSpreadButton(task.id, spreadInfo)),
-      !heroNode
-        ? div({ class: "card-visit-btn-centered" },
-            form({ method: "GET", action: `/tasks/${encodeURIComponent(task.id)}` },
-              input({ type: "hidden", name: "filter", value: currentFilter }),
-              button({ type: "submit", class: "filter-btn" }, i18n.viewTask || "View Task")
-            )
-          )
-        : null
+      )
     )
   );
 };
@@ -268,7 +221,8 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
   filtered = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const editTask = list.find((t) => t.id === taskId) || {};
-  const editTags = Array.isArray(editTask.tags) ? editTask.tags : [];
+  const formData = currentFilter === "edit" ? editTask : (params.draft || {});
+  const editTags = Array.isArray(formData.tags) ? formData.tags : (typeof formData.tags === "string" ? formData.tags.split(",").map(t => t.trim()).filter(Boolean) : []);
   const minCreate = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm");
 
   const ret = typeof returnTo === "string" && returnTo.startsWith("/tasks")
@@ -287,19 +241,30 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
         { class: "filters" },
         form(
           { method: "GET", action: "/tasks" },
-          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterMine),
-          button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterAssigned),
-          button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterOpen),
-          button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterInProgress),
-          button({ type: "submit", name: "filter", value: "closed", class: currentFilter === "closed" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterClosed),
-          button({ type: "submit", name: "filter", value: "priority-low", class: currentFilter === "priority-low" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterLow),
-          button({ type: "submit", name: "filter", value: "priority-medium", class: currentFilter === "priority-medium" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterMedium),
-          button({ type: "submit", name: "filter", value: "priority-high", class: currentFilter === "priority-high" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterHigh),
-          button({ type: "submit", name: "filter", value: "priority-urgent", class: currentFilter === "priority-urgent" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterUrgent),
+          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAssigned).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterOpen).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterInProgress).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "closed", class: currentFilter === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterClosed).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "priority-low", class: currentFilter === "priority-low" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterLow).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "priority-medium", class: currentFilter === "priority-medium" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMedium).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "priority-high", class: currentFilter === "priority-high" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterHigh).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "priority-urgent", class: currentFilter === "priority-urgent" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterUrgent).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.taskCreateButton)
         )
-      )
+      ),
+      currentFilter === "edit" || currentFilter === "create"
+        ? null
+        : div({ class: "filters" },
+            form({ method: "GET", action: "/tasks", class: "filter-box" },
+              input({ type: "hidden", name: "filter", value: currentFilter }),
+              input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.taskSearchPlaceholder, class: "filter-box__input" }),
+              div({ class: "filter-box__controls" },
+                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+              )
+            )
+          )
     ),
     section(
       currentFilter === "edit" || currentFilter === "create"
@@ -310,18 +275,18 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
               { action: currentFilter === "edit" ? `/tasks/update/${encodeURIComponent(taskId)}` : "/tasks/create", method: "POST", enctype: "multipart/form-data" },
               input({ type: "hidden", name: "returnTo", value: ret }),
               label(i18n.taskTitleLabel), br(),
-              input({ type: "text", name: "title", required: true, value: currentFilter === "edit" ? (editTask.title || "") : (params.prefillTitle || "") }), br(),
+              input({ type: "text", name: "title", required: true, value: formData.title || params.prefillTitle || "" }), br(),
               label(i18n.taskDescriptionLabel), br(),
-              textarea({ name: "description", required: true, placeholder: i18n.taskDescriptionPlaceholder, rows: "4" }, currentFilter === "edit" ? (editTask.description || "") : (params.prefillDescription || "")), br(),
-              label(i18n.uploadMedia), br(),
-              input({ type: "file", name: "image", accept: "image/*" }), br(),br(),
+              textarea({ name: "description", required: true, placeholder: i18n.taskDescriptionPlaceholder, rows: "4" }, formData.description || params.prefillDescription || ""), br(),
+              ...renderGalleryFields(formData, currentFilter === "edit"),
+              br(),
               label(i18n.taskStartTimeLabel), br(),
               input({
                 type: "datetime-local",
                 name: "startTime",
                 required: true,
                 min: currentFilter === "create" ? minCreate : undefined,
-                value: currentFilter === "edit" && editTask.startTime ? moment(editTask.startTime).format("YYYY-MM-DDTHH:mm") : ""
+                value: formData.startTime ? moment(formData.startTime).format("YYYY-MM-DDTHH:mm") : ""
               }), br(), br(),
               label(i18n.taskEndTimeLabel), br(),
               input({
@@ -329,25 +294,25 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
                 name: "endTime",
                 required: true,
                 min: currentFilter === "create" ? minCreate : undefined,
-                value: currentFilter === "edit" && editTask.endTime ? moment(editTask.endTime).format("YYYY-MM-DDTHH:mm") : ""
+                value: formData.endTime ? moment(formData.endTime).format("YYYY-MM-DDTHH:mm") : ""
               }), br(), br(),
               label(i18n.taskPriorityLabel), br(),
               select(
                 { name: "priority", required: true },
-                opt("URGENT", String(editTask.priority || "").toUpperCase() === "URGENT", i18n.taskPriorityUrgent),
-                opt("HIGH", String(editTask.priority || "").toUpperCase() === "HIGH", i18n.taskPriorityHigh),
-                opt("MEDIUM", String(editTask.priority || "").toUpperCase() === "MEDIUM", i18n.taskPriorityMedium),
-                opt("LOW", !editTask.priority || String(editTask.priority || "").toUpperCase() === "LOW", i18n.taskPriorityLow)
+                opt("URGENT", String(formData.priority || "").toUpperCase() === "URGENT", i18n.taskPriorityUrgent),
+                opt("HIGH", String(formData.priority || "").toUpperCase() === "HIGH", i18n.taskPriorityHigh),
+                opt("MEDIUM", String(formData.priority || "").toUpperCase() === "MEDIUM", i18n.taskPriorityMedium),
+                opt("LOW", !formData.priority || String(formData.priority || "").toUpperCase() === "LOW", i18n.taskPriorityLow)
               ), br(), br(),
               label(i18n.taskLocationLabel), br(),
-              input({ type: "text", name: "location", value: editTask.location || "" }), br(),
+              input({ type: "text", name: "location", value: formData.location || "" }), br(),
               label(i18n.taskTagsLabel), br(),
               input({ type: "text", name: "tags", value: editTags.join(", ") }), br(),
               label(i18n.taskVisibilityLabel), br(),
               select(
                 { name: "isPublic", id: "isPublic" },
-                opt("PUBLIC", String(editTask.isPublic || "PUBLIC").toUpperCase() === "PUBLIC", i18n.taskPublic),
-                opt("PRIVATE", String(editTask.isPublic || "").toUpperCase() === "PRIVATE", i18n.taskPrivate)
+                opt("PUBLIC", String(formData.isPublic || "PUBLIC").toUpperCase() === "PUBLIC", i18n.taskPublic),
+                opt("PRIVATE", String(formData.isPublic || "").toUpperCase() === "PRIVATE", i18n.taskPrivate)
               ), br(), br(),
               button({ type: "submit" }, currentFilter === "edit" ? i18n.taskUpdateButton : i18n.taskCreateButton)
             )
@@ -372,16 +337,16 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
     { class: "filters" },
     form(
       { method: "GET", action: "/tasks" },
-      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterAll),
-      button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterMine),
-      button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterAssigned),
-      button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterOpen),
-      button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterInProgress),
-      button({ type: "submit", name: "filter", value: "closed", class: currentFilter === "closed" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterClosed),
-      button({ type: "submit", name: "filter", value: "priority-low", class: currentFilter === "priority-low" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterLow),
-      button({ type: "submit", name: "filter", value: "priority-medium", class: currentFilter === "priority-medium" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterMedium),
-      button({ type: "submit", name: "filter", value: "priority-high", class: currentFilter === "priority-high" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterHigh),
-      button({ type: "submit", name: "filter", value: "priority-urgent", class: currentFilter === "priority-urgent" ? "filter-btn active" : "filter-btn" }, i18n.taskFilterUrgent),
+      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMine).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAssigned).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterOpen).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterInProgress).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "closed", class: currentFilter === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterClosed).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "priority-low", class: currentFilter === "priority-low" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterLow).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "priority-medium", class: currentFilter === "priority-medium" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMedium).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "priority-high", class: currentFilter === "priority-high" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterHigh).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "priority-urgent", class: currentFilter === "priority-urgent" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterUrgent).toUpperCase()),
       button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.taskCreateButton)
     )
   );
@@ -429,8 +394,7 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
     ));
   }
   const assignNode = renderTaskAssignAction(task, isAssignedToMe, returnToSelf);
-  if (assignNode) sideActions.push(assignNode);
-  if (isAuthor) sideActions.push(...renderTaskOwnerActions(task, returnToSelf));
+  const ownerActions = isAuthor ? renderTaskOwnerActions(task, returnToSelf) : [];
 
   const infoRows = [];
   const pushRow = (labelText, valueNode) =>
@@ -445,19 +409,25 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
   if (task.location && String(task.location).trim()) pushRow(i18n.taskLocationLabel, task.location);
 
   const taskSide = div({ class: "tribe-side" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(task.id, null, { spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title })
+    ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, task.title)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    div({ class: "card-spread-centered" }, renderSpreadButton(task.id, params.spreads)),
-    task.image ? renderTaskMediaBlob(task.image, { class: "tribe-detail-image" }) : null,
+    renderPhotoGallery(task, 'task'),
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    assignNode ? div({ class: "tribe-side-actions housing-status-row task-assign-row" }, ...assignNode) : null,
+    isAuthor ? renderTaskStatusRow(task, returnToSelf) : null,
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
     ),
     assigneesListNode,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
+    renderDocumentActions('tasks', task.id)
   );
 
   const returnToOpinions = `/tasks/${encodeURIComponent(task.id)}?filter=${encodeURIComponent(currentFilter)}`;
@@ -474,13 +444,13 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
       span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
       userLink(task.author)
     ),
-    opinionsBar,
-    renderTaskCommentsSection(task.id, comments, currentFilter)
+    renderEngagement(task.id, opinionsBar, renderTaskCommentsSection(task.id, comments, currentFilter))
   );
 
   return template(
     task.title,
     section(
+      div({ class: "tags-header" }, h2(i18n.tasksTitle), p(i18n.tasksDescription)),
       filterBar,
       div({ class: "tribe-details" }, taskSide, taskMain)
     )

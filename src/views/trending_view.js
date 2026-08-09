@@ -13,7 +13,7 @@ const filterButton = (mode, currentFilter) =>
     input({ type: 'hidden', name: 'filter', value: mode }),
     button(
       { type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' },
-      i18n[mode + 'Button'] || mode
+      String(i18n[mode + 'Button'] || mode).toUpperCase()
     )
   );
 
@@ -42,12 +42,11 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       )
     );
   } else if (c.type === 'image') {
-    const { url, title, description, meme } = c;
+    const { url, title, description } = c;
     contentHtml = div({ class: 'trending-image' },
       div({ class: 'card-section image' },
         title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"), p(...renderUrl(description))] : null,
-        meme ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.trendingCategory + ':'), span({ class: 'card-value' }, i18n.meme)) : "",
         div({ class: 'card-field' }, img({ src: `/blob/${encodeURIComponent(url)}`, class: 'feed-image' }))
       )
     );
@@ -159,7 +158,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
             : ""
       )
     );
-  } else if (c.type === 'votes') {
+  } else if (c.type === 'votes' || c.type === 'poll') {
     const { question, deadline, votes: vmap, totalVotes } = c;
     const votesList = vmap && typeof vmap === 'object'
       ? Object.entries(vmap).map(([o, cnt]) => ({ option: o, count: cnt }))
@@ -230,12 +229,11 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
         span({ class: 'pm-exposition-text' }, String(c.type || '').toUpperCase())
       ),
-      renderContentActions(item.key, detailHref)
+      renderContentActions(item.key, detailHref, { spread: spreadMap.get(item.key) || null })
     ),
     div(
       { class: 'card-section trending-card-body' },
       contentHtml,
-      div({ class: 'card-spread-left' }, renderSpreadButton(item.key, spreadMap.get(item.key))),
       p(
         { class: 'card-footer' },
         span({ class: 'date-link' }, `${created} ${i18n.performed} `),
@@ -260,14 +258,16 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         );
       })(),
       details({ class: 'opinions-voting-collapse' },
-        summary({ class: 'opinions-summary' }, `${i18n.opinionsTitle || 'Opinions'} (${Object.values(c.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)})`),
+        summary({ class: 'opinions-summary' },
+          span({ class: 'opinions-summary-icon' }, 'ꔍ'),
+          span({ class: 'opinions-summary-count' }, `(${Object.values(c.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)})`)),
         div(
           { class: 'voting-buttons' },
           categories.map(cat =>
             form({ method: 'POST', action: `/trending/${encodeURIComponent(item.key)}/${cat}` },
               button(
                 { class: 'vote-btn' },
-                `${voteLabelFor(cat)} [${c.opinions?.[cat] || 0}]`
+                `${String(voteLabelFor(cat)).toUpperCase()} [${c.opinions?.[cat] || 0}]`
               )
             )
           )
@@ -281,10 +281,10 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
-  const baseFilters = ['TOP', 'ALL', 'MINE', 'RECENT'];
+  const baseFilters = ['ALL', 'MINE', 'RECENT', 'TOP'];
   const contentFilters = [
-    ['feed', 'votes', 'event', 'task', 'report'],
-    ['project', 'industry', 'transfer', 'shopProduct'],
+    ['votes', 'event', 'task', 'report'],
+    ['feed', 'project', 'industry', 'shopProduct', 'transfer'],
     ['audio', 'bookmark', 'document', 'image', 'torrent', 'video']
   ];
 
@@ -305,7 +305,9 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
       return bVotes !== aVotes ? bVotes - aVotes : b.value.timestamp - a.value.timestamp;
     });
   } else if (contentFilters.flat().includes(filter)) {
-    filteredItems = filteredItems.filter(item => item.value.content.type === filter);
+    filteredItems = filteredItems.filter(item =>
+      item.value.content.type === filter ||
+      (filter === 'votes' && item.value.content.type === 'poll'));
   } else if (filter !== 'ALL') {
     filteredItems = filteredItems.filter(item => (item.value.content.opinions_inhabitants || []).length > 0);
   }
@@ -342,7 +344,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
       ),
       section(
         cards.length
-          ? div({ class: 'trending-container', style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;' }, ...cards)
+          ? div({ class: 'trending-container' }, ...cards)
           : div({ class: 'no-results' }, p(i18n.trendingNoContentMessage))
       )
     )

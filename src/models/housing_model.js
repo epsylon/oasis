@@ -49,35 +49,7 @@ const safeProperty = (v) => {
   return PROPERTY_TYPES.includes(t) ? t : "other"
 }
 
-const MAX_IMAGES = 8
-
-const blobOf = (value) => {
-  let blobId = value || null
-  if (blobId && /\(([^)]+)\)/.test(String(blobId))) blobId = String(blobId).match(/\(([^)]+)\)/)[1]
-  return blobId || null
-}
-
-const normalizeImages = (raw) => {
-  const list = Array.isArray(raw) ? raw : (raw ? [raw] : [])
-  const out = []
-  const seen = new Set()
-  for (const entry of list) {
-    const value = String(entry || "").trim()
-    const id = blobOf(value)
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    out.push(/\[(image|video|audio):[^\]]*\]\(/.test(value) || value.startsWith("![") ? value : id)
-    if (out.length >= MAX_IMAGES) break
-  }
-  return out
-}
-
-const normalizeVideo = (raw) => {
-  const value = String(Array.isArray(raw) ? raw[0] || "" : raw || "").trim()
-  const id = blobOf(value)
-  if (!id) return ""
-  return /\[(image|video|audio):[^\]]*\]\(/.test(value) || value.startsWith("![") ? value : id
-}
+const { MAX_IMAGES, normalizeImages, normalizeVideo } = require('./media_gallery')
 
 const matchSearch = (item, q) => {
   const qq = norm(q)
@@ -323,7 +295,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const availableTo = safeDate(data.availableTo)
     if (!availableFrom) throw new Error("The start date is required")
     if (opts.enforceFutureStart) {
-      const startsAt = new Date(availableFrom)
+      const [y, m, d] = String(availableFrom).split("-").map(Number)
+      const startsAt = new Date(y, (m || 1) - 1, d || 1)
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       if (startsAt < today) throw new Error("The start date cannot be earlier than today")

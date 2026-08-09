@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderInviteQrCard , renderSpreadEditWarning } = require("./main_views")
+const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -60,18 +61,14 @@ const renderModeButtons = (currentFilter) =>
     )
   )
 
-const renderFavoriteToggle = (shop, returnTo) =>
-  form(
-    { method: "POST", action: shop.isFavorite ? `/shops/favorites/remove/${encodeURIComponent(shop.key)}` : `/shops/favorites/add/${encodeURIComponent(shop.key)}` },
-    returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-    button({ type: "submit", class: "filter-btn" }, shop.isFavorite ? i18n.shopRemoveFavorite : i18n.shopAddFavorite)
-  )
-
 const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params)
   const isAuthor = String(shop.author) === String(userId)
 
   return div({ class: "tribe-card" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(shop.key, `/shops/${encodeURIComponent(shop.key)}`, { spread: params.spreadMap && params.spreadMap.get(shop.key) || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title })
+    ),
     div({ class: "tribe-card-image-wrapper" },
       a({ href: `/shops/${encodeURIComponent(shop.key)}` },
         renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-card-hero-image' })
@@ -89,12 +86,6 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
       ),
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
-      ),
-      div({ class: "card-spread-centered" }, renderSpreadButton(shop.key, params.spreadMap && params.spreadMap.get(shop.key))),
-      div({ class: "card-visit-btn-centered" },
-        form({ method: 'GET', action: `/shops/${encodeURIComponent(shop.key)}` },
-          button({ type: 'submit', class: 'filter-btn' }, i18n.viewShop || i18n.shopVisitShop || 'View Shop')
-        )
       )
     )
   )
@@ -126,9 +117,6 @@ const renderProductCard = (product, shopId, returnTo) => {
         if (!isAuthor && stock > 0) {
           actions.push(a({ href: productUrl, class: "buy-btn" }, i18n.marketActionsBuy || i18n.shopBuy));
         }
-        actions.push(form({ method: "POST", action: product.isFavorite ? `/shops/favorites/remove/${encodeURIComponent(product.key)}` : `/shops/favorites/add/${encodeURIComponent(product.key)}` },
-          returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-          button({ type: "submit", class: "filter-btn" }, product.isFavorite ? i18n.shopRemoveFavorite : i18n.shopAddFavorite)));
         return actions.length ? div({ class: "shop-product-actions" }, ...actions) : null;
       })()
     )
@@ -136,40 +124,12 @@ const renderProductCard = (product, shopId, returnTo) => {
 }
 
 const renderCommentsSection = (parentId, returnTo, comments = []) => {
-  const count = Array.isArray(comments) ? comments.length : 0
-  return div({ class: "vote-comments-section market-comments" },
-    div({ class: "comments-count" }, span({ class: "card-label" }, i18n.voteCommentsLabel + ": "), span({ class: "card-value" }, String(count))),
-    div({ class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form({ method: "POST", action: `/shops/${encodeURIComponent(parentId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        textarea({ name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    count
-      ? div({ class: "comments-list" },
-          comments.map(c => {
-            const author = c.value?.author || ""
-            const ts = c.value?.timestamp || c.timestamp
-            const text = c.value?.content?.text || ""
-            const rootId = c.value?.content?.fork || c.value?.content?.root || null
-            return div({ class: "votations-comment-card" },
-              span({ class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                ts ? span(" | ", span({ class: "votations-comment-date" }, moment(ts).format("YYYY/MM/DD HH:mm:ss"))) : "",
-                ts && rootId ? span(" | ", a({ href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}` }, moment(ts).fromNow())) : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            )
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
-  )
-}
+  return renderSharedCommentsSection({
+    action: `/shops/${encodeURIComponent(parentId)}/comments`,
+    comments: comments,
+    returnTo: returnTo
+  });
+};
 
 const renderShopForm = (filter, shop = {}, params = {}) => {
   const isEdit = filter === "edit"
@@ -272,12 +232,12 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
   ]
 
   const searchBar = div({ class: "filters" },
-    form({ method: "GET", action: "/shops" },
+    form({ method: "GET", action: "/shops", class: "filter-box" },
       input({ type: "hidden", name: "filter", value: filter }),
-      input({ type: "text", name: "q", placeholder: i18n.shopSearchPlaceholder, value: q }),
-      br(),
-      button({ type: "submit" }, i18n.search),
-      br()
+      input({ type: "text", name: "q", placeholder: i18n.shopSearchPlaceholder, value: q, class: "filter-box__input" }),
+      div({ class: "filter-box__controls" },
+        button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+      )
     )
   )
 
@@ -315,10 +275,12 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
   const sort = safeText(params.sort || "recent")
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort })
   const isAuthor = String(shop.author) === String(userId)
-  const fullShareUrl = `/shops/${encodeURIComponent(shop.key)}`
 
   const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetShops && shop.visibility !== 'CLOSED');
   const shopSide = div({ class: "tribe-side" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(shop.key, null, { spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title })
+    ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, shop.title || i18n.shopUntitled)
     ),
@@ -330,20 +292,12 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       renderLifespanChip(shop.lifetime, i18n),
       renderReachChip(isClearnet, i18n)
     ),
-    div({ class: "card-spread-centered" }, renderSpreadButton(shop.key, params.spreads)),
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
     shop.description ? p({ class: "tribe-side-description" }, ...renderUrl(shop.description)) : null,
-    div({ class: "shop-share" },
-      span({ class: "tribe-info-label" }, `${i18n.shopShareUrl}: `),
-      input({ type: "text", value: fullShareUrl, readonly: true, class: "shop-share-input" })
-    ),
     table({ class: "tribe-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.shopCreatedAt || "CREATED"),
         td({ class: "tribe-info-value", colspan: "3" }, new Date(shop.createdAt).toLocaleString())
-      ),
-      tr(
-        td({ class: "tribe-info-value", colspan: "4" }, userLink(shop.author))
       ),
       shop.location ? tr(
         td({ class: "tribe-info-label" }, i18n.shopLocation),
@@ -356,36 +310,20 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       shop.url ? tr(
         td({ class: "tribe-info-label" }, i18n.shopUrl),
         td({ class: "tribe-info-value", colspan: "3" }, ...renderUrl(shop.url))
-      ) : null
+      ) : null,
+      tr(
+        td({ class: "tribe-info-value", colspan: "4" }, userLink(shop.author))
+      )
     ),
     renderMapEmbed(params.mapData, shop.mapUrl),
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
     ),
-    div({ class: "tribe-side-actions" },
-      renderFavoriteToggle(shop, returnTo),
-      shop.author && String(shop.author) !== String(userId)
-        ? form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: shop.author }), button({ type: "submit", class: "tribe-action-btn" }, i18n.privateMessage))
-        : null,
-      isAuthor
-        ? form({ method: "GET", action: `/shops/edit/${encodeURIComponent(shop.key)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.shopUpdate)
-          )
-        : null,
-      isAuthor
-        ? form({ method: "GET", action: `/shops/${encodeURIComponent(shop.key)}/orders` },
-            button({ type: "submit", class: "tribe-action-btn" },
-              i18n.shopOrdersTitle || "Orders",
-              Number(shop.pendingOrders || 0) > 0 ? span({ class: "shop-orders-badge", title: i18n.shopOrdersPending || "Pending orders" }, ` ● ${shop.pendingOrders}`) : null
-            )
-          )
-        : null,
-      isAuthor
-        ? form({ method: "POST", action: `/shops/delete/${encodeURIComponent(shop.key)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.shopDelete)
-          )
-        : null
-    ),
+    shop.author && String(shop.author) !== String(userId)
+      ? div({ class: "tribe-side-actions" },
+          form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: shop.author }), button({ type: "submit", class: "tribe-action-btn" }, i18n.privateMessage))
+        )
+      : null,
     isAuthor
       ? div({ class: "tribe-side-actions shop-visibility-row" },
           span({ class: "card-label" }, `${i18n.visibilityLabel || "Visibility"}: `),
@@ -419,6 +357,26 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
               shop.encrypted ? i18n.shopMakePublic : i18n.shopMakePrivate))
         )
       : null,
+    isAuthor
+      ? div({ class: "tribe-side-actions" },
+          form({ method: "GET", action: `/shops/${encodeURIComponent(shop.key)}/orders` },
+            button({ type: "submit", class: "tribe-action-btn" },
+              i18n.shopOrdersTitle || "Orders",
+              Number(shop.pendingOrders || 0) > 0 ? span({ class: "shop-orders-badge", title: i18n.shopOrdersPending || "Pending orders" }, ` ● ${shop.pendingOrders}`) : null
+            )
+          )
+        )
+      : null,
+    isAuthor
+      ? div({ class: "tribe-side-actions owner-actions" },
+          form({ method: "GET", action: `/shops/edit/${encodeURIComponent(shop.key)}` },
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.shopUpdate)
+          ),
+          form({ method: "POST", action: `/shops/delete/${encodeURIComponent(shop.key)}` },
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.shopDelete)
+          )
+        )
+      : null,
     safeArr(shop.tags).length
       ? div({ class: "tribe-side-tags" }, safeArr(shop.tags).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
       : null
@@ -439,6 +397,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
 
   return template(
     shop.title || i18n.shopTitle,
+    section(div({ class: "tags-header" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
     section(renderModeButtons(filter)),
     section(
       div({ class: "tribe-details" },
@@ -454,81 +413,102 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
   const isAuthor = String(product.author) === String(userId)
   const stock = Number(product.stock) || 0
 
-  return template(
-    product.title || i18n.shopProductTitle,
-    section(renderModeButtons("products")),
-    section(
-      div({ class: "shop-detail" },
-        div({ class: "bookmark-topbar transfer-topbar-single" },
-          div({ class: "bookmark-topbar-left" },
-            product.author && String(product.author) !== String(userId)
-              ? form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: product.author }), button({ type: "submit", class: "filter-btn" }, i18n.privateMessage))
-              : null,
-            form({ method: "GET", action: `/shops/${encodeURIComponent(product.shopId)}` },
-              button({ type: "submit", class: "filter-btn" }, `← ${i18n.shopBackToShop}`))
-          ),
-          isAuthor
-            ? div({ class: "bookmark-actions transfer-actions" },
-                form({ method: "GET", action: `/shops/product/edit/${encodeURIComponent(product.key)}` },
-                  input({ type: "hidden", name: "shopId", value: product.shopId }),
-                  input({ type: "hidden", name: "returnTo", value: returnTo }),
-                  button({ class: "update-btn", type: "submit" }, i18n.shopUpdate)
-                ),
-                form({ method: "POST", action: `/shops/product/delete/${encodeURIComponent(product.key)}` },
-                  input({ type: "hidden", name: "returnTo", value: returnTo }),
-                  button({ class: "delete-btn", type: "submit" }, i18n.shopDelete)
-                )
-              )
-            : null
-        ),
-        product.image ? div({ class: "shop-detail-media" }, renderMediaBlob(product.image)) : null,
-        h2(product.title),
-        renderStarRating(product.opinions, safeArr(product.opinions_inhabitants).length),
-        product.description ? div({ class: "shop-detail-desc" }, ...renderUrl(product.description)) : null,
-        div({ class: "shop-product-price" }, `${Number(product.price || 0).toFixed(6)} ECO`),
-        div({ class: "confirmations-block stock-block" },
-          div({ class: "card-field" },
-            span({ class: "card-label" }, `${i18n.shopProductStock}: `),
-            span({ class: "card-value" }, stock > 0 ? String(stock) : i18n.shopOutOfStock)
-          ),
-          progress({ class: "confirmations-progress stock-progress", value: Math.min(stock, 100), max: 100 })
-        ),
-        !isAuthor && stock > 0
-          ? form({ method: "POST", action: `/shops/product/buy/${encodeURIComponent(product.key)}`, class: "shop-buy-form" },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              p({ class: "shop-buy-form-note" }, i18n.shopBuyEncryptedNote || "Your delivery details are sent encrypted only to the shop owner."),
-              label(i18n.shopBuyDeliveryAddress || "Delivery address"),
-              br(),
-              textarea({ name: "deliveryAddress", required: true, rows: 3, placeholder: i18n.shopBuyDeliveryAddressPlaceholder || "" }),
-              br(),
-              br(),
-              label(i18n.shopBuyContact || "Contact"),
-              br(),
-              input({ type: "text", name: "contact", placeholder: i18n.shopBuyContactPlaceholder || "email, phone, etc." }),
-              br(),
-              br(),
-              label(i18n.shopBuyNotes || "Notes"),
-              br(),
-              textarea({ name: "notes", rows: 2, placeholder: i18n.shopBuyNotesPlaceholder || "" }),
-              br(),
-              br(),
-              button({ type: "submit", class: "buy-btn" }, i18n.marketActionsBuy || i18n.shopBuy)
-            )
-          : null,
-        br(),
-        p({ class: "card-footer" },
-          span({ class: "date-link" }, moment(product.createdAt).format("YYYY-MM-DD HH:mm")),
-          " ",
-          userLink(product.author)
-        ),
-        !isAuthor && params.canRate
-          ? renderOpinionsVoting('/shops/product/opinions', product.key, product.opinions, returnTo, product.opinions_inhabitants)
-          : null
+  const productSide = div({ class: "tribe-side" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(product.key, null, { spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title })
+    ),
+    div({ class: "shop-title-row" },
+      h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled)
+    ),
+    renderStarRating(product.opinions, safeArr(product.opinions_inhabitants).length),
+    product.image ? renderMediaBlob(product.image, null, { class: "tribe-detail-image" }) : null,
+    div({ class: "card-date-highlight" }, `${Number(product.price || 0).toFixed(6)} ECO`),
+    div({ class: "confirmations-block stock-block" },
+      div({ class: "card-field" },
+        span({ class: "card-label" }, `${i18n.shopProductStock}: `),
+        span({ class: "card-value" }, stock > 0 ? String(stock) : i18n.shopOutOfStock)
       ),
+      progress({ class: "confirmations-progress stock-progress", value: Math.min(stock, 100), max: 100 })
+    ),
+    table({ class: "tribe-info-table jobs-info-table" },
+      tr(
+        td({ class: "tribe-info-label" }, i18n.shopCreatedAt || "CREATED"),
+        td({ class: "tribe-info-value", colspan: "3" }, moment(product.createdAt).format("YYYY/MM/DD HH:mm"))
+      ),
+      tr(
+        td({ class: "tribe-info-value", colspan: "4" }, userLink(product.author))
+      )
+    ),
+    div({ class: "tribe-side-actions" },
+      form({ method: "GET", action: `/shops/${encodeURIComponent(product.shopId)}` },
+        button({ type: "submit", class: "tribe-action-btn" }, `← ${i18n.shopBackToShop}`)
+      ),
+      product.author && String(product.author) !== String(userId)
+        ? form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: product.author }), button({ type: "submit", class: "tribe-action-btn" }, i18n.privateMessage))
+        : null
+    ),
+    isAuthor
+      ? div({ class: "tribe-side-actions owner-actions" },
+          form({ method: "GET", action: `/shops/product/edit/${encodeURIComponent(product.key)}` },
+            input({ type: "hidden", name: "shopId", value: product.shopId }),
+            input({ type: "hidden", name: "returnTo", value: returnTo }),
+            button({ class: "tribe-action-btn", type: "submit" }, i18n.shopUpdate)
+          ),
+          form({ method: "POST", action: `/shops/product/delete/${encodeURIComponent(product.key)}` },
+            input({ type: "hidden", name: "returnTo", value: returnTo }),
+            button({ class: "tribe-action-btn danger-btn", type: "submit" }, i18n.shopDelete)
+          )
+        )
+      : null
+  )
+
+  const productMain = div({ class: "tribe-main" },
+    product.description
+      ? div({ class: "job-section" },
+          h2({ class: "job-section-title" }, i18n.marketItemDescription || i18n.shopDescription),
+          p({ class: "tribe-side-description" }, ...renderUrl(product.description))
+        )
+      : null,
+    !isAuthor && stock > 0
+      ? div({ class: "job-section" },
+          form({ method: "POST", action: `/shops/product/buy/${encodeURIComponent(product.key)}`, class: "shop-buy-form" },
+            input({ type: "hidden", name: "returnTo", value: returnTo }),
+            p({ class: "shop-buy-form-note" }, i18n.shopBuyEncryptedNote || "Your delivery details are sent encrypted only to the shop owner."),
+            label(i18n.shopBuyDeliveryAddress || "Delivery address"),
+            br(),
+            textarea({ name: "deliveryAddress", required: true, rows: 3, placeholder: i18n.shopBuyDeliveryAddressPlaceholder || "" }),
+            br(),
+            br(),
+            label(i18n.shopBuyContact || "Contact"),
+            br(),
+            input({ type: "text", name: "contact", placeholder: i18n.shopBuyContactPlaceholder || "email, phone, etc." }),
+            br(),
+            br(),
+            label(i18n.shopBuyNotes || "Notes"),
+            br(),
+            textarea({ name: "notes", rows: 2, placeholder: i18n.shopBuyNotesPlaceholder || "" }),
+            br(),
+            br(),
+            button({ type: "submit", class: "buy-btn" }, i18n.marketActionsBuy || i18n.shopBuy)
+          )
+        )
+      : null,
+    renderEngagement(product.key,
+      !isAuthor && params.canRate
+        ? renderOpinionsVoting('/shops/product/opinions', product.key, product.opinions, returnTo, product.opinions_inhabitants)
+        : null,
       renderCommentsSection(product.key, returnTo, comments)
     )
   )
+
+  return template(
+    product.title || i18n.shopProductTitle,
+    section(div({ class: "tags-header" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
+    section(renderModeButtons("products")),
+    section(div({ class: "tribe-details" }, productSide, productMain))
+  )
 }
+
 
 exports.editProductView = async (product, shopId, params = {}) => {
   const returnTo = safeText(params.returnTo) || `/shops/${encodeURIComponent(shopId)}`
@@ -589,7 +569,7 @@ exports.shopOrdersView = async (shop, orders) => {
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyDeliveryAddress || "Delivery address"}:`), span({ class: "card-value" }, String(o.deliveryAddress || ""))),
     o.contact ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyContact || "Contact"}:`), span({ class: "card-value" }, String(o.contact))) : null,
     o.notes ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyNotes || "Notes"}:`), span({ class: "card-value" }, String(o.notes))) : null,
-    p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.createdAt || o.ts).format("YYYY-MM-DD HH:mm"))),
+    p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.createdAt || o.ts).format("YYYY/MM/DD HH:mm"))),
     orderActions(o)
   ))
   return template(
@@ -626,7 +606,7 @@ exports.myPurchasesView = async (purchases) => {
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyDeliveryAddress || "Delivery address"}:`), span({ class: "card-value" }, String(o.deliveryAddress || ""))),
     o.contact ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyContact || "Contact"}:`), span({ class: "card-value" }, String(o.contact))) : null,
     o.notes ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyNotes || "Notes"}:`), span({ class: "card-value" }, String(o.notes))) : null,
-    p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.createdAt || o.ts).format("YYYY-MM-DD HH:mm"))),
+    p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.createdAt || o.ts).format("YYYY/MM/DD HH:mm"))),
     buyerActions(o)
   ))
   return template(

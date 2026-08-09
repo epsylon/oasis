@@ -187,3 +187,62 @@ describe('chats: E2E crypto round-trip and key auto-heal (regression)', (t) => {
     ok(after.some(m => m.text === 'secret from A'), 'after keyholder listed, B is healed and decrypts');
   });
 });
+
+describe('chats: how fast one inhabitant can fill a room', (t) => {
+  t('a normal conversation is no longer cut off after three messages', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const chats = A.use('chats');
+    const chat = await chats.createChat('a room', 'desc', null, 'GENERAL', 'OPEN', [], null);
+    for (let i = 0; i < 20; i++) {
+      await chats.sendMessage(chat.key, `message ${i}`, null);
+    }
+    const msgs = await chats.listMessages(chat.key);
+    eq(msgs.length, 20, 'twenty messages went through');
+  });
+
+  t('the cap still exists, and says so instead of failing like a crash', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const chats = A.use('chats');
+    const chat = await chats.createChat('a room', 'desc', null, 'GENERAL', 'OPEN', [], null);
+    let err = null;
+    try {
+      for (let i = 0; i < 80; i++) await chats.sendMessage(chat.key, `message ${i}`, null);
+    } catch (e) { err = e; }
+    ok(err, 'the cap is reached eventually');
+    eq(err.code, 'CHAT_RATE_LIMIT', 'and it is typed, so the route can answer properly');
+    ok(/60/.test(err.message), 'the message names the actual limit');
+  });
+
+  t('the cap counts per room, not across all of them', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const chats = A.use('chats');
+    const one = await chats.createChat('room one', '', null, 'GENERAL', 'OPEN', [], null);
+    const two = await chats.createChat('room two', '', null, 'GENERAL', 'OPEN', [], null);
+    for (let i = 0; i < 40; i++) await chats.sendMessage(one.key, `a ${i}`, null);
+    await chats.sendMessage(two.key, 'still fine here', null);
+    eq((await chats.listMessages(two.key)).length, 1, 'the other room is unaffected');
+  });
+});
+
+describe('chats: the conversation reads downwards', (t) => {
+  t('the newest message is the last one, and can be reached', async () => {
+    const { singleChatView } = require('../../../src/views/chats_view');
+    const chat = {
+      key: '%c.sha256', title: 'a chat', author: '@a.ed25519', members: ['@a.ed25519'],
+      status: 'OPEN', createdAt: new Date().toISOString(), tags: []
+    };
+    const msg = (text, minutesAgo) => ({
+      key: `%m${minutesAgo}.sha256`, author: '@a.ed25519', text,
+      createdAt: new Date(Date.now() - minutesAgo * 60000).toISOString()
+    });
+
+    const html = String(await singleChatView(chat, 'all', [msg('oldest', 30), msg('middle', 20), msg('newest', 1)], {}));
+
+    ok(html.indexOf('oldest') < html.indexOf('middle'), 'the oldest comes first');
+    ok(html.indexOf('middle') < html.indexOf('newest'), 'and the newest goes last');
+    ok(html.includes('id="chat-latest"'), 'the last message is an anchor');
+    ok(html.includes('href="#chat-latest"'), 'with a way to jump straight to it');
+    ok(html.indexOf('chat-messages-list') < html.indexOf('chat-message-form'), 'and you write underneath the conversation');
+    ok(html.includes('%23chat-latest') || html.includes('#chat-latest'), 'after writing you come back to it');
+  });
+});

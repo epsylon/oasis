@@ -1,8 +1,9 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, textarea, select, option } =
   require("../server/node_modules/hyperaxe");
+const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 
@@ -33,21 +34,6 @@ const renderTags = (tags) => {
     : null;
 };
 
-const renderFavoriteToggle = (doc, returnTo) =>
-  form(
-    {
-      method: "POST",
-      action: doc.isFavorite
-        ? `/documents/favorites/remove/${encodeURIComponent(doc.key)}`
-        : `/documents/favorites/add/${encodeURIComponent(doc.key)}`
-    },
-    returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-    button(
-      { type: "submit", class: "filter-btn" },
-      doc.isFavorite ? i18n.documentRemoveFavoriteButton : i18n.documentAddFavoriteButton
-    )
-  );
-
 const renderDocumentActions = (filter, doc, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   const isAuthor = String(doc.author) === String(userId);
@@ -73,70 +59,11 @@ const renderDocumentActions = (filter, doc, params = {}) => {
 };
 
 const renderDocumentCommentsSection = (documentKey, rootId, comments = [], returnTo = null) => {
-  const list = safeArr(comments).filter(c => {
-    const t = c && c.value && c.value.content && c.value.content.text;
-    return t && String(t).trim();
+  return renderSharedCommentsSection({
+    action: `/documents/${encodeURIComponent(documentKey)}/comments`,
+    comments: comments,
+    returnTo: returnTo
   });
-  const commentsCount = list.length;
-
-  return div(
-    { class: "vote-comments-section" },
-    div(
-      { class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(commentsCount))
-    ),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form(
-        { method: "POST", action: `/documents/${encodeURIComponent(documentKey)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-        rootId ? input({ type: "hidden", name: "rootId", value: rootId }) : null,
-        textarea({
-          id: "comment-text",
-          name: "text",
-          rows: 4,
-          class: "comment-textarea",
-          placeholder: i18n.voteNewCommentPlaceholder
-        }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    list.length
-      ? div(
-          { class: "comments-list" },
-          list.map((c) => {
-            const author = c?.value?.author || "";
-            const ts = c?.value?.timestamp || c?.timestamp;
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
-            const relDate = ts ? moment(ts).fromNow() : "";
-
-            const content = c?.value?.content || {};
-            const text = content.text || "";
-            const threadRoot = content.fork || content.root || null;
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && threadRoot
-                  ? a({ href: `/thread/${encodeURIComponent(threadRoot)}#${encodeURIComponent(c.key)}` }, relDate)
-                  : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            );
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
-  );
 };
 
 const renderDocumentList = exports.renderDocumentList = (documents, filter, params = {}) => {
@@ -163,49 +90,19 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`)
+            renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', isFavorite: doc.isFavorite, reportTitle: doc.title })
           ),
           div(
             { class: "card-section document-card-body" },
-            div(
-              { class: "bookmark-topbar" },
-              div(
-                { class: "bookmark-topbar-left" },
-                renderFavoriteToggle(doc, returnTo),
-                topbarLeft
-              ),
-              renderDocumentActions(filter, doc, params)
-            ),
             title ? h2(title) : null,
             doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
             doc?.url
               ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
               : p(i18n.documentNoFile),
-            div(
-              { class: "card-comments-summary" },
-              span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-              span({ class: "card-value" }, String(commentCount)),
-              br(),
-              br(),
-              form(
-                { method: "GET", action: `/documents/${encodeURIComponent(doc.key)}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                input({ type: "hidden", name: "filter", value: filter || "all" }),
-                params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-                params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-                button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-              )
+            renderEngagement(doc.key,
+              renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
+              renderCommentsLink({ href: `/documents/${encodeURIComponent(doc.key)}`, count: commentCount })
             ),
-                        div(
-              { class: "card-comments-summary feed-opinions-section" },
-              div(
-                { class: "comments-count" },
-                span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
-                span({ class: "card-value" }, String(Object.values(doc.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)))
-              ),
-              renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants)
-            ),
-            div({ class: "card-spread-left" }, renderSpreadButton(doc.key, (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads)),
             br(),
             (() => {
               const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
@@ -214,12 +111,12 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
 
               return p(
                 { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+                span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
                 userLink(doc.author),
                 showUpdated
                   ? span(
                       { class: "votations-comment-date" },
-                      ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+                      ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm")}`
                     )
                   : null
               );
@@ -310,14 +207,14 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
           { method: "GET", action: "/documents", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.documentFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.documentFilterMine),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.documentFilterTop),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase()),
           button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
-            i18n.documentFilterFavorites
+            String(i18n.documentFilterFavorites).toUpperCase()
           ),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.documentFilterRecent),
+          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.documentCreateButton)
         )
       )
@@ -370,7 +267,6 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   ].filter(Boolean);
 
   const sideActions = [];
-  sideActions.push(renderFavoriteToggle(doc, returnTo));
   if (doc.author && String(doc.author) !== String(userId)) {
     sideActions.push(form(
       { method: "GET", action: "/pm" },
@@ -395,6 +291,17 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
 
   const tagsNode = renderTags(doc.tags);
 
+  const detailActions = div({ class: "card-header activity-card-header" },
+    renderContentActions(doc.key, null, {
+      author: doc.author,
+      favKind: 'documents',
+      isFavorite: doc.isFavorite,
+      spread: params.spreads || null,
+      returnTo,
+      reportTitle: doc.title
+    })
+  );
+
   const docSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
@@ -405,11 +312,11 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
       ? p({ class: "tribe-side-description" }, ...renderUrl(doc.description))
       : null,
     tagsNode,
-    div({ class: "card-spread-centered" }, renderSpreadButton(doc.key, params.spreads)),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const docMain = div({ class: "tribe-main" },
+    detailActions,
     doc?.url
       ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
       : p(i18n.documentNoFile),
@@ -420,18 +327,20 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
 
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
         userLink(doc.author),
         showUpdated
           ? span(
               { class: "votations-comment-date" },
-              ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+              ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm")}`
             )
           : null
       );
     })(),
-    renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
-    renderDocumentCommentsSection(doc.key, doc.rootId || doc.key, comments, returnTo)
+    renderEngagement(doc.key,
+      renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
+      renderDocumentCommentsSection(doc.key, doc.rootId || doc.key, comments, returnTo)
+    )
   );
 
   const tpl = template(
@@ -447,14 +356,14 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
           { method: "GET", action: "/documents", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.documentFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.documentFilterMine),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.documentFilterTop),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase()),
           button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
-            i18n.documentFilterFavorites
+            String(i18n.documentFilterFavorites).toUpperCase()
           ),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.documentFilterRecent),
+          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.documentCreateButton)
         )
       ),

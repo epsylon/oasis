@@ -9,74 +9,34 @@ exports.aiView = (history = [], userPrompt = '') => {
       div({ class: "tags-header" },
         h2(i18n.aiTitle),
         p(i18n.aiDescription),
-        userPrompt ? div({ class: 'user-prompt', style: 'margin-bottom: 2em; font-size: 0.95em; color: #888;' },
+        userPrompt ? div({ class: 'user-prompt' },
           `${i18n.aiPromptUsed || 'System Prompt'}: `,
-          span({ style: 'font-style: italic;' }, `"${userPrompt}"`)
+          span({ class: 'user-prompt-text' }, `"${userPrompt}"`)
         ) : null,
-        form({ method: 'POST', action: '/ai', style: "margin-bottom: 0;" },
+        form({ method: 'POST', action: '/ai', class: 'ai-prompt-form' },
           textarea({ name: 'input', rows: 4, placeholder: i18n.aiInputPlaceholder, required: true }),
           br(),
-          div({ style: "display: flex; gap: 1.5em; justify-content: flex-end; align-items: center; margin-top: 0.7em;" },
+          div({ class: 'ai-submit-row' },
             button({ type: 'submit' }, i18n.aiSubmitButton)
           )
         ),
-        div({ style: "display: flex; justify-content: flex-end; margin-bottom: 2em;" },
-          form({ method: 'POST', action: '/ai/clear', style: "display: inline;" },
-            button({
-              type: 'submit',
-              style: `
-                background: #b80c09;
-                color: #fff;
-                border: none;
-                padding: 0.4em 1.2em;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 1em;
-                margin-left: 1em;
-              `
-            }, i18n.aiClearHistory)
+        div({ class: 'ai-clear-row' },
+          form({ method: 'POST', action: '/ai/clear', class: 'ai-clear-form' },
+            button({ type: 'submit', class: 'ai-clear-btn' }, i18n.aiClearHistory)
           )
         ),
         br(),
         ...history.map(entry =>
-          div({
-            class: 'chat-entry',
-            style: `
-              margin-bottom: 2em;
-              position: relative;
-              background: #191919;
-              border-radius: 10px;
-              box-shadow: 0 0 8px #0004;
-              padding-top: 1.8em;
-            `
-          },
-            entry.timestamp ? span({
-              style: `
-                position: absolute;
-                top: 0.5em;
-                right: 1.3em;
-                font-size: 0.92em;
-                color: #888;
-              `
-            }, new Date(entry.timestamp).toLocaleString()) : null,
+          div({ class: 'chat-entry' },
+            entry.timestamp
+              ? span({ class: 'chat-entry-timestamp' }, new Date(entry.timestamp).toLocaleString())
+              : null,
             br(), br(),
-            div({ class: 'user-question', style: 'margin-bottom: 0.75em;' },
+            div({ class: 'user-question' },
               h2(`${i18n.aiUserQuestion}:`),
               p(...renderUrl(entry.question))
             ),
-            div({
-              class: 'ai-response',
-              style: `
-                max-width: 800px;
-                margin: auto;
-                background: #111;
-                padding: 1.25em;
-                border-radius: 6px;
-                font-family: sans-serif;
-                line-height: 1.6;
-                color: #ffcc00;
-              `
-            },
+            div({ class: 'ai-response' },
               h2(`${i18n.aiResponseTitle}:`),
               ...String(entry.answer || '')
                 .split('\n\n')
@@ -84,31 +44,19 @@ exports.aiView = (history = [], userPrompt = '') => {
                   paragraph
                     .split('\n')
                     .map(line =>
-                      p({ style: "margin-bottom: 1.2em;" }, ...renderUrl(line.trim()))
+                      p(...renderUrl(line.trim()))
                     )
                 )
             ),
-            div({
-              class: 'ai-train-bar',
-              style: `
-                display:flex;
-                align-items:center;
-                gap:12px;
-                margin: 12px auto 8px auto;
-                max-width: 800px;
-                padding: 8px 0;
-                border-top: 1px solid #2a2a2a;
-                flex-wrap: wrap;
-              `
-            },
+            div({ class: 'ai-train-bar' },
               Array.isArray(entry.snippets) && entry.snippets.length
-                ? span({ style: 'color:#9aa; font-size:0.95em;' }, `${i18n.aiSnippetsUsed}: ${entry.snippets.length}`)
+                ? span({ class: 'ai-snippets-used' }, `${i18n.aiSnippetsUsed}: ${entry.snippets.length}`)
                 : null,
               h2(`${i18n.statsAITraining}:`),
               entry.trainStatus === 'approved'
-                ? span({ style: 'color:#5ad25a; font-weight:600;' }, i18n.aiTrainApproved)
+                ? span({ class: 'ai-train-approved' }, i18n.aiTrainApproved)
                 : entry.trainStatus === 'rejected'
-                  ? span({ style: 'color:#ff6b6b; font-weight:600;' }, i18n.aiTrainRejected)
+                  ? span({ class: 'ai-train-rejected' }, i18n.aiTrainRejected)
                   : null,
               entry.trainStatus === 'approved' || entry.trainStatus === 'rejected'
                 ? null

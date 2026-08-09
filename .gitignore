@@ -7,5 +7,9 @@ src/AI/embeddings/
 src/AI/.cache/
 .update_required
 cache/
-src/configs/
+src/configs/*
+!src/configs/config-manager.js
+!src/configs/shared-state.js
+!src/configs/server-config.json
+!src/configs/content_favorites.json
 test/results/

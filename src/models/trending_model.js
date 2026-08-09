@@ -19,7 +19,7 @@ module.exports = ({ cooler }) => {
   };
 
   const types = [
-    'bookmark', 'votes', 'feed',
+    'bookmark', 'votes', 'poll', 'feed',
     'image', 'audio', 'video', 'document', 'torrent', 'transfer',
     'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market'
   ];
@@ -141,7 +141,8 @@ module.exports = ({ cooler }) => {
         case 'feed':
           return `feed::${(c.text || '').replace(/\s+/g, ' ').trim()}`;
         case 'votes':
-          return `votes::${(c.question || '').replace(/\s+/g, ' ').trim()}`;
+        case 'poll':
+          return `${c.type}::${(c.question || '').replace(/\s+/g, ' ').trim()}`;
         case 'transfer':
           return `transfer::${(c.concept || '')}|${c.amount || ''}|${c.from || ''}|${c.to || ''}|${c.deadline || ''}`;
         default:

@@ -1,4 +1,4 @@
-const { eq, ok } = require('../../helpers/assert');
+const { eq, ok, notOk } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
 describe('activity: feed', (t) => {
@@ -275,5 +275,96 @@ describe('activity: industry builds gated by approval', (t) => {
     B.setActor(); await B.use('industry').voteBuild(buildId, 'yes');
     const feedB = await B.use('activity').listFeed('all');
     ok(feedB.find(a => a.type === 'industryBuild' && a.id === buildId), 'approved build visible');
+  });
+});
+
+describe('activity: the TOP filter', (t) => {
+  t('orders the feed by the most active inhabitant', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const publish = (peer, content) => new Promise((res, rej) =>
+      peer.node.publish(content, (e) => e ? rej(e) : res()));
+
+    B.setActor();
+    await publish(B, { type: 'post', text: 'b only one' });
+
+    A.setActor();
+    await publish(A, { type: 'post', text: 'a one' });
+    await publish(A, { type: 'post', text: 'a two' });
+    await publish(A, { type: 'post', text: 'a three' });
+
+    const activity = A.use('activity');
+    activity.invalidateCache();
+    const top = await activity.listFeed('top');
+    ok(top.length >= 4, 'everything is listed');
+    eq(top[0].author, A.keypair.id, 'the busiest inhabitant leads');
+    eq(top[0].authorActions, 3, 'and carries their action count');
+    eq(top[top.length - 1].author, B.keypair.id, 'the quietest one closes');
+  });
+});
+
+describe('activity: filter layout', (t) => {
+  t('each column follows the order of its menu group, and no filter is lost', () => {
+    const { activityView } = require('../../../src/views/activity_view');
+    const html = String(activityView([], 'all', '@me.ed25519'));
+    const at = (type) => html.indexOf(`value="${type}"`);
+
+    const economy = ['banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'];
+    for (const type of economy) ok(at(type) > 0, `${type} is rendered`);
+    for (let i = 1; i < economy.length; i++) {
+      ok(at(economy[i]) > at(economy[i - 1]),
+        `${economy[i]} comes after ${economy[i - 1]}, like in the ECONOMY menu`);
+    }
+
+    const office = ['votes', 'event', 'calendar', 'task', 'report'];
+    for (let i = 1; i < office.length; i++) {
+      ok(at(office[i]) > at(office[i - 1]), `${office[i]} comes after ${office[i - 1]}`);
+    }
+
+    ok(at('banking') < at('post'), 'the economy column comes before the network one');
+
+    for (const type of ['all', 'mine', 'recent', 'top', 'video', 'banking', 'courts']) {
+      ok(html.includes(`value="${type}"`), `${type} survived the regrouping`);
+    }
+  });
+});
+
+describe('activity: the pin on the feed', (t) => {
+  t('a card that belongs to a favourites list offers the pin, in the right state', () => {
+    const { activityView } = require('../../../src/views/activity_view');
+    const id = '%event.sha256';
+    const action = {
+      id, key: id, type: 'event', author: '@a.ed25519', ts: Date.now(),
+      content: { type: 'event', title: 'a meetup', date: new Date().toISOString(), attendees: [], isPublic: 'public' }
+    };
+
+    const plain = String(activityView([action], 'all', '@me.ed25519'));
+    ok(plain.includes('/events/favorites/add/'), 'the pin is offered');
+    ok(plain.indexOf('/events/favorites/add/') < plain.indexOf('/reports?filter=create'),
+      'and it comes before the report button');
+
+    const pinned = String(activityView([action], 'all', '@me.ed25519', '', {
+      favIndex: new Map([[id, 'events']])
+    }));
+    ok(pinned.includes('/events/favorites/remove/'), 'an already pinned card offers to unpin');
+    ok(pinned.includes('btn-pin-on'), 'and shows it as pinned');
+  });
+
+  t('a card with no favourites list of its own shows the rest of the bar anyway', () => {
+    const { activityView } = require('../../../src/views/activity_view');
+    const action = {
+      id: '%about.sha256', key: '%about.sha256', type: 'about', author: '@a.ed25519', ts: Date.now(),
+      content: { type: 'about', about: '@a.ed25519', name: 'someone' }
+    };
+    const html = String(activityView([action], 'all', '@me.ed25519'));
+    notOk(html.includes('/favorites/add/'), 'no pin where there is nothing to pin');
+    ok(html.includes('/blockexplorer/block/'), 'but the rest of the bar is there');
+  });
+});
+
+describe('activity: every card can be visited', (t) => {
+  t('a feed entry links to its own page', () => {
+    const { getViewDetailsAction } = require('../../../src/views/activity_view');
+    const href = getViewDetailsAction('feed', { id: '%f.sha256', content: {} });
+    eq(href, `/feed/${encodeURIComponent('%f.sha256')}`, 'the feed card points at the feed detail');
   });
 });

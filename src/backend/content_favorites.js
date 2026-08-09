@@ -1,22 +1,40 @@
 const fs = require("fs");
 const path = require("path");
 
-const FILE = path.join(__dirname, "../configs/media-favorites.json");
+const TEMPLATE = path.join(__dirname, "../configs/content_favorites.json");
+
+const storePath = () => {
+  try {
+    return require("../server/ssb_config").statePath("content_favorites.json") || TEMPLATE;
+  } catch (_) { return TEMPLATE; }
+};
 
 const DEFAULT = {
   audios: [],
+  blogs: [],
   bookmarks: [],
   calendars: [],
   chats: [],
   documents: [],
+  events: [],
+  forum: [],
+  housing: [],
   images: [],
+  jobs: [],
+  logs: [],
   maps: [],
   pads: [],
+  polls: [],
+  projects: [],
+  reports: [],
   shops: [],
   market: [],
   shopProducts: [],
+  tasks: [],
   torrents: [],
-  videos: []
+  transfers: [],
+  videos: [],
+  votes: []
 };
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -39,32 +57,32 @@ const normalize = (raw) => {
 
 const ensureFile = async () => {
   try {
-    await fs.promises.access(FILE);
+    await fs.promises.access(storePath());
   } catch (e) {
-    const dir = path.dirname(FILE);
+    const dir = path.dirname(storePath());
     await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(FILE, JSON.stringify(DEFAULT, null, 2), "utf8");
+    await fs.promises.writeFile(storePath(), JSON.stringify(DEFAULT, null, 2), "utf8");
   }
 };
 
 const readAll = async () => {
   await ensureFile();
   try {
-    const txt = await fs.promises.readFile(FILE, "utf8");
+    const txt = await fs.promises.readFile(storePath(), "utf8");
     return normalize(JSON.parse(txt || "{}"));
   } catch (e) {
     const fixed = normalize(DEFAULT);
-    await fs.promises.writeFile(FILE, JSON.stringify(fixed, null, 2), "utf8");
+    await fs.promises.writeFile(storePath(), JSON.stringify(fixed, null, 2), "utf8");
     return fixed;
   }
 };
 
 const writeAll = async (data) => {
-  const dir = path.dirname(FILE);
-  const tmp = path.join(dir, `.media-favorites.${process.pid}.${Date.now()}.tmp`);
+  const dir = path.dirname(storePath());
+  const tmp = path.join(dir, `.content_favorites.${process.pid}.${Date.now()}.tmp`);
   const txt = JSON.stringify(normalize(data), null, 2);
   await fs.promises.writeFile(tmp, txt, "utf8");
-  await fs.promises.rename(tmp, FILE);
+  await fs.promises.rename(tmp, storePath());
 };
 
 const assertKind = (kind) => {
@@ -86,6 +104,15 @@ exports.getFavoriteSet = async (kind) => {
   const k = assertKind(kind);
   const data = await readAll();
   return new Set(safeArr(data[k]).map(String));
+};
+
+exports.getFavoriteIndex = async () => {
+  const data = await readAll();
+  const index = new Map();
+  for (const kind of Object.keys(DEFAULT)) {
+    for (const id of safeArr(data[kind])) index.set(String(id), kind);
+  }
+  return index;
 };
 
 exports.addFavorite = async (kind, id) =>
@@ -123,4 +150,4 @@ exports.removeFromFavorites = async (...args) => {
   const id = idFromArgs(args);
   return exports.removeFavorite(kind, id);
 };
-
+exports.storePath = storePath;

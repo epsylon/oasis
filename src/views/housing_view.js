@@ -1,5 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderSpreadEditWarning } = require("./main_views")
+const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
+const { template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning } = require("./main_views")
+const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderMediaThumb, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -36,27 +38,7 @@ const fmtPrice = (v) => {
   return Number.isFinite(n) ? n.toFixed(2) : String(v ?? "")
 }
 
-const blobUrl = (id, size = 0) => size
-  ? `/image/${size}/${encodeURIComponent(id)}`
-  : `/blob/${encodeURIComponent(id)}`
 
-const imagesOf = (item) => {
-  const list = safeArr(item.images).filter(Boolean)
-  if (list.length) return list
-  return item.image ? [item.image] : []
-}
-
-const blobIdOf = (entry) => {
-  const value = String(entry || "").trim()
-  const m = value.match(/\(([^)\s]+)\)/)
-  return m ? m[1] : value
-}
-
-const isVideoEntry = (entry) => /\[video:[^\]]*\]\(/.test(String(entry || ""))
-
-const renderMediaThumb = (entry, alt) => isVideoEntry(entry)
-  ? video({ controls: true, class: "gallery-image", src: blobUrl(blobIdOf(entry)) })
-  : img({ src: blobUrl(blobIdOf(entry), 256), class: "gallery-image", alt })
 
 const priceLabel = (item) => {
   if (item.housing_type === "couchsurfing") return i18n.housingFree || "FREE"
@@ -141,36 +123,6 @@ const renderInfoTable = (item) => {
 
 const today = () => moment().format("YYYY-MM-DD")
 
-const lightboxId = (itemId, index) => `housing-photo-${encodeURIComponent(itemId)}-${index}`
-
-const renderPhotoGallery = (item) => {
-  const list = imagesOf(item)
-  const clip = safeText(item.video)
-  if (!list.length && !clip) return null
-  return div({ class: "housing-gallery" },
-    list.length
-      ? div({ class: "gallery" },
-          list.map((entry, i) =>
-            isVideoEntry(entry)
-              ? span({ class: "gallery-item" }, renderMediaThumb(entry, ""))
-              : a({ href: `#${lightboxId(item.id, i)}`, class: "gallery-item" }, renderMediaThumb(entry, ""))
-          )
-        )
-      : null,
-    list.filter(entry => !isVideoEntry(entry)).map((entry, i) =>
-      div({ id: lightboxId(item.id, list.indexOf(entry)), class: "lightbox" },
-        a({ href: "#", class: "lightbox-close" }, "×"),
-        img({ src: blobUrl(blobIdOf(entry)), class: "lightbox-image", alt: "" })
-      )
-    ),
-    clip
-      ? div({ class: "housing-video housing-video-centered" },
-          video({ controls: true, class: "housing-video-player", src: blobUrl(blobIdOf(clip)) })
-        )
-      : null
-  )
-}
-
 const renderStatusRow = (item, returnTo) => {
   if (String(item.author) !== String(userId)) return null
   const isOpen = item.status === "OPEN"
@@ -235,7 +187,7 @@ const renderHousingList = (items, filter, params = {}) => {
       return div({ class: "trending-card housing-card" + (isOwn ? " own-content" : "") },
         div({ class: "card-header activity-card-header" },
           span(),
-          renderContentActions(item.id, `/housing/${encodeURIComponent(item.id)}`)
+          renderContentActions(item.id, `/housing/${encodeURIComponent(item.id)}`, { spread: params.spreadMap && params.spreadMap.get(item.id) || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title })
         ),
         div({ class: "card-section housing-card-body" },
           clip || (cover && isVideoEntry(cover))
@@ -269,11 +221,10 @@ const renderHousingList = (items, filter, params = {}) => {
             ),
             imagesOf(item).length > 1
               ? div({ class: "card-field" },
-                  span({ class: "card-label" }, `${i18n.housingPhotos}: `),
+                  span({ class: "card-label" }, `${i18n.galleryPhotos}: `),
                   span({ class: "card-value" }, String(imagesOf(item).length))
                 )
-              : null,
-            div({ class: "card-spread-centered" }, renderSpreadButton(item.id, params.spreadMap && params.spreadMap.get(item.id)))
+              : null
           )
         )
       )
@@ -317,44 +268,7 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       input({ type: "text", name: "title", required: true, placeholder: i18n.housingTitlePlaceholder, value: item.title || "" }),
       br(),
       br(),
-      label(i18n.housingImages),
-      br(),
-      imagesOf(item).length < maxImages
-        ? div({ class: "housing-file-row" },
-            input({ type: "file", name: "images", accept: "image/*", multiple: true }),
-            button({ type: "submit", name: "action", value: "addPhoto", class: "filter-btn housing-add-media" }, i18n.housingAddPhoto)
-          )
-        : null,
-      br(),
-      isEdit && imagesOf(item).length
-        ? [
-            div({ class: "gallery housing-form-gallery" },
-              imagesOf(item).map((entry, i) =>
-                span({ class: "gallery-item" },
-                  renderMediaThumb(entry, ""),
-                  button({ type: "submit", name: "removePhoto", value: String(i), class: "housing-remove-media" }, i18n.housingRemovePhoto)
-                )
-              )
-            ),
-            br()
-          ]
-        : null,
-      br(),
-      label(i18n.housingVideo),
-      br(),
-      safeText(item.video)
-        ? [
-            div({ class: "housing-video housing-form-video" },
-              video({ controls: true, class: "housing-video-player", src: blobUrl(blobIdOf(item.video)) }),
-              button({ type: "submit", name: "action", value: "removeVideo", class: "housing-remove-media" }, i18n.housingRemoveVideo)
-            ),
-            br()
-          ]
-        : div({ class: "housing-file-row" },
-            input({ type: "file", name: "video", accept: "video/*" }),
-            button({ type: "submit", name: "action", value: "addVideo", class: "filter-btn housing-add-media" }, i18n.housingAddVideo)
-          ),
-      br(),
+      ...renderGalleryFields(item, isEdit, maxImages),
       label(i18n.housingDescription),
       br(),
       textarea({ name: "description", rows: "6", required: true, placeholder: i18n.housingDescriptionPlaceholder }, item.description || ""),
@@ -432,7 +346,7 @@ const renderFiltersBar = (filter, params = {}) =>
       input({ type: "hidden", name: "place", value: safeText(params.place || "") }),
       input({ type: "hidden", name: "sort", value: safeText(params.sort || "") }),
       ...FILTERS.map(f =>
-        button({ type: "submit", name: "filter", value: f.key, class: filter === f.key ? "filter-btn active" : "filter-btn" }, i18n[f.i18n])
+        button({ type: "submit", name: "filter", value: f.key, class: filter === f.key ? "filter-btn active" : "filter-btn" }, String(i18n[f.i18n]).toUpperCase())
       ),
       button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.housingCreateButton)
     )
@@ -458,7 +372,7 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
     ),
     section(
       isForm
-        ? renderHousingForm(filter === "EDIT" ? (Array.isArray(items) ? items[0] : items) || {} : {}, filter === "EDIT" ? "edit" : "create", Number(params.maxImages) > 0 ? Number(params.maxImages) : MAX_IMAGES, await renderSpreadEditWarning(filter === "EDIT" ? ((Array.isArray(items) ? items[0] : items) || {}).id : null))
+        ? renderHousingForm(filter === "EDIT" ? (Array.isArray(items) ? items[0] : items) || {} : (params.draft || {}), filter === "EDIT" ? "edit" : "create", Number(params.maxImages) > 0 ? Number(params.maxImages) : MAX_IMAGES, await renderSpreadEditWarning(filter === "EDIT" ? ((Array.isArray(items) ? items[0] : items) || {}).id : null))
         : section(
             div({ class: "housing-search" },
               form({ method: "GET", action: "/housing", class: "filter-box" },
@@ -488,49 +402,12 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
 }
 
 const renderCommentsSection = (itemId, returnTo, comments = []) => {
-  const list = safeArr(comments).filter(c => {
-    const t = c && c.value && c.value.content && c.value.content.text
-    return t && String(t).trim()
-  })
-
-  return div({ id: "comments", class: "vote-comments-section" },
-    div({ class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(list.length))
-    ),
-    div({ class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form({ method: "POST", action: `/housing/${encodeURIComponent(itemId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        textarea({ name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    list.length
-      ? div({ class: "comments-list" },
-          list.map(c => {
-            const author = c?.value?.author || ""
-            const ts = c?.value?.timestamp || c?.timestamp
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : ""
-            const rootId = c?.value?.content ? (c.value.content.fork || c.value.content.root) : null
-            const text = c?.value?.content?.text || ""
-            return div({ class: "votations-comment-card" },
-              span({ class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                rootId ? a({ href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}` }, moment(ts).fromNow()) : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            )
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
-  )
-}
+  return renderSharedCommentsSection({
+    action: `/housing/${encodeURIComponent(itemId)}/comments`,
+    comments: comments,
+    returnTo: returnTo
+  });
+};
 
 exports.singleHousingView = async (item, filter = "ALL", comments = [], params = {}) => {
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, params)
@@ -552,7 +429,7 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
   if (requestToggle) sideActions.push(requestToggle)
   const pmBtn = renderPmButton(item.author)
   if (pmBtn) sideActions.push(pmBtn)
-  for (const action of renderOwnerActions(item, returnTo)) sideActions.push(action)
+  const ownerActions = renderOwnerActions(item, returnTo)
 
   const nextVisibility = item.visibility === "PUBLIC" ? "HIDDEN" : "PUBLIC"
   const isHidden = item.visibility === "HIDDEN"
@@ -573,12 +450,14 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
 
   const cover = imagesOf(item)[0]
   const housingSide = div({ class: "tribe-side" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(item.id, null, { spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title })
+    ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, safeText(item.title) || i18n.housingTitle)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     renderStarRating(item.opinions, voters.length),
-    div({ class: "card-spread-centered" }, renderSpreadButton(item.id, params.spreads)),
     cover && !isVideoEntry(cover) ? img({ src: blobUrl(blobIdOf(cover), 256), class: "tribe-detail-image", alt: "" }) : null,
     renderInfoTable(item),
     div({ class: "tribe-card-members" },
@@ -586,6 +465,7 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     ),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     renderStatusRow(item, returnTo),
+    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
     visibilityRow,
     renderTags(item.tags)
   )
@@ -603,21 +483,22 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     renderSection(i18n.housingDescription, item.description),
     renderSection(i18n.housingRules, item.rules),
     item.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, item.mapUrl)) : null,
-    !isAuthor && item.everRequestedByViewer
-      ? div({ class: "job-section housing-opinions" },
-          renderOpinionsVoting("/housing/opinions", item.id, item.opinions, returnTo, voters)
-        )
-      : null,
     p({ class: "card-footer" },
       span({ class: "date-link" }, `${moment(item.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
       userLink(item.author)
     ),
-    renderCommentsSection(item.id, returnTo, comments)
+    renderEngagement(item.id,
+      !isAuthor && item.everRequestedByViewer
+        ? renderOpinionsVoting("/housing/opinions", item.id, item.opinions, returnTo, voters)
+        : null,
+      renderCommentsSection(item.id, returnTo, comments)
+    )
   )
 
   return template(
     i18n.housingTitle,
     section(
+      div({ class: "tags-header" }, h2(i18n.housingTitle), p(i18n.housingDescriptionText)),
       renderFiltersBar(filter, params),
       div({ class: "tribe-details" }, housingSide, housingMain)
     )

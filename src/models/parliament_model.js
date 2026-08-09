@@ -12,6 +12,20 @@ const QUORUM_RATIO = 0.25;
 const VOTE_METHODS = new Set(['DEMOCRACY', 'ANARCHY', 'MAJORITY', 'MINORITY']);
 const METHODS = ['DEMOCRACY', 'MAJORITY', 'MINORITY', 'DICTATORSHIP', 'KARMATOCRACY'];
 const FEED_ID_RE = /^@.+\.ed25519$/;
+const TERM_EPOCH = Date.UTC(2020, 0, 1);
+const TERM_SPAN_MS = TERM_DAYS * 86400000;
+
+const termWindowFor = (at = Date.now()) => {
+  const ms = at instanceof Date ? at.getTime() : Number(at);
+  const base = Number.isFinite(ms) ? ms : Date.now();
+  const index = Math.floor((base - TERM_EPOCH) / TERM_SPAN_MS);
+  const startMs = TERM_EPOCH + index * TERM_SPAN_MS;
+  return {
+    cycle: index,
+    startAt: new Date(startMs).toISOString(),
+    endAt: new Date(startMs + TERM_SPAN_MS).toISOString()
+  };
+};
 
 module.exports = ({ cooler, services = {} }) => {
   let ssb;
@@ -251,7 +265,13 @@ if (c.type === type) {
 
   async function listCandidaturesOpenRaw() {
     const all = await listByType('parliamentCandidature');
-    const filtered = all.filter(c => (c.status || 'OPEN') === 'OPEN');
+    const window = termWindowFor(Date.now());
+    const from = new Date(window.startAt).getTime();
+    const filtered = all.filter(c => {
+      if ((c.status || 'OPEN') !== 'OPEN') return false;
+      const created = new Date(c.createdAt).getTime();
+      return Number.isFinite(created) ? created >= from : true;
+    });
     return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 
@@ -345,6 +365,28 @@ if (c.type === type) {
     return isExpiredTerm(t) ? null : t;
   }
 
+  function virtualAnarchyTerm(window = termWindowFor(Date.now())) {
+    return {
+      id: `anarchy:${window.cycle}`,
+      virtual: true,
+      type: 'parliamentTerm',
+      cycle: window.cycle,
+      method: 'ANARCHY',
+      powerType: 'none',
+      powerId: null,
+      powerTitle: 'ANARCHY',
+      winnerTribeId: null,
+      winnerInhabitantId: null,
+      winnerVotes: 0,
+      totalVotes: 0,
+      population: 0,
+      startAt: window.startAt,
+      endAt: window.endAt,
+      createdBy: null,
+      createdAt: window.startAt
+    };
+  }
+
   function currentCycleStart(term) {
     return term ? term.startAt : moment().subtract(TERM_DAYS, 'days').toISOString();
   }
@@ -352,6 +394,7 @@ if (c.type === type) {
   async function archiveAllCandidatures() {
     const all = await listCandidaturesOpenRaw();
     for (const c of all) {
+      if (String(c.proposer || '') !== String(userId)) continue;
       const updated = { ...stripId(c), replaces: c.id, status: 'DISCARDED', updatedAt: nowISO() };
       await publishMsg(updated);
     }
@@ -713,10 +756,7 @@ if (c.type === type) {
 
   async function createProposal({ title, description }) {
     let term = await getCurrentTermBase();
-    if (!term) {
-      await resolveElection();
-      term = await getCurrentTermBase();
-    }
+    if (!term) term = await resolveElection();
     if (!term) throw new Error('No active government');
     const allowed = await canPropose();
     if (!allowed) throw new Error('You are not in the goverment, yet.');
@@ -833,6 +873,11 @@ if (c.type === type) {
   }
 
   async function getCurrentTerm() {
+    const published = await getCurrentTermBase();
+    return published || virtualAnarchyTerm();
+  }
+
+  async function getPublishedTerm() {
     return await getCurrentTermBase();
   }
 
@@ -1135,44 +1180,20 @@ if (c.type === type) {
       }
     }
 
-    const startAt = now.toISOString();
-    const endAt = moment(startAt).add(TERM_DAYS, 'days').toISOString();
+    const window = termWindowFor(now.valueOf());
+    const startAt = window.startAt;
+    const endAt = window.endAt;
+    const population = await inhabitantsCount();
 
     if (!chosen) {
-      const termAnarchy = {
-        type: 'parliamentTerm',
-        method: 'ANARCHY',
-        powerType: 'none',
-        powerId: null,
-        powerTitle: 'ANARCHY',
-        winnerTribeId: null,
-        winnerInhabitantId: null,
-        winnerVotes: 0,
-        totalVotes: 0,
-        startAt,
-        endAt,
-        createdBy: userId,
-        createdAt: nowISO()
-      };
-
-      const resAnarchy = await publishMsg(termAnarchy);
-      try {
-        await sleep(250);
-        const canonical = await getCurrentTermBase();
-        const myId = resAnarchy.key || resAnarchy.id;
-        if (canonical && canonical.id && myId && canonical.id !== myId) {
-          const tomb = { type: 'tombstone', target: myId, deletedAt: nowISO(), author: userId };
-          await publishMsg(tomb);
-          await archiveAllCandidatures();
-          return canonical;
-        }
-      } catch {}
       await archiveAllCandidatures();
-      return resAnarchy;
+      return virtualAnarchyTerm(window);
     }
 
     const term = {
       type: 'parliamentTerm',
+      cycle: window.cycle,
+      population,
       method: chosen.method,
       powerType: chosen.targetType,
       powerId: chosen.targetId,
@@ -1223,21 +1244,16 @@ if (c.type === type) {
     const term = await getLatestTermAny();
     if (!term) return null;
     const card = await computeGovernmentCard({ ...term, id: term.id || term.startAt });
-    const now = moment();
-    let start = moment(term.startAt);
-    let end = term.endAt ? moment(term.endAt) : start.clone().add(TERM_DAYS, 'days');
-    let rolled = false;
-    while (start.isValid() && end.isValid() && end.isSameOrBefore(now)) {
-      start = end.clone();
-      end = end.clone().add(TERM_DAYS, 'days');
-      rolled = true;
-    }
+    const current = termWindowFor(Date.now());
+    const termEnd = term.endAt ? new Date(term.endAt).getTime() : NaN;
+    const rolled = Number.isFinite(termEnd) && termEnd <= Date.now();
     if (rolled) {
       return {
         ...card,
         id: term.id || term.startAt,
-        since: start.toISOString(),
-        end: end.toISOString(),
+        cycle: current.cycle,
+        since: current.startAt,
+        end: current.endAt,
         method: 'ANARCHY',
         powerType: 'none',
         powerId: null,
@@ -1513,6 +1529,7 @@ if (c.type === type) {
     listCandidatures,
     listTerms,
     getCurrentTerm,
+    getPublishedTerm,
     getLatestTerm,
     getLatestGovernmentCard,
     listLeaders,
@@ -1543,6 +1560,29 @@ if (c.type === type) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+function compareTermsForWindow(a, b) {
+  const num = (t, field) => Number(t && t[field]) || 0;
+  const anarchy = (t) => (String(t && t.method || '').toUpperCase() === 'ANARCHY' ? 1 : 0);
+
+  const populationA = num(a, 'population');
+  const populationB = num(b, 'population');
+  if (populationA !== populationB) return populationB - populationA;
+
+  const turnoutA = num(a, 'totalVotes');
+  const turnoutB = num(b, 'totalVotes');
+  if (turnoutA !== turnoutB) return turnoutB - turnoutA;
+
+  const votesA = num(a, 'winnerVotes');
+  const votesB = num(b, 'winnerVotes');
+  if (votesA !== votesB) return votesB - votesA;
+
+  const anarchyA = anarchy(a);
+  const anarchyB = anarchy(b);
+  if (anarchyA !== anarchyB) return anarchyA - anarchyB;
+
+  return String(a && a.id || '').localeCompare(String(b && b.id || ''));
+}
+
 function collapseOverlappingTerms(terms = []) {
   if (!terms.length) return [];
   const sorted = [...terms].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
@@ -1563,20 +1603,13 @@ function collapseOverlappingTerms(terms = []) {
     if (!placed) groups.push({ items: [t], minStart: tStart, maxEnd: tEnd });
   }
   const winners = groups.map(g => {
-    g.items.sort((a, b) => {
-      const aAn = String(a.method || '').toUpperCase() === 'ANARCHY' ? 1 : 0;
-      const bAn = String(b.method || '').toUpperCase() === 'ANARCHY' ? 1 : 0;
-      if (aAn !== bAn) return aAn - bAn;
-      const aC = new Date(a.createdAt || a.startAt).getTime();
-      const bC = new Date(b.createdAt || b.startAt).getTime();
-      if (aC !== bC) return aC - bC;
-      const aS = new Date(a.startAt).getTime();
-      const bS = new Date(b.startAt).getTime();
-      if (aS !== bS) return aS - bS;
-      return String(a.id || '').localeCompare(String(b.id || ''));
-    });
+    g.items.sort(compareTermsForWindow);
     return g.items[0];
   });
   return winners.sort((a, b) => new Date(b.startAt) - new Date(a.startAt));
 }
 
+module.exports.termWindowFor = termWindowFor;
+module.exports.compareTermsForWindow = compareTermsForWindow;
+module.exports.collapseOverlappingTerms = collapseOverlappingTerms;
+module.exports.TERM_DAYS = TERM_DAYS;

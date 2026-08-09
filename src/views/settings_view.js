@@ -4,6 +4,7 @@ const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
 const { template, selectedLanguage, i18n, setLanguage } = require('./main_views');
 const i18nBase = require("../client/assets/translations/i18n");
+const { WORKFLOWS, currentWorkflow } = require('../models/workflows_model');
 
 const snhUrl = "https://wiki.solarnethub.com/socialnet/overview";
 
@@ -28,7 +29,6 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
   const walletUrl = currentConfig.wallet.url;
   const walletUser = currentConfig.wallet.user;
   const walletFee = currentConfig.wallet.fee;
-  const pubId = currentConfig.walletPub?.pubId || '';
   const currentWish = currentConfig.wish === 'mutuals' ? 'mutuals' : 'whole';
   const currentPmVisibility = currentConfig.pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
 
@@ -39,6 +39,26 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
     option({ value: "Matrix-SNH", ...(theme === "Matrix-SNH" ? true : undefined ? { selected: true } : {})}, "Matrix-SNH"),
     option({ value: "OasisMobile", ...(theme === "OasisMobile" ? true : undefined ? { selected: true } : {})}, "Oasis-Mobile")
   ];
+
+  const activeWorkflow = currentWorkflow(currentConfig) || '';
+  const modOn = (name) => (currentConfig.modules || {})[`${name}Mod`] === 'on';
+
+  const workflowSection = section(
+    div({ class: "tags-header" },
+      h2(i18n.workflowsTitle),
+      p(i18n.workflowsDescription),
+      form(
+        { action: "/settings/workflow", method: "POST" },
+        select({ name: "workflow" },
+          ...WORKFLOWS.map(w => activeWorkflow === w.key
+            ? option({ value: w.key, selected: true }, i18n[`workflow_${w.key}`])
+            : option({ value: w.key }, i18n[`workflow_${w.key}`]))
+        ),
+        br(), br(),
+        button({ type: "submit" }, i18n.workflowsSet)
+      )
+    )
+  );
 
   const languageOption = (longName, shortName) => {
     return shortName === selectedLanguage
@@ -69,6 +89,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         updateButton
       )
     ),
+    workflowSection,
     section(
       div({ class: "tags-header" },
         h2(i18n.theme),
@@ -128,6 +149,37 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         )
       )
     ),
+    modOn('ai') ? section(
+      div({ class: "tags-header" },
+        h2(i18n.aiTitle),
+        p(i18n.aiSettingsDescription),
+        form(
+          { action: "/settings/ai", method: "POST" },
+          input({
+            type: "text",
+            id: "ai_prompt",
+            name: "ai_prompt",
+            placeholder: aiPrompt,
+            value: aiPrompt,
+            maxlength: "128",
+            required: true
+          }), br(),
+          label({ for: "aiSuggestions", class: "lan-checkbox-label" },
+            input({
+              type: "checkbox",
+              id: "aiSuggestions",
+              name: "ai_suggestions",
+              value: "on",
+              class: "lan-checkbox-input",
+              checked: currentConfig.ai?.suggestions !== false ? true : undefined
+            }),
+            span({ class: "lan-checkbox-text" }, i18n.aiSuggestionsEnable)
+          ),
+          br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ) : null,
     section(
       div({ class: "tags-header" },
         h2(i18n.homePageTitle),
@@ -135,18 +187,22 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         form(
           { action: "/settings/home-page", method: "POST" },
           select({ name: "homePage" },
-            option({ value: "activity", ...(currentConfig.homePage === "activity" ? true : undefined ? { selected: true } : {})}, i18n.activityTitle),
-            option({ value: "ai", ...(currentConfig.homePage === "ai" ? true : undefined ? { selected: true } : {})}, i18n.aiTitle),
-            option({ value: "trending", ...(currentConfig.homePage === "trending" ? true : undefined ? { selected: true } : {})}, i18n.trendingTitle),
-            option({ value: "opinions", ...(currentConfig.homePage === "opinions" ? true : undefined ? { selected: true } : {})}, i18n.opinionsTitle),
-            option({ value: "forum", ...(currentConfig.homePage === "forum" ? true : undefined ? { selected: true } : {})}, i18n.forumTitle),
-            option({ value: "feed", ...(currentConfig.homePage === "feed" ? true : undefined ? { selected: true } : {})}, i18n.feedTitle),
-            option({ value: "mentions", ...(currentConfig.homePage === "mentions" ? true : undefined ? { selected: true } : {})}, i18n.mentions),
-            option({ value: "inbox", ...(currentConfig.homePage === "inbox" ? true : undefined ? { selected: true } : {})}, i18n.inbox),
-            option({ value: "agenda", ...(currentConfig.homePage === "agenda" ? true : undefined ? { selected: true } : {})}, i18n.agendaTitle),
-            option({ value: "favorites", ...(currentConfig.homePage === "favorites" ? true : undefined ? { selected: true } : {})}, i18n.favoritesTitle),
-            option({ value: "stats", ...(currentConfig.homePage === "stats" ? true : undefined ? { selected: true } : {})}, i18n.statsTitle),
-            option({ value: "blockexplorer", ...(currentConfig.homePage === "blockexplorer" ? true : undefined ? { selected: true } : {})}, i18n.blockchain)
+            ...[
+              { value: "activity", label: i18n.activityTitle },
+              { value: "ai", label: i18n.aiTitle, mod: "ai" },
+              { value: "trending", label: i18n.trendingTitle, mod: "trending" },
+              { value: "opinions", label: i18n.opinionsTitle, mod: "opinions" },
+              { value: "forum", label: i18n.forumTitle, mod: "forum" },
+              { value: "feed", label: i18n.feedTitle, mod: "feed" },
+              { value: "mentions", label: i18n.mentions },
+              { value: "inbox", label: i18n.inbox },
+              { value: "agenda", label: i18n.agendaTitle, mod: "agenda" },
+              { value: "favorites", label: i18n.favoritesTitle, mod: "favorites" },
+              { value: "stats", label: i18n.statsTitle },
+              { value: "blockexplorer", label: i18n.blockchain }
+            ].filter(o => !o.mod || modOn(o.mod)).map(o => currentConfig.homePage === o.value
+              ? option({ value: o.value, selected: true }, o.label)
+              : option({ value: o.value }, o.label))
           ),
           br(), br(),
           button({ type: "submit" }, i18n.saveHomePage)
@@ -243,7 +299,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         )
       )
     ),
-    section(
+    modOn('wallet') ? section(
       { id: "wallet" },
       div({ class: "tags-header" },
         h2(i18n.wallet),
@@ -264,45 +320,9 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
           button({ type: "submit" }, i18n.walletConfiguration)
         )
       )
-    ),
-    section(
-      div({ class: "tags-header" },
-        h2(i18n.pubIdTitle || "PUB Wallet"),
-        p(i18n.pubIdDescription || "Set the PUB OASIS ID. This will be used for PUB transactions (including the UBI)."),
-        form(
-          { action: "/settings/pub-id", method: "POST" },
-          input({
-            type: "text",
-            id: "pub_id",
-            name: "pub_id",
-            value: pubId,
-            placeholder: i18n.pubIdPlaceholder || "@example.ed25519"
-          }), br(),
-          button({ type: "submit" }, i18n.pubIdSave || "Save configuration")
-        )
-      )
-    ),
-    section(
-      div({ class: "tags-header" },
-        h2(i18n.aiTitle),
-        p(i18n.aiSettingsDescription),
-        form(
-          { action: "/settings/ai", method: "POST" },
-          input({
-            type: "text",
-            id: "ai_prompt",
-            name: "ai_prompt",
-            placeholder: aiPrompt,
-            value: aiPrompt,
-            maxlength: "128",
-            required: true
-          }), br(),
-          button({ type: "submit" }, i18n.aiConfiguration)
-        )
-      )
-    ),
-    section(
-      { id: "fediverse" },
+    ) : null,
+    modOn('fediverse') ? section(
+      { id: "multiverse" },
       div({ class: "tags-header" },
         h2(i18n.fediverseSettingsTitle),
         div({ class: "fediverse-network" },
@@ -333,7 +353,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
               )
         )
       )
-    ),
+    ) : null,
     section(
       div({ class: "tags-header" },
         h2(i18n.indexes),

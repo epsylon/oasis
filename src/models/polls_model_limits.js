@@ -1,0 +1,5 @@
+const MAX_OPTIONS = 10;
+const MIN_OPTIONS = 2;
+const MAX_OPTION_LENGTH = 120;
+
+module.exports = { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH };

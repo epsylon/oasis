@@ -295,7 +295,7 @@ a.user-link:focus {
 }
 
 .carbon-bar-max {
-  background: #ccc !important;
+  background: #cc7700 !important;
 }
 
 .stats-kpi-label { color: #2D2D2D !important; }
@@ -303,6 +303,7 @@ a.user-link:focus {
 .carbon-bar-note, .carbon-bar-formula { color: #007BFF !important; }
 .graphos-node-label { fill: #2C2C2C !important; }
 .graphos-node-label-me { fill: #cc7700 !important; }
+.data-best-label { color: #cc7700 !important; }
 .graphos-legend { color: #2C2C2C !important; }
 .graphos-edge { stroke: #BBB !important; }
 .graphos-edge-discovered { stroke: #b8860b !important; }
@@ -323,6 +324,8 @@ a.user-link:focus {
 .block-row--details .block-url:hover { background: #E0E0E0 !important; color: #FF6F00 !important; }
 .btn-singleview { background: #F0F0F0 !important; color: #FF6F00 !important; }
 .btn-singleview:hover { background: #E0E0E0 !important; color: #FF8F00 !important; }
+.btn-spread-on, .content-actions .btn-pin-on { background: #FF6F00 !important; color: #FFFFFF !important; }
+.btn-spread-on:hover, .content-actions .btn-pin-on:hover { background: #FF8F00 !important; color: #FFFFFF !important; }
 .btn-back { background: #FF6F00 !important; color: #FFFFFF !important; }
 .btn-back:hover { background: #FF8F00 !important; color: #FFFFFF !important; }
 .block-info-table td, .pm-info-table td { border-color: #E0E0E0 !important; }

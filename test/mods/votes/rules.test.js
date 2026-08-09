@@ -3,7 +3,7 @@ const { makeNetwork, makePeer } = require('../../helpers/setup');
 
 const future = (days = 30) => new Date(Date.now() + days * 86400000).toISOString();
 
-describe('votes: generic functionality', (t) => {
+describe('votes: the rules of a votation', (t) => {
   t('createVote returns a message and getVoteById exposes its fields', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('votes').createVote('Adopt policy?', future(), ['YES', 'NO', 'ABSTENTION'], ['gov']);

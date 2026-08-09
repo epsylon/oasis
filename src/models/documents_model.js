@@ -3,7 +3,7 @@ const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
-const mediaFavorites = require("../backend/media-favorites");
+const contentFavorites = require("../backend/content_favorites");
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -154,7 +154,7 @@ module.exports = ({ cooler }) => {
 
   const favoritesSetForDocuments = async () => {
     try {
-      return await mediaFavorites.getFavoriteSet("documents");
+      return await contentFavorites.getFavoriteSet("documents");
     } catch {
       return new Set();
     }

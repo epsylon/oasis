@@ -2,18 +2,19 @@ const path = require('path')
 const fs = require('fs')
 
 const ROUTES = [
-  { path: '/public/latest', mod: null,         description: 'home, latest posts, public timeline, news, recent activity' },
-  { path: '/public/popular/day', mod: 'popularMod', description: 'popular, trending posts, most liked, top voted, best posts, popular today this week most spread' },
-  { path: '/public/latest/topics', mod: 'topicsMod', description: 'topics, browse by topic, subjects, categories of discussion, what people talk about' },
-  { path: '/public/latest/summaries', mod: 'summariesMod', description: 'summaries, AI summaries, digest, recap, tldr, overview of the latest posts' },
-  { path: '/public/latest/threads', mod: 'threadsMod', description: 'threads, threaded conversations, discussion threads, replies grouped, conversation trees' },
-  { path: '/public/latest/extended', mod: 'multiverseMod', description: 'multiverse, extended network, wider timeline, beyond my follows, posts from the whole network, extended public feed' },
+  { path: '/blogs',         mod: 'blogsMod',   description: 'blogs, blog posts, articles, written entries, long posts, public writing' },
+  { path: '/polls',         mod: 'pollsMod',   description: 'polls, survey, ask a question with options, multiple choice, anonymous poll, count answers' },
+  { path: '/polls?filter=CREATE', mod: 'pollsMod', description: 'create a poll, new survey, ask the network with options' },
+  { path: '/blogs?filter=CREATE', mod: 'blogsMod', description: 'write a blog, publish a blog, compose an article, new blog entry' },
+  { path: '/blogs?filter=TOP', mod: 'blogsMod', description: 'best blogs, most commented blogs, most valued blog entries' },
   { path: '/feed',          mod: 'feedMod',    description: 'feed, microblog, opinions, share thoughts, vote on posts, refeeds' },
   { path: '/forum',         mod: 'forumMod',   description: 'forum, discussions, threads, debates, conversation by category' },
   { path: '/inhabitants',   mod: null, description: 'inhabitants, users, people, profiles, contacts, follow, block' },
   { path: '/inhabitants?filter=SUGGESTED', mod: null, description: 'suggested inhabitants, recommendations, who to follow, similar people, people you might know, friend suggestions' },
-  { path: '/inhabitants?filter=MATCHSKILLS', mod: null, description: 'match skills, people with same skills, common skills, professional matches, find collaborators, who shares my expertise, skill overlap' },
-  { path: '/inhabitants?filter=CVs', mod: null, description: 'curriculums, CVs, resumes, professional profiles, people with experience, find expertise' },
+  { path: '/data',          mod: null,         description: 'matches, match skills, cross-data, big data of the network, affinities, cohesion coefficient, who shares my expertise, skill overlap, algorithmic suggestions' },
+  { path: '/data?filter=INHABITANTS', mod: null, description: 'people with the same skills, professional matches, find collaborators' },
+  { path: '/data?filter=JOBS', mod: null, description: 'jobs that match my skills, work suited to my profile' },
+    { path: '/inhabitants?filter=CVs', mod: null, description: 'curriculums, CVs, resumes, professional profiles, people with experience, find expertise' },
   { path: '/inhabitants?filter=TOP%20KARMA', mod: null, description: 'top karma, most active inhabitants, highest reputation, leaderboard' },
   { path: '/inhabitants?filter=TOP%20ECO', mod: null, description: 'top eco, most ecological, least carbon footprint, sustainable users, efficient inhabitants' },
   { path: '/inhabitants?filter=TOP%20ACTIVITY', mod: null, description: 'top activity, most recently active inhabitants, fresh users, recently online' },
@@ -89,7 +90,6 @@ const ROUTES = [
   { path: '/inbox?filter=reminders', mod: null, description: 'reminders, task reminders, calendar reminders, automatic notifications' },
   { path: '/pm',            mod: null, description: 'private messages, direct messages, DMs, encrypted PM, compose new PM' },
   { path: '/mentions',      mod: null,         description: 'mentions, who mentioned me, tagged me, my mentions, posts mentioning me, tribe mentions' },
-  { path: '/publish',       mod: null,         description: 'publish, write, create post, new entry, compose' },
   { path: '/games',         mod: 'gamesMod',    description: 'games, play, mini-games, scoring, fun' },
   { path: '/ai',            mod: 'aiMod',       description: '42, AI assistant, ask the AI, chat with AI, oasis assistant, artificial intelligence, ai help, ai answers' },
   { path: '/pixelia',       mod: 'pixeliaMod', description: 'pixelia, pixel canvas, draw, collaborative pixel art' },
@@ -221,8 +221,17 @@ const resolveTopK = async (queryVector, { isModuleEnabled, threshold = 0.35, emb
   return dedupeByPath(all).slice(0, Math.max(1, k|0))
 }
 
+const KEYWORD_STOPWORDS = new Set([
+  'the', 'this', 'that', 'these', 'those', 'and', 'for', 'with', 'from', 'into', 'about', 'want', 'show', 'see', 'find', 'give', 'get', 'go', 'my', 'me', 'to', 'of', 'in', 'on', 'at', 'an', 'is', 'are', 'do', 'does',
+  'week', 'year', 'month', 'today', 'tomorrow', 'now', 'next', 'last',
+  'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'de', 'del', 'este', 'esta', 'esto', 'estos', 'estas', 'ese', 'esa', 'eso', 'que', 'quiero', 'ver', 'buscar', 'dame', 'ir', 'mi', 'mis', 'lo', 'se', 'al', 'en', 'con', 'para', 'por',
+  'semana', 'mes', 'hoy', 'ahora', 'proximo', 'próximo', 'proxima', 'próxima', 'ultimo', 'último', 'ultima', 'última'
+])
+
 const resolveKeywordTopK = ({ isModuleEnabled } = {}, query, k = 8) => {
-  const tokens = String(query || '').toLowerCase().split(/[^a-z0-9À-ſ]+/).filter(t => t && t.length >= 2)
+  let tokens = String(query || '').toLowerCase().split(/[^a-z0-9À-ſ]+/).filter(t => t && t.length >= 2)
+  const meaningful = tokens.filter(t => !KEYWORD_STOPWORDS.has(t))
+  if (meaningful.length) tokens = meaningful
   if (!tokens.length) return []
   const all = []
   for (const entry of ROUTES) {

@@ -551,7 +551,7 @@ module.exports = ({ cooler }) => {
       return publishReplace(ssbClient, project.id, patch)
     },
 
-    async listProjects(filter) {
+    async listProjects(filter, opts = {}) {
       const ssbClient = await openSsb()
       const currentUserId = ssbClient.id
       const idx = buildProjectIndex(await getAllMsgs(ssbClient))
@@ -584,6 +584,15 @@ module.exports = ({ cooler }) => {
       else if (F === "CANCELLED") list = list.filter((p) => String((p && p.status) || "").toUpperCase() === "CANCELLED")
       else if (F === "RECENT") list = list.filter((p) => p && moment(p.createdAt).isAfter(moment().subtract(24, "hours")))
       else if (F === "FOLLOWING") list = list.filter((p) => Array.isArray(p.followers) && p.followers.includes(currentUserId))
+
+      const q = norm(opts.q)
+      if (q) {
+        list = list.filter((p) =>
+          norm(p.title).includes(q) ||
+          norm(p.description).includes(q) ||
+          (Array.isArray(p.tags) && p.tags.some(t => norm(t).includes(q)))
+        )
+      }
 
       if (F === "TOP") {
         list.sort((a, b) => (parseFloat(b.pledged || 0) / (parseFloat(b.goal || 1))) - (parseFloat(a.pledged || 0) / (parseFloat(a.goal || 1))))

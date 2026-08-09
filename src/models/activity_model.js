@@ -164,7 +164,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       // ties correctly — the mock and real SSB can stamp equal timestamps.
       if (prev && !((isTip && !prev.isTip) || (isTip === prev.isTip && (a.ts || 0) >= prev.ts))) continue;
       const cc = a.content || {};
-      stateByRoot.set(root, { ts: a.ts || 0, isTip, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || '') });
+      stateByRoot.set(root, { ts: a.ts || 0, isTip, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || ''), members: Array.isArray(cc.members) ? cc.members.length : 0 });
     }
     const msgsByRoot = new Map();
     for (const a of idToAction.values()) {
@@ -181,7 +181,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       const val = await getMsg(ssbClient, root);
       const cc = val && val.content;
       if (cc && typeof cc === 'object' && cc.type === 'chat') {
-        stateByRoot.set(root, { ts: 0, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || '') });
+        stateByRoot.set(root, { ts: 0, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || ''), members: Array.isArray(cc.members) ? cc.members.length : 0 });
       } else {
         stateByRoot.set(root, null);
       }
@@ -202,6 +202,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
           chatRoot: root,
           title: info.title || '',
           description: info.description || '',
+          members: info.members || 0,
+          messageCount: asc.length,
           replies: asc.slice(-CHAT_THREAD_LIMIT).map(m => ({ id: m.id, author: m.author, ts: m.ts || 0, text: (m.content && m.content.text) || '' }))
         }
       });
@@ -251,6 +253,21 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       const idToAction = new Map();
       const rawById = new Map();
       const voteTally = buildVoteTally(results);
+      const pollTally = new Map();
+      for (const m of results) {
+        const c = m && m.value && m.value.content;
+        if (!c || c.type !== 'pollVote' || typeof c.target !== 'string') continue;
+        if (!Array.isArray(c.choices)) continue;
+        const entry = pollTally.get(c.target) || { counts: {}, voters: new Map() };
+        entry.voters.set(m.value.author, { ts: m.value.timestamp || 0, choices: c.choices });
+        pollTally.set(c.target, entry);
+      }
+      for (const entry of pollTally.values()) {
+        entry.counts = {};
+        for (const v of entry.voters.values()) {
+          for (const choice of v.choices) entry.counts[choice] = (entry.counts[choice] || 0) + 1;
+        }
+      }
       const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
       const accessibleTribeIds = await buildAccessibleTribeIds();
 
@@ -577,6 +594,11 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         const actionRoot = rootOf(a.id);
         const extra = a.type === 'aiExchange' ? { helpfulVotes: aiHelpfulCounts.get(a.id) || 0 } : {};
         const voteAgg = a.type === 'votes' ? voteTally.get(a.id) : null;
+        if (a.type === 'poll') {
+          const tally = pollTally.get(a.id) || pollTally.get(actionRoot);
+          a.pollCounts = tally ? tally.counts : {};
+          a.pollVoters = tally ? tally.voters.size : 0;
+        }
         let content = voteAgg ? { ...c, ...voteAgg } : a.content;
         if (a.type === 'feed') {
           const base = a.content || {};
@@ -688,12 +710,13 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       }
 
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
-      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'gameScore']);
+      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'logPublic', 'gameScore', 'pollVote', 'pollClose', 'pollOpinion', 'curriculum']);
       const chatThreadItems = await buildChatThreads(ssbClient, idToAction, rootOf, deduped);
       deduped = deduped.concat(chatThreadItems);
       const isAllowedTribeActivity = (a) => {
         if (tribeInternalTypes.has(a.type)) return false;
         const c = a.content || {};
+        if (a.type === 'poll' && c.chatId) return false;
         if (c.tribeId) return false;
         if (a.type === 'tribe') {
           const isInitial = !c.replaces;
@@ -704,8 +727,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         }
         return true;
       };
-      const itemVisible = (a) => {
-        if (hiddenTypes.has(a.type)) return false;
+      const itemVisible = (a, opts = {}) => {
+        if (hiddenTypes.has(a.type) && !(opts.allowHidden && opts.allowHidden.has(a.type))) return false;
         const c = a.content || {};
         if (c.encryptedPayload) return false;
         if (a.type === 'pad' && c.status !== 'OPEN') return false;
@@ -723,8 +746,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         if (a.type === 'transfer' && String(c.status || '').toUpperCase() === 'UNCONFIRMED' && a.author !== userId && c.from !== userId && c.to !== userId) return false;
         return true;
       };
-      const isVisible = (a) => {
-        if (!itemVisible(a)) return false;
+      const isVisible = (a, opts) => {
+        if (!itemVisible(a, opts)) return false;
         if (a.type === 'post' || a.type === 'opinion') {
           const c = a.content || {};
           const ref = (typeof c.root === 'string' && c.root)
@@ -743,6 +766,14 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       if (filter === 'mine') out = deduped.filter(a => a.author === userId && isAllowedTribeActivity(a) && isVisible(a));
       else if (filter === 'recent') { const cutoff = Date.now() - 24 * 60 * 60 * 1000; out = deduped.filter(a => (a.ts || 0) >= cutoff && isAllowedTribeActivity(a) && isVisible(a)) }
       else if (filter === 'all') out = deduped.filter(a => isAllowedTribeActivity(a) && isVisible(a));
+      else if (filter === 'top') {
+        const visible = deduped.filter(a => isAllowedTribeActivity(a) && isVisible(a));
+        const perAuthor = new Map();
+        for (const a of visible) perAuthor.set(a.author, (perAuthor.get(a.author) || 0) + 1);
+        out = visible
+          .map(a => ({ ...a, authorActions: perAuthor.get(a.author) || 0 }))
+          .sort((x, y) => (y.authorActions - x.authorActions) || ((y.ts || 0) - (x.ts || 0)));
+      }
       else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim' || a.type === 'ubiClaim');
       else if (filter === 'tribe') out = deduped.filter(a => a.type === 'tribe' || String(a.type || '').startsWith('tribe'));
       else if (filter === 'spread') out = deduped.filter(a => a.type === 'spread');
@@ -757,6 +788,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         });
       else if (filter === 'task')
         out = deduped.filter(a => a.type === 'task' || a.type === 'taskAssignment');
+      else if (filter === 'votes')
+        out = deduped.filter(a => (a.type === 'votes' || a.type === 'poll') && isAllowedTribeActivity(a) && isVisible(a));
       else if (filter === 'industry')
         out = deduped.filter(a => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(a.type) && isVisible(a));
       else if (filter === 'pad') out = deduped.filter(a => a.type === 'pad' && (a.content || {}).status === 'OPEN');
@@ -765,7 +798,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       else if (filter === 'transfer') out = deduped.filter(a => a.type === 'transfer' && isVisible(a));
       else out = deduped.filter(a => a.type === filter);
 
-      out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+      if (filter !== 'top') out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
       return out;
       })();
       _feedCacheInflight.set(cacheKey, promise);

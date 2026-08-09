@@ -1,7 +1,10 @@
-const { div, h2, p, section, button, form, span, table, thead, tbody, tr, th, td, input, textarea, br, option, select } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, span, table, thead, tbody, tr, th, td, input, textarea, br, option, select, a, label } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require("./main_views");
 const moment = require("../server/node_modules/moment");
+const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
+
+const userId = config.keys.id;
 
 const safeArr = v => Array.isArray(v) ? v : [];
 
@@ -18,22 +21,22 @@ const filterLabel = (f) => {
   return map[f] || f.toUpperCase();
 };
 
-const renderFilterBar = (current, hasItems = false) =>
-  div({ class: "logs-toolbar" },
-    form({ method: "GET", action: "/logs", class: "logs-toolbar-inline" },
+const renderFilterBar = (current, hasItems = true) =>
+  div({ class: "activity-sub-filter" },
+    form({ method: "GET", action: "/logs", class: "sub-filter-form" },
       FILTERS.map(f =>
         button({
           type: "submit", name: "filter", value: f,
           class: current === f ? "filter-btn active" : "filter-btn"
-        }, filterLabel(f))
+        }, String(filterLabel(f)).toUpperCase())
       )
     ),
-    form({ method: "GET", action: "/logs", class: "logs-toolbar-inline" },
+    form({ method: "GET", action: "/logs", class: "sub-filter-form" },
       input({ type: "hidden", name: "view", value: "create" }),
       button({ type: "submit", class: "create-button" }, i18n.logsCreate || 'Create Log')
     ),
     hasItems
-      ? form({ method: "GET", action: "/logs/export", class: "logs-toolbar-inline" },
+      ? form({ method: "GET", action: "/logs/export", class: "sub-filter-form" },
           button({ type: "submit", class: "create-button" }, i18n.logsExport || 'Export Logs')
         )
       : null
@@ -71,12 +74,9 @@ const renderToolbar = (current, search, hasItems) =>
     renderSearchBox(current, search)
   );
 
-const MAX_PREVIEW = 140;
-
-const truncate = (str) => {
-  const s = String(str || '');
-  if (s.length <= MAX_PREVIEW) return s;
-  return s.slice(0, MAX_PREVIEW).replace(/\s+\S*$/, '') + '…';
+const truncate = (value, max = 160) => {
+  const text = String(value == null ? '' : value).trim();
+  return text.length > max ? `${text.slice(0, max)}\u2026` : text;
 };
 
 const renderLogPreview = (item) => {
@@ -91,9 +91,8 @@ const renderTable = (items) => {
       tr(
         th(i18n.logsColumnDate || 'Date'),
         th(i18n.logsColumnType || 'Type'),
-        th(i18n.logsColumnLog || 'Log'),
-        th(''),
-        th('')
+        th({ class: "logs-col-log" }, i18n.logsColumnLog || 'Log'),
+        th({ class: "logs-col-actions" }, '')
       )
     ),
     tbody(
@@ -114,13 +113,13 @@ const renderTable = (items) => {
             renderLogPreview(item)
           ),
           td({ class: "logs-col-actions" },
-            form({ method: "GET", action: `/logs/view/${encodeURIComponent(item.key)}` },
-              button({ type: "submit", class: "filter-btn" }, i18n.logsViewDetails || 'View Details')
-            )
-          ),
-          td({ class: "logs-col-actions" },
-            form({ method: "GET", action: `/logs/export/${encodeURIComponent(item.key)}` },
-              button({ type: "submit", class: "filter-btn" }, i18n.logsExportOne || 'Export')
+            div({ class: "logs-row-actions" },
+              form({ method: "GET", action: `/logs/view/${encodeURIComponent(item.key)}` },
+                button({ type: "submit", class: "filter-btn" }, i18n.logsViewDetails || 'View Details')
+              ),
+              form({ method: "GET", action: `/logs/export/${encodeURIComponent(item.key)}` },
+                button({ type: "submit", class: "filter-btn" }, i18n.logsExportOne || 'Export')
+              )
             )
           )
         )
@@ -161,7 +160,6 @@ const renderCreateForm = (mode, aiModOn) => {
     : div({ class: "div-center audio-form" },
         form({ method: "POST", action: "/logs/create" },
           input({ type: "hidden", name: "mode", value: "manual" }),
-          span(i18n.logsManualPrompt || 'Write your log'), br(),
           textarea({ name: "text", rows: "8", required: true, placeholder: i18n.logsTextPlaceholder || 'Describe your experiences...' }),
           br(), br(),
           button({ type: "submit", class: "create-button" }, i18n.logsWriteButton || 'Write')
@@ -172,9 +170,8 @@ const renderCreateForm = (mode, aiModOn) => {
 
 const renderEditForm = (entry) => {
   return div({ class: "div-center audio-form" },
-    h2(i18n.logsEditTitle || 'Edit Log'),
-    form({ method: "POST", action: `/logs/edit/${encodeURIComponent(entry.key)}` },
-      span(i18n.logsManualPrompt || 'Write your log...'), br(),
+    h2(i18n.logsEditTitle || 'Update Log'),
+    form({ method: "POST", action: `/logs/update/${encodeURIComponent(entry.key)}` },
       textarea({ name: "text", rows: "8", required: true }, entry.text || ''),
       input({ type: "hidden", name: "label", value: entry.label || '' }),
       br(), br(),
@@ -189,24 +186,23 @@ const renderDetail = (entry) => {
     h2(headerLine),
     entry.label ? div({ class: "logs-entry-label" }, entry.label) : null,
     div({ class: "logs-detail-text" }, ...renderUrl(String(entry.text || ''))),
-    div({ class: "logs-detail-actions" },
+    div({ class: "tribe-side-actions logs-detail-actions" },
       form({ method: "GET", action: "/logs" },
-        button({ type: "submit", class: "filter-btn" }, i18n.walletBack || 'Back')
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.walletBack || 'Back')
       ),
       form({ method: "GET", action: `/logs/export/${encodeURIComponent(entry.key)}` },
-        button({ type: "submit", class: "filter-btn" }, i18n.logsExportOne || 'Export')
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.generatePdf)
       ),
-      form({ method: "GET", action: "/logs" },
-        input({ type: "hidden", name: "view", value: "edit" }),
-        input({ type: "hidden", name: "id", value: entry.key }),
-        button({ type: "submit", class: "filter-btn" }, i18n.logsEdit || 'Edit')
+      form({ method: "GET", action: `/logs/edit/${encodeURIComponent(entry.key)}` },
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.logsEdit || 'Update')
       ),
       form({ method: "POST", action: `/logs/delete/${encodeURIComponent(entry.key)}` },
-        button({ type: "submit", class: "filter-btn danger-btn" }, i18n.logsDelete || 'Delete')
+        button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.logsDelete || 'Delete')
       )
     )
   );
 };
+
 
 exports.logsView = (items, filter, mode, opts = {}) => {
   const listTitle = i18n.logsTitle || 'Logs';
@@ -215,30 +211,23 @@ exports.logsView = (items, filter, mode, opts = {}) => {
   const aiModOn = !!opts.aiModOn;
   const hasItems = Array.isArray(items) && items.length > 0;
 
+  const screen = (...blocks) => template(
+    listTitle,
+    section(
+      div({ class: "tags-header" }, h2(listTitle), p(description)),
+      renderFilterBar(filter),
+      ...blocks
+    )
+  );
+
   if (view === 'create') {
-    const h = i18n.logsCreateTitle || 'Create Log';
-    const body = section(
-      div({ class: "tags-header" }, h2(h), p(description)),
-      renderFilterBar(filter, hasItems),
-      renderCreateForm(mode, aiModOn)
-    );
-    return template(h, body);
+    return screen(renderCreateForm(mode, aiModOn));
   }
   if (view === 'edit' && opts.entry) {
-    const h = i18n.logsEditTitle || 'Edit Log';
-    const body = section(
-      div({ class: "tags-header" }, h2(h), p(description)),
-      renderEditForm(opts.entry)
-    );
-    return template(h, body);
+    return screen(renderEditForm(opts.entry));
   }
   if (view === 'detail' && opts.entry) {
-    const h = i18n.logsViewTitle || 'Log';
-    const body = section(
-      div({ class: "tags-header" }, h2(h), p(description)),
-      renderDetail(opts.entry)
-    );
-    return template(h, body);
+    return screen(renderDetail(opts.entry));
   }
   const body = section(
     div({ class: "tags-header" }, h2(listTitle), p(description)),

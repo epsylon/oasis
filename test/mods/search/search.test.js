@@ -10,10 +10,10 @@ describe('search: full-text search across modules', (t) => {
   });
 });
 
-describe('search: index + query generic', (t) => {
+describe('search: index and query', (t) => {
   t('finds a bookmark by a distinctive word in its description', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('bookmarks').createBookmark('https://example.org/qux', ['ref'], 'zorptangle reference page', 'docs', '');
+    await A.use('bookmarks').createBookmark('https://example.org/qux', ['ref'], 'zorptangle reference page', '');
     const results = await A.use('search').search({ query: 'zorptangle', types: [] });
     ok(results.bookmark);
     ok(results.bookmark.length >= 1);
@@ -29,14 +29,14 @@ describe('search: index + query generic', (t) => {
 
   t('an unrelated query returns no results', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('bookmarks').createBookmark('https://example.org/a', [], 'ordinary page', '', '');
+    await A.use('bookmarks').createBookmark('https://example.org/a', [], 'ordinary page', '');
     const results = await A.use('search').search({ query: 'noSuchTermXyz123', types: [] });
     eq(Object.keys(results).length, 0);
   });
 
   t('type filter restricts results to the requested type', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('bookmarks').createBookmark('https://example.org/shared', [], 'sharedkeyword bookmark', '', '');
+    await A.use('bookmarks').createBookmark('https://example.org/shared', [], 'sharedkeyword bookmark', '');
     await A.use('feed').createFeed('sharedkeyword in a feed post here', []);
     const results = await A.use('search').search({ query: 'sharedkeyword', types: ['bookmark'] });
     ok(results.bookmark);
@@ -46,7 +46,7 @@ describe('search: index + query generic', (t) => {
 
   t('tag search (#tag) matches items carrying that tag', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    await A.use('bookmarks').createBookmark('https://example.org/tagged', ['zephyrtag'], 'a tagged bookmark', '', '');
+    await A.use('bookmarks').createBookmark('https://example.org/tagged', ['zephyrtag'], 'a tagged bookmark', '');
     const results = await A.use('search').search({ query: '#zephyrtag', types: [] });
     ok(results.bookmark);
     ok(results.bookmark.length >= 1);
@@ -54,7 +54,7 @@ describe('search: index + query generic', (t) => {
 
   t('deleted content is not returned by search', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const r = await A.use('bookmarks').createBookmark('https://example.org/temp', [], 'vanishword temp bookmark', '', '');
+    const r = await A.use('bookmarks').createBookmark('https://example.org/temp', [], 'vanishword temp bookmark', '');
     let before = await A.use('search').search({ query: 'vanishword', types: [] });
     ok(before.bookmark && before.bookmark.length >= 1);
     await A.use('bookmarks').deleteBookmarkById(r.key);

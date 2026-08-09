@@ -47,6 +47,8 @@ module.exports = ({ cooler }) => {
         status: data.status || 'LOOKING FOR WORK',
         preferences: data.preferences || 'REMOTE WORKING',
         visibility: String(data.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC',
+        aiManaged: data.aiManaged === undefined ? true : (data.aiManaged === true || data.aiManaged === '1' || data.aiManaged === 'true'),
+        matchThreshold: Math.min(100, Math.max(0, parseInt(data.matchThreshold, 10) || 80)),
         createdAt: new Date().toISOString()
       };
       return new Promise((resolve, reject) => {
@@ -85,7 +87,7 @@ module.exports = ({ cooler }) => {
         author: userId,
         name: data.name,
         description: data.description,
-        photo: extractBlobId(photoBlobId) || null,
+        photo: extractBlobId(photoBlobId) || old.content.photo || null,
         contact: userId,
         personalSkills: parseCSV(data.personalSkills),
         personalExperiences: data.personalExperiences || '',
@@ -102,6 +104,12 @@ module.exports = ({ cooler }) => {
         visibility: data.visibility !== undefined
           ? (String(data.visibility).toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC')
           : (old.content.visibility || 'PUBLIC'),
+        aiManaged: data.aiManaged !== undefined
+          ? (data.aiManaged === true || data.aiManaged === '1' || data.aiManaged === 'true')
+          : (old.content.aiManaged !== false),
+        matchThreshold: data.matchThreshold !== undefined
+          ? Math.min(100, Math.max(0, parseInt(data.matchThreshold, 10) || 80))
+          : (Number(old.content.matchThreshold) || 80),
         createdAt: old.content.createdAt,
         updatedAt: new Date().toISOString()
       };

@@ -44,8 +44,8 @@ describe('trending: opinion + list', (t) => {
 
   t('only opined content surfaces in the trending feed', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const opined = await A.use('bookmarks').createBookmark('https://trend.test/surface', [], 's', '', '');
-    await A.use('bookmarks').createBookmark('https://trend.test/silent', [], 'q', '', '');
+    const opined = await A.use('bookmarks').createBookmark('https://trend.test/surface', [], 's', '');
+    await A.use('bookmarks').createBookmark('https://trend.test/silent', [], 'q', '');
     await A.use('trending').createVote(opined.key, 'interesting');
     const { filtered } = await A.use('trending').listTrending('ALL');
     ok(Array.isArray(filtered), 'filtered is an array');
@@ -55,7 +55,7 @@ describe('trending: opinion + list', (t) => {
 
   t('createVote records the voter on the content and it stays as the live tip', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const bm = await A.use('bookmarks').createBookmark('https://trend.test/voted', [], 'v', '', '');
+    const bm = await A.use('bookmarks').createBookmark('https://trend.test/voted', [], 'v', '');
     await A.use('trending').createVote(bm.key, 'useful');
     const { filtered } = await A.use('trending').listTrending('ALL');
     const item = filtered.find(m => m.value.content.url === 'https://trend.test/voted');
@@ -66,7 +66,7 @@ describe('trending: opinion + list', (t) => {
 
   t('type filter restricts the feed to a single content type', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const bm = await A.use('bookmarks').createBookmark('https://trend.test/type', [], 'tp', '', '');
+    const bm = await A.use('bookmarks').createBookmark('https://trend.test/type', [], 'tp', '');
     const fd = await A.use('feed').createFeed('a trending feed post about things', []);
     await A.use('trending').createVote(bm.key, 'interesting');
     await A.use('trending').createVote(fd.key, 'interesting');
@@ -80,10 +80,10 @@ describe('trending: opinion + list', (t) => {
   t('MINE filter restricts the feed to the viewer own content', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    const aMine = await A.use('bookmarks').createBookmark('https://trend.test/amine', [], 'am', '', '');
+    const aMine = await A.use('bookmarks').createBookmark('https://trend.test/amine', [], 'am', '');
     await A.use('trending').createVote(aMine.key, 'interesting');
     B.setActor();
-    const bMine = await B.use('bookmarks').createBookmark('https://trend.test/bmine', [], 'bm', '', '');
+    const bMine = await B.use('bookmarks').createBookmark('https://trend.test/bmine', [], 'bm', '');
     await B.use('trending').createVote(bMine.key, 'interesting');
     A.setActor();
     const { filtered } = await A.use('trending').listTrending('MINE');
@@ -93,7 +93,7 @@ describe('trending: opinion + list', (t) => {
 
   t('invalid category and unsupported type are rejected', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const bm = await A.use('bookmarks').createBookmark('https://trend.test/bad', [], 'b', '', '');
+    const bm = await A.use('bookmarks').createBookmark('https://trend.test/bad', [], 'b', '');
     await throwsAsync(() => A.use('trending').createVote(bm.key, 'notacategory'), /Invalid voting category/);
     const ssb = await A.cooler.open();
     const raw = await new Promise((res, rej) => ssb.publish({ type: 'post', text: 'x' }, (e, r) => e ? rej(e) : res(r)));

@@ -1,7 +1,8 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option } =
   require("../server/node_modules/hyperaxe");
+const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { template, i18n, renderOpinionsVoting, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -58,70 +59,11 @@ const renderBookmarkActions = (filter, bookmark, params = {}) => {
 };
 
 const renderBookmarkCommentsSection = (bookmarkId, rootId, comments = [], returnTo = null) => {
-  const list = safeArr(comments).filter(c => {
-    const t = c && c.value && c.value.content && c.value.content.text;
-    return t && String(t).trim();
+  return renderSharedCommentsSection({
+    action: `/bookmarks/${encodeURIComponent(bookmarkId)}/comments`,
+    comments: comments,
+    returnTo: returnTo
   });
-  const commentsCount = list.length;
-
-  return div(
-    { class: "vote-comments-section" },
-    div(
-      { class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(commentsCount))
-    ),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form(
-        { method: "POST", action: `/bookmarks/${encodeURIComponent(bookmarkId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-        rootId ? input({ type: "hidden", name: "rootId", value: rootId }) : null,
-        textarea({
-          id: "comment-text",
-          name: "text",
-          rows: 4,
-          class: "comment-textarea",
-          placeholder: i18n.voteNewCommentPlaceholder
-        }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    list.length
-      ? div(
-          { class: "comments-list" },
-          list.map((c) => {
-            const author = c?.value?.author || "";
-            const ts = c?.value?.timestamp || c?.timestamp;
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
-            const relDate = ts ? moment(ts).fromNow() : "";
-
-            const content = c?.value?.content || {};
-            const text = content.text || "";
-            const threadRoot = content.fork || content.root || null;
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && threadRoot
-                  ? a({ href: `/thread/${encodeURIComponent(threadRoot)}#${encodeURIComponent(c.key)}` }, relDate)
-                  : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            );
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
-  );
 };
 
 const renderCardField = (labelText, value) =>
@@ -129,22 +71,6 @@ const renderCardField = (labelText, value) =>
     { class: "card-field" },
     span({ class: "card-label" }, labelText),
     span({ class: "card-value" }, value)
-  );
-
-const renderFavoriteToggle = (bookmark, returnTo) =>
-  form(
-    {
-      method: "POST",
-      action: bookmark.isFavorite
-        ? `/bookmarks/favorites/remove/${encodeURIComponent(bookmark.id)}`
-        : `/bookmarks/favorites/add/${encodeURIComponent(bookmark.id)}`,
-      class: "bookmark-favorite-form"
-    },
-    returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-    button(
-      { type: "submit", class: "filter-btn" },
-      bookmark.isFavorite ? i18n.bookmarkRemoveFavoriteButton : i18n.bookmarkAddFavoriteButton
-    )
   );
 
 const renderTags = (tags) => {
@@ -167,7 +93,7 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
         const lastVisit = bookmark.lastVisit ? moment(bookmark.lastVisit) : null;
         const lastVisitTxt =
           lastVisit && lastVisit.isValid()
-            ? `${lastVisit.format("YYYY/MM/DD HH:mm:ss")} (${lastVisit.fromNow()})`
+            ? `${lastVisit.format("YYYY/MM/DD HH:mm")} (${lastVisit.fromNow()})`
             : i18n.noLastVisit;
 
         const urlLink = bookmark.url
@@ -180,52 +106,19 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`)
+            renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, { spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, author: bookmark.author, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title })
           ),
           div(
             { class: "card-section bookmark-card-body" },
-            div(
-              { class: "bookmark-topbar" },
-              div(
-                { class: "bookmark-topbar-left" },
-                renderPMButton(bookmark.author),
-                renderFavoriteToggle(bookmark, returnTo)
-              ),
-              div(
-                { class: "bookmark-topbar-right" },
-                renderBookmarkActions(filter, bookmark, params)
-              )
-            ),
-            h2({ class: "bookmark-title" }, bookmark.category || bookmark.url || ""),
+            h2({ class: "bookmark-title" }, bookmark.url ? urlLink : (bookmark.title || "")),
             bookmark.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(bookmark.lifetime, i18n)) : null,
-            renderCardField(i18n.bookmarkUrlLabel + ":", urlLink),
+            bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null,
             renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
             br,
-            div(
-              { class: "card-comments-summary" },
-              span({ class: "card-label" }, i18n.voteCommentsLabel + ":"),
-              span({ class: "card-value" }, String(commentCount)),
-              br(),
-              br(),
-              form(
-                { method: "GET", action: `/bookmarks/${encodeURIComponent(bookmark.id)}` },
-                input({ type: "hidden", name: "returnTo", value: returnTo }),
-                input({ type: "hidden", name: "filter", value: filter || "all" }),
-                params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-                params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-                button({ type: "submit", class: "filter-btn" }, i18n.voteCommentsForumButton)
-              )
+            renderEngagement(bookmark.id,
+              renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
+              renderCommentsLink({ href: `/bookmarks/${encodeURIComponent(bookmark.id)}`, count: commentCount })
             ),
-                        div(
-              { class: "card-comments-summary feed-opinions-section" },
-              div(
-                { class: "comments-count" },
-                span({ class: "card-label" }, (i18n.opinionsTitle || "Opinions") + ": "),
-                span({ class: "card-value" }, String(Object.values(bookmark.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)))
-              ),
-              renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants)
-            ),
-            div({ class: "card-spread-left" }, renderSpreadButton(bookmark.id, (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads)),
             (() => {
               const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
               const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
@@ -233,12 +126,12 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
 
               return p(
                 { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+                span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
                 userLink(bookmark.author),
                 showUpdated
                   ? span(
                       { class: "votations-comment-date" },
-                      ` | ${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+                      ` | ${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm")}`
                     )
                   : null
               );
@@ -294,16 +187,6 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
         value: filter === "edit" ? lastVisitValue : ""
       }),
       br(),
-      br(),
-      label(i18n.bookmarkCategoryLabel),
-      br(),
-      input({
-        type: "text",
-        name: "category",
-        id: "category",
-        placeholder: i18n.bookmarkCategoryPlaceholder,
-        value: filter === "edit" ? bookmarkToEdit.category || "" : ""
-      }),
       br(),
       label(i18n.bookmarkTagsLabel),
       br(),
@@ -361,11 +244,11 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
           { method: "GET", action: "/bookmarks", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterMine),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterTop),
-          button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterFavorites),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterRecent),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterRecent).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterFavorites).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.bookmarkCreateButton)
         )
       )
@@ -411,7 +294,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   const lastVisit = bookmark.lastVisit ? moment(bookmark.lastVisit) : null;
   const lastVisitTxt =
     lastVisit && lastVisit.isValid()
-      ? `${lastVisit.format("YYYY/MM/DD HH:mm:ss")} (${lastVisit.fromNow()})`
+      ? `${lastVisit.format("YYYY/MM/DD HH:mm")} (${lastVisit.fromNow()})`
       : i18n.noLastVisit;
 
   const urlLink = bookmark.url
@@ -424,7 +307,6 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   ].filter(Boolean);
 
   const sideActions = [];
-  sideActions.push(renderFavoriteToggle(bookmark, returnTo));
   if (bookmark.author && String(bookmark.author) !== String(userId)) {
     sideActions.push(renderPMButton(bookmark.author));
   }
@@ -445,25 +327,33 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
 
   const tagsNode = renderTags(bookmark.tags);
 
+  const detailActions = div({ class: "card-header activity-card-header" },
+    renderContentActions(bookmark.id, null, {
+      author: bookmark.author,
+      favKind: 'bookmarks',
+      isFavorite: bookmark.isFavorite,
+      spread: params.spreads || null,
+      returnTo,
+      reportTitle: bookmark.title
+    })
+  );
+
   const bookmarkSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, bookmark.category || bookmark.url || ""),
+      h2({ class: "tribe-card-title" }, bookmark.url ? urlLink : (bookmark.title || "")),
       renderReachChip(isClearnet, i18n)
     ),
+    bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null,
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(bookmark.description)
       ? p({ class: "tribe-side-description" }, ...renderUrl(bookmark.description))
       : null,
-    safeText(bookmark.category)
-      ? renderCardField(i18n.bookmarkCategoryLabel + ":", safeText(bookmark.category))
-      : null,
     tagsNode,
-    div({ class: "card-spread-centered" }, renderSpreadButton(bookmark.id, params.spreads)),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const bookmarkMain = div({ class: "tribe-main" },
-    renderCardField(i18n.bookmarkUrlLabel + ":", urlLink),
+    detailActions,
     renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
     (() => {
       const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
@@ -471,18 +361,20 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
       const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm:ss")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
         userLink(bookmark.author),
         showUpdated
           ? span(
               { class: "votations-comment-date" },
-              ` | ${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm:ss")}`
+              ` | ${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm")}`
             )
           : null
       );
     })(),
-    renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
-    renderBookmarkCommentsSection(bookmark.id, bookmark.rootId, comments, returnTo)
+    renderEngagement(bookmark.id,
+      renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
+      renderBookmarkCommentsSection(bookmark.id, bookmark.rootId, comments, returnTo)
+    )
   );
 
   return template(
@@ -498,11 +390,11 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
           { method: "GET", action: "/bookmarks", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterMine),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterTop),
-          button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterFavorites),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, i18n.bookmarkFilterRecent),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterRecent).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterFavorites).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.bookmarkCreateButton)
         )
       ),

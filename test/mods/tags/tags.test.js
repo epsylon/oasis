@@ -25,7 +25,7 @@ describe('tags: aggregate from content with tags', (t) => {
   t('the same tag on different content types aggregates together', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     await A.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000020.sha256)', ['shared'], 'A', '', '');
-    await A.use('bookmarks').createBookmark('https://tags.test/x', ['shared'], 'bm', '', '');
+    await A.use('bookmarks').createBookmark('https://tags.test/x', ['shared'], 'bm', '');
     const tags = await A.use('tags').listTags('all');
     eq(find(tags, 'shared').count, 2, 'tag spans audio + bookmark');
   });
@@ -114,5 +114,33 @@ describe('tags: search', (t) => {
     const cloud = await A.use('tags').listTags('cloud', 'solar');
     eq(cloud.length, 2);
     ok(cloud.every(x => typeof x.weight === 'number'), 'weights still computed');
+  });
+});
+
+describe('tags: mine and recent', (t) => {
+  t('the mine filter only keeps tags I have used', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    B.setActor();
+    await B.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000200.sha256)', ['theirs'], 'B', '', '');
+    A.setActor();
+    await A.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000201.sha256)', ['mine'], 'A', '', '');
+    const names = (await A.use('tags').listTags('mine')).map(x => x.name.toLowerCase());
+    ok(names.includes('mine'));
+    notOk(names.includes('theirs'), 'somebody else tag is out');
+  });
+
+  t('the recent filter keeps what was tagged this week', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await A.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000210.sha256)', ['fresh'], 'A', '', '');
+    const names = (await A.use('tags').listTags('recent')).map(x => x.name.toLowerCase());
+    ok(names.includes('fresh'));
+  });
+
+  t('every tag carries how many are mine and when it was last used', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await A.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000220.sha256)', ['counted'], 'A', '', '');
+    const tag = (await A.use('tags').listTags('all')).find(x => x.name.toLowerCase() === 'counted');
+    eq(tag.mine, 1);
+    ok(tag.lastTs > 0);
   });
 });

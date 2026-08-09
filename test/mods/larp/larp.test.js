@@ -509,3 +509,97 @@ describe('larp: invitation codes (tribe-backed)', (t) => {
     eq(await B.use('larp').getUserHouse(B.keypair.id), 'dogma');
   });
 });
+
+describe('larp: the wall of a house', (t) => {
+  t('the academia wall is readable from outside, a normal house wall is not', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const larp = A.use('larp');
+    ok(larp.wallIsPublic('academia'), 'academia is public');
+    notOk(larp.wallIsPublic('solaris'), 'a house is not public by default');
+    ok(larp.wallIsPublic('solaris', { isGoverning: true }), 'unless it is ruling');
+  });
+
+  t('an outsider reads the academia wall but not another house wall', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const larpA = A.use('larp');
+    await larpA.publishJoin('academia');
+    await larpA.publishHousePost({ house: 'academia', text: 'open to everyone' });
+
+    B.setActor();
+    const larpB = B.use('larp');
+    const academia = await larpB.listHousePosts('academia', { viewerHouse: null, isGoverning: false });
+    eq(academia.length, 1, 'the academia wall is readable');
+    const other = await larpB.listHousePosts('solaris', { viewerHouse: null, isGoverning: false });
+    eq(other.length, 0, 'another house is not, unless it rules');
+  });
+});
+
+describe('larp: the newcomer is pointed at the Academia', (t) => {
+  const { larpListView } = require('../../../src/views/larp_view');
+  const i18n = require('../../../src/views/main_views').i18n;
+  const houses = [
+    { key: 'academia', name: 'LA ACADEMIA', members: [] },
+    { key: 'quark', name: 'QuarK', members: [] }
+  ];
+  const base = {
+    filter: 'houses', houses, cycle: { index: 1 }, governingKey: 'quark',
+    governingHouse: houses[1], governingMembers: [], governingPosts: [], canPost: false
+  };
+
+  t('somebody without a house sees where to start, next to who rules', () => {
+    const html = String(larpListView({ ...base, myHouseKey: null }));
+    ok(html.includes(String(i18n.larpGoverning)), 'the ruling house is labelled');
+    ok(html.includes(String(i18n.larpStartHere)), 'and the newcomer is told where to start');
+    ok(html.includes('LA ACADEMIA'), 'pointing at the Academia');
+  });
+
+  t('somebody already in the Academia is not told to start there', () => {
+    const html = String(larpListView({ ...base, myHouseKey: 'academia' }));
+    notOk(html.includes(String(i18n.larpStartHere)), 'their house is already shown as My House');
+  });
+
+  t('somebody with a house of their own is not nagged', () => {
+    const html = String(larpListView({ ...base, myHouseKey: 'quark' }));
+    notOk(html.includes(String(i18n.larpStartHere)), 'no hint once they belong somewhere');
+  });
+});
+
+describe('larp: the Academia reads in a sensible order', (t) => {
+  const { larpHouseView } = require('../../../src/views/larp_view');
+  const i18n = require('../../../src/views/main_views').i18n;
+  const academia = { key: 'academia', name: 'LA ACADEMIA', motto: 'learn', members: [], image: '' };
+  const quark = { key: 'quark', name: 'QuarK', motto: 'build', members: [], image: '' };
+  const questions = [{ key: 'q1', question: 'why?', options: [{ key: 'o1', text: 'because' }, { key: 'o2', text: 'why not' }] }];
+
+  const render = (over = {}) => String(larpHouseView({
+    house: academia, members: [], myHouseKey: 'academia', cycle: { index: 1 },
+    governingKey: 'quark', houses: [academia, quark], posts: [], canPost: true,
+    testStatus: { allowed: true }, questions, ...over
+  }));
+
+  t('the houses status comes first and the wall goes last', () => {
+    const html = render();
+    const status = html.indexOf(String(i18n.larpAcademiaJoinTitle));
+    const wall = html.indexOf('larp-posts-block');
+    ok(status > -1 && wall > -1, 'both blocks are on the page');
+    ok(status < wall, 'the long wall is left for the end');
+    notOk(html.includes(String(i18n.larpWillTestTitle)), 'the questionnaire is not inlined here');
+    ok(html.includes(String(i18n.larpStartJourney)), 'it is reached from Start Journey instead');
+  });
+
+  t('the Academia wall carries no polls for now', () => {
+    const html = render();
+    notOk(html.includes('/larp/polls/create'), 'no poll form on the Academia wall');
+  });
+
+  t('somebody in the Academia can write on its wall', () => {
+    const html = render();
+    ok(html.includes('/larp/post'), 'the posting form is offered');
+  });
+
+  t('the setup questionnaire is gone', () => {
+    const html = render();
+    notOk(html.includes('/larp/academy/setup'), 'no setup form left');
+  });
+});

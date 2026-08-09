@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -105,6 +105,10 @@ const renderPadCard = (pad, filter, spreadInfo) => {
     renderLifespanChip(pad.lifetime, i18n)
   ].filter(Boolean)
   return div({ class: "tribe-card" },
+    div({ class: "card-header activity-card-header" },
+      span(),
+      renderContentActions(pad.rootId || pad.key, `/pads/${encodeURIComponent(pad.rootId)}`, { spread: spreadInfo || null, author: pad.author, favKind: 'pads', isFavorite: pad.isFavorite, reportTitle: pad.title })
+    ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
@@ -113,17 +117,10 @@ const renderPadCard = (pad, filter, spreadInfo) => {
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       pad.deadline
-        ? p({ class: "job-meta-line" }, `${i18n.padDeadlineLabel || "Deadline"}: ${moment(pad.deadline).format("YYYY-MM-DD HH:mm")}`)
+        ? p({ class: "job-meta-line" }, `${i18n.padDeadlineLabel || "Deadline"}: ${moment(pad.deadline).format("YYYY/MM/DD HH:mm")}`)
         : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.padMembersLabel || "Members"}: ${pad.members.length}`)
-      ),
-      (() => {
-        const btn = renderSpreadButton(pad.rootId, spreadInfo);
-        return btn ? div({ class: "card-spread-left" }, btn) : null;
-      })(),
-      div({ class: "visit-btn-centered" },
-        a({ href: `/pads/${encodeURIComponent(pad.rootId)}`, class: "filter-btn" }, i18n.padVisitPad || "Visit Pad")
       )
     )
   )
@@ -199,12 +196,12 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
     renderModeButtons(filter),
     !isForm
       ? div({ class: "filters" },
-          form({ method: "GET", action: "/pads" },
+          form({ method: "GET", action: "/pads", class: "filter-box" },
             input({ type: "hidden", name: "filter", value: filter }),
-            input({ type: "text", name: "q", placeholder: i18n.padSearchPlaceholder || "Search pads...", value: q }),
-            br(),
-            button({ type: "submit" }, i18n.search),
-            br()
+            input({ type: "text", name: "q", placeholder: i18n.padSearchPlaceholder || "Search pads...", value: q, class: "filter-box__input" }),
+            div({ class: "filter-box__controls" },
+              button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+            )
           )
         )
       : null,
@@ -213,7 +210,7 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
       : div(
           filteredPads.length === 0
             ? p({ class: "no-content" }, i18n.padsNoItems || "No pads found.")
-            : div({ class: "tribe-grid" }, ...filteredPads.map(pd => renderPadCard(pd, filter, params && params.spreadMap && params.spreadMap.get(pd.rootId))))
+            : div({ class: "tribe-grid pads-grid" }, ...filteredPads.map(pd => renderPadCard(pd, filter, params && params.spreadMap && params.spreadMap.get(pd.rootId))))
         )
   )
 
@@ -225,7 +222,6 @@ exports.singlePadView = async (pad, entries, params) => {
   const isMember = pad.members.includes(userId) || (!!pad.tribeId && !!pad.isTribeMember)
   const padClosed = pad.isClosed
   const returnTo = `/pads/${encodeURIComponent(pad.rootId)}`
-  const shareUrl = `/pads/${encodeURIComponent(pad.rootId)}`
   const isRestrictedInviteOnly = !isMember && !isAuthor && pad.status === "INVITE-ONLY"
 
   const tags = !isRestrictedInviteOnly && Array.isArray(pad.tags) && pad.tags.length > 0
@@ -237,76 +233,68 @@ exports.singlePadView = async (pad, entries, params) => {
     renderEncryptedChip(i18n),
     renderLifespanChip(pad.lifetime, i18n)
   ].filter(Boolean)
+  const inviteActions = [
+    isAuthor && pad.status === "INVITE-ONLY"
+      ? form({ method: "POST", action: `/pads/generate-invite/${encodeURIComponent(pad.rootId)}` },
+          button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
+        )
+      : null,
+    (() => {
+      if (!(isAuthor && pad.status === "INVITE-ONLY")) return null
+      const invs = Array.isArray(pad.invites) ? pad.invites : []
+      const openInvite = invs.find(inv => typeof inv === "object" && inv && inv.public === true && inv.code)
+      if (openInvite) return [
+        div({ class: "tribe-open-invite" },
+          span({ class: "card-label" }, i18n.tribeInviteCodeText),
+          span({ class: "tribe-open-invite-code" }, openInvite.code)
+        ),
+        form({ method: "POST", action: `/pads/open-invite/remove/${encodeURIComponent(pad.rootId)}` },
+          button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
+        )
+      ]
+      return form({ method: "POST", action: `/pads/open-invite/create/${encodeURIComponent(pad.rootId)}` },
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
+      )
+    })(),
+    !isAuthor
+      ? a({ href: `/pm?to=${encodeURIComponent(pad.author)}`, class: "tribe-action-btn" }, "PM")
+      : null
+  ].filter(Boolean)
+
   const padSide = div({ class: "tribe-side" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(pad.rootId, null, {
+        author: pad.author,
+        favKind: 'pads',
+        isFavorite: pad.isFavorite,
+        spread: (params && params.spreads) || null,
+        returnTo,
+        reportTitle: pad.title
+      })
+    ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, pad.title || "\u2014")
     ),
     detailChips.length ? div({ class: "card-chips-row" }, ...detailChips) : null,
-    div({ class: "shop-share" },
-      span({ class: "tribe-info-label" }, i18n.padShareUrl || "Share URL"),
-      input({ type: "text", readonly: true, value: shareUrl, class: "shop-share-input" })
+    table({ class: "tribe-info-table jobs-info-table" },
+      tr(td({ class: "tribe-info-label" }, i18n.padCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(pad.createdAt).format("YYYY/MM/DD HH:mm"))),
+      (isRestrictedInviteOnly || !pad.deadline) ? null : tr(td({ class: "tribe-info-label" }, i18n.padDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, moment(pad.deadline).format("YYYY/MM/DD HH:mm"))),
+      isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-value pad-author-cell", colspan: "4" }, userLink(pad.author)))
     ),
-    (() => {
-      const btn = renderSpreadButton(pad.rootId);
-      return btn ? div({ class: "card-spread-centered" }, btn) : null;
-    })(),
+    tags,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.padMembersLabel || "Members"}: ${pad.members.length}`)
     ),
-    table({ class: "tribe-info-table" },
-      tr(td({ class: "tribe-info-label" }, i18n.padCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(pad.createdAt).format("YYYY-MM-DD"))),
-      isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-value pad-author-cell", colspan: "4" }, userLink(pad.author))),
-      isRestrictedInviteOnly ? null : tr(td({ class: "tribe-info-label" }, i18n.padDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, pad.deadline ? moment(pad.deadline).format("YYYY-MM-DD HH:mm") : "\u2014"))
-    ),
-    isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions" },
-      isAuthor && pad.status === "INVITE-ONLY"
-        ? form({ method: "POST", action: `/pads/generate-invite/${encodeURIComponent(pad.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
-          )
-        : null,
-      (() => {
-        if (!(isAuthor && pad.status === "INVITE-ONLY")) return null
-        const invs = Array.isArray(pad.invites) ? pad.invites : []
-        const openInvite = invs.find(inv => typeof inv === "object" && inv && inv.public === true && inv.code)
-        if (openInvite) return [
-          div({ class: "tribe-open-invite" },
-            span({ class: "card-label" }, i18n.tribeInviteCodeText),
-            span({ class: "tribe-open-invite-code" }, openInvite.code)
-          ),
-          form({ method: "POST", action: `/pads/open-invite/remove/${encodeURIComponent(pad.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
-          )
-        ]
-        return form({ method: "POST", action: `/pads/open-invite/create/${encodeURIComponent(pad.rootId)}` },
-          button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
-        )
-      })(),
-      form(
-        { method: "POST", action: pad.isFavorite ? `/pads/favorites/remove/${encodeURIComponent(pad.key)}` : `/pads/favorites/add/${encodeURIComponent(pad.key)}` },
-        returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-        button({ type: "submit", class: "tribe-action-btn" }, pad.isFavorite ? (i18n.padRemoveFavorite || "Remove Favorite") : (i18n.padAddFavorite || "Add Favorite"))
-      ),
-      !isAuthor
-        ? a({ href: `/pm?to=${encodeURIComponent(pad.author)}`, class: "tribe-action-btn" }, "PM")
-        : null,
-      isAuthor
-        ? form({ method: "GET", action: "/pads" },
-            input({ type: "hidden", name: "filter", value: "edit" }),
-            input({ type: "hidden", name: "id", value: pad.rootId }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.padUpdate || "Update")
-          )
-        : null,
+    isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions housing-status-row" },
+      span({ class: "card-label" }, `${i18n.padStatusLabel || "Status"}: `),
+      renderPadStatusChip(pad.status, padClosed),
       isAuthor && pad.status !== "CLOSED" && !padClosed
         ? form({ method: "POST", action: `/pads/close/${encodeURIComponent(pad.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.padClose || "Close Pad")
-          )
-        : null,
-      isAuthor
-        ? form({ method: "POST", action: `/pads/delete/${encodeURIComponent(pad.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.padDelete || "Delete")
+            button({ type: "submit", class: "status-btn project-control-btn" }, i18n.padClose || "Close")
           )
         : null
     ),
+    (isRestrictedInviteOnly || !inviteActions.length) ? null : div({ class: "tribe-side-actions" }, ...inviteActions),
     !isAuthor && pad.status === "INVITE-ONLY" && !isMember
       ? div({ class: "pad-invite-section" },
           a({ class: "tribe-action-btn", href: "/invites#invites-pads" }, i18n.tribeEnterInvite)
@@ -317,7 +305,16 @@ exports.singlePadView = async (pad, entries, params) => {
           button({ type: "submit", class: "create-button" }, i18n.padStartEditing || "START EDITING!")
         )
       : null,
-    tags
+    isRestrictedInviteOnly || !isAuthor ? null : div({ class: "tribe-side-actions" },
+      form({ method: "GET", action: "/pads" },
+        input({ type: "hidden", name: "filter", value: "edit" }),
+        input({ type: "hidden", name: "id", value: pad.rootId }),
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.padUpdate || "Update")
+      ),
+      form({ method: "POST", action: `/pads/delete/${encodeURIComponent(pad.rootId)}` },
+        button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.padDelete || "Delete")
+      )
+    )
   )
 
   let canonicalEntries = entries
@@ -343,7 +340,7 @@ exports.singlePadView = async (pad, entries, params) => {
         h4(i18n.padVersionHistory || "Version History"),
         ...visibleEntries.slice().reverse().map((e, idx) =>
           div({ class: "pad-version-item" },
-            span({ class: "pad-version-date" }, moment(e.createdAt).format("YYYY-MM-DD HH:mm")),
+            span({ class: "pad-version-date" }, moment(e.createdAt).format("YYYY/MM/DD HH:mm")),
             span({ class: "pad-version-author" },
               span({ class: "pad-author-swatch " + memberColorClass(pad.members, e.author) }),
               userLink(e.author)

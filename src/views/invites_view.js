@@ -107,6 +107,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'pubs-section' },
         h2(i18n.invitesPubsTitle),
+        p(i18n.invitesPubsHint),
         form(
           { action: '/settings/invite/accept', method: 'post' },
           input({ name: 'invite', type: 'text', placeholder: i18n.invitesPubInviteCodePlaceholder, autofocus: true, required: true }),
@@ -129,6 +130,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'federations-section' },
         h2(i18n.invitesFederationsTitle || 'Federations'),
+        p(i18n.invitesFederationsHint),
         div({ class: 'conn-actions invites-pubs-actions' },
           form({ action: '/invites/refresh-pubs', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsRefresh || 'Refresh')),
           form({ action: '/invites/clear-unreachable', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsClearUnreachable || 'Remove unreachable')),
@@ -180,6 +182,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-houses', id: 'invites-houses' },
         h2(i18n.invitesHousesTitle || 'Houses'),
+        p(i18n.invitesHousesHint),
         form(
           { action: '/larp/invite/redeem', method: 'post' },
           input({ type: 'hidden', name: 'returnTo', value: '/invites' }),
@@ -192,6 +195,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-tribes', id: 'invites-tribes' },
         h2(i18n.invitesTribesTitle),
+        p(i18n.invitesTribesHint),
         form(
           { action: '/tribes/join-code', method: 'post' },
           input({ name: 'inviteCode', type: 'text', placeholder: i18n.invitesTribeInviteCodePlaceholder, required: true }),
@@ -203,6 +207,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-chats', id: 'invites-chats' },
         h2(i18n.invitesChatsTitle || 'Chats'),
+        p(i18n.invitesChatsHint),
         form(
           { action: '/chats/join-code', method: 'post' },
           input({ name: 'code', type: 'text', placeholder: i18n.invitesChatInviteCodePlaceholder || 'Enter chat invite code', required: true }),
@@ -214,6 +219,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-pads', id: 'invites-pads' },
         h2(i18n.invitesPadsTitle || 'Pads'),
+        p(i18n.invitesPadsHint),
         form(
           { action: '/pads/join-code', method: 'post' },
           input({ name: 'code', type: 'text', placeholder: i18n.invitesPadInviteCodePlaceholder || 'Enter pad invite code', required: true }),
@@ -225,6 +231,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-calendars', id: 'invites-calendars' },
         h2(i18n.invitesCalendarsTitle || 'Calendars'),
+        p(i18n.invitesCalendarsHint),
         form(
           { action: '/calendars/join-code', method: 'post' },
           input({ name: 'code', type: 'text', placeholder: i18n.invitesCalendarInviteCodePlaceholder || 'Enter calendar invite code', required: true }),
@@ -236,6 +243,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-events', id: 'invites-events' },
         h2(i18n.invitesEventsTitle || 'Events'),
+        p(i18n.invitesEventsHint),
         form(
           { action: '/events/join-code', method: 'post' },
           input({ name: 'code', type: 'text', placeholder: i18n.invitesEventInviteCodePlaceholder || 'Enter event invite code', required: true }),
@@ -247,6 +255,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-forums', id: 'invites-forums' },
         h2(i18n.invitesForumsTitle || 'Forums'),
+        p(i18n.invitesForumsHint),
         form(
           { action: '/forum/join-code', method: 'post' },
           input({ name: 'code', type: 'text', placeholder: i18n.invitesForumInviteCodePlaceholder || 'Enter forum invite code', required: true }),
@@ -258,6 +267,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-maps', id: 'invites-maps' },
         h2(i18n.invitesMapsTitle || 'Maps'),
+        p(i18n.invitesMapsHint),
         form(
           { action: '/maps/join-code', method: 'post' },
           input({ name: 'code', type: 'text', placeholder: i18n.invitesMapInviteCodePlaceholder || 'Enter map invite code', required: true }),
@@ -269,6 +279,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-shops', id: 'invites-shops' },
         h2(i18n.invitesShopsTitle || 'Shops'),
+        p(i18n.invitesShopsHint),
         form(
           { action: '/shops/join-code', method: 'post' },
           input({ name: 'code', type: 'text', placeholder: i18n.invitesShopInviteCodePlaceholder || 'Enter shop invite code', required: true }),
@@ -280,6 +291,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
     section(
       div({ class: 'invites-inhabitants', id: 'invites-inhabitants' },
         h2(i18n.invitesInhabitantsTitle || 'Inhabitants'),
+        p(i18n.invitesInhabitantsHint),
         form(
           { action: '/invites/inhabitant/follow', method: 'post' },
           input({ name: 'feedId', id: 'inh_oasis_id', type: 'text', placeholder: '@...=.ed25519', pattern: '@[A-Za-z0-9+/_\\-]{43}=\\.ed25519', required: true, maxlength: 56 }),

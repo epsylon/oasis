@@ -2,11 +2,26 @@
 
 Per-module unit/integration tests covering all publishing actions across the network.
 
-**Current status:** 40 modules / 149 tests passing.
+**Current status:** 69 suites / 978 tests passing.
 
 Module tests live under `test/mods/` to keep them grouped and the top-level
 `test/` directory clean (so `results/`, the runner, and the README are easy
 to find).
+
+Some suites under `test/mods/` do not exercise a module — they guard rules that
+must hold across the whole codebase:
+
+- `conventions/` reads the views and fails when a shared rule is broken: a module
+  writing its own comments section instead of reusing the shared one, a card
+  rendering the spread button twice, a listing offering owner-only actions, a
+  view using a `render*` helper it never imported, or a detail view that offers
+  no content actions (spread / pin / report).
+- `i18n/` keeps the translation files in sync (see below).
+- `favorites/` also checks, for every `favKind` offered in the views, that the
+  kind is wired end to end: resolver, module check, add/remove routes, store
+  key, `kindConfig` and `kindOrder`. A kind that can be pinned but never listed
+  back fails here.
+- `gallery/` checks the image fields keep working across form round-trips.
 
 ## Quick start
 
@@ -89,57 +104,82 @@ test/
     mock-ssb.js                In-memory SSB network (multi-peer + box1 + private msgs)
     setup.js                   makePeer / makeNetwork helpers per module
 
-  crypto/         primitives.test.js   Keyring, fingerprint, wrap/unwrap, AAD, invites, AES-GCM
-  tribes/         basic.test.js        Create, list, invite, join, content
-  sub-tribes/     basic.test.js        Hierarchy, invite scoping, cycles, tombstone cascade
-                  content.test.js      Publishing inside sub-tribes (feed, event, votation)
-                                       and parent vs sub key isolation
-  media/
-    audios/       audios.test.js       createAudio, opinion, list, delete
-    videos/       videos.test.js       createVideo, opinion, delete
-    images/       images.test.js       createImage (meme + non-meme), opinion
-    documents/    documents.test.js    createDocument, opinion
-    bookmarks/    bookmarks.test.js    createBookmark, opinion
-
-  forum/          forum.test.js        createForum, addMessageToForum, voteContent
-  transfers/      transfers.test.js    createTransfer, confirmTransferById, opinion
-  votes/          votes.test.js        createVote, voteOnVote, opinion
-  events/         events.test.js       createEvent, toggleAttendee (multi-user), delete
-  tasks/          tasks.test.js        createTask, toggleAssignee, updateTaskStatus
-  chats/          chats.test.js        createChat (standalone), close, delete
-  pads/           pads.test.js         createPad, close, delete
-  maps/           maps.test.js         createMap (SINGLE), delete
-  torrents/       torrents.test.js     createTorrent, opinion, delete
-  calendars/      calendars.test.js    createCalendar, addDate, listAll
-  reports/        reports.test.js      createReport, confirmReportById (multi-user), delete
-  market/         market.test.js       createItem (exchange/auction), addBidToAuction
-  jobs/           jobs.test.js         createJob, subscribeToJob, deleteJob
-  projects/       projects.test.js     createProject, followProject, pledgeToProject
-  inhabitants/    inhabitants.test.js  listInhabitants
-  parliament/     parliament.test.js   proposeCandidature, createProposal
-  courts/         courts.test.js       openCase, nominateJudge
-  opinions/       opinions.test.js     createVote (opinion), listOpinions
-  shops/          shops.test.js        createShop, createProduct, update, delete
-  pixelia/        pixelia.test.js      paintPixel, repaint (replace), cross-peer visibility
-  pm/             pm.test.js           sendMessage, listAllPrivate (private box1)
-  feed/           feed.test.js         createFeed, createRefeed, addComment, opinion
-  tags/           tags.test.js         listTags (aggregate)
-  search/         search.test.js      search() across modules
-  trending/       trending.test.js     listTrending, createVote (opinion)
-  agenda/         agenda.test.js       listAgenda
-  cv/             cv.test.js           createCV
-  favorites/      favorites.test.js    listAll
-  banking/        banking.test.js      addAddress, getUserAddress, hasClaimedThisMonth,
-                                       getUbiClaimHistory, listBanking, getBankingData,
-                                       isPubNode, DEFAULT_RULES, listAddressesMerged
-  activity/       activity.test.js     listFeed (member vs non-member visibility)
-  stats/          stats.test.js        getStats (member sees own tribes, non-member doesn't)
-  blockchain/     blockchain.test.js   listBlockchain (member decrypts tribe content)
+  mods/actions          actions.test.js
+  mods/activity         activity.test.js
+  mods/agenda           agenda.test.js
+  mods/ai               ai_nav.test.js
+  mods/banking          banking.test.js
+  mods/blockchain       blockchain.test.js
+  mods/blogs            blogs.test.js
+  mods/calendars        calendars.test.js
+  mods/chats            chats.test.js
+  mods/cipher           cipher.test.js
+  mods/comments         comments.test.js
+  mods/conventions      conventions.test.js
+  mods/courts           courts.test.js rules.test.js
+  mods/crypto           invite-safety.test.js primitives.test.js tombstone-author.test.js
+  mods/cv               cv.test.js
+  mods/data             data.test.js
+  mods/dev              dev.test.js
+  mods/events           crypto.test.js events.test.js recurrence.test.js
+  mods/favorites        favorites.test.js
+  mods/feed             feed.test.js
+  mods/fileshare        fileshare.test.js
+  mods/forum            crypto.test.js forum.test.js
+  mods/gallery          gallery.test.js
+  mods/games            games.test.js
+  mods/housing          housing.test.js
+  mods/i18n             i18n.test.js
+  mods/industry         industry.test.js
+  mods/inhabitants      inhabitants.test.js
+  mods/jobs             jobs.test.js
+  mods/larp             larp.test.js
+  mods/legacy           legacy.test.js
+  mods/logs             logs.test.js
+  mods/maps             maps.test.js
+  mods/market           market.test.js
+  mods/media            media.test.js
+  mods/media/audios     audios.test.js
+  mods/media/bookmarks  bookmarks.test.js
+  mods/media/documents  documents.test.js
+  mods/media/images     images.test.js
+  mods/media/videos     videos.test.js
+  mods/melody           melody.test.js
+  mods/mentions         mentions.test.js
+  mods/multiuser        multiuser.test.js
+  mods/opinions         opinions.test.js
+  mods/pads             pads.test.js
+  mods/parliament       cycles.test.js parliament.test.js rules.test.js
+  mods/pdf              content-pdf.test.js
+  mods/pixelia          pixelia.test.js
+  mods/pm               pm.test.js pm_refs.test.js
+  mods/politicalbot     politicalbot.test.js
+  mods/polls            polls.test.js
+  mods/profile          qr.test.js
+  mods/projects         projects.test.js
+  mods/reports          reports.test.js
+  mods/search           search.test.js
+  mods/security         security.test.js
+  mods/shops            shops.test.js
+  mods/spread           spread.test.js
+  mods/stats            stats.test.js
+  mods/sub-tribes       basic.test.js content.test.js
+  mods/tags             tags.test.js
+  mods/tasks            tasks.test.js
+  mods/torrents         torrents.test.js
+  mods/transfers        transfers.test.js
+  mods/trending         trending.test.js
+  mods/tribes           basic.test.js
+  mods/votes            rules.test.js votes.test.js
+  mods/welcome          welcome.test.js
+  mods/workflows        workflows.test.js
 ```
 
-Each module directory has its own `run.sh`:
+Most module directories have their own `run.sh` (53 of 69); for the rest use
+`node test/run.js mods/<module>`:
 ```sh
-bash test/<module>/run.sh
+bash test/mods/tribes/run.sh
+node test/run.js mods/conventions
 ```
 
 ## Test pattern
@@ -190,17 +230,20 @@ Every `bash test/run.sh` generates `test/results/unit_test_<YYYY-MM-DD_HH-MM-SS>
 
 ## Adding a new module
 
-1. Create `test/<module>/<name>.test.js` following the pattern.
+1. Create `test/mods/<module>/<name>.test.js` following the pattern.
 2. If the model isn't registered, add it to `FACTORIES` in `helpers/setup.js`. If it has unusual deps (services, cipher, etc.), add a branch in `requireOnce`.
-3. Create `test/<module>/run.sh`:
+3. Optionally create `test/mods/<module>/run.sh` for fast iteration:
    ```bash
    #!/usr/bin/env bash
    export NODE_NO_WARNINGS=1
    cd "$(dirname "$0")/../.."
-   node test/run.js <module> "$@"
+   node test/run.js mods/<module> "$@"
    ```
-4. Add `<module>` to the `MODULES` array in `test/run.sh`.
-5. `chmod +x test/<module>/run.sh && bash test/<module>/run.sh`.
+4. Nothing to register: `test/run.sh` discovers every directory under
+   `test/mods/` that contains a `*.test.js`. The `MODULES` array at the top only
+   fixes the order of the first ones; anything not listed is appended
+   automatically.
+5. `chmod +x test/mods/<module>/run.sh && bash test/mods/<module>/run.sh`.
 
 ## What's covered
 
@@ -241,8 +284,6 @@ These models are deliberately not tested as unit tests:
 - **`legacy`** — broken crypto (audit found); disable in production.
 - **`panicmode`** / **`exportmode`** — destructive operations.
 - **`wallet`** — requires external `localhost:7474` RPC; tested via `banking` mock.
-- **`logs`** / **`cipher`** — internal utilities, no publish actions.
-- **`games`** — each minigame independent, gameplay-specific.
 - **`tribes_content`** — covered by `tribes` and `sub-tribes` test suites.
 
 ## Bugs caught by these tests

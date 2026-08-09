@@ -331,6 +331,8 @@ a.user-link:focus {
 .block-row--details .block-url:hover { background: #292b36 !important; color: #ffa300 !important; }
 .btn-singleview { background: #1e1f23 !important; color: #ffa300 !important; }
 .btn-singleview:hover { background: #2d2e34 !important; color: #FFD700 !important; }
+.btn-spread-on, .content-actions .btn-pin-on { background: #ffa300 !important; color: #000000 !important; }
+.btn-spread-on:hover, .content-actions .btn-pin-on:hover { background: #ffb733 !important; color: #000000 !important; }
 .btn-back { background: #21232b !important; color: #ffa300 !important; }
 .btn-back:hover { background: #292b36 !important; color: #FFD700 !important; }
 .block-info-table td, .pm-info-table td { border-color: #444 !important; }

@@ -142,7 +142,6 @@ module.exports = ({ cooler }) => {
       title: c.title || "",
       description: c.description || "",
       mapUrl: c.mapUrl || "",
-      meme: !!c.meme,
       opinions: agg ? agg.opinions : (c.opinions || {}),
       opinions_inhabitants: voters,
       hasVoted: viewerId ? voters.includes(viewerId) : false,
@@ -177,7 +176,7 @@ module.exports = ({ cooler }) => {
       return root;
     },
 
-    async createImage(blobMarkdown, tagsRaw, title, description, memeBool, mapUrl) {
+    async createImage(blobMarkdown, tagsRaw, title, description, mapUrl) {
       const ssbClient = await openSsb();
       const blobId = parseBlobId(blobMarkdown);
       const tags = normalizeTags(tagsRaw) || [];
@@ -193,7 +192,6 @@ module.exports = ({ cooler }) => {
         title: title || "",
         description: description || "",
         mapUrl: mapUrl || "",
-        meme: !!memeBool,
         opinions: {},
         opinions_inhabitants: []
       };
@@ -203,7 +201,7 @@ module.exports = ({ cooler }) => {
       });
     },
 
-    async updateImageById(id, blobMarkdown, tagsRaw, title, description, memeBool, mapUrl) {
+    async updateImageById(id, blobMarkdown, tagsRaw, title, description, mapUrl) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const tipId = await this.resolveCurrentId(id);
@@ -226,7 +224,6 @@ module.exports = ({ cooler }) => {
         title: title !== undefined ? title || "" : oldMsg.content.title || "",
         description: description !== undefined ? description || "" : oldMsg.content.description || "",
         mapUrl: mapUrl !== undefined ? mapUrl || "" : oldMsg.content.mapUrl || "",
-        meme: typeof memeBool === "boolean" ? memeBool : !!oldMsg.content.meme,
         createdAt: oldMsg.content.createdAt,
         updatedAt: now
       };
@@ -280,7 +277,6 @@ module.exports = ({ cooler }) => {
 
       if (filter === "mine") list = list.filter((im) => String(im.author) === String(viewerId));
       else if (filter === "recent") list = list.filter((im) => new Date(im.createdAt).getTime() >= now - 86400000);
-      else if (filter === "meme") list = list.filter((im) => im.meme === true);
       else if (filter === "top") {
         list = list
           .slice()

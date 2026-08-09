@@ -48,8 +48,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     {
       id: "search-type",
       name: "type",
-      class: "input-select",
-      style: "position:relative; z-index:10;"
+      class: "input-select search-select"
     },
     contentTypes.map(type =>
       option({
@@ -63,8 +62,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     {
       id: "results-per-page",
       name: "resultsPerPage",
-      class: "input-select",
-      style: "position:relative; z-index:10;margin-left:10px;"
+      class: "input-select search-select search-select-spaced"
     },
     option({ value: "100", selected: resultCount === "100" ? "selected" : undefined }, "100"),
     option({ value: "50", selected: resultCount === "50" ? "selected" : undefined }, "50"),
@@ -233,7 +231,6 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         return content.url ? div({ class: 'search-image' },
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
           content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageDescriptionLabel + ':'), span({ class: 'card-value' }, content.description)) : null,
-          content.meme ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.trendingCategory + ':'), span({ class: 'card-value' }, i18n.meme)) : null,
           br(),
           img({ src: `/blob/${encodeURIComponent(content.url)}` }),
           br(),
@@ -330,7 +327,6 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         return div({ class: 'search-bookmark' },
           content.url ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkUrlLabel + ':'), span({ class: 'card-value' }, a({ href: content.url, target: '_blank' }, content.url))) : null,
           content.description ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), span({ class: 'card-value' }, content.description)) : null,
-          content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkCategory + ':'), span({ class: 'card-value' }, content.category)) : null,
           content.lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, new Date(content.lastVisit).toLocaleString())) : null,
           content.tags && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
@@ -341,7 +337,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'task':
         return div({ class: 'search-task' },
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
-          content.description ? div({ class: 'card-field', style: 'display:flex;flex-direction:column;' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), p({ class: 'card-value', style: 'white-space:pre-wrap;margin-top:4px;' }, content.description)) : null,
+          content.description ? div({ class: 'card-field card-field-stacked' }, span({ class: 'card-label' }, i18n.searchDescription + ':'), p({ class: 'card-value card-value-pre' }, content.description)) : null,
           content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchLocationLabel + ':'), span({ class: 'card-value' }, content.location)) : null,
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchStatusLabel + ':'), span({ class: 'card-value' }, content.status)) : null,
           content.priority ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchPriorityLabel + ':'), span({ class: 'card-value' }, content.priority)) : null,

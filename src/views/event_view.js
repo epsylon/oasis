@@ -1,5 +1,8 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning } = require("./main_views");
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
+const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions } = require("./main_views");
+const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
+const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -105,70 +108,12 @@ const renderEventAttendAction = (e, isAttending, returnTo) => {
 };
 
 const renderEventCommentsSection = (eventId, comments = [], currentFilter = "all") => {
-  const commentsCount = Array.isArray(comments) ? comments.length : 0;
   const returnTo = `/events/${encodeURIComponent(eventId)}?filter=${encodeURIComponent(currentFilter || "all")}`;
-
-  return div(
-    { class: "vote-comments-section" },
-    div(
-      { class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(commentsCount))
-    ),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form(
-        { method: "POST", action: `/events/${encodeURIComponent(eventId)}/comments`, class: "comment-form", enctype: "multipart/form-data" },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        textarea({
-          id: "comment-text",
-          name: "text",
-          rows: 4,
-          class: "comment-textarea",
-          placeholder: i18n.voteNewCommentPlaceholder
-        }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    (() => {
-      const visibleComments = (comments || []).filter(c => {
-        const t = c && c.value && c.value.content && c.value.content.text;
-        return t && String(t).trim();
-      });
-      return visibleComments.length
-      ? div(
-          { class: "comments-list" },
-          visibleComments.map((c) => {
-            const author = c.value && c.value.author ? c.value.author : "";
-            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
-            const relDate = ts ? moment(ts).fromNow() : "";
-
-            const content = c.value && c.value.content ? c.value.content : {};
-            const root = content.fork || content.root || "";
-            const text = content.text || "";
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && root ? a({ href: `/thread/${encodeURIComponent(root)}#${encodeURIComponent(c.key)}` }, relDate) : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(String(text)))
-            );
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet);
-    })()
-  );
+  return renderSharedCommentsSection({
+    action: `/events/${encodeURIComponent(eventId)}/comments`,
+    comments: comments,
+    returnTo: returnTo
+  });
 };
 
 const renderEventStatusChip = (status) => {
@@ -198,7 +143,7 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
     div(
       { class: "card-header activity-card-header" },
       span(),
-      renderContentActions(e.id, `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`)
+      renderContentActions(e.id, `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`, { spread: spreadInfo || null, author: e.organizer || e.author, favKind: 'events', isFavorite: e.isFavorite, reportTitle: e.title })
     ),
     div({ class: "card-section event-card-body" },
       div({ class: "shop-title-row" },
@@ -216,8 +161,7 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
         : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
-      ),
-      div({ class: "card-spread-centered" }, renderSpreadButton(e.id, spreadInfo))
+      )
     )
   );
 };
@@ -235,8 +179,9 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
     i18n.eventAllSectionTitle;
 
   const eventToEdit = list.find((e) => e.id === eventId) || {};
+  const formData = currentFilter === "edit" ? eventToEdit : (params.draft || {});
   const spreadWarning = currentFilter === "edit" ? await renderSpreadEditWarning(eventToEdit && eventToEdit.id) : null;
-  const editTags = Array.isArray(eventToEdit.tags) ? eventToEdit.tags.filter(Boolean) : [];
+  const editTags = Array.isArray(formData.tags) ? formData.tags.filter(Boolean) : (typeof formData.tags === "string" ? formData.tags.split(",").map(t => t.trim()).filter(Boolean) : []);
 
   const canSee = (e) => {
     const isPub = normalizePrivacy(e.isPublic) === "public";
@@ -271,7 +216,12 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   const minCreate = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm");
 
   const ret = typeof returnTo === "string" && returnTo.startsWith("/events") ? returnTo : "/events?filter=mine";
-  const editPrivacy = normalizePrivacy(eventToEdit.isPublic);
+  const editPrivacy = normalizePrivacy(formData.isPublic);
+  const editInterval = formData.interval
+    || (formData.intervalWeekly ? "weekly" : formData.intervalMonthly ? "monthly" : formData.intervalYearly ? "yearly" : "");
+  const editIntervalUntil = (formData.recurrenceUntil || formData.intervalDeadline)
+    ? moment(formData.recurrenceUntil || formData.intervalDeadline).format("YYYY-MM-DDTHH:mm")
+    : "";
 
   return template(
     title,
@@ -286,16 +236,27 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
         { class: "filters" },
         form(
           { method: "GET", action: "/events" },
-          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterMine),
-          button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterToday),
-          button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterWeek),
-          button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterMonth),
-          button({ type: "submit", name: "filter", value: "year", class: currentFilter === "year" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterYear),
-          button({ type: "submit", name: "filter", value: "archived", class: currentFilter === "archived" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterArchived),
+          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "year", class: currentFilter === "year" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterYear).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "archived", class: currentFilter === "archived" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterArchived).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.eventCreateButton)
         )
-      )
+      ),
+      currentFilter === "edit" || currentFilter === "create"
+        ? null
+        : div({ class: "filters" },
+            form({ method: "GET", action: "/events", class: "filter-box" },
+              input({ type: "hidden", name: "filter", value: currentFilter }),
+              input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.eventSearchPlaceholder, class: "filter-box__input" }),
+              div({ class: "filter-box__controls" },
+                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+              )
+            )
+          )
     ),
     section(
       currentFilter === "edit" || currentFilter === "create"
@@ -316,20 +277,17 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 name: "title",
                 id: "title",
                 required: true,
-                value: currentFilter === "edit" ? eventToEdit.title || "" : ""
+                value: formData.title || ""
               }),
               br(),
               label(i18n.eventDescriptionLabel),
               br(),
               textarea(
                 { name: "description", id: "description", placeholder: i18n.eventDescriptionPlaceholder, rows: "4" },
-                currentFilter === "edit" ? eventToEdit.description || "" : ""
+                formData.description || ""
               ),
               br(),
-              label(i18n.uploadMedia),
-              br(),
-              input({ type: "file", name: "image", accept: "image/*" }),
-              br(),
+              ...renderGalleryFields(formData, currentFilter === "edit"),
               br(),
               label(i18n.eventDateLabel),
               br(),
@@ -339,17 +297,8 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 id: "date",
                 required: true,
                 min: currentFilter === "create" ? minCreate : undefined,
-                value: currentFilter === "edit" && eventToEdit.date ? moment(eventToEdit.date).format("YYYY-MM-DDTHH:mm") : ""
+                value: formData.date ? moment(formData.date).format("YYYY-MM-DDTHH:mm") : ""
               }),
-              br(),
-              br(),
-              label(i18n.eventPrivacyLabel),
-              br(),
-              select(
-                { name: "isPublic", id: "isPublic" },
-                opt("public", editPrivacy !== "private", i18n.eventPublic),
-                opt("private", editPrivacy === "private", i18n.eventPrivate)
-              ),
               br(),
               br(),
               label(i18n.eventLocationLabel),
@@ -359,17 +308,17 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 name: "location",
                 id: "location",
                 required: true,
-                value: currentFilter === "edit" ? eventToEdit.location || "" : ""
+                value: formData.location || ""
               }),
               br(),
               label(i18n.mapLocationTitle || "Map Location"),
               br(),
-              input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: eventToEdit?.mapUrl || "" }),
+              input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: formData.mapUrl || "" }),
               br(),
               br(),
               label(i18n.eventUrlLabel),
               br(),
-              input({ type: "url", name: "url", id: "url", value: currentFilter === "edit" ? eventToEdit.url || "" : "" }),
+              input({ type: "url", name: "url", id: "url", value: formData.url || "" }),
               br(),
               br(),
               label(i18n.eventPriceLabel),
@@ -380,13 +329,28 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 id: "price",
                 min: "0.000000",
                 step: "0.000001",
-                value: currentFilter === "edit" ? parseFloat(eventToEdit.price || 0).toFixed(6) : (0).toFixed(6)
+                value: parseFloat(formData.price || 0).toFixed(6)
               }),
               br(),
               br(),
               label(i18n.eventTagsLabel),
               br(),
-              input({ type: "text", name: "tags", id: "tags", value: currentFilter === "edit" ? editTags.join(", ") : "" }),
+              input({ type: "text", name: "tags", id: "tags", value: editTags.join(", ") }),
+              br(),
+              br(),
+              div({ class: "event-recurrence-block" },
+                label(i18n.eventRecurrenceLabel),
+                br(),
+                renderIntervalBlock({ min: minCreate }, editInterval, editIntervalUntil)
+              ),
+              br(),
+              label(i18n.eventPrivacyLabel),
+              br(),
+              select(
+                { name: "isPublic", id: "isPublic" },
+                opt("public", editPrivacy !== "private", i18n.eventPublic),
+                opt("private", editPrivacy === "private", i18n.eventPrivate)
+              ),
               br(),
               br(),
               ...(currentFilter === "create" ? [
@@ -421,13 +385,13 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     { class: "filters" },
     form(
       { method: "GET", action: "/events" },
-      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterAll),
-      button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterMine),
-      button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterToday),
-      button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterWeek),
-      button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterMonth),
-      button({ type: "submit", name: "filter", value: "year", class: currentFilter === "year" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterYear),
-      button({ type: "submit", name: "filter", value: "archived", class: currentFilter === "archived" ? "filter-btn active" : "filter-btn" }, i18n.eventFilterArchived),
+      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "year", class: currentFilter === "year" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterYear).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "archived", class: currentFilter === "archived" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterArchived).toUpperCase()),
       button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.eventCreateButton)
     )
   );
@@ -467,10 +431,10 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   if (attendNode) sideActions.push(attendNode);
   if (params.linkedCalendarId) {
     sideActions.push(form({ method: "GET", action: `/calendars/${encodeURIComponent(params.linkedCalendarId)}` },
-      button({ type: "submit", class: "filter-btn" }, i18n.eventVisitCalendar || "Visit calendar")
+      button({ type: "submit", class: "tribe-action-btn" }, i18n.eventVisitCalendar || "Visit calendar")
     ));
   }
-  if (isOrganizer) sideActions.push(...renderEventOwnerActions(event, returnToSelf));
+  const ownerActions = isOrganizer ? renderEventOwnerActions(event, returnToSelf) : [];
 
   const tagsNode = event.tags && event.tags.filter(Boolean).length
     ? div({ class: "card-tags" },
@@ -484,7 +448,16 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       td({ class: "tribe-info-label" }, labelText),
       td({ class: "tribe-info-value" }, valueNode)
     ));
-  if (event.date) pushRow(i18n.eventDateLabel, moment(event.date).format("YYYY/MM/DD HH:mm"));
+  if (event.date) pushRow(i18n.eventDateLabel, moment(event.recurring && event.nextDate ? event.nextDate : event.date).format("YYYY/MM/DD HH:mm"));
+  if (event.recurring) {
+    const parts = [
+      event.intervalWeekly ? (i18n.calendarIntervalWeekly || "Weekly") : null,
+      event.intervalMonthly ? (i18n.calendarIntervalMonthly || "Monthly") : null,
+      event.intervalYearly ? (i18n.calendarIntervalYearly || "Yearly") : null
+    ].filter(Boolean);
+    pushRow(i18n.eventRecurrenceLabel, parts.join(" · "));
+    if (event.recurrenceUntil) pushRow(i18n.eventRecurrenceUntil, moment(event.recurrenceUntil).format("YYYY/MM/DD HH:mm"));
+  }
   pushRow(i18n.eventStatus, eventStatusLabel(event.status));
   pushRow(i18n.eventPrivacyLabel, privacyLabel(event.isPublic));
   if (event.location && String(event.location).trim()) pushRow(i18n.eventLocationLabel, event.location);
@@ -499,18 +472,31 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     : null;
 
   const eventSide = div({ class: "tribe-side" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(event.id, null, { spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title })
+    ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, event.title)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    div({ class: "card-spread-centered" }, renderSpreadButton(event.id, params.spreads)),
+    renderPhotoGallery(event, 'event'),
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    event.recurring && Array.isArray(event.occurrences) && event.occurrences.length > 1
+      ? details({ class: "event-occurrences" },
+          summary({ class: "chat-thread-summary" }, `${i18n.eventUpcomingDates} (${event.occurrences.length})`),
+          ul({ class: "event-occurrence-list" },
+            ...event.occurrences.map(d => li(moment(d).format("YYYY/MM/DD HH:mm")))
+          )
+        )
+      : null,
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
     ),
     attendeesListNode,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
+    renderDocumentActions('events', event.id)
   );
 
   const returnToOpinions = `/events/${encodeURIComponent(event.id)}?filter=${encodeURIComponent(currentFilter)}`;
@@ -528,13 +514,13 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       span({ class: "date-link" }, `${moment(event.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
       userLink(event.organizer)
     ),
-    opinionsBar,
-    renderEventCommentsSection(event.id, comments, currentFilter)
+    renderEngagement(event.id, opinionsBar, renderEventCommentsSection(event.id, comments, currentFilter))
   );
 
   return template(
     event.title,
     section(
+      div({ class: "tags-header" }, h2(i18n.eventsTitle), p(i18n.eventsDescription)),
       filterBar,
       div({ class: "tribe-details" }, eventSide, eventMain)
     )
@@ -545,7 +531,7 @@ exports.clearnetEventView = async (event) => {
   const { escapeHtml: esc, renderClearnetPage } = require('./clearnet_view');
   const title = esc(event.title || 'Event');
   const desc = esc(event.description || '');
-  const dateStr = event.date ? esc(moment(event.date).format("YYYY-MM-DD HH:mm")) : '';
+  const dateStr = event.date ? esc(moment(event.date).format("YYYY/MM/DD HH:mm")) : '';
   const loc = esc(event.location || '');
   const price = parseFloat(event.price || 0);
   const priceStr = price > 0 ? `${price.toFixed(2)} ECO` : '';

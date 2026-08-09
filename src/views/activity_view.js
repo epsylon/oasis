@@ -2,7 +2,7 @@ const { div, h2, p, section, button, form, a, input, img, textarea, br, span, vi
 const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 
-const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent','transfer']);
+const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent']);
 const OPINION_ROUTES = {
   feed:        (id) => `/feed/opinions/${encodeURIComponent(id)}`,
   bookmark:    (id) => `/bookmarks/opinions/${encodeURIComponent(id)}`,
@@ -11,11 +11,11 @@ const OPINION_ROUTES = {
   torrent:     (id) => `/torrents/opinions/${encodeURIComponent(id)}`,
   video:       (id) => `/videos/opinions/${encodeURIComponent(id)}`,
   document:    (id) => `/documents/opinions/${encodeURIComponent(id)}`,
-  votes:       (id) => `/votes/opinions/${encodeURIComponent(id)}`,
-  transfer:    (id) => `/transfers/opinions/${encodeURIComponent(id)}`
+  votes:       (id) => `/votes/opinions/${encodeURIComponent(id)}`
 };
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require('../backend/renderUrl');
+const { letterOf } = require('./polls_view');
 const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
@@ -228,7 +228,14 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
 }
 
 exports.renderActionCards = renderActionCards;
-function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
+const SPREADABLE_TYPES = new Set([
+  'post', 'audio', 'video', 'image', 'document', 'torrent', 'bookmark',
+  'event', 'calendar', 'task', 'votes', 'vote', 'market', 'shop', 'shopProduct',
+  'project', 'transfer', 'housing', 'job', 'report', 'industry', 'industryBuild', 'industryBlueprint',
+  'chat', 'chatMessage', 'pad', 'padEntry', 'forum', 'map', 'poll', 'blog'
+]);
+
+function renderActionCards(actions, userId, allActions, spreadMap = new Map(), extras = {}) {
   const all = Array.isArray(allActions) ? allActions : actions;
   const byIdAll = new Map();
   for (const a0 of all) {
@@ -343,7 +350,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
     } else if (type === 'shopProduct') {
       headerText = `[SHOP · PRODUCT]`;
     } else if (type === 'chat') {
-      headerText = `[CHAT \u00b7 NEW]`;
+      headerText = `[CHAT \u00b7 ${String(i18n.chatThreadsLabel).toUpperCase()}]`;
     } else if (type === 'pad') {
       headerText = `[PAD · ${String(i18n.padNew || 'NEW').toUpperCase()}]`;
     } else if (type === 'ubiClaim') {
@@ -551,29 +558,19 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
     }
 
     if (type === 'tribe') {
-      const { title, image, description, location, tags, inviteMode, isAnonymous } = content;
+      const { title, image, description, isAnonymous } = content;
       if (isAnonymous === true) { skip = true; }
-      const validTags = Array.isArray(tags) ? tags : [];
       cardBody.push(
         div({ class: 'card-section tribe' },
           h2({ class: 'tribe-title' },
             a({ href: `/tribe/${encodeURIComponent(action.id)}`, class: "user-link" }, title)
           ),
-           div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
-            location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeLocationLabel.toUpperCase()) + ':'), span({ class: 'card-value' }, ...renderUrl(location))) : "",
-            typeof isAnonymous === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel+ ':'), span({ class: 'card-value' }, isAnonymous ? i18n.tribePrivate : i18n.tribePublic)) : "",
-            inviteMode ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.tribeModeLabel) + ':'), span({ class: 'card-value' }, inviteMode.toUpperCase())) : ""
-         ),
           image
             ? (/^(\/|https?:)/.test(String(image))
                 ? img({ src: image, class: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
-          p({ class: 'tribe-description' }, ...renderUrl(description || '')),
-          validTags.length
-            ? div({ class: 'card-tags' }, validTags.map(tag =>
-              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
-            : ""
+          p({ class: 'tribe-description' }, ...renderUrl(description || ''))
         )
       );
     }
@@ -745,7 +742,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
     }
 
     if (type === 'event') {
-      const { title, description, date, location, price, attendees, organizer, isPublic } = content;
+      const { title, description, date, location, price, attendees, isPublic } = content;
       cardBody.push(
         div({ class: 'card-section event' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
@@ -754,7 +751,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
           typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
           price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
           br(),
-          organizer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.organizer || 'Organizer') + ': '), userLink(organizer)) : "",
           Array.isArray(attendees) ? h2({ class: 'card-label' }, (i18n.attendees || 'Attendees') + ': ' + attendees.length) : ""
         )
       );
@@ -838,9 +834,9 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
               (url) =>
                 `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
             );
-       bodyNode = div({ class: 'post-text', style: 'max-height:180px;overflow:hidden;', innerHTML: sanitizeHtml(linkified) });
+       bodyNode = div({ class: 'post-text post-text-clamped', innerHTML: sanitizeHtml(linkified) });
       } else {
-        bodyNode = p({ class: 'post-text post-text-pre', style: 'max-height:180px;overflow:hidden;' }, ...renderUrlPreserveNewlines(displayText));
+        bodyNode = p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderUrlPreserveNewlines(displayText));
       }
       const threadId = getThreadIdFromPost(action);
       const replyToId = getReplyToIdFromPost(action, byIdAll);
@@ -855,18 +851,18 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         div({ class: 'card-section post' },
           isReply
             ? div(
-                { class: 'reply-context', style: 'border-left:3px solid #666;padding-left:10px;margin-bottom:8px;opacity:0.85;' },
-                span({ style: 'font-size:0.85em;' },
+                { class: 'reply-context' },
+                span({ class: 'reply-context-label' },
                   a({ href: ctxHref, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
                   parentAuthor ? span(' ', userLink(parentAuthor, parentName)) : ''
                 ),
-                parentText ? p({ class: 'post-text reply-context-text post-text-pre', style: 'font-size:0.85em;max-height:80px;overflow:hidden;margin-top:4px;' }, ...renderUrlPreserveNewlines(parentText)) : ''
+                parentText ? p({ class: 'post-text reply-context-text post-text-pre' }, ...renderUrlPreserveNewlines(parentText)) : ''
               )
             : '',
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
           bodyNode,
           isTruncated && threadId
-            ? div({ style: 'margin-top:6px;' },
+            ? div({ class: 'card-section-action' },
                 a({ href: `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(action.id || threadId)}`, class: 'filter-btn' }, i18n.keepReading || 'Keep reading...')
               )
             : ''
@@ -893,12 +889,16 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
                         span({ class: 'pm-exposition-text' }, `${String(i18n.typePost || 'POST').toUpperCase()} · THREAD`)
                     )
                 ),
-                renderContentActions(threadId, href)
+                renderContentActions(threadId, href, {
+                  author: action.author,
+                  spread: spreadMap.get(threadId) || null,
+                  ...favOptsFor('post', threadId, extras)
+                })
             ),
             div({ class: 'card-body' },
 		root && root.text
 		    ? div({ class: 'card-section' },
-			p({ class: 'post-text', style: 'white-space:pre-wrap;' }, ...renderUrlPreserveNewlines(root.text))
+			p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(root.text))
 		    )
 		    : '',
 		div({ class: 'card-section' },
@@ -906,7 +906,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
 		    const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
 		    return div({ class: 'thread-reply-item' },
 			div({ class: 'thread-reply' },
-			    r.text ? p({ class: 'post-text', style: 'white-space:pre-wrap;' }, ...renderUrlPreserveNewlines(r.text)) : ''
+			    r.text ? p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(r.text)) : ''
 			),
 			div({ class: 'card-footer thread-reply-footer' },
 			    span({ class: 'date-link' }, rDate),
@@ -937,30 +937,46 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
             div({ class: 'card-header activity-card-header' },
                 div({ class: 'card-chips-row' },
                     span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                        span({ class: 'pm-exposition-text' }, `${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD`)
+                        span({ class: 'pm-exposition-text' }, `${String(i18n.typeChat || 'CHAT').toUpperCase()} \u00b7 ${String(i18n.chatThreadsLabel).toUpperCase()}`)
                     )
                 ),
-                renderContentActions(chatRoot, href)
+                renderContentActions(chatRoot, href, {
+                  author: action.author,
+                  reportTitle: chatTitle,
+                  spread: spreadMap.get(chatRoot) || null,
+                  ...favOptsFor('chat', chatRoot, extras)
+                })
             ),
             div({ class: 'card-body' },
                 div({ class: 'card-section chat' },
-                    div({ class: 'card-field' }, span({ class: 'card-value' }, a({ href, class: 'user-link' }, chatTitle))),
-                    chatDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, chatDesc)) : ''
+                    div({ class: 'card-field' }, a({ href, class: 'card-value user-link' }, chatTitle)),
+                    chatDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, chatDesc)) : '',
+                    div({ class: 'card-field chat-thread-meta' },
+                        span({ class: 'card-label' }, `${i18n.chatParticipants}: `),
+                        span({ class: 'card-value' }, String(c.members || 0)),
+                        span({ class: 'card-label' }, ` · ${i18n.chatMessagesLabel}: `),
+                        span({ class: 'card-value' }, String(c.messageCount || show.length))
+                    )
                 ),
-                div({ class: 'card-section' },
-                    show.map(r => {
-                        const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
-                        return div({ class: 'thread-reply-item' },
-                            div({ class: 'thread-reply' },
-                                r.text ? p({ class: 'post-text', style: 'white-space:pre-wrap;' }, ...renderUrlPreserveNewlines(r.text)) : ''
-                            ),
-                            div({ class: 'card-footer thread-reply-footer' },
-                                span({ class: 'date-link' }, rDate),
-                                userLink(r.author, action.authorNames && action.authorNames[r.author])
-                            )
-                        );
-                    })
-                )
+                show.length
+                    ? details({ class: 'chat-thread-details' },
+                        summary({ class: 'comments-summary chat-thread-summary' }, i18n.keepReading || 'Keep reading...'),
+                        div({ class: 'card-section' },
+                            show.map(r => {
+                                const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
+                                return div({ class: 'thread-reply-item' },
+                                    div({ class: 'thread-reply' },
+                                        r.text ? p({ class: 'post-text thread-reply-text' }, ...renderUrlPreserveNewlines(r.text)) : ''
+                                    ),
+                                    div({ class: 'card-footer thread-reply-footer' },
+                                        span({ class: 'date-link' }, rDate),
+                                        userLink(r.author, action.authorNames && action.authorNames[r.author])
+                                    )
+                                );
+                            })
+                        )
+                      )
+                    : null
             ),
             p({ class: 'card-footer' },
                 span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
@@ -976,9 +992,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         const linkText = (title && String(title).trim()) ? title : '';
         cardBody.push(
           div({ class: 'card-section forum' },
-            div({ class: 'card-field', style: "font-size:1.12em; margin-bottom:5px;" },
-              span({ class: 'card-label', style: "font-weight:800;color:#ff9800;" }, i18n.title + ': '),
-              a({ href: `/forum/${encodeURIComponent(linkKey)}`, style: "font-weight:800;color:#4fc3f7;" }, linkText)
+            div({ class: 'card-field' },
+              linkKey
+                ? a({ href: `/forum/${encodeURIComponent(linkKey)}`, class: 'card-value user-link' }, linkText || linkKey)
+                : span({ class: 'card-value' }, linkText)
             )
           )
         );
@@ -993,15 +1010,15 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         cardBody.push(
           div({ class: 'card-section forum' },
             div(
-              { class: 'reply-context', style: 'border-left:3px solid #666;padding-left:10px;margin-bottom:8px;opacity:0.85;' },
-              span({ style: 'font-size:0.85em;' },
+              { class: 'reply-context' },
+              span({ class: 'reply-context-meta' },
                 a({ href: `/forum/${encodeURIComponent(hrefKey)}`, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
                 parentAuthor ? span(' ', userLink(parentAuthor, parentName)) : ''
               ),
-              parentTitle ? p({ class: 'post-text reply-context-text', style: 'font-size:0.85em;max-height:60px;overflow:hidden;margin-top:4px;font-weight:bold;color:#4fc3f7;' }, parentTitle) : ''
+              parentTitle ? p({ class: 'post-text reply-context-text' }, parentTitle) : ''
             ),
-            div({ class: 'card-field', style: 'margin-bottom:12px;' },
-              p({ style: "margin:0 0 8px 0; word-break:break-all;" }, ...renderUrl(text))
+            div({ class: 'card-field forum-reply-body' },
+              p({ class: 'forum-reply-text' }, ...renderUrl(text))
             )
           )
         );
@@ -1044,8 +1061,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       spreadTitle ? h2({ class: 'post-title activity-spread-title' }, spreadTitle) : '',
       spreadContentWarning ? h2({ class: 'content-warning' }, spreadContentWarning) : '',
       spreadExcerpt
-        ? div({ class: 'post-text activity-spread-text post-text-pre', style: 'max-height:200px;overflow:hidden;' }, ...renderUrlPreserveNewlines(spreadExcerpt))
-        : div({ class: 'post-text activity-spread-text', style: 'opacity:0.6;font-style:italic;' }, i18n.spreadContentUnavailable || 'Content not yet available (pending replication)'),
+        ? div({ class: 'post-text activity-spread-text post-text-pre activity-spread-clamped' }, ...renderUrlPreserveNewlines(spreadExcerpt))
+        : div({ class: 'post-text activity-spread-text activity-spread-missing' }, i18n.spreadContentUnavailable || 'Content not yet available (pending replication)'),
       spreadOriginalAuthor
         ? div({ class: 'card-field' },
             span({ class: 'card-label' }, (i18n.spreadBy || 'By') + ': '),
@@ -1059,7 +1076,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
           )
         : '',
       link
-        ? div({ style: 'margin-top:6px;' },
+        ? div({ class: 'card-section-action' },
             a({ href: `/thread/${encodeURIComponent(link)}#${encodeURIComponent(link)}`, class: 'filter-btn' }, i18n.viewDetails || 'View details')
           )
         : ''
@@ -1205,7 +1222,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
           h2({ class: 'tribe-title' },
             a({ href: `/industry/${encodeURIComponent(facKey)}`, class: "user-link" }, name || (i18n.industryTitle || 'Industry'))
           ),
-          div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
+          div({ class: 'card-field-row' },
             sector ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industrySector || 'Sector').toUpperCase() + ':'), span({ class: 'card-value' }, String(sector).toUpperCase())) : "",
             status ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryStatusLabel || 'Status').toUpperCase() + ':'), span({ class: 'card-value' }, statusValue)) : "",
             membershipPolicy ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryMembershipPolicy || 'Membership policy').toUpperCase() + ':'), span({ class: 'card-value' }, policyValue)) : ""
@@ -1233,7 +1250,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
           h2({ class: 'tribe-title' },
             a({ href: `/industry/build/${encodeURIComponent(buildKey)}`, class: "user-link" }, title || (i18n.industryBuild || 'Build'))
           ),
-          (buildStatus || startDate || endDate) ? div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
+          (buildStatus || startDate || endDate) ? div({ class: 'card-field-row' },
             buildStatus ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryStatusLabel || 'Status').toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['industryBuildStatus_' + buildStatus] || buildStatus).toUpperCase())) : "",
             startDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildStart || 'Start date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(startDate).format('YYYY-MM-DD'))) : "",
             endDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildEnd || 'End date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(endDate).format('YYYY-MM-DD'))) : "",
@@ -1258,7 +1275,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
               ? a({ href: `/industry/${encodeURIComponent(facility)}`, class: "user-link" }, name || (i18n.industryBlueprint || 'Blueprint'))
               : (name || (i18n.industryBlueprint || 'Blueprint'))
           ),
-          div({ style: 'display:flex; gap:.6em; flex-wrap:wrap;' },
+          div({ class: 'card-field-row' },
             outKind ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryOutputKind || 'Product type').toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['industryKind_' + outKind] || outKind).toUpperCase())) : "",
             laborHours ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryLaborHours || 'Labor hours').toUpperCase() + ':'), span({ class: 'card-value' }, String(laborHours))) : "",
             estTotal != null ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryEstTotal || 'Estimated price').toUpperCase() + ':'), span({ class: 'card-value' }, `${Number(estTotal).toFixed(2)} ECO`)) : ""
@@ -1290,10 +1307,12 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       const chatImageNode = renderMediaBlob(image);
       cardBody.push(
         div({ class: 'card-section chat' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, 'Chat:'), span({ class: 'card-value' }, chatKey ? a({ href: `/chats/${encodeURIComponent(chatKey)}`, class: 'user-link' }, title || chatKey) : (title || ''))),
-          displayDesc ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatDescription || 'Description') + ':'), span({ class: 'card-value' }, displayDesc)) : '',
-          category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, category)) : '',
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatStatus || 'Status') + ':'), span({ class: 'card-value' }, status)) : ''
+          div({ class: 'card-field' },
+            chatKey
+              ? a({ href: `/chats/${encodeURIComponent(chatKey)}`, class: 'card-value user-link' }, title || chatKey)
+              : span({ class: 'card-value' }, title || '')),
+          displayDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, displayDesc)) : '',
+          category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, category)) : ''
         )
       );
     }
@@ -1303,7 +1322,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       const padTitle = content.title || action.title || '';
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padTitle || 'Pad') + ':'), span({ class: 'card-value' }, padKey ? a({ href: `/pads/${encodeURIComponent(padKey)}`, class: 'user-link' }, padTitle || padKey) : '')),
+          div({ class: 'card-field' }, padKey ? a({ href: `/pads/${encodeURIComponent(padKey)}`, class: 'card-value user-link' }, padTitle || padKey) : span({ class: 'card-value' }, padTitle || '')),
           content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padDeadlineLabel || 'Deadline') + ':'), span({ class: 'card-value' }, content.deadline)) : ''
         )
       );
@@ -1314,8 +1333,41 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       const calTitle = content.title || action.title || '';
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.calendarTitle || 'Calendar') + ':'), span({ class: 'card-value' }, calKey ? a({ href: `/calendars/${encodeURIComponent(calKey)}`, class: 'user-link' }, calTitle || calKey) : '')),
-          content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.calendarStatusLabel || 'Status') + ':'), span({ class: 'card-value' }, content.status)) : ''
+          div({ class: 'card-field' }, calKey ? a({ href: `/calendars/${encodeURIComponent(calKey)}`, class: 'card-value user-link' }, calTitle || calKey) : span({ class: 'card-value' }, calTitle || ''))
+        )
+      );
+    }
+
+    if (type === 'poll') {
+      const options = Array.isArray(content.options) ? content.options : [];
+      const counts = (action.pollCounts && typeof action.pollCounts === 'object') ? action.pollCounts : {};
+      const voters = Number(action.pollVoters) || 0;
+      const pctOf = (opt) => (voters > 0 ? Math.round(((counts[opt] || 0) / voters) * 100) : 0);
+      const step = (opt) => Math.round(pctOf(opt) / 5) * 5;
+      cardBody.push(
+        div({ class: 'card-section poll' },
+          div({ class: 'card-field' },
+            span({ class: 'card-value' }, content.question || '')
+          ),
+          options.length
+            ? table({ class: 'poll-results' },
+                ...options.map((opt, i) =>
+                  tr(
+                    td({ class: 'poll-result-option' }, `${letterOf(i)})`),
+                    td({ class: 'poll-result-bar' },
+                      div({ class: 'poll-bar' },
+                        div({ class: `poll-bar-fill poll-bar-fill-${step(opt)} poll-hue-${i % 8}` })
+                      )
+                    ),
+                    td({ class: 'poll-result-count' }, `${counts[opt] || 0} (${pctOf(opt)}%)`)
+                  )
+                )
+              )
+            : null,
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, `${i18n.pollVoters}: `),
+            span({ class: 'card-value' }, String(voters))
+          )
         )
       );
     }
@@ -1587,7 +1639,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
     }
 
     if (type === 'parliamentTerm') {
-      const { method, powerType, powerId, powerTitle, winnerVotes, totalVotes, startAt, endAt } = content;
+      const { method, powerType, powerId, powerTitle, startAt, endAt } = content;
       const powerTypeNorm = String(powerType || '').toLowerCase();
       const winnerLink =
         powerTypeNorm === 'tribe'
@@ -1596,17 +1648,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
             ? a({ href: `/parliament?filter=government`, class: 'user-link' }, (i18n.parliamentAnarchy || 'ANARCHY'))
             : userLink(powerId, powerTitle);
 
-      const methodUpper = String(
-        i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
-      ).toUpperCase();
-
       cardBody.push(
         div({ class: 'card-section parliament' },
           startAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsStart.toUpperCase() || 'Elections start') + ':'), span({ class: 'card-value' }, new Date(startAt).toLocaleString())) : '',
           endAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsEnd.toUpperCase() || 'Elections end') + ':'), span({ class: 'card-value' }, new Date(endAt).toLocaleString())) : '',
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentCurrentLeader.toUpperCase() || 'Winning candidature') + ':'), span({ class: 'card-value' }, winnerLink)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod.toUpperCase() || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesReceived.toUpperCase() || 'Votes received') + ':'), span({ class: 'card-value' }, `${Number(winnerVotes || 0)} (${Number(totalVotes || 0)})`))
+          div({ class: 'card-field' }, span({ class: 'card-value' }, winnerLink))
         )
       );
     }
@@ -1621,7 +1667,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       cardBody.push(
         div({ class: 'card-section parliament' },
           title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
-          description ? p({ style: 'margin:.4rem 0' }, description) : '',
+          description ? p({ class: 'card-section-text' }, description) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
           createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, new Date(createdAt).toLocaleString())) : '',
           voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
@@ -1639,7 +1685,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       cardBody.push(
         div({ class: 'card-section parliament' },
           title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
-          reasons ? p({ style: 'margin:.4rem 0' }, reasons) : '',
+          reasons ? p({ class: 'card-section-text' }, reasons) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
           createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, new Date(createdAt).toLocaleString())) : '',
           voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
@@ -1660,7 +1706,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       cardBody.push(
         div({ class: 'card-section parliament' },
           question ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawQuestion || 'Question') + ':'), span({ class: 'card-value' }, question)) : '',
-          description ? p({ style: 'margin:.4rem 0' }, description) : '',
+          description ? p({ class: 'card-section-text' }, description) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
           proposer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawProposer || 'Proposer') + ':'), span({ class: 'card-value' }, userLink(proposer))) : '',
           enactedAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawEnacted || 'Enacted at') + ':'), span({ class: 'card-value' }, new Date(enactedAt).toLocaleString())) : '',
@@ -1722,7 +1768,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
       return null;
     }
 
-    const detailHref = (type !== 'feed' && type !== 'aiExchange' && type !== 'bankWallet')
+    const detailHref = (type !== 'aiExchange' && type !== 'bankWallet')
       ? (isParliamentTarget
           ? `/parliament?filter=${encodeURIComponent(parliamentFilter)}`
           : isCourtsTarget
@@ -1738,7 +1784,12 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
             span({ class: 'pm-exposition-text' }, String(type || '').toUpperCase())
           )
         ),
-        renderContentActions(msgId, detailHref)
+        renderContentActions(msgId, detailHref, {
+          author: action.author,
+          reportTitle: (content && (content.title || content.question || content.concept || content.name)) || '',
+          spread: SPREADABLE_TYPES.has(type) ? (spreadMap.get(action.id) || null) : undefined,
+          ...favOptsFor(type, msgId, extras)
+        })
       ),
       ...cardBody,
       (() => {
@@ -1748,26 +1799,17 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
         const ops = (action.value?.content?.opinions) || (action.content?.opinions) || {};
         const opsTotal = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
         return details({ class: 'opinions-voting-collapse' },
-          summary({ class: 'opinions-summary' }, `${i18n.opinionsTitle || 'Opinions'} (${opsTotal})`),
+          summary({ class: 'opinions-summary' },
+            span({ class: 'opinions-summary-icon' }, 'ꔍ'),
+            span({ class: 'opinions-summary-count' }, `(${opsTotal})`)),
           div({ class: 'voting-buttons' },
             opinionCategories.map(cat =>
               form({ method: 'POST', action: `${routeFn(action.id)}/${cat}` },
-                button({ class: 'vote-btn' }, `${i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat} [${ops[cat] || 0}]`)
+                button({ class: 'vote-btn' }, `${String(i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat).toUpperCase()} [${ops[cat] || 0}]`)
               )
             )
           )
         );
-      })(),
-      (() => {
-        const SPREADABLE = new Set([
-          'post','audio','video','image','document','torrent','bookmark',
-          'event','calendar','task','votes','vote','market','shop','shopProduct',
-          'project','transfer','housing','job','report','industry','industryBuild','industryBlueprint',
-          'chat','chatMessage','pad','padEntry','forum','map'
-        ]);
-        if (!SPREADABLE.has(type)) return null;
-        const btn = renderSpreadButton(action.id, spreadMap.get(action.id));
-        return btn ? div({ class: 'card-spread-left' }, btn) : null;
       })(),
       (() => {
         const footerAuthorId = action.author || (content && content.proposer) || '';
@@ -1785,6 +1827,26 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map()) {
   }
   return filteredCards;
 }
+
+const FAV_KIND_BY_TYPE = {
+  image: 'images', audio: 'audios', video: 'videos', document: 'documents',
+  bookmark: 'bookmarks', torrent: 'torrents', event: 'events', task: 'tasks',
+  report: 'reports', votes: 'votes', poll: 'polls', market: 'market',
+  housing: 'housing', job: 'jobs', project: 'projects', shop: 'shops',
+  chat: 'chats', chatThread: 'chats', pad: 'pads', calendar: 'calendars',
+  map: 'maps', forum: 'forum', transfer: 'transfers', post: 'blogs'
+};
+
+const favOptsFor = (type, id, extras = {}) => {
+  const favKind = FAV_KIND_BY_TYPE[type];
+  if (!favKind) return {};
+  const index = extras.favIndex instanceof Map ? extras.favIndex : null;
+  return {
+    favKind,
+    isFavorite: index ? index.get(String(id)) === favKind : false,
+    returnTo: extras.returnTo || '/activity'
+  };
+};
 
 function getViewDetailsAction(type, action) {
   const id = encodeURIComponent(safeMsgId(action.tipId || action.id || action.key || action));
@@ -1807,11 +1869,18 @@ function getViewDetailsAction(type, action) {
       const link = normalizeSpreadLink(action.content?.spreadTargetId || action.content?.vote?.link || '');
       return link ? `/thread/${encodeURIComponent(link)}#${encodeURIComponent(link)}` : `/activity`;
     }
-    case 'post':       return `/thread/${id}#${id}`;
+    case 'post': {
+      const root = action.content && action.content.root;
+      return root
+        ? `/blogs/${encodeURIComponent(root)}#${id}`
+        : `/blogs/${id}`;
+    }
+    case 'feed':       return `/feed/${id}`;
     case 'vote':       return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
     case 'votes':      return `/votes/${id}`;
     case 'transfer':   return `/transfers/${id}`;
     case 'pixelia':    return `/pixelia`;
+    case 'poll':       return `/polls/${id}`;
     case 'larpHousePost': return action.content?.house ? `/larp/${encodeURIComponent(action.content.house)}` : `/activity`;
     case 'tribe':      return `/tribe/${id}`;
     case 'curriculum': return `/inhabitant/${encodeURIComponent(action.author)}`;
@@ -1851,15 +1920,18 @@ function getViewDetailsAction(type, action) {
   }
 }
 
+exports.getViewDetailsAction = getViewDetailsAction;
+
 exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const spreadMap = (extras && extras.spreadMap) || new Map();
   const title = filter === 'mine' ? i18n.yourActivity : i18n.globalActivity;
   const desc = i18n.activityDesc;
 
   const activityTypes = [
-    { type: 'recent',    label: i18n.typeRecent },
     { type: 'all',       label: i18n.allButton },
     { type: 'mine',      label: i18n.mineButton },
+    { type: 'recent',    label: i18n.typeRecent },
+    { type: 'top',       label: i18n.typeTop },
     { type: 'inhabitants', label: i18n.typeInhabitants },
     { type: 'tribe',     label: i18n.typeTribe },
     { type: 'larp',      label: i18n.typeLarp },
@@ -1884,7 +1956,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'job',       label: i18n.typeJob },
     { type: 'shop',      label: i18n.typeShop },
     { type: 'transfer',  label: i18n.typeTransfer },
-    { type: 'curriculum',label: i18n.typeCurriculum },
     { type: 'audio',     label: i18n.typeAudio },
     { type: 'bookmark',  label: i18n.typeBookmark },
     { type: 'document',  label: i18n.typeDocument },
@@ -1893,12 +1964,13 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'video',     label: i18n.typeVideo }
   ];
 
-  const FILTER_META = new Set(['recent', 'all', 'mine']);
+  const FILTER_META = new Set(['all', 'mine', 'recent']);
   const GROUP_SUBTYPES = {
     parliament: ['parliamentCandidature', 'parliamentTerm', 'parliamentProposal', 'parliamentRevocation', 'parliamentLaw'],
     courts:     ['courtsCase', 'courtsNomination', 'courtsNominationVote'],
     banking:    ['bankWallet', 'bankClaim', 'ubiClaim'],
     task:       ['task', 'taskAssignment'],
+    votes:      ['votes', 'poll'],
     shop:       ['shop', 'shopProduct'],
     larp:       ['larpHousePost'],
     inhabitants:['about'],
@@ -1943,7 +2015,12 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   } else if (filter === 'industry') {
     filteredActions = actions.filter(action => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(action.type) && action.type !== 'tombstone');
   } else {
-    filteredActions = actions.filter(action => (action.type === filter || filter === 'all' || (filter === 'shop' && action.type === 'shopProduct')) && action.type !== 'tombstone');
+    filteredActions = actions.filter(action =>
+      (action.type === filter
+        || filter === 'all'
+        || (filter === 'shop' && action.type === 'shopProduct')
+        || (filter === 'votes' && action.type === 'poll'))
+      && action.type !== 'tombstone');
   }
 
   const larpEarliest = new Map();
@@ -2041,14 +2118,23 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
         p(desc)
       ),
       div({ class: 'activity-filter-grid' },
-        ...[
-          activityTypes.slice(0, 3),
-          activityTypes.slice(3, 8),
-          activityTypes.slice(8, 13),
-          activityTypes.slice(13, 19),
-          activityTypes.slice(19, 26),
-          activityTypes.slice(26)
-        ].map(col =>
+        ...(() => {
+          const COLUMNS = [
+            ['all', 'mine', 'recent', 'top'],
+            ['inhabitants', 'tribe', 'larp', 'parliament', 'courts'],
+            ['votes', 'event', 'calendar', 'task', 'report'],
+            ['banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'],
+            ['post', 'feed', 'chat', 'pad', 'forum', 'map'],
+            ['audio', 'bookmark', 'document', 'image', 'torrent', 'video']
+          ];
+          const byType = new Map(activityTypes.map(t => [t.type, t]));
+          const placed = new Set(COLUMNS.flat());
+          const leftovers = activityTypes.filter(t => !placed.has(t.type));
+          return COLUMNS
+            .map(col => col.map(type => byType.get(type)).filter(Boolean))
+            .concat(leftovers.length ? [leftovers] : [])
+            .filter(col => col.length);
+        })().map(col =>
           div({ class: 'activity-filter-col' },
             col.map(({ type, label }) =>
               form({ method: 'GET', action: '/activity' },
@@ -2064,7 +2150,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
             sub.filters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'filter-btn' }, String(f).toUpperCase()))
           )
         : null,
-    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, actions, spreadMap))
+    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, actions, spreadMap, extras))
     )
   );
 

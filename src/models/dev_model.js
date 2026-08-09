@@ -109,12 +109,9 @@ const MODULE_ALIASES = {
   ai: { model: 'src/AI/ai_service.mjs', view: 'src/views/AI_view.js' },
   aiNav: { model: 'src/AI/routes_index.js', view: 'src/views/AI_view.js', paths: ['/ai/ask'] },
   docs: { paths: ['/documents'] },
-  latest: { model: 'src/models/main_models.js', view: 'src/views/main_views.js', paths: ['/public/latest'] },
-  popular: { model: 'src/models/main_models.js', view: 'src/views/main_views.js', paths: ['/public/popular'] },
-  topics: { model: 'src/models/main_models.js', view: 'src/views/main_views.js', paths: ['/public/latest/topics'] },
-  summaries: { model: 'src/models/main_models.js', view: 'src/views/main_views.js', paths: ['/public/latest/summaries'] },
-  threads: { model: 'src/models/main_models.js', view: 'src/views/main_views.js', paths: ['/public/latest/threads'] },
-  multiverse: { model: 'src/models/main_models.js', view: 'src/views/main_views.js', paths: ['/public/latest/extended'] },
+  blogs: { model: 'src/models/blog_model.js', view: 'src/views/blog_view.js', paths: ['/blogs'] },
+  polls: { model: 'src/models/polls_model.js', view: 'src/views/polls_view.js', paths: ['/polls'] },
+  data: { model: 'src/models/data_model.js', view: 'src/views/data_view.js', paths: ['/data'] },
   invites: { model: 'src/models/main_models.js', view: 'src/views/invites_view.js' },
   graphos: { model: 'src/models/main_models.js', view: 'src/views/graphos_view.js' }
 };

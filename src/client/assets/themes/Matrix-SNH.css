@@ -327,6 +327,8 @@ a.user-link:focus {
 .block-row--details .block-url:hover { background: #00FF00 !important; color: #000000 !important; }
 .btn-singleview { background: #000000 !important; color: #00FF00 !important; border: 1px solid #00FF00 !important; }
 .btn-singleview:hover { background: #00FF00 !important; color: #000000 !important; }
+.btn-spread-on, .content-actions .btn-pin-on { background: #00FF00 !important; color: #000000 !important; }
+.btn-spread-on:hover, .content-actions .btn-pin-on:hover { background: #66FF66 !important; color: #000000 !important; }
 .btn-back { background: #000000 !important; color: #00FF00 !important; border: 1px solid #00FF00 !important; }
 .btn-back:hover { background: #00FF00 !important; color: #000000 !important; }
 .block-info-table td, .pm-info-table td { border-color: #00FF00 !important; }

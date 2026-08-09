@@ -1,5 +1,7 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning } = require("./main_views");
+const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions } = require("./main_views");
+const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
 const { renderUrl } = require("../backend/renderUrl");
@@ -135,7 +137,6 @@ const renderTemplateDetails = (report) => {
       h2({ class: "report-template-title" }, i18n.reportsContentTemplateTitle),
       renderStackedTextField(i18n.reportsContentLocationLabel + ":", t.contentLocation),
       renderStackedTextField(i18n.reportsWhyInappropriateLabel + ":", t.whyInappropriate),
-      renderStackedTextField(i18n.reportsRequestedActionLabel + ":", t.requestedAction),
       renderStackedTextField(i18n.reportsEvidenceLinksLabel + ":", t.evidenceLinks)
     );
   }
@@ -144,73 +145,11 @@ const renderTemplateDetails = (report) => {
 };
 
 const renderReportCommentsSection = (reportId, comments = []) => {
-  const commentsCount = Array.isArray(comments) ? comments.length : 0;
-
-  return div(
-    { class: "vote-comments-section" },
-    div(
-      { class: "comments-count" },
-      span({ class: "card-label" }, i18n.voteCommentsLabel + ": "),
-      span({ class: "card-value" }, String(commentsCount))
-    ),
-    div(
-      { class: "comment-form-wrapper" },
-      h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
-      form(
-        {
-          method: "POST",
-          action: `/reports/${encodeURIComponent(reportId)}/comments`,
-          class: "comment-form",
-          enctype: "multipart/form-data"
-        },
-        textarea({
-          id: "comment-text",
-          name: "text",
-          rows: 4,
-          class: "comment-textarea",
-          placeholder: i18n.voteNewCommentPlaceholder
-        }),
-        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
-        br(),
-        button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)
-      )
-    ),
-    (() => {
-      const visibleComments = (comments || []).filter(c => {
-        const t = c && c.value && c.value.content && c.value.content.text;
-        return t && String(t).trim();
-      });
-      return visibleComments.length
-      ? div(
-          { class: "comments-list" },
-          visibleComments.map((c) => {
-            const author = c.value && c.value.author ? c.value.author : "";
-            const ts = c.value && c.value.timestamp ? c.value.timestamp : c.timestamp;
-            const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
-            const relDate = ts ? moment(ts).fromNow() : "";
-
-            const content = c.value && c.value.content ? c.value.content : {};
-            const root = content.fork || content.root || "";
-            const text = content.text || "";
-
-            return div(
-              { class: "votations-comment-card" },
-              span(
-                { class: "created-at" },
-                span(i18n.createdBy),
-                author ? userLink(author) : span("(unknown)"),
-                absDate ? span(" | ") : "",
-                absDate ? span({ class: "votations-comment-date" }, absDate) : "",
-                relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
-                relDate && root ? a({ href: `/thread/${encodeURIComponent(root)}#${encodeURIComponent(c.key)}` }, relDate) : ""
-              ),
-              p({ class: "votations-comment-text" }, ...renderUrl(text))
-            );
-          })
-        )
-      : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet);
-    })()
-  );
+  return renderSharedCommentsSection({
+    action: `/reports/${encodeURIComponent(reportId)}/comments`,
+    comments: comments,
+    returnTo: null
+  });
 };
 
 const renderTemplateForCategory = (category, templateData = {}) => {
@@ -257,26 +196,6 @@ const renderTemplateForCategory = (category, templateData = {}) => {
     );
   }
 
-  if (cat === "ABUSE") {
-    return div(
-      { class: "report-template-block" },
-      h2({ class: "report-template-title" }, i18n.reportsAbuseTemplateTitle),
-      label(i18n.reportsWhatHappenedLabel),
-      br(),
-      textarea({ name: "whatHappened", rows: "4", placeholder: i18n.reportsWhatHappenedPlaceholder }, tval("whatHappened")),
-      br(),
-      br(),
-      label(i18n.reportsReportedUserLabel),
-      br(),
-      textarea({ name: "reportedUser", rows: "2", placeholder: i18n.reportsReportedUserPlaceholder }, tval("reportedUser")),
-      br(),
-      br(),
-      label(i18n.reportsEvidenceLinksLabel),
-      br(),
-      textarea({ name: "evidenceLinks", rows: "3", placeholder: i18n.reportsEvidenceLinksPlaceholder }, tval("evidenceLinks"))
-    );
-  }
-
   if (cat === "CONTENT") {
     return div(
       { class: "report-template-block" },
@@ -289,11 +208,6 @@ const renderTemplateForCategory = (category, templateData = {}) => {
       label(i18n.reportsWhyInappropriateLabel),
       br(),
       textarea({ name: "whyInappropriate", rows: "4", placeholder: i18n.reportsWhyInappropriatePlaceholder }, tval("whyInappropriate")),
-      br(),
-      br(),
-      label(i18n.reportsRequestedActionLabel),
-      br(),
-      textarea({ name: "requestedAction", rows: "3", placeholder: i18n.reportsRequestedActionPlaceholder }, tval("requestedAction")),
       br(),
       br(),
       label(i18n.reportsEvidenceLinksLabel),
@@ -377,6 +291,10 @@ const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => 
   ].filter(Boolean);
 
   return div({ class: "tribe-card report-card" },
+    div({ class: "card-header activity-card-header" },
+      span(),
+      renderContentActions(report.id, `/reports/${encodeURIComponent(report.id)}`, { spread: spreadInfo || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false })
+    ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
@@ -386,13 +304,6 @@ const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => 
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
-      ),
-      div({ class: "card-spread-centered" }, renderSpreadButton(report.id, spreadInfo)),
-      div({ class: "card-visit-btn-centered" },
-        form({ method: "GET", action: `/reports/${encodeURIComponent(report.id)}` },
-          input({ type: "hidden", name: "filter", value: currentFilter }),
-          button({ type: "submit", class: "filter-btn" }, i18n.viewReport || "View Report")
-        )
       )
     )
   );
@@ -433,18 +344,20 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
   const reportToEdit = filter === "edit"
     ? (Array.isArray(reports) ? reports.find((r) => r.id === reportId) : null)
     : null;
+  const formData = reportToEdit || params.draft || {};
 
   const btnClass = (v) => (filter === v ? "filter-btn active" : "filter-btn");
 
-  const selectedCategory = normU(
+  const rawCategory = normU(
     filter === "create"
       ? (createCategory || "FEATURES")
       : (reportToEdit?.category || "FEATURES")
   );
+  const selectedCategory = ["FEATURES", "BUGS", "CONTENT"].includes(rawCategory) ? rawCategory : "FEATURES";
 
   const selectedTemplate = reportToEdit?.template && typeof reportToEdit.template === "object" ? reportToEdit.template : {};
   const applyLabel = i18n.apply || "Apply";
-  const sev = String(reportToEdit?.severity || "low");
+  const sev = String(formData.severity || "low");
   const hiddenDescription = String(reportToEdit?.description || "");
 
   return template(
@@ -458,21 +371,40 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
       div(
         { class: "filters" },
         form(
-          { method: "GET", action: "/reports" },
-          button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, i18n.reportsFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, i18n.reportsFilterMine),
-          button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, i18n.reportsFilterFeatures),
-          button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, i18n.reportsFilterBugs),
-          button({ type: "submit", name: "filter", value: "abuse", class: btnClass("abuse") }, i18n.reportsFilterAbuse),
-          button({ type: "submit", name: "filter", value: "content", class: btnClass("content") }, i18n.reportsFilterContent),
-          button({ type: "submit", name: "filter", value: "confirmed", class: btnClass("confirmed") }, i18n.reportsFilterConfirmed),
-          button({ type: "submit", name: "filter", value: "open", class: btnClass("open") }, i18n.reportsFilterOpen),
-          button({ type: "submit", name: "filter", value: "under_review", class: btnClass("under_review") }, i18n.reportsFilterUnderReview),
-          button({ type: "submit", name: "filter", value: "resolved", class: btnClass("resolved") }, i18n.reportsFilterResolved),
-          button({ type: "submit", name: "filter", value: "invalid", class: btnClass("invalid") }, i18n.reportsFilterInvalid),
+          { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
+          button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: btnClass("recent") }, String(i18n.reportsFilterRecent).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "top", class: btnClass("top") }, String(i18n.reportsFilterTop).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, String(i18n.reportsFilterFeatures).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, String(i18n.reportsFilterBugs).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "content", class: btnClass("content") }, String(i18n.reportsFilterContent).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "confirmed", class: btnClass("confirmed") }, String(i18n.reportsFilterConfirmed).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.reportsCreateButton)
+        ),
+        form(
+          { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters reports-subfilters" },
+          button({ type: "submit", name: "filter", value: "open", class: btnClass("open") }, String(i18n.reportsFilterOpen).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "under_review", class: btnClass("under_review") }, String(i18n.reportsFilterUnderReview).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "resolved", class: btnClass("resolved") }, String(i18n.reportsFilterResolved).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "invalid", class: btnClass("invalid") }, String(i18n.reportsFilterInvalid).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sev_low", class: btnClass("sev_low") }, String(i18n.reportsSeverityLow).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sev_medium", class: btnClass("sev_medium") }, String(i18n.reportsSeverityMedium).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sev_high", class: btnClass("sev_high") }, String(i18n.reportsSeverityHigh).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sev_critical", class: btnClass("sev_critical") }, String(i18n.reportsSeverityCritical).toUpperCase())
         )
-      )
+      ),
+      filter === "edit" || filter === "create"
+        ? null
+        : div({ class: "filters" },
+            form({ method: "GET", action: "/reports", class: "filter-box" },
+              input({ type: "hidden", name: "filter", value: filter }),
+              input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.reportsSearchPlaceholder, class: "filter-box__input" }),
+              div({ class: "filter-box__controls" },
+                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+              )
+            )
+          )
     ),
     section(
       filter === "edit" || filter === "create"
@@ -492,10 +424,9 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                     label(i18n.reportsCategory),
                     br(),
                     select(
-                      { name: "category" },
+                      { name: "category", class: "report-category-select" },
                       opt("FEATURES", selectedCategory === "FEATURES", i18n.reportsCategoryFeatures),
                       opt("BUGS", selectedCategory === "BUGS", i18n.reportsCategoryBugs),
-                      opt("ABUSE", selectedCategory === "ABUSE", i18n.reportsCategoryAbuse),
                       opt("CONTENT", selectedCategory === "CONTENT", i18n.reportsCategoryContent)
                     ),
                     br(),
@@ -509,6 +440,15 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                     { id: "report-create-form", action: "/reports/create", method: "POST", enctype: "multipart/form-data" },
                     input({ type: "hidden", name: "category", value: selectedCategory }),
                     input({ type: "hidden", name: "description", value: "" }),
+                    h2({ class: "report-template-main-title" }, i18n.reportsTemplateSectionTitle),
+                    renderTemplateForCategory(selectedCategory, params.draft || {}),
+                    ...renderGalleryFields(formData, false, 8),
+                    br(),
+                    label("Tags"),
+                    br(),
+                    input({ type: "text", name: "tags", value: Array.isArray(formData.tags) ? formData.tags.join(", ") : (formData.tags || "") }),
+                    br(),
+                    br(),
                     label(i18n.reportsSeverity),
                     br(),
                     select(
@@ -518,18 +458,6 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                       opt("medium", sev === "medium", i18n.reportsSeverityMedium),
                       opt("low", sev === "low", i18n.reportsSeverityLow)
                     ),
-                    br(),
-                    br(),
-                    h2({ class: "report-template-main-title" }, i18n.reportsTemplateSectionTitle),
-                    renderTemplateForCategory(selectedCategory, {}),
-                    label(i18n.reportsUploadFile),
-                    br(),
-                    input({ type: "file", name: "image" }),
-                    br(),
-                    br(),
-                    label("Tags"),
-                    br(),
-                    input({ type: "text", name: "tags", value: "" }),
                     br(),
                     br(),
                     button({ type: "submit", class: "create-button" }, i18n.reportsCreateButton)
@@ -550,9 +478,19 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                       { name: "category", required: true },
                       opt("FEATURES", selectedCategory === "FEATURES", i18n.reportsCategoryFeatures),
                       opt("BUGS", selectedCategory === "BUGS", i18n.reportsCategoryBugs),
-                      opt("ABUSE", selectedCategory === "ABUSE", i18n.reportsCategoryAbuse),
                       opt("CONTENT", selectedCategory === "CONTENT", i18n.reportsCategoryContent)
                     ),
+                    br(),
+                    br(),
+                    h2({ class: "report-template-main-title" }, i18n.reportsTemplateSectionTitle),
+                    renderTemplateForCategory(selectedCategory, selectedTemplate),
+                    br(),
+                    br(),
+                    ...renderGalleryFields(reportToEdit || {}, true, 8),
+                    br(),
+                    label("Tags"),
+                    br(),
+                    input({ type: "text", name: "tags", value: reportToEdit?.tags?.join(", ") || "" }),
                     br(),
                     br(),
                     label(i18n.reportsSeverity),
@@ -564,20 +502,6 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                       opt("medium", sev === "medium", i18n.reportsSeverityMedium),
                       opt("low", sev === "low", i18n.reportsSeverityLow)
                     ),
-                    br(),
-                    br(),
-                    h2({ class: "report-template-main-title" }, i18n.reportsTemplateSectionTitle),
-                    renderTemplateForCategory(selectedCategory, selectedTemplate),
-                    br(),
-                    br(),
-                    label(i18n.reportsUploadFile),
-                    br(),
-                    input({ type: "file", name: "image" }),
-                    br(),
-                    br(),
-                    label("Tags"),
-                    br(),
-                    input({ type: "text", name: "tags", value: reportToEdit?.tags?.join(", ") || "" }),
                     br(),
                     br(),
                     button({ type: "submit" }, i18n.reportsUpdateButton)
@@ -609,18 +533,15 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   const pm = renderPmButton(report.author);
   if (pm) sideActions.push(pm);
   sideActions.push(form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
-    button({ type: "submit", class: "filter-btn" }, i18n.reportsConfirmButton)
+    button({ type: "submit", class: "tribe-action-btn" }, i18n.reportsConfirmButton)
   ));
-  sideActions.push(a({ href: "/tasks?filter=create", target: "_blank" },
-    button({ type: "button", class: "filter-btn" }, i18n.reportsCreateTaskButton)
-  ));
+  const ownerActions = [];
   if (isAuthor) {
-    sideActions.push(renderReportStatusSetter(report));
-    sideActions.push(form({ method: "GET", action: `/reports/edit/${encodeURIComponent(report.id)}` },
-      button({ type: "submit", class: "update-btn" }, i18n.reportsUpdateButton)
+    ownerActions.push(form({ method: "GET", action: `/reports/edit/${encodeURIComponent(report.id)}` },
+      button({ type: "submit", class: "tribe-action-btn" }, i18n.reportsUpdateButton)
     ));
-    sideActions.push(form({ method: "POST", action: `/reports/delete/${encodeURIComponent(report.id)}` },
-      button({ type: "submit", class: "delete-btn" }, i18n.reportsDeleteButton)
+    ownerActions.push(form({ method: "POST", action: `/reports/delete/${encodeURIComponent(report.id)}` },
+      button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.reportsDeleteButton)
     ));
   }
 
@@ -641,53 +562,72 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   pushRow(i18n.reportsCategory, report.category);
 
   const reportSide = div({ class: "tribe-side" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(report.id, null, { spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false })
+    ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, report.title)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    div({ class: "card-spread-centered" }, renderSpreadButton(report.id, params.spreads)),
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
     ),
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    isAuthor
+      ? div({ class: "tribe-side-actions housing-status-row" },
+          span({ class: "card-label" }, `${i18n.reportsStatus}: `),
+          renderStateChip(normalizeStatus(report.status) === "RESOLVED" ? "mutuals" : "whole", "◆", String(report.status || "OPEN").toUpperCase()),
+          renderReportStatusSetter(report)
+        )
+      : null,
+    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
+    renderDocumentActions('reports', report.id, [
+      a({ href: "/tasks?filter=create", class: "filter-btn" }, i18n.reportsCreateTaskButton)
+    ])
   );
 
   const opinionsBar = renderOpinionsVoting('/reports/opinions', report.id, report.opinions, null, report.opinions_inhabitants);
 
   const reportMain = div({ class: "tribe-main" },
-    (details || report.image) ? div({ class: "job-section" },
-      details || null,
-      report.image ? renderMediaBlob(report.image, { class: "report-detail-image" }) : null
-    ) : null,
+    details ? div({ class: "job-section" }, details) : null,
+    renderPhotoGallery(report, 'report'),
     p({ class: "card-footer" },
       span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
       userLink(report.author)
     ),
-    opinionsBar,
-    renderReportCommentsSection(report.id, comments)
+    renderEngagement(report.id, opinionsBar, renderReportCommentsSection(report.id, comments))
   );
 
   return template(
     report.title,
     section(
+      div({ class: "tags-header" }, h2(i18n.reportsTitle), p(i18n.reportsDescription)),
       div(
         { class: "filters" },
         form(
-          { method: "GET", action: "/reports" },
-          button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, i18n.reportsFilterAll),
-          button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, i18n.reportsFilterMine),
-          button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, i18n.reportsFilterFeatures),
-          button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, i18n.reportsFilterBugs),
-          button({ type: "submit", name: "filter", value: "abuse", class: btnClass("abuse") }, i18n.reportsFilterAbuse),
-          button({ type: "submit", name: "filter", value: "content", class: btnClass("content") }, i18n.reportsFilterContent),
-          button({ type: "submit", name: "filter", value: "confirmed", class: btnClass("confirmed") }, i18n.reportsFilterConfirmed),
-          button({ type: "submit", name: "filter", value: "open", class: btnClass("open") }, i18n.reportsFilterOpen),
-          button({ type: "submit", name: "filter", value: "under_review", class: btnClass("under_review") }, i18n.reportsFilterUnderReview),
-          button({ type: "submit", name: "filter", value: "resolved", class: btnClass("resolved") }, i18n.reportsFilterResolved),
-          button({ type: "submit", name: "filter", value: "invalid", class: btnClass("invalid") }, i18n.reportsFilterInvalid),
+          { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
+          button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "recent", class: btnClass("recent") }, String(i18n.reportsFilterRecent).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "top", class: btnClass("top") }, String(i18n.reportsFilterTop).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, String(i18n.reportsFilterFeatures).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, String(i18n.reportsFilterBugs).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "content", class: btnClass("content") }, String(i18n.reportsFilterContent).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "confirmed", class: btnClass("confirmed") }, String(i18n.reportsFilterConfirmed).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.reportsCreateButton)
+        ),
+        form(
+          { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters reports-subfilters" },
+          button({ type: "submit", name: "filter", value: "open", class: btnClass("open") }, String(i18n.reportsFilterOpen).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "under_review", class: btnClass("under_review") }, String(i18n.reportsFilterUnderReview).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "resolved", class: btnClass("resolved") }, String(i18n.reportsFilterResolved).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "invalid", class: btnClass("invalid") }, String(i18n.reportsFilterInvalid).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sev_low", class: btnClass("sev_low") }, String(i18n.reportsSeverityLow).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sev_medium", class: btnClass("sev_medium") }, String(i18n.reportsSeverityMedium).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sev_high", class: btnClass("sev_high") }, String(i18n.reportsSeverityHigh).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "sev_critical", class: btnClass("sev_critical") }, String(i18n.reportsSeverityCritical).toUpperCase())
         )
       ),
       div({ class: "tribe-details" }, reportSide, reportMain)

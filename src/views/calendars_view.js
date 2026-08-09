@@ -1,5 +1,6 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions } = require("./main_views")
+const { renderMapLocationVisitLabel } = require("./maps_view")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -19,13 +20,6 @@ const renderNoteText = (text) => {
   if (last < text.length) result.push(text.slice(last))
   return result
 }
-
-const renderCalendarFavoriteToggle = (cal, returnTo) =>
-  form(
-    { method: "POST", action: cal.isFavorite ? `/calendars/favorites/remove/${encodeURIComponent(cal.rootId)}` : `/calendars/favorites/add/${encodeURIComponent(cal.rootId)}` },
-    returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-    button({ type: "submit", class: "tribe-action-btn" }, cal.isFavorite ? (i18n.calendarRemoveFavorite || "Remove Favorite") : (i18n.calendarAddFavorite || "Add Favorite"))
-  )
 
 const renderModeButtons = (currentFilter) =>
   div({ class: "tribe-mode-buttons" },
@@ -63,54 +57,53 @@ const renderCalendarCard = (cal, spreadInfo) => {
     renderLifespanChip(cal.lifetime, i18n)
   ].filter(Boolean)
   return div({ class: "tribe-card" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(cal.rootId, href, { spread: spreadInfo || null, author: cal.author, favKind: 'calendars', isFavorite: cal.isFavorite, reportTitle: cal.title })
+    ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, a({ href }, cal.title || "\u2014"))
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       cal.deadline
-        ? p({ class: "job-meta-line" }, `${i18n.calendarDeadlineLabel || "Deadline"}: ${moment(cal.deadline).format("YYYY-MM-DD HH:mm")}`)
+        ? p({ class: "job-meta-line" }, `${i18n.calendarDeadlineLabel || "Deadline"}: ${moment(cal.deadline).format("YYYY/MM/DD HH:mm")}`)
         : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${cal.participants.length}`)
-      ),
-      div({ class: "card-spread-centered" }, renderSpreadButton(cal.rootId, spreadInfo)),
-      div({ class: "card-visit-btn-centered" },
-        a({ href, class: "filter-btn" }, i18n.calendarVisitCalendar || "Visit Calendar")
       )
     )
   )
 }
 
-const renderIntervalBlock = () =>
-  div({ class: "calendar-interval-block" },
+const renderIntervalBlock = (bounds = {}, current = "", until = "") => {
+  const sel = (v) => (String(current || "") === v ? { selected: true } : {})
+  return div({ class: "calendar-interval-block" },
     span({ class: "calendar-interval-label" }, i18n.calendarIntervalLabel || "Interval"),
-    div({ class: "calendar-interval-row" },
-      input({ type: "hidden", name: "intervalWeekly", value: "0" }),
-      label({ class: "calendar-interval-option" },
-        input({ type: "checkbox", name: "intervalWeekly", value: "1" }),
-        " ", i18n.calendarIntervalWeekly || "Weekly"
-      ),
-      input({ type: "hidden", name: "intervalMonthly", value: "0" }),
-      label({ class: "calendar-interval-option" },
-        input({ type: "checkbox", name: "intervalMonthly", value: "1" }),
-        " ", i18n.calendarIntervalMonthly || "Monthly"
-      ),
-      input({ type: "hidden", name: "intervalYearly", value: "0" }),
-      label({ class: "calendar-interval-option" },
-        input({ type: "checkbox", name: "intervalYearly", value: "1" }),
-        " ", i18n.calendarIntervalYearly || "Yearly"
-      )
+    select({ name: "interval", class: "calendar-interval-select" },
+      option({ value: "", ...sel("") }, i18n.calendarIntervalNone),
+      option({ value: "weekly", ...sel("weekly") }, i18n.calendarIntervalWeekly || "Weekly"),
+      option({ value: "monthly", ...sel("monthly") }, i18n.calendarIntervalMonthly || "Monthly"),
+      option({ value: "yearly", ...sel("yearly") }, i18n.calendarIntervalYearly || "Yearly")
     ),
     span({ class: "calendar-interval-label calendar-interval-until" }, i18n.calendarIntervalUntil || "Until"),
-    input({ type: "datetime-local", name: "intervalDeadline" }),
+    input({
+      type: "datetime-local",
+      name: "intervalDeadline",
+      ...(until ? { value: until } : {}),
+      ...(bounds.min ? { min: bounds.min } : {}),
+      ...(bounds.max ? { max: bounds.max } : {})
+    }),
     br()
   )
+}
 
 const renderCreateForm = (calendarToEdit, params) => {
   const isEdit = !!calendarToEdit
   const tribeId = (params && params.tribeId) || ""
   const now = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm")
+  const deadlineMax = calendarToEdit && calendarToEdit.deadline
+    ? moment(calendarToEdit.deadline).format("YYYY-MM-DDTHH:mm")
+    : ""
   const action = isEdit ? `/calendars/update/${encodeURIComponent(calendarToEdit.rootId)}` : "/calendars/create"
   const sectionTitle = isEdit ? (i18n.calendarUpdateSectionTitle || "Update Calendar") : (i18n.calendarCreateSectionTitle || "Create New Calendar")
   return div({ class: "div-center audio-form" },
@@ -133,17 +126,21 @@ const renderCreateForm = (calendarToEdit, params) => {
       span(i18n.calendarTagsLabel || "Tags"), br(),
       input({ type: "text", name: "tags", placeholder: i18n.calendarTagsPlaceholder || "tag1, tag2...", value: calendarToEdit && Array.isArray(calendarToEdit.tags) ? calendarToEdit.tags.join(", ") : "" }),
       br(), br(),
+      span(i18n.mapLocationTitle || "Map Location"), br(),
+      input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: (calendarToEdit && calendarToEdit.mapUrl) || "" }),
+      br(), br(),
       !isEdit
         ? [
             span(i18n.calendarFirstDateLabel || "Date"), br(),
-            input({ type: "datetime-local", name: "firstDate", required: true, min: now }),
+            input({ type: "datetime-local", name: "firstDate", required: true, min: now, max: deadlineMax || undefined }),
             br(), br(),
             span(i18n.calendarFormDescription || "Description"), br(),
             input({ type: "text", name: "firstDateLabel", placeholder: i18n.calendarDatePlaceholder || "Describe this date..." }),
             br(), br(),
-            renderIntervalBlock(),
             span(i18n.calendarFirstNoteLabel || "Notes"), br(),
             textarea({ name: "firstNote", rows: "3", placeholder: i18n.calendarNotePlaceholder || "Add a note..." }),
+            br(), br(),
+            renderIntervalBlock({ min: now, max: deadlineMax || undefined }),
             br(), br()
           ]
         : null,
@@ -214,14 +211,17 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
         p(i18n.calendarsDescription || "Discover and manage calendars.")
       ),
       renderModeButtons(filter),
-      q
-        ? div({ class: "filters" },
-            form({ method: "GET", action: "/calendars" },
-              input({ type: "text", name: "q", value: q, placeholder: i18n.calendarSearchPlaceholder || "Search calendars..." }),
-              button({ type: "submit", class: "filter-btn" }, i18n.searchButton || "Search")
+      showForm
+        ? null
+        : div({ class: "filters" },
+            form({ method: "GET", action: "/calendars", class: "filter-box" },
+              input({ type: "hidden", name: "filter", value: filter }),
+              input({ type: "text", name: "q", value: q, placeholder: i18n.calendarSearchPlaceholder || "Search calendars...", class: "filter-box__input" }),
+              div({ class: "filter-box__controls" },
+                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+              )
             )
           )
-        : null
     ),
     section(
       showForm
@@ -268,26 +268,17 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
       h2({ class: "tribe-card-title" }, calendar.title || "\u2014")
     ),
     detailChips.length ? div({ class: "card-chips-row" }, ...detailChips) : null,
-    div({ class: "card-spread-centered" }, renderSpreadButton(calendar.rootId, params && params.spreads)),
-    div({ class: "shop-share" },
-      span({ class: "tribe-info-label" }, i18n.calendarsShareUrl || "Share URL"),
-      input({ type: "text", readonly: true, value: shareUrl, class: "shop-share-input" })
-    ),
     table({ class: "tribe-info-table" },
-      tr(td({ class: "tribe-info-label" }, i18n.calendarCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.createdAt).format("YYYY-MM-DD"))),
+      tr(td({ class: "tribe-info-label" }, i18n.calendarCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.createdAt).format("YYYY/MM/DD HH:mm"))),
+      calendar.deadline ? tr(td({ class: "tribe-info-label" }, i18n.calendarDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.deadline).format("YYYY/MM/DD HH:mm"))) : null,
       tr(td({ class: "tribe-info-label" }, i18n.calendarStatusLabel || "Status"), td({ class: "tribe-info-value", colspan: "3" }, renderStatus(calendar))),
-      tr(td({ class: "tribe-info-value", colspan: "4" }, userLink(calendar.author))),
-      calendar.deadline ? tr(td({ class: "tribe-info-label" }, i18n.calendarDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.deadline).format("YYYY-MM-DD HH:mm"))) : null
+      tr(td({ class: "tribe-info-value", colspan: "4" }, userLink(calendar.author)))
     ),
-    div({ class: "tribe-side-actions" },
-      renderCalendarFavoriteToggle(calendar, shareUrl),
-      isAuthor
-        ? form({ method: "GET", action: "/calendars" },
-            input({ type: "hidden", name: "filter", value: "edit" }),
-            input({ type: "hidden", name: "id", value: calendar.rootId }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.calendarUpdate || "Update")
-          )
-        : null,
+    tags,
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${calendar.participants.length}`)
+    ),
+    div({ class: "tribe-side-actions calendar-invite-actions" },
       isAuthor && calendar.status !== "OPEN"
         ? form({ method: "POST", action: `/calendars/generate-invite/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
@@ -297,24 +288,18 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
         if (!(isAuthor && !calendar.tribeId)) return null
         const invs = Array.isArray(calendar.invites) ? calendar.invites : []
         const openInvite = invs.find(inv => typeof inv === "object" && inv && inv.public === true && inv.code)
-        if (openInvite) return [
+        if (openInvite) return div({ class: "calendar-open-invite-block" },
           div({ class: "tribe-open-invite" },
-            span({ class: "card-label" }, i18n.tribeInviteCodeText),
             span({ class: "tribe-open-invite-code" }, openInvite.code)
           ),
           form({ method: "POST", action: `/calendars/open-invite/remove/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
           )
-        ]
+        )
         return form({ method: "POST", action: `/calendars/open-invite/create/${encodeURIComponent(calendar.rootId)}` },
           button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
         )
       })(),
-      isAuthor
-        ? form({ method: "POST", action: `/calendars/delete/${encodeURIComponent(calendar.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.calendarDelete || "Delete")
-          )
-        : null,
       !isAuthor
         ? a({ href: `/pm?to=${encodeURIComponent(calendar.author)}`, class: "tribe-action-btn" }, "PM")
         : null,
@@ -332,34 +317,43 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           )
         : null
     ),
-    tags,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${calendar.participants.length}`)
-    )
+    isAuthor
+      ? div({ class: "tribe-side-actions calendar-owner-actions" },
+          form({ method: "GET", action: "/calendars" },
+            input({ type: "hidden", name: "filter", value: "edit" }),
+            input({ type: "hidden", name: "id", value: calendar.rootId }),
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.calendarUpdate || "Update")
+          ),
+          form({ method: "POST", action: `/calendars/delete/${encodeURIComponent(calendar.rootId)}` },
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.calendarDelete || "Delete")
+          )
+        )
+      : null,
+    renderDocumentActions('calendars', calendar.rootId)
   )
 
   const minDate = now.add(1, "minute").format("YYYY-MM-DDTHH:mm")
+  const calMax = calendar.deadline ? moment(calendar.deadline).format("YYYY-MM-DDTHH:mm") : ""
   const canAddDate = !calClosed && (calendar.status === "OPEN" || isAuthor)
 
   const unifiedForm = canAddDate
     ? div({ class: "div-center audio-form" },
-        h4(i18n.calendarAddEntry || "Add Entry"),
         form({ method: "POST", action: `/calendars/add-date/${encodeURIComponent(calendar.rootId)}` },
           span(i18n.calendarDateLabel || "Date"), br(),
-          input({ type: "datetime-local", name: "date", required: true, min: minDate }),
+          input({ type: "datetime-local", name: "date", required: true, min: minDate, max: calMax || undefined }),
           br(), br(),
           span(i18n.calendarFormDescription || "Description"), br(),
           input({ type: "text", name: "label", placeholder: i18n.calendarDatePlaceholder || "Describe this date..." }),
           br(), br(),
-          renderIntervalBlock(),
-          br(),
           isParticipant
             ? [
-                span(i18n.calendarNoteLabel || "Note (optional)"), br(),
+                span(i18n.calendarNoteLabel), br(),
                 textarea({ name: "text", rows: "3", placeholder: i18n.calendarNotePlaceholder || "Add a note..." }),
                 br(), br()
               ]
             : null,
+          renderIntervalBlock({ min: minDate, max: calMax || undefined }),
+          br(),
           button({ type: "submit", class: "create-button" }, i18n.calendarAddEntry || "Add Entry")
         )
       )
@@ -393,7 +387,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
                     )
                   : null,
                 div({ class: "calendar-date-item-header" },
-                  `${moment(d.date).format("YYYY-MM-DD HH:mm")}${d.label ? " \u2014 " + d.label : ""}`
+                  `${moment(d.date).format("YYYY/MM/DD HH:mm")}${d.label ? " \u2014 " + d.label : ""}`
                 ),
                 (() => {
                   const visibleNotes = notes.filter(n => n.text && String(n.text).trim())
@@ -426,6 +420,17 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     : null
 
   const calMain = div({ class: "tribe-main" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(calendar.rootId, null, {
+        author: calendar.author,
+        favKind: 'calendars',
+        isFavorite: calendar.isFavorite,
+        spread: (params && params.spreads) || null,
+        returnTo: shareUrl,
+        reportTitle: calendar.title
+      })
+    ),
+
     calNav,
     grid,
     dayNotesSection,
@@ -444,3 +449,5 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     section(div({ class: "tribe-details" }, calSide, calMain))
   )
 }
+
+exports.renderIntervalBlock = renderIntervalBlock

@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, img, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderMapEmbedWithZoom } = require("./maps_view")
@@ -120,7 +120,7 @@ const renderFacilityList = exports.renderFacilityList = (facilities, filter, spr
       return div({ class: "trending-card tribes-card industry-card" + (isOwn ? " own-content" : "") },
         div({ class: "card-header activity-card-header" },
           span(),
-          renderContentActions(fc.id || fc.key, href)
+          renderContentActions(fc.id || fc.key, href, { spread: spreadMap.get(fc.id || fc.key) || null })
         ),
         div({ class: "card-section tribes-card-body" },
           div({ class: "tribe-card-image-wrapper" },
@@ -140,7 +140,6 @@ const renderFacilityList = exports.renderFacilityList = (facilities, filter, spr
             div({ class: "tribe-card-members" },
               span({ class: "tribe-members-count" }, `${i18n.industryMembers || "Members"}: ${fc.memberCount != null ? fc.memberCount : safeArr(fc.members).length}`)
             ),
-            div({ class: "card-spread-centered" }, renderSpreadButton(fc.id || fc.key, spreadMap.get(fc.id || fc.key)))
           )
         )
       )
@@ -285,8 +284,8 @@ const renderBuildCard = (b, opts = {}) => {
     b.blueprintImage ? renderMediaBlob(b.blueprintImage, { class: "post-image" }) : null,
     b.notes ? p({ class: "tribe-card-description" }, ...renderUrl(safeText(b.notes))) : null,
     div({ class: "industry-blueprint-meta industry-dates-row" },
-      b.startDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildStart || "Start date"}: `), moment(b.startDate).format("YYYY-MM-DD")) : null,
-      b.endDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildEnd || "End date"}: `), moment(b.endDate).format("YYYY-MM-DD")) : null,
+      b.startDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildStart || "Start date"}: `), moment(b.startDate).format("YYYY/MM/DD")) : null,
+      b.endDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildEnd || "End date"}: `), moment(b.endDate).format("YYYY/MM/DD")) : null,
     ),
     renderBlueprintEstimate(b, i18n.industryFinalPrice || "Final price"),
     p(span({ class: "industry-meta-label" }, `${i18n.industryContributions || "Contributions"}: `), String(safeArr(b.contributions).length)),
@@ -326,7 +325,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
         form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "search", value: search }),
           input({ type: "hidden", name: "sector", value: sectorSel }),
-          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, i18n[x.i18n] || x.key))
+          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
             .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
         )
       ),
@@ -348,7 +347,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
                     [option({ value: "", ...(sectorSel ? {} : { selected: true }) }, i18n.industryAllSectors || "All sectors")]
                       .concat(SECTORS.map((s) => option({ value: s, ...(s === sectorSel ? { selected: true } : {}) }, sectorLabel(s))))
                   ),
-                  button({ type: "submit", class: "filter-btn" }, i18n.applyFilters || "Apply")
+                  button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
                 )
               )
             ),
@@ -509,10 +508,9 @@ const renderBlueprintsSection = (fc, blueprints, isMember, spreadMap = new Map()
   const cards = list.map((bp) => {
     const actions = renderBlueprintGovernActions(fc.id, bp, isMember, `/industry/${encodeURIComponent(fc.id)}`)
     return div({ class: "industry-card-wrap" },
-      div({ class: "card-header activity-card-header" }, span(), renderContentActions(bp.id, `/industry/blueprint/${encodeURIComponent(bp.id)}`)),
+      div({ class: "card-header activity-card-header" }, span(), renderContentActions(bp.id, `/industry/blueprint/${encodeURIComponent(bp.id)}`, { spread: spreadMap.get(bp.id) || null })),
       div({ class: "industry-blueprint-card" },
       div({ class: "card-chips-row" },
-        renderSpreadButton(bp.id, spreadMap.get(bp.id)),
         renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
         renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase())
       ),
@@ -634,11 +632,11 @@ const renderFacilitySide = (fc, returnTo, params = {}) => {
   }
   if (isSteward) {
     sideActions.push(form({ method: "GET", action: `/industry/edit/${encodeURIComponent(fc.id)}` },
-      button({ type: "submit", class: "update-btn" }, i18n.industryUpdateButton || "Update")
+      button({ type: "submit", class: "tribe-action-btn" }, i18n.industryUpdateButton || "Update")
     ))
     if (memberCount <= 1) {
       sideActions.push(form({ method: "POST", action: `/industry/delete/${encodeURIComponent(fc.id)}` },
-        button({ type: "submit", class: "delete-btn danger-btn" }, i18n.industryDeleteButton || "Delete")
+        button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.industryDeleteButton || "Delete")
       ))
     }
   }
@@ -646,14 +644,13 @@ const renderFacilitySide = (fc, returnTo, params = {}) => {
   return div({ class: "tribe-side" },
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/${encodeURIComponent(fc.id)}` }, safeText(fc.name) || (i18n.industryTitle || "Industry")))),
     div({ class: "card-chips-row" }, ...chips),
-    div({ class: "card-spread-centered" }, renderSpreadButton(fc.id || fc.key, params.spreads)),
     fc.image ? renderMediaBlob(fc.image, { class: "tribe-detail-image" }) : null,
     fc.description ? p({ class: "tribe-side-description" }, ...renderUrl(safeText(fc.description))) : null,
     table({ class: "tribe-info-table" },
-      tr(td({ class: "tribe-info-value tribe-author-cell", colspan: "4" }, userLink(fc.steward))),
       tr(td({ class: "tribe-info-label" }, i18n.industryLaborRate || "Labor rate"), td({ class: "tribe-info-value", colspan: "3" }, `${fc.laborRate || 0} ECO/h`)),
       tr(td({ class: "tribe-info-label" }, i18n.industryQuorum || "Quorum"), td({ class: "tribe-info-value", colspan: "3" }, String(fc.quorum))),
-      tr(td({ class: "tribe-info-label" }, i18n.industryMajority || "Majority"), td({ class: "tribe-info-value", colspan: "3" }, `${Math.round((fc.majority || 0.5) * 100)}%`))
+      tr(td({ class: "tribe-info-label" }, i18n.industryMajority || "Majority"), td({ class: "tribe-info-value", colspan: "3" }, `${Math.round((fc.majority || 0.5) * 100)}%`)),
+      tr(td({ class: "tribe-info-value tribe-author-cell", colspan: "4" }, userLink(fc.steward)))
     ),
     fc.mapUrl ? renderMapEmbedWithZoom(params.mapData, fc.mapUrl, returnTo, params.zoom) : null,
     safeArr(fc.tags).length
@@ -693,13 +690,12 @@ exports.singleFacilityView = async (facility, filter, params = {}) => {
     i18n.industryTitle || "Industry",
     section(
       div({ class: "card-header activity-card-header" },
-        span(),
-        renderContentActions(fc.id || fc.key, returnTo)
+        renderContentActions(fc.id || fc.key, null, { spread: params.spreads || null })
       ),
       div({ class: "tags-header" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
       div({ class: "filters" },
         form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
-          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, i18n[x.i18n] || x.key))
+          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
             .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
         )
       ),
@@ -712,13 +708,12 @@ exports.blueprintEditView = async (bp, fc) => template(
   i18n.industryTitle || "Industry",
   section(
     div({ class: "card-header activity-card-header" },
-      span(),
       renderContentActions(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`)
     ),
     div({ class: "tags-header" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
     div({ class: "filters" },
       form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
-        FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, i18n[x.i18n] || x.key))
+        FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
           .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
       )
     ),
@@ -730,13 +725,12 @@ exports.buildEditView = async (b, fc) => template(
   i18n.industryTitle || "Industry",
   section(
     div({ class: "card-header activity-card-header" },
-      span(),
       renderContentActions(b.id, `/industry/build/${encodeURIComponent(b.id)}`)
     ),
     div({ class: "tags-header" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
     div({ class: "filters" },
       form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
-        FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, i18n[x.i18n] || x.key))
+        FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
           .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
       )
     ),
@@ -753,16 +747,21 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
 
   return template(
     i18n.industryTitle || "Industry",
+    section(div({ class: "tags-header" }, h2(i18n.industryTitle), p(i18n.industryDescription))),
     section(
       div({ class: "filters" },
         form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
-          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, i18n[x.i18n] || x.key))
+          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
             .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
         )
       )
     ),
     section(
       div({ class: "shop-detail" },
+        div({ class: "card-header activity-card-header" },
+          span(),
+          renderContentActions(bp.id, null, { spread: params.spreads || null, author: bp.author, reportTitle: bp.name || bp.title })
+        ),
         (bp.author && String(bp.author) !== String(userId))
           ? div({ class: "bookmark-topbar transfer-topbar-single" },
               div({ class: "bookmark-topbar-left" },
@@ -771,7 +770,6 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
             )
           : null,
         div({ class: "card-chips-row" },
-          renderSpreadButton(bp.id, params.spreads),
           renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
           renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase())
         ),
@@ -919,8 +917,8 @@ exports.singleBuildView = async (build, params = {}) => {
   const productName = safeText(b.blueprintName) || safeText(b.title)
   const crossTags = [facilityName, productName].filter(Boolean).map(x => x.toLowerCase().replace(/\s+/g, "-")).join(", ")
   const crossDates = [
-    b.startDate ? `${i18n.industryBuildStart || "Start date"}: ${moment(b.startDate).format("YYYY-MM-DD")}` : null,
-    b.endDate ? `${i18n.industryBuildEnd || "End date"}: ${moment(b.endDate).format("YYYY-MM-DD")}` : null
+    b.startDate ? `${i18n.industryBuildStart || "Start date"}: ${moment(b.startDate).format("YYYY/MM/DD")}` : null,
+    b.endDate ? `${i18n.industryBuildEnd || "End date"}: ${moment(b.endDate).format("YYYY/MM/DD")}` : null
   ].filter(Boolean).join(" · ")
   const crossContext = [
     `${i18n.industryFacility || "Facility"}: ${facilityName}`,
@@ -941,16 +939,21 @@ exports.singleBuildView = async (build, params = {}) => {
 
   return template(
     i18n.industryTitle || "Industry",
+    section(div({ class: "tags-header" }, h2(i18n.industryTitle), p(i18n.industryDescription))),
     section(
       div({ class: "filters" },
         form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
-          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, i18n[x.i18n] || x.key))
+          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
             .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
         )
       )
     ),
     section(
       div({ class: "shop-detail" },
+        div({ class: "card-header activity-card-header" },
+          span(),
+          renderContentActions(b.id, null, { spread: params.spreads || null, author: b.proposer, reportTitle: b.title })
+        ),
         (b.proposer && String(b.proposer) !== String(userId))
           ? div({ class: "bookmark-topbar transfer-topbar-single" },
               div({ class: "bookmark-topbar-left" },
@@ -960,15 +963,15 @@ exports.singleBuildView = async (build, params = {}) => {
           : null,
         b.image ? div({ class: "shop-detail-media" }, renderMediaBlob(b.image, { class: "post-image" })) : null,
         h2(safeText(b.title) || (i18n.industryBuild || "Build")),
-        div({ class: "card-chips-row" }, renderSpreadButton(b.id, params.spreads), renderBuildStatusChip(status)),
+        div({ class: "card-chips-row" }, renderBuildStatusChip(status)),
       div({ class: "industry-meta" },
         b.blueprintName ? p(span({ class: "industry-meta-label" }, `${i18n.industryBlueprint || "Blueprint"}: `), safeText(b.blueprintName)) : null,
         b.blueprintImage ? renderMediaBlob(b.blueprintImage, { class: "post-image" }) : null,
         p(span({ class: "industry-meta-label" }, `${i18n.industryProposer || "Proposer"}: `), userLink(b.proposer)),
         b.notes ? p({ class: "industry-build-notes" }, span({ class: "industry-meta-label" }, `${i18n.industryBuildNotes || "Notes"}: `), safeText(b.notes)) : null,
         div({ class: "industry-dates-row" },
-          b.startDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildStart || "Start date"}: `), moment(b.startDate).format("YYYY-MM-DD")) : null,
-          b.endDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildEnd || "End date"}: `), moment(b.endDate).format("YYYY-MM-DD")) : null,
+          b.startDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildStart || "Start date"}: `), moment(b.startDate).format("YYYY/MM/DD")) : null,
+          b.endDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildEnd || "End date"}: `), moment(b.endDate).format("YYYY/MM/DD")) : null,
           (b.endDate && status !== "COMPLETED" && status !== "FAILED")
             ? p(span({ class: "industry-meta-label" }, `${i18n.industryTimeLeft || "Time left"}: `), `${Math.max(0, Math.ceil((new Date(b.endDate) - Date.now()) / 86400000))}d`)
             : null

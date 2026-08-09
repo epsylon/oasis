@@ -6,7 +6,8 @@ const BLOB = (n) => `&hou0000000000000000000000000000000000000000000000${n}.sha2
 const inDays = (n) => {
   const d = new Date();
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  const pad = (x) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
 const base = (over = {}) => ({

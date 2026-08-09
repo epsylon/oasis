@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
+const { normalizeImages, normalizeVideo } = require('./media_gallery');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
@@ -131,6 +132,8 @@ module.exports = ({ cooler, pmModel }) => {
       id: node.key,
       rootId,
       ...c,
+      images: normalizeImages(c.images),
+      video: normalizeVideo(c.video),
       assignees,
       opinions,
       opinions_inhabitants: voters,
@@ -139,7 +142,7 @@ module.exports = ({ cooler, pmModel }) => {
   };
 
   return {
-    async createTask(title, description, startTime, endTime, priority, location = '', tagsRaw = [], isPublic) {
+    async createTask(title, description, startTime, endTime, priority, location = '', tagsRaw = [], isPublic, media = {}) {
       const ssb = await openSsb();
       const userId = ssb.id;
 
@@ -166,6 +169,8 @@ module.exports = ({ cooler, pmModel }) => {
         location,
         tags,
         isPublic: visibility,
+        images: normalizeImages(media && media.images),
+        video: normalizeVideo(media && media.video),
         assignees: [userId],
         createdAt: new Date().toISOString(),
         status: 'OPEN',
@@ -253,6 +258,8 @@ module.exports = ({ cooler, pmModel }) => {
         tags: newTags,
         isPublic: newVisibility,
         status: newStatus,
+        images: normalizeImages(updatedData.images !== undefined ? updatedData.images : c.images),
+        video: updatedData.video !== undefined ? normalizeVideo(updatedData.video) : normalizeVideo(c.video),
         assignees: nextAssignees,
         updatedAt: new Date().toISOString(),
         replaces: taskId

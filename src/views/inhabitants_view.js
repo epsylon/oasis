@@ -1,5 +1,5 @@
-const { div, h2, p, section, button, form, img, a, textarea, input, br, span, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderUserSensors, renderContentActions } = require('./main_views');
+const { div, h2, p, section, button, form, img, a, textarea, input, span, strong } = require("../server/node_modules/hyperaxe");
+const { template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock } = require('./main_views');
 const { renderContentStats } = require('./clearnet_view');
 const { renderUrl } = require('../backend/renderUrl');
 const { getConfig } = require('../configs/config-manager');
@@ -54,14 +54,34 @@ function resolvePhoto(photoField, size = 256) {
   return toImageUrl(photoField, size);
 }
 
-const generateFilterButtons = (filters, currentFilter) =>
+const filterLabel = (mode) =>
+  String(i18n[mode + 'Button'] || i18n[mode + 'SectionTitle'] || mode).toUpperCase();
+
+const generateFilterButtons = (filters, currentFilter, labelOf = filterLabel) =>
   filters.map(mode =>
     form({ method: 'GET', action: '/inhabitants' },
       input({ type: 'hidden', name: 'filter', value: mode }),
       button({
         type: 'submit',
         class: currentFilter === mode ? 'filter-btn active' : 'filter-btn'
-      }, i18n[mode + 'Button'] || i18n[mode + 'SectionTitle'] || mode)
+      }, labelOf(mode))
+    )
+  );
+
+const MAIN_FILTERS = ['all', 'TOP', 'contacts', 'blocked', 'CVs', 'SUGGESTED', 'GALLERY'];
+
+const renderMainFilters = (filter, isTop) =>
+  div({ class: 'inhabitant-action' },
+    ...MAIN_FILTERS.map(mode =>
+      form({ method: 'GET', action: '/inhabitants' },
+        input({ type: 'hidden', name: 'filter', value: mode === 'TOP' ? 'TOP ACTIVITY' : mode }),
+        button({
+          type: 'submit',
+          class: (mode === 'TOP' ? isTop : filter === mode) ? 'filter-btn active' : 'filter-btn'
+        }, mode === 'TOP'
+            ? String(i18n.topSectionTitle || 'TOP').toUpperCase()
+            : filterLabel(mode))
+      )
     )
   );
 
@@ -89,6 +109,27 @@ function lastActivityBadge(user, isMe) {
 
 const lightboxId = (id) => 'inhabitant_' + String(id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
 
+const cvField = (labelText, value) => value
+  ? div({ class: 'card-field' },
+      span({ class: 'card-label' }, `${labelText}: `),
+      span({ class: 'card-value' }, value)
+    )
+  : null;
+
+const renderCvFields = (user) => {
+  const languages = Array.isArray(user.languages) ? user.languages.filter(Boolean) : [];
+  const skills = Array.isArray(user.skills) ? user.skills.filter(Boolean) : [];
+  const fields = [
+    cvField(i18n.locationLabel, user.location),
+    cvField(i18n.languagesLabel, languages.length ? languages.join(', ').toUpperCase() : ''),
+    cvField(i18n.skillsLabel, skills.length ? skills.join(', ') : ''),
+    cvField(i18n.statusLabel || 'Status', user.status),
+    cvField(i18n.preferencesLabel || 'Preferences', user.preferences),
+    cvField(i18n.createdAtLabel || 'Created at', user.createdAt ? new Date(user.createdAt).toLocaleString() : '')
+  ].filter(Boolean);
+  return fields.length ? div({ class: 'cv-card-fields' }, ...fields) : null;
+};
+
 const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) => {
   const isMe = user.id === currentUserId;
   const raw = user.visibilityPrefs || {};
@@ -102,7 +143,7 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
     wallet:   raw.wallet   === true,
     ecoTax:   raw.ecoTax   !== false,
     larpSign: raw.larpSign === true,
-    gpg:      raw.gpg      !== false,
+    gpg:      raw.gpg      === true,
     clearnet: hasClearnet,
     fediverse: raw.fediverse === true,
     fediverseHandle: typeof raw.fediverseHandle === 'string' ? raw.fediverseHandle : ''
@@ -111,7 +152,7 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
     div(
       { class: 'card-header activity-card-header' },
       span(),
-      renderContentActions(user.id, `/inhabitant/${encodeURIComponent(user.id)}`)
+      renderContentActions(user.id, `/inhabitant/${encodeURIComponent(user.id)}`, { author: user.id })
     ),
     div({ class: 'card-section inhabitants-card-body' },
       div({ class: 'inhabitant-card' },
@@ -128,26 +169,36 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
         estimatedUBI: user.estimatedUBI, lastClaimedDate: user.lastClaimedDate, totalClaimed: user.totalClaimed,
         larpHouse: user.larpHouse, stats: user.stats
       }, { relationshipNode: isMe ? span({ class: 'status you' }, i18n.relationshipYou) : null, excludeContent: true }),
-      !isMe
+      (!isMe || filter === 'CVs')
         ? div(
-            { class: 'cv-actions' },
-            form(
-              { method: 'GET', action: '/pm' },
-              input({ type: 'hidden', name: 'recipients', value: user.id }),
-              button({ type: 'submit', class: 'btn' }, i18n.pmCreateButton)
-            )
+            { class: 'cv-actions doc-export-actions' },
+            filter === 'CVs'
+              ? form(
+                  { method: 'GET', action: `/cv/pdf/${encodeURIComponent(user.id)}` },
+                  button({ type: 'submit', class: 'filter-btn' }, i18n.generatePdf)
+                )
+              : null,
+            filter === 'CVs'
+              ? form(
+                  { method: 'POST', action: `/cv/share/${encodeURIComponent(user.id)}` },
+                  button({ type: 'submit', class: 'filter-btn' }, i18n.sharePm)
+                )
+              : null,
+            !isMe
+              ? form(
+                  { method: 'GET', action: '/pm' },
+                  input({ type: 'hidden', name: 'recipients', value: user.id }),
+                  button({ type: 'submit', class: 'filter-btn' }, i18n.pmCreateButton)
+                )
+              : null
           )
-        : null
+        : null,
+      !isMe ? div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(user.relationship || {}, user.id)) : null
     ),
     div({ class: 'inhabitant-details' },
       h2(user.name || 'Anonymous'),
       user.description ? p(...renderUrl(user.description)) : null,
-      filter === 'MATCHSKILLS' && user.commonSkills?.length
-        ? div({ class: 'matchskills' },
-            p(`${i18n.commonSkills}: ${user.commonSkills.join(', ')}`),
-            p(`${i18n.matchScore}: ${Math.round((user.matchScore || 0) * 100)}%`)
-          )
-        : null,
+      filter === 'CVs' ? renderCvFields(user) : null,
       filter === 'SUGGESTED' && (user.followsYou || user.commonSkills?.length || user.mutualCount)
         ? div({ class: 'suggested-meta' },
             user.followsYou ? span({ class: 'suggested-badge' }, i18n.suggestedFollowsYou || 'Follows you') : null,
@@ -160,31 +211,6 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
       filter === 'blocked' && user.isBlocked
         ? p(i18n.blockedLabel) : null,
       p(userLink(user.id)),
-      !isMe ? (() => {
-        const rel = user.relationship || {}
-        const blockedBoth = rel.blocking && rel.blockedBy
-        const mutual = rel.following && rel.followsMe
-        const supportAction = rel.following ? 'unfollow' : (rel.blocking ? 'unblock' : 'follow')
-        return div({ class: 'relationship-status inhabitant-relationship' },
-          blockedBoth
-            ? span({ class: 'status blocked' }, i18n.relationshipMutualBlock)
-            : [
-                rel.blocking ? span({ class: 'status blocked' }, i18n.relationshipBlocking) : null,
-                rel.blockedBy ? span({ class: 'status blocked-by' }, i18n.relationshipBlockedBy) : null,
-                mutual
-                  ? span({ class: 'status mutual' }, i18n.relationshipMutuals)
-                  : [
-                      span({ class: 'status supporting' }, rel.following ? i18n.relationshipFollowing : i18n.relationshipNone),
-                      span({ class: 'status supported-by' }, rel.followsMe ? i18n.relationshipTheyFollow : i18n.relationshipNotFollowing)
-                    ]
-              ],
-          div({ class: 'relationship-actions' },
-            form({ method: 'POST', action: `/${supportAction}/${encodeURIComponent(user.id)}` },
-              button({ type: 'submit', class: 'btn' }, i18n[supportAction])
-            )
-          )
-        )
-      })() : null,
       renderContentStats(user.stats, i18n)
     )
       )
@@ -229,19 +255,11 @@ function msgIdOf(m) {
 }
 
 exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseConfigured) => {
-  const title = filter === 'contacts'    ? i18n.yourContacts
-               : filter === 'CVs'         ? i18n.allCVs
-               : filter === 'MATCHSKILLS' ? i18n.matchSkills
-               : filter === 'SUGGESTED'   ? i18n.suggestedSectionTitle
-               : filter === 'blocked'     ? i18n.blockedSectionTitle
-               : filter === 'GALLERY'     ? i18n.gallerySectionTitle
-               : filter === 'TOP KARMA'    ? i18n.topkarmaSectionTitle
-               : filter === 'TOP ECO'      ? (i18n.topecoSectionTitle || 'Top Eco')
-               : filter === 'TOP ACTIVITY' ? i18n.topactivitySectionTitle
-               : i18n.allInhabitants;
+  const title = i18n.allInhabitants;
 
-  const showCVFilters = filter === 'CVs' || filter === 'MATCHSKILLS';
-  const filters = ['all', 'TOP ACTIVITY', 'TOP KARMA', 'TOP ECO', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'];
+  const showCVFilters = filter === 'CVs';
+  const TOP_FILTERS = ['TOP ACTIVITY', 'TOP INACTIVITY', 'TOP KARMA', 'TOP ECO'];
+  const isTop = TOP_FILTERS.includes(filter);
 
   return template(
     title,
@@ -251,28 +269,33 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
         p(i18n.discoverPeople)
       ),
       div({ class: 'filters' },
-        form({ method: 'GET', action: '/inhabitants' },
+        form({ method: 'GET', action: '/inhabitants', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({
             type: 'text',
             name: 'search',
             placeholder: i18n.searchInhabitantsPlaceholder,
-            value: (query && query.search) || ''
+            value: (query && query.search) || '',
+            class: 'filter-box__input'
           }),
-          showCVFilters
-            ? [
-                input({ type: 'text', name: 'location', placeholder: i18n.filterLocation, value: (query && query.location) || '' }),
-                input({ type: 'text', name: 'language', placeholder: i18n.filterLanguage, value: (query && query.language) || '' }),
-                input({ type: 'text', name: 'skills', placeholder: i18n.filterSkills, value: (query && query.skills) || '' })
-              ]
-            : null,
-          br(),
-          button({ type: 'submit' }, i18n.applyFilters)
+          div({ class: 'filter-box__controls' },
+            showCVFilters
+              ? [
+                  input({ type: 'text', name: 'location', placeholder: i18n.filterLocation, value: (query && query.location) || '', class: 'filter-box__number' }),
+                  input({ type: 'text', name: 'language', placeholder: i18n.filterLanguage, value: (query && query.language) || '', class: 'filter-box__number' }),
+                  input({ type: 'text', name: 'skills', placeholder: i18n.filterSkills, value: (query && query.skills) || '', class: 'filter-box__number' })
+                ]
+              : null,
+            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+          )
         )
       ),
-      div({ class: 'inhabitant-action' },
-        ...generateFilterButtons(filters, filter)
-      ),
+      renderMainFilters(filter, isTop),
+      isTop
+        ? div({ class: 'inhabitant-action inhabitant-subfilters' },
+            ...generateFilterButtons(TOP_FILTERS, filter, (mode) => filterLabel(mode).replace(/^TOP\s+/, ''))
+          )
+        : null,
       filter === 'GALLERY'
         ? renderGalleryInhabitants(inhabitants)
         : div({ class: 'inhabitants-list' },
@@ -338,7 +361,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
     wallet:   rawPrefs.wallet   === true,
     ecoTax:   rawPrefs.ecoTax   !== false,
     larpSign: rawPrefs.larpSign === true,
-    gpg:      rawPrefs.gpg      !== false,
+    gpg:      rawPrefs.gpg      === true,
     clearnet: rawPrefs.clearnet === true || clearnetSubKeys.some(k => rawPrefs[k] === true),
     fediverse: rawPrefs.fediverse === true,
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : ''
@@ -350,14 +373,18 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
   const providedBucket = typeof safe.lastActivityBucket === 'string' ? safe.lastActivityBucket : null;
   const dotClass = providedBucket === 'green' ? 'green' : providedBucket === 'orange' ? 'orange' : 'red';
 
+  const fieldNodes = [
+    cvField(i18n.locationLabel, location),
+    cvField(i18n.languagesLabel, languages.length ? languages.join(', ').toUpperCase() : ''),
+    cvField(i18n.skillsLabel, skills.length ? skills.join(', ') : ''),
+    cvField(i18n.statusLabel || 'Status', status),
+    cvField(i18n.preferencesLabel || 'Preferences', preferences),
+    cvField(i18n.createdAtLabel || 'Created at', createdAt)
+  ].filter(Boolean);
+
   const detailNodes = [
     description ? p(...renderUrl(description)) : null,
-    location ? p(`${i18n.locationLabel}: ${location}`) : null,
-    languages.length ? p(`${i18n.languagesLabel}: ${languages.join(', ').toUpperCase()}`) : null,
-    skills.length ? p(`${i18n.skillsLabel}: ${skills.join(', ')}`) : null,
-    status ? p(`${i18n.statusLabel || 'Status'}: ${status}`) : null,
-    preferences ? p(`${i18n.preferencesLabel || 'Preferences'}: ${preferences}`) : null,
-    createdAt ? p(`${i18n.createdAtLabel || 'Created at'}: ${createdAt}`) : null
+    fieldNodes.length ? div({ class: 'cv-card-fields' }, ...fieldNodes) : null
   ].filter(Boolean);
 
   return template(
@@ -367,9 +394,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
         h2(title),
         p(i18n.discoverPeople)
       ),
-      div({ class: 'mode-buttons' },
-        ...generateFilterButtons(['all', 'TOP ACTIVITY', 'TOP KARMA', 'TOP ECO', 'contacts', 'SUGGESTED', 'blocked', 'CVs', 'MATCHSKILLS', 'GALLERY'], 'all')
-      ),
+      renderMainFilters('all', false),
       div({ class: 'inhabitant-card' },
         div({ class: 'inhabitant-left' },
           img({ class: 'inhabitant-photo-details', src: image, alt: name || 'Anonymous' }),
@@ -382,11 +407,16 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
             larpHouse, stats: safe.stats
           }, { excludeContent: true }),
           (!isMe && (id || viewedId))
-            ? form(
-                { method: 'GET', action: '/pm' },
-                input({ type: 'hidden', name: 'recipients', value: id || viewedId }),
-                button({ type: 'submit', class: 'btn' }, i18n.pmCreateButton)
+            ? div({ class: 'cv-actions doc-export-actions' },
+                form(
+                  { method: 'GET', action: '/pm' },
+                  input({ type: 'hidden', name: 'recipients', value: id || viewedId }),
+                  button({ type: 'submit', class: 'filter-btn' }, i18n.pmCreateButton)
+                )
               )
+            : null,
+          (!isMe && (id || viewedId) && safe.relationship)
+            ? div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(safe.relationship, id || viewedId))
             : null
         ),
         (() => {
@@ -420,3 +450,4 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
 };
 
 exports.lastActivityBadge = lastActivityBadge;
+exports.resolvePhoto = resolvePhoto;

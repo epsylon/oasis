@@ -46,7 +46,7 @@ describe('spreads.forMessage', (t) => {
 
   t('counts spread on bookmark', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const bm = await A.use('bookmarks').createBookmark('https://x.com', [], 'd', 'demo', new Date().toISOString());
+    const bm = await A.use('bookmarks').createBookmark('https://x.com', [], 'd', new Date().toISOString());
     const ssb = await A.cooler.open();
     await publishSpread(ssb, bm.key);
     const main = mainModelsFactory({ cooler: A.cooler, isPublic: false });
@@ -116,7 +116,7 @@ describe('spreads.forMessage', (t) => {
 
   t('counts spread on image', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const img = await A.use('images').createImage('[i](&b.sha256)', [], 'pic', 'desc', false, '');
+    const img = await A.use('images').createImage('[i](&b.sha256)', [], 'pic', 'desc', '');
     const ssb = await A.cooler.open();
     await publishSpread(ssb, img.key);
     const main = mainModelsFactory({ cooler: A.cooler, isPublic: false });
@@ -251,7 +251,7 @@ describe('spreads.forMessage', (t) => {
 
   t('opinion: createVote persists for bookmark', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const bm = await A.use('bookmarks').createBookmark('https://x.com', [], 'd', 'demo', new Date().toISOString());
+    const bm = await A.use('bookmarks').createBookmark('https://x.com', [], 'd', new Date().toISOString());
     await A.use('opinions').createVote(bm.key, 'love');
     const after = await A.use('bookmarks').getBookmarkById(bm.key);
     eq((after.opinions && after.opinions.love) || 0, 1);
@@ -325,5 +325,37 @@ describe('spreads and edits', (t) => {
 
     B.setActor();
     eq((await mainB.spreads.forMessage(tip)).alreadySpread, false, 'B can spread the new version if they still want to');
+  });
+});
+
+describe('spread: where the button lives', (t) => {
+  t('the card header shows it before the pin, and only when the card asks for it', () => {
+    const { renderContentActions } = require('../../../src/views/main_views');
+
+    const withSpread = String(renderContentActions('%abc.sha256', '/tasks/%abc.sha256',
+      { spread: null, favKind: 'tasks', isFavorite: false }).outerHTML);
+    ok(withSpread.includes('spread-form'), 'the spread button is in the header');
+    ok(withSpread.indexOf('spread-form') < withSpread.indexOf('✛'), 'and it comes before pin/unpin');
+
+    const plain = String(renderContentActions('%abc.sha256', '/tasks/%abc.sha256', { favKind: 'tasks' }).outerHTML);
+    ok(!plain.includes('spread-form'), 'a card that does not pass it keeps its header clean');
+  });
+
+});
+
+describe('spread: what the button says', (t) => {
+  t('it always shows the counter and never names who spread it', () => {
+    const { renderSpreadButton } = require('../../../src/views/main_views');
+    const i18n = require('../../../src/views/main_views').i18n;
+
+    const none = String(renderSpreadButton('%abc.sha256', { count: 0, voters: [] }).outerHTML);
+    ok(none.includes('⟳ 0'), 'with nobody spreading it the counter still reads zero');
+    ok(none.includes(`title="${String(i18n.spreadContent)}"`), 'and the tooltip is just the action');
+
+    const voters = ['@one.ed25519', '@two.ed25519', '@three.ed25519', '@four.ed25519', '@five.ed25519', '@six.ed25519'];
+    const many = String(renderSpreadButton('%abc.sha256', { count: 6, voters }).outerHTML);
+    ok(many.includes('⟳ 6'), 'the counter shows every spread');
+    ok(!many.includes('@one'), 'no inhabitant is named in the tooltip');
+    ok(many.includes(`title="${String(i18n.spreadContent)}"`), 'the tooltip stays the same whoever spread it');
   });
 });

@@ -40,7 +40,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
     'image', 'audio', 'video', 'torrent', 'market', 'bankWallet', 'bankClaim',
-    'project', 'job', 'housing', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad'
+    'project', 'job', 'housing', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad', 'poll'
   ];
 
   const getRelevantFields = (type, content) => {
@@ -60,7 +60,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       case 'audio':
         return [content?.url, content?.mimeType, content?.title, content?.description, ...(content?.tags || [])];
       case 'image':
-        return [content?.url, content?.title, content?.description, ...(content?.tags || []), content?.meme];
+        return [content?.url, content?.title, content?.description, ...(content?.tags || [])];
       case 'video':
         return [content?.url, content?.mimeType, content?.title, content?.description, ...(content?.tags || [])];
       case 'document':
@@ -85,6 +85,10 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
         return [content?.amount, content?.epochId, content?.allocationId, content?.txid];
       case 'project':
         return [content?.title, content?.status, content?.progress, content?.goal, content?.pledged, content?.deadline, (content?.followers || []).length, (content?.backers || []).length, (content?.milestones || []).length, content?.bounty, content?.bountyAmount, content?.bounty_currency, content?.activity?.kind, content?.activityActor];
+      case 'poll':
+        return content?.encryptedQuestion
+          ? []
+          : [content?.question, ...(content?.options || []), ...(content?.tags || [])];
       case 'housing':
         return [content?.title, content?.housing_type, content?.property_type, content?.place, content?.price, content?.rooms, content?.size, content?.capacity, content?.status];
       case 'job':

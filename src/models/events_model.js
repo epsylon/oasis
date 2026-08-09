@@ -1,5 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
+const { normalizeImages, normalizeVideo } = require('./media_gallery');
+const { truthy, hasAnyInterval, nextOccurrence, upcomingOccurrences } = require('./recurrence');
 const crypto = require('crypto');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
@@ -72,8 +74,22 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     return m.toISOString();
   };
 
+  const recurrenceOf = (c) => ({
+    weekly: truthy(c.intervalWeekly),
+    monthly: truthy(c.intervalMonthly),
+    yearly: truthy(c.intervalYearly),
+    until: c.recurrenceUntil || ''
+  });
+
+  const effectiveDate = (c) => {
+    const r = recurrenceOf(c);
+    if (!hasAnyInterval(r.weekly, r.monthly, r.yearly) || !r.until) return c.date;
+    const next = nextOccurrence(c.date, r.until, r.weekly, r.monthly, r.yearly);
+    return next ? next.toISOString() : c.date;
+  };
+
   const deriveStatus = (c) => {
-    const dateM = moment(c.date);
+    const dateM = moment(effectiveDate(c));
     let status = String(c.status || 'OPEN').toUpperCase();
     if (dateM.isValid() && dateM.isBefore(moment())) status = 'CLOSED';
     if (status !== 'OPEN' && status !== 'CLOSED') status = 'OPEN';
@@ -171,7 +187,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       return idx.rootOf(id);
     },
 
-    async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic, mapUrl = "", clearnetPublic = false) {
+    async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic, mapUrl = "", clearnetPublic = false, media = {}, recurrence = {}) {
       const ssbClient = await openSsb();
       const userId = await me();
 
@@ -203,6 +219,12 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
         isPublic: visibility,
         mapUrl: String(mapUrl || "").trim(),
         clearnetPublic: clearnetPublic === true || clearnetPublic === 'true' || clearnetPublic === 'on',
+        images: normalizeImages(media && media.images),
+        video: normalizeVideo(media && media.video),
+        intervalWeekly: truthy(recurrence && recurrence.weekly),
+        intervalMonthly: truthy(recurrence && recurrence.monthly),
+        intervalYearly: truthy(recurrence && recurrence.yearly),
+        recurrenceUntil: String((recurrence && recurrence.until) || '').trim(),
         opinions: {},
         opinions_inhabitants: []
       };
@@ -461,6 +483,15 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
         status,
         isPublic: normalizePrivacy(c.isPublic),
         mapUrl: c.mapUrl || "",
+        images: normalizeImages(c.images),
+        video: normalizeVideo(c.video),
+        intervalWeekly: truthy(c.intervalWeekly),
+        intervalMonthly: truthy(c.intervalMonthly),
+        intervalYearly: truthy(c.intervalYearly),
+        recurrenceUntil: c.recurrenceUntil || '',
+        recurring: hasAnyInterval(truthy(c.intervalWeekly), truthy(c.intervalMonthly), truthy(c.intervalYearly)) && !!c.recurrenceUntil,
+        nextDate: effectiveDate(c),
+        occurrences: upcomingOccurrences(c.date, c.recurrenceUntil, truthy(c.intervalWeekly), truthy(c.intervalMonthly), truthy(c.intervalYearly)).map(d => d.toISOString()),
         clearnetPublic: !!c.clearnetPublic,
         encrypted: normalizePrivacy(c.isPublic) === 'private',
         opinions: agg.opinions,
@@ -503,6 +534,12 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
         isPublic: updatedData.isPublic !== undefined ? normalizePrivacy(updatedData.isPublic) : normalizePrivacy(c.isPublic),
         clearnetPublic: updatedData.clearnetPublic !== undefined ? (updatedData.clearnetPublic === true || updatedData.clearnetPublic === 'true' || updatedData.clearnetPublic === 'on') : !!c.clearnetPublic,
         attendees: uniq(Array.isArray(c.attendees) ? c.attendees : []),
+        images: normalizeImages(updatedData.images !== undefined ? updatedData.images : c.images),
+        video: updatedData.video !== undefined ? normalizeVideo(updatedData.video) : normalizeVideo(c.video),
+        intervalWeekly: updatedData.intervalWeekly !== undefined ? truthy(updatedData.intervalWeekly) : truthy(c.intervalWeekly),
+        intervalMonthly: updatedData.intervalMonthly !== undefined ? truthy(updatedData.intervalMonthly) : truthy(c.intervalMonthly),
+        intervalYearly: updatedData.intervalYearly !== undefined ? truthy(updatedData.intervalYearly) : truthy(c.intervalYearly),
+        recurrenceUntil: updatedData.recurrenceUntil !== undefined ? String(updatedData.recurrenceUntil || '').trim() : (c.recurrenceUntil || ''),
         updatedAt: new Date().toISOString(),
         replaces: eventId
       };
@@ -610,6 +647,14 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
                 status,
                 isPublic: normalizePrivacy(c.isPublic),
                 mapUrl: c.mapUrl || "",
+                images: normalizeImages(c.images),
+                video: normalizeVideo(c.video),
+                intervalWeekly: truthy(c.intervalWeekly),
+                intervalMonthly: truthy(c.intervalMonthly),
+                intervalYearly: truthy(c.intervalYearly),
+                recurrenceUntil: c.recurrenceUntil || '',
+                recurring: hasAnyInterval(truthy(c.intervalWeekly), truthy(c.intervalMonthly), truthy(c.intervalYearly)) && !!c.recurrenceUntil,
+                nextDate: effectiveDate(c),
                 encrypted: normalizePrivacy(c.isPublic) === 'private',
                 opinions: agg.opinions,
                 opinions_inhabitants: agg.opinions_inhabitants

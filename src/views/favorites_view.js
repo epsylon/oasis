@@ -10,6 +10,30 @@ const userId = config.keys.id;
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 const safeText = (v) => String(v || "").trim();
 
+const FILTER_KINDS = [
+  { value: "audios", label: () => i18n.favoritesFilterAudios },
+  { value: "bookmarks", label: () => i18n.favoritesFilterBookmarks },
+  { value: "calendars", label: () => i18n.favoritesFilterCalendars },
+  { value: "chats", label: () => i18n.favoritesFilterChats },
+  { value: "documents", label: () => i18n.favoritesFilterDocuments },
+  { value: "events", label: () => i18n.favoritesFilterEvents },
+  { value: "forum", label: () => i18n.favoritesFilterForum },
+  { value: "housing", label: () => i18n.favoritesFilterHousing },
+  { value: "images", label: () => i18n.favoritesFilterImages },
+  { value: "jobs", label: () => i18n.favoritesFilterJobs },
+  { value: "maps", label: () => i18n.favoritesFilterMaps },
+  { value: "market", label: () => i18n.favoritesFilterMarket },
+  { value: "pads", label: () => i18n.favoritesFilterPads },
+  { value: "projects", label: () => i18n.favoritesFilterProjects },
+  { value: "reports", label: () => i18n.favoritesFilterReports },
+  { value: "shopProducts", label: () => i18n.favoritesFilterShopProducts },
+  { value: "tasks", label: () => i18n.favoritesFilterTasks },
+  { value: "torrents", label: () => i18n.favoritesFilterTorrents },
+  { value: "transfers", label: () => i18n.favoritesFilterTransfers },
+  { value: "videos", label: () => i18n.favoritesFilterVideos },
+  { value: "votes", label: () => i18n.favoritesFilterVotes }
+];
+
 const buildReturnTo = (filter) => {
   const f = safeText(filter || "all");
   return `/favorites?filter=${encodeURIComponent(f)}`;
@@ -23,6 +47,47 @@ const renderTags = (tags) => {
         list.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
       )
     : null;
+};
+
+const DETAIL_KEYS = [
+  "status", "category", "severity", "priority", "location", "place",
+  "date", "deadline", "startTime", "endTime", "price", "salary", "amount",
+  "concept", "question", "housing_type", "property_type", "item_type", "sector"
+];
+
+const fieldLabel = (key) => {
+  const camel = key.replace(/_(.)/g, (_, c) => c.toUpperCase());
+  return i18n[camel + "Label"] || i18n["search" + camel.charAt(0).toUpperCase() + camel.slice(1)] || camel.toUpperCase();
+};
+
+const fieldValue = (v) => {
+  if (v === null || v === undefined) return "";
+  if (Array.isArray(v)) return v.filter(Boolean).join(", ");
+  if (typeof v === "object") return "";
+  return String(v).trim();
+};
+
+const renderDetailFields = (item) => {
+  const content = item && item.content;
+  if (!content || typeof content !== "object") return null;
+  const rows = DETAIL_KEYS
+    .map((k) => [k, fieldValue(content[k])])
+    .filter(([, v]) => v)
+    .map(([k, v]) =>
+      div({ class: "card-field" },
+        span({ class: "card-label" }, `${fieldLabel(k)}: `),
+        span({ class: "card-value" }, v)
+      )
+    );
+  const members = ["members", "participants", "attendees", "assignees", "confirmedBy"]
+    .map((k) => [k, Array.isArray(content[k]) ? content[k].length : null])
+    .find(([, n]) => typeof n === "number" && n > 0);
+  if (members) {
+    rows.push(div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${fieldLabel(members[0])}: ${members[1]}`)
+    ));
+  }
+  return rows.length ? div({ class: "cv-card-fields" }, ...rows) : null;
 };
 
 const renderBookmarkUrl = (item) => {
@@ -60,7 +125,7 @@ const renderFavoriteCard = (item, filter) => {
   const title = safeText(item.title) || safeText(item.name) || safeText(item.category) || safeText(item.url) || "";
 
   const ts = item.updatedAt || item.createdAt;
-  const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm:ss") : "";
+  const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm") : "";
 
   const isOwn = item.author && String(item.author) === String(userId);
   return div(
@@ -95,6 +160,7 @@ const renderFavoriteCard = (item, filter) => {
       renderImagePreview(item),
       renderBookmarkUrl(item),
       safeText(item.description) ? p(...renderUrl(item.description)) : null,
+      renderDetailFields(item),
       renderTags(item.tags),
       p(
         { class: "card-footer" },
@@ -105,7 +171,7 @@ const renderFavoriteCard = (item, filter) => {
   );
 };
 
-exports.favoritesView = async (items, filter = "all", counts = {}) => {
+exports.favoritesView = async (items, filter = "all", counts = {}, q = "") => {
   const c = counts || {};
   const total = typeof c.all === "number" ? c.all : safeArr(items).length;
 
@@ -125,53 +191,22 @@ exports.favoritesView = async (items, filter = "all", counts = {}) => {
             { type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" },
             `${i18n.favoritesFilterRecent} (${total})`
           ),
-          button(
-            { type: "submit", name: "filter", value: "audios", class: filter === "audios" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterAudios} (${c.audios || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "bookmarks", class: filter === "bookmarks" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterBookmarks} (${c.bookmarks || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "documents", class: filter === "documents" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterDocuments} (${c.documents || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "images", class: filter === "images" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterImages} (${c.images || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "maps", class: filter === "maps" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterMaps} (${c.maps || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "pads", class: filter === "pads" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterPads || "PADS"} (${c.pads || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "chats", class: filter === "chats" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterChats || "CHATS"} (${c.chats || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "calendars", class: filter === "calendars" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterCalendars || "CALENDARS"} (${c.calendars || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "videos", class: filter === "videos" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterVideos} (${c.videos || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "torrents", class: filter === "torrents" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterTorrents || "TORRENTS"} (${c.torrents || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "market", class: filter === "market" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterMarket || "MARKET"} (${c.market || 0})`
-          ),
-          button(
-            { type: "submit", name: "filter", value: "shopProducts", class: filter === "shopProducts" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterShopProducts || "SHOP ITEMS"} (${c.shopProducts || 0})`
+          ...FILTER_KINDS.map((k) =>
+            button(
+              { type: "submit", name: "filter", value: k.value, class: filter === k.value ? "filter-btn active" : "filter-btn" },
+              `${k.label()} (${c[k.value] || 0})`
+            )
+          )
+        )
+      ),
+      div(
+        { class: "filters" },
+        form(
+          { method: "GET", action: "/favorites", class: "filter-box" },
+          input({ type: "hidden", name: "filter", value: filter }),
+          input({ type: "text", name: "q", value: q, placeholder: i18n.favoritesSearchPlaceholder, class: "filter-box__input" }),
+          div({ class: "filter-box__controls" },
+            button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
           )
         )
       ),

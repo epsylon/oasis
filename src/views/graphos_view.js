@@ -88,9 +88,9 @@ const buildGraphSvg = (me, peers) => {
     + `</svg>`;
 };
 
-const kpi = (label, value) => div({ class: 'stats-kpi' },
-  div({ class: 'stats-kpi-label' }, label),
-  div({ class: 'stats-kpi-value' }, String(value))
+const kpi = (label, value) => div({ class: 'stats-kpi stats-kpi-inline' },
+  span({ class: 'stats-kpi-label' }, `${String(label).toUpperCase()}: `),
+  span({ class: 'stats-kpi-value' }, String(value))
 );
 
 const legendItem = (kind, label) =>
@@ -126,27 +126,27 @@ exports.graphosView = ({ filter, me, peers, kpis, focus = null, focusId = null, 
             modes.map(m =>
               form({ method: 'GET', action: '/graphos' },
                 input({ type: 'hidden', name: 'filter', value: m }),
-                button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, i18n[m + 'Button'])
+                button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, String(i18n[m + 'Button']).toUpperCase())
               )
             )
           ),
       capped
         ? p({ class: 'graphos-cap-note' }, `${i18n.graphosShowing || 'Showing'} ${shown} / ${total}`)
         : null,
-      div({ class: 'graphos-legend' },
-        legendItem('me', i18n.graphosYou || 'You'),
-        legendItem('online', i18n.online || 'Online'),
-        filter !== 'MINE' ? legendItem('discovered', i18n.discovered || 'Discovered') : null,
-        filter !== 'MINE' ? legendItem('unknown', i18n.unknown || 'Unknown') : null
-      ),
-      div({ class: 'graphos-canvas', innerHTML: buildGraphSvg(me, peers) }),
-      div({ class: 'stats-block' },
+      div({ class: 'stats-block graphos-stats' },
         div({ class: 'stats-grid' },
           kpi(i18n.graphosTotalNodes || 'Total nodes', kpis.total),
           kpi(i18n.online || 'Online', kpis.online),
           filter !== 'MINE' ? kpi(i18n.discovered || 'Discovered', kpis.discovered) : null,
           filter !== 'MINE' ? kpi(i18n.unknown || 'Unknown', kpis.unknown) : null
         )
+      ),
+      div({ class: 'graphos-canvas', innerHTML: buildGraphSvg(me, peers) }),
+      div({ class: 'graphos-legend' },
+        legendItem('me', i18n.graphosYou || 'You'),
+        legendItem('online', i18n.online || 'Online'),
+        filter !== 'MINE' ? legendItem('discovered', i18n.discovered || 'Discovered') : null,
+        filter !== 'MINE' ? legendItem('unknown', i18n.unknown || 'Unknown') : null
       )
     )
   );

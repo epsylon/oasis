@@ -223,11 +223,17 @@ MODULES=(
   mods/banking
   mods/ai
   mods/profile
-  mods/peers
   mods/multiuser
   mods/larp
   mods/melody
 )
+
+while IFS= read -r discovered; do
+  case " ${MODULES[*]} " in
+    *" $discovered "*) ;;
+    *) MODULES+=("$discovered") ;;
+  esac
+done < <(find test/mods -type f -name '*.test.js' -printf '%h\n' | sed 's|^test/||' | sort -u)
 
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
 REPORT_DIR="test/results"

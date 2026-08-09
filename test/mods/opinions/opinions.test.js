@@ -12,7 +12,7 @@ describe('opinions: cast + list', (t) => {
 
   t('opinion on a bookmark surfaces it with an aggregated category count', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const bm = await A.use('bookmarks').createBookmark('https://oasis.test/one', [], 'first', '', '');
+    const bm = await A.use('bookmarks').createBookmark('https://oasis.test/one', [], 'first', '');
     await A.use('opinions').createVote(bm.key, 'interesting');
     const list = await A.use('opinions').listOpinions('ALL', '');
     const item = list.find(m => m.value.content.type === 'bookmark' && m.value.content.url === 'https://oasis.test/one');
@@ -24,7 +24,7 @@ describe('opinions: cast + list', (t) => {
   t('two distinct peers voting aggregate to 2; a repeat by same author does not inflate', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    const bm = await A.use('bookmarks').createBookmark('https://oasis.test/agg', [], 'agg', '', '');
+    const bm = await A.use('bookmarks').createBookmark('https://oasis.test/agg', [], 'agg', '');
     await A.use('opinions').createVote(bm.key, 'useful');
     await A.use('opinions').createVote(bm.key, 'useful');
     B.setActor();
@@ -39,8 +39,8 @@ describe('opinions: cast + list', (t) => {
 
   t('category filter returns only content opined in that category', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const one = await A.use('bookmarks').createBookmark('https://oasis.test/cat1', [], 'c1', '', '');
-    const two = await A.use('bookmarks').createBookmark('https://oasis.test/cat2', [], 'c2', '', '');
+    const one = await A.use('bookmarks').createBookmark('https://oasis.test/cat1', [], 'c1', '');
+    const two = await A.use('bookmarks').createBookmark('https://oasis.test/cat2', [], 'c2', '');
     await A.use('opinions').createVote(one.key, 'insightful');
     await A.use('opinions').createVote(two.key, 'funny');
     const insightful = await A.use('opinions').listOpinions('insightful', '');
@@ -51,10 +51,10 @@ describe('opinions: cast + list', (t) => {
   t('MINE filter only returns the viewer own content', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
-    const mineBm = await A.use('bookmarks').createBookmark('https://oasis.test/mine', [], 'mine', '', '');
+    const mineBm = await A.use('bookmarks').createBookmark('https://oasis.test/mine', [], 'mine', '');
     await A.use('opinions').createVote(mineBm.key, 'interesting');
     B.setActor();
-    const otherBm = await B.use('bookmarks').createBookmark('https://oasis.test/other', [], 'other', '', '');
+    const otherBm = await B.use('bookmarks').createBookmark('https://oasis.test/other', [], 'other', '');
     await B.use('opinions').createVote(otherBm.key, 'interesting');
     A.setActor();
     const mine = await A.use('opinions').listOpinions('MINE', '');
@@ -65,7 +65,7 @@ describe('opinions: cast + list', (t) => {
 
   t('invalid category is rejected', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const bm = await A.use('bookmarks').createBookmark('https://oasis.test/bad', [], 'bad', '', '');
+    const bm = await A.use('bookmarks').createBookmark('https://oasis.test/bad', [], 'bad', '');
     await throwsAsync(() => A.use('opinions').createVote(bm.key, 'notarealcategory'), /Invalid voting category/);
   });
 
@@ -79,7 +79,7 @@ describe('opinions: cast + list', (t) => {
   t('voting on a non-existent message is rejected and getMessageById resolves real ones', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     await throwsAsync(() => A.use('opinions').createVote('%doesnotexist.sha256', 'interesting'), /not found/);
-    const bm = await A.use('bookmarks').createBookmark('https://oasis.test/get', [], 'g', '', '');
+    const bm = await A.use('bookmarks').createBookmark('https://oasis.test/get', [], 'g', '');
     const msg = await A.use('opinions').getMessageById(bm.key);
     eq(msg.content.type, 'bookmark');
   });
@@ -88,8 +88,8 @@ describe('opinions: cast + list', (t) => {
 describe('opinions: only opined content is listed', (t) => {
   t('content without any opinion never appears in the listing', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const opined = await A.use('bookmarks').createBookmark('https://oasis.test/has-op', [], 'a', '', '');
-    await A.use('bookmarks').createBookmark('https://oasis.test/no-op', [], 'b', '', '');
+    const opined = await A.use('bookmarks').createBookmark('https://oasis.test/has-op', [], 'a', '');
+    await A.use('bookmarks').createBookmark('https://oasis.test/no-op', [], 'b', '');
     await A.use('opinions').createVote(opined.key, 'interesting');
     for (const f of ['ALL', 'TOP', 'MINE', 'RECENT']) {
       const list = await A.use('opinions').listOpinions(f, '');

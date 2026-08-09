@@ -7,7 +7,7 @@ const openJudgeCase = async (A, B, method = 'JUDGE', title = 'dispute') => {
   return res.key;
 };
 
-describe('courts: generic functionality', (t) => {
+describe('courts: the rules of a case', (t) => {
   t('openCase validates title, method and respondent', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
     await throwsAsync(() => A.use('courts').openCase({ titleBase: '   ', respondentInput: B.keypair.id, method: 'JUDGE' }), /Title is required/);

@@ -99,13 +99,13 @@ exports.gamesView = (filter = 'all', hall = null) => {
     form({ method: 'GET', action: '/games' },
       input({ type: 'hidden', name: 'filter', value: 'all' }),
       button({ type: 'submit', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' },
-        i18n.gamesFilterAll
+        String(i18n.gamesFilterAll).toUpperCase()
       )
     ),
     form({ method: 'GET', action: '/games' },
       input({ type: 'hidden', name: 'filter', value: 'scoring' }),
       button({ type: 'submit', class: filter === 'scoring' ? 'filter-btn active' : 'filter-btn' },
-        i18n.gamesFilterScoring
+        String(i18n.gamesFilterScoring).toUpperCase()
       )
     )
   );

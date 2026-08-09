@@ -1069,17 +1069,18 @@ const CaseSearch = (filter, search = '') =>
   div(
     { class: 'filters' },
     form(
-      { method: 'GET', action: '/courts' },
+      { method: 'GET', action: '/courts', class: 'filter-box' },
       input({ type: 'hidden', name: 'filter', value: filter }),
       input({
         type: 'text',
         name: 'search',
         placeholder: i18n.searchCasesPlaceholder,
-        value: search || ''
+        value: search || '',
+        class: 'filter-box__input'
       }),
-      br(),
-      button({ type: 'submit' }, i18n.applyFilters),
-      br()
+      div({ class: 'filter-box__controls' },
+        button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+      )
     )
   );
 

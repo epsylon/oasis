@@ -264,7 +264,7 @@ const CandidatureStats = (cands, govCard, leaderMeta, electionQuorum = 2) => {
     h2(i18n.parliamentElectionsStatusTitle),
     div({ class: 'card-field card-field--spaced' },
       span({ class: 'card-label' }, winLbl + ': '),
-      span({ class: 'card-value' }, hasQuorum ? idLink : span({ style: 'color:#ffcc00;font-weight:bold;' }, i18n.voteNoQuorum || 'NO QUORUM'))
+      span({ class: 'card-value' }, hasQuorum ? idLink : span({ class: 'vote-no-quorum' }, i18n.voteNoQuorum || 'NO QUORUM'))
     ),
     hasQuorum
       ? div({ class: 'card-field card-field--spaced' },

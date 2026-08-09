@@ -156,7 +156,13 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
                   span({ class: "pm-fileshare-meta" }, `${fileSharePreview.sizeLabel || ''} · ${String(fileSharePreview.mime || 'application/octet-stream')}`)
                 ),
                 form({ method: "POST", action: "/pm/file", class: "pm-fileshare-send-form" },
-                  input({ type: "hidden", name: "recipient", value: fileSharePreview.recipient }),
+                  fileSharePreview.recipient
+                    ? input({ type: "hidden", name: "recipient", value: fileSharePreview.recipient })
+                    : div({ class: "pm-fileshare-recipient" },
+                        label({ for: "fs-preview-recipient" }, i18n.pmRecipients),
+                        br(),
+                        input({ id: "fs-preview-recipient", type: "text", name: "recipient", placeholder: i18n.fileShareRecipientPlaceholder || 'Enter Oasis ID (@....ed25519)', required: true, maxlength: "120" })
+                      ),
                   input({ type: "hidden", name: "subject", value: fileSharePreview.subject || '' }),
                   input({ type: "hidden", name: "manifestBlobId", value: fileSharePreview.manifestBlobId }),
                   input({ type: "hidden", name: "keyHex", value: fileSharePreview.keyHex }),

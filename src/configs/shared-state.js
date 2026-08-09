@@ -9,6 +9,8 @@ let _ecoValue = null;
 let _lastActivity = null;
 let _maxBlockBytes = 0;
 let _inhabitantCount = 0;
+let _mentionsCount = 0;
+let _bestMatch = null;
 module.exports = {
   getInboxCount: () => _inboxCount,
   setInboxCount: (n) => { _inboxCount = n; },
@@ -30,6 +32,10 @@ module.exports = {
   setLastActivity: (a) => { _lastActivity = a; },
   getMaxBlockBytes: () => _maxBlockBytes,
   setMaxBlockBytes: (n) => { if (Number(n) > _maxBlockBytes) _maxBlockBytes = Number(n); },
+  getMentionsCount: () => _mentionsCount,
+  setMentionsCount: (n) => { _mentionsCount = Math.max(0, Number(n) || 0); },
   getInhabitantCount: () => _inhabitantCount,
-  setInhabitantCount: (n) => { _inhabitantCount = Math.max(0, Number(n) || 0); }
+  setInhabitantCount: (n) => { _inhabitantCount = Math.max(0, Number(n) || 0); },
+  getBestMatch: () => _bestMatch,
+  setBestMatch: (m) => { _bestMatch = m || null; }
 };

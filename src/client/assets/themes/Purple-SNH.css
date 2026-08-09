@@ -362,6 +362,8 @@ a.user-link:focus {
 .block-row--details .block-url:hover { background: #5A1A85 !important; color: #FFD600 !important; }
 .btn-singleview { background: #4B1A72 !important; color: #B86ADE !important; }
 .btn-singleview:hover { background: #5A1A85 !important; color: #FFD600 !important; }
+.btn-spread-on, .content-actions .btn-pin-on { background: #B86ADE !important; color: #2A0E42 !important; }
+.btn-spread-on:hover, .content-actions .btn-pin-on:hover { background: #CE8CE9 !important; color: #2A0E42 !important; }
 .btn-back { background: #A34AD8 !important; color: #FFFFFF !important; }
 .btn-back:hover { background: #751E9F !important; color: #FFFFFF !important; }
 .block-info-table td, .pm-info-table td { border-color: #B86ADE !important; }

@@ -1,7 +1,7 @@
 const { eq, ok, notOk, throwsAsync } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
-describe('parliament: generic functionality', (t) => {
+describe('parliament: the rules of candidatures and proposals', (t) => {
   t('proposeCandidature validates method and candidate', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
     await throwsAsync(() => A.use('parliament').proposeCandidature({ candidateId: B.keypair.id, method: 'BOGUS' }), /Invalid method/);
@@ -46,12 +46,14 @@ describe('parliament: generic functionality', (t) => {
     await throwsAsync(() => A.use('parliament').proposeCandidature({ candidateId: targets[3].keypair.id, method: 'DEMOCRACY' }), /limit/);
   });
 
-  t('no term exists until governance activity begins', async () => {
+  t('with nobody elected the government is ANARCHY, and nothing is written down', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const term = await A.use('parliament').getCurrentTerm();
-    eq(term, null);
+    eq(term.method, 'ANARCHY', 'an empty parliament is an anarchy');
+    ok(term.virtual, 'and it is derived from the calendar, not from a message');
+    eq(await A.use('parliament').getPublishedTerm(), null, 'no term was published');
     const terms = await A.use('parliament').listTerms('all');
-    ok(Array.isArray(terms) && terms.length === 0);
+    ok(Array.isArray(terms) && terms.length === 0, 'the log stays empty');
   });
 
   t('createProposal validates title and description, and opens an ANARCHY term', async () => {

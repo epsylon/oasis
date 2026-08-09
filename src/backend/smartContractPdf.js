@@ -3,7 +3,7 @@ const path = require('path');
 
 const LOGO_PATH = path.join(__dirname, '..', 'client', 'assets', 'images', 'snh-oasis.jpg');
 
-const escapePdf = s => String(s || '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+const { escapePdf } = require('./pdfDocument');
 
 const wrap = (txt, max = 82) => {
   const out = [];
@@ -131,8 +131,8 @@ function buildSmartContractPdf({ transfer, block, viewerId }) {
 
   const catalogId = addObj(null);
   const pagesId = addObj(null);
-  const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>');
-  const fontBoldId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold >>');
+  const fontId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>');
+  const fontBoldId = addObj('<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>');
   let logoXObjId = null;
   if (logoBuf && logoDims) {
     const cs = logoDims.c === 1 ? '/DeviceGray' : '/DeviceRGB';
@@ -185,7 +185,7 @@ function buildSmartContractPdf({ transfer, block, viewerId }) {
     parts.push(`BT\n/F1 8 Tf\n${pageW - marginX - pageLabelW} ${footerH - 10} Td\n(${escapePdf(pageLabel)}) Tj\nET`);
 
     const content = parts.join('\n');
-    const stream = `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`;
+    const stream = `<< /Length ${Buffer.byteLength(content, 'latin1')} >>\nstream\n${content}\nendstream`;
     const cid = addObj(stream);
     contentIds.push(cid);
     const pid = addObj(null);
