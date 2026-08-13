@@ -246,9 +246,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
   return template(i18n.forumTitle,
     section(
       div({ class: 'tags-header' },
-        h2(currentFilter === 'create'
-          ? i18n.forumCreateSectionTitle
-          : i18n.forumTitle),
+        h2(i18n.forumTitle),
         p(i18n.forumDescription)
       ),
       div({ class: 'mode-buttons-cols' },

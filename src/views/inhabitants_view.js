@@ -48,10 +48,10 @@ function resolvePhoto(photoField, size = 256) {
     if (photoField.startsWith('/blob/')) return photoField;
     if (photoField.startsWith('/image/')) {
       if (isDefaultImageId(photoField)) return '/assets/images/default-avatar.png';
-      return photoField.replace('/image/256/','/image/'+size+'/').replace('/image/512/','/image/'+size+'/');
+      return photoField.replace('/image/256/','/image/'+size+'/').replace('/image/512/','/image/'+size+'/') + '?fallback=avatar';
     }
   }
-  return toImageUrl(photoField, size);
+  return toImageUrl(photoField, size) + '?fallback=avatar';
 }
 
 const filterLabel = (mode) =>
@@ -169,31 +169,30 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
         estimatedUBI: user.estimatedUBI, lastClaimedDate: user.lastClaimedDate, totalClaimed: user.totalClaimed,
         larpHouse: user.larpHouse, stats: user.stats
       }, { relationshipNode: isMe ? span({ class: 'status you' }, i18n.relationshipYou) : null, excludeContent: true }),
-      (!isMe || filter === 'CVs')
+      filter === 'CVs'
         ? div(
             { class: 'cv-actions doc-export-actions' },
-            filter === 'CVs'
-              ? form(
-                  { method: 'GET', action: `/cv/pdf/${encodeURIComponent(user.id)}` },
-                  button({ type: 'submit', class: 'filter-btn' }, i18n.generatePdf)
-                )
-              : null,
-            filter === 'CVs'
-              ? form(
-                  { method: 'POST', action: `/cv/share/${encodeURIComponent(user.id)}` },
-                  button({ type: 'submit', class: 'filter-btn' }, i18n.sharePm)
-                )
-              : null,
-            !isMe
-              ? form(
-                  { method: 'GET', action: '/pm' },
-                  input({ type: 'hidden', name: 'recipients', value: user.id }),
-                  button({ type: 'submit', class: 'filter-btn' }, i18n.pmCreateButton)
-                )
-              : null
+            form(
+              { method: 'GET', action: `/cv/pdf/${encodeURIComponent(user.id)}` },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.generatePdf)
+            ),
+            form(
+              { method: 'POST', action: `/cv/share/${encodeURIComponent(user.id)}` },
+              button({ type: 'submit', class: 'filter-btn' }, i18n.sharePm)
+            )
           )
         : null,
-      !isMe ? div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(user.relationship || {}, user.id)) : null
+      !isMe
+        ? div(
+            { class: 'inhabitant-user-actions' },
+            div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(user.relationship || {}, user.id)),
+            form(
+              { method: 'GET', action: '/pm' },
+              input({ type: 'hidden', name: 'recipients', value: user.id }),
+              button({ type: 'submit', class: 'filter-btn' }, i18n.pmCreateButton)
+            )
+          )
+        : null
     ),
     div({ class: 'inhabitant-details' },
       h2(user.name || 'Anonymous'),

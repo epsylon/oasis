@@ -175,14 +175,7 @@ exports.renderPadInvitePage = (code) => {
 exports.padsView = async (pads, filter, padToEdit, params) => {
   const q = String((params && params.q) || "").trim()
   const isForm = filter === "create" || filter === "edit"
-  const headerMap = {
-    all: i18n.padAllSectionTitle || "Pads",
-    mine: i18n.padMineSectionTitle || "Your Pads",
-    recent: i18n.padRecentSectionTitle || "Recent Pads",
-    open: i18n.padOpenSectionTitle || "Open Pads",
-    closed: i18n.padClosedSectionTitle || "Closed Pads"
-  }
-  const headerText = headerMap[filter] || headerMap.all
+  const headerText = i18n.padsTitle
 
   const filteredPads = q
     ? pads.filter(pd => String(pd.title || "").toLowerCase().includes(q.toLowerCase()))
@@ -255,10 +248,7 @@ exports.singlePadView = async (pad, entries, params) => {
       return form({ method: "POST", action: `/pads/open-invite/create/${encodeURIComponent(pad.rootId)}` },
         button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
       )
-    })(),
-    !isAuthor
-      ? a({ href: `/pm?to=${encodeURIComponent(pad.author)}`, class: "tribe-action-btn" }, "PM")
-      : null
+    })()
   ].filter(Boolean)
 
   const padSide = div({ class: "tribe-side" },

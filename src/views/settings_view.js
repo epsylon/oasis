@@ -1,4 +1,4 @@
-const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span, img } = require("../server/node_modules/hyperaxe");
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
@@ -89,20 +89,6 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         updateButton
       )
     ),
-    workflowSection,
-    section(
-      div({ class: "tags-header" },
-        h2(i18n.theme),
-        p(i18n.themeIntro),
-        form(
-          { action: "/settings/theme", method: "post" },
-          select({ name: "theme" }, ...themeElements),
-          br(),
-          br(),
-          button({ type: "submit" }, i18n.setTheme)
-        )
-      )
-    ),
     section(
       div({ class: "tags-header" },
         h2(i18n.language),
@@ -136,16 +122,59 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
           { action: "/settings/ux", method: "POST" },
           (() => {
             const aiNavEnabled = currentConfig.modules && currentConfig.modules.aiNavMod === 'on';
-            const opts = [
-              option({ value: "blocks", ...((currentConfig.ux?.current !== "ainav") ? true : undefined ? { selected: true } : {})}, i18n.uxModeMenus || "Blocks")
-            ];
-            if (aiNavEnabled) {
-              opts.push(option({ value: "ainav", ...(currentConfig.ux?.current === "ainav" ? true : undefined ? { selected: true } : {})}, i18n.uxModeAINav || "AI"));
-            }
-            return select({ name: "ux" }, ...opts);
+            const chatsEnabled = currentConfig.modules && currentConfig.modules.chatsMod === 'on';
+            const cur = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : "blocks";
+            const uxCard = (value, title, image) => label({ class: "welcome-ux-option" },
+              input({ type: "radio", name: "ux", value, ...(cur === value ? { checked: true } : {}) }),
+              img({ src: image, class: "welcome-ux-shot", alt: title }),
+              span({ class: "welcome-ux-label" }, title)
+            );
+            return div({ class: "welcome-ux-grid" },
+              uxCard("blocks", i18n.uxModeMenus || "Blocks", "/assets/images/ux-blocks.png"),
+              chatsEnabled ? uxCard("chats", i18n.chatsTitle || "Chats", "/assets/images/ux-chats.png") : null,
+              aiNavEnabled ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null
+            );
           })(),
-          br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    workflowSection,
+    section(
+      div({ class: "tags-header" },
+        h2(i18n.theme),
+        p(i18n.themeIntro),
+        form(
+          { action: "/settings/theme", method: "post" },
+          select({ name: "theme" }, ...themeElements),
+          br(),
+          br(),
+          button({ type: "submit" }, i18n.setTheme)
+        )
+      )
+    ),
+    section(
+      div({ class: "tags-header" },
+        h2(i18n.homePageTitle),
+        p(i18n.homePageDescription),
+        form(
+          { action: "/settings/home-page", method: "POST" },
+          select({ name: "homePage" },
+            ...[
+              { value: "activity", label: i18n.activityTitle },
+              { value: "ai", label: i18n.aiTitle, mod: "ai" },
+              { value: "trending", label: i18n.trendingTitle, mod: "trending" },
+              { value: "forum", label: i18n.forumTitle, mod: "forum" },
+              { value: "feed", label: i18n.feedTitle, mod: "feed" },
+              { value: "inbox", label: i18n.inbox },
+              { value: "agenda", label: i18n.agendaTitle, mod: "agenda" },
+              { value: "favorites", label: i18n.favoritesTitle, mod: "favorites" }
+            ].filter(o => !o.mod || modOn(o.mod)).map(o => currentConfig.homePage === o.value
+              ? option({ value: o.value, selected: true }, o.label)
+              : option({ value: o.value }, o.label))
+          ),
+          br(), br(),
+          button({ type: "submit" }, i18n.saveHomePage)
         )
       )
     ),
@@ -180,35 +209,6 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
         )
       )
     ) : null,
-    section(
-      div({ class: "tags-header" },
-        h2(i18n.homePageTitle),
-        p(i18n.homePageDescription),
-        form(
-          { action: "/settings/home-page", method: "POST" },
-          select({ name: "homePage" },
-            ...[
-              { value: "activity", label: i18n.activityTitle },
-              { value: "ai", label: i18n.aiTitle, mod: "ai" },
-              { value: "trending", label: i18n.trendingTitle, mod: "trending" },
-              { value: "opinions", label: i18n.opinionsTitle, mod: "opinions" },
-              { value: "forum", label: i18n.forumTitle, mod: "forum" },
-              { value: "feed", label: i18n.feedTitle, mod: "feed" },
-              { value: "mentions", label: i18n.mentions },
-              { value: "inbox", label: i18n.inbox },
-              { value: "agenda", label: i18n.agendaTitle, mod: "agenda" },
-              { value: "favorites", label: i18n.favoritesTitle, mod: "favorites" },
-              { value: "stats", label: i18n.statsTitle },
-              { value: "blockexplorer", label: i18n.blockchain }
-            ].filter(o => !o.mod || modOn(o.mod)).map(o => currentConfig.homePage === o.value
-              ? option({ value: o.value, selected: true }, o.label)
-              : option({ value: o.value }, o.label))
-          ),
-          br(), br(),
-          button({ type: "submit" }, i18n.saveHomePage)
-        )
-      )
-    ),
     section(
       div({ class: "tags-header" },
       h2(i18n.ssbLogStream),

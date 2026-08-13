@@ -172,11 +172,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   const { renderReachChip: renderReachChipEvents } = require('./clearnet_view');
   const viewerClearnetEvents = !!(params.viewerPrefs && params.viewerPrefs.clearnetEvents);
 
-  const title =
-    currentFilter === "mine" ? i18n.eventMineSectionTitle :
-    currentFilter === "create" ? i18n.eventCreateSectionTitle :
-    currentFilter === "edit" ? i18n.eventUpdateSectionTitle :
-    i18n.eventAllSectionTitle;
+  const title = i18n.eventsTitle;
 
   const eventToEdit = list.find((e) => e.id === eventId) || {};
   const formData = currentFilter === "edit" ? eventToEdit : (params.draft || {});
@@ -421,12 +417,6 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   ].filter(Boolean);
 
   const sideActions = [];
-  if (event.organizer && event.organizer !== userId) {
-    sideActions.push(form({ method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: event.organizer }),
-      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-    ));
-  }
   const attendNode = renderEventAttendAction(event, isAttending, returnToSelf);
   if (attendNode) sideActions.push(attendNode);
   if (params.linkedCalendarId) {

@@ -20,14 +20,6 @@ const buildReturnTo = (filter, params = {}) => {
   return `/maps?${parts.join("&")}`;
 };
 
-const renderPMButton = (recipient) => {
-  const r = safeText(recipient);
-  if (!r || String(r) === String(userId)) return null;
-  return form({ method: "GET", action: "/pm" },
-    input({ type: "hidden", name: "recipients", value: r }),
-    button({ type: "submit", class: "filter-btn" }, i18n.privateMessage));
-};
-
 const renderTags = (tags) => {
   const list = safeArr(tags).map((t) => String(t || "").trim()).filter(Boolean);
   return list.length
@@ -399,12 +391,7 @@ exports.renderMapInvitePage = (code) => {
 
 exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(mapId) };
-  const title = filter === "mine" ? i18n.mapMineSectionTitle
-    : filter === "create" ? i18n.mapCreateSectionTitle
-      : filter === "edit" ? i18n.mapUpdateSectionTitle
-        : filter === "recent" ? i18n.mapRecentSectionTitle
-          : filter === "favorites" ? i18n.mapFavoritesSectionTitle
-            : i18n.mapAllSectionTitle;
+  const title = i18n.mapTitle;
 
   const q = safeText(params.q || "");
   const list = safeArr(maps);

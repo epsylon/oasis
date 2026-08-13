@@ -10,7 +10,7 @@ const generateCVBox = (label, content, className) => {
 };
 
 exports.createCVView = async (cv = {}, editMode = false) => {
-  const title = editMode ? i18n.cvEditSectionTitle : i18n.cvCreateSectionTitle;
+  const title = i18n.cvTitle;
 
   return template(
     title,

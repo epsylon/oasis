@@ -38,18 +38,6 @@ const buildReturnTo = (filter, params = {}) => {
   return `/videos?${parts.join("&")}`;
 };
 
-const renderPMButton = (recipient, className = "filter-btn") => {
-  const r = safeText(recipient);
-  if (!r) return null;
-  if (String(r) === String(userId)) return null;
-
-  return form(
-    { method: "GET", action: "/pm" },
-    input({ type: "hidden", name: "recipients", value: r }),
-    button({ type: "submit", class: className }, i18n.privateMessage)
-  );
-};
-
 const renderTags = (tags) => {
   const list = safeArr(tags).map((t) => String(t || "").trim()).filter(Boolean);
   return list.length
@@ -205,20 +193,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
 
 exports.videoView = async (videos, filter = "all", videoId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(videoId) };
-  const title =
-    filter === "mine"
-      ? i18n.videoMineSectionTitle
-      : filter === "create"
-        ? i18n.videoCreateSectionTitle
-        : filter === "edit"
-          ? i18n.videoUpdateSectionTitle
-          : filter === "recent"
-            ? i18n.videoRecentSectionTitle
-            : filter === "top"
-              ? i18n.videoTopSectionTitle
-              : filter === "favorites"
-                ? i18n.videoFavoritesSectionTitle
-                : i18n.videoAllSectionTitle;
+  const title = i18n.videoTitle;
 
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
@@ -307,9 +282,6 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
 
   const ownerActions = renderVideoOwnerActions(filter, videoObj, { q, sort });
   const sideActions = [];
-  if (videoObj.author && String(videoObj.author) !== String(userId)) {
-    sideActions.push(renderPMButton(videoObj.author));
-  }
   for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(videoObj.tags);

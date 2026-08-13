@@ -762,14 +762,7 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
           span(),
           renderContentActions(bp.id, null, { spread: params.spreads || null, author: bp.author, reportTitle: bp.name || bp.title })
         ),
-        (bp.author && String(bp.author) !== String(userId))
-          ? div({ class: "bookmark-topbar transfer-topbar-single" },
-              div({ class: "bookmark-topbar-left" },
-                form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: bp.author }), button({ type: "submit", class: "filter-btn" }, i18n.privateMessage))
-              )
-            )
-          : null,
-        div({ class: "card-chips-row" },
+                div({ class: "card-chips-row" },
           renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
           renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase())
         ),
@@ -954,14 +947,7 @@ exports.singleBuildView = async (build, params = {}) => {
           span(),
           renderContentActions(b.id, null, { spread: params.spreads || null, author: b.proposer, reportTitle: b.title })
         ),
-        (b.proposer && String(b.proposer) !== String(userId))
-          ? div({ class: "bookmark-topbar transfer-topbar-single" },
-              div({ class: "bookmark-topbar-left" },
-                form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: b.proposer }), button({ type: "submit", class: "filter-btn" }, i18n.privateMessage))
-              )
-            )
-          : null,
-        b.image ? div({ class: "shop-detail-media" }, renderMediaBlob(b.image, { class: "post-image" })) : null,
+                b.image ? div({ class: "shop-detail-media" }, renderMediaBlob(b.image, { class: "post-image" })) : null,
         h2(safeText(b.title) || (i18n.industryBuild || "Build")),
         div({ class: "card-chips-row" }, renderBuildStatusChip(status)),
       div({ class: "industry-meta" },

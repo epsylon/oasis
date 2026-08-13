@@ -183,19 +183,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
   const list = Array.isArray(tasks) ? tasks : [tasks];
   const currentFilter = filter || "all";
 
-  const title =
-    currentFilter === "mine" ? i18n.taskMineSectionTitle :
-    currentFilter === "create" ? i18n.taskCreateSectionTitle :
-    currentFilter === "edit" ? i18n.taskUpdateSectionTitle :
-    currentFilter === "open" ? i18n.taskOpenTitle :
-    currentFilter === "in-progress" ? i18n.taskInProgressTitle :
-    currentFilter === "closed" ? i18n.taskClosedTitle :
-    currentFilter === "assigned" ? i18n.taskAssignedTitle :
-    currentFilter === "priority-urgent" ? i18n.taskFilterUrgent :
-    currentFilter === "priority-high" ? i18n.taskFilterHigh :
-    currentFilter === "priority-medium" ? i18n.taskFilterMedium :
-    currentFilter === "priority-low" ? i18n.taskFilterLow :
-    i18n.taskAllSectionTitle;
+  const title = i18n.tasksTitle;
 
   const canSee = (t) => {
     const vis = String(t.isPublic || "").toUpperCase();
@@ -387,12 +375,6 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
     : null;
 
   const sideActions = [];
-  if (task.author && task.author !== userId) {
-    sideActions.push(form({ method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: task.author }),
-      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-    ));
-  }
   const assignNode = renderTaskAssignAction(task, isAssignedToMe, returnToSelf);
   const ownerActions = isAuthor ? renderTaskOwnerActions(task, returnToSelf) : [];
 

@@ -179,20 +179,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
 
 exports.torrentsView = async (torrents, filter = "all", torrentId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(torrentId) };
-  const title =
-    filter === "mine"
-      ? i18n.torrentMineSectionTitle
-      : filter === "create"
-        ? i18n.torrentCreateSectionTitle
-        : filter === "edit"
-          ? i18n.torrentUpdateSectionTitle
-          : filter === "recent"
-            ? i18n.torrentRecentSectionTitle
-            : filter === "top"
-              ? i18n.torrentTopSectionTitle
-              : filter === "favorites"
-                ? i18n.torrentFavoritesSectionTitle
-                : i18n.torrentAllSectionTitle;
+  const title = i18n.torrentsTitle;
 
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
@@ -281,13 +268,6 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
 
   const ownerActions = renderTorrentOwnerActions(filter, torrentObj, { q, sort });
   const sideActions = [];
-  if (torrentObj.author && String(torrentObj.author) !== String(userId)) {
-    sideActions.push(form(
-      { method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: torrentObj.author }),
-      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-    ));
-  }
   for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(torrentObj.tags);

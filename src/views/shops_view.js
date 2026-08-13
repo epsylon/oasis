@@ -208,75 +208,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
   const sort = safeText(params.sort || "recent")
   const list = safeArr(shops)
 
-  const title =
-    filter === "mine" ? i18n.shopMineSectionTitle :
-    filter === "recent" ? i18n.shopRecentSectionTitle :
-    filter === "top" ? i18n.shopTopSectionTitle :
-    filter === "products" ? i18n.shopProductsSectionTitle :
-    filter === "prices" ? (i18n.shopPricesSectionTitle || "Products by Price") :
-    filter === "favorites" ? i18n.shopFavoritesSectionTitle :
-    filter === "create" ? i18n.shopCreateSectionTitle :
-    filter === "edit" ? i18n.shopUpdateSectionTitle :
-    i18n.shopAllSectionTitle
-
-  const isForm = filter === "create" || filter === "edit"
-
-  const viewerClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetShops)
-  const header = [
-    div({ class: "tags-header" },
-      h2(title),
-      p(i18n.shopDescription)
-    ),
-    div({ class: "shop-title-row" }, renderReachChip(viewerClearnet, i18n)),
-    br()
-  ]
-
-  const searchBar = div({ class: "filters" },
-    form({ method: "GET", action: "/shops", class: "filter-box" },
-      input({ type: "hidden", name: "filter", value: filter }),
-      input({ type: "text", name: "q", placeholder: i18n.shopSearchPlaceholder, value: q, class: "filter-box__input" }),
-      div({ class: "filter-box__controls" },
-        button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
-      )
-    )
-  )
-
-  const sortedProducts = filter === "products"
-    ? [...list].sort((a, b) => safeArr(b.opinions_inhabitants).length - safeArr(a.opinions_inhabitants).length)
-    : filter === "prices"
-      ? [...list].sort((a, b) => Number(b.price || 0) - Number(a.price || 0))
-      : list
-
-  return template(
-    title,
-    section(...header),
-    section(renderModeButtons(filter)),
-    !isForm ? section(searchBar) : null,
-    section(
-      isForm
-        ? renderShopForm(filter, filter === "edit" ? (shopToEdit || {}) : {}, params)
-        : filter === "products" || filter === "prices"
-          ? div({ class: "shop-products-grid" },
-              sortedProducts.length
-                ? sortedProducts.map(prod => renderProductCard(prod, prod.shopId, buildReturnTo(filter, params)))
-                : p(i18n.shopNoItems)
-            )
-          : div({ class: "tribe-grid" },
-              list.length
-                ? list.map(shop => renderShopCard(shop, filter, { q, sort, spreadMap: params.spreadMap }))
-                : p(i18n.shopNoItems)
-            )
-    )
-  )
-}
-
-exports.singleShopView = async (shop, filter, products = [], comments = [], params = {}) => {
-  const q = safeText(params.q || "")
-  const sort = safeText(params.sort || "recent")
-  const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort })
-  const isAuthor = String(shop.author) === String(userId)
-
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetShops && shop.visibility !== 'CLOSED');
+  const title = i18n.shopsTitle;
   const shopSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
       renderContentActions(shop.key, null, { spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title })
@@ -319,11 +251,6 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
     ),
-    shop.author && String(shop.author) !== String(userId)
-      ? div({ class: "tribe-side-actions" },
-          form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: shop.author }), button({ type: "submit", class: "tribe-action-btn" }, i18n.privateMessage))
-        )
-      : null,
     isAuthor
       ? div({ class: "tribe-side-actions shop-visibility-row" },
           span({ class: "card-label" }, `${i18n.visibilityLabel || "Visibility"}: `),
@@ -442,10 +369,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
     div({ class: "tribe-side-actions" },
       form({ method: "GET", action: `/shops/${encodeURIComponent(product.shopId)}` },
         button({ type: "submit", class: "tribe-action-btn" }, `← ${i18n.shopBackToShop}`)
-      ),
-      product.author && String(product.author) !== String(userId)
-        ? form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: product.author }), button({ type: "submit", class: "tribe-action-btn" }, i18n.privateMessage))
-        : null
+      )
     ),
     isAuthor
       ? div({ class: "tribe-side-actions owner-actions" },

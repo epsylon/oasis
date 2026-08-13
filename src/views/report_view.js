@@ -64,15 +64,6 @@ const renderStackedTextField = (lbl, val) =>
       )
     : null;
 
-const renderPmButton = (recipientId) =>
-  recipientId && String(recipientId) !== String(userId)
-    ? form(
-        { method: "GET", action: "/pm" },
-        input({ type: "hidden", name: "recipients", value: recipientId }),
-        button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-      )
-    : null;
-
 const renderReportStatusSetter = (report) => {
   const st = normalizeStatus(report && report.status ? report.status : "OPEN");
   return form(
@@ -310,20 +301,7 @@ const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => 
 };
 
 exports.reportView = async (reports, filter, reportId, createCategory, params = {}) => {
-  const title =
-    filter === "create" ? i18n.reportsCreateButton :
-    filter === "edit" ? i18n.reportsUpdateButton :
-    filter === "mine" ? i18n.reportsMineSectionTitle :
-    filter === "features" ? i18n.reportsFeaturesSectionTitle :
-    filter === "bugs" ? i18n.reportsBugsSectionTitle :
-    filter === "abuse" ? i18n.reportsAbuseSectionTitle :
-    filter === "content" ? i18n.reportsContentSectionTitle :
-    filter === "confirmed" ? i18n.reportsConfirmedSectionTitle :
-    filter === "open" ? i18n.reportsOpenSectionTitle :
-    filter === "under_review" ? i18n.reportsUnderReviewSectionTitle :
-    filter === "resolved" ? i18n.reportsResolvedSectionTitle :
-    filter === "invalid" ? i18n.reportsInvalidSectionTitle :
-    i18n.reportsAllSectionTitle;
+  const title = i18n.reportsTitle;
 
   let filtered = Array.isArray(reports) ? reports : [];
 
@@ -530,8 +508,6 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   ].filter(Boolean);
 
   const sideActions = [];
-  const pm = renderPmButton(report.author);
-  if (pm) sideActions.push(pm);
   sideActions.push(form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
     button({ type: "submit", class: "tribe-action-btn" }, i18n.reportsConfirmButton)
   ));

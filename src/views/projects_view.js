@@ -580,12 +580,6 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
   ].filter(Boolean)
 
   const sideActions = []
-  if (!isAuthor && pr.author) {
-    sideActions.push(form({ method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: pr.author }),
-      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-    ))
-  }
   if (!isAuthor && statusUpper === "ACTIVE") {
     sideActions.push(isFollower
       ? form({ method: "POST", action: `/projects/unfollow/${encodeURIComponent(pr.id)}` },

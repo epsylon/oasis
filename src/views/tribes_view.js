@@ -167,15 +167,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
         return cb - ca;
       });
 
-  const title =
-    filter === 'recent' ? i18n.tribeRecentSectionTitle :
-    filter === 'mine' ? i18n.tribeMineSectionTitle :
-    filter === 'create' ? i18n.tribeCreateSectionTitle :
-    filter === 'edit' ? i18n.tribeUpdateSectionTitle :
-    filter === 'gallery' ? i18n.tribeGallerySectionTitle :
-    filter === 'top' ? i18n.tribeTopSectionTitle :
-    filter === 'subtribes' ? (i18n.tribeSubTribes || 'SUB-TRIBES') :
-    i18n.tribeAllSectionTitle;
+  const title = i18n.tribesTitle;
 
   const header = div({ class: 'tags-header' }, h2(title), p(i18n.tribeDescription));
 

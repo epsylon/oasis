@@ -193,15 +193,7 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
   if (calendarToEdit) params = { ...(params || {}), spreadWarning: await renderSpreadEditWarning(calendarToEdit.id || calendarToEdit.key || calendarToEdit.rootId) };
   const q = (params && params.q) || ""
   const showForm = filter === "create" || filter === "edit" || !!calendarToEdit
-  const headerMap = {
-    all: i18n.calendarAllSectionTitle || "Calendars",
-    mine: i18n.calendarMineSectionTitle || "Your Calendars",
-    recent: i18n.calendarRecentSectionTitle || "Recent Calendars",
-    favorites: i18n.calendarFavoritesSectionTitle || "Favorites",
-    open: i18n.calendarOpenSectionTitle || "Open Calendars",
-    closed: i18n.calendarClosedSectionTitle || "Closed Calendars"
-  }
-  const headerText = headerMap[filter] || headerMap.all
+  const headerText = i18n.calendarsTitle || "Calendars"
 
   return template(
     i18n.calendarsTitle || "Calendars",
@@ -300,9 +292,6 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
         )
       })(),
-      !isAuthor
-        ? a({ href: `/pm?to=${encodeURIComponent(calendar.author)}`, class: "tribe-action-btn" }, "PM")
-        : null,
       !isAuthor && !isParticipant && calendar.status === "OPEN"
         ? form({ method: "POST", action: `/calendars/join/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "create-button" }, i18n.calendarJoin || "Join Calendar")

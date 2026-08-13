@@ -200,20 +200,7 @@ const generateTransferCard = (transfer, filter, params = {}) => {
 exports.transferView = async (transfers, filter, transferId, params = {}) => {
   const normalizedFilter = filter === "favs" ? "all" : (filter || "all")
 
-  const title =
-    normalizedFilter === "mine"        ? i18n.transfersMineSectionTitle :
-    normalizedFilter === "ubi"         ? i18n.transfersUBISectionTitle :
-    normalizedFilter === "pending"     ? i18n.transfersPendingSectionTitle :
-    normalizedFilter === "top"         ? i18n.transfersTopSectionTitle :
-    normalizedFilter === "unconfirmed" ? i18n.transfersUnconfirmedSectionTitle :
-    normalizedFilter === "closed"      ? i18n.transfersClosedSectionTitle :
-    normalizedFilter === "discarded"   ? i18n.transfersDiscardedSectionTitle :
-    normalizedFilter === "create"      ? i18n.transfersCreateSectionTitle :
-    normalizedFilter === "edit"        ? i18n.transfersUpdateSectionTitle :
-    normalizedFilter === "economic"    ? (i18n.transfersEconomicSectionTitle || (i18n.transfersCategoryEconomic + " " + i18n.transfersTitle)) :
-    normalizedFilter === "time"        ? (i18n.transfersTimeSectionTitle || (i18n.transfersCategoryTime + " " + i18n.transfersTitle)) :
-    normalizedFilter === "trust"       ? (i18n.transfersTrustSectionTitle || (i18n.transfersCategoryTrust + " " + i18n.transfersTitle)) :
-                                        i18n.transfersAllSectionTitle
+  const title = i18n.transfersTitle
 
   const q = safeText(params.q || "")
   const minAmountRaw = params.minAmount ?? ""

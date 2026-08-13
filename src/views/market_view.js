@@ -226,21 +226,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
   const maxPrice = params.maxPrice
   const sort = params.sort || "recent"
 
-  let title = i18n.marketAllSectionTitle
-  switch (filter) {
-    case "mine":
-      title = i18n.marketMineSectionTitle
-      break
-    case "create":
-      title = i18n.marketCreateSectionTitle
-      break
-    case "edit":
-      title = i18n.marketUpdateSectionTitle
-      break
-    case "mybids":
-      title = i18n.marketFilterMyBids
-      break
-  }
+  const title = i18n.marketTitle
 
   let filtered = []
   switch (filter) {
@@ -602,24 +588,6 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         if (item.shopId && item.shopTitle) pushRow(i18n.marketShopLabel || "Shop", a({ href: `/shops/${encodeURIComponent(item.shopId)}`, class: "user-link" }, item.shopTitle))
         if (item.deadline) pushRow(i18n.marketItemAvailable, moment(item.deadline).format("YYYY/MM/DD HH:mm"))
 
-        const itemSide = div({ class: "tribe-side" },
-          div({ class: "card-header activity-card-header" },
-            renderContentActions(item.id, null, { spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title })
-          ),
-          div({ class: "shop-title-row" },
-            h2({ class: "tribe-card-title" }, item.title)
-          ),
-          renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
-          chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-          renderMediaBlob(item.image, "/assets/images/default-market.png"),
-          div({ class: "card-date-highlight" }, `${item.price} ECO`),
-          renderStockBar(item.stock, maxStock),
-          table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
-          tagsNode,
-          visibilityRow,
-          marketActions.length ? div({ class: "tribe-side-actions" }, ...marketActions) : null
-        )
-
         const visibilityRow = String(item.seller) === String(userId)
           ? (() => {
               const vis = isHidden ? 'HIDDEN' : 'PUBLIC'
@@ -638,12 +606,6 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           : null
 
         const marketActions = []
-        if (item.seller && String(item.seller) !== String(userId)) {
-          marketActions.push(form({ method: "GET", action: "/pm" },
-            input({ type: "hidden", name: "recipients", value: item.seller }),
-            button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-          ))
-        }
         if (String(item.seller) === String(userId)) {
           marketActions.push(form({ method: "GET", action: `/market/edit/${encodeURIComponent(item.id)}` },
             button({ type: "submit", class: "update-btn" }, i18n.marketUpdateButton || "Update")
@@ -652,6 +614,25 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
             button({ type: "submit", class: "delete-btn" }, i18n.marketDeleteButton || "Delete")
           ))
         }
+
+        const itemSide = div({ class: "tribe-side" },
+          div({ class: "card-header activity-card-header" },
+            renderContentActions(item.id, null, { spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title })
+          ),
+          div({ class: "shop-title-row" },
+            h2({ class: "tribe-card-title" }, item.title)
+          ),
+          renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
+          chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+          renderMediaBlob(item.image, "/assets/images/default-market.png"),
+          div({ class: "card-date-highlight" }, `${item.price} ECO`),
+          renderStockBar(item.stock, maxStock),
+          table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+          tagsNode,
+          visibilityRow,
+          marketActions.length ? div({ class: "tribe-side-actions" }, ...marketActions) : null
+        )
+
         const itemMain = div({ class: "tribe-main" },
           item.description
             ? div({ class: "job-section" },

@@ -1770,6 +1770,10 @@ router
       ctx.body = ainavHomeView({ recentTags });
       return;
     }
+    if (currentConfig.ux?.current === "chats") {
+      ctx.redirect("/chats");
+      return;
+    }
     const homePage = currentConfig.homePage || "activity";
     ctx.redirect(`/${homePage}`);
   })
@@ -3026,7 +3030,7 @@ router
     ctx.body = await tribeView(tribe, uid, query, section, sectionData);
   })
   .get('/activity', async ctx => {
-    const filter = qf(ctx, 'recent'), userId = getViewerId();
+    const filter = qf(ctx, 'all'), userId = getViewerId();
     const q = String((ctx.query && ctx.query.q) || '');
     try { await bankingModel.ensureSelfAddressPublished(); } catch (_) {}
     try { await bankingModel.getUserEngagementScore(userId); } catch (_) {}
@@ -3440,11 +3444,21 @@ router
         },
       }).png().toBuffer();
     };
+    const avatarFallback = ctx.query.fallback === 'avatar';
+    const fallbackImage = async () => {
+      ctx.set("Content-Type", "image/png");
+      ctx.set("Cache-Control", "no-cache");
+      if (avatarFallback) {
+        try {
+          return fs.readFileSync(path.join(__dirname, "../client/assets/images/default-avatar.png"));
+        } catch (_) {}
+      }
+      return fakeImage();
+    };
     try {
-      const buffer = await blob.getResolved({ blobId });
+      const buffer = await blob.getResolved({ blobId, timeout: avatarFallback ? 2000 : 30000 });
       if (!buffer) {
-        ctx.set("Content-Type", "image/png");
-        ctx.body = await fakeImage();
+        ctx.body = await fallbackImage();
         return;
       }
       const fileType = await FileType.fromBuffer(buffer);
@@ -3459,8 +3473,7 @@ router
         ctx.body = buffer;
       }
     } catch (err) {
-      ctx.set("Content-Type", "image/png");
-      ctx.body = await fakeImage();
+      ctx.body = await fallbackImage();
     }
   })
   .get("/settings", async (ctx) => {
@@ -4219,6 +4232,7 @@ router
       profile: true,
       federation: checkMod(ctx, 'invitesMod'),
       larp: checkMod(ctx, 'larpMod'),
+      ux: true,
       backup: checkMod(ctx, 'legacyMod'),
       greeting: checkMod(ctx, 'feedMod')
     };
@@ -4251,8 +4265,24 @@ router
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }); return; }
     ctx.redirect('/welcome');
   })
+  .post('/welcome/ux', koaBody(), async (ctx) => {
+    const cfg = getConfig();
+    const v = String((ctx.request.body || {}).ux || '').trim().toLowerCase();
+    const aiNavEnabled = cfg.modules && cfg.modules.aiNavMod === 'on';
+    const chatsEnabled = cfg.modules && cfg.modules.chatsMod === 'on';
+    const next = (v === 'ainav' && aiNavEnabled) ? 'ainav' : (v === 'chats' && chatsEnabled) ? 'chats' : 'blocks';
+    cfg.ux = { ...(cfg.ux && typeof cfg.ux === 'object' ? cfg.ux : {}), current: next };
+    saveConfig(cfg);
+    try { onboardingModel.markStep('ux'); } catch (_) {}
+    ctx.redirect('/welcome');
+  })
   .post('/welcome/dismiss', koaBody(), async (ctx) => {
     try { onboardingModel.dismiss(); } catch (_) {}
+    safeRefererRedirect(ctx, '/');
+  })
+  .post('/ai/suggestion/dismiss', koaBody(), async (ctx) => {
+    const current = sharedState.getBestMatch ? sharedState.getBestMatch() : null;
+    if (current && current.href) sharedState.setDismissedSuggestion(current.href);
     safeRefererRedirect(ctx, '/');
   })
   .get('/legacy', async (ctx) => {
@@ -5029,7 +5059,14 @@ router
     try { finalList = await lifetime.enrichAndFilter(finalList, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
     const spreadMap = await spreads.forMessages((finalList || []).map(x => x && (x.key || x.id)));
     await warmAuthorNames(finalList);
-    ctx.body = await chatsView(finalList, filter, null, { q, spreadMap });
+    const uxChatsMode = getConfig().ux?.current === 'chats';
+    if (uxChatsMode && filter === 'all' && !q && finalList.length) {
+      const actTs = (c) => Math.max(Number(c.lastMsgAt || 0), Date.parse(c.updatedAt || '') || 0, Date.parse(c.createdAt || '') || 0);
+      const first = finalList.slice().sort((a, b) => actTs(b) - actTs(a))[0];
+      ctx.redirect(`/chats/${encodeURIComponent(first.rootId || first.key)}`);
+      return;
+    }
+    ctx.body = await chatsView(finalList, filter, null, { q, spreadMap, workspace: uxChatsMode });
   })
   .get("/chats/edit/:id", async (ctx) => {
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
@@ -5064,7 +5101,14 @@ router
     const chatPolls = pollsEnabled
       ? await pollsModel.listAll('ALL', { chatId: chat.rootId || chat.key }).catch(() => [])
       : [];
-    ctx.body = await singleChatView({ ...chat, isFavorite: fav.has(String(chat.rootId || chat.key)), isTribeMember }, filter, messages, { q, polls: chatPolls, pollsEnabled, returnTo: safeReturnTo(ctx, `/chats?filter=${encodeURIComponent(filter)}`, ['/chats']), spreads: await spreads.forMessage(chat.key).catch(() => null) });
+    const uxChats = getConfig().ux?.current === 'chats';
+    let allChats = [];
+    if (uxChats) {
+      try {
+        allChats = (await chatsModel.listAll({ filter: 'all', q: '', viewerId: uid })).filter(x => !x.tribeId);
+      } catch (_) { allChats = []; }
+    }
+    ctx.body = await singleChatView({ ...chat, isFavorite: fav.has(String(chat.rootId || chat.key)), isTribeMember }, filter, messages, { q, polls: chatPolls, pollsEnabled, returnTo: safeReturnTo(ctx, `/chats?filter=${encodeURIComponent(filter)}`, ['/chats']), spreads: await spreads.forMessage(chat.key).catch(() => null), workspace: uxChats, allChats });
   })
   .get("/pads", async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
@@ -9092,10 +9136,11 @@ router
     const cfg = getConfig();
     const v = String(ctx.request.body.ux || "").trim().toLowerCase();
     const aiNavEnabled = cfg.modules && cfg.modules.aiNavMod === 'on';
-    const next = (v === "ainav" && aiNavEnabled) ? "ainav" : "blocks";
+    const chatsEnabled = cfg.modules && cfg.modules.chatsMod === 'on';
+    const next = (v === "ainav" && aiNavEnabled) ? "ainav" : (v === "chats" && chatsEnabled) ? "chats" : "blocks";
     cfg.ux = { ...(cfg.ux && typeof cfg.ux === 'object' ? cfg.ux : {}), current: next };
     saveConfig(cfg);
-    ctx.redirect(next === "ainav" ? "/" : "/settings");
+    ctx.redirect(next === "ainav" ? "/" : next === "chats" ? "/chats" : "/settings");
   })
   .post("/settings/lan-broadcasting", koaBody(), async (ctx) => {
     const enabled = !!(ctx.request.body && (ctx.request.body.lanBroadcasting === 'on' || ctx.request.body.lanBroadcasting === '1' || ctx.request.body.lanBroadcasting === 'true'));
@@ -9290,16 +9335,9 @@ const middleware = [
           sharedState.setCarbonHcH(hcH);
         } catch (_) {}
         try {
-          const meId = getViewerId();
-          const dataRes = await dataModel.listMatches('MINE');
-          let suggestion = null;
-          for (const m of (dataRes.matches || [])) {
-            const other = String(m.a.author) === String(meId)
-              ? (String(m.b.author) === String(meId) ? null : m.b)
-              : m.a;
-            if (other) { suggestion = { href: other.href, title: other.title || other.id, kind: other.kind, score: m.score }; break; }
-          }
-          sharedState.setBestMatch(suggestion);
+          const dataRes = await dataModel.listMatches('ALL');
+          const top = (dataRes.matches || [])[0] || null;
+          sharedState.setBestMatch(top ? { href: top.href, title: top.title || top.id, kind: top.kind, score: top.score } : null);
         } catch (_) {}
         try { await refreshInboxCount(); } catch (_) {}
         try { await refreshMentionsCount(); } catch (_) {}

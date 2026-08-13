@@ -68,14 +68,6 @@ const buildReturnTo = (filter, params = {}) => {
   return `/housing?${parts.join("&")}`
 }
 
-const renderPmButton = (recipientId) =>
-  recipientId && String(recipientId) !== String(userId)
-    ? form({ method: "GET", action: "/pm" },
-        input({ type: "hidden", name: "recipients", value: recipientId }),
-        button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-      )
-    : null
-
 const renderTags = (tags = []) => {
   const arr = safeArr(tags).map(t => String(t || "").trim()).filter(Boolean)
   return arr.length
@@ -427,8 +419,6 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
   const sideActions = []
   const requestToggle = renderRequestToggle(item, returnTo)
   if (requestToggle) sideActions.push(requestToggle)
-  const pmBtn = renderPmButton(item.author)
-  if (pmBtn) sideActions.push(pmBtn)
   const ownerActions = renderOwnerActions(item, returnTo)
 
   const nextVisibility = item.visibility === "PUBLIC" ? "HIDDEN" : "PUBLIC"

@@ -608,7 +608,6 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
 
   const ownerActions = renderJobOwnerActions(job, returnTo)
   const applyToggle = renderJobApplyToggle(job, returnTo)
-  const pmBtn = renderPmButton(job.author)
   const visibility = (job.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC'
   const chips = [
     renderJobStatusChip(job.status),
@@ -636,7 +635,6 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
 
   const sideActions = []
   if (applyToggle) sideActions.push(applyToggle)
-  if (pmBtn) sideActions.push(pmBtn)
   for (const a of ownerActions) sideActions.push(a)
 
   const jobSide = div({ class: "tribe-side" },

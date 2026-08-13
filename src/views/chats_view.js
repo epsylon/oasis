@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -144,10 +144,40 @@ const renderMessageText = (text) => {
   return span({ class: "chat-message-text" }, ...nodes)
 }
 
+const chatActivityTs = (c) => Math.max(
+  Number(c.lastMsgAt || 0),
+  Date.parse(c.updatedAt || "") || 0,
+  Date.parse(c.createdAt || "") || 0
+)
+
+const renderChatTopics = (chats, activeKey) =>
+  div({ class: "chat-topics" },
+    div({ class: "chat-topics-head" },
+      a({ href: "/chats", class: "chat-topics-title-link" }, i18n.chatsTitle),
+      a({ href: "/chats?filter=create", class: "filter-btn chat-topics-new" }, "+")
+    ),
+    ...safeArr(chats).slice().sort((a, b) => chatActivityTs(b) - chatActivityTs(a)).map(c => {
+      const key = c.rootId || c.key
+      const active = activeKey && String(key) === String(activeKey)
+      return a({ href: `/chats/${encodeURIComponent(key)}`, class: active ? "chat-topic chat-topic-active" : "chat-topic" },
+        span({ class: "chat-topic-title" }, c.title || i18n.chatUntitled),
+        span({ class: "chat-topic-meta" }, `${i18n.chatParticipants}: ${safeArr(c.members).length}`)
+      )
+    })
+  )
+
+const renderSenderLink = (author, isOwner) =>
+  author
+    ? a({ href: `/author/${encodeURIComponent(author)}`, class: isOwner ? "chat-bubble-sender chat-bubble-sender-owner" : "chat-bubble-sender" }, userLinkLabel(author))
+    : null
+
 const renderChatPoll = (poll, chat) => {
   const isSelf = String(poll.author) === String(userId)
+  const isOwner = String(poll.author) === String(chat.author)
   const showResults = poll.hasVoted || poll.status === "CLOSED"
-  return div({ class: isSelf ? "chat-message chat-message-self chat-poll" : "chat-message chat-poll" },
+  return div({ class: isSelf ? "chat-bubble-row chat-bubble-row-self" : "chat-bubble-row" },
+    div({ class: isSelf ? "chat-message chat-message-self chat-poll" : "chat-message chat-poll" },
+    isSelf ? null : renderSenderLink(poll.author, isOwner),
     div({ class: "chat-poll-head" },
       span({ class: "chat-poll-tag" }, i18n.pollInChat),
       poll.anonymous ? span({ class: "chat-poll-tag" }, i18n.pollAnonymous) : null,
@@ -175,10 +205,7 @@ const renderChatPoll = (poll, chat) => {
             span({ class: "card-value" }, outcomeOf(poll))
           )
         ],
-    div({ class: "chat-message-meta" },
-      span({ class: "chat-message-date" }, moment(poll.createdAt).format("YYYY/MM/DD HH:mm")),
-      span(" · "),
-      poll.author ? userLink(poll.author) : span("?")
+    span({ class: "chat-bubble-time" }, moment(poll.createdAt).format("HH:mm"))
     )
   )
 }
@@ -186,18 +213,14 @@ const renderChatPoll = (poll, chat) => {
 const renderMessage = (msg, chatAuthor) => {
   const isAuthor = String(msg.author) === String(chatAuthor)
   const isSelf = String(msg.author) === String(userId)
-  const dateStr = moment(msg.createdAt).format("YYYY/MM/DD HH:mm")
-  const shortId = msg.author ? "@" + msg.author.slice(1, 9) + "\u2026" : "?"
-  const authorLink = msg.author ? userLink(msg.author) : span("?")
-
   const imageNode = msg.image ? renderMediaBlob(msg.image, null, { class: "chat-message-image" }) : null
 
-  return div({ class: isSelf ? "chat-message chat-message-self" : isAuthor ? "chat-message chat-message-author" : "chat-message" },
-    renderMessageText(msg.text || ""),
-    imageNode ? div({ class: "chat-message-image-wrap" }, imageNode) : null,
-    div({ class: "chat-message-meta" },
-      span({ class: "chat-message-sender" }, authorLink),
-      span({ class: "chat-message-date" }, ` [ ${dateStr} ]`)
+  return div({ class: isSelf ? "chat-bubble-row chat-bubble-row-self" : "chat-bubble-row" },
+    div({ class: isSelf ? "chat-message chat-message-self" : isAuthor ? "chat-message chat-message-author" : "chat-message" },
+      isSelf ? null : renderSenderLink(msg.author, isAuthor),
+      renderMessageText(msg.text || ""),
+      imageNode ? div({ class: "chat-message-image-wrap" }, imageNode) : null,
+      span({ class: "chat-bubble-time" }, moment(msg.createdAt).format("HH:mm"))
     )
   )
 }
@@ -220,15 +243,21 @@ exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
 
   const isForm = filter === "create" || filter === "edit"
 
-  const chatHeaderMap = {
-    all: i18n.chatsTitle,
-    mine: i18n.chatMineSectionTitle || "Your Chats",
-    recent: i18n.chatRecentTitle || "Recent Chats",
-    favorites: i18n.chatFavoritesTitle || "Favorites",
-    open: i18n.chatOpenTitle || "Open Chats",
-    closed: i18n.chatClosedTitle || "Closed Chats"
+  const headerText = i18n.chatsTitle
+
+  if (params.workspace && !isForm) {
+    return template(
+      i18n.chatsTitle,
+      section({ class: "chat-workspace-section" },
+        div({ class: "chat-workspace" },
+          renderChatTopics(list, null),
+          div({ class: "chat-workspace-main chat-workspace-empty" },
+            p({ class: "chat-no-messages" }, list.length ? i18n.chatPickChat : i18n.chatNoneYet)
+          )
+        )
+      )
+    )
   }
-  const headerText = chatHeaderMap[filter] || i18n.chatsTitle
 
   return template(
     i18n.chatsTitle,
@@ -332,12 +361,6 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
         )
       })(),
-      chat.author && String(chat.author) !== String(userId)
-        ? form({ method: "GET", action: "/pm" },
-            input({ type: "hidden", name: "recipients", value: chat.author }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.chatPM || i18n.privateMessage)
-          )
-        : null,
       !isAuthor && isMember
         ? form({ method: "POST", action: `/chats/leave/${encodeURIComponent(chat.key)}` },
             input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -397,15 +420,22 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           kind: 'poll', ts: Date.parse(poll.createdAt) || 0, poll
         }))
         const stream = [...visible, ...pollItems].sort((a, b) => a.ts - b.ts)
-        return stream.length
-          ? stream.map((entry, i) => {
-              const last = i === stream.length - 1
-              const node = entry.kind === 'poll'
-                ? renderChatPoll(entry.poll, chat)
-                : renderMessage(entry.msg, chat.author)
-              return last ? div({ id: "chat-latest", class: "chat-latest-anchor" }, node) : node
-            })
-          : p({ class: "chat-no-messages" }, i18n.chatNoMessages)
+        if (!stream.length) return p({ class: "chat-no-messages" }, i18n.chatNoMessages)
+        const nodes = []
+        let prevDay = null
+        stream.forEach((entry, i) => {
+          const day = moment(entry.ts).format("YYYY/MM/DD")
+          if (day !== prevDay) {
+            nodes.push(div({ class: "chat-day-separator" }, span({ class: "chat-day-chip" }, day)))
+            prevDay = day
+          }
+          const last = i === stream.length - 1
+          const node = entry.kind === 'poll'
+            ? renderChatPoll(entry.poll, chat)
+            : renderMessage(entry.msg, chat.author)
+          nodes.push(last ? div({ id: "chat-latest", class: "chat-latest-anchor" }, node) : node)
+        })
+        return nodes
       })()
     ),
     canWrite
@@ -441,6 +471,23 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         )
       : null
   )
+
+  if (params.workspace) {
+    return template(
+      chat.title || i18n.chatUntitled,
+      section({ class: "chat-workspace-section" },
+        div({ class: "chat-workspace" },
+          renderChatTopics(safeArr(params.allChats), chat.rootId || chat.key),
+          div({ class: "chat-workspace-main" },
+            div({ class: "tribe-details chat-workspace-details" },
+              chatSide,
+              chatMain
+            )
+          )
+        )
+      )
+    )
+  }
 
   return template(
     chat.title || i18n.chatUntitled,

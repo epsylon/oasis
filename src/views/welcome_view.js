@@ -93,6 +93,32 @@ const stepContent = (key, lang, profile) => {
       )
     )
   }
+  if (key === "ux") {
+    let cfg = {}
+    try { cfg = require("../configs/config-manager.js").getConfig() || {} } catch (_) {}
+    const cur = cfg.ux?.current === "ainav" ? "ainav" : cfg.ux?.current === "chats" ? "chats" : "blocks"
+    const chatsOn = cfg.modules?.chatsMod === "on"
+    const aiOn = cfg.modules?.aiNavMod === "on"
+    const uxCard = (value, title, image) => label({ class: "welcome-ux-option" },
+      input({ type: "radio", name: "ux", value, ...(value === "blocks" ? { checked: true } : {}) }),
+      img({ src: image, class: "welcome-ux-shot", alt: title }),
+      span({ class: "welcome-ux-label" }, title)
+    )
+    return {
+      title: i18n.welcomeStepUxTitle || "Choose your interface",
+      text: i18n.welcomeStepUxText || "Pick how Oasis should look. You can change it later in Settings.",
+      action: form({ method: "POST", action: "/welcome/ux", class: "welcome-ux-form" },
+        div({ class: "welcome-ux-grid" },
+          uxCard("blocks", i18n.uxModeMenus || "Blocks", "/assets/images/ux-blocks.png"),
+          chatsOn ? uxCard("chats", i18n.chatsTitle || "Chats", "/assets/images/ux-chats.png") : null,
+          aiOn ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null
+        ),
+        div({ class: "welcome-action" },
+          button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepUxAction || "Use this view")
+        )
+      )
+    }
+  }
   if (key === "backup") return {
     title: i18n.welcomeStepBackupTitle || "Backup your ID",
     text: i18n.welcomeStepBackupText || "Your identity is a key file on this device.",

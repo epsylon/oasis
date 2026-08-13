@@ -617,6 +617,18 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
 
       let list = chatCollab.visibleThenCollapsed(collectChats(idx), uid)
 
+      const lastMsgAt = new Map()
+      const lastMineAt = new Map()
+      for (const node of idx.msgNodes.values()) {
+        const cid = node.c && node.c.chatId
+        if (!cid) continue
+        const r = idx.rawRootOf(cid) || cid
+        const t = node.ts || 0
+        if (t > (lastMsgAt.get(r) || 0)) lastMsgAt.set(r, t)
+        if (node.author === uid && t > (lastMineAt.get(r) || 0)) lastMineAt.set(r, t)
+      }
+      list = list.map(c => ({ ...c, lastMsgAt: lastMsgAt.get(c.rootId) || 0, lastMineAt: lastMineAt.get(c.rootId) || 0 }))
+
       if (filter === "mine") list = list.filter(c => c.author === uid)
       else if (filter === "recent") list = list.filter(c => new Date(c.createdAt).getTime() >= now - 86400000)
       else if (filter === "open") list = list.filter(c => c.status === "OPEN" || c.status === "INVITE-ONLY")

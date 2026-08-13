@@ -167,20 +167,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
 
 exports.documentView = async (documents, filter = "all", documentId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(documentId) };
-  const title =
-    filter === "mine"
-      ? i18n.documentMineSectionTitle
-      : filter === "create"
-        ? i18n.documentCreateSectionTitle
-        : filter === "edit"
-          ? i18n.documentUpdateSectionTitle
-          : filter === "recent"
-            ? i18n.documentRecentSectionTitle
-            : filter === "top"
-              ? i18n.documentTopSectionTitle
-              : filter === "favorites"
-                ? i18n.documentFavoritesSectionTitle
-                : i18n.documentAllSectionTitle;
+  const title = i18n.documentTitle;
 
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");

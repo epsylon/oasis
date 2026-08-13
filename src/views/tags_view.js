@@ -58,12 +58,7 @@ exports.tagsView = async (tags, filter, search = '') => {
   const filteredTags = getFilteredTags(filter, tags);
   const query = String(search || '').trim();
 
-  const title =
-    filter === 'top'    ? i18n.tagsTopSectionTitle :
-    filter === 'cloud'  ? i18n.tagsCloudSectionTitle :
-    filter === 'mine'   ? i18n.tagsMineSectionTitle :
-    filter === 'recent' ? i18n.tagsRecentSectionTitle :
-                          i18n.tagsAllSectionTitle;
+  const title = i18n.tagsTitle;
 
   return template(
     title,

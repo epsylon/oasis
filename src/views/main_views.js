@@ -1170,7 +1170,7 @@ const renderTasksLink = () => {
 const template = (titlePrefix, ...elements) => {
   const currentConfig = getConfig();
   const theme = currentConfig.themes.current || "Dark-SNH";
-  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : "blocks";
+  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : "blocks";
   const themeLink = link({
     rel: "stylesheet",
     href: `/assets/themes/${theme}.css`
@@ -1240,11 +1240,13 @@ const template = (titlePrefix, ...elements) => {
                   )
                 );
               })(),
-              navLink({
-                href: "/pm",
-                emoji: "ꕕ",
-                text: i18n.privateMessage
-              })
+              uxMode === "chats"
+                ? navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
+                : navLink({
+                    href: "/pm",
+                    emoji: "ꕕ",
+                    text: i18n.privateMessage
+                  })
             )
           )
         ),
@@ -1275,6 +1277,15 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
               navLink({ href: "/graphos", emoji: "ꕢ", text: i18n.graphos }),
               navLink({ href: "/peers", emoji: "⧖", text: i18n.peers })
+            )
+          )
+        ) : uxMode === "chats" ? div(
+          { class: "top-bar-right" },
+          nav(
+            ul(
+              navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
+              renderTrendingLink(),
+              navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
             )
           )
         ) : div(
@@ -1325,16 +1336,21 @@ const template = (titlePrefix, ...elements) => {
         } catch (_) {}
         const suggestion = sharedState.getBestMatch ? sharedState.getBestMatch() : null;
         if (!suggestion || !suggestion.href) return null;
+        if (sharedState.getDismissedSuggestion && sharedState.getDismissedSuggestion() === suggestion.href) return null;
         return div(
           { class: "update-banner ai-suggestion-banner" },
           span({ class: "update-banner-icon" }, "🤖"),
           span({ class: "update-banner-text" }, i18n.aiSuggestionBanner),
-          a({ href: suggestion.href, class: "update-banner-link" }, `${suggestion.title} (${Math.round((Number(suggestion.score) || 0) * 100)}%)`)
+          a({ href: suggestion.href, class: "update-banner-link" }, `${suggestion.title} (${(((Number(suggestion.score) || 0) * 100).toFixed(1)).replace(/\.0$/, '')}%)`),
+          form(
+            { method: "POST", action: "/ai/suggestion/dismiss", class: "welcome-banner-close" },
+            button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
+          )
         );
       })(),
       div(
-        { class: uxMode === "ainav" ? "main-content ainav-only" : "main-content" },
-        uxMode === "ainav" ? null : div(
+        { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : "main-content" },
+        uxMode !== "blocks" ? null : div(
           { class: "sidebar-left" },
           nav(
             ul(
@@ -1441,7 +1457,7 @@ const template = (titlePrefix, ...elements) => {
           )
         ),
         main({ id: "content", class: "main-column" }, elements),
-        uxMode === "ainav" ? null : div(
+        uxMode !== "blocks" ? null : div(
           { class: "sidebar-right" },
           nav(
             ul(

@@ -304,6 +304,7 @@ a.user-link:focus {
 .graphos-node-label { fill: #2C2C2C !important; }
 .graphos-node-label-me { fill: #cc7700 !important; }
 .data-best-label { color: #cc7700 !important; }
+.data-best-card { background: #FFF3E0 !important; border: 1px solid rgba(204, 119, 0, .4) !important; }
 .graphos-legend { color: #2C2C2C !important; }
 .graphos-edge { stroke: #BBB !important; }
 .graphos-edge-discovered { stroke: #b8860b !important; }
@@ -357,3 +358,15 @@ a.user-link:focus {
 .tribe-subtribe-link:hover { background: #E0E0E0 !important; }
 .tribe-parent-image { border-color: #E0E0E0 !important; }
 .tribe-parent-box { background: #FFFFFF !important; }
+.chat-message { background: #FFFFFF !important; border: 1px solid #E0E0E0 !important; }
+.chat-bubble-row-self .chat-message { background: #FFF3E0 !important; border-color: rgba(204, 119, 0, .35) !important; }
+.chat-message-author { background: #FDF6EC !important; }
+.chat-bubble-sender { color: #1565C0 !important; }
+.chat-bubble-sender-owner { color: #cc7700 !important; }
+.chat-bubble-time { color: #999 !important; }
+.chat-day-chip { background: #F0F0F0 !important; color: #666 !important; border-color: #DDD !important; }
+.chat-topics { background: #FAFAFA !important; border-color: #E0E0E0 !important; }
+.chat-topic:hover { background: #F0F0F0 !important; }
+.chat-topic-active { background: #FFF3E0 !important; }
+.chat-topic-title { color: #2D2D2D !important; }
+.chat-workspace-empty { border-color: #DDD !important; }

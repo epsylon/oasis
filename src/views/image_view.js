@@ -23,18 +23,6 @@ const buildReturnTo = (filter, params = {}) => {
   return `/images?${parts.join("&")}`;
 };
 
-const renderPMButton = (recipient, className = "filter-btn") => {
-  const r = safeText(recipient);
-  if (!r) return null;
-  if (String(r) === String(userId)) return null;
-
-  return form(
-    { method: "GET", action: "/pm" },
-    input({ type: "hidden", name: "recipients", value: r }),
-    button({ type: "submit", class: className }, i18n.privateMessage)
-  );
-};
-
 const renderTags = (tags) => {
   const list = safeArr(tags).map((t) => String(t || "").trim()).filter(Boolean);
   return list.length
@@ -222,22 +210,7 @@ const renderImageCommentsSection = (imageKey, comments = [], returnTo = null) =>
 
 exports.imageView = async (images, filter = "all", imageId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(imageId) };
-  const title =
-    filter === "mine"
-      ? i18n.imageMineSectionTitle
-      : filter === "create"
-        ? i18n.imageCreateSectionTitle
-        : filter === "edit"
-          ? i18n.imageUpdateSectionTitle
-          : filter === "gallery"
-            ? i18n.imageGallerySectionTitle
-              : filter === "recent"
-                ? i18n.imageRecentSectionTitle
-                : filter === "top"
-                  ? i18n.imageTopSectionTitle
-                  : filter === "favorites"
-                    ? i18n.imageFavoritesSectionTitle
-                    : i18n.imageAllSectionTitle;
+  const title = i18n.imageTitle;
 
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
@@ -331,9 +304,6 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
 
   const ownerActions = renderImageOwnerActions(filter, imageObj, { q, sort });
   const sideActions = [];
-  if (imageObj.author && String(imageObj.author) !== String(userId)) {
-    sideActions.push(renderPMButton(imageObj.author));
-  }
   for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(imageObj.tags);

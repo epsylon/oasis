@@ -147,12 +147,6 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
   ].filter(Boolean);
 
   const sideActions = [];
-  if (v.createdBy && v.createdBy !== userId) {
-    sideActions.push(form({ method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: v.createdBy }),
-      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-    ));
-  }
   for (const a of renderVoteOwnerActions(v, returnTo, mode || "")) sideActions.push(a);
 
   const cleanTags = (Array.isArray(v.tags) ? v.tags : []).filter((t) => t && !String(t).includes(":"));
@@ -237,14 +231,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
     ? activeFilterParam
     : (standardFilters.includes(mode) ? mode : "all");
 
-  const title =
-    mode === "mine" ? i18n.voteMineSectionTitle :
-    mode === "create" ? i18n.voteCreateSectionTitle :
-    mode === "edit" ? i18n.voteUpdateSectionTitle :
-    mode === "open" ? i18n.voteOpenTitle :
-    mode === "closed" ? i18n.voteClosedTitle :
-    mode === "detail" ? (i18n.voteDetailSectionTitle || i18n.voteAllSectionTitle) :
-    i18n.voteAllSectionTitle;
+  const title = i18n.votationsTitle;
 
   const voteToEdit = list.find((v) => v.id === voteId) || {};
   const editTags = Array.isArray(voteToEdit.tags) ? voteToEdit.tags.filter(Boolean) : [];

@@ -42,6 +42,16 @@ const cvSkills = (c) => [
 
 const PLACEHOLDERS = new Set(['unknown', 'n/a', 'na', 'none', '-', 'other']);
 
+const TITLE_STOPWORDS = new Set([
+  'the', 'this', 'that', 'and', 'for', 'with', 'from', 'into', 'about', 'new', 'all', 'not', 'are', 'was', 'you', 'your', 'our',
+  'los', 'las', 'del', 'una', 'unos', 'unas', 'este', 'esta', 'esto', 'que', 'con', 'para', 'por', 'sin', 'sobre', 'bajo', 'mas', 'más'
+]);
+
+const titleTerms = (c) => String(c.title || c.name || c.question || c.concept || '')
+  .toLowerCase()
+  .split(/[^\p{L}\p{N}]+/u)
+  .filter(w => w.length >= 3 && !TITLE_STOPWORDS.has(w) && !/^\d+$/.test(w));
+
 const termsOf = (kind, c) => {
   const out = [];
   if (kind === 'inhabitants') {
@@ -107,7 +117,9 @@ module.exports = ({ cooler }) => {
     const byAuthorCv = new Map();
     for (const node of latestByKey.values()) {
       if (replaced.has(node.key)) continue;
-      const terms = termsOf(node.kind, node.c);
+      const coreTerms = termsOf(node.kind, node.c);
+      const extra = node.kind === 'inhabitants' ? [] : titleTerms(node.c).map(norm).filter(t => t && !PLACEHOLDERS.has(t));
+      const terms = Array.from(new Set([...coreTerms, ...extra]));
       if (!terms.length) continue;
       const entry = {
         id: node.key,
@@ -116,6 +128,7 @@ module.exports = ({ cooler }) => {
         title: titleOf(node.kind, node.c, node.c.author || node.author),
         terms,
         termSet: new Set(terms),
+        coreTermSet: new Set(coreTerms),
         ts: node.ts,
         createdAt: node.c.createdAt || new Date(node.ts).toISOString(),
         href: KINDS[node.kind].href(node.key, node.c)
@@ -136,36 +149,6 @@ module.exports = ({ cooler }) => {
   const MAX_ENTITIES = 400;
   const MAX_PAIRS = 300;
 
-  const buildPairs = (nodes) => {
-    const use = nodes.slice(0, MAX_ENTITIES);
-    const df = new Map();
-    for (const n of use) for (const t of n.termSet) df.set(t, (df.get(t) || 0) + 1);
-    const total = use.length || 1;
-    const weightOf = (t) => Math.log(1 + total / (df.get(t) || 1));
-    const pairs = [];
-    const links = new Map();
-    for (let i = 0; i < use.length; i++) {
-      for (let j = i + 1; j < use.length; j++) {
-        const a = use[i], b = use[j];
-        if (a.kind === 'inhabitants' && b.kind === 'inhabitants' && a.author === b.author) continue;
-        const common = [...b.termSet].filter(x => a.termSet.has(x));
-        if (!common.length) continue;
-        let commonW = 0;
-        for (const t of common) commonW += weightOf(t);
-        let unionW = commonW;
-        for (const t of a.termSet) if (!b.termSet.has(t)) unionW += weightOf(t);
-        for (const t of b.termSet) if (!a.termSet.has(t)) unionW += weightOf(t);
-        const score = unionW > 0 ? commonW / unionW : 0;
-        if (score <= 0) continue;
-        common.sort((x, y) => weightOf(y) - weightOf(x) || x.localeCompare(y));
-        links.set(a.id, (links.get(a.id) || 0) + 1);
-        links.set(b.id, (links.get(b.id) || 0) + 1);
-        pairs.push({ a, b, score, common, ts: Math.max(a.ts, b.ts), sameAuthor: String(a.author) === String(b.author) });
-      }
-    }
-    return { pairs, links };
-  };
-
   const strip = (n) => ({
     id: n.id, kind: n.kind, author: n.author, title: n.title,
     href: n.href, createdAt: n.createdAt, ts: n.ts
@@ -176,46 +159,55 @@ module.exports = ({ cooler }) => {
 
     async listMatches(filter = 'ALL', opts = {}) {
       const { viewerId, nodes, cvByAuthor } = await buildGraph();
-      const { pairs, links } = buildPairs(nodes);
+      const use = nodes.slice(0, MAX_ENTITIES);
       const f = String(filter || 'ALL').toUpperCase();
 
-      let out = pairs.map(pr => ({
-        id: `${pr.a.id}|${pr.b.id}`,
-        a: strip(pr.a),
-        b: strip(pr.b),
-        score: pr.score,
-        common: pr.common,
-        ts: pr.ts,
-        createdAt: new Date(pr.ts).toISOString(),
-        connections: (links.get(pr.a.id) || 0) + (links.get(pr.b.id) || 0),
-        sameAuthor: pr.sameAuthor,
-        involvesMe: String(pr.a.author) === String(viewerId) || String(pr.b.author) === String(viewerId)
-      }));
+      const myTermSet = new Set();
+      const mineCv = cvByAuthor.get(viewerId);
+      if (mineCv) for (const t of mineCv.terms) myTermSet.add(t);
+      for (const n of use) {
+        if (String(n.author) === String(viewerId)) for (const t of n.terms) myTermSet.add(t);
+      }
 
-      if (f !== 'MINE') out = out.filter(pr => !pr.sameAuthor);
+      const df = new Map();
+      for (const n of use) for (const t of n.termSet) df.set(t, (df.get(t) || 0) + 1);
+      const total = use.length || 1;
+      const weightOf = (t) => Math.log(1 + total / (df.get(t) || 1));
 
-      if (f === 'MINE') out = out.filter(pr => pr.involvesMe);
-      else if (f === 'RECENT') {
+      let out = [];
+      for (const n of use) {
+        if (String(n.author) === String(viewerId)) continue;
+        const common = [...n.termSet].filter(t => myTermSet.has(t));
+        if (!common.length) continue;
+        let commonW = 0;
+        for (const t of common) commonW += weightOf(t);
+        let itemW = 0;
+        for (const t of n.termSet) itemW += weightOf(t);
+        const score = itemW > 0 ? Math.min(1, commonW / itemW) : 0;
+        if (score <= 0) continue;
+        common.sort((x, y) => weightOf(y) - weightOf(x) || x.localeCompare(y));
+        out.push({ ...strip(n), score, common, connections: common.length });
+      }
+
+      if (f === 'RECENT') {
         const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        out = out.filter(pr => pr.ts >= cutoff);
+        out = out.filter(s => s.ts >= cutoff);
       } else if (f !== 'ALL' && f !== 'TOP') {
         const kind = f.toLowerCase();
-        if (KINDS[kind]) out = out.filter(pr => pr.a.kind === kind || pr.b.kind === kind);
+        if (KINDS[kind]) out = out.filter(s => s.kind === kind);
       }
 
       const q = norm(opts.q);
-      if (q) out = out.filter(pr =>
-        norm(pr.a.title).includes(q) || norm(pr.b.title).includes(q) || pr.common.some(t => t.includes(q)));
+      if (q) out = out.filter(s => norm(s.title).includes(q) || s.common.some(t => t.includes(q)));
 
       if (f === 'RECENT') out.sort((x, y) => y.ts - x.ts || y.score - x.score);
-      else if (f === 'TOP') out.sort((x, y) => y.connections - x.connections || y.score - x.score);
       else out.sort((x, y) => y.score - x.score || y.ts - x.ts);
 
       return {
         matches: out.slice(0, MAX_PAIRS),
         total: out.length,
-        hasProfile: !!cvByAuthor.get(viewerId),
-        myTerms: cvByAuthor.get(viewerId) ? cvByAuthor.get(viewerId).terms : []
+        hasProfile: myTermSet.size > 0,
+        myTerms: [...myTermSet]
       };
     },
 
@@ -226,7 +218,7 @@ module.exports = ({ cooler }) => {
       return nodes
         .filter(n => n.kind === 'jobs' && String(n.author) !== String(viewerId))
         .map(n => {
-          const { score, common } = jaccard(mine.termSet, n.termSet);
+          const { score, common } = jaccard(mine.termSet, n.coreTermSet || n.termSet);
           return { id: n.id, title: n.title, author: n.author, href: n.href, score, common };
         })
         .filter(m => m.score >= minScore)
@@ -239,6 +231,7 @@ module.exports = ({ cooler }) => {
       let comparisons = 0;
       let sum = 0;
       let connectedPairs = 0;
+      const linkedEntities = new Set();
       for (let i = 0; i < use.length; i++) {
         for (let j = i + 1; j < use.length; j++) {
           const a = use[i], b = use[j];
@@ -246,7 +239,7 @@ module.exports = ({ cooler }) => {
           const { score } = jaccard(a.termSet, b.termSet);
           comparisons += 1;
           sum += score;
-          if (score > 0) connectedPairs += 1;
+          if (score > 0) { connectedPairs += 1; linkedEntities.add(a.id); linkedEntities.add(b.id); }
         }
       }
       const coefficient = comparisons > 0 ? sum / comparisons : 0;
@@ -289,8 +282,8 @@ module.exports = ({ cooler }) => {
         perKind,
         people: people.length,
         skills: skillSet.size,
-        connected: linked.size,
-        isolated: Math.max(0, people.length - linked.size),
+        connected: linkedEntities.size,
+        isolated: Math.max(0, use.length - linkedEntities.size),
         cvCoefficient,
         cvPercent: Math.round(cvCoefficient * 1000) / 10
       };

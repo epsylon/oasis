@@ -22,18 +22,6 @@ const buildReturnTo = (filter, params = {}) => {
   return `/bookmarks?${parts.join("&")}`;
 };
 
-const renderPMButton = (recipient, className = "filter-btn") => {
-  const r = safeText(recipient);
-  if (!r) return null;
-  if (String(r) === String(userId)) return null;
-
-  return form(
-    { method: "GET", action: "/pm" },
-    input({ type: "hidden", name: "recipients", value: r }),
-    button({ type: "submit", class: className }, i18n.privateMessage)
-  );
-};
-
 const renderBookmarkActions = (filter, bookmark, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   const isAuthor = String(bookmark.author) === String(userId);
@@ -206,20 +194,7 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
 
 exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, params = {}) => {
   const bookmarkEditWarning = filter === "edit" ? await renderSpreadEditWarning(bookmarkId) : null;
-  const title =
-    filter === "mine"
-      ? i18n.bookmarkMineSectionTitle
-      : filter === "create"
-        ? i18n.bookmarkCreateSectionTitle
-        : filter === "edit"
-          ? i18n.bookmarkUpdateSectionTitle
-          : filter === "recent"
-            ? i18n.bookmarkRecentSectionTitle
-            : filter === "top"
-              ? i18n.bookmarkTopSectionTitle
-              : filter === "favorites"
-                ? i18n.bookmarkFavoritesSectionTitle
-                : i18n.bookmarkAllSectionTitle;
+  const title = i18n.bookmarkTitle;
 
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
@@ -307,9 +282,6 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   ].filter(Boolean);
 
   const sideActions = [];
-  if (bookmark.author && String(bookmark.author) !== String(userId)) {
-    sideActions.push(renderPMButton(bookmark.author));
-  }
   if (isAuthor && !hasOpinions) {
     sideActions.push(form(
       { method: "GET", action: `/bookmarks/edit/${encodeURIComponent(bookmark.id)}` },

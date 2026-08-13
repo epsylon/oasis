@@ -1003,3 +1003,18 @@ a.hashtag {
 .profile-reach { max-width: 100% !important; overflow: hidden !important; text-align: center !important; }
 .feed-card .card-footer { display: flex !important; flex-wrap: wrap !important; align-items: center !important; gap: 6px !important; row-gap: 4px !important; }
 .feed-card .date-link { max-width: 100% !important; overflow-wrap: anywhere !important; font-size: 0.85em !important; padding: 6px 10px !important; }
+
+/* Data (Matches) view */
+.data-cohesion-figures { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)) !important; gap: 8px !important; max-width: 100% !important; }
+.data-figure { border: 1px solid rgba(128, 128, 128, .25) !important; border-radius: 8px !important; padding: 8px 6px !important; text-align: center !important; max-width: 100% !important; min-width: 0 !important; }
+.data-figure-value { font-size: 1.2em !important; overflow-wrap: anywhere !important; }
+.data-figure-label { font-size: .7em !important; overflow-wrap: anywhere !important; }
+.data-top-terms { display: flex !important; flex-wrap: wrap !important; gap: 6px !important; max-width: 100% !important; }
+.data-card { max-width: 100% !important; overflow: hidden !important; }
+.data-card-title, .data-card-author { overflow-wrap: anywhere !important; }
+.data-common-row { max-width: 100% !important; }
+.data-search { width: 100% !important; max-width: 100% !important; }
+.data-search input { width: 100% !important; max-width: 100% !important; }
+.data-cohesion { max-width: 100% !important; overflow: hidden !important; }
+.chat-message { max-width: 85% !important; }
+.chat-message.chat-poll { max-width: 95% !important; }

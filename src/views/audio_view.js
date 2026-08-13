@@ -197,20 +197,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
 
 exports.audioView = async (audios, filter = "all", audioId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(audioId) };
-  const title =
-    filter === "mine"
-      ? i18n.audioMineSectionTitle
-      : filter === "create"
-        ? i18n.audioCreateSectionTitle
-        : filter === "edit"
-          ? i18n.audioUpdateSectionTitle
-          : filter === "recent"
-            ? i18n.audioRecentSectionTitle
-            : filter === "top"
-              ? i18n.audioTopSectionTitle
-              : filter === "favorites"
-                ? i18n.audioFavoritesSectionTitle
-                : i18n.audioAllSectionTitle;
+  const title = i18n.audioTitle;
 
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
