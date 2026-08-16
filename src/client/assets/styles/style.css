@@ -1830,13 +1830,19 @@ background:#ffcc00; color:#000;
  }
 
 .buy-btn {
-  display: inline-block;
-  background: #ffcc00;
+  display: block;
+  width: 100%;
+  padding: 14px 20px;
+  font-size: 1.2em;
+  font-weight: bold;
+  background: #ffa300;
   color: #000;
   text-decoration: none;
   text-align: center;
+  border-radius: 8px;
 }
 .buy-btn:hover { background: #ffcc00; color: #000; }
+form:has(> .buy-btn) { width: 100%; }
 
 .gallery { 
 display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; padding:10px; 
@@ -1933,6 +1939,9 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   object-fit: contain;
   border-radius: 6px;
 }
+
+.zoom-link{display:inline-block;border:none !important;background:transparent !important;padding:0 !important}
+.zoom-link img{cursor:zoom-in}
 
 .lightbox-close {
   position: absolute;

@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, span, strong } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock } = require('./main_views');
+const { renderZoomableImage } = require('./gallery_view');
 const { renderContentStats } = require('./clearnet_view');
 const { renderUrl } = require('../backend/renderUrl');
 const { getConfig } = require('../configs/config-manager');
@@ -185,12 +186,7 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
       !isMe
         ? div(
             { class: 'inhabitant-user-actions' },
-            div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(user.relationship || {}, user.id)),
-            form(
-              { method: 'GET', action: '/pm' },
-              input({ type: 'hidden', name: 'recipients', value: user.id }),
-              button({ type: 'submit', class: 'filter-btn' }, i18n.pmCreateButton)
-            )
+            div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(user.relationship || {}, user.id))
           )
         : null
     ),
@@ -434,7 +430,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
                     return div({ class: 'post' },
                       visitBtn,
                       parts.clean && parts.clean.trim() ? p(...renderUrl(parts.clean)) : null,
-                      ...(parts.imgs || []).map(src => img({ src, class: 'post-image', alt: 'image' }))
+                      ...(parts.imgs || []).map(src => renderZoomableImage(src, { imgClass: 'post-image', alt: 'image' }))
                     );
                   })
                 ) ]

@@ -166,8 +166,11 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
               { value: "trending", label: i18n.trendingTitle, mod: "trending" },
               { value: "forum", label: i18n.forumTitle, mod: "forum" },
               { value: "feed", label: i18n.feedTitle, mod: "feed" },
+              { value: "chats", label: i18n.chatsTitle, mod: "chats" },
               { value: "inbox", label: i18n.inbox },
+              { value: "mentions", label: i18n.mentions },
               { value: "agenda", label: i18n.agendaTitle, mod: "agenda" },
+              { value: "market", label: i18n.marketTitle, mod: "market" },
               { value: "favorites", label: i18n.favoritesTitle, mod: "favorites" }
             ].filter(o => !o.mod || modOn(o.mod)).map(o => currentConfig.homePage === o.value
               ? option({ value: o.value, selected: true }, o.label)

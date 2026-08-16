@@ -3541,6 +3541,22 @@ exports.threadView = ({ messages, spreadMap = null }) => {
   }`;
 };
 
+exports.likesView = async ({ messages, feed, name, spreadMap = null }) => {
+  const list = Array.isArray(messages) ? messages : [];
+  return template(
+    i18n.viewLikes,
+    section(
+      div({ class: "tags-header" },
+        h2(i18n.viewLikes),
+        p(userLink(feed, name))
+      )
+    ),
+    list.length
+      ? div(thread(list, spreadMap))
+      : p({ class: "no-content" }, i18n.no_results)
+  );
+};
+
 
 //generate preview
 const ensureAt = (id) => {

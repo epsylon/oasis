@@ -3456,7 +3456,7 @@ router
       return fakeImage();
     };
     try {
-      const buffer = await blob.getResolved({ blobId, timeout: avatarFallback ? 2000 : 30000 });
+      const buffer = avatarFallback ? await blob.getCached({ blobId }) : await blob.getResolved({ blobId });
       if (!buffer) {
         ctx.body = await fallbackImage();
         return;

@@ -5,6 +5,7 @@ const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
+const { renderZoomableImage } = require("./gallery_view")
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -17,6 +18,13 @@ const ALL_CATS = [...CAT_BLOCK1, ...CAT_BLOCK2, ...CAT_BLOCK3]
 
 const catKey = (c) => "forumCat" + String(c || "").replace(/\./g, "").replace(/[\s-]/g, "").toUpperCase()
 const catLabel = (c) => i18n[catKey(c)] || c
+
+const blobSrcOf = (value) => {
+  const s = String(value || "").trim()
+  if (s.startsWith("&")) return `/blob/${encodeURIComponent(s)}`
+  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  return mImg ? `/blob/${encodeURIComponent(mImg[1])}` : null
+}
 
 const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
   if (!value) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
@@ -213,7 +221,10 @@ const renderChatPoll = (poll, chat) => {
 const renderMessage = (msg, chatAuthor) => {
   const isAuthor = String(msg.author) === String(chatAuthor)
   const isSelf = String(msg.author) === String(userId)
-  const imageNode = msg.image ? renderMediaBlob(msg.image, null, { class: "chat-message-image" }) : null
+  const imageSrc = blobSrcOf(msg.image)
+  const imageNode = imageSrc
+    ? renderZoomableImage(imageSrc, { imgClass: "chat-message-image" })
+    : (msg.image ? renderMediaBlob(msg.image, null, { class: "chat-message-image" }) : null)
 
   return div({ class: isSelf ? "chat-bubble-row chat-bubble-row-self" : "chat-bubble-row" },
     div({ class: isSelf ? "chat-message chat-message-self" : isAuthor ? "chat-message chat-message-author" : "chat-message" },
@@ -335,7 +346,8 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         )
       )
     ),
-    isRestrictedInviteOnly ? null : div({ class: "tribe-side-actions" },
+    isRestrictedInviteOnly ? null : (() => {
+      const sideActionNodes = [
       isAuthor && chat.status === "INVITE-ONLY"
         ? form({ method: "POST", action: `/chats/generate-invite` },
             input({ type: "hidden", name: "chatId", value: chat.key }),
@@ -367,7 +379,9 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
             button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeLeaveButton)
           )
         : null
-    ),
+      ].flat().filter(Boolean)
+      return sideActionNodes.length ? div({ class: "tribe-side-actions" }, ...sideActionNodes) : null
+    })(),
     isAuthor
       ? div({ class: "tribe-side-actions housing-status-row" },
           span({ class: "card-label" }, `${i18n.chatStatusLabel}: `),

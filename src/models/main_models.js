@@ -501,6 +501,31 @@ async function checkLocalBlob(blobId) {
 }
 
 models.blob = {
+  getCached: async ({ blobId }) => {
+    const local = await checkLocalBlob(blobId);
+    if (local) return local;
+    const ssb = await cooler.open();
+    const has = await new Promise((resolve) => ssb.blobs.has(blobId, (err, v) => resolve(!err && !!v)));
+    if (!has) {
+      try { ssb.blobs.want(blobId, () => {}); } catch (_) {}
+      return null;
+    }
+    return new Promise((resolve) => {
+      pull(
+        ssb.blobs.get(blobId),
+        pull.collect(async (err, bufs) => {
+          if (err || !bufs || !bufs.length) return resolve(null);
+          const buffer = Buffer.concat(bufs);
+          try {
+            const filePath = blobIdToHexPath(blobId);
+            await fs.mkdir(path.dirname(filePath), { recursive: true });
+            await fs.writeFile(filePath, buffer);
+          } catch (e) { /* ignore */ }
+          resolve(buffer);
+        })
+      );
+    });
+  },
   getResolved: async ({ blobId, timeout = 30000 }) => {
     let buf = await checkLocalBlob(blobId);
     if (buf) return buf;

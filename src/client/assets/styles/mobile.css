@@ -913,3 +913,25 @@ a.create-button {
 .peers-technical-block .block-info-table td[data-label=""]::before { content: none !important; }
 .peers-list .block-info-table td .peer-key,
 .peers-technical-block .block-info-table td .peer-key { text-align: right !important; }
+
+.relationship-status .relationship-actions { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
+.relationship-status .relationship-actions form,
+.relationship-status .relationship-actions button { width: 100% !important; }
+
+.profile-sensors-box { align-items: center !important; text-align: center !important; }
+.profile-sensors-box > * { margin-left: auto !important; margin-right: auto !important; justify-content: center !important; }
+
+.tribe-feed .refeed-column,
+.tribe-feed-full .refeed-column { align-self: center !important; align-items: center !important; justify-content: center !important; }
+.tribe-feed .card-footer,
+.tribe-feed-full .card-footer { display: flex !important; flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 2px !important; }
+
+.invite-qr-card { display: flex !important; justify-content: center !important; border: none !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; margin: 0 auto !important; }
+.invite-qr-img { display: block; margin: 0 auto; }
+
+.stats-kpi { display: flex !important; flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 2px !important; }
+.stats-kpi-label,
+.stats-kpi-value { width: 100% !important; text-align: center !important; }
+
+.main-column audio,
+.main-column video { width: 100% !important; max-width: 100% !important; }
