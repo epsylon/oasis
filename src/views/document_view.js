@@ -149,7 +149,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       br(),
       label(i18n.documentTitleLabel),
       br(),
-      input({ type: "text", name: "title", placeholder: i18n.documentTitlePlaceholder, value: docToEdit?.title || "" }),
+      input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.documentTitlePlaceholder, value: docToEdit?.title || "" }),
       br(),
       label(i18n.documentDescriptionLabel),
       br(),

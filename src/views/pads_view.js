@@ -136,7 +136,7 @@ const renderCreateForm = (padToEdit, params) => {
     },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       span(i18n.padTitleLabel || "Title"), require("../server/node_modules/hyperaxe").br(),
-      input({ type: "text", name: "title", value: padToEdit ? padToEdit.title : "", placeholder: i18n.padTitlePlaceholder || "Enter pad title...", required: true }),
+      input({ type: "text", name: "title", maxlength: "100", value: padToEdit ? padToEdit.title : "", placeholder: i18n.padTitlePlaceholder || "Enter pad title...", required: true }),
       require("../server/node_modules/hyperaxe").br(), require("../server/node_modules/hyperaxe").br(),
       span(i18n.padStatusLabel || "Status"), require("../server/node_modules/hyperaxe").br(),
       select({ name: "status" },

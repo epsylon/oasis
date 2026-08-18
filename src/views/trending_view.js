@@ -277,7 +277,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
   );
 };
 
-exports.trendingView = (items, filter, categories = opinionCategories, spreadMap = new Map()) => {
+exports.trendingView = (items, filter, categories = opinionCategories, spreadMap = new Map(), q = '') => {
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
@@ -340,6 +340,15 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
         div({ class: 'column' }, baseFilters.map(mode => filterButton(mode, filter))),
         ...contentFilters.map(row =>
           div({ class: 'column' }, row.map(mode => filterButton(mode, filter)))
+        )
+      ),
+      div({ class: 'filters' },
+        form({ method: 'GET', action: '/trending', class: 'filter-box' },
+          input({ type: 'hidden', name: 'filter', value: filter }),
+          input({ type: 'text', name: 'q', value: q, placeholder: i18n.trendingSearchPlaceholder, class: 'filter-box__input' }),
+          div({ class: 'filter-box__controls' },
+            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+          )
         )
       ),
       section(

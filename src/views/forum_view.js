@@ -96,7 +96,7 @@ const renderForumForm = () =>
       label(i18n.forumTitleLabel), br(),
       input({
         type: 'text',
-        name: 'title',
+        name: 'title', maxlength: '100',
         required: true,
         placeholder: i18n.forumTitlePlaceholder
       }), br(), br(),

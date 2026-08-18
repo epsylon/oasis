@@ -220,7 +220,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         input({ type: "hidden", name: "filter", value: "create" }),
         params.tribeId ? input({ type: "hidden", name: "tribeId", value: params.tribeId }) : null,
         label(i18n.title || "Title"), br(),
-        input({ type: "text", name: "title", placeholder: i18n.mapTitlePlaceholder || "Map title", value: titleVal }),
+        input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.mapTitlePlaceholder || "Map title", value: titleVal }),
         br(), br(),
         label(i18n.mapDescriptionLabel), br(),
         textarea({ name: "description", placeholder: i18n.mapDescriptionPlaceholder, rows: "3" }, descVal),

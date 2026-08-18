@@ -117,7 +117,7 @@ const renderChatForm = (filter, chat = {}, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       span(i18n.title || "Title"), br(),
-      input({ type: "text", name: "title", required: true, placeholder: i18n.chatTitlePlaceholder, value: chat.title || "" }), br(), br(),
+      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.chatTitlePlaceholder, value: chat.title || "" }), br(), br(),
       span(i18n.chatDescription), br(),
       textarea({ name: "description", rows: 4, placeholder: i18n.chatDescriptionPlaceholder }, chat.description || ""), br(), br(),
       span(i18n.uploadMedia), br(),

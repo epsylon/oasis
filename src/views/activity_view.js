@@ -2150,6 +2150,15 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
             sub.filters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'filter-btn' }, String(f).toUpperCase()))
           )
         : null,
+      div({ class: 'filters' },
+        form({ method: 'GET', action: '/activity', class: 'filter-box' },
+          input({ type: 'hidden', name: 'filter', value: filter }),
+          input({ type: 'text', name: 'q', value: qs, placeholder: i18n.activitySearchPlaceholder, class: 'filter-box__input' }),
+          div({ class: 'filter-box__controls' },
+            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+          )
+        )
+      ),
     section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, actions, spreadMap, extras))
     )
   );

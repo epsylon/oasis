@@ -454,7 +454,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       label(i18n.projectTitle),
       br(),
-      input({ type: "text", name: "title", required: true, placeholder: i18n.projectTitlePlaceholder, value: pr.title || "" }),
+      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.projectTitlePlaceholder, value: pr.title || "" }),
       br(),
       label(i18n.projectDescription),
       br(),

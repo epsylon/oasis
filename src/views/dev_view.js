@@ -188,13 +188,13 @@ exports.devFileView = async (file) => {
         form({ method: "GET", action: "/reports" },
           input({ type: "hidden", name: "filter", value: "create" }),
           input({ type: "hidden", name: "category", value: "BUGS" }),
-          input({ type: "hidden", name: "title", value: reportTitle }),
+          input({ type: "hidden", name: "title", maxlength: "100", value: reportTitle }),
           input({ type: "hidden", name: "description", value: reportDescription }),
           button({ type: "submit", class: "filter-btn" }, i18n.devReportBug || "Report Bug")
         ),
         form({ method: "GET", action: "/tasks" },
           input({ type: "hidden", name: "filter", value: "create" }),
-          input({ type: "hidden", name: "title", value: taskTitle }),
+          input({ type: "hidden", name: "title", maxlength: "100", value: taskTitle }),
           input({ type: "hidden", name: "description", value: reportDescription }),
           button({ type: "submit", class: "filter-btn" }, i18n.devCreateTask || "Create Task")
         ),

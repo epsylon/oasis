@@ -263,7 +263,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
               { action: currentFilter === "edit" ? `/tasks/update/${encodeURIComponent(taskId)}` : "/tasks/create", method: "POST", enctype: "multipart/form-data" },
               input({ type: "hidden", name: "returnTo", value: ret }),
               label(i18n.taskTitleLabel), br(),
-              input({ type: "text", name: "title", required: true, value: formData.title || params.prefillTitle || "" }), br(),
+              input({ type: "text", name: "title", maxlength: "100", required: true, value: formData.title || params.prefillTitle || "" }), br(),
               label(i18n.taskDescriptionLabel), br(),
               textarea({ name: "description", required: true, placeholder: i18n.taskDescriptionPlaceholder, rows: "4" }, formData.description || params.prefillDescription || ""), br(),
               ...renderGalleryFields(formData, currentFilter === "edit"),

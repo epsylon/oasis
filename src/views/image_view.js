@@ -155,7 +155,7 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
         : null,
       label(i18n.imageTitleLabel),
       br(),
-      input({ type: "text", name: "title", placeholder: i18n.imageTitlePlaceholder, value: imageToEdit?.title || "" }),
+      input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.imageTitlePlaceholder, value: imageToEdit?.title || "" }),
       br(),
       label(i18n.imageDescriptionLabel),
       br(),

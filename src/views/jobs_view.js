@@ -288,7 +288,7 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null) => {
       br(),
       label(i18n.jobTitle),
       br(),
-      input({ type: "text", name: "title", required: true, placeholder: i18n.jobTitlePlaceholder, value: job.title || "" }),
+      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.jobTitlePlaceholder, value: job.title || "" }),
       br(),
       br(),
       label(i18n.jobImage),

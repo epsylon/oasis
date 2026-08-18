@@ -393,7 +393,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
               ? div(
                   label(i18n.reportsTitleLabel),
                   br(),
-                  input({ type: "text", name: "title", required: true, value: params.prefillTitle || "", form: "report-create-form" }),
+                  input({ type: "text", name: "title", maxlength: "100", required: true, value: params.prefillTitle || "", form: "report-create-form" }),
                   br(),
                   br(),
                   form(
@@ -446,7 +446,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                     { id: "report-edit-form", action: `/reports/update/${encodeURIComponent(reportId)}`, method: "POST", enctype: "multipart/form-data" },
                     label(i18n.reportsTitleLabel),
                     br(),
-                    input({ type: "text", name: "title", required: true, value: reportToEdit?.title || "" }),
+                    input({ type: "text", name: "title", maxlength: "100", required: true, value: reportToEdit?.title || "" }),
                     br(),
                     br(),
                     input({ type: "hidden", name: "description", value: hiddenDescription }),

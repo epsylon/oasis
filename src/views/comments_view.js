@@ -54,7 +54,7 @@ const renderCommentsSection = ({ action, comments = [], returnTo = null, closedN
           ),
       list.length
         ? div({ class: "comments-list" }, ...list.map(renderCommentCard))
-        : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)
+        : (closedNote ? null : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet))
     )
   );
 };

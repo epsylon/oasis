@@ -42,7 +42,7 @@ const collectLocalIPs = () => {
 
 module.exports = ({ host, port, middleware, allowHost }) => {
   const assets = new Koa()
-  assets.use(koaStatic(join(__dirname, "..", "client", "assets")));
+  assets.use(koaStatic(join(__dirname, "..", "client", "assets"), { maxage: 60 * 60 * 1000 }));
 
   const app = new Koa();
   const validHosts = [];

@@ -1129,14 +1129,84 @@ button.create-button:hover {
 }
 
 .filter-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
   padding: 16px 18px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.18);
 }
 
+.filter-box input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+.filter-box select,
+.filter-box button {
+  height: 42px !important;
+  box-sizing: border-box !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin: 0 !important;
+  vertical-align: middle;
+}
+
+div:has(> .filter-box) {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+
+.filter-box div {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.filter-box__controls .filter-box__input,
+.filter-box__controls input[type="text"],
+.filter-box__controls input[type="number"],
+.filter-box__controls input[type="date"],
+.filter-box__controls input[type="datetime-local"],
+.filter-box__controls select {
+  width: auto;
+  flex: 0 1 220px;
+  min-width: 140px;
+}
+
+.filter-box .transfer-range,
+.filter-box__controls .transfer-range {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 100% !important;
+}
+
+.filter-box select {
+  flex: 1 1 100% !important;
+  max-width: 340px;
+}
+
+.filter-box .filter-box__button,
+.filter-box button {
+  flex: 0 0 auto;
+}
+
+.filter-box input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]),
+.filter-box select {
+  box-sizing: border-box;
+  height: 42px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffd700;
+  outline: none;
+}
+
 .filter-box__input {
   width: 100%;
+  flex: 1 1 100%;
   box-sizing: border-box;
   height: 42px;
   padding: 10px 12px;
@@ -1155,15 +1225,16 @@ button.create-button:hover {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-top: 14px;
+  margin-top: 0;
+  flex: 1 1 100%;
   flex-wrap: wrap;
 }
 
 .filter-box__select {
   box-sizing: border-box;
-  height: 36px;
+  height: 42px;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.12);
   color: inherit;
@@ -1171,12 +1242,24 @@ button.create-button:hover {
 }
 
 .filter-box__button {
-  height: 36px;
-  padding: 0 14px;
-  border-radius: 6px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.16);
   color: #ffd700;
+}
+
+.filter-box__controls input:not([type="hidden"]),
+.filter-box__controls select,
+.filter-box__controls button {
+  height: 42px !important;
+  box-sizing: border-box !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin: 0 !important;
+  align-self: center !important;
+  line-height: normal;
 }
 
 .bookmark-topbar {
@@ -4114,6 +4197,16 @@ a.pm-btn:hover { text-decoration: none }
 .tribe-card-title {
   margin: 0;
   font-size: 1.15em;
+  overflow-wrap: anywhere;
+}
+
+.jobs-grid .tribe-card-title,
+.tribe-grid .tribe-card-title,
+.trending-card .tribe-card-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .tribe-card-footer {
@@ -5268,6 +5361,31 @@ a.pm-btn:hover { text-decoration: none }
   font-size: 0.9rem;
 }
 
+.search-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.search-card .card-value,
+.search-card .styled-text,
+.search-card p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.search-card img,
+.search-card video {
+  max-width: 100%;
+  height: auto;
+}
+
+.search-card audio {
+  width: 100%;
+  max-width: 100%;
+}
+
 .search-result-image {
   max-width: 100%;
   max-height: 300px;
@@ -5512,7 +5630,7 @@ a.pm-btn:hover { text-decoration: none }
 .chat-messages-list{display:flex;flex-direction:column;gap:6px}
 .chat-bubble-row{display:flex;justify-content:flex-start;border:none !important;background:transparent !important;padding:0 !important}
 .chat-bubble-row-self{justify-content:flex-end}
-.chat-message{max-width:75%;padding:7px 12px 5px;border-radius:14px 14px 14px 4px;background:#23242a;word-break:break-word;border:none}
+.chat-message{max-width:85%;padding:7px 12px 5px;border-radius:14px 14px 14px 4px;background:#23242a;word-break:break-word;border:none}
 .chat-message-author{background:#1f1800}
 .chat-bubble-row-self .chat-message{border-radius:14px 14px 4px 14px;background:#2f2510}
 .chat-bubble-sender{display:block;font-size:0.78rem;font-weight:bold;color:#7fb3ff;text-decoration:none;margin-bottom:2px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -6080,7 +6198,9 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .search-filters-table td{padding:6px 10px;border:none;vertical-align:middle;background:transparent}
 .search-filters-table td.card-label{white-space:nowrap;font-weight:600;color:#ffa500}
 .search-filters-table input[type="datetime-local"],
-.search-filters-table input.search-oasis-id{min-width:280px}
+.search-filters-table input.search-oasis-id,
+.search-filters-table input[type="search"],
+.search-filters-table select{min-width:280px;width:100%;box-sizing:border-box}
 .transfer-category-select{width:auto;min-width:160px;max-width:200px;padding:6px 10px}
 .spread-row{margin:8px 0;display:flex;justify-content:flex-start}
 .spread-form{display:inline-block}
@@ -6385,6 +6505,8 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
   border-bottom: 1px solid #2a2a2a;
   align-items: baseline;
 }
+.card-field > .card-value:only-child { grid-column: 1 / -1; min-width: 0; }
+
 .card .card-field:last-child,
 .card-section .card-field:last-child,
 .card-fields-container .card-field:last-child,
@@ -7452,7 +7574,6 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .activity-spread-missing{opacity:.6;font-style:italic}
 
 .search-select{position:relative;z-index:10}
-.search-select-spaced{margin-left:10px}
 .card-field-stacked{display:flex;flex-direction:column}
 .card-value-pre{white-space:pre-wrap;margin-top:4px}
 

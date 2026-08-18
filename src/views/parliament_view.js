@@ -344,7 +344,7 @@ const ProposalForm = () =>
     form(
       { method: 'POST', action: '/parliament/proposals/create' },
       label(i18n.parliamentProposalTitle), br(),
-      input({ type: 'text', name: 'title', required: true }), br(), br(),
+      input({ type: 'text', name: 'title', maxlength: '100', required: true }), br(), br(),
       label(i18n.parliamentProposalDescription), br(),
       textarea({ name: 'description', rows: 5, maxlength: 1000 }), br(), br(),
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentProposalPublish)

@@ -166,7 +166,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
       br(),
       span(i18n.videoTitleLabel),
       br(),
-      input({ type: "text", name: "title", placeholder: i18n.videoTitlePlaceholder, value: videoToEdit?.title || "" }),
+      input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.videoTitlePlaceholder, value: videoToEdit?.title || "" }),
       br(),
       span(i18n.videoDescriptionLabel),
       br(),

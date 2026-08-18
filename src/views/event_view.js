@@ -270,7 +270,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
               br(),
               input({
                 type: "text",
-                name: "title",
+                name: "title", maxlength: "100",
                 id: "title",
                 required: true,
                 value: formData.title || ""

@@ -112,7 +112,7 @@ const renderCreateForm = (calendarToEdit, params) => {
     form({ method: "POST", action },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       span(i18n.calendarTitleLabel || "Title"), br(),
-      input({ type: "text", name: "title", required: true, placeholder: i18n.calendarTitlePlaceholder || "Calendar title...", value: calendarToEdit ? calendarToEdit.title : "" }),
+      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.calendarTitlePlaceholder || "Calendar title...", value: calendarToEdit ? calendarToEdit.title : "" }),
       br(), br(),
       span(i18n.calendarStatusLabel || "Status"), br(),
       select({ name: "status", required: true },

@@ -284,7 +284,18 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
           button({ type: "submit", name: "filter", value: "closed", class: mode === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterClosed).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: mode === "create" ? "create-button active" : "create-button" }, i18n.voteCreateButton)
         )
-      )
+      ),
+      mode !== "create" && mode !== "edit"
+        ? div({ class: "filters" },
+            form({ method: "GET", action: "/votes", class: "filter-box" },
+              input({ type: "hidden", name: "filter", value: mode }),
+              input({ type: "text", name: "q", value: (params && params.q) || "", placeholder: i18n.votesSearchPlaceholder, class: "filter-box__input" }),
+              div({ class: "filter-box__controls" },
+                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+              )
+            )
+          )
+        : null
     ),
     section(
       (mode === "edit" || mode === "create")

@@ -474,7 +474,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
 		input({ type: 'datetime-local', name: 'to', value: toVal, class: 'blockexplorer-search-input' })
 	      ),
 	      div({ class: 'blockexplorer-search-actions' },
-		button({ type: 'submit', class: 'filter-box__button' }, i18n.searchSubmit)
+		div({ class: 'filter-box__controls' }, button({ type: 'submit', class: 'filter-box__button' }, i18n.searchSubmit))
 	      )
 	    )
 	  )

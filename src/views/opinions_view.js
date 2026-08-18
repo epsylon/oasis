@@ -333,7 +333,7 @@ const renderContentHtml = (content, key) => {
   }
 };
 
-exports.opinionsView = (items, filter, spreadMap = new Map()) => {
+exports.opinionsView = (items, filter, spreadMap = new Map(), q = '') => {
   seenDocumentTitles.clear();
   items = items
     .filter(item => {
@@ -493,6 +493,15 @@ exports.opinionsView = (items, filter, spreadMap = new Map()) => {
               input({ type: 'hidden', name: 'filter', value: mode }),
               button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
             )
+          )
+        )
+      ),
+      div({ class: 'filters' },
+        form({ method: 'GET', action: '/opinions', class: 'filter-box' },
+          input({ type: 'hidden', name: 'filter', value: filter }),
+          input({ type: 'text', name: 'q', value: q, placeholder: i18n.opinionsSearchPlaceholder, class: 'filter-box__input' }),
+          div({ class: 'filter-box__controls' },
+            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
           )
         )
       ),

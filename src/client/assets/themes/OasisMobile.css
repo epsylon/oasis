@@ -1016,8 +1016,8 @@ a.hashtag {
 .data-search { width: 100% !important; max-width: 100% !important; }
 .data-search input { width: 100% !important; max-width: 100% !important; }
 .data-cohesion { max-width: 100% !important; overflow: hidden !important; }
-.chat-message { max-width: 85% !important; }
-.chat-message.chat-poll { max-width: 95% !important; }
+.chat-message { max-width: 92% !important; }
+.chat-message.chat-poll { max-width: 97% !important; }
 .data-pair { grid-template-columns: 1fr !important; gap: 6px !important; }
 .data-pair-side { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
 .data-pair-link { max-width: 100% !important; overflow-wrap: anywhere !important; }

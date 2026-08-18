@@ -400,6 +400,10 @@ const nbsp = "\xa0";
 const { getConfig } = require('../configs/config-manager.js');
 
 // menu INIT
+const assetVersion = () => {
+  try { return encodeURIComponent(String(readPkg()?.version || '0')); } catch (_) { return '0'; }
+};
+
 const readPkg = () => {
   const file = path.resolve(__dirname, "..", "server", "package.json");
   try {
@@ -1173,15 +1177,15 @@ const template = (titlePrefix, ...elements) => {
   const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : "blocks";
   const themeLink = link({
     rel: "stylesheet",
-    href: `/assets/themes/${theme}.css`
+    href: `/assets/themes/${theme}.css?v=${assetVersion()}`
   });
   const nodes = html(
     { lang: "en" },
     head(
       title(titlePrefix, " | Oasis"),
-      link({ rel: "stylesheet", href: "/assets/styles/style.css" }),
+      link({ rel: "stylesheet", href: `/assets/styles/style.css?v=${assetVersion()}` }),
       themeLink,
-      link({ rel: "stylesheet", href: "/assets/styles/mobile.css", media: "(max-width: 768px)" }),
+      link({ rel: "stylesheet", href: `/assets/styles/mobile.css?v=${assetVersion()}`, media: "(max-width: 768px)" }),
       link({ rel: "icon", href: "/assets/images/favicon.svg" }),
       meta({ charset: "utf-8" }),
       meta({ name: "description", content: i18n.oasisDescription }),
@@ -1533,9 +1537,9 @@ exports.ainavHomeView = ({ recentTags = [] } = {}) => {
     { lang: "en" },
     head(
       title(placeholder, " | Oasis"),
-      link({ rel: "stylesheet", href: "/assets/styles/style.css" }),
-      link({ rel: "stylesheet", href: `/assets/themes/${theme}.css` }),
-      link({ rel: "stylesheet", href: "/assets/styles/mobile.css", media: "(max-width: 768px)" }),
+      link({ rel: "stylesheet", href: `/assets/styles/style.css?v=${assetVersion()}` }),
+      link({ rel: "stylesheet", href: `/assets/themes/${theme}.css?v=${assetVersion()}` }),
+      link({ rel: "stylesheet", href: `/assets/styles/mobile.css?v=${assetVersion()}`, media: "(max-width: 768px)" }),
       link({ rel: "icon", href: "/assets/images/favicon.svg" }),
       meta({ charset: "utf-8" }),
       meta({ name: "description", content: i18n.oasisDescription }),

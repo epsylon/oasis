@@ -81,7 +81,7 @@ exports.tagsView = async (tags, filter, search = '') => {
         form({ method: 'GET', action: '/tags', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter || 'all' }),
           input({ type: 'text', name: 'search', value: query, placeholder: i18n.tagsSearchPlaceholder, class: 'filter-box__input' }),
-          button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+          div({ class: 'filter-box__controls' }, button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton))
         )
       ),
       div({ class: 'tags-list' },

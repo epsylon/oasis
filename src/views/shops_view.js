@@ -140,7 +140,7 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
     form({ action: isEdit ? `/shops/update/${encodeURIComponent(shop.key || "")}` : "/shops/create", method: "POST", enctype: "multipart/form-data" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       label(i18n.title || "Title"), br,
-      input({ type: "text", name: "title", required: true, placeholder: i18n.shopTitlePlaceholder || "Name of your shop", value: shop.title || "" }), br(),
+      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.shopTitlePlaceholder || "Name of your shop", value: shop.title || "" }), br(),
       label(i18n.shopShortDescription), br,
       input({ type: "text", name: "shortDescription", required: true, maxlength: 160, placeholder: i18n.shopShortDescriptionPlaceholder || "Brief description of your shop", value: shop.shortDescription || "" }), br(),
       label(i18n.description || "Description"), br,
@@ -176,7 +176,7 @@ const renderProductForm = (shopId, product = {}, isEdit = false, returnTo = "", 
       input({ type: "hidden", name: "shopId", value: shopId }),
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       label(i18n.title || "Title"), br,
-      input({ type: "text", name: "title", required: true, value: product.title || "" }), br(),
+      input({ type: "text", name: "title", maxlength: "100", required: true, value: product.title || "" }), br(),
       label(i18n.description || "Description"), br,
       textarea({ name: "description", rows: 4 }, product.description || ""), br,
       label(i18n.shopProductPrice), br,
@@ -207,8 +207,56 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
   const q = safeText(params.q || "")
   const sort = safeText(params.sort || "recent")
   const list = safeArr(shops)
+  const title = i18n.shopsTitle
+  const isForm = filter === "create" || filter === "edit"
+  const isProducts = filter === "products" || filter === "prices"
 
-  const title = i18n.shopsTitle;
+  return template(
+    title,
+    section(div({ class: "tags-header" }, h2(title), p(i18n.shopDescription))),
+    section(renderModeButtons(filter)),
+    !isForm
+      ? section(
+          div({ class: "filters" },
+            form({ method: "GET", action: "/shops", class: "filter-box" },
+              input({ type: "hidden", name: "filter", value: filter }),
+              input({ type: "text", name: "q", value: q, placeholder: i18n.shopSearchPlaceholder, class: "filter-box__input" }),
+              div({ class: "filter-box__controls" },
+                select({ name: "sort", class: "filter-box__select" },
+                  option({ value: "recent", ...(sort === "recent" ? { selected: true } : {}) }, i18n.documentSortRecent),
+                  option({ value: "top", ...(sort === "top" ? { selected: true } : {}) }, i18n.documentSortTop)
+                ),
+                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+              )
+            )
+          )
+        )
+      : null,
+    section(
+      isForm
+        ? renderShopForm(filter, filter === "edit" ? (shopToEdit || {}) : {}, params)
+        : isProducts
+          ? div({ class: "shop-products-grid" },
+              list.length
+                ? list.map(prod => renderProductCard(prod, prod.shopId, buildReturnTo(filter, { q })))
+                : p(i18n.shopNoProducts)
+            )
+          : div({ class: "tribe-grid" },
+              list.length
+                ? list.map(shopItem => renderShopCard(shopItem, filter, params))
+                : p(i18n.shopNoItems)
+            )
+    )
+  )
+}
+
+exports.singleShopView = async (shop, filter, products = [], comments = [], params = {}) => {
+  const q = safeText(params.q || "")
+  const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q })
+  const isAuthor = String(shop.author) === String(userId)
+  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetShops === true)
+  products = safeArr(products)
+
   const shopSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
       renderContentActions(shop.key, null, { spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title })

@@ -156,7 +156,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
       br(),
       span(i18n.torrentTitleLabel),
       br(),
-      input({ type: "text", name: "title", placeholder: i18n.torrentTitlePlaceholder, value: torrentToEdit?.title || "", required: true }),
+      input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.torrentTitlePlaceholder, value: torrentToEdit?.title || "", required: true }),
       br(),
       span(i18n.torrentDescriptionLabel),
       br(),

@@ -170,7 +170,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       br(),
       span(i18n.audioTitleLabel),
       br(),
-      input({ type: "text", name: "title", placeholder: i18n.audioTitlePlaceholder, value: audioToEdit?.title || "" }),
+      input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.audioTitlePlaceholder, value: audioToEdit?.title || "" }),
       br(),
       span(i18n.audioDescriptionLabel),
       br(),

@@ -257,7 +257,7 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       br(),
       label(i18n.housingTitleLabel),
       br(),
-      input({ type: "text", name: "title", required: true, placeholder: i18n.housingTitlePlaceholder, value: item.title || "" }),
+      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.housingTitlePlaceholder, value: item.title || "" }),
       br(),
       br(),
       ...renderGalleryFields(item, isEdit, maxImages),

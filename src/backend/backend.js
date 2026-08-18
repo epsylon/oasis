@@ -2061,6 +2061,7 @@ router
     const applySearchPrivacy = (msgs) => msgs.filter(msg => {
       const c = msg.value?.content;
       if (!c) return true;
+      if (c.type === 'pub') return false;
       if (Array.isArray(c.recps)) return false;
       if (c.type === 'post' && (c.private === true || c.recps)) return false;
       if (c.tribeId && anonTribeIds.has(c.tribeId)) return false;
@@ -2404,13 +2405,22 @@ router
   })
   .get('/trending', async (ctx) => {
     const filter = qf(ctx, 'ALL');
+    const q = String(ctx.query.q || '').trim();
     let { filtered = [] } = await trendingModel.listTrending(filter);
     filtered = await applyListFilters(filtered, ctx);
+    if (q) {
+      const needle = q.toLowerCase();
+      filtered = filtered.filter(m => {
+        const c = (m && m.value && m.value.content) || {};
+        return [c.title, c.name, c.question, c.description, c.text, c.concept, ...(Array.isArray(c.tags) ? c.tags : [])]
+          .some(v => String(v || '').toLowerCase().includes(needle));
+      });
+    }
     const spreadMap = new Map();
     const results = await Promise.all(filtered.map(it => it && it.key ? spreads.forMessage(it.key).catch(() => null) : Promise.resolve(null)));
     filtered.forEach((it, i) => { if (it && it.key && results[i]) spreadMap.set(it.key, results[i]); });
     await warmAuthorNames(filtered);
-    ctx.body = await trendingView(filtered, filter, trendingModel.categories, spreadMap);
+    ctx.body = await trendingView(filtered, filter, trendingModel.categories, spreadMap, q);
   })
   .get('/agenda', async (ctx) => {
     const filter = qf(ctx);
@@ -3856,13 +3866,22 @@ router
   })
   .get('/opinions', async (ctx) => {
     const filter = qf(ctx, 'ALL');
+    const q = String(ctx.query.q || '').trim();
     let opinions = await opinionsModel.listOpinions(filter);
     if (Array.isArray(opinions)) opinions = await applyListFilters(opinions, ctx);
+    if (q && Array.isArray(opinions)) {
+      const needle = q.toLowerCase();
+      opinions = opinions.filter(m => {
+        const c = (m && m.value && m.value.content) || {};
+        return [c.title, c.name, c.question, c.description, c.text, c.concept, ...(Array.isArray(c.tags) ? c.tags : [])]
+          .some(v => String(v || '').toLowerCase().includes(needle));
+      });
+    }
     const spreadMap = new Map();
     const list = Array.isArray(opinions) ? opinions : [];
     const results = await Promise.all(list.map(it => it && it.key ? spreads.forMessage(it.key).catch(() => null) : Promise.resolve(null)));
     list.forEach((it, i) => { if (it && it.key && results[i]) spreadMap.set(it.key, results[i]); });
-    ctx.body = await opinionsView(opinions, filter, spreadMap);
+    ctx.body = await opinionsView(opinions, filter, spreadMap, q);
   })
   .get("/feed", async (ctx) => {
     const filter = String(ctx.query.filter || "ALL").toUpperCase();
@@ -4431,13 +4450,15 @@ router
   })
   .get('/votes', async ctx => {
     const filter = qf(ctx);
+    const q = String(ctx.query.q || '').trim();
     let voteList = await enrichWithComments(await votesModel.listAll(filter));
     voteList = await applyListFilters(voteList, ctx);
+    voteList = applyTextSearch(voteList, q, ['question', 'tags']);
     try { voteList = await lifetime.enrichAndFilter(voteList, { getAuthor: (x) => x.createdBy }); } catch (_) {}
     await enrichMsgSize(voteList);
     const spreadMap = await spreads.forMessages((voteList || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(voteList);
-    ctx.body = await voteView(voteList, filter, null, [], filter, { spreadMap, ...voteFormState(ctx) });
+    ctx.body = await voteView(voteList, filter, null, [], filter, { spreadMap, q, ...voteFormState(ctx) });
   })
   .get('/votes/edit/:id', async ctx => {
     const id = ctx.params.id;
@@ -6393,6 +6414,7 @@ router
     const applySearchPrivacy = (msgs) => msgs.filter(msg => {
       const c = msg.value?.content;
       if (!c) return true;
+      if (c.type === 'pub') return false;
       if (Array.isArray(c.recps)) return false;
       if (c.type === 'post' && (c.private === true || c.recps)) return false;
       if (c.tribeId && anonTribeIds.has(c.tribeId)) return false;

@@ -377,7 +377,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               br(),
               label(i18n.marketItemTitle),
               br(),
-              input({ type: "text", name: "title", id: "title", value: (itemEdit && itemEdit.title) || params.title || "", required: true }),
+              input({ type: "text", name: "title", maxlength: "100", id: "title", value: (itemEdit && itemEdit.title) || params.title || "", required: true }),
               br(),
               br(),
               label(i18n.marketItemDescription),

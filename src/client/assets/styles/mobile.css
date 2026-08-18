@@ -935,3 +935,10 @@ a.create-button {
 
 .main-column audio,
 .main-column video { width: 100% !important; max-width: 100% !important; }
+
+.main-column section:has(.chat-messages-list) { border: none !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
+.tribe-details:has(.chat-messages-list) { display: block !important; border: none !important; background: transparent !important; padding: 6px !important; margin: 0 !important; box-shadow: none !important; }
+.chat-full-width { border: none !important; background: transparent !important; padding: 0 !important; }
+.chat-messages-list { padding: 0 !important; }
+.chat-message { max-width: 92% !important; }
+.chat-message.chat-poll { max-width: 97% !important; }
