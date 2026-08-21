@@ -418,12 +418,6 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
   ].filter(Boolean)
 
   const sideActions = []
-  if (otherParty && String(otherParty) !== String(userId)) {
-    sideActions.push(form({ method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: otherParty }),
-      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-    ))
-  }
   if (showConfirm) {
     sideActions.push(form({ method: "POST", action: `/transfers/confirm/${encodeURIComponent(transfer.id)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),

@@ -15,7 +15,7 @@ const toTs = (d) => {
   return Number.isFinite(t) ? t : 0;
 };
 
-module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel, pollsModel }) => {
+module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel, pollsModel, schoolModel }) => {
   const kindConfig = {
     audios: {
       base: "/audios/",
@@ -77,6 +77,10 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
       base: "/reports/",
       getById: getFn(reportsModel, ["getReportById", "getById"])
     },
+    school: {
+      base: "/school/course/",
+      getById: getFn(schoolModel, ["getCourseById", "getById"])
+    },
     votes: {
       base: "/votes/",
       getById: getFn(votesModel, ["getVoteById", "getById"])
@@ -115,7 +119,7 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     }
   };
 
-  const kindOrder = ["audios", "blogs", "bookmarks", "calendars", "chats", "documents", "events", "forum", "housing", "images", "jobs", "maps", "market", "pads", "polls", "projects", "reports", "shopProducts", "shops", "tasks", "torrents", "transfers", "videos", "votes"];
+  const kindOrder = ["audios", "blogs", "bookmarks", "calendars", "chats", "documents", "events", "forum", "housing", "images", "jobs", "maps", "market", "pads", "polls", "projects", "reports", "school", "shopProducts", "shops", "tasks", "torrents", "transfers", "videos", "votes"];
 
   const hydrateKind = async (kind, ids) => {
     const cfg = kindConfig[kind];

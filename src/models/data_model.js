@@ -28,7 +28,8 @@ const KINDS = {
   pads: { type: 'pad', href: (id) => `/pads/${encodeURIComponent(id)}` },
   maps: { type: 'map', href: (id) => `/maps/${encodeURIComponent(id)}` },
   calendars: { type: 'calendar', href: (id) => `/calendars/${encodeURIComponent(id)}` },
-  forum: { type: 'forum', href: (id) => `/forum/${encodeURIComponent(id)}` }
+  forum: { type: 'forum', href: (id) => `/forum/${encodeURIComponent(id)}` },
+  school: { type: 'schoolCourse', href: (id) => `/school/course/${encodeURIComponent(id)}` }
 };
 
 const KIND_BY_TYPE = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [v.type, k]));

@@ -193,10 +193,35 @@ if (argv[0] === 'start') {
     } catch (_) {}
   }, 5000);
 
+  setTimeout(() => {
+    try {
+      const pull = require('pull-stream');
+      const version = String(require('./package.json').version || '');
+      if (!version) return;
+      pull(
+        server.createUserStream({ id: server.id, reverse: true }),
+        pull.filter(m => m && m.value && m.value.content && m.value.content.type === 'oasisVersion'),
+        pull.take(1),
+        pull.collect((err, msgs) => {
+          const mine = !err && msgs && msgs.length ? msgs[0].value.content.version : null;
+          if (mine !== version) {
+            try { server.publish({ type: 'oasisVersion', version, updatedAt: new Date().toISOString() }, () => {}); } catch (_) {}
+          }
+        })
+      );
+    } catch (_) {}
+  }, 7000);
+
 }
 
 module.exports = {
   config,
-  server: server || Server(config),
-  open: async () => server || Server(config)
+  get server() {
+    if (!server) server = Server(config);
+    return server;
+  },
+  open: async () => {
+    if (!server) server = Server(config);
+    return server;
+  }
 };

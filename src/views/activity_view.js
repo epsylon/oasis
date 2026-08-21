@@ -232,7 +232,7 @@ const SPREADABLE_TYPES = new Set([
   'post', 'audio', 'video', 'image', 'document', 'torrent', 'bookmark',
   'event', 'calendar', 'task', 'votes', 'vote', 'market', 'shop', 'shopProduct',
   'project', 'transfer', 'housing', 'job', 'report', 'industry', 'industryBuild', 'industryBlueprint',
-  'chat', 'chatMessage', 'pad', 'padEntry', 'forum', 'map', 'poll', 'blog'
+  'chat', 'chatMessage', 'pad', 'padEntry', 'forum', 'map', 'poll', 'blog', 'schoolCourse'
 ]);
 
 function renderActionCards(actions, userId, allActions, spreadMap = new Map(), extras = {}) {
@@ -863,7 +863,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           bodyNode,
           isTruncated && threadId
             ? div({ class: 'card-section-action' },
-                a({ href: `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(action.id || threadId)}`, class: 'filter-btn' }, i18n.keepReading || 'Keep reading...')
+                a({ href: `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(action.id || threadId)}`, class: 'comments-summary chat-thread-summary keep-reading-link' }, i18n.keepReading || 'Keep reading...')
               )
             : ''
         )
@@ -956,11 +956,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                         span({ class: 'card-value' }, String(c.members || 0)),
                         span({ class: 'card-label' }, ` · ${i18n.chatMessagesLabel}: `),
                         span({ class: 'card-value' }, String(c.messageCount || show.length))
-                    )
-                ),
+                    ),
                 show.length
-                    ? details({ class: 'chat-thread-details' },
-                        summary({ class: 'comments-summary chat-thread-summary' }, i18n.keepReading || 'Keep reading...'),
+                    ? div({ class: 'card-section-action' },
+                      details({ class: 'chat-thread-details' },
+                        summary({ class: 'comments-summary chat-thread-summary keep-reading-link' }, i18n.keepReading || 'Keep reading...'),
                         div({ class: 'card-section' },
                             show.map(r => {
                                 const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
@@ -976,7 +976,9 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                             })
                         )
                       )
+                      )
                     : null
+                )
             ),
             p({ class: 'card-footer' },
                 span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
@@ -1183,7 +1185,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section shop' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopTitle || 'Shop') + ':'), span({ class: 'card-value' }, shopKey ? a({ href: `/shops/${encodeURIComponent(shopKey)}`, class: 'user-link' }, title || shopKey) : (title || ''))),
-          displayDesc ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.description || 'Description') + ':'), span({ class: 'card-value' }, displayDesc)) : "",
+          displayDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, displayDesc)) : "",
           visibility ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopVisibility || 'Visibility') + ':'), span({ class: 'card-value' }, visibility)) : "",
           location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopLocation || 'Location') + ':'), span({ class: 'card-value' }, location)) : ""
         )
@@ -1580,6 +1582,34 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       );
     }
 
+    if (type === 'schoolCourse') {
+      const { title, description, price, visibility, startDate } = content;
+      const coursePaid = Number(price) > 0;
+      cardBody.push(
+        div({ class: 'card-section report' },
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, i18n.title + ':'),
+            span({ class: 'card-value' }, title)
+          ),
+          description ? div({ class: 'card-field' },
+            span({ class: 'card-value' }, String(description).length > 220 ? String(description).slice(0, 220) + '…' : description)
+          ) : null,
+          div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.schoolCourseType || 'Course type') + ':'),
+            span({ class: 'card-value' }, String(visibility || '').toUpperCase() === 'INVITE' ? 'INVITE-ONLY' : (coursePaid ? 'PAID' : 'OPEN'))
+          ),
+          coursePaid ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.schoolPrice || 'Price (ECO)') + ':'),
+            span({ class: 'card-value' }, `${Number(price).toFixed(2)} ECO`)
+          ) : null,
+          startDate ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.schoolStartDate || 'Start date') + ':'),
+            span({ class: 'card-value' }, new Date(startDate).toLocaleDateString())
+          ) : null
+        )
+      );
+    }
+
     if (type === 'job') {
       const { title, job_type, tasks, location, vacants, salary, status, subscribers } = content;
       cardBody.push(
@@ -1908,6 +1938,7 @@ function getViewDetailsAction(type, action) {
     case 'housing':    return `/housing/${id}`;
     case 'job':        return `/jobs/${id}`;
     case 'project':    return `/projects/${id}`;
+    case 'schoolCourse': return `/school/course/${id}`;
     case 'industry':   return `/industry/${id}`;
     case 'industryBuild': return `/industry/build/${id}`;
     case 'industryBlueprint': return `/industry/blueprint/${id}`;
@@ -1950,6 +1981,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'map',       label: i18n.typeMap },
     { type: 'banking',   label: i18n.typeBanking },
     { type: 'market',    label: i18n.typeMarket },
+    { type: 'schoolCourse', label: i18n.typeSchool },
     { type: 'project',   label: i18n.typeProject },
     { type: 'industry',  label: i18n.typeIndustry },
     { type: 'housing',   label: i18n.typeHousing },
@@ -2121,7 +2153,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
         ...(() => {
           const COLUMNS = [
             ['all', 'mine', 'recent', 'top'],
-            ['inhabitants', 'tribe', 'larp', 'parliament', 'courts'],
+            ['inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts'],
             ['votes', 'event', 'calendar', 'task', 'report'],
             ['banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'],
             ['post', 'feed', 'chat', 'pad', 'forum', 'map'],

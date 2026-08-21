@@ -49,7 +49,6 @@ const ADDR_PATH = path.join(__dirname, '..', 'configs', 'wallet-addresses.json')
 const readAddrMap = () => { try { return JSON.parse(fs.readFileSync(ADDR_PATH, 'utf8')); } catch { return {}; } };
 const writeAddrMap = (map) => { fs.mkdirSync(path.dirname(ADDR_PATH), { recursive: true }); fs.writeFileSync(ADDR_PATH, JSON.stringify(map, null, 2)); };
 
-//parliament model
 let electionInFlight = null;
 const ensureTerm = async () => {
   const cur = await parliamentModel.getPublishedTerm().catch(() => null);
@@ -112,7 +111,6 @@ const safeArr = v => Array.isArray(v) ? v : [];
 const safeText = v => String(v || '').trim();
 const safeReturnTo = (ctx, fb, ap) => { const rt = ctx.request?.body?.returnTo || ctx.query?.returnTo; return typeof rt === 'string' && ap?.some(p => rt.startsWith(p)) ? rt : fb; };
 
-// anti-injections
 const { stripDangerousTags, sanitizeHtml } = require('./sanitizeHtml');
 
 const sharedState = require('../configs/shared-state');
@@ -619,6 +617,7 @@ const ssbConfig = require('../server/ssb_config');
 const tribeCrypto = require('../models/crypto')(ssbConfig.path, 'tribes');
 const onboardingModel = require('../models/onboarding_model')({ cooler, ssbPath: ssbConfig.path });
 const chatCrypto = require('../models/crypto')(ssbConfig.path, 'chats');
+const schoolCrypto = require('../models/crypto')(ssbConfig.path, 'school');
 const padCrypto = require('../models/crypto')(ssbConfig.path, 'pads');
 const mapCrypto = require('../models/crypto')(ssbConfig.path, 'maps');
 const calendarCrypto = require('../models/crypto')(ssbConfig.path, 'calendars');
@@ -661,11 +660,12 @@ const shopsModel = require('../models/shops_model')({ cooler, isPublic: config.p
 const chatsModel = require('../models/chats_model')({ cooler, tribeCrypto, chatCrypto, tribesModel });
 const pollsModel = require('../models/polls_model')({ cooler, isPublic: config.public, tribeCrypto, chatsModel });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
-const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config.public, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel, industryModel, housingModel });
+const schoolModel = require('../models/school_model')({ cooler, transfersModel, schoolCrypto, chatsModel });
+const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config.public, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel, industryModel, housingModel, schoolModel });
 const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public, tribeCrypto, mapCrypto, tribesModel });
 const gamesModel = require('../models/games_model')({ cooler });
 const bankingModel = require("../models/banking_model")({ services: { cooler }, isPublic: config.public });
-const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel: blogModel, pollsModel });
+const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel: blogModel, pollsModel, schoolModel });
 const logsModel = require("../models/logs_model")({ cooler });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const fediverseModel = require('../models/fediverse_model')({ isPublic: config.public });
@@ -938,9 +938,10 @@ const contentResolvers = {
   housing: async id => housingModel.resolveRootId(id).catch(() => id),
   projects: async id => id,
   transfers: async id => id,
-  market: async id => id
+  market: async id => id,
+  school: async id => schoolModel.resolveRootId(id).catch(() => id)
 };
-const contentModCheck = { images: 'imagesMod', audios: 'audiosMod', videos: 'videosMod', documents: 'documentsMod', bookmarks: 'bookmarksMod', market: 'marketMod', jobs: 'jobsMod', projects: 'projectsMod', shops: 'shopsMod', shopProducts: 'shopsMod', chats: 'chatsMod', maps: 'mapsMod', pads: 'padsMod', calendars: 'calendarsMod', torrents: 'torrentsMod', events: 'eventsMod', forum: 'forumMod', blogs: 'blogsMod', logs: 'logsMod', polls: 'pollsMod', tasks: 'tasksMod', reports: 'reportsMod', votes: 'votesMod', housing: 'housingMod', transfers: 'transfersMod' };
+const contentModCheck = { images: 'imagesMod', audios: 'audiosMod', videos: 'videosMod', documents: 'documentsMod', bookmarks: 'bookmarksMod', market: 'marketMod', jobs: 'jobsMod', projects: 'projectsMod', shops: 'shopsMod', shopProducts: 'shopsMod', chats: 'chatsMod', maps: 'mapsMod', pads: 'padsMod', calendars: 'calendarsMod', torrents: 'torrentsMod', events: 'eventsMod', forum: 'forumMod', blogs: 'blogsMod', logs: 'logsMod', polls: 'pollsMod', tasks: 'tasksMod', reports: 'reportsMod', votes: 'votesMod', housing: 'housingMod', transfers: 'transfersMod', school: 'schoolMod' };
 const favAction = async (ctx, kind, action) => {
   if (!checkMod(ctx, contentModCheck[kind])) { ctx.redirect('/modules'); return; }
   try {
@@ -1129,7 +1130,7 @@ const MODULE_HOME_PATHS = new Set([
   'images', 'audios', 'videos', 'documents', 'bookmarks', 'torrents', 'maps',
   'events', 'tasks', 'reports', 'votes', 'market', 'jobs', 'housing', 'projects',
   'industry', 'shops', 'transfers', 'pads', 'chats', 'calendars', 'forum',
-  'tribes', 'feed', 'logs', 'opinions', 'trending', 'agenda'
+  'tribes', 'feed', 'logs', 'opinions', 'trending', 'agenda', 'school'
 ]);
 
 const moduleHomeFor = (ctx) => {
@@ -1216,9 +1217,6 @@ const dedupeLarpHouseTribes = (list) => {
   });
 };
 about._startNameWarmup();
-// Route-triggered author-name resolution: warms nameCache with the ACTUAL name
-// for each feed id about to be rendered, so every userLink() date·author footer
-// (and comments) shows @name instead of the raw oasis id. Call before rendering.
 const FEED_RE = /^@.+\.ed25519$/;
 const AUTHOR_FIELDS = ['author', 'from', 'to', 'organizer', 'proposer', 'seller', 'recipient', 'judgeId', 'accuser', 'respondentId', 'createdBy'];
 const warmNames = async (ids) => {
@@ -1622,6 +1620,7 @@ const { indexingView } = require("../views/indexing_view");
 const { pixeliaView } = require("../views/pixelia_view");
 const { melodyView } = require("../views/melody_view");
 const { gamesView } = require("../views/games_view");
+const { schoolView, singleCourseView } = require("../views/school_view");
 const { statsView } = require("../views/stats_view");
 const { tribesView, tribeView, renderInvitePage } = require("../views/tribes_view");
 const { agendaView } = require("../views/agenda_view");
@@ -1806,7 +1805,7 @@ router
     ctx.body = statsView(stats, filter);
   })
   .get("/modules", async (ctx) => {
-    const modules = ['blogs', 'polls', 'fediverse', 'invites', 'wallet', 'legacy', 'dev', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'housing', 'jobs', 'projects', 'industry', 'shops', 'banking', 'parliament', 'courts'];
+    const modules = ['blogs', 'polls', 'fediverse', 'invites', 'wallet', 'legacy', 'dev', 'cipher', 'bookmarks', 'calendars', 'chats', 'videos', 'docs', 'audios', 'tags', 'images', 'maps', 'trending', 'events', 'tasks', 'market', 'tribes', 'larp', 'votes', 'reports', 'opinions', 'pads', 'transfers', 'feed', 'pixelia', 'melody', 'agenda', 'favorites', 'ai', 'forum', 'games', 'housing', 'jobs', 'projects', 'industry', 'shops', 'banking', 'school', 'parliament', 'courts'];
     const cfg = getConfig().modules;
     ctx.body = modulesView(modules.reduce((acc, m) => { acc[`${m}Mod`] = cfg[`${m}Mod`]; return acc; }, {}));
   })
@@ -1821,8 +1820,9 @@ router
   .get('/games', async (ctx) => {
     if (!checkMod(ctx, 'gamesMod')) { ctx.redirect('/modules'); return; }
     const filter = qf(ctx, 'all');
+    const q = String(ctx.query.q || '').trim();
     const hall = await gamesModel.getHallOfFame();
-    ctx.body = gamesView(filter, hall);
+    ctx.body = gamesView(filter, hall, q);
   })
   .get('/games/:name', async (ctx) => {
     if (!checkMod(ctx, 'gamesMod')) { ctx.redirect('/modules'); return; }
@@ -1835,6 +1835,236 @@ router
     try { await gamesModel.submitScore(game, score); } catch (_) {}
     ctx.redirect('/games?filter=scoring');
   })
+  .get('/school', async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const filter = String(ctx.query.filter || 'all').toLowerCase();
+    const q = String(ctx.query.q || '').trim();
+    const sort = String(ctx.query.sort || 'recent').trim();
+    if (filter === 'create') { ctx.body = await schoolView([], 'create', null, { q, sort }); return; }
+    if (filter === 'edit') {
+      const course = await schoolModel.getCourseById(String(ctx.query.courseId || ''), getViewerId());
+      ctx.body = await schoolView([], 'edit', course, { q, sort });
+      return;
+    }
+    const fav = await contentFavorites.getFavoriteSet('school').catch(() => new Set());
+    let courses = await schoolModel.listCourses(filter === 'favorites' ? 'all' : filter, getViewerId(), { q, sort });
+    courses = courses.map(c => ({ ...c, isFavorite: fav.has(String(c.rootId || c.id)) }));
+    if (filter === 'favorites') courses = courses.filter(c => c.isFavorite);
+    ctx.body = await schoolView(courses, filter, null, { q, sort });
+  })
+  .get('/school/course/:id', async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const course = await schoolModel.getCourseById(ctx.params.id, getViewerId());
+    const lessons = await schoolModel.listLessons(course.rootId);
+    const certificates = await schoolModel.listCertificates(course.rootId);
+    const fav = await contentFavorites.getFavoriteSet('school').catch(() => new Set());
+    const comments = await getVoteComments(course.rootId || course.id).catch(() => []);
+    const exams = await schoolModel.listExams(course.rootId).catch(() => []);
+    const progress = course.author === getViewerId() ? await schoolModel.progressForCourse(course.rootId).catch(() => ({})) : {};
+    const approved = course.students.includes(getViewerId()) ? await schoolModel.hasPassedCourse(course.rootId, getViewerId()).catch(() => false) : false;
+    ctx.body = await singleCourseView({ ...course, isFavorite: fav.has(String(course.rootId || course.id)) }, lessons, certificates, { comments, exams, progress, approved, spreads: await spreads.forMessage(course.id).catch(() => null) });
+  })
+  .post('/school/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
+    const courseType = String(b.courseType || 'OPEN').toUpperCase();
+    if (courseType === 'PAID' && !(parseFloat(String(b.price || '').replace(',', '.')) > 0)) throw new Error('Invalid price');
+    await schoolModel.createCourse({ title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), tags: b.tags, price: courseType === 'OPEN' ? '0' : b.price, visibility: courseType === 'INVITE' ? 'INVITE' : 'PUBLIC', startDate: b.startDate, image: imageBlob });
+    try { activityModel.invalidateCache(); } catch (_) {}
+    ctx.redirect('/school?filter=mine');
+  })
+  .post('/school/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : undefined;
+    const courseType = String(b.courseType || 'OPEN').toUpperCase();
+    if (courseType === 'PAID' && !(parseFloat(String(b.price || '').replace(',', '.')) > 0)) throw new Error('Invalid price');
+    const patch = { title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), tags: b.tags, price: courseType === 'OPEN' ? '0' : b.price, visibility: courseType === 'INVITE' ? 'INVITE' : 'PUBLIC', status: b.status, startDate: b.startDate };
+    if (imageBlob !== undefined) patch.image = imageBlob;
+    await schoolModel.updateCourse(ctx.params.id, patch);
+    try { activityModel.invalidateCache(); } catch (_) {}
+    ctx.redirect('/school?filter=mine');
+  })
+  .post('/school/status/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.updateCourseStatus(ctx.params.id, String(ctx.request.body.status || '').toUpperCase());
+    try { activityModel.invalidateCache(); } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, '/school?filter=mine', ['/school']));
+  })
+  .post('/school/delete/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.deleteCourse(ctx.params.id);
+    try { activityModel.invalidateCache(); } catch (_) {}
+    ctx.redirect('/school?filter=mine');
+  })
+  .post('/school/enroll/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.enroll(ctx.params.id);
+    try {
+      const course = await schoolModel.getCourseById(ctx.params.id, getViewerId());
+      await pmModel.sendMessage([course.author], 'SCHOOL_ENROLLED', `[${getViewerId()}](/author/${encodeURIComponent(getViewerId())}) has enrolled in your course [${course.title || 'a course'}](/school/course/${encodeURIComponent(ctx.params.id)})`);
+    } catch (_) {}
+    ctx.redirect(`/school/course/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/school/unenroll/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.unenroll(ctx.params.id);
+    ctx.redirect(`/school/course/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/school/invite/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const m = await schoolModel.inviteStudent(ctx.params.id, stripDangerousTags(ctx.request.body.students));
+    try {
+      const courseId = m && m.key ? m.key : ctx.params.id;
+      const course = await schoolModel.getCourseById(courseId, getViewerId());
+      const invited = String(ctx.request.body.students || '').split(/[\s,]+/).filter(x => x.startsWith('@'));
+      for (const student of invited) {
+        await pmModel.sendMessage([student], 'SCHOOL_INVITED', `You have been invited to the course [${course.title || 'a course'}](/school/course/${encodeURIComponent(courseId)})`);
+      }
+    } catch (_) {}
+    ctx.redirect(`/school/course/${encodeURIComponent(m && m.key ? m.key : ctx.params.id)}`);
+  })
+  .post('/school/lesson/add/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    await schoolModel.addLesson(ctx.params.id, { title: stripDangerousTags(b.title), text: stripDangerousTags(b.text), unit: stripDangerousTags(b.unit || ''), order: b.order, sessionDate: b.sessionDate });
+    try {
+      const course = await schoolModel.getCourseById(ctx.params.id, getViewerId());
+      for (const student of (course.students || [])) {
+        await pmModel.sendMessage([student], 'SCHOOL_LESSON_NEW', `New lesson "${stripDangerousTags(b.title)}" in the course [${course.title || 'a course'}](/school/course/${encodeURIComponent(ctx.params.id)})`);
+      }
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
+  })
+  .post('/school/lesson/delete/:courseId/:lessonId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.deleteLesson(ctx.params.lessonId);
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
+  })
+  .post('/school/certificate/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    await schoolModel.issueCertificate(ctx.params.id, stripDangerousTags(b.student), stripDangerousTags(b.text || ''));
+    try {
+      const course = await schoolModel.getCourseById(ctx.params.id, getViewerId());
+      const student = String(b.student || '').trim();
+      if (student.startsWith('@')) await pmModel.sendMessage([student], 'SCHOOL_CERTIFICATE', `You have received a certificate 🎓 for the course [${course.title || 'a course'}](/school/course/${encodeURIComponent(ctx.params.id)})`);
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
+  })
+  .post('/school/opinions/:id/:category', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    try { await schoolModel.createOpinion(ctx.params.id, ctx.params.category); } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
+  })
+  .post('/school/:courseId/comments', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => commentAction(ctx, 'school', 'courseId'))
+  .post('/school/lesson/complete/:courseId/:lessonId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const done = String(ctx.request.body.value || 'true') !== 'false';
+    const passedBefore = await schoolModel.hasPassedCourse(ctx.params.courseId, getViewerId()).catch(() => false);
+    try { await schoolModel.markLesson(ctx.params.courseId, ctx.params.lessonId, done); } catch (_) {}
+    try {
+      if (!passedBefore && await schoolModel.hasPassedCourse(ctx.params.courseId, getViewerId())) {
+        const course = await schoolModel.getCourseById(ctx.params.courseId, getViewerId());
+        await pmModel.sendMessage([course.author], 'SCHOOL_PASSED', `[${getViewerId()}](/author/${encodeURIComponent(getViewerId())}) has passed your course [${course.title || 'a course'}](/school/course/${encodeURIComponent(ctx.params.courseId)})`);
+      }
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
+  })
+  .post('/school/exam/create/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.createExam(ctx.params.id, stripDangerousTags(ctx.request.body.title), { lessonId: ctx.request.body.lessonId });
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
+  })
+  .post('/school/exam/question/add/:courseId/:examId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    await schoolModel.addExamQuestion(ctx.params.courseId, ctx.params.examId, { q: stripDangerousTags(b.q), o1: stripDangerousTags(b.o1), o2: stripDangerousTags(b.o2), o3: stripDangerousTags(b.o3), o4: stripDangerousTags(b.o4), correct: b.correct, points: b.points });
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
+  })
+  .post('/school/exam/question/delete/:courseId/:examId/:questionId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.deleteExamQuestion(ctx.params.questionId);
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
+  })
+  .post('/school/exam/delete/:courseId/:examId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.deleteExam(ctx.params.examId);
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
+  })
+  .post('/school/exam/take/:courseId/:examId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const passedBefore = await schoolModel.hasPassedCourse(ctx.params.courseId, getViewerId()).catch(() => false);
+    try { await schoolModel.takeExam(ctx.params.courseId, ctx.params.examId, ctx.request.body); } catch (_) {}
+    try {
+      if (!passedBefore && await schoolModel.hasPassedCourse(ctx.params.courseId, getViewerId())) {
+        const course = await schoolModel.getCourseById(ctx.params.courseId, getViewerId());
+        await pmModel.sendMessage([course.author], 'SCHOOL_PASSED', `[${getViewerId()}](/author/${encodeURIComponent(getViewerId())}) has passed your course [${course.title || 'a course'}](/school/course/${encodeURIComponent(ctx.params.courseId)})`);
+      }
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
+  })
+  .get('/school/lesson/:courseId/:lessonId', async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const course = await schoolModel.getCourseById(ctx.params.courseId, getViewerId());
+    const lessons = await schoolModel.listLessons(course.rootId);
+    const lesson = lessons.find(l => l.id === ctx.params.lessonId);
+    if (!lesson) { ctx.redirect(`/school/course/${encodeURIComponent(ctx.params.courseId)}`); return; }
+    const materials = await schoolModel.listLessonMaterials(course.rootId, lesson.id).catch(() => []);
+    ctx.body = await require('../views/school_view').singleLessonView(course, lesson, materials, { edit: String(ctx.query.edit || '') === '1' });
+  })
+  .post('/school/lesson/update/:courseId/:lessonId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    const updated = await schoolModel.updateLesson(ctx.params.courseId, ctx.params.lessonId, { title: stripDangerousTags(b.title), text: stripDangerousTags(b.text), unit: stripDangerousTags(b.unit || ''), order: b.order, sessionDate: b.sessionDate });
+    ctx.redirect(`/school/lesson/${encodeURIComponent(ctx.params.courseId)}/${encodeURIComponent(updated && updated.key ? updated.key : ctx.params.lessonId)}`);
+  })
+  .post('/school/lesson/media/:courseId/:lessonId', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const uploads = await handleBlobUploads(ctx, 'files', 8);
+    const caption = stripDangerousTags((ctx.request.body.caption || '').trim());
+    for (const media of (uploads || []).filter(Boolean)) {
+      await schoolModel.addLessonMaterial(ctx.params.courseId, ctx.params.lessonId, media, caption);
+    }
+    const text = stripDangerousTags((ctx.request.body.text || '').trim());
+    if (text) await schoolModel.addLessonMaterial(ctx.params.courseId, ctx.params.lessonId, text, caption);
+    ctx.redirect(`/school/lesson/${encodeURIComponent(ctx.params.courseId)}/${encodeURIComponent(ctx.params.lessonId)}`);
+  })
+  .post('/school/lesson/media/delete/:courseId/:lessonId/:materialId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.deleteLessonMaterial(ctx.params.materialId);
+    ctx.redirect(`/school/lesson/${encodeURIComponent(ctx.params.courseId)}/${encodeURIComponent(ctx.params.lessonId)}`);
+  })
+  .post('/school/generate-invite/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    try {
+      const { code } = await schoolModel.generateInvite(ctx.params.id);
+      ctx.body = await require('../views/school_view').schoolInvitePage(code);
+    } catch (_) {
+      ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
+    }
+  })
+  .post('/school/join-code', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const code = String((ctx.request.body || {}).code || '').trim();
+    try {
+      const { courseId } = await schoolModel.joinByInvite(code);
+      ctx.redirect(`/school/course/${encodeURIComponent(courseId)}`);
+    } catch (_) {
+      ctx.redirect('/school');
+    }
+  })
+  .post('/school/grant/:id', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    await schoolModel.grantAccess(ctx.params.id, stripDangerousTags(ctx.request.body.student));
+    try {
+      const course = await schoolModel.getCourseById(ctx.params.id, getViewerId());
+      const student = String(ctx.request.body.student || '').trim();
+      if (student.startsWith('@')) await pmModel.sendMessage([student], 'SCHOOL_ADMITTED', `You have been admitted to the course [${course.title || 'a course'}](/school/course/${encodeURIComponent(ctx.params.id)})`);
+    } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
+  })
+  .post('/school/favorites/add/:id', koaBody(), async ctx => favAction(ctx, 'school', 'add'))
+  .post('/school/favorites/remove/:id', koaBody(), async ctx => favAction(ctx, 'school', 'remove'))
   .get('/pixelia', async (ctx) => {
     if (!checkMod(ctx, 'pixeliaMod')) { ctx.redirect('/modules'); return; }
     const pixelArt = await pixeliaModel.listPixels();
@@ -2039,7 +2269,7 @@ router
     const { bucket: lastActivityBucket } = inhabitantsModel.bucketLastActivity(fullLastTs || null);
     const profileItems = await fetchProfileItems(feedId, rawPrefs);
     const profileFilterType = String(ctx.query.type || '').toLowerCase();
-    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map']);
+    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map','schoolCourse']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
     await warmAuthorNames(allActions, sanitizedMsgs, profileItems);
@@ -2069,6 +2299,8 @@ router
       if (c.type === 'task' && String(c.isPublic).toUpperCase() === 'PRIVATE' && c.author !== userId && !(Array.isArray(c.assignees) && c.assignees.includes(userId))) return false;
       if (c.status === 'PRIVATE') return false;
       if (c.type === 'shop' && (c.visibility === 'CLOSED' || c.encryptedPayload) && c.author !== userId) return false;
+      if (c.type === 'schoolCourse' && c.encryptedPayload) return false;
+      if (c.type === 'schoolCourse' && String(c.visibility || '').toUpperCase() === 'INVITE' && c.author !== userId && !(Array.isArray(c.invited) && c.invited.includes(userId))) return false;
       return true;
     });
     const results = await searchModel.search({ query, types: [] });
@@ -2338,7 +2570,8 @@ router
   })
   .get('/cv', async ctx => {
     const cv = await cvModel.getCVByUserId()
-    ctx.body = await cvView(cv)
+    const certificates = checkMod(ctx, 'schoolMod') ? await schoolModel.listCertificatesForStudent(getViewerId()).catch(() => []) : []
+    ctx.body = await cvView(cv, certificates)
   })
   .get('/cv/create', async ctx => {
     ctx.body = await createCVView()
@@ -3084,7 +3317,7 @@ router
     }
     allActions = await applyListFilters(allActions, ctx);
     const spreadMap = new Map();
-    const SPREADABLE = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map']);
+    const SPREADABLE = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map','schoolCourse']);
     const targets = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && SPREADABLE.has(a.type));
     const results = await Promise.all(targets.map(a => spreads.forMessage(a.id).catch(() => null)));
     targets.forEach((a, i) => { if (results[i]) spreadMap.set(a.id, results[i]); });
@@ -3152,7 +3385,7 @@ router
     const baseUrl = resolveExternalBaseUrl(ctx);
     const profileItems = await fetchProfileItems(myFeedId, rawPrefs);
     const profileFilterType = String(ctx.query.type || '').toLowerCase();
-    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map']);
+    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','forum','map','schoolCourse']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
     ctx.body = await authorView({ feedId: myFeedId, oasisVersion: OASIS_VERSION || await getOasisVersion(myFeedId), messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, stats, baseUrl, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
@@ -3209,6 +3442,7 @@ router
     const body = ctx.request.body || {};
     const flag = (v) => v === '1' || v === 'on' || v === true;
     const clearnetShops     = flag(body.vis_clearnetShops);
+    const clearnetSchool    = flag(body.vis_clearnetSchool);
     const clearnetJobs      = flag(body.vis_clearnetJobs);
     const clearnetEvents    = flag(body.vis_clearnetEvents);
     const clearnetProjects  = flag(body.vis_clearnetProjects);
@@ -3241,8 +3475,9 @@ router
       gpg:      flag(body.vis_gpg),
       fediverse: flag(body.vis_fediverse),
       fediverseHandle: typeof body.fediverseHandle === 'string' ? body.fediverseHandle : '',
-      clearnet: clearnetShops || clearnetJobs || clearnetEvents || clearnetProjects || clearnetPosts || clearnetAudios || clearnetVideos || clearnetImages || clearnetDocuments || clearnetTorrents || clearnetBookmarks,
+      clearnet: clearnetShops || clearnetSchool || clearnetJobs || clearnetEvents || clearnetProjects || clearnetPosts || clearnetAudios || clearnetVideos || clearnetImages || clearnetDocuments || clearnetTorrents || clearnetBookmarks,
       clearnetShops,
+      clearnetSchool,
       clearnetJobs,
       clearnetEvents,
       clearnetProjects,
@@ -3313,7 +3548,7 @@ router
     const myFeedId = await meta.myFeedId();
     const current = await about.visibilityPrefs(myFeedId).catch(() => null) || {};
     const subKeys = [
-      'clearnetShops', 'clearnetJobs', 'clearnetEvents', 'clearnetProjects',
+      'clearnetShops', 'clearnetSchool', 'clearnetJobs', 'clearnetEvents', 'clearnetProjects',
       'clearnetPosts', 'clearnetAudios', 'clearnetVideos', 'clearnetImages',
       'clearnetDocuments', 'clearnetTorrents'
     ];
@@ -3593,7 +3828,19 @@ router
         return !sc || (nowTs - sc) < PEER_IDLE_MAX_MS;
       })
       .sort((a, b) => (a.state === 'connected' ? -1 : 1) - (b.state === 'connected' ? -1 : 1));
-    ctx.body = await peersView({ onlinePeers: await meta.onlinePeers(), discoveredPeers, unknownPeers, lanBroadcastActive, technicalPeers });
+    const onlinePeersList = await meta.onlinePeers();
+    const versionKeys = new Set();
+    for (const coll of [onlinePeersList, discoveredPeers, unknownPeers]) {
+      for (const entry of (coll || [])) {
+        const k = entry && entry[1] && entry[1].key;
+        if (k) versionKeys.add(k);
+      }
+    }
+    const versions = {};
+    await Promise.all(Array.from(versionKeys).map(async (k) => {
+      versions[k] = String(k) === String(getViewerId()) ? OASIS_VERSION : await getOasisVersion(k).catch(() => null);
+    }));
+    ctx.body = await peersView({ onlinePeers: onlinePeersList, discoveredPeers, unknownPeers, lanBroadcastActive, technicalPeers, versions });
   })
   .get("/graphos", async (ctx) => {
     if (!checkMod(ctx, 'graphosMod')) return ctx.redirect('/modules');
@@ -3651,8 +3898,6 @@ router
     };
     const onlineKeys = keysOf(onlinePeers);
     const unknownKeys = keysOf(unknownPeers);
-    // Nodes partition into discovered vs unknown (total = discovered + unknown);
-    // "online" is an orthogonal status flag (a subset of the nodes).
     const seen = new Set([myId]);
     const nodes = [];
     const addFrom = (entries) => {
@@ -4863,6 +5108,18 @@ router
       snippet: m.description || '',
       meta: m.createdAt ? new Date(m.createdAt).toISOString().slice(0, 10) : ''
     });
+    if (prefs.clearnetSchool) {
+      try {
+        const courses = await schoolModel.listCourses('ALL', feedId, {}).catch(() => []);
+        items.school = (courses || []).filter(c => c.author === feedId && c.visibility === 'PUBLIC' && !(Number(c.price) > 0)).slice(0, MAX_PER_SECTION).map(c => ({
+          id: c.id,
+          title: c.title || 'Untitled',
+          image: c.image || null,
+          snippet: c.description || '',
+          meta: c.startDate ? new Date(c.startDate).toISOString().slice(0, 10) : ''
+        }));
+      } catch (_) {}
+    }
     if (prefs.clearnetShops) {
       try {
         const shops = await shopsModel.listAll({ filter: 'all' }).catch(() => []);
@@ -4998,6 +5255,24 @@ router
     const filterType = String(ctx.query.type || '').toLowerCase();
     ctx.type = 'text/html';
     ctx.body = await clearnetInhabitantView({ feedId, name, description, image: safeImage, prefs, items, filterType });
+  })
+  .get("/c/school/:courseId", async (ctx) => {
+    let course;
+    try { course = await schoolModel.getCourseById(ctx.params.courseId, null); } catch (_) {}
+    if (!course || course.visibility !== 'PUBLIC' || Number(course.price) > 0) {
+      ctx.type = 'text/html';
+      ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
+      return;
+    }
+    const courseAuthorPrefs = await about.visibilityPrefs(course.author).catch(() => null);
+    if (!courseAuthorPrefs || courseAuthorPrefs.clearnetSchool !== true) {
+      ctx.type = 'text/html';
+      ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
+      return;
+    }
+    const lessons = await schoolModel.listLessons(course.rootId).catch(() => []);
+    ctx.type = 'text/html';
+    ctx.body = await require('../views/school_view').clearnetCourseView(course, lessons);
   })
   .get("/c/shops/:shopId", async (ctx) => {
     const shop = await shopsModel.getShopById(ctx.params.shopId).catch(() => null);
@@ -6422,6 +6697,8 @@ router
       if (c.type === 'task' && String(c.isPublic).toUpperCase() === 'PRIVATE' && c.author !== userId && !(Array.isArray(c.assignees) && c.assignees.includes(userId))) return false;
       if (c.status === 'PRIVATE') return false;
       if (c.type === 'shop' && (c.visibility === 'CLOSED' || c.encryptedPayload) && c.author !== userId) return false;
+      if (c.type === 'schoolCourse' && c.encryptedPayload) return false;
+      if (c.type === 'schoolCourse' && String(c.visibility || '').toUpperCase() === 'INVITE' && c.author !== userId && !(Array.isArray(c.invited) && c.invited.includes(userId))) return false;
       return true;
     });
     const results = await searchModel.search({ query, types });
@@ -6733,7 +7010,7 @@ router
     const { feedId, category } = ctx.params;
     try {
       await feedModel.addOpinion(feedId, category);
-    } catch { /* already voted or invalid — ignore */ }
+    } catch {}
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(ctx.get("Referer") || "/feed");
   })
@@ -9216,8 +9493,8 @@ router
     const ALL_MODULES = workflowsModel.ALL_MODULES;
     const PRESETS = {
       minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'blogs', 'polls', 'opinions', 'cipher', 'legacy'],
-      social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes'],
-      economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry'],
+      social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'school', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes'],
+      economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry', 'school'],
       mobile: workflowsModel.MOBILE_MODULES,
       full: ALL_MODULES
     };
@@ -9686,6 +9963,7 @@ async function logClearnetStatus() {
     const prefs = await about.visibilityPrefs(ssbClient.id).catch(() => null);
     const modules = [
       ['Shops',     'clearnetShops'],
+      ['School',    'clearnetSchool'],
       ['Jobs',      'clearnetJobs'],
       ['Events',    'clearnetEvents'],
       ['Projects',  'clearnetProjects'],

@@ -13,8 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+    const canvasWrap = document.createElement('div');
+    canvasWrap.className = 'pdf-canvas-wrap';
+    canvasWrap.appendChild(canvas);
     container.innerHTML = '';
-    container.appendChild(canvas);
+    container.appendChild(canvasWrap);
 
     const controls = document.createElement('div');
     controls.className = 'pdf-controls';
@@ -47,6 +50,15 @@ document.addEventListener('DOMContentLoaded', () => {
         renderPage(currentPage);
       }
     };
+
+    try {
+      const firstPage = await pdf.getPage(1);
+      const baseViewport = firstPage.getViewport({ scale: 1, rotation: 0 });
+      const avail = canvasWrap.clientWidth || container.clientWidth;
+      if (avail > 0 && baseViewport.width > 0) {
+        scale = Math.min(1.5, Math.max(0.5, (avail - 40) / baseViewport.width));
+      }
+    } catch (e) {}
 
     renderPage(currentPage);
 

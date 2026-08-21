@@ -2,7 +2,7 @@
 
 Per-module unit/integration tests covering all publishing actions across the network.
 
-**Current status:** 69 suites / 977 tests passing.
+**Current status:** 71 suites / 1081 tests passing.
 
 Module tests live under `test/mods/` to keep them grouped and the top-level
 `test/` directory clean (so `results/`, the runner, and the README are easy
@@ -175,7 +175,7 @@ test/
   mods/workflows        workflows.test.js
 ```
 
-Most module directories have their own `run.sh` (53 of 69); for the rest use
+Most module directories have their own `run.sh` (48 of 71); for the rest use
 `node test/run.js mods/<module>`:
 ```sh
 bash test/mods/tribes/run.sh

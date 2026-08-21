@@ -23,7 +23,7 @@ module.exports = ({ cooler }) => {
   const validTypes = [
     'bookmark', 'votes', 'transfer',
     'feed', 'image', 'audio', 'video', 'document', 'torrent',
-    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market'
+    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse'
   ];
 
   const getPreview = c => {
@@ -48,7 +48,8 @@ module.exports = ({ cooler }) => {
     event: 'eventOpinion',
     shopProduct: 'shopOpinion',
     housing: 'housingOpinion',
-    market: 'marketOpinion'
+    market: 'marketOpinion',
+    schoolCourse: 'schoolOpinion'
   };
 
   const createVote = async (contentId, category) => {
@@ -158,6 +159,12 @@ module.exports = ({ cooler }) => {
     }
 
     let filtered = Array.from(byId.values()).filter(m => validTypes.includes(m.value?.content?.type));
+    filtered = filtered.filter(m => {
+      const c = m.value?.content;
+      if (c?.type !== 'schoolCourse') return true;
+      if (c.encryptedPayload) return false;
+      return String(c.visibility || 'PUBLIC').toUpperCase() !== 'INVITE';
+    });
     const blobTypes = ['document', 'image', 'audio', 'video'];
     const blobCheckCache = new Map();
 

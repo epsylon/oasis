@@ -14,11 +14,12 @@ const FILTER_LABELS = {
   aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts,
   map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product',
   pad: i18n.typePad || 'PAD', chat: i18n.typeChat || 'CHAT', gameScore: i18n.typeGameScore || 'GAME SCORE',
-  calendar: i18n.typeCalendar || 'CALENDAR', torrent: i18n.typeTorrent
+  calendar: i18n.typeCalendar || 'CALENDAR', torrent: i18n.typeTorrent,
+  school: i18n.typeSchool || 'SCHOOL'
 };
 
 const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone', 'logs'];
-const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'parliament', 'courts'];
+const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'school', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
 const CAT_BLOCK3  = ['banking', 'job', 'housing', 'market', 'project', 'industry', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
 const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map', 'torrent'];
@@ -75,6 +76,7 @@ const filterBlocks = (blocks, filter, userId) => {
     return blocks.filter(b => cset.has(b.type));
   }
   if (filter === 'shop') return blocks.filter(b => b.type === 'shop' || b.type === 'shopProduct');
+  if (filter === 'school') return blocks.filter(b => ['schoolCourse', 'schoolLesson', 'schoolEnroll', 'schoolCertificate'].includes(b.type));
   if (filter === 'logs') return blocks.filter(b => b.type === 'log' && b.author === userId);
   return blocks.filter(b => b.type === filter);
 };
@@ -181,6 +183,7 @@ const getViewDetailsAction = (type, block) => {
     case 'job': return `/jobs/${encodeURIComponent(block.id)}`;
     case 'housing': return `/housing/${encodeURIComponent(block.id)}`;
     case 'project': return `/projects/${encodeURIComponent(block.id)}`;
+    case 'schoolCourse': return `/school/course/${encodeURIComponent(block.id)}`;
     case 'industry': return `/industry/${encodeURIComponent(block.id)}`;
     case 'industryBlueprint': return `/industry/blueprint/${encodeURIComponent(block.id)}`;
     case 'report': return `/reports/${encodeURIComponent(block.id)}`;
@@ -224,7 +227,7 @@ const TYPE_COLORS = {
   pub:'#2ecc71', tribe:'#e67e22', event:'#e74c3c', task:'#f39c12', report:'#c0392b',
   image:'#2980b9', audio:'#8e44ad', video:'#d35400', document:'#27ae60', bookmark:'#f1c40f',
   forum:'#1abc9c', feed:'#95a5a6', transfer:'#e74c3c', market:'#e67e22', job:'#3498db', housing:'#16a085',
-  project:'#2ecc71', banking:'#f39c12', bankWallet:'#f39c12', bankClaim:'#f39c12',
+  project:'#2ecc71', schoolCourse:'#1abc9c', schoolLesson:'#1abc9c', schoolEnroll:'#1abc9c', schoolCertificate:'#1abc9c', banking:'#f39c12', bankWallet:'#f39c12', bankClaim:'#f39c12',
   pixelia:'#9b59b6', curriculum:'#1abc9c', aiExchange:'#3498db', tombstone:'#7f8c8d',
   parliamentTerm:'#8e44ad', parliamentProposal:'#8e44ad', parliamentLaw:'#8e44ad',
   parliamentCandidature:'#8e44ad', parliamentRevocation:'#8e44ad',

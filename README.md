@@ -104,6 +104,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Projects: Module to explore, crowd-funding and manage projects.
  + Polls: Module to ask the network and count the answers.
  + Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.	
+ + School: Module to exchange knowledge.
  + Shops: Module to manage and discover shops.	
  + Tags: Module to discover and explore taxonomy patterns (tags).	
  + Tasks: Module to discover and manage tasks.	

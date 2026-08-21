@@ -265,6 +265,18 @@ const invitesView = ({ invitesEnabled, flash }) => {
       )
     ),
     section(
+      div({ class: 'invites-school', id: 'invites-school' },
+        h2(i18n.invitesSchoolTitle || 'School'),
+        p(i18n.invitesSchoolHint),
+        form(
+          { action: '/school/join-code', method: 'post' },
+          input({ name: 'code', type: 'text', placeholder: i18n.invitesSchoolCodePlaceholder || 'Enter course invite code', required: true }),
+          br(),
+          button({ type: 'submit' }, i18n.invitesSchoolJoinButton || 'Join Course')
+        )
+      )
+    ),
+    section(
       div({ class: 'invites-maps', id: 'invites-maps' },
         h2(i18n.invitesMapsTitle || 'Maps'),
         p(i18n.invitesMapsHint),

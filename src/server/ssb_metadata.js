@@ -123,7 +123,6 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   console.log("Modules loaded: [", modules.length, "]");
   console.log("=========================");
 
-  // Check for updates
   await checkForUpdate();
   console.log("=========================");
 

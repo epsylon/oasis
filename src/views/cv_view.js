@@ -104,7 +104,7 @@ exports.createCVView = async (cv = {}, editMode = false) => {
   )
 };
 
-exports.cvView = async (cv) => {
+exports.cvView = async (cv, certificates = []) => {
   const title = i18n.cvTitle;
 
   if (!cv) {
@@ -120,7 +120,21 @@ exports.cvView = async (cv) => {
           form({ method: "GET", action: "/cv/create" },
             button({ type: "submit" }, i18n.cvCreateButton)
           )
-        )
+        ),
+        Array.isArray(certificates) && certificates.length
+          ? div({ class: "cv-section-block school-certificates" },
+              h2(i18n.schoolCertificates),
+              certificates.map(cert =>
+                div({ class: "school-certificate" },
+                  span("🎓 "),
+                  a({ href: `/school/course/${encodeURIComponent(cert.courseId)}` }, cert.courseTitle || cert.courseId),
+                  span(" — "),
+                  userLink(cert.author),
+                  span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`)
+                )
+              )
+            )
+          : null
       )
     )
   }
@@ -216,7 +230,21 @@ exports.cvView = async (cv) => {
     renderBlock(i18n.cvPersonal, cv.personalExperiences, cv.personalSkills),
     renderBlock(i18n.cvEducationalView, cv.educationExperiences, cv.educationalSkills),
     renderBlock(i18n.cvProfessionalView, cv.professionalExperiences, cv.professionalSkills),
-    renderBlock(i18n.cvOasisContributorView, cv.oasisExperiences, cv.oasisSkills)
+    renderBlock(i18n.cvOasisContributorView, cv.oasisExperiences, cv.oasisSkills),
+    Array.isArray(certificates) && certificates.length
+      ? div({ class: "cv-section-block school-certificates" },
+          h2(i18n.schoolCertificates),
+          certificates.map(cert =>
+            div({ class: "school-certificate" },
+              span("🎓 "),
+              a({ href: `/school/course/${encodeURIComponent(cert.courseId)}` }, cert.courseTitle || cert.courseId),
+              span(" — "),
+              userLink(cert.author),
+              span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`)
+            )
+          )
+        )
+      : null
   );
 
   return template(

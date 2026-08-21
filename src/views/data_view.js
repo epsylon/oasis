@@ -23,7 +23,8 @@ const KIND_LABEL = {
   pads: () => i18n.padsTitle,
   maps: () => i18n.mapTitle,
   calendars: () => i18n.calendarsTitle,
-  forum: () => i18n.forumTitle
+  forum: () => i18n.forumTitle,
+  school: () => i18n.schoolTitle
 };
 
 const FILTER_COLUMNS = [
@@ -31,7 +32,7 @@ const FILTER_COLUMNS = [
   ["INHABITANTS", "TRIBES"],
   ["VOTES", "EVENTS", "CALENDARS", "TASKS", "REPORTS"],
   ["MARKET", "HOUSING", "JOBS", "PROJECTS", "INDUSTRY"],
-  ["FORUM", "CHATS", "PADS", "MAPS"],
+  ["FORUM", "CHATS", "PADS", "MAPS", "SCHOOL"],
   ["AUDIOS", "BOOKMARKS", "DOCUMENTS", "IMAGES", "TORRENTS", "VIDEOS"]
 ];
 

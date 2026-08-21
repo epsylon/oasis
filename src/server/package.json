@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "Oasis - Social Networking Utopia",
   "repository": {
     "type": "git",
@@ -55,6 +55,7 @@
     "muxrpcli": "^3.1.2",
     "node-llama-cpp": "^3.10.0",
     "non-private-ip": "^2.2.0",
+    "onnxruntime-node": "1.19.2",
     "open": "^8.4.2",
     "openpgp": "^6.3.0",
     "packet-stream": "^2.0.6",
@@ -135,7 +136,10 @@
     "ssb-ref": "^2.16.0",
     "secret-stack": "^6.3.1",
     "ip": "https://registry.npmjs.org/neoip/-/neoip-3.0.0.tgz",
-    "lodash.set": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"
+    "lodash.set": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+    "onnxruntime-node": "1.19.2",
+    "onnxruntime-common": "1.19.2",
+    "onnxruntime-web": "1.19.2"
   },
   "optionalDependencies": {
     "fsevents": "^2.3.2",

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minesweeper</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow: hidden; }
+body { background: #000; color: #eee; font-family: monospace; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+#topbar { width: 100%; padding: 8px 16px; display: flex; align-items: center; gap: 16px; background: #111; border-bottom: 1px solid #333; }
+#topbar a { color: #FFA500; text-decoration: none; font-size: 14px; }
+#hud { display: flex; gap: 18px; padding: 6px 10px; font-size: 13px; color: #ccc; flex-wrap: wrap; justify-content: center; }
+#hud b { color: #FFA500; }
+#board { display: grid; gap: 2px; margin: 4px auto; touch-action: manipulation; }
+.cell { display: flex; align-items: center; justify-content: center; background: #222; border: 1px solid #555; color: #eee; font-family: monospace; font-weight: bold; cursor: pointer; padding: 0; user-select: none; }
+.cell.open { background: #0d0d0d; border-color: #333; cursor: default; }
+.cell.boom { background: #3a1010; border-color: #f44; }
+.cell.flag { color: #FFA500; }
+.n1 { color: #55aaff; } .n2 { color: #6c6; } .n3 { color: #e66; } .n4 { color: #b7f; }
+.n5 { color: #fa0; } .n6 { color: #4dd; } .n7 { color: #f8f; } .n8 { color: #fff; }
+#msg { font-size: 15px; color: #FFA500; margin: 4px; text-align: center; min-height: 20px; }
+#actions { display: flex; gap: 8px; justify-content: center; margin: 4px; }
+#actions button { background: #222; border: 1px solid #555; color: #FFA500; padding: 6px 14px; cursor: pointer; font-family: monospace; font-size: 14px; }
+#flagBtn.on { background: #3a2a00; border-color: #FFA500; }
+#controls { color: #888; font-size: 12px; text-align: center; margin-bottom: 4px; }
+#scoreSubmit { text-align: center; margin: 6px; }
+#scoreSubmit button { background: #1a3a1a; border: 1px solid #FFA500; color: #FFA500; padding: 6px 16px; cursor: pointer; font-family: monospace; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <a href="/games" target="_top">&#8592; Back to Games</a>
+  <span style="color:#FFA500;font-weight:bold">MINESWEEPER</span>
+</div>
+<div id="hud">
+  <span>LEVEL <b id="levelEl">1</b></span>
+  <span>MINES <b id="minesEl">0</b></span>
+  <span>TIME <b id="timeEl">0</b></span>
+  <span>SCORE <b id="scoreEl">0</b></span>
+  <span>BEST <b id="bestEl">-</b></span>
+</div>
+<div id="board"></div>
+<div id="msg">Click any cell to start</div>
+<div id="actions">
+  <button id="flagBtn">&#9873; FLAG MODE: OFF</button>
+  <button id="newBtn">NEW GAME</button>
+</div>
+<div id="controls">Click — reveal &nbsp;|&nbsp; Right click — flag &nbsp;|&nbsp; Clear the board to level up</div>
+<div id="scoreSubmit" style="display:none">
+  <form method="POST" action="/games/submit-score" target="_top">
+    <input type="hidden" name="game" value="minesweeper">
+    <input type="hidden" id="scoreInput" name="score" value="0">
+    <button type="submit">Submit Score to Hall of Fame</button>
+  </form>
+</div>
+<script>
+const boardEl = document.getElementById('board');
+let level, size, mines, grid, opened, flags, totalScore, gameState, mined, startTs, timerId;
+let flagMode = false;
+let best = parseInt(localStorage.getItem('minesweeper_best') || '-1');
+if (best >= 0) document.getElementById('bestEl').textContent = best;
+
+function dims() {
+  size = Math.min(7 + level, 16);
+  const cells = size * size;
+  mines = Math.min(Math.round(cells * (0.105 + level * 0.02)), Math.floor(cells * 0.28));
+}
+
+function cellPx() {
+  const w = (window.innerWidth - 24) / size;
+  const h = (window.innerHeight - 210) / size;
+  return Math.max(18, Math.min(34, Math.floor(Math.min(w, h))));
+}
+
+function buildBoard() {
+  dims();
+  grid = Array.from({ length: size }, () => Array.from({ length: size }, () => ({ mine: false, open: false, flag: false, n: 0 })));
+  opened = 0; flags = 0; mined = false;
+  const px = cellPx();
+  boardEl.style.gridTemplateColumns = `repeat(${size}, ${px}px)`;
+  boardEl.innerHTML = '';
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const b = document.createElement('button');
+      b.className = 'cell';
+      b.style.width = px + 'px';
+      b.style.height = px + 'px';
+      b.style.fontSize = Math.floor(px * 0.55) + 'px';
+      b.dataset.r = r; b.dataset.c = c;
+      b.addEventListener('click', onTap);
+      b.addEventListener('contextmenu', (e) => { e.preventDefault(); toggleFlag(r, c); });
+      boardEl.appendChild(b);
+    }
+  }
+  document.getElementById('levelEl').textContent = level;
+  document.getElementById('minesEl').textContent = mines;
+  document.getElementById('scoreEl').textContent = totalScore;
+}
+
+function neighbors(r, c) {
+  const out = [];
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < size && nc >= 0 && nc < size) out.push([nr, nc]);
+    }
+  return out;
+}
+
+function placeMines(sr, sc) {
+  const safe = new Set([sr + ':' + sc]);
+  neighbors(sr, sc).forEach(([r, c]) => safe.add(r + ':' + c));
+  let left = mines;
+  while (left > 0) {
+    const r = Math.floor(Math.random() * size), c = Math.floor(Math.random() * size);
+    if (safe.has(r + ':' + c) || grid[r][c].mine) continue;
+    grid[r][c].mine = true; left--;
+  }
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++)
+      grid[r][c].n = neighbors(r, c).filter(([nr, nc]) => grid[nr][nc].mine).length;
+  mined = true;
+  startTs = Date.now();
+  timerId = setInterval(() => {
+    document.getElementById('timeEl').textContent = Math.floor((Date.now() - startTs) / 1000);
+  }, 500);
+}
+
+function cellBtn(r, c) {
+  return boardEl.children[r * size + c];
+}
+
+function toggleFlag(r, c) {
+  if (gameState !== 'play') return;
+  const cell = grid[r][c];
+  if (cell.open) return;
+  cell.flag = !cell.flag;
+  flags += cell.flag ? 1 : -1;
+  const b = cellBtn(r, c);
+  b.textContent = cell.flag ? '⚑' : '';
+  b.classList.toggle('flag', cell.flag);
+  document.getElementById('minesEl').textContent = Math.max(0, mines - flags);
+}
+
+function onTap(e) {
+  if (gameState !== 'play') return;
+  const r = +e.currentTarget.dataset.r, c = +e.currentTarget.dataset.c;
+  if (flagMode) { toggleFlag(r, c); return; }
+  reveal(r, c);
+}
+
+function reveal(r, c) {
+  const cell = grid[r][c];
+  if (cell.open || cell.flag) return;
+  if (!mined) placeMines(r, c);
+  if (cell.mine) { boom(r, c); return; }
+  const stack = [[r, c]];
+  while (stack.length) {
+    const [cr, cc] = stack.pop();
+    const cur = grid[cr][cc];
+    if (cur.open || cur.flag || cur.mine) continue;
+    cur.open = true; opened++;
+    totalScore += 10 * level;
+    const b = cellBtn(cr, cc);
+    b.classList.add('open');
+    if (cur.n > 0) { b.textContent = cur.n; b.classList.add('n' + cur.n); }
+    else { neighbors(cr, cc).forEach((p) => stack.push(p)); }
+  }
+  document.getElementById('scoreEl').textContent = totalScore;
+  if (opened === size * size - mines) levelCleared();
+}
+
+function levelCleared() {
+  clearInterval(timerId);
+  const secs = Math.floor((Date.now() - startTs) / 1000);
+  const bonus = mines * 25 * level + Math.max(0, size * size - secs) * level;
+  totalScore += bonus;
+  document.getElementById('scoreEl').textContent = totalScore;
+  gameState = 'cleared';
+  document.getElementById('msg').textContent = `LEVEL ${level} CLEARED! +${bonus} bonus. Click to continue`;
+  boardEl.addEventListener('click', nextLevel, { once: true });
+}
+
+function nextLevel() {
+  level++;
+  gameState = 'play';
+  document.getElementById('msg').textContent = '';
+  document.getElementById('timeEl').textContent = '0';
+  buildBoard();
+}
+
+function boom(r, c) {
+  clearInterval(timerId);
+  gameState = 'over';
+  for (let rr = 0; rr < size; rr++)
+    for (let cc = 0; cc < size; cc++) {
+      if (grid[rr][cc].mine) {
+        const b = cellBtn(rr, cc);
+        b.classList.add('open');
+        b.textContent = '✹';
+        b.style.color = '#f44';
+      }
+    }
+  cellBtn(r, c).classList.add('boom');
+  if (best < 0 || totalScore > best) {
+    best = totalScore;
+    localStorage.setItem('minesweeper_best', best);
+    document.getElementById('bestEl').textContent = best;
+  }
+  document.getElementById('msg').textContent = `GAME OVER! Score: ${totalScore}`;
+  document.getElementById('scoreInput').value = totalScore;
+  document.getElementById('scoreSubmit').style.display = 'block';
+}
+
+function startGame() {
+  clearInterval(timerId);
+  level = 1; totalScore = 0; gameState = 'play';
+  document.getElementById('msg').textContent = 'Click any cell to start';
+  document.getElementById('timeEl').textContent = '0';
+  document.getElementById('scoreSubmit').style.display = 'none';
+  buildBoard();
+}
+
+document.getElementById('flagBtn').addEventListener('click', () => {
+  flagMode = !flagMode;
+  const b = document.getElementById('flagBtn');
+  b.textContent = '⚑ FLAG MODE: ' + (flagMode ? 'ON' : 'OFF');
+  b.classList.toggle('on', flagMode);
+});
+document.getElementById('newBtn').addEventListener('click', startGame);
+window.addEventListener('resize', () => {
+  if (gameState !== 'play' || mined) return;
+  buildBoard();
+});
+
+startGame();
+</script>
+</body>
+</html>

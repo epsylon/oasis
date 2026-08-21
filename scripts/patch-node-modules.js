@@ -77,3 +77,28 @@ if (fs.existsSync(ssbBlobsPath)) {
     log('ssb-blobs patch skipped: want function not found');
   }
 }
+
+// === Patch @xenova/transformers (onnxruntime 1.19 Tensor getter) ===
+const xenovaTensorPath = path.resolve(__dirname, '../src/server/node_modules/@xenova/transformers/src/utils/tensor.js');
+if (fs.existsSync(xenovaTensorPath)) {
+  let data = fs.readFileSync(xenovaTensorPath, 'utf8');
+  if (!data.includes('this.data = args[0].data')) {
+    const patched = data
+      .replace(
+        "        if (args[0] instanceof ONNXTensor) {\n            // Create shallow copy\n            Object.assign(this, args[0]);\n",
+        "        if (args[0] instanceof ONNXTensor) {\n            // Create shallow copy\n            Object.assign(this, args[0]);\n            if (this.data === undefined) this.data = args[0].data;\n"
+      )
+      .replace(
+        "                args[2]\n            ));\n        }",
+        "                args[2]\n            ));\n            if (this.data === undefined && this.cpuData !== undefined) this.data = this.cpuData;\n        }"
+      );
+    if (patched !== data) {
+      fs.writeFileSync(xenovaTensorPath, patched);
+      log('Patched @xenova/transformers tensor.js for onnxruntime 1.19 data getter');
+    } else {
+      log('@xenova/transformers patch skipped: unexpected tensor.js format');
+    }
+  }
+} else {
+  log('@xenova/transformers patch skipped: file not found');
+}

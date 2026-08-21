@@ -26,6 +26,7 @@ function getViewDetailsAction(item) {
     case 'project': return `/projects/${encodeURIComponent(item.id)}`;
     case 'industry': return `/industry/build/${encodeURIComponent(item.id)}`;
     case 'housing': return `/housing/${encodeURIComponent(item.id)}`;
+    case 'schoolCourse': return `/school/course/${encodeURIComponent(item.id)}`;
     case 'calendar': return `/calendars/${encodeURIComponent(item.id)}`;
     default: return `/messages/${encodeURIComponent(item.id)}`;
   }
@@ -270,6 +271,8 @@ exports.agendaView = async (data, filter, q = '') => {
             `${i18n.agendaFilterIndustry || 'INDUSTRY'} (${counts.industry || 0})`),
           button({ type: 'submit', name: 'filter', value: 'housing', class: filter === 'housing' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterHousing || 'HOUSING'} (${counts.housing || 0})`),
+          button({ type: 'submit', name: 'filter', value: 'school', class: filter === 'school' ? 'filter-btn active' : 'filter-btn' },
+            `${i18n.agendaFilterSchool || 'SCHOOL'} (${counts.school || 0})`),
           button({ type: 'submit', name: 'filter', value: 'calendars', class: filter === 'calendars' ? 'filter-btn active' : 'filter-btn' },
             `${i18n.agendaFilterCalendars || 'CALENDARS'} (${counts.calendars})`),
           button({ type: 'submit', name: 'filter', value: 'transfers', class: filter === 'transfers' ? 'filter-btn active' : 'filter-btn' },

@@ -43,6 +43,7 @@ const FACTORIES = {
   market: '../../src/models/market_model',
   housing: '../../src/models/housing_model',
   jobs: '../../src/models/jobs_model',
+  school: '../../src/models/school_model',
   projects: '../../src/models/projects_model',
   industry: '../../src/models/industry_model',
   opinions: '../../src/models/opinions_model',
@@ -92,6 +93,7 @@ function makePeer(network, keypair) {
   const calendarCrypto = tribeCryptoFactory(configDir, 'calendars');
   const eventCrypto = tribeCryptoFactory(configDir, 'events');
   const forumCrypto = tribeCryptoFactory(configDir, 'forum');
+  const schoolCrypto = tribeCryptoFactory(configDir, 'school');
   const baseDeps = { cooler, isPublic: false, tribeCrypto };
   const models = {};
   const requireOnce = (name) => {
@@ -112,8 +114,10 @@ function makePeer(network, keypair) {
       deps = { ...baseDeps, calendarCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'housing') {
       deps = { ...baseDeps, tribeCrypto };
+    } else if (name === 'school') {
+      deps = { ...baseDeps, transfersModel: requireOnce('transfers'), schoolCrypto, chatsModel: requireOnce('chats') };
     } else if (name === 'agenda') {
-      deps = { ...baseDeps, housingModel: requireOnce('housing') };
+      deps = { ...baseDeps, housingModel: requireOnce('housing'), schoolModel: requireOnce('school') };
     } else if (name === 'activity') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes'), industryModel: requireOnce('industry') };
     } else if (name === 'stats' || name === 'blockchain' || name === 'larp') {

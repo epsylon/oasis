@@ -12,13 +12,14 @@ const SENSITIVE_FIELDS = [
 const ENVELOPE_PRESERVE = new Set([
   'type', 'tribeId', 'contentType', 'replaces', 'target', 'author',
   'createdAt', 'updatedAt', 'encryptedPayload',
-  'mapId', 'calendarId', 'dateId', 'padId', 'roomId', 'parentId',
+  'mapId', 'calendarId', 'dateId', 'padId', 'roomId', 'parentId', 'courseId',
   'members', 'invites', 'participants',
   '_decrypted', '_undecryptable'
 ]);
 
 const INVITE_SALT_LEGACY = 'SolarNET.HuB';
-const INVITE_SCRYPT = { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
+const INVITE_SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+const INVITE_SCRYPT_LEGACY = { N: 131072, r: 8, p: 1, maxmem: 512 * 1024 * 1024 };
 
 const FP_INFO = Buffer.from('v1-fp', 'utf8');
 const ENVELOPE_TYPE = 'tribe-msg';
@@ -200,9 +201,9 @@ module.exports = (configPath, namespace = 'tribes') => {
 
   const generateInviteSalt = () => crypto.randomBytes(16).toString('hex');
 
-  const deriveInviteKey = (code, salt) => {
+  const deriveInviteKey = (code, salt, params = INVITE_SCRYPT) => {
     const s = (salt === undefined || salt === null || salt === '') ? INVITE_SALT_LEGACY : salt;
-    return crypto.scryptSync(code, s, 32, INVITE_SCRYPT);
+    return crypto.scryptSync(code, s, 32, params);
   };
 
   const hashInviteCode = (code, salt) => {
@@ -219,8 +220,18 @@ module.exports = (configPath, namespace = 'tribes') => {
   };
 
   const decryptFromInvite = (encryptedKey, inviteCode, salt) => {
-    const derived = deriveInviteKey(inviteCode, salt);
-    return decryptWithKey(encryptedKey, derived.toString('hex'), inviteAad(inviteCode, salt));
+    const aad = inviteAad(inviteCode, salt);
+    try {
+      const derived = deriveInviteKey(inviteCode, salt);
+      return decryptWithKey(encryptedKey, derived.toString('hex'), aad);
+    } catch (_) {}
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const derived = deriveInviteKey(inviteCode, salt, INVITE_SCRYPT_LEGACY);
+        return decryptWithKey(encryptedKey, derived.toString('hex'), aad);
+      } catch (_) {}
+    }
+    throw new Error('Unsupported state or unable to authenticate data');
   };
 
   const INVITE_ENCRYPT_ATTEMPTS = 3;
@@ -244,9 +255,17 @@ module.exports = (configPath, namespace = 'tribes') => {
   };
 
   const decryptChainOnce = (encryptedPayload, code, salt) => {
-    const k = deriveInviteKey(code, salt);
+    let json = null
     try {
-      const json = decryptWithKey(encryptedPayload, k.toString('hex'), inviteAad(code, salt));
+      const k = deriveInviteKey(code, salt);
+      json = decryptWithKey(encryptedPayload, k.toString('hex'), inviteAad(code, salt));
+    } catch (_) {
+      try {
+        const k = deriveInviteKey(code, salt, INVITE_SCRYPT_LEGACY);
+        json = decryptWithKey(encryptedPayload, k.toString('hex'), inviteAad(code, salt));
+      } catch (_) { return null; }
+    }
+    try {
       const parsed = JSON.parse(json);
       if (Array.isArray(parsed) && parsed.every(e => e && e.rootId && Array.isArray(e.keys) && e.keys.length)) {
         return parsed.map(e => ({

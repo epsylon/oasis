@@ -324,8 +324,9 @@ const renderOverviewSummaryTable = (s, rules, userEcoinTax, isPub = false) => {
         kvRow(i18n.bankingUserEngagementScore, String(score)),
         ubiWired ? kvRow(i18n.bankYourUbiMonth || 'Your UBI (this month)', `${future.toFixed(6)} ECO`) : null,
         kvRow(i18n.bankYourIndustryBalance || 'Your Industry Share', a({ href: '/industry?filter=MEMBER' }, `${Number(s.industryBalance || 0).toFixed(6)} ECO`)),
+        kvRow(i18n.bankYourSchoolBalance || 'Your School Earnings', a({ href: '/school?filter=mine' }, `${Number(s.schoolBalance || 0).toFixed(6)} ECO`)),
         kvRow(i18n.bankOverviewYourTaxes || 'Your taxes', a({ href: '/banking?filter=taxes' }, `${tax.toFixed(6)} ECO`)),
-        kvRow(i18n.bankYourFundsMonth || 'Your Funds (this month)', `${((ubiWired ? future : 0) + Number(s.industryBalance || 0) - tax).toFixed(6)} ECO`)
+        kvRow(i18n.bankYourFundsMonth || 'Your Funds (this month)', `${((ubiWired ? future : 0) + Number(s.industryBalance || 0) + Number(s.schoolBalance || 0) - tax).toFixed(6)} ECO`)
       )
     )
   );

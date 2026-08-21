@@ -173,7 +173,6 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     }
   });
   
-  // pdf viewer
   const pdfjsPath = path.join(__dirname, '../server/node_modules/pdfjs-dist/build/pdf.min.js');
   app.use(koaStatic(pdfjsPath));
 

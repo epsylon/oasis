@@ -42,7 +42,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
     "report", "task", "event", "bookmark", "image", "audio", "video", "document", "torrent",
-    "bankWallet", "bankClaim", "project", "job", "industry", "industryBlueprint", "forum", "vote", "contact", "map", "shop", "shopProduct", "chat", "pad", "all"
+    "bankWallet", "bankClaim", "project", "job", "industry", "industryBlueprint", "forum", "vote", "contact", "map", "shop", "shopProduct", "chat", "pad", "schoolCourse", "all"
   ];
 
   const filterSelect = select(
@@ -89,6 +89,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'market': return `/market/${encodeURIComponent(contentId)}`;
       case 'report': return `/reports/${encodeURIComponent(contentId)}`;
       case 'project': return `/projects/${encodeURIComponent(contentId)}`;
+      case 'schoolCourse': return `/school/course/${encodeURIComponent(contentId)}`;
       case 'housing': return `/housing/${encodeURIComponent(contentId)}`;
       case 'job': return `/jobs/${encodeURIComponent(contentId)}`;
       case 'industry': return `/industry/${encodeURIComponent(contentId)}`;
@@ -443,6 +444,17 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.txid ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankTx + ':' ),
             a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${content.txid}`, target: '_blank' }, content.txid)
+          ) : null
+        );
+      case 'schoolCourse':
+        return div({ class: 'search-school' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, content.title)) : null,
+          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.schoolCourseType || 'Course type') + ':'), span({ class: 'card-value' }, String(content.visibility || '').toUpperCase() === 'INVITE' ? 'INVITE-ONLY' : (Number(content.price) > 0 ? 'PAID' : 'OPEN'))),
+          Number(content.price) > 0 ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.schoolPrice || 'Price (ECO)') + ':'), span({ class: 'card-value' }, `${Number(content.price).toFixed(2)} ECO`)) : null,
+          content.startDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.schoolStartDate || 'Start date') + ':'), span({ class: 'card-value' }, new Date(content.startDate).toLocaleDateString())) : null,
+          content.description ? div({ class: 'card-field card-field-stacked' }, span({ class: 'card-value' }, String(content.description).length > 220 ? String(content.description).slice(0, 220) + '…' : content.description)) : null,
+          Array.isArray(content.tags) && content.tags.length ? div({ class: 'card-tags' },
+            content.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`))
           ) : null
         );
       case 'housing':

@@ -384,7 +384,6 @@ const renderSpreadEditWarning = async (msgId) => {
 exports.renderSpreadEditWarning = renderSpreadEditWarning;
 
 
-// markdown
 const markdownUrl = "https://commonmark.org/help/";
 
 const doctypeString = "<!DOCTYPE html>";
@@ -399,9 +398,22 @@ const nbsp = "\xa0";
 
 const { getConfig } = require('../configs/config-manager.js');
 
-// menu INIT
 const assetVersion = () => {
-  try { return encodeURIComponent(String(readPkg()?.version || '0')); } catch (_) { return '0'; }
+  try {
+    const base = path.resolve(__dirname, "..", "client", "assets");
+    let latest = 0;
+    for (const rel of ["styles", "themes"]) {
+      const dir = path.join(base, rel);
+      for (const f of fs.readdirSync(dir)) {
+        const t = fs.statSync(path.join(dir, f)).mtimeMs;
+        if (t > latest) latest = t;
+      }
+    }
+    const v = String(readPkg()?.version || '0');
+    return encodeURIComponent(latest ? `${v}-${Math.floor(latest / 1000).toString(36)}` : v);
+  } catch (_) {
+    try { return encodeURIComponent(String(readPkg()?.version || '0')); } catch (_) { return '0'; }
+  }
 };
 
 const readPkg = () => {
@@ -916,6 +928,18 @@ const renderParliamentLink = () => {
     : "";
 };
 
+const renderSchoolLink = () => {
+  const schoolMod = getConfig().modules.schoolMod === "on";
+  return schoolMod
+    ? navLink({
+        href: "/school",
+        emoji: "ꖂ",
+        text: i18n.schoolTitle,
+        class: "school-link enabled"
+      })
+    : "";
+};
+
 const renderCourtsLink = () => {
   const courtsMod = getConfig().modules.courtsMod === "on";
   return courtsMod
@@ -1402,6 +1426,7 @@ const template = (titlePrefix, ...elements) => {
                 }),
                 renderTribesLink(),
                 renderLarpLink(),
+                renderSchoolLink(),
                 renderParliamentLink(),
                 renderCourtsLink()
               ),
@@ -1525,7 +1550,6 @@ const template = (titlePrefix, ...elements) => {
   );
   return doctypeString + nodes.outerHTML;
 };
-// menu END
 
 exports.template = template;
 
@@ -2194,6 +2218,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     ubi:      visibilityPrefs.ubi      === true,
     wallet:   visibilityPrefs.wallet   === true,
     clearnetShops:     visibilityPrefs.clearnetShops     === true,
+    clearnetSchool:    visibilityPrefs.clearnetSchool    === true,
     clearnetJobs:      visibilityPrefs.clearnetJobs      === true,
     clearnetEvents:    visibilityPrefs.clearnetEvents    === true,
     clearnetProjects:  visibilityPrefs.clearnetProjects  === true,
@@ -2221,7 +2246,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     gpg:               visibilityPrefs.gpg               === true
   };
   const fediverseHandleValue = typeof visibilityPrefs.fediverseHandle === 'string' ? visibilityPrefs.fediverseHandle : '';
-  prefs.clearnet = prefs.clearnetShops || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks;
+  prefs.clearnet = prefs.clearnetShops || prefs.clearnetSchool || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks;
   const togglePill = (key, labelText, forced = false) => label(
     { class: forced ? "pref-pill pref-pill-forced" : "pref-pill", for: forced ? undefined : `vis_${key}`, title: forced ? (i18n.profileDeviceLockedHint || 'On mobile devices this sensor is mandatory and cannot be disabled.') : undefined },
     forced ? input({ type: "hidden", name: `vis_${key}`, value: "1" }) : null,
@@ -2320,6 +2345,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
           ),
           div({ class: "pref-pill-row" },
             togglePill('clearnetShops',     i18n.profileClearnetShopsLabel     || 'Shops'),
+            togglePill('clearnetSchool',    i18n.profileClearnetSchoolLabel    || 'School'),
             togglePill('clearnetJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'),
             togglePill('clearnetEvents',    i18n.profileClearnetEventsLabel    || 'Events'),
             togglePill('clearnetProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'),
@@ -2412,6 +2438,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   };
   const moduleDef = [
     { key: 'shops',     label: 'Shops',     kind: 'Shop',     prefKey: 'clearnetShops' },
+    { key: 'school',    label: 'School',    kind: 'Course',   prefKey: 'clearnetSchool' },
     { key: 'jobs',      label: 'Jobs',      kind: 'Job',      prefKey: 'clearnetJobs' },
     { key: 'events',    label: 'Events',    kind: 'Event',    prefKey: 'clearnetEvents' },
     { key: 'projects',  label: 'Projects',  kind: 'Project',  prefKey: 'clearnetProjects' },
@@ -2612,7 +2639,7 @@ exports.authorView = async ({
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : '',
     gpg:      rawPrefs.gpg      === true
   };
-  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
+  const clearnetSubKeys = ['clearnetShops','clearnetSchool','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
   const anySubClearnet = clearnetSubKeys.some(k => rawPrefs[k] === true);
   prefs.clearnet = prefs.clearnet || anySubClearnet;
   const showField = (key) => prefs[key];
@@ -3277,6 +3304,25 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
+  function SchoolBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const titleMap = {
+      SCHOOL_ENROLLED: i18n.schoolBotEnrolledTitle || 'A new student has enrolled in your course.',
+      SCHOOL_INVITED: i18n.schoolBotInvitedTitle || 'You have been invited to a course.',
+      SCHOOL_ADMITTED: i18n.schoolBotAdmittedTitle || 'You have been admitted to a course.',
+      SCHOOL_CERTIFICATE: i18n.schoolBotCertificateTitle || 'You have received a certificate.',
+      SCHOOL_PASSED: i18n.schoolBotPassedTitle || 'A student has passed your course.',
+      SCHOOL_LESSON_NEW: i18n.schoolBotLessonTitle || 'A new lesson has been published.'
+    }
+    const title = titleMap[subjectU] || (i18n.pmBotSchool || 'EducaBot')
+    return div(
+      { class: 'pm-card school-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `🎓 ${i18n.pmBotSchool || 'EducaBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
   function JobsBotCard({ sentAt, from, toLinks, text, key, msgSize }) {
     const title = i18n.jobsBotMatchTitle
     return div(
@@ -3432,6 +3478,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             if (subjectU === 'LARP_RULING' || subjectU === 'PARLIAMENT_GOV' || subjectU === 'TRIBE_GOV') {
               return PoliticalBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
+            if (subjectU === 'SCHOOL_ENROLLED' || subjectU === 'SCHOOL_INVITED' || subjectU === 'SCHOOL_ADMITTED' || subjectU === 'SCHOOL_CERTIFICATE' || subjectU === 'SCHOOL_PASSED' || subjectU === 'SCHOOL_LESSON_NEW') {
+              return SchoolBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
             if (subjectU === 'INDUSTRY_ADMITTED' || subjectU === 'INDUSTRY_APPLICATION' || subjectU === 'INDUSTRY_INVITED' || subjectU === 'INDUSTRY_DISSOLVED' || subjectU === 'INDUSTRY_BUILD_APPROVED' || subjectU === 'INDUSTRY_DISTRIBUTED') {
               return IndustryBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
@@ -3562,7 +3611,6 @@ exports.likesView = async ({ messages, feed, name, spreadMap = null }) => {
 };
 
 
-//generate preview
 const ensureAt = (id) => {
   const s = String(id || "").trim()
   if (!s) return ""

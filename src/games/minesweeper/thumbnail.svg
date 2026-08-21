@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220">
+  <rect width="400" height="220" fill="#000"/>
+  <g stroke="#333" stroke-width="2">
+    <rect x="60" y="30" width="40" height="40" fill="#222"/>
+    <rect x="100" y="30" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="140" y="30" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="180" y="30" width="40" height="40" fill="#222"/>
+    <rect x="220" y="30" width="40" height="40" fill="#222"/>
+    <rect x="260" y="30" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="300" y="30" width="40" height="40" fill="#222"/>
+    <rect x="60" y="70" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="100" y="70" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="140" y="70" width="40" height="40" fill="#222"/>
+    <rect x="180" y="70" width="40" height="40" fill="#3a1010" stroke="#f44"/>
+    <rect x="220" y="70" width="40" height="40" fill="#222"/>
+    <rect x="260" y="70" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="300" y="70" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="60" y="110" width="40" height="40" fill="#222"/>
+    <rect x="100" y="110" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="140" y="110" width="40" height="40" fill="#0d0d0d"/>
+    <rect x="180" y="110" width="40" height="40" fill="#222"/>
+    <rect x="220" y="110" width="40" height="40" fill="#222"/>
+    <rect x="260" y="110" width="40" height="40" fill="#222"/>
+    <rect x="300" y="110" width="40" height="40" fill="#0d0d0d"/>
+  </g>
+  <g font-family="monospace" font-weight="bold" font-size="26" text-anchor="middle">
+    <text x="120" y="59" fill="#55aaff">1</text>
+    <text x="160" y="59" fill="#6c6">2</text>
+    <text x="280" y="59" fill="#55aaff">1</text>
+    <text x="80" y="99" fill="#6c6">2</text>
+    <text x="120" y="99" fill="#e66">3</text>
+    <text x="280" y="99" fill="#6c6">2</text>
+    <text x="320" y="99" fill="#55aaff">1</text>
+    <text x="120" y="139" fill="#55aaff">1</text>
+    <text x="160" y="139" fill="#55aaff">1</text>
+    <text x="320" y="139" fill="#55aaff">1</text>
+  </g>
+  <circle cx="200" cy="90" r="11" fill="#f44"/>
+  <g stroke="#f44" stroke-width="3">
+    <line x1="200" y1="73" x2="200" y2="107"/>
+    <line x1="183" y1="90" x2="217" y2="90"/>
+    <line x1="188" y1="78" x2="212" y2="102"/>
+    <line x1="212" y1="78" x2="188" y2="102"/>
+  </g>
+  <g>
+    <line x1="235" y1="122" x2="235" y2="146" stroke="#FFA500" stroke-width="3"/>
+    <path d="M235 122 L255 129 L235 136 Z" fill="#FFA500"/>
+  </g>
+  <text x="200" y="190" font-family="monospace" font-weight="bold" font-size="28" fill="#FFA500" text-anchor="middle">MINESWEEPER</text>
+</svg>

@@ -1,4 +1,4 @@
-const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [] }) => {
+const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [], versions = {} }) => {
   const { form, button, div, h2, p, section, a, hr, input, label, br, span, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
   const { template, i18n } = require('./main_views');
 
@@ -37,6 +37,7 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     return tr(
       td(a({ href: peerUrl, class: "user-link" }, name || key.slice(0, 20) + '…')),
       td(a({ href: peerUrl, class: 'user-link peer-key' }, key)),
+      td(String((versions || {})[key] || '—')),
       td(String(userCount))
     );
   };
@@ -54,8 +55,9 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     return table({ class: 'block-info-table' },
       tr(
         td({ class: 'card-label' }, i18n.peerHost || 'Pub'),
-        td({ class: 'card-label' }, 'Key'),
-        td({ class: 'card-label' }, i18n.peersReplicatedFeeds || 'Replicated feeds')
+        td({ class: 'card-label' }, i18n.peersOasisId || 'Oasis ID'),
+        td({ class: 'card-label' }, i18n.peersOasisVersion || 'Version'),
+        td({ class: 'card-label' }, i18n.peersReplicatedFeeds || 'Replicated')
       ),
       ...peers.map(renderPeerRow)
     );

@@ -2,19 +2,19 @@ const ALL_MODULES = [
   'agenda', 'ai', 'aiNav', 'audios', 'banking', 'blogs', 'bookmarks', 'calendars', 'chats', 'cipher',
   'courts', 'dev', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'graphos',
   'housing', 'images', 'industry', 'invites', 'jobs', 'larp', 'legacy', 'logs', 'maps', 'market',
-  'melody', 'opinions', 'pads', 'parliament', 'pixelia', 'polls', 'projects', 'reports', 'shops',
+  'melody', 'opinions', 'pads', 'parliament', 'pixelia', 'polls', 'projects', 'reports', 'school', 'shops',
   'tags', 'tasks', 'torrents', 'transfers', 'trending', 'tribes', 'videos', 'votes', 'wallet'
 ];
 
 const NETWORK = ['feed', 'blogs', 'tags', 'trending', 'opinions', 'pads', 'forum', 'maps', 'chats'];
 const MEDIA = ['audios', 'bookmarks', 'docs', 'images', 'torrents', 'videos'];
 const OFFICE = ['agenda', 'calendars', 'events', 'tasks', 'reports', 'favorites'];
-const GOVERNANCE = ['tribes', 'larp', 'votes', 'polls', 'parliament', 'courts', 'logs'];
+const GOVERNANCE = ['tribes', 'larp', 'votes', 'polls', 'school', 'parliament', 'courts', 'logs'];
 const ECONOMY = ['banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry', 'projects'];
 
 const MOBILE_MODULES = [
   'agenda', 'favorites', 'wallet', 'tribes', 'larp', 'votes', 'polls', 'events', 'calendars', 'tasks',
-  'reports', 'banking', 'market', 'housing', 'jobs', 'shops', 'transfers', 'cipher', 'invites',
+  'reports', 'banking', 'market', 'housing', 'jobs', 'shops', 'school', 'transfers', 'cipher', 'invites',
   'games', 'audios', 'bookmarks', 'docs', 'images', ...NETWORK
 ];
 
@@ -50,7 +50,7 @@ const WORKFLOWS = [
     theme: 'Clear-SNH',
     homePage: 'feed',
     modules: [...NETWORK, ...MEDIA, 'events', 'calendars', 'agenda', 'favorites', 'games', 'pixelia',
-      'melody', 'tribes', 'fediverse', 'invites', 'polls']
+      'melody', 'tribes', 'fediverse', 'invites', 'polls', 'school']
   },
   {
     key: 'business',
@@ -63,7 +63,7 @@ const WORKFLOWS = [
     theme: 'Matrix-SNH',
     homePage: 'feed',
     modules: ['feed', 'blogs', 'opinions', 'chats', 'forum', 'tags', 'trending', 'audios', 'videos',
-      'images', 'bookmarks', 'melody', 'games', 'pixelia', 'favorites']
+      'images', 'bookmarks', 'melody', 'games', 'pixelia', 'favorites', 'school']
   },
   {
     key: 'mobile',

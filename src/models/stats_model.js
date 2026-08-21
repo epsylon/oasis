@@ -62,6 +62,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     'image','torrent','audio','video','document','transfer','post','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
     'pad','padEntry','gameScore','calendar','calendarDate','calendarNote','log',
+    'schoolCourse','schoolLesson','schoolEnroll','schoolCertificate',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
@@ -275,6 +276,13 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       else if (t === 'larptestattempt') score += 3;
       else if (t === 'torrent') score += 6;
       else if (t === 'shop' || t === 'shopproduct') score += 6;
+      else if (t === 'schoolcourse' || rawType === 'schoolcourse') score += 10;
+      else if (t === 'schoollesson' || rawType === 'schoollesson') score += 6;
+      else if (t === 'schoolenroll' || rawType === 'schoolenroll') score += 3;
+      else if (t === 'schoolcertificate' || rawType === 'schoolcertificate') score += 12;
+      else if (t === 'schoolexam' || rawType === 'schoolexam') score += 6;
+      else if (t === 'schoolprogress' || rawType === 'schoolprogress') score += 1;
+      else if (t === 'schoolopinion' || rawType === 'schoolopinion') score += 2;
       else if (t === 'shop-purchase') score += 2;
       else if (t === 'pad' || t === 'padentry') score += 3;
       else if (t === 'calendar' || t === 'calendarnote' || t === 'calendardate') score += 3;

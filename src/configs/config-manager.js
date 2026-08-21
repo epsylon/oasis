@@ -51,6 +51,7 @@ if (!fs.existsSync(configFilePath)) {
       "projectsMod": "on",
       "industryMod": "on",
       "bankingMod": "on",
+      "schoolMod": "on",
       "parliamentMod": "on",
       "courtsMod": "on",
       "favoritesMod": "on",

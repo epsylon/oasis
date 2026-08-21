@@ -40,7 +40,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
     'image', 'audio', 'video', 'torrent', 'market', 'bankWallet', 'bankClaim',
-    'project', 'job', 'housing', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad', 'poll'
+    'project', 'job', 'housing', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad', 'poll', 'schoolCourse'
   ];
 
   const getRelevantFields = (type, content) => {
@@ -83,6 +83,8 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
         return [content?.address];
       case 'bankClaim':
         return [content?.amount, content?.epochId, content?.allocationId, content?.txid];
+      case 'schoolCourse':
+        return [content?.title, content?.description, ...(content?.tags || []), content?.price, content?.status, content?.visibility];
       case 'project':
         return [content?.title, content?.status, content?.progress, content?.goal, content?.pledged, content?.deadline, (content?.followers || []).length, (content?.backers || []).length, (content?.milestones || []).length, content?.bounty, content?.bountyAmount, content?.bounty_currency, content?.activity?.kind, content?.activityActor];
       case 'poll':
@@ -228,6 +230,9 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       ].join('|');
     }
 
+    if (t === 'schoolCourse') {
+      return ['schoolCourse', author, norm(c.title), norm(c.createdAt)].join('|');
+    }
     if (t === 'project') {
       return [
         'project',

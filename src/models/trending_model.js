@@ -21,7 +21,7 @@ module.exports = ({ cooler }) => {
   const types = [
     'bookmark', 'votes', 'poll', 'feed',
     'image', 'audio', 'video', 'document', 'torrent', 'transfer',
-    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market'
+    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse'
   ];
 
   const categories = opinionCategories;
@@ -114,6 +114,12 @@ module.exports = ({ cooler }) => {
     }
 
     let rawItems = Array.from(itemsById.values()).filter(m => types.includes(m.value?.content?.type));
+    rawItems = rawItems.filter(m => {
+      const c = m.value?.content;
+      if (c?.type !== 'schoolCourse') return true;
+      if (c.encryptedPayload) return false;
+      return String(c.visibility || 'PUBLIC').toUpperCase() !== 'INVITE';
+    });
     const blobTypes = ['document', 'image', 'audio', 'video'];
 
     let items = await Promise.all(

@@ -65,7 +65,6 @@ const publicOnlyFilter = pull.filter(isNotPrivate);
 const configure = (...customOptions) =>
   Object.assign({}, defaultOptions, ...customOptions);
  
-// PEERS 
 const ebtDir = path.join(os.homedir(), '.ssb', 'ebt');
 const unfollowedPath = path.join(os.homedir(), '.ssb', 'gossip_unfollowed.json');
 
@@ -160,7 +159,6 @@ function toLegacyInvite(s) {
   return `${m[1]}:${m[2]}:@${key}~${m[4]}`;
 }
 
-// CORE MODEL
 module.exports = ({ cooler, isPublic }) => {
   const models = {};
   const getAbout = async ({ key, feedId }) => {
@@ -289,7 +287,6 @@ module.exports = ({ cooler, isPublic }) => {
   );
 };
   
-// ABOUT MODEL
 models.about = {
   publicWebHosting: async (feedId) => {
     const result = await getAbout({
@@ -479,7 +476,6 @@ models.about = {
   },
 };
 
-// BLOBS MODEL
 function blobIdToHexPath(blobId) {
   const homeDir = os.homedir();
   const m = /^&([A-Za-z0-9+/=]+)\.sha256$/.exec(blobId);
@@ -565,7 +561,6 @@ models.blob = {
   }
 };
 
-// FRIENDS MODEL
 models.friend = {
   setRelationship: async ({ feedId, following, blocking }) => {
     if (following && blocking) {
@@ -655,7 +650,6 @@ models.friend = {
     },
   };
   
-// META MODEL
 models.meta = {
     myFeedId: async () => {
       const ssb = await cooler.open();
@@ -959,7 +953,7 @@ models.meta = {
     return conditions.every((x) => x === true);
   };
 
-  const maxMessages = 30; // change it to control post overloading
+  const maxMessages = 30;
 
   const getMessages = async ({
     myFeedId,
@@ -1210,7 +1204,6 @@ models.meta = {
     return messages.length ? messages[0] : undefined;
   };
 
-// POST MODEL
 const post = {
     firstBy: async (feedId) => {
       return getLimitPost(feedId, false);
@@ -2165,7 +2158,6 @@ const post = {
   };
   models.post = post;
 
-// SPREAD MODEL
 models.vote = {
   publish: async ({ messageKey, value, recps }) => {
       const ssb = await cooler.open();

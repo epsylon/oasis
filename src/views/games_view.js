@@ -18,13 +18,13 @@ const getGames = () => [
   { id: 'artillery', title: () => i18n.gamesArtilleryTitle, desc: () => i18n.gamesArtilleryDesc },
   { id: 'labyrinth', title: () => i18n.gamesLabyrinthTitle, desc: () => i18n.gamesLabyrinthDesc },
   { id: 'cocoman', title: () => i18n.gamesCocomanTitle, desc: () => i18n.gamesCocomanDesc },
-  { id: 'tetris', title: () => i18n.gamesTetrisTitle, desc: () => i18n.gamesTetrisDesc }
+  { id: 'tetris', title: () => i18n.gamesTetrisTitle, desc: () => i18n.gamesTetrisDesc },
+  { id: 'minesweeper', title: () => i18n.gamesMinesweeperTitle, desc: () => i18n.gamesMinesweeperDesc }
 ];
 
 const shortId = (feedId) => feedId ? '@' + feedId.slice(1, 9) + '...' : '?';
 
-const renderHallOfFame = (hall) => {
-  const games = getGames();
+const renderHallOfFame = (hall, games) => {
   const gamesWithScores = games.filter(g => hall[g.id] && hall[g.id].length > 0);
   if (gamesWithScores.length === 0) {
     return p({ class: 'no-content' }, i18n.gamesNoScores || 'No scores yet.');
@@ -55,7 +55,7 @@ const renderHallOfFame = (hall) => {
   );
 };
 
-const VALID_GAME_IDS = new Set(['cocoland','ecoinflow','neoninfiltrator','audiopendulum','spaceinvaders','arkanoid','pingpong','asteroids','rockpaperscissors','tiktaktoe','flipflop','8ball','artillery','labyrinth','cocoman','tetris']);
+const VALID_GAME_IDS = new Set(['cocoland','ecoinflow','neoninfiltrator','audiopendulum','spaceinvaders','arkanoid','pingpong','asteroids','rockpaperscissors','tiktaktoe','flipflop','8ball','artillery','labyrinth','cocoman','tetris','minesweeper']);
 
 exports.gameShellView = (name) => {
   if (!VALID_GAME_IDS.has(name)) {
@@ -92,8 +92,9 @@ exports.gameShellView = (name) => {
   );
 };
 
-exports.gamesView = (filter = 'all', hall = null) => {
-  const games = getGames();
+exports.gamesView = (filter = 'all', hall = null, q = '') => {
+  const ql = String(q || '').trim().toLowerCase();
+  const games = getGames().filter(g => !ql || `${g.title()} ${g.desc()}`.toLowerCase().includes(ql));
 
   const filterBar = div({ class: 'filter-group' },
     form({ method: 'GET', action: '/games' },
@@ -110,8 +111,18 @@ exports.gamesView = (filter = 'all', hall = null) => {
     )
   );
 
+  const searchBox = div({ class: 'filters' },
+    form({ method: 'GET', action: '/games', class: 'filter-box' },
+      input({ type: 'hidden', name: 'filter', value: filter }),
+      input({ type: 'text', name: 'q', value: q, placeholder: i18n.gamesSearchPlaceholder, class: 'filter-box__input' }),
+      div({ class: 'filter-box__controls' },
+        button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+      )
+    )
+  );
+
   const content = filter === 'scoring' && hall
-    ? renderHallOfFame(hall)
+    ? renderHallOfFame(hall, games)
     : div({ class: 'games-single-col' },
         games.map(game => {
           const topScore = hall && hall[game.id] && hall[game.id].length > 0 ? hall[game.id][0] : null;
@@ -146,6 +157,7 @@ exports.gamesView = (filter = 'all', hall = null) => {
       ),
       filterBar
     ),
+    section(searchBox),
     section(content)
   );
 };

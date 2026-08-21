@@ -27,6 +27,7 @@ const DEFAULT = {
   polls: [],
   projects: [],
   reports: [],
+  school: [],
   shops: [],
   market: [],
   shopProducts: [],

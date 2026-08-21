@@ -44,6 +44,7 @@ const modulesView = () => {
     { name: 'polls', label: i18n.modulesPollsLabel, description: i18n.modulesPollsDescription },
     { name: 'projects', label: i18n.modulesProjectsLabel, description: i18n.modulesProjectsDescription },
     { name: 'reports', label: i18n.modulesReportsLabel, description: i18n.modulesReportsDescription },
+    { name: 'school', label: i18n.modulesSchoolLabel, description: i18n.modulesSchoolDescription },
     { name: 'shops', label: i18n.modulesShopsLabel, description: i18n.modulesShopsDescription },
     { name: 'tags', label: i18n.modulesTagsLabel, description: i18n.modulesTagsDescription },
     { name: 'tasks', label: i18n.modulesTasksLabel, description: i18n.modulesTasksDescription },
@@ -74,11 +75,11 @@ const modulesView = () => {
       ul({ class: 'modules-count-list' },
         li({ class: 'modules-count-item' },
           `${i18n.modulesEnabledModulesLabel}: `,
-          span({ class: 'modules-count-value' }, activeModulesCount)
+          strong({ class: 'modules-count-value' }, activeModulesCount)
         ),
         li({ class: 'modules-count-item' },
           `${i18n.modulesDisabledModulesLabel}: `,
-          span({ class: 'modules-count-value' }, disabledModulesCount)
+          strong({ class: 'modules-count-value' }, disabledModulesCount)
         )
       )
     )
@@ -86,8 +87,8 @@ const modulesView = () => {
 
   const PRESETS = {
     minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'blogs', 'polls', 'opinions', 'cipher', 'legacy'],
-    social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes'],
-    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry'],
+    social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'school', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes'],
+    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry', 'school'],
     mobile: MOBILE_MODULES,
     full: ALL_MODULES
   };

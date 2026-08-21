@@ -143,9 +143,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
     return t.length > max ? t.slice(0, max - 1) + '…' : t;
   };
 
-  // Builds self-contained chatThread items (title + recent messages embedded) for
-  // general (non-tribe) OPEN chats that have activity. Emitted as one item per chat
-  // with ts = latest message, so it survives the recent/all/mine filters intact.
   const CHAT_THREAD_LIMIT = 6;
   const buildChatThreads = async (ssbClient, idToAction, rootOf) => {
     const replacedChatIds = new Set();
@@ -160,8 +157,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       const root = rootOf(a.id);
       const isTip = !replacedChatIds.has(a.id);
       const prev = stateByRoot.get(root);
-      // Resolve the chain tip by replaces (a non-replaced action wins), breaking ts
-      // ties correctly — the mock and real SSB can stamp equal timestamps.
       if (prev && !((isTip && !prev.isTip) || (isTip === prev.isTip && (a.ts || 0) >= prev.ts))) continue;
       const cc = a.content || {};
       stateByRoot.set(root, { ts: a.ts || 0, isTip, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || ''), members: Array.isArray(cc.members) ? cc.members.length : 0 });
@@ -710,7 +705,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       }
 
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
-      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'logPublic', 'gameScore', 'pollVote', 'pollClose', 'pollOpinion', 'curriculum']);
+      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'logPublic', 'gameScore', 'pollVote', 'pollClose', 'pollOpinion', 'curriculum', 'schoolLesson', 'schoolEnroll', 'schoolCertificate', 'schoolProgress', 'schoolExam', 'schoolExamResult', 'school-invite', 'schoolExamQuestion', 'schoolLessonMedia']);
       const chatThreadItems = await buildChatThreads(ssbClient, idToAction, rootOf, deduped);
       deduped = deduped.concat(chatThreadItems);
       const isAllowedTribeActivity = (a) => {
@@ -738,6 +733,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         if (a.type === 'task' && String(c.isPublic || '').toUpperCase() === 'PRIVATE' && a.author !== userId && !(Array.isArray(c.assignees) && c.assignees.includes(userId))) return false;
         if (a.type === 'forum' && c.isPrivate === true && a.author !== userId) return false;
         if (a.type === 'job' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId && !(Array.isArray(c.subscribers) && c.subscribers.includes(userId))) return false;
+        if (a.type === 'schoolCourse' && c.encryptedPayload) return false;
+        if (a.type === 'schoolCourse' && String(c.visibility || '').toUpperCase() === 'INVITE' && a.author !== userId && !(Array.isArray(c.invited) && c.invited.includes(userId))) return false;
         if (a.type === 'housing' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId) return false;
         if (a.type === 'market' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && c.seller !== userId) return false;
         if (a.type === 'shop' && String(c.visibility || '').toUpperCase() === 'CLOSED' && a.author !== userId) return false;

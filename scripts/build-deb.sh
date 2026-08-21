@@ -2,10 +2,10 @@
 
 set -e
 
-VERSION="0.7.8"
 PKG_NAME="oasis"
 ARCH=$(dpkg --print-architecture)
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION="$(node -p "require('${SRC_DIR}/src/server/package.json').version")"
 BUILD_DIR="/tmp/oasis-deb-build"
 DEB_ROOT="${BUILD_DIR}/${PKG_NAME}_${VERSION}_${ARCH}"
 INSTALL_DIR="/opt/oasis"

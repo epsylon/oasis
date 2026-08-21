@@ -40,6 +40,7 @@ exports.statsView = (stats, filter) => {
     'image', 'torrent', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
     'chat', 'chatMessage', 'pad', 'padEntry', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
+    'schoolCourse', 'schoolLesson', 'schoolEnroll', 'schoolCertificate',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
@@ -73,6 +74,10 @@ exports.statsView = (stats, filter) => {
     pad: i18n.statsPad,
     padEntry: i18n.statsPadEntry,
     gameScore: i18n.statsGameScore,
+    schoolCourse: i18n.statsSchoolCourse,
+    schoolLesson: i18n.statsSchoolLesson,
+    schoolEnroll: i18n.statsSchoolEnroll,
+    schoolCertificate: i18n.statsSchoolCertificate,
     calendar: i18n.statsCalendar,
     calendarDate: i18n.statsCalendarDate,
     calendarNote: i18n.statsCalendarNote,
