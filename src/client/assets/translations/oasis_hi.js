@@ -3108,6 +3108,11 @@ module.exports = {
     chatStatusClosed: "बंद",
     chatSendMessage: "भेजें",
     chatJumpLatest: "नवीनतम संदेश",
+    chatReply: "उत्तर दें",
+    chatReplyCancel: "उत्तर रद्द करें",
+    chatPin: "पिन करें",
+    chatUnpin: "अनपिन करें",
+    chatPinned: "पिन किए गए",
     chatPickChat: "खोलने के लिए एक चैट चुनें",
     chatNoneYet: "अभी तक कोई चैट उपलब्ध नहीं है।",
     activitySearchPlaceholder: "गतिविधि में खोजें...",
@@ -3767,6 +3772,10 @@ module.exports = {
     uxModeTitle: "UX",
     uxModeDescription: "अपने इंटरफ़ेस के लिए UX नेविगेशन मोड चुनें।",
     uxModeMenus: "ब्लॉक",
+    uxModeChats: "वार्तालाप",
+    uxModeFeed: "माइक्रोब्लॉगिंग",
+    feedTrendingTitle: "ट्रेंडिंग टैग",
+    feedActiveTitle: "सक्रिय निवासी",
     uxModeAINav: "AI",
 
     }

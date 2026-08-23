@@ -16,6 +16,7 @@ const normalizeTags = (raw) => {
 
 const INVITE_CODE_BYTES = 16
 const VALID_STATUS = ["OPEN", "INVITE-ONLY", "CLOSED"]
+const REACTION_EMOJIS = ["up", "heart", "laugh", "down"]
 
 const DEFAULT_MESSAGES_PER_HOUR = 60
 
@@ -112,6 +113,8 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     const authorByKey = new Map()
     const tombRequests = []
     const memberMsgs = []
+    const reactMsgs = []
+    const pinMsgs = []
 
     for (const m of messages) {
       const k = m.key
@@ -121,6 +124,14 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       if (c.type === "tombstone" && c.target) { tombRequests.push({ target: c.target, author: v.author }); continue }
       if (c.type === "chatMember" && c.target && c.member) {
         memberMsgs.push({ target: c.target, member: c.member, on: c.on !== false, code: typeof c.code === "string" ? c.code : "", author: v.author, ts: v.timestamp || m.timestamp || 0 })
+        continue
+      }
+      if (c.type === "chatReaction" && c.target && REACTION_EMOJIS.includes(c.emoji)) {
+        reactMsgs.push({ target: c.target, emoji: c.emoji, on: c.on !== false, author: v.author, ts: v.timestamp || m.timestamp || 0 })
+        continue
+      }
+      if (c.type === "chatPin" && c.target) {
+        pinMsgs.push({ target: c.target, on: c.on !== false, author: v.author, ts: v.timestamp || m.timestamp || 0 })
         continue
       }
       if (c.type === "chat") {
@@ -176,7 +187,19 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
 
     const rawRootOf = (id) => { let cur = id, g = 0; while (parent.has(cur) && g++ < 100000) cur = parent.get(cur); return cur }
 
-    return { tomb, nodes, parent: strictParent, child: strictChild, rawParent: parent, rawChild: child, rawRootOf, rootOf, tipOf, tipByRoot, msgNodes, memberByRoot, consumedByRoot, isCodeConsumed }
+    const reactionByKey = new Map()
+    for (const r of reactMsgs) {
+      const rk = `${r.target}|${r.author}|${r.emoji}`
+      const prev = reactionByKey.get(rk)
+      if (!prev || r.ts >= prev.ts) reactionByKey.set(rk, r)
+    }
+    const pinByTarget = new Map()
+    for (const pm of pinMsgs) {
+      const prev = pinByTarget.get(pm.target)
+      if (!prev || pm.ts >= prev.ts) pinByTarget.set(pm.target, pm)
+    }
+
+    return { tomb, nodes, parent: strictParent, child: strictChild, rawParent: parent, rawChild: child, rawRootOf, rootOf, tipOf, tipByRoot, msgNodes, memberByRoot, consumedByRoot, isCodeConsumed, reactionByKey, pinByTarget }
   }
 
   const resolveKeyChainSets = (chatRootId) => {
@@ -304,6 +327,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       chatId: c.chatId || "",
       text,
       image: c.image || null,
+      replyTo: typeof c.replyTo === "string" ? c.replyTo : null,
       author: c.author || node.author,
       createdAt: c.createdAt || new Date(node.ts).toISOString()
     }
@@ -824,7 +848,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       } catch (_) { return 0 }
     },
 
-    async sendMessage(chatId, text, image = null) {
+    async sendMessage(chatId, text, image = null, replyTo = null) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const chat = await this.getChatById(chatId)
@@ -856,6 +880,13 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         createdAt: now
       }
       if (image) content.image = image
+      if (replyTo) {
+        const idxAll = buildIndex(messages)
+        const target = idxAll.msgNodes.get(replyTo)
+        if (target && (target.c.chatId === chat.rootId || idxAll.rawRootOf(target.c.chatId) === idxAll.rawRootOf(chat.rootId))) {
+          content.replyTo = replyTo
+        }
+      }
 
       const chatIsEncrypted = !!(chat.tribeId) || !!lookupKey(chat.rootId)
       if (chatIsEncrypted && tribeCrypto) {
@@ -894,8 +925,75 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         if (msg) result.push(msg)
       }
 
+      const viewerId = ssbClient.id
+      let chatAuthor = null
+      if (chatNode) {
+        const dec = decryptChatContent(chatNode.c || {}, wantRoot)
+        chatAuthor = dec.c.author || chatNode.author
+      }
+      const reactsByTarget = new Map()
+      for (const r of idx.reactionByKey.values()) {
+        if (!r.on) continue
+        if (!reactsByTarget.has(r.target)) reactsByTarget.set(r.target, [])
+        reactsByTarget.get(r.target).push(r)
+      }
+      const byKey = new Map(result.map(m => [m.key, m]))
+      for (const m of result) {
+        const counts = {}
+        const mine = {}
+        for (const e of REACTION_EMOJIS) { counts[e] = 0; mine[e] = false }
+        for (const r of reactsByTarget.get(m.key) || []) {
+          counts[r.emoji] += 1
+          if (r.author === viewerId) mine[r.emoji] = true
+        }
+        m.reactions = { counts, mine }
+        const pin = idx.pinByTarget.get(m.key)
+        m.pinned = !!(pin && pin.on && chatAuthor && pin.author === chatAuthor)
+        const quoted = m.replyTo ? byKey.get(m.replyTo) : null
+        m.reply = quoted ? { author: quoted.author, text: String(quoted.text || "").slice(0, 120) } : null
+      }
+
       result.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
       return result
+    },
+
+    async toggleReaction(chatId, targetKey, emoji) {
+      if (!REACTION_EMOJIS.includes(emoji)) throw new Error("Invalid reaction")
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const chat = await this.getChatById(chatId)
+      if (!chat) throw new Error("Chat not found")
+      if (chat.status === "CLOSED") throw new Error("Chat is closed")
+      if (!chat.members.includes(userId)) {
+        if (chat.status === "OPEN") await this.joinChat(chatId)
+        else throw new Error("Not a participant")
+      }
+      const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
+      const target = idx.msgNodes.get(targetKey)
+      if (!target || (target.c.chatId !== chat.rootId && idx.rawRootOf(target.c.chatId) !== idx.rawRootOf(chat.rootId))) throw new Error("Message not found")
+      const prev = idx.reactionByKey.get(`${targetKey}|${userId}|${emoji}`)
+      const on = !(prev && prev.on)
+      return new Promise((resolve, reject) => {
+        ssbClient.publish({ type: "chatReaction", chatId: chat.rootId, target: targetKey, emoji, on, author: userId, createdAt: new Date().toISOString() }, (e, res) => e ? reject(e) : resolve(res))
+      })
+    },
+
+    async togglePin(chatId, targetKey) {
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const chat = await this.getChatById(chatId)
+      if (!chat) throw new Error("Chat not found")
+      if (chat.author !== userId) throw new Error("Only the chat author can pin")
+      const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
+      const target = idx.msgNodes.get(targetKey)
+      if (!target || (target.c.chatId !== chat.rootId && idx.rawRootOf(target.c.chatId) !== idx.rawRootOf(chat.rootId))) throw new Error("Message not found")
+      const prev = idx.pinByTarget.get(targetKey)
+      const on = !(prev && prev.on && prev.author === userId)
+      return new Promise((resolve, reject) => {
+        ssbClient.publish({ type: "chatPin", chatId: chat.rootId, target: targetKey, on, author: userId, createdAt: new Date().toISOString() }, (e, res) => e ? reject(e) : resolve(res))
+      })
     },
 
     async getParticipants(chatRootId) {

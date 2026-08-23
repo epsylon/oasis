@@ -5639,13 +5639,41 @@ a.pm-btn:hover { text-decoration: none }
 .chat-messages-list{display:flex;flex-direction:column;gap:6px}
 .chat-bubble-row{display:flex;justify-content:flex-start;border:none !important;background:transparent !important;padding:0 !important}
 .chat-bubble-row-self{justify-content:flex-end}
-.chat-message{max-width:85%;padding:7px 12px 5px;border-radius:14px 14px 14px 4px;background:#23242a;word-break:break-word;border:none}
+.chat-message{position:relative;max-width:85%;padding:7px 12px 5px;border-radius:14px 14px 14px 4px;background:#23242a;word-break:break-word;border:none}
 .chat-message-author{background:#1f1800}
 .chat-bubble-row-self .chat-message{border-radius:14px 14px 4px 14px;background:#2f2510}
 .chat-bubble-sender{display:block;font-size:0.78rem;font-weight:bold;color:#7fb3ff;text-decoration:none;margin-bottom:2px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-bubble-sender:hover{text-decoration:underline}
 .chat-bubble-sender-owner{color:#ffa300}
 .chat-bubble-time{display:block;font-size:0.68rem;color:#888;text-align:right;margin-top:2px;line-height:1}
+.chat-reply-quote{display:block;border-left:3px solid #FFA500;background:rgba(255,163,0,.08);border-radius:4px;padding:2px 8px;margin-bottom:4px;font-size:.78rem;color:#ccc;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:420px}
+.chat-reply-quote:hover{background:rgba(255,163,0,.16)}
+.chat-reply-author{color:#7fb3ff;font-weight:bold}
+.chat-replying-banner{display:flex;align-items:center;gap:6px;border:0 !important;border-left:3px solid #FFA500 !important;background:rgba(255,163,0,.08) !important;border-radius:4px;padding:4px 10px !important;margin:0 0 6px;box-shadow:none;font-size:.8rem;color:#ccc;overflow:hidden}
+.chat-replying-banner .chat-reply-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.chat-reply-cancel{color:#ff6b6b;text-decoration:none;font-weight:bold;margin-left:auto}
+.chat-msg-actions{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:4px 0 0;padding:0 !important;background:transparent !important;border:0 !important;border-radius:0;box-shadow:none}
+.chat-react-form{display:inline;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
+.chat-react-btn{display:inline-flex;align-items:center;justify-content:center;font-size:.72rem;line-height:1.4;padding:1px 7px;border:1px solid rgba(128,128,128,.4);border-radius:10px;background:rgba(128,128,128,.12);color:#eee;cursor:pointer;text-decoration:none;font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif}
+.chat-react-btn:hover{background:rgba(128,128,128,.3)}
+.chat-reply-btn{margin-left:auto}
+.chat-react-active{border-color:#FFA500;color:#FFA500}
+.chat-message-pinned{border:1px solid #FFA500 !important;background:#332a14 !important}
+.chat-pin-toggle{position:absolute;top:4px;right:6px}
+.chat-has-pin-toggle{padding-right:38px}
+.chat-pinned-link{margin-right:8px}
+.feed-workspace{display:grid;grid-template-columns:230px minmax(0,1fr) 230px;gap:18px;align-items:start;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0;overflow:visible}
+.feed-workspace-center{min-width:0;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0;overflow:visible}
+.feed-side{position:sticky;top:12px;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0;overflow:visible}
+.feed-side-box{background:#1c1c1c;border:1px solid #333;border-radius:12px;padding:14px 16px;margin:0;box-shadow:none;overflow:hidden}
+.feed-side-title{font-size:1em;margin:0 0 10px;color:#FFA500}
+.feed-side-tags{display:flex;flex-wrap:wrap;gap:6px;background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none}
+.feed-side-users{display:flex;flex-direction:column;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none}
+.feed-side-user{display:flex;align-items:center;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none;overflow:hidden}
+.feed-side-avatar{width:28px;height:28px;border-radius:50%;object-fit:cover;flex:0 0 auto}
+.feed-side-user .user-link{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.chat-time-inline{margin:0 0 0 6px;line-height:1.4}
+.chat-time-push{margin-left:auto}
 .chat-day-separator{display:flex;justify-content:center;margin:10px 0 4px;border:none !important;background:transparent !important;padding:0 !important}
 .chat-day-chip{font-size:0.72rem;padding:2px 12px;border-radius:10px;background:#1a1a1a;color:#aaa;border:1px solid #333}
 .chat-message.chat-poll{max-width:92%}
@@ -6729,11 +6757,11 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .welcome-banner .welcome-banner-close{margin:0;padding:0;border:none;background:transparent;box-shadow:none;display:inline-flex;align-items:center}
 .welcome-banner-close-btn{background:transparent;border:none;color:inherit;cursor:pointer;font-size:1em;line-height:1;padding:0 4px;margin:0;opacity:.6}
 .welcome-banner-close-btn:hover{opacity:1}
-.welcome-ux-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;border:none !important;background:transparent !important}
+.welcome-ux-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;border:none !important;background:transparent !important;max-width:680px}
 .welcome-ux-option{display:flex;flex-direction:column;gap:6px;align-items:center;border:1px solid rgba(128,128,128,.35);border-radius:8px;padding:10px;cursor:pointer;background:transparent}
 .welcome-ux-option:has(input:checked){border-color:#ffa300;background:rgba(255,163,0,.07)}
 .welcome-ux-option input{margin:0}
-.welcome-ux-shot{width:100%;border-radius:6px;border:1px solid rgba(128,128,128,.25)}
+.welcome-ux-shot{width:100%;max-width:320px;border-radius:6px;border:1px solid rgba(128,128,128,.25)}
 .welcome-ux-label{font-weight:bold}
 @media (max-width: 700px){.welcome-ux-grid{grid-template-columns:1fr}}
 .welcome-progress,.welcome-steps,.welcome-complete,.welcome-footer,.welcome-action,.welcome-step-head{border:none !important;background:transparent !important;padding:0 !important;box-shadow:none !important;border-radius:0 !important}

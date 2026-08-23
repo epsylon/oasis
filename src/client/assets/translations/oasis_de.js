@@ -3150,6 +3150,11 @@ module.exports = {
     chatStatusClosed: "GESCHLOSSEN",
     chatSendMessage: "Senden",
     chatJumpLatest: "Neueste Nachricht",
+    chatReply: "Antworten",
+    chatReplyCancel: "Antwort abbrechen",
+    chatPin: "Anheften",
+    chatUnpin: "Lösen",
+    chatPinned: "Angeheftet",
     chatPickChat: "Wähle einen Chat, um ihn zu öffnen",
     chatNoneYet: "Noch kein Chat verfügbar.",
     activitySearchPlaceholder: "In der Aktivität suchen...",
@@ -3763,6 +3768,10 @@ module.exports = {
     uxModeTitle: "UX",
     uxModeDescription: "Wähle den UX-Navigationsmodus für deine Oberfläche.",
     uxModeMenus: "Blöcke",
+    uxModeChats: "Unterhaltungen",
+    uxModeFeed: "Microblogging",
+    feedTrendingTitle: "Trend-Tags",
+    feedActiveTitle: "Aktive Bewohner",
     uxModeAINav: "AI",
 
     }

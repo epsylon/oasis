@@ -110,8 +110,9 @@ const stepContent = (key, lang, profile) => {
       action: form({ method: "POST", action: "/welcome/ux", class: "welcome-ux-form" },
         div({ class: "welcome-ux-grid" },
           uxCard("blocks", i18n.uxModeMenus || "Blocks", "/assets/images/ux-blocks.png"),
-          chatsOn ? uxCard("chats", i18n.chatsTitle || "Chats", "/assets/images/ux-chats.png") : null,
-          aiOn ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null
+          aiOn ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null,
+          chatsOn ? uxCard("chats", i18n.uxModeChats || "Conversations", "/assets/images/ux-chats.png") : null,
+          uxCard("feed", i18n.uxModeFeed || "Microblogging", "/assets/images/ux-feed.png")
         ),
         div({ class: "welcome-action" },
           button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepUxAction || "Use this view")

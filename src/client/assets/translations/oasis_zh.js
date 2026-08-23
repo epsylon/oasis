@@ -3109,6 +3109,11 @@ module.exports = {
     chatStatusClosed: "已关闭",
     chatSendMessage: "发送",
     chatJumpLatest: "最新消息",
+    chatReply: "回复",
+    chatReplyCancel: "取消回复",
+    chatPin: "置顶",
+    chatUnpin: "取消置顶",
+    chatPinned: "已置顶",
     chatPickChat: "选择一个聊天以打开",
     chatNoneYet: "目前还没有可用的聊天。",
     activitySearchPlaceholder: "在动态中搜索...",
@@ -3768,6 +3773,10 @@ module.exports = {
     uxModeTitle: "UX",
     uxModeDescription: "选择你想要的 UX 导航模式。",
     uxModeMenus: "块",
+    uxModeChats: "对话",
+    uxModeFeed: "微博客",
+    feedTrendingTitle: "热门标签",
+    feedActiveTitle: "活跃居民",
     uxModeAINav: "AI",
 
     }

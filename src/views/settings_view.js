@@ -123,7 +123,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
           (() => {
             const aiNavEnabled = currentConfig.modules && currentConfig.modules.aiNavMod === 'on';
             const chatsEnabled = currentConfig.modules && currentConfig.modules.chatsMod === 'on';
-            const cur = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : "blocks";
+            const cur = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : "blocks";
             const uxCard = (value, title, image) => label({ class: "welcome-ux-option" },
               input({ type: "radio", name: "ux", value, ...(cur === value ? { checked: true } : {}) }),
               img({ src: image, class: "welcome-ux-shot", alt: title }),
@@ -131,8 +131,9 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
             );
             return div({ class: "welcome-ux-grid" },
               uxCard("blocks", i18n.uxModeMenus || "Blocks", "/assets/images/ux-blocks.png"),
-              chatsEnabled ? uxCard("chats", i18n.chatsTitle || "Chats", "/assets/images/ux-chats.png") : null,
-              aiNavEnabled ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null
+              aiNavEnabled ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null,
+              chatsEnabled ? uxCard("chats", i18n.uxModeChats || "Conversations", "/assets/images/ux-chats.png") : null,
+              uxCard("feed", i18n.uxModeFeed || "Microblogging", "/assets/images/ux-feed.png")
             );
           })(),
           button({ type: "submit" }, i18n.saveSettings)

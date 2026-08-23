@@ -2,7 +2,7 @@
 
 Per-module unit/integration tests covering all publishing actions across the network.
 
-**Current status:** 71 suites / 1081 tests passing.
+**Current status:** 71 suites / 1087 tests passing.
 
 Module tests live under `test/mods/` to keep them grouped and the top-level
 `test/` directory clean (so `results/`, the runner, and the README are easy

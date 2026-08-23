@@ -94,7 +94,7 @@ const getConfig = () => {
   if (typeof cfg.ux === 'string') cfg.ux = { current: cfg.ux };
   if (!cfg.ux || typeof cfg.ux !== 'object') cfg.ux = { current: 'blocks' };
   if (cfg.ux.current === 'menus') cfg.ux.current = 'blocks';
-  if (cfg.ux.current !== 'blocks' && cfg.ux.current !== 'ainav' && cfg.ux.current !== 'chats') cfg.ux.current = 'blocks';
+  if (cfg.ux.current !== 'blocks' && cfg.ux.current !== 'ainav' && cfg.ux.current !== 'chats' && cfg.ux.current !== 'feed') cfg.ux.current = 'blocks';
   if (cfg.ux.current === 'ainav' && cfg.modules && cfg.modules.aiNavMod !== 'on') cfg.ux.current = 'blocks';
   if (cfg.ux.current === 'chats' && cfg.modules && cfg.modules.chatsMod !== 'on') cfg.ux.current = 'blocks';
   return cfg;

@@ -3108,6 +3108,11 @@ module.exports = {
     chatStatusClosed: "مغلق",
     chatSendMessage: "إرسال",
     chatJumpLatest: "آخر رسالة",
+    chatReply: "رد",
+    chatReplyCancel: "إلغاء الرد",
+    chatPin: "تثبيت",
+    chatUnpin: "إلغاء التثبيت",
+    chatPinned: "المثبتة",
     chatPickChat: "اختر محادثة لفتحها",
     chatNoneYet: "لا توجد محادثة متاحة بعد.",
     activitySearchPlaceholder: "ابحث في النشاط...",
@@ -3767,6 +3772,10 @@ module.exports = {
     uxModeTitle: "UX",
     uxModeDescription: "اختر وضع التنقل UX الذي تريده لواجهتك.",
     uxModeMenus: "الكتل",
+    uxModeChats: "المحادثات",
+    uxModeFeed: "التدوين المصغر",
+    feedTrendingTitle: "الوسوم الرائجة",
+    feedActiveTitle: "السكان النشطون",
     uxModeAINav: "AI",
 
     }

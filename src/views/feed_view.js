@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
@@ -157,8 +157,36 @@ const renderFeedCard = (feed) => {
     );
 };
 
+const renderFeedSideTags = (trendingTags) =>
+  div({ class: "feed-side feed-side-right" },
+    div({ class: "feed-side-box" },
+      h2({ class: "feed-side-title" }, i18n.feedTrendingTitle || "Trending Tags"),
+      trendingTags.length
+        ? div({ class: "feed-side-tags" },
+            trendingTags.map(t => a({ href: `/feed?tag=${encodeURIComponent(t.name || t)}`, class: "tag-link" }, `#${t.name || t}`)))
+        : p({ class: "muted" }, "—")
+    )
+  );
+
+const renderFeedSideUsers = (activeUsers) =>
+  div({ class: "feed-side feed-side-left" },
+    div({ class: "feed-side-box" },
+      h2({ class: "feed-side-title" }, i18n.feedActiveTitle || "Active Inhabitants"),
+      activeUsers.length
+        ? div({ class: "feed-side-users" },
+            activeUsers.map(u => div({ class: "feed-side-user" },
+              img({ src: u.avatarUrl || "/assets/images/default-avatar.png", class: "feed-side-avatar" }),
+              userLink(u.id)
+            )))
+        : p({ class: "muted" }, "—")
+    )
+  );
+
 exports.feedView = (feeds, opts = "ALL") => {
   const { filter, q, tag, msg } = normalizeOptions(opts);
+  const workspace = !!(opts && typeof opts === "object" && opts.workspace);
+  const trendingTags = (opts && typeof opts === "object" && Array.isArray(opts.trendingTags)) ? opts.trendingTags : [];
+  const activeUsers = (opts && typeof opts === "object" && Array.isArray(opts.activeUsers)) ? opts.activeUsers : [];
 
   const title =
     filter === "MINE"
@@ -182,50 +210,60 @@ exports.feedView = (feeds, opts = "ALL") => {
 
   const extra = { q, tag };
 
-  return template(
-    title,
-    section(
-      header,
-      successBanner,
-      div(
-        { class: "mode-buttons-row" },
-        ...generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"], filter, "/feed", extra),
-        form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button filter-btn" }, i18n.createFeedTitle || "Create Feed"))
-      ),
-      div(
-        { class: "feed-tools-row" },
-        form(
-          { method: "GET", action: "/feed", class: "filter-box" },
-          input({ type: "hidden", name: "filter", value: filter }),
-          tag ? input({ type: "hidden", name: "tag", value: tag }) : null,
-          input({ type: "text", name: "q", value: q, placeholder: i18n.searchPlaceholder || "Search", class: "filter-box__input" }),
-          div({ class: "filter-box__controls" },
-            button({ type: "submit", class: "filter-box__button" }, i18n.searchButton || "Search")
-          )
+  const centerContent = section(
+    header,
+    successBanner,
+    div(
+      { class: "mode-buttons-row" },
+      ...generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"], filter, "/feed", extra),
+      form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button filter-btn" }, i18n.createFeedTitle || "Create Feed"))
+    ),
+    div(
+      { class: "feed-tools-row" },
+      form(
+        { method: "GET", action: "/feed", class: "filter-box" },
+        input({ type: "hidden", name: "filter", value: filter }),
+        tag ? input({ type: "hidden", name: "tag", value: tag }) : null,
+        input({ type: "text", name: "q", value: q, placeholder: i18n.searchPlaceholder || "Search", class: "filter-box__input" }),
+        div({ class: "filter-box__controls" },
+          button({ type: "submit", class: "filter-box__button" }, i18n.searchButton || "Search")
         )
-      ),
-      section(
-        filter === "CREATE"
-          ? form(
-              { method: "POST", action: "/feed/create" },
-              textarea({
-                name: "text",
-                placeholder: i18n.feedPlaceholder,
-                required: true,
-                minlength: String(FEED_TEXT_MIN),
-                maxlength: String(FEED_TEXT_MAX),
-                rows: 4,
-                cols: 50
-              }),
-              br(),
-              button({ type: "submit", class: "create-button" }, i18n.createFeedButton)
-            )
-          : feeds && feeds.length > 0
-            ? div({ class: "feed-container" }, feeds.map((feed) => renderFeedCard(feed)).filter(Boolean))
-            : div({ class: "no-results" }, p(i18n.noFeedsFound))
       )
+    ),
+    section(
+      filter === "CREATE"
+        ? form(
+            { method: "POST", action: "/feed/create" },
+            textarea({
+              name: "text",
+              placeholder: i18n.feedPlaceholder,
+              required: true,
+              minlength: String(FEED_TEXT_MIN),
+              maxlength: String(FEED_TEXT_MAX),
+              rows: 4,
+              cols: 50
+            }),
+            br(),
+            button({ type: "submit", class: "create-button" }, i18n.createFeedButton)
+          )
+        : feeds && feeds.length > 0
+          ? div({ class: "feed-container" }, feeds.map((feed) => renderFeedCard(feed)).filter(Boolean))
+          : div({ class: "no-results" }, p(i18n.noFeedsFound))
     )
   );
+
+  if (workspace) {
+    return template(
+      title,
+      div({ class: "feed-workspace" },
+        renderFeedSideUsers(activeUsers),
+        div({ class: "feed-workspace-center" }, centerContent),
+        renderFeedSideTags(trendingTags)
+      )
+    );
+  }
+
+  return template(title, centerContent);
 };
 
 exports.feedCreateView = (opts = {}) => {

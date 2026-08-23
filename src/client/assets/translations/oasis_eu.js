@@ -3106,6 +3106,11 @@ module.exports = {
     chatStatusClosed: "ITXIA",
     chatSendMessage: "Bidali",
     chatJumpLatest: "Azken Mezua",
+    chatReply: "Erantzun",
+    chatReplyCancel: "Erantzuna utzi",
+    chatPin: "Finkatu",
+    chatUnpin: "Askatu",
+    chatPinned: "Finkatuak",
     chatPickChat: "Aukeratu txat bat irekitzeko",
     chatNoneYet: "Oraindik ez dago txatik eskuragarri.",
     activitySearchPlaceholder: "Bilatu jardueran...",
@@ -3768,6 +3773,10 @@ module.exports = {
     uxModeTitle: "UX",
     uxModeDescription: "Aukeratu nahi duzun UX nabigazio modua zure interfazerako.",
     uxModeMenus: "Blokeak",
+    uxModeChats: "Elkarrizketak",
+    uxModeFeed: "Mikroblogintza",
+    feedTrendingTitle: "Joerako Etiketak",
+    feedActiveTitle: "Biztanle Aktiboak",
     uxModeAINav: "AI",
 
   }

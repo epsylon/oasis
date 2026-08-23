@@ -728,6 +728,15 @@ a.filter-btn,
   max-width: 100% !important;
   overflow-wrap: anywhere !important;
 }
+.card-field .card-value.user-link,
+.card-field .card-value .user-link {
+  display: inline-block !important;
+  vertical-align: bottom !important;
+  max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
 
 .market-grid,
 .shop-products-grid,
@@ -942,3 +951,9 @@ a.create-button {
 .chat-messages-list { padding: 0 !important; }
 .chat-message { max-width: 92% !important; }
 .chat-message.chat-poll { max-width: 97% !important; }
+.feed-workspace {
+  display: block !important;
+}
+.feed-side {
+  display: none !important;
+}

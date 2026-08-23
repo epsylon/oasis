@@ -218,20 +218,76 @@ const renderChatPoll = (poll, chat) => {
   )
 }
 
-const renderMessage = (msg, chatAuthor) => {
-  const isAuthor = String(msg.author) === String(chatAuthor)
+const REACTIONS = [
+  ["up", "👍"],
+  ["heart", "❤️"],
+  ["laugh", "😂"],
+  ["down", "👎"]
+]
+
+const anchorIdOf = (key) => "msg-" + String(key || "").replace(/[^a-zA-Z0-9]/g, "")
+
+const renderMessage = (msg, chat, opts = {}) => {
+  const isAuthor = String(msg.author) === String(chat.author)
   const isSelf = String(msg.author) === String(userId)
   const imageSrc = blobSrcOf(msg.image)
   const imageNode = imageSrc
     ? renderZoomableImage(imageSrc, { imgClass: "chat-message-image" })
     : (msg.image ? renderMediaBlob(msg.image, null, { class: "chat-message-image" }) : null)
 
-  return div({ class: isSelf ? "chat-bubble-row chat-bubble-row-self" : "chat-bubble-row" },
-    div({ class: isSelf ? "chat-message chat-message-self" : isAuthor ? "chat-message chat-message-author" : "chat-message" },
+  const counts = (msg.reactions && msg.reactions.counts) || {}
+  const mine = (msg.reactions && msg.reactions.mine) || {}
+  const reactionNodes = REACTIONS.map(([code, icon]) => {
+    const n = Number(counts[code] || 0)
+    const label = n > 0 ? `${icon} ${n}` : icon
+    if (!opts.canWrite) return n > 0 ? span({ class: "chat-react-btn" }, label) : null
+    return form({ method: "POST", action: `/chats/${encodeURIComponent(chat.key)}/react`, class: "chat-react-form" },
+      input({ type: "hidden", name: "target", value: msg.key }),
+      input({ type: "hidden", name: "emoji", value: code }),
+      button({ type: "submit", class: mine[code] ? "chat-react-btn chat-react-active" : "chat-react-btn" }, label)
+    )
+  }).filter(Boolean)
+
+  const replyLink = opts.canWrite
+    ? a({ href: `/chats/${encodeURIComponent(chat.key)}?reply=${encodeURIComponent(msg.key)}#chat-message-form`, class: "chat-react-btn chat-reply-btn", title: i18n.chatReply }, "↩")
+    : null
+
+  const pinBtn = opts.isChatAuthor
+    ? form({ method: "POST", action: `/chats/${encodeURIComponent(chat.key)}/pin`, class: "chat-react-form chat-pin-toggle" },
+        input({ type: "hidden", name: "target", value: msg.key }),
+        button({ type: "submit", class: msg.pinned ? "chat-react-btn chat-react-active" : "chat-react-btn", title: msg.pinned ? i18n.chatUnpin : i18n.chatPin }, "📌")
+      )
+    : null
+
+  const quoteText = String((msg.reply && msg.reply.text) || "").trim()
+  const quote = msg.reply
+    ? a({ href: `#${anchorIdOf(msg.replyTo)}`, class: "chat-reply-quote" },
+        span({ class: "chat-reply-arrow" }, "↩ "),
+        span({ class: "chat-reply-text" }, quoteText ? `${quoteText}${quoteText.length >= 120 ? "…" : ""}` : userLinkLabel(msg.reply.author))
+      )
+    : null
+
+  const timeNode = span({ class: "chat-bubble-time" }, moment(msg.createdAt).format("HH:mm"))
+  const actionsRow = (reactionNodes.length || replyLink)
+    ? div({ class: "chat-msg-actions" }, ...reactionNodes, replyLink,
+        span({ class: replyLink ? "chat-bubble-time chat-time-inline" : "chat-bubble-time chat-time-inline chat-time-push" }, moment(msg.createdAt).format("HH:mm")))
+    : null
+
+  const bubbleClass = [
+    "chat-message",
+    isSelf ? "chat-message-self" : (isAuthor ? "chat-message-author" : ""),
+    msg.pinned ? "chat-message-pinned" : "",
+    pinBtn ? "chat-has-pin-toggle" : ""
+  ].filter(Boolean).join(" ")
+
+  return div({ id: anchorIdOf(msg.key), class: isSelf ? "chat-bubble-row chat-bubble-row-self" : "chat-bubble-row" },
+    div({ class: bubbleClass },
+      pinBtn,
       isSelf ? null : renderSenderLink(msg.author, isAuthor),
+      quote,
       renderMessageText(msg.text || ""),
       imageNode ? div({ class: "chat-message-image-wrap" }, imageNode) : null,
-      span({ class: "chat-bubble-time" }, moment(msg.createdAt).format("HH:mm"))
+      actionsRow || timeNode
     )
   )
 }
@@ -417,11 +473,17 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   const msgList = safeArr(messages)
   const canWrite = (isMember || chat.status === "OPEN") && chat.status !== "CLOSED"
 
+  const pinnedMsgs = msgList.filter(m => m.pinned).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+  const replyMsg = params.reply ? msgList.find(m => String(m.key) === String(params.reply)) : null
+
   const chatMain = isRestrictedInviteOnly
     ? div({ class: "tribe-main chat-full-width" }, p({ class: "access-denied-msg" }, i18n.chatAccessDenied))
     : div({ class: "tribe-main chat-full-width" },
     msgList.length
       ? div({ class: "chat-jump-row" },
+          pinnedMsgs.length
+            ? a({ href: `#${anchorIdOf(pinnedMsgs[0].key)}`, class: "filter-btn chat-pinned-link" }, `${i18n.chatPinned} (${pinnedMsgs.length})`)
+            : null,
           a({ href: "#chat-latest", class: "filter-btn chat-jump-latest" }, i18n.chatJumpLatest)
         )
       : null,
@@ -446,16 +508,24 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           const last = i === stream.length - 1
           const node = entry.kind === 'poll'
             ? renderChatPoll(entry.poll, chat)
-            : renderMessage(entry.msg, chat.author)
+            : renderMessage(entry.msg, chat, { canWrite, isChatAuthor: isAuthor })
           nodes.push(last ? div({ id: "chat-latest", class: "chat-latest-anchor" }, node) : node)
         })
         return nodes
       })()
     ),
     canWrite
-      ? div({ class: "chat-message-form" },
+      ? div({ id: "chat-message-form", class: "chat-message-form" },
+          replyMsg
+            ? div({ class: "chat-replying-banner" },
+                span({ class: "chat-reply-arrow" }, "↩ "),
+                span({ class: "chat-reply-text" }, String(replyMsg.text || "").trim() ? ` ${String(replyMsg.text).trim().slice(0, 120)}` : userLinkLabel(replyMsg.author)),
+                a({ href: `/chats/${encodeURIComponent(chat.key)}#chat-message-form`, class: "chat-reply-cancel", title: i18n.chatReplyCancel || "✕" }, "✕")
+              )
+            : null,
           form({ method: "POST", action: `/chats/${encodeURIComponent(chat.key)}/message`, enctype: "multipart/form-data" },
             input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}#chat-latest` }),
+            replyMsg ? input({ type: "hidden", name: "replyTo", value: replyMsg.key }) : null,
             textarea({ name: "text", rows: 3, placeholder: i18n.chatMessagePlaceholder }), br(),
             span(i18n.uploadMedia), br(),
             input({ type: "file", name: "image", accept: "image/*,video/*" }), br(), br(),

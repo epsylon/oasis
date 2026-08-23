@@ -1773,6 +1773,10 @@ router
       ctx.redirect("/chats");
       return;
     }
+    if (currentConfig.ux?.current === "feed") {
+      ctx.redirect("/feed");
+      return;
+    }
     const homePage = currentConfig.homePage || "activity";
     ctx.redirect(`/${homePage}`);
   })
@@ -4136,7 +4140,25 @@ router
     let feeds = await feedModel.listFeeds({ filter, q, tag });
     feeds = await applyListFilters(feeds, ctx);
     await warmAuthorNames(feeds);
-    ctx.body = feedView(feeds, { filter, q, tag, msg });
+    const uxFeed = getConfig().ux?.current === 'feed';
+    let trendingTags = [];
+    let activeUsers = [];
+    if (uxFeed) {
+      try { trendingTags = ((await tagsModel.listTags('top')) || []).slice(0, 10); } catch (_) {}
+      try {
+        const ids = [];
+        const seen = new Set();
+        for (const f of feeds) {
+          const aid = f?.value?.author;
+          if (!aid || seen.has(aid)) continue;
+          seen.add(aid);
+          ids.push(aid);
+          if (ids.length >= 8) break;
+        }
+        activeUsers = await Promise.all(ids.map(async (id) => ({ id, avatarUrl: getAvatarUrl(await about.image(id).catch(() => null)) })));
+      } catch (_) {}
+    }
+    ctx.body = feedView(feeds, { filter, q, tag, msg, workspace: uxFeed, trendingTags, activeUsers });
   })
   .get("/feed/create", async (ctx) => {
     const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
@@ -4534,7 +4556,7 @@ router
     const v = String((ctx.request.body || {}).ux || '').trim().toLowerCase();
     const aiNavEnabled = cfg.modules && cfg.modules.aiNavMod === 'on';
     const chatsEnabled = cfg.modules && cfg.modules.chatsMod === 'on';
-    const next = (v === 'ainav' && aiNavEnabled) ? 'ainav' : (v === 'chats' && chatsEnabled) ? 'chats' : 'blocks';
+    const next = (v === 'ainav' && aiNavEnabled) ? 'ainav' : (v === 'chats' && chatsEnabled) ? 'chats' : v === 'feed' ? 'feed' : 'blocks';
     cfg.ux = { ...(cfg.ux && typeof cfg.ux === 'object' ? cfg.ux : {}), current: next };
     saveConfig(cfg);
     try { onboardingModel.markStep('ux'); } catch (_) {}
@@ -5404,7 +5426,7 @@ router
         allChats = (await chatsModel.listAll({ filter: 'all', q: '', viewerId: uid })).filter(x => !x.tribeId);
       } catch (_) { allChats = []; }
     }
-    ctx.body = await singleChatView({ ...chat, isFavorite: fav.has(String(chat.rootId || chat.key)), isTribeMember }, filter, messages, { q, polls: chatPolls, pollsEnabled, returnTo: safeReturnTo(ctx, `/chats?filter=${encodeURIComponent(filter)}`, ['/chats']), spreads: await spreads.forMessage(chat.key).catch(() => null), workspace: uxChats, allChats });
+    ctx.body = await singleChatView({ ...chat, isFavorite: fav.has(String(chat.rootId || chat.key)), isTribeMember }, filter, messages, { q, polls: chatPolls, pollsEnabled, reply: String(ctx.query.reply || '').trim() || null, returnTo: safeReturnTo(ctx, `/chats?filter=${encodeURIComponent(filter)}`, ['/chats']), spreads: await spreads.forMessage(chat.key).catch(() => null), workspace: uxChats, allChats });
   })
   .get("/pads", async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
@@ -8505,9 +8527,10 @@ router
     }
     const text = stripDangerousTags(String(ctx.request.body.text || '').trim());
     const imageBlob = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : null;
+    const replyTo = String(ctx.request.body.replyTo || '').trim() || null;
     if (!text && !imageBlob) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
     try {
-      await chatsModel.sendMessage(ctx.params.chatId, text, imageBlob);
+      await chatsModel.sendMessage(ctx.params.chatId, text, imageBlob, replyTo);
     } catch (err) {
       if (err && err.code === 'CHAT_RATE_LIMIT') {
         const { i18n } = require('../views/main_views');
@@ -8517,6 +8540,23 @@ router
       throw err;
     }
     ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(ctx.params.chatId)}`, ['/chats']));
+  })
+  .post("/chats/:chatId/react", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const target = String(ctx.request.body.target || '').trim();
+    const emoji = String(ctx.request.body.emoji || '').trim();
+    if (!target || !emoji) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
+    try { await chatsModel.toggleReaction(ctx.params.chatId, target, emoji); } catch (_) {}
+    const anchor = 'msg-' + target.replace(/[^a-zA-Z0-9]/g, '');
+    ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}#${anchor}`);
+  })
+  .post("/chats/:chatId/pin", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
+    const target = String(ctx.request.body.target || '').trim();
+    if (!target) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
+    try { await chatsModel.togglePin(ctx.params.chatId, target); } catch (_) {}
+    const anchor = 'msg-' + target.replace(/[^a-zA-Z0-9]/g, '');
+    ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}#${anchor}`);
   })
   .post("/pads/create", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
@@ -9436,10 +9476,10 @@ router
     const v = String(ctx.request.body.ux || "").trim().toLowerCase();
     const aiNavEnabled = cfg.modules && cfg.modules.aiNavMod === 'on';
     const chatsEnabled = cfg.modules && cfg.modules.chatsMod === 'on';
-    const next = (v === "ainav" && aiNavEnabled) ? "ainav" : (v === "chats" && chatsEnabled) ? "chats" : "blocks";
+    const next = (v === "ainav" && aiNavEnabled) ? "ainav" : (v === "chats" && chatsEnabled) ? "chats" : v === "feed" ? "feed" : "blocks";
     cfg.ux = { ...(cfg.ux && typeof cfg.ux === 'object' ? cfg.ux : {}), current: next };
     saveConfig(cfg);
-    ctx.redirect(next === "ainav" ? "/" : next === "chats" ? "/chats" : "/settings");
+    ctx.redirect(next === "ainav" ? "/" : next === "chats" ? "/chats" : next === "feed" ? "/feed" : "/settings");
   })
   .post("/settings/lan-broadcasting", koaBody(), async (ctx) => {
     const enabled = !!(ctx.request.body && (ctx.request.body.lanBroadcasting === 'on' || ctx.request.body.lanBroadcasting === '1' || ctx.request.body.lanBroadcasting === 'true'));

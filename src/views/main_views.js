@@ -1198,7 +1198,7 @@ const renderTasksLink = () => {
 const template = (titlePrefix, ...elements) => {
   const currentConfig = getConfig();
   const theme = currentConfig.themes.current || "Dark-SNH";
-  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : "blocks";
+  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : "blocks";
   const themeLink = link({
     rel: "stylesheet",
     href: `/assets/themes/${theme}.css?v=${assetVersion()}`
@@ -1268,7 +1268,7 @@ const template = (titlePrefix, ...elements) => {
                   )
                 );
               })(),
-              uxMode === "chats"
+              (uxMode === "chats" || uxMode === "feed")
                 ? navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
                 : navLink({
                     href: "/pm",
@@ -1307,7 +1307,7 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/peers", emoji: "⧖", text: i18n.peers })
             )
           )
-        ) : uxMode === "chats" ? div(
+        ) : (uxMode === "chats" || uxMode === "feed") ? div(
           { class: "top-bar-right" },
           nav(
             ul(
@@ -1377,7 +1377,7 @@ const template = (titlePrefix, ...elements) => {
         );
       })(),
       div(
-        { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : "main-content" },
+        { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" ? "main-content chatsux-only" : "main-content" },
         uxMode !== "blocks" ? null : div(
           { class: "sidebar-left" },
           nav(

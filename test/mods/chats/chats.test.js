@@ -246,3 +246,83 @@ describe('chats: the conversation reads downwards', (t) => {
     ok(html.includes('%23chat-latest') || html.includes('#chat-latest'), 'after writing you come back to it');
   });
 });
+
+describe('chats: reactions', (t) => {
+  t('a member reacts and the reaction toggles off on repeat', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Reacts', '', null, '', 'OPEN', [], null);
+    await A.use('chats').sendMessage(chat.key, 'react to me');
+    const [msg] = await A.use('chats').listMessages(chat.key);
+    B.setActor();
+    await B.use('chats').toggleReaction(chat.key, msg.key, 'heart');
+    let seen = (await A.use('chats').listMessages(chat.key))[0];
+    eq(seen.reactions.counts.heart, 1, 'heart counted once');
+    await B.use('chats').toggleReaction(chat.key, msg.key, 'heart');
+    seen = (await A.use('chats').listMessages(chat.key))[0];
+    eq(seen.reactions.counts.heart, 0, 'second toggle removes it');
+  });
+
+  t('invalid emoji is rejected and mine flag reflects the viewer', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const chat = await A.use('chats').createChat('Mine', '', null, '', 'OPEN', [], null);
+    await A.use('chats').sendMessage(chat.key, 'hola');
+    const [msg] = await A.use('chats').listMessages(chat.key);
+    let bad = false;
+    try { await A.use('chats').toggleReaction(chat.key, msg.key, 'rocket'); } catch (_) { bad = true; }
+    ok(bad, 'unknown emoji rejected');
+    await A.use('chats').toggleReaction(chat.key, msg.key, 'up');
+    const seen = (await A.use('chats').listMessages(chat.key))[0];
+    ok(seen.reactions.mine.up, 'my own reaction is flagged');
+  });
+});
+
+describe('chats: replies', (t) => {
+  t('a reply carries the quoted author and text', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Replies', '', null, '', 'OPEN', [], null);
+    await A.use('chats').sendMessage(chat.key, 'original words');
+    const [orig] = await A.use('chats').listMessages(chat.key);
+    B.setActor();
+    await B.use('chats').sendMessage(chat.key, 'my answer', null, orig.key);
+    const msgs = await A.use('chats').listMessages(chat.key);
+    const reply = msgs.find(m => m.text === 'my answer');
+    eq(reply.replyTo, orig.key, 'replyTo points at the original');
+    eq(reply.reply.author, A.keypair.id, 'quoted author resolved');
+    ok(reply.reply.text.includes('original words'), 'quoted text resolved');
+  });
+
+  t('a replyTo pointing outside the chat is dropped', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const one = await A.use('chats').createChat('One', '', null, '', 'OPEN', [], null);
+    const two = await A.use('chats').createChat('Two', '', null, '', 'OPEN', [], null);
+    await A.use('chats').sendMessage(one.key, 'foreign');
+    const [foreign] = await A.use('chats').listMessages(one.key);
+    await A.use('chats').sendMessage(two.key, 'local', null, foreign.key);
+    const msgs = await A.use('chats').listMessages(two.key);
+    eq(msgs[0].replyTo, null, 'cross-chat replyTo is not stored');
+  });
+});
+
+describe('chats: pinned messages', (t) => {
+  t('only the chat author can pin, and pinning toggles', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Pins', '', null, '', 'OPEN', [], null);
+    await A.use('chats').sendMessage(chat.key, 'pin me');
+    const [msg] = await A.use('chats').listMessages(chat.key);
+    B.setActor();
+    await B.use('chats').joinChat(chat.key);
+    let denied = false;
+    try { await B.use('chats').togglePin(chat.key, msg.key); } catch (_) { denied = true; }
+    ok(denied, 'a plain member cannot pin');
+    A.setActor();
+    await A.use('chats').togglePin(chat.key, msg.key);
+    let seen = (await A.use('chats').listMessages(chat.key))[0];
+    ok(seen.pinned, 'author pin sticks');
+    await A.use('chats').togglePin(chat.key, msg.key);
+    seen = (await A.use('chats').listMessages(chat.key))[0];
+    ok(!seen.pinned, 'second toggle unpins');
+  });
+});

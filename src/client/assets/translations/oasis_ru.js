@@ -3108,6 +3108,11 @@ module.exports = {
     chatStatusClosed: "ЗАКРЫТЫЙ",
     chatSendMessage: "Отправить",
     chatJumpLatest: "Последнее сообщение",
+    chatReply: "Ответить",
+    chatReplyCancel: "Отменить ответ",
+    chatPin: "Закрепить",
+    chatUnpin: "Открепить",
+    chatPinned: "Закреплённые",
     chatPickChat: "Выберите чат, чтобы открыть его",
     chatNoneYet: "Пока нет доступных чатов.",
     activitySearchPlaceholder: "Поиск по активности...",
@@ -3767,6 +3772,10 @@ module.exports = {
     uxModeTitle: "UX",
     uxModeDescription: "Выберите режим UX-навигации для вашего интерфейса.",
     uxModeMenus: "Блоки",
+    uxModeChats: "Беседы",
+    uxModeFeed: "Микроблогинг",
+    feedTrendingTitle: "Популярные теги",
+    feedActiveTitle: "Активные жители",
     uxModeAINav: "AI",
 
     }

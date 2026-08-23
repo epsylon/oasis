@@ -1166,3 +1166,20 @@ audio, video { max-width: 100% !important; }
 .chat-message { margin: 0 !important; }
 .chat-message p { margin: 0 !important; }
 .chat-day-separator { margin: 8px 0 2px 0 !important; }
+.module-table { width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; }
+.module-table td:first-child, .module-table th:first-child { width: 27% !important; }
+.module-table td:last-child, .module-table th:last-child { width: 19% !important; text-align: center !important; }
+.module-table th { white-space: nowrap !important; font-size: .9em !important; }
+.module-table td:first-child a { white-space: normal !important; word-break: keep-all !important; overflow-wrap: normal !important; hyphens: none !important; }
+.module-table td, .module-table th { padding: 8px 6px !important; vertical-align: middle !important; }
+.module-table td:nth-child(2) p { font-size: .85em !important; margin: 0 !important; }
+.pdf-canvas-wrap { height: auto !important; max-height: 70vh !important; overflow: auto !important; }
+.pdf-viewer-container { padding: 8px !important; }
+.pdf-viewer-container .pdf-controls { display: flex !important; flex-wrap: wrap !important; gap: 8px !important; justify-content: center !important; align-items: center !important; margin-top: 8px !important; }
+.pdf-viewer-container button { font-size: 1em !important; padding: 7px 10px !important; min-width: 42px !important; }
+.pdf-viewer-container span { margin: 0 4px !important; }
+.pdf-viewer-container { margin-bottom: 8px !important; }
+.pdf-maximized { position: fixed !important; inset: 0 !important; z-index: 9999 !important; margin: 0 !important; border-radius: 0 !important; background: #111 !important; display: flex !important; flex-direction: column !important; padding: 6px !important; overflow: hidden !important; }
+.pdf-maximized .pdf-canvas-wrap { flex: 1 1 auto !important; max-height: none !important; height: auto !important; overflow: auto !important; }
+.pdf-maximized .pdf-controls { flex-shrink: 0 !important; margin: 6px 0 !important; }
+.pdf-maximized-body { overflow: hidden !important; }
