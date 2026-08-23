@@ -6753,7 +6753,7 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .dev-code-row td{border:none;vertical-align:top}
 .dev-code-num{text-align:right;padding:0 14px 0 4px;width:1%;min-width:52px;white-space:nowrap;opacity:.5;user-select:none;border-right:1px solid rgba(128,128,128,.25) !important}
 .dev-code-line{padding-left:16px}
-.ai-suggestion-banner .update-banner-link{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60vw}
+.ai-suggestion-banner .update-banner-link{display:inline-block;vertical-align:bottom;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60vw}
 .welcome-banner .welcome-banner-close{margin:0;padding:0;border:none;background:transparent;box-shadow:none;display:inline-flex;align-items:center}
 .welcome-banner-close-btn{background:transparent;border:none;color:inherit;cursor:pointer;font-size:1em;line-height:1;padding:0 4px;margin:0;opacity:.6}
 .welcome-banner-close-btn:hover{opacity:1}

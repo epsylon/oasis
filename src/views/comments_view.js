@@ -32,9 +32,9 @@ const renderCommentCard = (c) => {
   );
 };
 
-const renderCommentsSection = ({ action, comments = [], returnTo = null, closedNote = null, extraClass = "" } = {}) => {
+const renderCommentsSection = ({ action, comments = [], returnTo = null, closedNote = null, extraClass = "", open = false } = {}) => {
   const list = visibleComments(comments);
-  return details({ class: "comments-collapse" + (extraClass ? ` ${extraClass}` : "") },
+  return details({ class: "comments-collapse" + (extraClass ? ` ${extraClass}` : ""), ...(open ? { open: true } : {}) },
     summary({ class: list.length > 0 ? "comments-summary engage-on" : "comments-summary" },
       span({ class: "comments-summary-icon" }, COMMENT_ICON),
       span({ class: "comments-summary-count" }, `(${list.length})`)

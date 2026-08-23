@@ -24,10 +24,33 @@ const socketPath = path.join(ssbConfig.path, "socket");
 const publicInteger = ssbConfig.keys.public.replace(".ed25519", "");
 const remote = `unix:${socketPath}~noauth:${publicInteger}`;
 
+const windowLogStream = (ssb) => {
+  if (!ssb || ssb._logStreamWindowed || typeof ssb.createLogStream !== "function") return ssb;
+  const pull = require("../server/node_modules/pull-stream");
+  const defer = require("../server/node_modules/pull-defer");
+  const orig = ssb.createLogStream;
+  ssb.createLogStream = function (opts) {
+    const o = opts || {};
+    const plain = o.limit && !o.reverse && !o.live && !o.raw && o.old === undefined && !o.gt && !o.lt;
+    if (!plain) return orig.call(ssb, opts);
+    const src = defer.source();
+    pull(
+      orig.call(ssb, { ...o, reverse: true }),
+      pull.collect((err, msgs) => {
+        if (err) return src.abort(err);
+        src.resolve(pull.values(msgs.reverse()));
+      })
+    );
+    return src;
+  };
+  ssb._logStreamWindowed = true;
+  return ssb;
+};
+
 const connect = (options) =>
   new Promise((resolve, reject) => {
     ssbClient(process.env.OASIS_TEST ? ssbConfig.keys : null, options)
-      .then(resolve)
+      .then((ssb) => resolve(windowLogStream(ssb)))
       .catch(reject);
   });
 
@@ -90,7 +113,7 @@ module.exports = ({ offline, port = 3000, host = 'localhost', isPublic = false }
         if (internalSSB) {
           const { printMetadata, colors } = require('../server/ssb_metadata');
           printMetadata('OASIS GUI', colors.yellow, port, host, offline, isPublic);
-          return resolve(internalSSB);
+          return resolve(windowLogStream(internalSSB));
         }
 
         if (clientHandle && clientHandle.closed === false) {

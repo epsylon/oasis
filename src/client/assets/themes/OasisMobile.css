@@ -1004,7 +1004,6 @@ a.hashtag {
 .feed-card .card-footer { display: flex !important; flex-wrap: wrap !important; align-items: center !important; gap: 6px !important; row-gap: 4px !important; }
 .feed-card .date-link { max-width: 100% !important; overflow-wrap: anywhere !important; font-size: 0.85em !important; padding: 6px 10px !important; }
 
-/* Data (Matches) view */
 .data-cohesion-figures { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)) !important; gap: 8px !important; max-width: 100% !important; }
 .data-figure { border: 1px solid rgba(128, 128, 128, .25) !important; border-radius: 8px !important; padding: 8px 6px !important; text-align: center !important; max-width: 100% !important; min-width: 0 !important; }
 .data-figure-value { font-size: 1.2em !important; overflow-wrap: anywhere !important; }
@@ -1022,7 +1021,6 @@ a.hashtag {
 .data-pair-side { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
 .data-pair-link { max-width: 100% !important; overflow-wrap: anywhere !important; }
 
-/* Chats UX (estilo mensajeria, dos columnas tipo Telegram) */
 .main-content.chatsux-only { padding: 4px !important; }
 .chat-workspace {
   display: grid !important;
@@ -1139,7 +1137,6 @@ a.hashtag {
 .chat-back-btn { text-decoration: none !important; }
 .chat-workspace-details .tribe-card-description { white-space: normal !important; overflow: visible !important; text-overflow: unset !important; max-width: 100% !important; flex-basis: 100% !important; margin: 2px 0 0 0 !important; font-size: .8em !important; opacity: .85 !important; }
 
-/* Mobile UI fixes (lista 0.9.5) */
 .relationship-actions { display: flex !important; flex-direction: column !important; gap: 6px !important; width: 100% !important; }
 .relationship-actions form { width: 100% !important; margin: 0 !important; display: block !important; }
 .relationship-actions .filter-btn { width: 100% !important; white-space: nowrap !important; }
@@ -1183,3 +1180,78 @@ audio, video { max-width: 100% !important; }
 .pdf-maximized .pdf-canvas-wrap { flex: 1 1 auto !important; max-height: none !important; height: auto !important; overflow: auto !important; }
 .pdf-maximized .pdf-controls { flex-shrink: 0 !important; margin: 6px 0 !important; }
 .pdf-maximized-body { overflow: hidden !important; }
+
+.main-content .feed-workspace { display: flex !important; flex-direction: column !important; gap: 10px !important; }
+.feed-workspace .feed-side { display: block !important; position: static !important; }
+.feed-workspace .feed-side-left { order: 1 !important; }
+.feed-workspace .feed-side-right { order: 2 !important; }
+.feed-workspace .feed-workspace-center { order: 3 !important; }
+.feed-workspace .feed-side-users { flex-direction: row !important; overflow-x: auto !important; gap: 12px !important; padding: 2px 0 6px 0 !important; }
+.feed-workspace .feed-side-user { flex-direction: column !important; flex: 0 0 auto !important; width: 64px !important; align-items: center !important; gap: 4px !important; }
+.feed-workspace .feed-side-avatar { width: 44px !important; height: 44px !important; }
+.feed-workspace .feed-side-user a { font-size: .65em !important; max-width: 62px !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+.feed-workspace .feed-side-box { padding: 8px 10px !important; }
+.feed-workspace .feed-side-title { font-size: .85em !important; margin: 0 0 6px 0 !important; }
+.feed-card .feed-row { display: flex !important; flex-direction: column !important; gap: 6px !important; align-items: stretch !important; }
+.feed-card .refeed-column { order: 2 !important; display: flex !important; flex-direction: row !important; flex-wrap: wrap !important; gap: 10px !important; align-items: center !important; justify-content: center !important; }
+.feed-card .refeed-column h1 { font-size: 1.1em !important; margin: 0 !important; }
+.feed-card .refeed-column .muted { font-size: .7em !important; margin: 0 !important; }
+.feed-card .refeed-btn { padding: 4px 14px !important; font-size: .85em !important; width: auto !important; }
+.feed-card .feed-main { order: 1 !important; width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
+.feed-card .feed-main h2 { font-size: .85em !important; }
+.feed-card .date-link { font-size: .7em !important; padding: 2px 6px !important; }
+.feed-sides-row { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin: 8px 0 !important; align-items: start !important; width: 100% !important; }
+.feed-sides-row .feed-side { display: block !important; position: static !important; width: 100% !important; min-width: 0 !important; }
+.feed-sides-row .feed-side-box { padding: 8px !important; width: 100% !important; box-sizing: border-box !important; }
+.feed-sides-row .feed-side-title { font-size: .8em !important; margin: 0 0 6px 0 !important; }
+.feed-sides-row .feed-side-users { display: flex !important; flex-direction: column !important; gap: 6px !important; overflow: visible !important; padding: 0 !important; }
+.feed-sides-row .feed-side-user { flex-direction: row !important; width: 100% !important; gap: 6px !important; align-items: center !important; }
+.feed-sides-row .feed-side-avatar { width: 24px !important; height: 24px !important; }
+.feed-sides-row .feed-side-user a { font-size: .75em !important; max-width: 100% !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+.feed-sides-row .feed-side-tags { gap: 4px !important; }
+.feed-sides-row .tag-link { font-size: .75em !important; }
+.feed-card { padding: 8px !important; }
+.feed-card .activity-card-header { padding: 0 !important; margin: 0 !important; min-height: 0 !important; }
+.feed-card .card-section { padding: 4px !important; margin: 0 !important; }
+.feed-card .feed-card-body { padding: 4px !important; }
+.feed-card .feed-main { padding: 0 !important; width: 100% !important; }
+.feed-card .feed-text { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+.feed-card .refeed-column { justify-content: center !important; align-items: center !important; gap: 10px !important; margin: 4px 0 0 0 !important; }
+.feed-card .refeed-column h1 { font-size: 1.5em !important; margin: 0 !important; padding: 6px 16px !important; border: 1px solid rgba(128, 128, 128, .35) !important; border-radius: 8px !important; line-height: 1 !important; }
+.feed-card .refeed-column .muted { font-size: .75em !important; }
+.feed-card .card-footer { gap: 4px !important; margin: 4px 0 0 0 !important; }
+.feed-card .card-footer a { font-size: .75em !important; padding: 2px 8px !important; }
+.feed-card .date-link { font-size: .7em !important; padding: 2px 6px !important; }
+.feed-card .activity-card-header { justify-content: flex-end !important; gap: 4px !important; margin-bottom: 4px !important; }
+.feed-card .activity-card-header button, .feed-card .activity-card-header a { width: 34px !important; height: 34px !important; min-width: 34px !important; padding: 4px !important; font-size: .9em !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+.feed-card .feed-main h2 { text-align: center !important; margin: 6px 0 2px 0 !important; }
+.feed-card .card-footer { justify-content: center !important; flex-wrap: nowrap !important; }
+.feed-card .date-link { display: inline-flex !important; align-items: center !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; max-width: 55% !important; font-size: .65em !important; }
+.feed-card .card-footer a { max-width: 42% !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; display: inline-block !important; }
+.feed-card .card-engage { display: flex !important; flex-direction: column !important; gap: 4px !important; margin-top: 6px !important; }
+.feed-card .card-engage summary { padding: 6px 10px !important; font-size: .85em !important; min-height: 0 !important; }
+.feed-card .card-engage details, .feed-card .card-engage .comments-link { padding: 0 !important; margin: 0 !important; }
+.feed-card .comments-link { padding: 6px 10px !important; font-size: .85em !important; display: block !important; text-align: center !important; }
+.feed-card .card-footer { flex-wrap: wrap !important; justify-content: center !important; max-width: 100% !important; }
+.feed-card .date-link { white-space: normal !important; overflow: visible !important; text-overflow: unset !important; max-width: 100% !important; font-size: .75em !important; }
+.feed-card .card-footer a { max-width: 100% !important; white-space: normal !important; overflow: visible !important; overflow-wrap: anywhere !important; }
+.feed-card .refeed-column { border: 1px solid rgba(128, 128, 128, .3) !important; border-radius: 8px !important; padding: 8px !important; width: 100% !important; box-sizing: border-box !important; }
+.feed-card { overflow: hidden !important; }
+.feed-card .refeed-column { flex-wrap: wrap !important; }
+.feed-card .refeed-column .muted { flex-basis: 100% !important; text-align: center !important; margin: 4px 0 0 0 !important; }
+.feed-card .card-engage summary, .feed-card .comments-link { min-height: 40px !important; padding: 8px 10px !important; box-sizing: border-box !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: .85em !important; }
+.comments-collapse .comments-inline-form { display: flex !important; flex-direction: column !important; gap: 6px !important; padding: 8px !important; }
+.comments-collapse textarea { width: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
+.comments-collapse .filter-btn { width: auto !important; align-self: center !important; padding: 6px 18px !important; }
+.comments-collapse .comments-view-all { display: block !important; text-align: center !important; padding: 6px !important; font-size: .8em !important; }
+.comments-collapse .comment-form { display: flex !important; flex-direction: column !important; gap: 6px !important; width: 100% !important; }
+.comments-collapse .comment-textarea { width: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
+.comments-collapse .comment-file-upload { display: flex !important; flex-direction: column !important; gap: 4px !important; width: 100% !important; }
+.comments-collapse .comment-file-upload input { width: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
+.comments-collapse .comment-form-title { font-size: .9em !important; margin: 4px 0 !important; }
+.comments-collapse .comment-submit-btn { align-self: center !important; padding: 6px 20px !important; }
+.comments-collapse .vote-comments-section { padding: 8px !important; }
+.feed-card .refeed-column h1 { min-height: 44px !important; min-width: 44px !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; padding: 0 16px !important; font-size: 1.3em !important; box-sizing: border-box !important; }
+.feed-card .refeed-btn { min-height: 44px !important; box-sizing: border-box !important; display: inline-flex !important; align-items: center !important; }
+.feed-card .refeed-column h1, .feed-card .refeed-column .refeed-btn { height: 48px !important; min-height: 48px !important; margin: 0 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; vertical-align: middle !important; }
+.feed-card .refeed-column form { margin: 0 !important; display: inline-flex !important; align-items: center !important; }

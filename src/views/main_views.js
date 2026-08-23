@@ -1369,7 +1369,7 @@ const template = (titlePrefix, ...elements) => {
           { class: "update-banner ai-suggestion-banner" },
           span({ class: "update-banner-icon" }, "🤖"),
           span({ class: "update-banner-text" }, i18n.aiSuggestionBanner),
-          a({ href: suggestion.href, class: "update-banner-link" }, `${suggestion.title} (${(((Number(suggestion.score) || 0) * 100).toFixed(1)).replace(/\.0$/, '')}%)`),
+          a({ href: suggestion.href, class: "update-banner-link" }, `${(() => { const t = String(suggestion.title || '').trim(); return t.length > 80 ? t.slice(0, 80) + '…' : t; })()} (${(((Number(suggestion.score) || 0) * 100).toFixed(1)).replace(/\.0$/, '')}%)`),
           form(
             { method: "POST", action: "/ai/suggestion/dismiss", class: "welcome-banner-close" },
             button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")

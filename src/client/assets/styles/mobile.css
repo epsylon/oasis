@@ -957,3 +957,21 @@ a.create-button {
 .feed-side {
   display: none !important;
 }
+.tribe-info-table,
+.tribe-info-table tbody,
+.tribe-info-table tr,
+.tribe-info-table td {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
+  overflow: visible !important;
+}
+.tribe-info-table td .user-link {
+  display: inline-block !important;
+  max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}

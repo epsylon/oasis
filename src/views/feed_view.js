@@ -83,7 +83,8 @@ const renderFeedCommentsSection = (feedKey, comments = []) => {
   return renderSharedCommentsSection({
     action: `/feed/${encodeURIComponent(feedKey)}/comments`,
     comments: comments,
-    returnTo: null
+    returnTo: null,
+    open: true
   });
 };
 
