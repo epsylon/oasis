@@ -3227,6 +3227,8 @@ module.exports = {
     schoolInvited: "المدعوون",
     schoolIssueCertificate: "إصدار شهادة",
     schoolCertificateTextPlaceholder: "ملاحظة الشهادة (اختياري)",
+    schoolLessonOpen: "افتح الدرس",
+    schoolCertificatePdf: "PDF",
     schoolCertificates: "الشهادات",
     schoolNoCertificates: "لم يتم إصدار شهادات بعد.",
     schoolEditButton: "تعديل",

@@ -1255,3 +1255,20 @@ audio, video { max-width: 100% !important; }
 .feed-card .refeed-btn { min-height: 44px !important; box-sizing: border-box !important; display: inline-flex !important; align-items: center !important; }
 .feed-card .refeed-column h1, .feed-card .refeed-column .refeed-btn { height: 48px !important; min-height: 48px !important; margin: 0 !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; vertical-align: middle !important; }
 .feed-card .refeed-column form { margin: 0 !important; display: inline-flex !important; align-items: center !important; }
+.school-lessons { width: 100% !important; padding: 8px !important; box-sizing: border-box !important; }
+.school-lesson { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 8px !important; margin: 0 0 8px 0 !important; }
+.school-lesson-header { display: flex !important; flex-wrap: wrap !important; align-items: center !important; justify-content: space-between !important; gap: 6px !important; width: 100% !important; padding: 0 !important; margin: 0 !important; background: transparent !important; border: none !important; }
+.school-lesson-header h3 { margin: 0 !important; flex: 1 1 auto !important; min-width: 0 !important; font-size: 1em !important; }
+.school-lesson-header h3 a { display: block !important; width: 100% !important; overflow-wrap: anywhere !important; }
+.school-lesson > p { width: 100% !important; max-width: 100% !important; margin: 6px 0 !important; padding: 0 !important; }
+.school-lesson-meta { display: flex !important; flex-wrap: wrap !important; gap: 4px !important; width: 100% !important; max-width: 100% !important; padding: 4px 0 0 0 !important; margin: 0 !important; background: transparent !important; border: none !important; font-size: .8em !important; opacity: .8 !important; }
+.school-lesson-meta span { white-space: normal !important; overflow-wrap: anywhere !important; }
+.school-teacher-panel { width: 100% !important; box-sizing: border-box !important; padding: 8px !important; }
+.school-teacher-panel input, .school-teacher-panel textarea, .school-teacher-panel select { width: 100% !important; box-sizing: border-box !important; }
+textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100% !important; box-sizing: border-box !important; }
+.create-tribe-form { width: 100% !important; box-sizing: border-box !important; padding: 8px !important; }
+.create-tribe-form form { width: 100% !important; }
+.tribe-card { width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+.tribe-card-body { width: 100% !important; box-sizing: border-box !important; padding: 8px !important; }
+.filter-box { width: 100% !important; box-sizing: border-box !important; }
+.filter-box__input { width: 100% !important; }

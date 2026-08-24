@@ -1676,6 +1676,7 @@ const { favoritesView } = require("../views/favorites_view");
 const { logsView } = require("../views/logs_view");
 const { buildLogsPdf } = require("./logsPdf");
 const { buildSmartContractPdf } = require("./smartContractPdf");
+const { buildCertificatePdf } = require("./certificatePdf");
 const { buildContentPdf, pdfFilename } = require("./contentPdf");
 const { parliamentView } = require("../views/parliament_view");
 const { courtsView, courtsCaseView } = require('../views/courts_view');
@@ -1944,14 +1945,32 @@ router
     await schoolModel.deleteLesson(ctx.params.lessonId);
     ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
   })
+  .get('/school/certificate/pdf/:courseId/:certId', async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const course = await schoolModel.getCourseById(ctx.params.courseId, getViewerId()).catch(() => null);
+    if (!course) { ctx.redirect('/school'); return; }
+    const certs = await schoolModel.listCertificates(course.rootId || course.id).catch(() => []);
+    const cert = certs.find(x => String(x.id) === String(ctx.params.certId));
+    if (!cert) { ctx.redirect(`/school/course/${encodeURIComponent(ctx.params.courseId)}`); return; }
+    let studentName = null, teacherName = null;
+    try { studentName = await about.name(cert.student); } catch (_) {}
+    try { teacherName = await about.name(cert.author); } catch (_) {}
+    const pdf = buildCertificatePdf({ cert, course, studentName, teacherName });
+    ctx.set('Content-Type', 'application/pdf');
+    ctx.set('Content-Disposition', `attachment; filename="oasis-certificate-${String(cert.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12)}.pdf"`);
+    ctx.body = pdf;
+  })
   .post('/school/certificate/:id', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
-    await schoolModel.issueCertificate(ctx.params.id, stripDangerousTags(b.student), stripDangerousTags(b.text || ''));
+    const issued = await schoolModel.issueCertificate(ctx.params.id, stripDangerousTags(b.student), stripDangerousTags(b.text || ''));
     try {
       const course = await schoolModel.getCourseById(ctx.params.id, getViewerId());
       const student = String(b.student || '').trim();
-      if (student.startsWith('@')) await pmModel.sendMessage([student], 'SCHOOL_CERTIFICATE', `You have received a certificate 🎓 for the course [${course.title || 'a course'}](/school/course/${encodeURIComponent(ctx.params.id)})`);
+      if (student.startsWith('@')) {
+        const pdfPart = issued && issued.key ? ` — [Download your diploma (PDF)](/school/certificate/pdf/${encodeURIComponent(ctx.params.id)}/${encodeURIComponent(issued.key)})` : '';
+        await pmModel.sendMessage([student], 'SCHOOL_CERTIFICATE', `You have received a certificate 🎓 for the course [${course.title || 'a course'}](/school/course/${encodeURIComponent(ctx.params.id)})${pdfPart}`);
+      }
     } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
   })
@@ -2014,7 +2033,31 @@ router
     const lesson = lessons.find(l => l.id === ctx.params.lessonId);
     if (!lesson) { ctx.redirect(`/school/course/${encodeURIComponent(ctx.params.courseId)}`); return; }
     const materials = await schoolModel.listLessonMaterials(course.rootId, lesson.id).catch(() => []);
-    ctx.body = await require('../views/school_view').singleLessonView(course, lesson, materials, { edit: String(ctx.query.edit || '') === '1' });
+    const lessonRoot = await schoolModel.lessonRootOf(lesson.id).catch(() => lesson.id);
+    const hiddenComments = await schoolModel.listHiddenComments(course.rootId).catch(() => new Set());
+    const lessonComments = (await getVoteComments(lessonRoot).catch(() => [])).filter(c => !hiddenComments.has(c.key));
+    ctx.body = await require('../views/school_view').singleLessonView(course, lesson, materials, { edit: String(ctx.query.edit || '') === '1', comments: lessonComments });
+  })
+  .post('/school/lesson/:courseId/:lessonId/comments', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    const rt = `/school/lesson/${encodeURIComponent(ctx.params.courseId)}/${encodeURIComponent(ctx.params.lessonId)}`;
+    const course = await schoolModel.getCourseById(ctx.params.courseId, getViewerId()).catch(() => null);
+    if (!course) { ctx.redirect('/school'); return; }
+    const uid = getViewerId();
+    const isOpenCourse = course.visibility !== 'INVITE' && !(Number(course.price) > 0);
+    if (course.author !== uid && !course.students.includes(uid) && !isOpenCourse) { ctx.redirect(rt); return; }
+    let text = stripDangerousTags((ctx.request.body.text || '').trim());
+    const blobMarkdown = await handleBlobUpload(ctx, 'blob');
+    if (blobMarkdown) text += blobMarkdown;
+    if (!text) { ctx.redirect(rt); return; }
+    const lessonRoot = await schoolModel.lessonRootOf(ctx.params.lessonId).catch(() => ctx.params.lessonId);
+    await post.publish({ text, root: lessonRoot, dest: lessonRoot });
+    ctx.redirect(rt);
+  })
+  .post('/school/lesson/comment/hide/:courseId/:commentId', koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
+    try { await schoolModel.hideComment(ctx.params.courseId, ctx.params.commentId); } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
   })
   .post('/school/lesson/update/:courseId/:lessonId', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }

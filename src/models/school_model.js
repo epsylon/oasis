@@ -1264,6 +1264,36 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       return certs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     },
 
+    async lessonRootOf(lessonId) {
+      const ssbClient = await openSsb()
+      const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages, ssbClient)
+      return idx.lessonRootOf(lessonId) || lessonId
+    },
+
+    async listHiddenComments(courseId) {
+      const ssbClient = await openSsb()
+      const course = await this.getCourseById(courseId)
+      const messages = await readAll(ssbClient)
+      const hidden = new Set()
+      for (const m of messages) {
+        const c = m.value?.content
+        if (!c || c.type !== "schoolCommentHide" || !c.target) continue
+        if (m.value?.author !== course.author) continue
+        if (c.courseId !== course.rootId) continue
+        hidden.add(c.target)
+      }
+      return hidden
+    },
+
+    async hideComment(courseId, commentId) {
+      const ssbClient = await openSsb()
+      const course = await this.getCourseById(courseId)
+      if (course.author !== ssbClient.id) throw new Error("Only the teacher can hide comments")
+      const content = { type: "schoolCommentHide", courseId: course.rootId, target: commentId, author: ssbClient.id, createdAt: new Date().toISOString() }
+      return new Promise((res, rej) => ssbClient.publish(content, (e, m) => e ? rej(e) : res(m)))
+    },
+
     async listCourses(filter = "ALL", viewerId = null, query = {}) {
       const ssbClient = await openSsb()
       const viewer = viewerId || ssbClient.id

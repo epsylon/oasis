@@ -3225,6 +3225,8 @@ module.exports = {
     schoolInvited: "Gonbidatuak",
     schoolIssueCertificate: "Eman ziurtagiria",
     schoolCertificateTextPlaceholder: "Ziurtagiriaren oharra (aukerakoa)",
+    schoolLessonOpen: "Ikasgaia ireki",
+    schoolCertificatePdf: "PDF",
     schoolCertificates: "Ziurtagiriak",
     schoolNoCertificates: "Oraindik ez da ziurtagiririk eman.",
     schoolEditButton: "Editatu",

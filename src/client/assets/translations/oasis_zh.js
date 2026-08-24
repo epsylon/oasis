@@ -3228,6 +3228,8 @@ module.exports = {
     schoolInvited: "已邀请",
     schoolIssueCertificate: "颁发证书",
     schoolCertificateTextPlaceholder: "证书备注(可选)",
+    schoolLessonOpen: "打开课程",
+    schoolCertificatePdf: "PDF",
     schoolCertificates: "证书",
     schoolNoCertificates: "尚未颁发证书。",
     schoolEditButton: "编辑",

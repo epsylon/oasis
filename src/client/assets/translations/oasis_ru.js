@@ -3227,6 +3227,8 @@ module.exports = {
     schoolInvited: "Приглашённые",
     schoolIssueCertificate: "Выдать сертификат",
     schoolCertificateTextPlaceholder: "Примечание к сертификату (необязательно)",
+    schoolLessonOpen: "Открыть урок",
+    schoolCertificatePdf: "PDF",
     schoolCertificates: "Сертификаты",
     schoolNoCertificates: "Сертификаты ещё не выданы.",
     schoolEditButton: "Редактировать",

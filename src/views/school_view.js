@@ -1,4 +1,4 @@
-const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
+const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
 const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
@@ -12,6 +12,7 @@ const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v || "").trim()
 const isFree = (course) => !(Number(course.price) > 0)
+const isProtected = (course) => !isFree(course) || course.visibility === "INVITE"
 const sumCats = (opinions = {}, cats = []) => (cats || []).reduce((sum, cat) => sum + (Number((opinions || {})[cat]) || 0), 0)
 const renderStarRating = (opinions, voterCount) => {
   const pos = sumCats(opinions, opinionCategories.positive)
@@ -181,20 +182,27 @@ const renderLesson = (lesson, course, isTeacher, returnTo, isStudent = false) =>
         div({ class: "school-lesson-meta" }, span(new Date(lesson.createdAt).toLocaleDateString()))
       )
     : div({ class: "school-lesson" },
-    div({ class: "school-lesson-header" },
-      h3(a({ href: `/school/lesson/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` }, lesson.unit ? `${lesson.unit} — ${lesson.title}` : lesson.title)),
-      isStudent
-        ? form({ method: "POST", action: `/school/lesson/complete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` },
-            input({ type: "hidden", name: "value", value: lesson.completed ? "false" : "true" }),
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: lesson.completed ? "tribe-action-btn school-complete-btn school-complete-btn--done" : "tribe-action-btn school-complete-btn" }, lesson.completed ? `✓ ${i18n.schoolProgressDone}` : i18n.schoolProgressMark)
-          )
-        : null
-    ),
-    p(...renderUrl(lesson.text)),
-    div({ class: "school-lesson-meta" },
-      lesson.sessionDate ? span({ class: "school-session-date" }, `${i18n.schoolSessionDate}: ${new Date(lesson.sessionDate).toLocaleDateString()} · `) : null,
-      span(new Date(lesson.createdAt).toLocaleDateString())
+    details({ class: "school-lesson-details" },
+      summary({ class: "school-lesson-summary" },
+        span({ class: "school-lesson-summary-title" }, (lesson.completed ? "✓ " : "") + (lesson.unit ? `${lesson.unit} — ${lesson.title}` : lesson.title)),
+        span({ class: "school-lesson-summary-meta" },
+          lesson.sessionDate ? `${new Date(lesson.sessionDate).toLocaleDateString()} · ` : "",
+          new Date(lesson.createdAt).toLocaleDateString()
+        )
+      ),
+      div({ class: "school-lesson-body" },
+        renderMd(lesson.text),
+        div({ class: "school-lesson-actions" },
+          a({ href: `/school/lesson/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}`, class: "filter-btn" }, i18n.schoolLessonOpen || "Open lesson"),
+          isStudent
+            ? form({ method: "POST", action: `/school/lesson/complete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}`, class: "inline-form" },
+                input({ type: "hidden", name: "value", value: lesson.completed ? "false" : "true" }),
+                input({ type: "hidden", name: "returnTo", value: returnTo }),
+                button({ type: "submit", class: lesson.completed ? "tribe-action-btn school-complete-btn school-complete-btn--done" : "tribe-action-btn school-complete-btn" }, lesson.completed ? `✓ ${i18n.schoolProgressDone}` : i18n.schoolProgressMark)
+              )
+            : null
+        )
+      )
     )
   )
 
@@ -417,7 +425,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     : null
 
   const exams = safeArr(params.exams)
-  const examsBlock = (isTeacher || isStudent) && (exams.length || (isTeacher && !isFree(course)))
+  const examsBlock = (isTeacher || isStudent) && (exams.length || (isTeacher && isProtected(course)))
     ? div({ class: "school-exams" },
         h2(`${i18n.schoolExams} (${exams.length})`),
         exams.map(exam =>
@@ -486,7 +494,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
                       )
               )
         ),
-        isTeacher && !isFree(course)
+        isTeacher && isProtected(course)
           ? form({ method: "POST", action: `/school/exam/create/${encodeURIComponent(course.id)}` },
               input({ type: "hidden", name: "returnTo", value: returnTo }),
               label(i18n.schoolExamCreate), br,
@@ -518,7 +526,10 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
             span("🎓 "),
             userLink(cert.student),
             cert.text ? span(` — ${cert.text}`) : null,
-            span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`)
+            span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`),
+            (String(cert.student) === String(userId) || isTeacher)
+              ? a({ href: `/school/certificate/pdf/${encodeURIComponent(course.id)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
+              : null
           )
         )
       : p(i18n.schoolNoCertificates)
@@ -719,7 +730,18 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
             button({ type: "submit" }, i18n.schoolAddMaterial)
           )
         )
-      : null
+      : null,
+    renderSharedCommentsSection({
+      action: `/school/lesson/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}/comments`,
+      comments: safeArr(params.comments),
+      returnTo: lessonUrl,
+      commentExtra: isTeacher
+        ? (c) => form({ method: "POST", action: `/school/lesson/comment/hide/${encodeURIComponent(course.id)}/${encodeURIComponent(c.key)}`, class: "inline-form" },
+            input({ type: "hidden", name: "returnTo", value: lessonUrl }),
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
+          )
+        : null
+    })
   )
 
   const tpl = template(

@@ -915,3 +915,20 @@ describe('school: invite courses travel encrypted', (t) => {
     ok(threw);
   });
 });
+
+describe('school: lesson comment moderation', (t) => {
+  t('only the teacher can hide comments, and the hidden set lists them', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course({ title: 'Moderated' }));
+    B.setActor();
+    let denied = false;
+    try { await B.use('school').hideComment(r.key, '%comment1.sha256'); } catch (_) { denied = true; }
+    ok(denied, 'a non-teacher cannot hide');
+    A.setActor();
+    await A.use('school').hideComment(r.key, '%comment1.sha256');
+    const hidden = await A.use('school').listHiddenComments(r.key);
+    ok(hidden.has('%comment1.sha256'), 'hidden comment is listed');
+    ok(!hidden.has('%other.sha256'), 'other comments are unaffected');
+  });
+});

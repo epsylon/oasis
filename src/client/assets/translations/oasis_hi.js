@@ -3227,6 +3227,8 @@ module.exports = {
     schoolInvited: "आमंत्रित",
     schoolIssueCertificate: "प्रमाणपत्र जारी करें",
     schoolCertificateTextPlaceholder: "प्रमाणपत्र नोट (वैकल्पिक)",
+    schoolLessonOpen: "पाठ खोलें",
+    schoolCertificatePdf: "PDF",
     schoolCertificates: "प्रमाणपत्र",
     schoolNoCertificates: "अभी तक कोई प्रमाणपत्र जारी नहीं हुआ।",
     schoolEditButton: "संपादित करें",

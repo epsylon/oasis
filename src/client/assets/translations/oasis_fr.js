@@ -3217,6 +3217,8 @@ module.exports = {
     schoolInvited: "Invités",
     schoolIssueCertificate: "Émettre un certificat",
     schoolCertificateTextPlaceholder: "Note du certificat (optionnel)",
+    schoolLessonOpen: "Ouvrir la leçon",
+    schoolCertificatePdf: "PDF",
     schoolCertificates: "Certificats",
     schoolNoCertificates: "Aucun certificat émis pour le moment.",
     schoolEditButton: "Modifier",

@@ -5662,6 +5662,15 @@ a.pm-btn:hover { text-decoration: none }
 .chat-pin-toggle{position:absolute;top:4px;right:6px}
 .chat-has-pin-toggle{padding-right:38px}
 .chat-pinned-link{margin-right:8px}
+.school-lesson-details{background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none}
+.school-lesson-summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;list-style:none;font-weight:bold}
+.school-lesson-summary::-webkit-details-marker{display:none}
+.school-lesson-summary-title{color:#ffa300}
+.school-lesson-summary-title::after{content:" \25BE";opacity:.7}
+details[open] > .school-lesson-summary .school-lesson-summary-title::after{content:" \25B4"}
+.school-lesson-summary-meta{font-size:.78em;color:#888;white-space:nowrap;font-weight:normal}
+.school-lesson-body{background:transparent !important;border:0 !important;padding:10px 0 0 !important;margin:0;box-shadow:none}
+.school-lesson-actions{display:flex;gap:8px;align-items:center;margin-top:8px;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none}
 .feed-workspace{display:grid;grid-template-columns:230px minmax(0,1fr) 230px;gap:18px;align-items:start;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0;overflow:visible}
 .feed-workspace-center{min-width:0;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0;overflow:visible}
 .feed-side{position:sticky;top:12px;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0;overflow:visible}

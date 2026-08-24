@@ -130,7 +130,8 @@ exports.cvView = async (cv, certificates = []) => {
                   a({ href: `/school/course/${encodeURIComponent(cert.courseId)}` }, cert.courseTitle || cert.courseId),
                   span(" — "),
                   userLink(cert.author),
-                  span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`)
+                  span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`),
+                  a({ href: `/school/certificate/pdf/${encodeURIComponent(cert.courseId)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
                 )
               )
             )
@@ -240,7 +241,8 @@ exports.cvView = async (cv, certificates = []) => {
               a({ href: `/school/course/${encodeURIComponent(cert.courseId)}` }, cert.courseTitle || cert.courseId),
               span(" — "),
               userLink(cert.author),
-              span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`)
+              span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`),
+              a({ href: `/school/certificate/pdf/${encodeURIComponent(cert.courseId)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
             )
           )
         )
