@@ -265,7 +265,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
               label(i18n.taskTitleLabel), br(),
               input({ type: "text", name: "title", maxlength: "100", required: true, value: formData.title || params.prefillTitle || "" }), br(),
               label(i18n.taskDescriptionLabel), br(),
-              textarea({ name: "description", required: true, placeholder: i18n.taskDescriptionPlaceholder, rows: "4" }, formData.description || params.prefillDescription || ""), br(),
+              textarea({ maxlength: "5000", name: "description", required: true, placeholder: i18n.taskDescriptionPlaceholder, rows: "4" }, formData.description || params.prefillDescription || ""), br(),
               ...renderGalleryFields(formData, currentFilter === "edit"),
               br(),
               label(i18n.taskStartTimeLabel), br(),

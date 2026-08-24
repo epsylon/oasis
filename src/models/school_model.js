@@ -316,6 +316,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       invited: normalizeIds(c.invited),
       startDate: c.startDate || null,
       chatId: c.chatId || null,
+      inviteCode: c.inviteCode || null,
       author: node.author || c.author,
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
@@ -514,6 +515,8 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       }
 
       if (data.invited !== undefined) patch.invited = normalizeIds(data.invited)
+
+      if (data.inviteCode !== undefined) patch.inviteCode = String(data.inviteCode || "") || null
 
       if (data.startDate !== undefined) patch.startDate = normalizeDate(data.startDate)
 
@@ -972,6 +975,8 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       if (course.visibility !== "INVITE") throw new Error("Only invite courses use invitation codes")
       if (!schoolCrypto) throw new Error("School crypto unavailable")
 
+      if (course.inviteCode) return { code: course.inviteCode, courseId: course.rootId }
+
       const key = await ensureCourseKey(ssbClient, course.rootId)
       if (!key) throw new Error("Course key unavailable")
 
@@ -982,6 +987,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
         type: "school-invite", target: course.rootId, ek, salt,
         codeHash: schoolCrypto.hashInviteCode(code, salt)
       }, (e) => e ? rej(e) : res()))
+      try { await this.updateCourse(courseId, { inviteCode: code }) } catch (_) {}
       return { code, courseId: course.rootId }
     },
 
@@ -1010,7 +1016,12 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       const node = idx.courseNodes.get(tipId)
       if (!node) throw new Error("Course not found")
       const teacherId = node.author
-      const priceN = toNum(node.c.price)
+      let cc = node.c
+      if (cc.encryptedPayload) {
+        const dec = schoolCrypto.decryptContent(cc, [[courseKey]])
+        if (dec && !dec._undecryptable) cc = dec
+      }
+      const priceN = toNum(cc.price)
 
       if (teacherId !== me) {
         const enrollments = idx.enrollByCourse.get(matched.target) || new Map()
@@ -1024,9 +1035,9 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
           const msg = { type: "schoolEnroll", courseId: matched.target, value: true, transferId, createdAt: new Date().toISOString() }
           await new Promise((res, rej) => ssbClient.private.publish(msg, [me, teacherId], (e, m) => e ? rej(e) : res(m)))
         }
-        if (node.c.chatId) {
+        if (cc.chatId) {
           try {
-            await new Promise((res) => ssbClient.publish({ type: "chatMember", target: node.c.chatId, member: me, on: true, createdAt: new Date().toISOString() }, () => res()))
+            await new Promise((res) => ssbClient.publish({ type: "chatMember", target: cc.chatId, member: me, on: true, createdAt: new Date().toISOString() }, () => res()))
           } catch {}
         }
       }

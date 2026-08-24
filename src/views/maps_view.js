@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, label, br, a, span, textar
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderInviteQrCard } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapWithPins, renderZoomedMapWithPins, getViewportBounds, latLngToPx, pxToLatLng, MAP_W, MAP_H, getMaxTileZoom } = require("../maps/map_renderer");
@@ -171,7 +171,8 @@ const renderMapOwnerActions = (filter, mapObj, params = {}) => {
     if (openInvite) {
       actions.push(div({ class: 'tribe-open-invite' },
         span({ class: 'card-label' }, i18n.tribeInviteCodeText),
-        span({ class: 'tribe-open-invite-code' }, openInvite.code)
+        span({ class: 'tribe-open-invite-code' }, openInvite.code),
+        renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(openInvite.code)}` })
       ));
       actions.push(form({ method: "POST", action: `/maps/open-invite/remove/${encodeURIComponent(mapObj.key)}` },
         button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)));
@@ -223,7 +224,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.mapTitlePlaceholder || "Map title", value: titleVal }),
         br(), br(),
         label(i18n.mapDescriptionLabel), br(),
-        textarea({ name: "description", placeholder: i18n.mapDescriptionPlaceholder, rows: "3" }, descVal),
+        textarea({ maxlength: "5000", name: "description", placeholder: i18n.mapDescriptionPlaceholder, rows: "3" }, descVal),
         br(), br(),
         label(i18n.mapTagsLabel), br(),
         input({ type: "text", name: "tags", placeholder: i18n.mapTagsPlaceholder, value: tagsValue }),
@@ -235,7 +236,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
           option({ value: "CLOSED", ...(mapTypeVal === "CLOSED" ? { selected: true } : {}) }, i18n.mapTypeClosed)),
         br(), br(),
         label(i18n.mapMarkerLabelField), br(),
-        textarea({ name: "markerLabel", placeholder: i18n.mapMarkerLabelPlaceholder, rows: "3" }, markerLabelVal),
+        textarea({ maxlength: "5000", name: "markerLabel", placeholder: i18n.mapMarkerLabelPlaceholder, rows: "3" }, markerLabelVal),
         br(), br(),
         label(i18n.markerImageLabel || "Marker Image"), br(),
         input({ type: "file", name: "image", accept: "image/*" }),
@@ -284,7 +285,7 @@ const renderMarkerForm = (mapObj, returnTo, params = {}, tribeMembers = []) => {
     form({ method: "POST", action: `/maps/${encodeURIComponent(mapObj.key)}/marker`, class: "map-form", enctype: "multipart/form-data" },
       returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,    
       label(i18n.mapMarkerLabelField),
-      textarea({ name: "label", placeholder: i18n.mapMarkerLabelPlaceholder, rows: "3" }, params.mkMarkerLabel || ""),
+      textarea({ maxlength: "5000", name: "label", placeholder: i18n.mapMarkerLabelPlaceholder, rows: "3" }, params.mkMarkerLabel || ""),
       label(i18n.markerImageLabel || "Marker Image"),
       input({ type: "file", name: "image", accept: "image/*" }),
       br(),br(),

@@ -159,7 +159,7 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
       br(),
       label(i18n.imageDescriptionLabel),
       br(),
-      textarea({ name: "description", placeholder: i18n.imageDescriptionPlaceholder, rows: "4" }, imageToEdit?.description || ""),
+      textarea({ maxlength: "5000", name: "description", placeholder: i18n.imageDescriptionPlaceholder, rows: "4" }, imageToEdit?.description || ""),
       br(),
       label(i18n.mapLocationTitle || "Map Location"),
       br(),

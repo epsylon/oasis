@@ -2,6 +2,7 @@ function buildValidatedTombstoneSet(messages) {
   if (!Array.isArray(messages)) return new Set();
   const tombClaims = new Map();
   const targetAuthors = new Map();
+  const targetContentAuthors = new Map();
   const targetRoots = new Map();
   for (const m of messages) {
     if (!m || !m.value) continue;
@@ -16,12 +17,13 @@ function buildValidatedTombstoneSet(messages) {
     }
     if (m.key) {
       targetAuthors.set(m.key, v.author);
+      if (typeof c === 'object' && c.type === 'feed' && typeof c.author === 'string') targetContentAuthors.set(m.key, c.author);
       if (typeof c === 'object' && c._rootId) targetRoots.set(m.key, c._rootId);
     }
   }
   const out = new Set();
   for (const [target, { author, rootId }] of tombClaims.entries()) {
-    if (targetAuthors.get(target) !== author) continue;
+    if (targetAuthors.get(target) !== author && targetContentAuthors.get(target) !== author) continue;
     if (rootId) {
       const targetRoot = targetRoots.get(target);
       if (targetRoot !== rootId) continue;

@@ -67,8 +67,11 @@ const renderVotesSummary = (opinions = {}) => {
   if (!entries.length) return null;
   entries.sort((a, b) => Number(b[1]) - Number(a[1]) || String(a[0]).localeCompare(String(b[0])));
   return div(
-    { class: "votes" },
-    entries.map(([category, count]) => span({ class: "vote-category" }, `${category}: ${count}`))
+    { class: "votes feed-votes-summary" },
+    entries.map(([category, count]) => {
+      const label = i18n['vote' + category.charAt(0).toUpperCase() + category.slice(1)] || category;
+      return span({ class: "vote-category" }, `${label} ${count}`);
+    })
   );
 };
 
@@ -101,7 +104,8 @@ const renderFeedCard = (feed) => {
 
     const alreadyRefeeded = Array.isArray(content.refeeds_inhabitants) && me ? content.refeeds_inhabitants.includes(me) : false;
 
-    const authorId = feed.value.author || content.author || "";
+    const authorId = content.author || feed.value.author || "";
+    const signerId = feed.value.author || "";
     const refeedsNum = Number(content.refeeds || 0) || 0;
     const commentCount = Number(content.commentCount || 0);
     const styledHtml = rewriteHashtagLinks(renderTextWithStyles(safeText));
@@ -111,7 +115,11 @@ const renderFeedCard = (feed) => {
         div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(feed.key, `/feed/${encodeURIComponent(feed.key)}`, { author: authorId, reportTitle: safeText })
+            renderContentActions(feed.key, `/feed/${encodeURIComponent(feed.key)}`, {
+                author: authorId,
+                reportTitle: safeText,
+                ...(((signerId && String(signerId) === String(me)) || (authorId && String(authorId) === String(me))) ? { deleteAction: `/feed/delete/${encodeURIComponent(feed.key)}` } : {})
+            })
         ),
         div(
             { class: "card-section feed-card-body" },
@@ -129,19 +137,7 @@ const renderFeedCard = (feed) => {
             div(
                 { class: "feed-main" },
                 div({ class: "feed-text", innerHTML: sanitizeHtml(styledHtml) }),
-                h2(
-                    `${i18n.totalOpinions}: ${totalCount}`,
-                    ...(() => {
-                        const entries = voteEntries.filter(([, v]) => Number(v) > 0);
-                        if (!entries.length) return [];
-                        const maxVal = Math.max(...entries.map(([, v]) => Number(v)));
-                        const dominant = entries.filter(([, v]) => Number(v) === maxVal).map(([k]) => i18n['vote' + k.charAt(0).toUpperCase() + k.slice(1)] || k);
-                        return [
-                            span({ class: 'feed-vote-sep' }, '|'),
-                            span({ class: 'feed-vote-dominant' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
-                        ];
-                    })()
-                ),
+                renderVotesSummary(content.opinions),
                 p(
                     { class: "card-footer" },
                     span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),
@@ -297,7 +293,8 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
   const content = feed.value?.content || {};
   const rawText = typeof content.text === "string" ? content.text : "";
   const safeText = rawText.trim();
-  const authorId = feed.value?.author || content.author || "";
+  const authorId = content.author || feed.value?.author || "";
+  const signerId = feed.value?.author || "";
   const createdAt = formatDate(feed);
   const styledHtml = rewriteHashtagLinks(renderTextWithStyles(safeText));
   const me = config?.keys?.id;
@@ -324,7 +321,12 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
         { class: "bookmark-item card feed-detail-card" },
         div({ class: "card-header activity-card-header" },
           span(),
-          renderContentActions(feed.key, null, { spread: params.spreads || null, author: authorId, reportTitle: safeText })
+          renderContentActions(feed.key, null, {
+            spread: params.spreads || null,
+            author: authorId,
+            reportTitle: safeText,
+            ...(((signerId && String(signerId) === String(me)) || (authorId && String(authorId) === String(me))) ? { deleteAction: `/feed/delete/${encodeURIComponent(feed.key)}` } : {})
+          })
         ),
         br,
         div(

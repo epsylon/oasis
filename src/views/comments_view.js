@@ -47,7 +47,7 @@ const renderCommentsSection = ({ action, comments = [], returnTo = null, closedN
             h2({ class: "comment-form-title" }, i18n.voteNewCommentLabel),
             form({ method: "POST", action, class: "comment-form", enctype: "multipart/form-data" },
               returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-              textarea({ name: "text", rows: 4, class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
+              textarea({ name: "text", rows: 4, maxlength: "4000", class: "comment-textarea", placeholder: i18n.voteNewCommentPlaceholder }),
               div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
               br(),
               button({ type: "submit", class: "comment-submit-btn" }, i18n.voteNewCommentButton)

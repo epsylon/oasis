@@ -382,7 +382,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               br(),
               label(i18n.marketItemDescription),
               br(),
-              textarea({ name: "description", id: "description", placeholder: i18n.marketItemDescriptionPlaceholder, rows: "6", required: true }, (itemEdit && itemEdit.description) || params.description || ""),
+              textarea({ maxlength: "5000", name: "description", id: "description", placeholder: i18n.marketItemDescriptionPlaceholder, rows: "6", required: true }, (itemEdit && itemEdit.description) || params.description || ""),
               br(),
               br(),
               label(i18n.marketCreateFormImageLabel),

@@ -174,7 +174,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       br(),
       span(i18n.audioDescriptionLabel),
       br(),
-      textarea({ name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows: "4" }, audioToEdit?.description || ""),
+      textarea({ maxlength: "5000", name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows: "4" }, audioToEdit?.description || ""),
       br(),
       span(i18n.mapLocationTitle || "Map Location"),
       br(),

@@ -141,8 +141,15 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     ? a({ href: `/pm?recipients=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-pm', title: i18n.pmContentTooltip }, '✉')
     : null;
 
-  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn) return null;
-  return div({ class: 'content-actions' }, spreadBtn, pinBtn, reportBtn, pmBtn, chainBtn, contentBtn);
+  const deleteBtn = o.deleteAction
+    ? form({ method: 'POST', action: o.deleteAction, class: 'content-action-form' },
+        o.returnTo ? input({ type: 'hidden', name: 'returnTo', value: o.returnTo }) : null,
+        button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.chatDelete }, '✕')
+      )
+    : null;
+
+  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !deleteBtn) return null;
+  return div({ class: 'content-actions' }, spreadBtn, pinBtn, deleteBtn, reportBtn, pmBtn, chainBtn, contentBtn);
 };
 exports.renderContentActions = renderContentActions;
 

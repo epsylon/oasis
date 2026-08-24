@@ -2096,9 +2096,20 @@ router
     try {
       const { courseId } = await schoolModel.joinByInvite(code);
       ctx.redirect(`/school/course/${encodeURIComponent(courseId)}`);
-    } catch (_) {
-      ctx.redirect('/school');
+    } catch (err) {
+      sendErrorPage(ctx, err && err.message ? err.message : 'Invalid or expired invite code', { status: 400 });
     }
+  })
+  .get('/qr-invite-code/:code', async (ctx) => {
+    try {
+      const code = String(ctx.params.code || '');
+      if (!/^[A-Za-z0-9]{4,128}$/.test(code)) { ctx.status = 404; ctx.body = ''; return; }
+      const QRCode = require('../server/node_modules/qrcode');
+      const buf = await QRCode.toBuffer(code, { type: 'png', width: 240, margin: 1, errorCorrectionLevel: 'M' });
+      ctx.set('Content-Type', 'image/png');
+      ctx.set('Cache-Control', 'no-store');
+      ctx.body = buf;
+    } catch (e) { ctx.status = 500; ctx.body = ''; }
   })
   .post('/school/grant/:id', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
@@ -4591,6 +4602,7 @@ router
     try {
       const mentions = await extractMentions(text);
       await feedModel.createFeed(text, mentions);
+    try { activityModel.invalidateCache(); } catch (_) {}
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }); return; }
     ctx.redirect('/welcome');
   })
@@ -7079,9 +7091,15 @@ router
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(ctx.get("Referer") || "/feed");
   })
+  .post("/feed/delete/:id", koaBody(), async (ctx) => {
+    try { await feedModel.deleteFeedById(ctx.params.id); } catch (_) {}
+    try { activityModel.invalidateCache(); } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, '/feed?filter=MINE', ['/feed']));
+  })
   .post("/feed/refeed/:id", koaBody(), async (ctx) => {
     try {
       await feedModel.createRefeed(ctx.params.id);
+    try { activityModel.invalidateCache(); } catch (_) {}
     } catch (e) {
       if (e.message !== "Already refeeded") throw e;
     }

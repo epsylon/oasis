@@ -14,7 +14,7 @@ exports.aiView = (history = [], userPrompt = '') => {
           span({ class: 'user-prompt-text' }, `"${userPrompt}"`)
         ) : null,
         form({ method: 'POST', action: '/ai', class: 'ai-prompt-form' },
-          textarea({ name: 'input', rows: 4, placeholder: i18n.aiInputPlaceholder, required: true }),
+          textarea({ maxlength: "5000", name: 'input', rows: 4, placeholder: i18n.aiInputPlaceholder, required: true }),
           br(),
           div({ class: 'ai-submit-row' },
             button({ type: 'submit' }, i18n.aiSubmitButton)
@@ -76,7 +76,7 @@ exports.aiView = (history = [], userPrompt = '') => {
                           option({ value: '5' }, '★★★★★')
                         )
                       ),
-                      textarea({ name: 'custom', rows: 3, placeholder: i18n.aiCustomAnswerPlaceholder, class: 'ai-approve-custom' }),
+                      textarea({ maxlength: "5000", name: 'custom', rows: 3, placeholder: i18n.aiCustomAnswerPlaceholder, class: 'ai-approve-custom' }),
                       div({ class: 'ai-approve-actions' },
                         button({ type: 'submit', class: 'approve-btn' }, i18n.aiApproveTrain)
                       )

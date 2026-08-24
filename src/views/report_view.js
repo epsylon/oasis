@@ -155,22 +155,22 @@ const renderTemplateForCategory = (category, templateData = {}) => {
       h2({ class: "report-template-title" }, i18n.reportsBugTemplateTitle),
       label(i18n.reportsStepsToReproduceLabel),
       br(),
-      textarea({ name: "stepsToReproduce", rows: "4", placeholder: i18n.reportsStepsToReproducePlaceholder }, tval("stepsToReproduce")),
+      textarea({ maxlength: "5000", name: "stepsToReproduce", rows: "4", placeholder: i18n.reportsStepsToReproducePlaceholder }, tval("stepsToReproduce")),
       br(),
       br(),
       label(i18n.reportsExpectedBehaviorLabel),
       br(),
-      textarea({ name: "expectedBehavior", rows: "3", placeholder: i18n.reportsExpectedBehaviorPlaceholder }, tval("expectedBehavior")),
+      textarea({ maxlength: "5000", name: "expectedBehavior", rows: "3", placeholder: i18n.reportsExpectedBehaviorPlaceholder }, tval("expectedBehavior")),
       br(),
       br(),
       label(i18n.reportsActualBehaviorLabel),
       br(),
-      textarea({ name: "actualBehavior", rows: "3", placeholder: i18n.reportsActualBehaviorPlaceholder }, tval("actualBehavior")),
+      textarea({ maxlength: "5000", name: "actualBehavior", rows: "3", placeholder: i18n.reportsActualBehaviorPlaceholder }, tval("actualBehavior")),
       br(),
       br(),
       label(i18n.reportsEnvironmentLabel),
       br(),
-      textarea({ name: "environment", rows: "3", placeholder: i18n.reportsEnvironmentPlaceholder }, tval("environment")),
+      textarea({ maxlength: "5000", name: "environment", rows: "3", placeholder: i18n.reportsEnvironmentPlaceholder }, tval("environment")),
       br(),
       br(),
       label(i18n.reportsReproduceRateLabel),
@@ -193,17 +193,17 @@ const renderTemplateForCategory = (category, templateData = {}) => {
       h2({ class: "report-template-title" }, i18n.reportsContentTemplateTitle),
       label(i18n.reportsContentLocationLabel),
       br(),
-      textarea({ name: "contentLocation", rows: "3", placeholder: i18n.reportsContentLocationPlaceholder }, tval("contentLocation")),
+      textarea({ maxlength: "5000", name: "contentLocation", rows: "3", placeholder: i18n.reportsContentLocationPlaceholder }, tval("contentLocation")),
       br(),
       br(),
       label(i18n.reportsWhyInappropriateLabel),
       br(),
-      textarea({ name: "whyInappropriate", rows: "4", placeholder: i18n.reportsWhyInappropriatePlaceholder }, tval("whyInappropriate")),
+      textarea({ maxlength: "5000", name: "whyInappropriate", rows: "4", placeholder: i18n.reportsWhyInappropriatePlaceholder }, tval("whyInappropriate")),
       br(),
       br(),
       label(i18n.reportsEvidenceLinksLabel),
       br(),
-      textarea({ name: "evidenceLinks", rows: "3", placeholder: i18n.reportsEvidenceLinksPlaceholder }, tval("evidenceLinks"))
+      textarea({ maxlength: "5000", name: "evidenceLinks", rows: "3", placeholder: i18n.reportsEvidenceLinksPlaceholder }, tval("evidenceLinks"))
     );
   }
 
@@ -212,17 +212,17 @@ const renderTemplateForCategory = (category, templateData = {}) => {
     h2({ class: "report-template-title" }, i18n.reportsFeatureTemplateTitle),
     label(i18n.reportsProblemStatementLabel),
     br(),
-    textarea({ name: "problemStatement", rows: "4", placeholder: i18n.reportsProblemStatementPlaceholder }, tval("problemStatement")),
+    textarea({ maxlength: "5000", name: "problemStatement", rows: "4", placeholder: i18n.reportsProblemStatementPlaceholder }, tval("problemStatement")),
     br(),
     br(),
     label(i18n.reportsUserStoryLabel),
     br(),
-    textarea({ name: "userStory", rows: "3", placeholder: i18n.reportsUserStoryPlaceholder }, tval("userStory")),
+    textarea({ maxlength: "5000", name: "userStory", rows: "3", placeholder: i18n.reportsUserStoryPlaceholder }, tval("userStory")),
     br(),
     br(),
     label(i18n.reportsAcceptanceCriteriaLabel),
     br(),
-    textarea({ name: "acceptanceCriteria", rows: "4", placeholder: i18n.reportsAcceptanceCriteriaPlaceholder }, tval("acceptanceCriteria"))
+    textarea({ maxlength: "5000", name: "acceptanceCriteria", rows: "4", placeholder: i18n.reportsAcceptanceCriteriaPlaceholder }, tval("acceptanceCriteria"))
   );
 };
 

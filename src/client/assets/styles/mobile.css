@@ -975,3 +975,35 @@ a.create-button {
   overflow: hidden !important;
   text-overflow: ellipsis !important;
 }
+.school-lesson-summary {
+  flex-wrap: wrap !important;
+}
+.school-lesson-summary-title {
+  flex: 1 1 100% !important;
+  min-width: 0 !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+.school-lesson-summary-meta {
+  flex: 1 1 100% !important;
+  white-space: normal !important;
+}
+.feed-opinions-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 8px !important;
+}
+.feed-votes-summary {
+  flex-wrap: wrap !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+.feed-votes-summary .vote-category {
+  white-space: nowrap !important;
+  flex: 0 0 auto !important;
+}
+.tribe-open-invite-code {
+  font-size: .85em !important;
+}

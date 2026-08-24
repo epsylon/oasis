@@ -932,3 +932,28 @@ describe('school: lesson comment moderation', (t) => {
     ok(!hidden.has('%other.sha256'), 'other comments are unaffected');
   });
 });
+
+describe('school: teacher sees the invite code persistently', (t) => {
+  t('after generating, the course record carries the code (teacher and student see it, outsiders do not)', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course({ title: 'PersistCode', visibility: 'INVITE' }));
+    const { code } = await A.use('school').generateInvite(r.key);
+    const mine = await A.use('school').getCourseById(r.key, A.keypair.id);
+    eq(mine.inviteCode, code, 'teacher reads the stored code from the course');
+    B.setActor();
+    await B.use('school').joinByInvite(code);
+    const list = await A.use('school').listCourses('MINE', A.keypair.id);
+    eq(list.find(c => c.title === 'PersistCode').inviteCode, code, 'code survives in listings too');
+  });
+});
+
+describe('school: one reusable code per course', (t) => {
+  t('generating again returns the same stored code', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('school').createCourse(course({ title: 'OneCode', visibility: 'INVITE' }));
+    const first = await A.use('school').generateInvite(r.key);
+    const second = await A.use('school').generateInvite(r.key);
+    eq(second.code, first.code, 'the course keeps its single reusable code');
+  });
+});

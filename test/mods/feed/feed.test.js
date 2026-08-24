@@ -66,3 +66,34 @@ describe('feed: microblogging workspace mode', (t) => {
     ok(!plain.includes('feed-workspace'), 'no workspace outside the mode');
   });
 });
+
+describe('feed: author can delete own feeds', (t) => {
+  t('a deleted feed disappears and strangers cannot delete', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('feed').createFeed('codigo caducado #oasis', []);
+    B.setActor();
+    let denied = false;
+    try { await B.use('feed').deleteFeedById(r.key); } catch (_) { denied = true; }
+    ok(denied, 'a stranger cannot delete');
+    A.setActor();
+    await A.use('feed').deleteFeedById(r.key);
+    const feeds = await A.use('feed').listFeeds('ALL');
+    ok(!feeds.find(m => (m.value?.content?.text || '') === 'codigo caducado #oasis'), 'deleted feed no longer listed');
+  });
+});
+
+describe('feed: content author can delete forged copies', (t) => {
+  t('a tombstone from the declared content author hides a copy signed by someone else', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const ssbB = await B.cooler.open();
+    await new Promise((res, rej) => ssbB.publish({ type: 'feed', text: 'forged legacy copy', author: A.keypair.id, opinions: { love: 1 }, createdAt: new Date().toISOString() }, e => e ? rej(e) : res()));
+    A.setActor();
+    let feeds = await A.use('feed').listFeeds('ALL');
+    const copy = feeds.find(m => (m.value?.content?.text || '') === 'forged legacy copy');
+    ok(copy, 'forged copy visible before delete');
+    await A.use('feed').deleteFeedById(copy.key);
+    feeds = await A.use('feed').listFeeds('ALL');
+    ok(!feeds.find(m => (m.value?.content?.text || '') === 'forged legacy copy'), 'content author tombstone hides it');
+  });
+});

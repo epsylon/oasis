@@ -211,7 +211,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     br(),
     label({ for: 'description' }, i18n.tribeDescriptionLabel),
     br,
-    textarea({ name: 'description', id: 'description', required: true, rows: 4, cols: 50, placeholder: i18n.tribeDescriptionPlaceholder }, tribeToEdit.description || ''),
+    textarea({ maxlength: "3000", name: 'description', id: 'description', required: true, rows: 4, cols: 50, placeholder: i18n.tribeDescriptionPlaceholder }, tribeToEdit.description || ''),
     br,
     label({ for: 'location' }, i18n.tribeLocationLabel),
     br,
@@ -770,7 +770,7 @@ const renderCreateForm = (tribe, contentType, fields) => {
     form(formAttrs,
       ...fields.map(f => {
         const prefix = f.spaceBefore ? [br()] : [];
-        if (f.type === 'textarea') return [...prefix, label({ for: f.name }, f.label), br, textarea({ name: f.name, id: f.name, rows: f.rows || 4, required: f.required, placeholder: f.placeholder }, ''), br()];
+        if (f.type === 'textarea') return [...prefix, label({ for: f.name }, f.label), br, textarea({ maxlength: "3000", name: f.name, id: f.name, rows: f.rows || 4, required: f.required, placeholder: f.placeholder }, ''), br()];
         if (f.type === 'select') return [...prefix, label({ for: f.name }, f.label), br, select({ name: f.name, id: f.name }, ...f.options.map(o => option({ value: o.value }, o.label))), br()];
         if (f.type === 'file') return [...prefix, label({ for: f.name }, f.label), br, input({ type: 'file', name: f.name, id: f.name, accept: f.accept || '*/*' }), br()];
         const attrs = { type: f.type || 'text', name: f.name, id: f.name, required: f.required, placeholder: f.placeholder };
@@ -912,7 +912,7 @@ const renderTribePollsSection = (tribe, items, query) => {
         label(i18n.pollQuestion), br,
         input({ type: 'text', name: 'question', required: true, maxlength: '300', placeholder: i18n.pollQuestionPlaceholder }), br(),
         label(i18n.pollOptions), br,
-        textarea({ name: 'options', rows: 5, required: true, placeholder: i18n.pollOptionsPlaceholder }, ''), br(),
+        textarea({ maxlength: "3000", name: 'options', rows: 5, required: true, placeholder: i18n.pollOptionsPlaceholder }, ''), br(),
         div({ class: 'poll-switch' },
           input({ type: 'hidden', name: 'anonymous', value: '0' }),
           label(input({ type: 'checkbox', name: 'anonymous', value: '1' }), ' ', i18n.pollAnonymousLabel)
@@ -979,7 +979,7 @@ const renderVotationsSection = (tribe, items, query) => {
         label({ for: 'title' }, i18n.tribeVotationTitle), br,
         input({ type: 'text', name: 'title', maxlength: '100', id: 'title', required: true, placeholder: i18n.tribeVotationTitle }), br(),
         label({ for: 'description' }, i18n.tribeVotationDescription), br,
-        textarea({ name: 'description', id: 'description', rows: 3, placeholder: i18n.tribeVotationDescription }, ''), br(),
+        textarea({ maxlength: "3000", name: 'description', id: 'description', rows: 3, placeholder: i18n.tribeVotationDescription }, ''), br(),
         label({ for: 'deadline' }, i18n.tribeVotationDeadline), br,
         input({ type: 'date', name: 'deadline', id: 'deadline', min: today }), br(),
         br(),
@@ -1110,7 +1110,7 @@ const renderForumSection = (tribe, items, query) => {
       ),
       div({ class: 'tribe-forum-reply-form' },
         form({ method: 'POST', action: `${tribeUrl}/forum/${encodeURIComponent(threadId)}/reply` },
-          textarea({ name: 'description', rows: 3, required: true, placeholder: i18n.tribeForumReply }),
+          textarea({ maxlength: "3000", name: 'description', rows: 3, required: true, placeholder: i18n.tribeForumReply }),
           br(),
           button({ type: 'submit', class: 'forum-send-btn' }, i18n.tribeForumReply)
         )
@@ -1240,7 +1240,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
           label({ for: 'url' }, i18n.bookmarkUrlLabel || 'URL'), br,
           input({ type: 'url', name: 'url', id: 'url', required: true, placeholder: 'https://' }), br(),br(),
           label({ for: 'description' }, i18n.tribeMediaDescription), br,
-          textarea({ name: 'description', id: 'description', rows: 3, placeholder: i18n.tribeMediaDescription }, ''), br(),
+          textarea({ maxlength: "3000", name: 'description', id: 'description', rows: 3, placeholder: i18n.tribeMediaDescription }, ''), br(),
           button({ type: 'submit', class: 'create-button' }, mediaBtnLabel)
         )
       );
@@ -1252,7 +1252,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
         label({ for: 'title' }, i18n.tribeMediaTitle), br,
         input({ type: 'text', name: 'title', maxlength: '100', id: 'title', required: true, placeholder: i18n.tribeMediaTitle }), br(),
         label({ for: 'description' }, i18n.tribeMediaDescription), br,
-        textarea({ name: 'description', id: 'description', rows: 3, placeholder: i18n.tribeMediaDescription }, ''), br(),
+        textarea({ maxlength: "3000", name: 'description', id: 'description', rows: 3, placeholder: i18n.tribeMediaDescription }, ''), br(),
         label({ for: 'media' }, i18n.tribeMediaUpload), br,
         input({ type: 'file', name: 'media', id: 'media', accept: acceptForMediaType[mediaType] || '*/*', required: true }), br(), br(),
         button({ type: 'submit', class: 'create-button' }, mediaBtnLabel)
@@ -1934,7 +1934,7 @@ const rulesBlock = (tribe, rules, isCreator) => div({},
           label({}, i18n.tribeGovRuleTitle || 'Title'), br(),
           input({ type: 'text', name: 'title', maxlength: '100', required: true }), br(), br(),
           label({}, i18n.tribeGovRuleBody || 'Body'), br(),
-          textarea({ name: 'body', rows: 4 }), br(), br(),
+          textarea({ maxlength: "3000", name: 'body', rows: 4 }), br(), br(),
           button({ type: 'submit', class: 'create-button' }, i18n.save || 'Save')
         )
       )

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -119,7 +119,7 @@ const renderChatForm = (filter, chat = {}, params = {}) => {
       span(i18n.title || "Title"), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.chatTitlePlaceholder, value: chat.title || "" }), br(), br(),
       span(i18n.chatDescription), br(),
-      textarea({ name: "description", rows: 4, placeholder: i18n.chatDescriptionPlaceholder }, chat.description || ""), br(), br(),
+      textarea({ name: "description", rows: 4, maxlength: "1000", placeholder: i18n.chatDescriptionPlaceholder }, chat.description || ""), br(), br(),
       span(i18n.uploadMedia), br(),
       input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
       span(i18n.chatCategory), br(),
@@ -417,7 +417,8 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         if (openInvite) return [
           div({ class: "tribe-open-invite" },
             span({ class: "card-label" }, i18n.tribeInviteCodeText),
-            span({ class: "tribe-open-invite-code" }, openInvite.code)
+            span({ class: "tribe-open-invite-code" }, openInvite.code),
+            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(openInvite.code)}` })
           ),
           form({ method: "POST", action: `/chats/open-invite/remove` },
             input({ type: "hidden", name: "chatId", value: chat.key }),
@@ -526,7 +527,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           form({ method: "POST", action: `/chats/${encodeURIComponent(chat.key)}/message`, enctype: "multipart/form-data" },
             input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}#chat-latest` }),
             replyMsg ? input({ type: "hidden", name: "replyTo", value: replyMsg.key }) : null,
-            textarea({ name: "text", rows: 3, placeholder: i18n.chatMessagePlaceholder }), br(),
+            textarea({ name: "text", rows: 3, maxlength: "3000", placeholder: i18n.chatMessagePlaceholder }), br(),
             span(i18n.uploadMedia), br(),
             input({ type: "file", name: "image", accept: "image/*,video/*" }), br(), br(),
             button({ type: "submit", class: "filter-btn" }, i18n.chatSendMessage)
@@ -541,7 +542,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
             span(i18n.pollQuestion), br(),
             input({ type: "text", name: "question", required: true, maxlength: "300", placeholder: i18n.pollQuestionPlaceholder }), br(), br(),
             span(i18n.pollOptions), br(),
-            textarea({ name: "options", rows: 4, required: true, placeholder: i18n.pollOptionsPlaceholder }), br(), br(),
+            textarea({ maxlength: "1000", name: "options", rows: 4, required: true, placeholder: i18n.pollOptionsPlaceholder }), br(), br(),
             div({ class: "poll-switch" },
               input({ type: "hidden", name: "anonymous", value: "0" }),
               label(input({ type: "checkbox", name: "anonymous", value: "1" }), " ", i18n.pollAnonymousLabel)

@@ -26,7 +26,7 @@ const renderComposeForm = (opts = {}) => {
     form(
       { method: "POST", action, enctype: "multipart/form-data" },
       replyToId ? input({ type: "hidden", name: "inReplyToId", value: replyToId }) : "",
-      textarea({ name: "text", id: "text", rows: "6", class: "publish-textarea", placeholder: placeholder || i18n.fediverseComposePlaceholder }),
+      textarea({ maxlength: "5000", name: "text", id: "text", rows: "6", class: "publish-textarea", placeholder: placeholder || i18n.fediverseComposePlaceholder }),
       br(),
       label({ for: "fediverse_media" }, i18n.fediverseAttach),
       br(),
@@ -209,7 +209,7 @@ exports.fediversePreviewView = ({ account, stats, text, media, error, replyToId,
       div({ class: "publish-form" },
         form(
           { action: postAction, method: "POST", enctype: "multipart/form-data" },
-          textarea({ name: "text", id: "text", rows: "6", class: "publish-textarea", placeholder: isReply ? i18n.fediverseReplyPlaceholder : i18n.fediverseComposePlaceholder }, text || ""),
+          textarea({ maxlength: "5000", name: "text", id: "text", rows: "6", class: "publish-textarea", placeholder: isReply ? i18n.fediverseReplyPlaceholder : i18n.fediverseComposePlaceholder }, text || ""),
           ...mediaList.map(m => input({ type: "hidden", name: "tmp", value: m.name })),
           br(),
           label({ for: "fediverse_media" }, i18n.fediverseAttach),

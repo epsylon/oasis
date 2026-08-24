@@ -44,34 +44,34 @@ exports.createCVView = async (cv = {}, editMode = false) => {
             label(i18n.cvNameLabel), br(),
             input({ type: "text", name: "name", required: true, value: cv.name || "" }), br(),
             label(i18n.cvDescriptionLabel), br(),
-            textarea({ name: "description", required: true, rows: 4  }, cv.description || ""), br(),
+            textarea({ maxlength: "5000", name: "description", required: true, rows: 4  }, cv.description || ""), br(),
             label(i18n.cvLanguagesLabel), br(),
             input({ type: "text", name: "languages", value: cv.languages || "" }), br(),
             label(i18n.cvPhotoLabel), br(),
             input({ type: "file", name: "image" }), br(), br(),
             label(i18n.cvPersonalExperiencesLabel), br(),
-            textarea({ name: "personalExperiences", rows: 4 }, cv.personalExperiences || ""), br(),
+            textarea({ maxlength: "5000", name: "personalExperiences", rows: 4 }, cv.personalExperiences || ""), br(),
             label(i18n.cvPersonalSkillsLabel), br(),
             input({ type: "text", name: "personalSkills", required: true, value: (cv.personalSkills || []).join(", ") }), br()
           ], "personal"),
 
           generateCVBox(i18n.cvOasis, [
             label(i18n.cvOasisExperiencesLabel), br(),
-            textarea({ name: "oasisExperiences", rows: 4 }, cv.oasisExperiences || ""), br(),
+            textarea({ maxlength: "5000", name: "oasisExperiences", rows: 4 }, cv.oasisExperiences || ""), br(),
             label(i18n.cvOasisSkillsLabel), br(),
             input({ type: "text", name: "oasisSkills", value: (cv.oasisSkills || []).join(", ") }), br()
           ], "oasis"),
 
           generateCVBox(i18n.cvEducational, [
             label(i18n.cvEducationExperiencesLabel), br(),
-            textarea({ name: "educationExperiences", rows: 4 }, cv.educationExperiences || ""), br(),
+            textarea({ maxlength: "5000", name: "educationExperiences", rows: 4 }, cv.educationExperiences || ""), br(),
             label(i18n.cvEducationalSkillsLabel), br(),
             input({ type: "text", name: "educationalSkills", value: (cv.educationalSkills || []).join(", ") }), br()
           ], "education"),
 
           generateCVBox(i18n.cvProfessional, [
             label(i18n.cvProfessionalExperiencesLabel), br(),
-            textarea({ name: "professionalExperiences", rows: 4 }, cv.professionalExperiences || ""), br(),
+            textarea({ maxlength: "5000", name: "professionalExperiences", rows: 4 }, cv.professionalExperiences || ""), br(),
             label(i18n.cvProfessionalSkillsLabel), br(),
             input({ type: "text", name: "professionalSkills", value: (cv.professionalSkills || []).join(", ") }), br()
           ], "professional"),

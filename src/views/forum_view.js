@@ -3,7 +3,7 @@ const {
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -101,7 +101,7 @@ const renderForumForm = () =>
         placeholder: i18n.forumTitlePlaceholder
       }), br(), br(),
       label(i18n.forumMessageLabel), br(),
-      textarea({
+      textarea({ maxlength: "5000",
         name: 'text',
         required: true,
         rows: 4,
@@ -159,7 +159,7 @@ const renderThread = (nodes, level = 0, forumId) => {
             class: 'comment-form'
           },
             input({ type: 'hidden', name: 'parentId', value: m.key }),
-            textarea({
+            textarea({ maxlength: "5000",
               name: 'message',
               rows: 2,
               required: true,
@@ -342,9 +342,10 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
                   button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeOpenInvitation))
               : null,
             (forum.isPrivate && forum.author === userId && forum.openInviteCode)
-              ? span({ class: 'tribe-open-invite' },
+              ? div({ class: 'tribe-open-invite' },
                   span({ class: 'card-label' }, i18n.tribeInviteCodeText),
-                  span({ class: 'tribe-open-invite-code' }, forum.openInviteCode))
+                  span({ class: 'tribe-open-invite-code' }, forum.openInviteCode),
+                  renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(forum.openInviteCode)}` }))
               : null,
             (forum.isPrivate && forum.author === userId && forum.openInviteCode)
               ? form({ method: 'POST', action: `/forum/open-invite/remove/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
@@ -385,7 +386,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
           action: `/forum/${encodeURIComponent(forum.key)}/message`,
           class: 'new-message-form'
         },
-          textarea({
+          textarea({ maxlength: "5000",
             name: 'message',
             rows: 4,
             required: true,

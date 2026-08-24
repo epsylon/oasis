@@ -160,7 +160,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
       br(),
       span(i18n.torrentDescriptionLabel),
       br(),
-      textarea({ name: "description", placeholder: i18n.torrentDescriptionPlaceholder, rows: "4" }, torrentToEdit?.description || ""),
+      textarea({ maxlength: "5000", name: "description", placeholder: i18n.torrentDescriptionPlaceholder, rows: "4" }, torrentToEdit?.description || ""),
       br(),
       span(i18n.torrentTagsLabel),
       br(),

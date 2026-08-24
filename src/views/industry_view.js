@@ -551,7 +551,7 @@ const renderBlueprintForm = (fc, bp, mode, spreadWarning = null) => {
       label(i18n.industryOutputKind || "Product type"),
       br(), select({ name: "outKind" }, ["physical", "digital"].map(k => option({ value: k, ...(k === curKind ? { selected: true } : {}) }, i18n["industryKind_" + k] || k))), br(),
       label(i18n.industryMaterials || "Materials"),
-      br(), textarea({ name: "materialsText", rows: "3", placeholder: i18n.industryMaterialsPlaceholder || "solar-panel:2:120\nbattery:1:80\nkit:1:15" }, materialsText), br(),
+      br(), textarea({ maxlength: "5000", name: "materialsText", rows: "3", placeholder: i18n.industryMaterialsPlaceholder || "solar-panel:2:120\nbattery:1:80\nkit:1:15" }, materialsText), br(),
       label(i18n.industryLaborHours || "Labor hours"),
       br(), input({ type: "number", name: "laborHours", min: "0", step: "0.01", value: bp.laborHours != null ? bp.laborHours : "" }), br(),
       button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Update") : (i18n.industryCreateBlueprintButton || "Create blueprint"))

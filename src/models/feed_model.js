@@ -430,6 +430,15 @@ module.exports = ({ cooler }) => {
     });
   };
 
-  return { createFeed, createRefeed, addOpinion, listFeeds, resolveCurrentId, getFeedById, getComments, addComment };
+  const deleteFeedById = async (id) => {
+    const ssbClient = await openSsb();
+    const userId = ssbClient.id;
+    const currentId = (await resolveCurrentId(id)) || id;
+    const item = await new Promise((res, rej) => ssbClient.get(currentId, (e, m) => (e || !m || !m.content) ? rej(new Error("Feed not found")) : res(m)));
+    if (item.author !== userId && item.content?.author !== userId) throw new Error("Not the author");
+    return new Promise((res, rej) => ssbClient.publish({ type: "tombstone", target: currentId, deletedAt: new Date().toISOString(), author: userId }, (e, m) => e ? rej(e) : res(m)));
+  };
+
+  return { createFeed, createRefeed, addOpinion, listFeeds, resolveCurrentId, getFeedById, getComments, addComment, deleteFeedById };
 };
 

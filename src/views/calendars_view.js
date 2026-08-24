@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard } = require("./main_views")
 const { renderMapLocationVisitLabel } = require("./maps_view")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -138,7 +138,7 @@ const renderCreateForm = (calendarToEdit, params) => {
             input({ type: "text", name: "firstDateLabel", placeholder: i18n.calendarDatePlaceholder || "Describe this date..." }),
             br(), br(),
             span(i18n.calendarFirstNoteLabel || "Notes"), br(),
-            textarea({ name: "firstNote", rows: "3", placeholder: i18n.calendarNotePlaceholder || "Add a note..." }),
+            textarea({ maxlength: "5000", name: "firstNote", rows: "3", placeholder: i18n.calendarNotePlaceholder || "Add a note..." }),
             br(), br(),
             renderIntervalBlock({ min: now, max: deadlineMax || undefined }),
             br(), br()
@@ -282,7 +282,9 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
         const openInvite = invs.find(inv => typeof inv === "object" && inv && inv.public === true && inv.code)
         if (openInvite) return div({ class: "calendar-open-invite-block" },
           div({ class: "tribe-open-invite" },
-            span({ class: "tribe-open-invite-code" }, openInvite.code)
+            span({ class: "card-label" }, i18n.tribeInviteCodeText),
+            span({ class: "tribe-open-invite-code" }, openInvite.code),
+            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(openInvite.code)}` })
           ),
           form({ method: "POST", action: `/calendars/open-invite/remove/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
@@ -337,7 +339,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           isParticipant
             ? [
                 span(i18n.calendarNoteLabel), br(),
-                textarea({ name: "text", rows: "3", placeholder: i18n.calendarNotePlaceholder || "Add a note..." }),
+                textarea({ maxlength: "5000", name: "text", rows: "3", placeholder: i18n.calendarNotePlaceholder || "Add a note..." }),
                 br(), br()
               ]
             : null,

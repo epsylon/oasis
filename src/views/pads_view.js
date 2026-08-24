@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -239,7 +239,8 @@ exports.singlePadView = async (pad, entries, params) => {
       if (openInvite) return [
         div({ class: "tribe-open-invite" },
           span({ class: "card-label" }, i18n.tribeInviteCodeText),
-          span({ class: "tribe-open-invite-code" }, openInvite.code)
+          span({ class: "tribe-open-invite-code" }, openInvite.code),
+          renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(openInvite.code)}` })
         ),
         form({ method: "POST", action: `/pads/open-invite/remove/${encodeURIComponent(pad.rootId)}` },
           button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
@@ -345,7 +346,7 @@ exports.singlePadView = async (pad, entries, params) => {
     ? div({ class: "pad-editor-area" },
         coloredView,
         form({ method: "POST", action: `/pads/entry/${encodeURIComponent(pad.rootId)}` },
-          textarea({ name: "text", rows: "12", class: "pad-editor-white", placeholder: i18n.padEditorPlaceholder || "Start writing..." }, currentText),
+          textarea({ maxlength: "3000", name: "text", rows: "12", class: "pad-editor-white", placeholder: i18n.padEditorPlaceholder || "Start writing..." }, currentText),
           button({ type: "submit", class: "create-button" }, i18n.padSubmitEntry || "Submit")
         ),
         versionList ? div({ class: "pad-version-section" }, versionList) : null

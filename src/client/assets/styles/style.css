@@ -4403,18 +4403,30 @@ a.pm-btn:hover { text-decoration: none }
 }
 
 .tribe-open-invite {
-  border: none;
+  display: block;
+  border: none !important;
   border-radius: 4px;
-  padding: 8px;
+  padding: 0 !important;
   margin: 6px 0;
-  background: #1e1f23;
-  text-align: center;
+  background: transparent !important;
+  box-shadow: none;
+  text-align: left;
 }
 .tribe-open-invite-code {
-  font-family: monospace;
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .95em;
+  color: #FFD700;
+  margin: 8px 0 10px;
+  user-select: all;
+  overflow-wrap: anywhere;
   word-break: break-all;
-  font-weight: bold;
-  margin-left: 6px;
+  background: #111 !important;
+  border: 1px dashed rgba(255, 163, 0, .5) !important;
+  border-radius: 6px;
+  padding: 8px 10px !important;
+  text-align: center;
+  box-shadow: none;
 }
 .tribe-open-invite-panel { margin: 6px 0; }
 .profile-side-version { margin: 4px 0 8px; font-size: 0.9em; text-align: center; }
@@ -5662,8 +5674,16 @@ a.pm-btn:hover { text-decoration: none }
 .chat-pin-toggle{position:absolute;top:4px;right:6px}
 .chat-has-pin-toggle{padding-right:38px}
 .chat-pinned-link{margin-right:8px}
+.btn-singleview.btn-delete{color:#ff6b6b !important;border-color:rgba(255,107,107,.55) !important}
+.btn-singleview.btn-delete:hover{background:rgba(255,107,107,.15) !important}
+.feed-opinions-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:transparent !important;border:0 !important;padding:0 !important;margin:6px 0;box-shadow:none}
+.feed-opinions-count{font-weight:bold;color:#FFA500}
+.feed-votes-summary{display:flex;gap:6px;flex-wrap:wrap;background:transparent !important;border:0 !important;padding:0 !important;margin:6px 0;box-shadow:none}
+.feed-votes-summary .vote-category{font-size:.75em;padding:2px 9px;border:1px solid rgba(255,163,0,.45);border-radius:10px;background:rgba(255,163,0,.08);color:#FFD700;white-space:nowrap}
+.school-invite-code-block{display:block}
 .school-lesson-details{background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none}
 .school-lesson-summary{cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;list-style:none;font-weight:bold}
+.school-lesson-summary-title{flex:1 1 auto;min-width:0}
 .school-lesson-summary::-webkit-details-marker{display:none}
 .school-lesson-summary-title{color:#ffa300}
 .school-lesson-summary-title::after{content:" \25BE";opacity:.7}

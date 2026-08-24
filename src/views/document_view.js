@@ -153,7 +153,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       br(),
       label(i18n.documentDescriptionLabel),
       br(),
-      textarea({ name: "description", placeholder: i18n.documentDescriptionPlaceholder, rows: "4" }, docToEdit?.description || ""),
+      textarea({ maxlength: "5000", name: "description", placeholder: i18n.documentDescriptionPlaceholder, rows: "4" }, docToEdit?.description || ""),
       br(),
       label(i18n.documentTagsLabel),
       br(),

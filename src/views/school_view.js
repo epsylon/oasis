@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
@@ -100,7 +100,7 @@ const renderCourseForm = (filter, course = {}) => {
       label(i18n.title), br,
       input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolCourseTitlePlaceholder, value: course.title || "" }), br(),
       label(i18n.description), br,
-      textarea({ name: "description", rows: 5, required: true, placeholder: i18n.schoolCourseDescriptionPlaceholder }, course.description || ""), br,
+      textarea({ name: "description", rows: 5, required: true, maxlength: "2000", placeholder: i18n.schoolCourseDescriptionPlaceholder }, course.description || ""), br,
       label(i18n.blogImage), br,
       input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
       label(i18n.schoolTags), br,
@@ -213,7 +213,7 @@ const renderTeacherPanel = (course, certificates, returnTo) =>
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       label(i18n.schoolAddLesson), br,
       input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolLessonTitlePlaceholder }), br(),
-      textarea({ name: "text", rows: 5, required: true, placeholder: i18n.schoolLessonTextPlaceholder }), br,
+      textarea({ name: "text", rows: 5, required: true, maxlength: "4000", placeholder: i18n.schoolLessonTextPlaceholder }), br,
       label(i18n.schoolLessonUnit), br,
       input({ type: "text", name: "unit", maxlength: "60", placeholder: i18n.schoolLessonUnitPlaceholder }), br(),
       label(i18n.schoolLessonOrder), br,
@@ -370,11 +370,20 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
           )
         )
       : null,
-    isTeacher && course.visibility === "INVITE"
+    isTeacher && course.visibility === "INVITE" && !course.inviteCode
       ? div({ class: "tribe-side-actions shop-visibility-row" },
           span({ class: "card-label" }, `${i18n.schoolVisibilityInvite}: `),
           form({ method: "POST", action: `/school/generate-invite/${encodeURIComponent(course.id)}` },
             button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeGenerateInvite)
+          )
+        )
+      : null,
+    isTeacher && course.visibility === "INVITE" && course.inviteCode
+      ? div({ class: "tribe-side-actions school-invite-code-block" },
+          div({ class: "tribe-open-invite" },
+            span({ class: "card-label" }, i18n.tribeInviteCodeText),
+            span({ class: "tribe-open-invite-code" }, course.inviteCode),
+            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(course.inviteCode)}` })
           )
         )
       : null,
@@ -451,10 +460,10 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
                         input({ type: "hidden", name: "returnTo", value: returnTo }),
                         label(i18n.schoolExamAddQuestion), br,
                         input({ type: "text", name: "q", required: true, maxlength: "300" }), br(),
-                        input({ type: "text", name: "o1", required: true, placeholder: `${i18n.schoolExamOption} 1` }), br(),
-                        input({ type: "text", name: "o2", required: true, placeholder: `${i18n.schoolExamOption} 2` }), br(),
-                        input({ type: "text", name: "o3", required: true, placeholder: `${i18n.schoolExamOption} 3` }), br(),
-                        input({ type: "text", name: "o4", required: true, placeholder: `${i18n.schoolExamOption} 4` }), br(),
+                        input({ type: "text", name: "o1", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 1` }), br(),
+                        input({ type: "text", name: "o2", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 2` }), br(),
+                        input({ type: "text", name: "o3", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 3` }), br(),
+                        input({ type: "text", name: "o4", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 4` }), br(),
                         label(i18n.schoolExamCorrect), br,
                         select({ name: "correct" },
                           option({ value: "0" }, `${i18n.schoolExamOption} 1`),
@@ -697,7 +706,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
           form({ method: "POST", action: `/school/lesson/update/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` },
             label(i18n.title), br,
             input({ type: "text", name: "title", maxlength: "120", required: true, value: lesson.title || "" }), br(),
-            textarea({ name: "text", rows: 5, required: true }, lesson.text || ""), br,
+            textarea({ name: "text", rows: 5, required: true, maxlength: "4000" }, lesson.text || ""), br,
             label(i18n.schoolLessonUnit), br,
             input({ type: "text", name: "unit", maxlength: "60", value: lesson.unit || "" }), br(),
             label(i18n.schoolLessonOrder), br,
@@ -726,7 +735,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
             label(i18n.title), br,
             input({ type: "text", name: "caption", maxlength: "120" }), br(), br(),
             label(i18n.description), br,
-            textarea({ name: "text", rows: 3, placeholder: i18n.schoolMaterialTextPlaceholder }), br,
+            textarea({ name: "text", rows: 3, maxlength: "2000", placeholder: i18n.schoolMaterialTextPlaceholder }), br,
             button({ type: "submit" }, i18n.schoolAddMaterial)
           )
         )

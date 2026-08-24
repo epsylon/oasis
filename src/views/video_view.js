@@ -170,7 +170,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
       br(),
       span(i18n.videoDescriptionLabel),
       br(),
-      textarea({ name: "description", placeholder: i18n.videoDescriptionPlaceholder, rows: "4" }, videoToEdit?.description || ""),
+      textarea({ maxlength: "5000", name: "description", placeholder: i18n.videoDescriptionPlaceholder, rows: "4" }, videoToEdit?.description || ""),
       br(),
       span(i18n.mapLocationTitle || "Map Location"),
       br(),
