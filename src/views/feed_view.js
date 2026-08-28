@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderVotesSummary } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
 const moment = require("../server/node_modules/moment");
@@ -62,19 +62,6 @@ const generateFilterButtons = (filters, currentFilter, action, extra = {}) => {
   );
 };
 
-const renderVotesSummary = (opinions = {}) => {
-  const entries = Object.entries(opinions).filter(([, v]) => Number(v) > 0);
-  if (!entries.length) return null;
-  entries.sort((a, b) => Number(b[1]) - Number(a[1]) || String(a[0]).localeCompare(String(b[0])));
-  return div(
-    { class: "votes feed-votes-summary" },
-    entries.map(([category, count]) => {
-      const label = i18n['vote' + category.charAt(0).toUpperCase() + category.slice(1)] || category;
-      return span({ class: "vote-category" }, `${label} ${count}`);
-    })
-  );
-};
-
 const renderCardField = (labelText, value) =>
   div(
     { class: "card-field" },
@@ -91,7 +78,7 @@ const renderFeedCommentsSection = (feedKey, comments = []) => {
   });
 };
 
-const renderFeedCard = (feed) => {
+const renderFeedCard = (feed, spreadMap = null) => {
     const content = feed.value.content || {};
     const rawText = typeof content.text === "string" ? content.text : "";
     const safeText = rawText.trim();
@@ -117,6 +104,7 @@ const renderFeedCard = (feed) => {
             span(),
             renderContentActions(feed.key, `/feed/${encodeURIComponent(feed.key)}`, {
                 author: authorId,
+                spread: (spreadMap && spreadMap.get(feed.key)) || null,
                 reportTitle: safeText,
                 ...(((signerId && String(signerId) === String(me)) || (authorId && String(authorId) === String(me))) ? { deleteAction: `/feed/delete/${encodeURIComponent(feed.key)}` } : {})
             })
@@ -128,10 +116,12 @@ const renderFeedCard = (feed) => {
             div(
                 { class: "refeed-column" },
                 h1(String(refeedsNum)),
-                form(
-                    { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
-                    button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", ...(alreadyRefeeded ? { disabled: true } : {}) }, i18n.refeedButton)
-                ),
+                (authorId && String(authorId) === String(me))
+                    ? null
+                    : form(
+                        { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
+                        button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", ...(alreadyRefeeded ? { disabled: true } : {}) }, i18n.refeedButton)
+                    ),
                 alreadyRefeeded ? p({ class: "muted" }, i18n.alreadyRefeeded) : null
             ),
             div(
@@ -181,7 +171,8 @@ const renderFeedSideUsers = (activeUsers) =>
 
 exports.feedView = (feeds, opts = "ALL") => {
   const { filter, q, tag, msg } = normalizeOptions(opts);
-  const workspace = !!(opts && typeof opts === "object" && opts.workspace);
+  const workspace = !!(opts && typeof opts === "object" && opts.workspace) && require("../configs/config-manager.js").getConfig().ux?.current === "feed";
+  const spreadMap = (opts && typeof opts === "object" && opts.spreadMap instanceof Map) ? opts.spreadMap : null;
   const trendingTags = (opts && typeof opts === "object" && Array.isArray(opts.trendingTags)) ? opts.trendingTags : [];
   const activeUsers = (opts && typeof opts === "object" && Array.isArray(opts.activeUsers)) ? opts.activeUsers : [];
 
@@ -244,7 +235,7 @@ exports.feedView = (feeds, opts = "ALL") => {
             button({ type: "submit", class: "create-button" }, i18n.createFeedButton)
           )
         : feeds && feeds.length > 0
-          ? div({ class: "feed-container" }, feeds.map((feed) => renderFeedCard(feed)).filter(Boolean))
+          ? div({ class: "feed-container" }, feeds.map((feed) => renderFeedCard(feed, spreadMap)).filter(Boolean))
           : div({ class: "no-results" }, p(i18n.noFeedsFound))
     )
   );
@@ -334,10 +325,12 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
           div(
             { class: "refeed-column" },
             h1(String(refeedsNum)),
-            form(
-              { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
-              button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", ...(alreadyRefeeded ? { disabled: true } : {}) }, i18n.refeedButton)
-            ),
+            (authorId && String(authorId) === String(me))
+              ? null
+              : form(
+                  { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
+                  button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", ...(alreadyRefeeded ? { disabled: true } : {}) }, i18n.refeedButton)
+              ),
             alreadyRefeeded ? p({ class: "muted" }, i18n.alreadyRefeeded) : null
           ),
           div(

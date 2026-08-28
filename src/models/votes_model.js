@@ -5,6 +5,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { dedupeBy, norm } = require('../backend/dedupe');
 const { buildVoteTally } = require('../backend/vote_tally');
 const categories = require('../backend/opinion_categories');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const MIN_VOTE_DAYS = 7;
 
@@ -17,13 +18,10 @@ module.exports = ({ cooler }) => {
 
   const TYPE = 'votes';
 
+  const VOTES_TYPES = [TYPE, 'votesVote', 'votesOpinion', 'tombstone'];
+
   async function getAllMessages(ssbClient) {
-    return new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, results) => (err ? reject(err) : resolve(results)))
-      );
-    });
+    return readTyped(ssbClient, VOTES_TYPES, { limit: logLimit });
   }
 
   function buildIndex(messages) {

@@ -1,7 +1,10 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+
+const CV_TYPES = ['curriculum', 'tombstone'];
 
 const extractBlobId = str => {
   if (!str || typeof str !== 'string') return null;
@@ -151,34 +154,27 @@ module.exports = ({ cooler }) => {
       const userId = ssbClient.id;
       const authorId = targetUserId || userId;
 
-      return new Promise((resolve, reject) => {
-        pull(
-          ssbClient.createLogStream({ limit: logLimit }),
-          pull.collect((err, msgs) => {
-            if (err) return reject(err);
+      const msgs = await readTyped(ssbClient, CV_TYPES, { limit: logLimit });
 
-            const tombstoned = buildValidatedTombstoneSet(msgs);
+      const tombstoned = buildValidatedTombstoneSet(msgs);
 
-            const cvMsgs = msgs
-              .filter(m =>
-                m.value?.content?.type === 'curriculum' &&
-                m.value.author === authorId &&
-                !tombstoned.has(m.key)
-              )
-              .sort((a, b) => b.value.timestamp - a.value.timestamp);
+      const cvMsgs = msgs
+        .filter(m =>
+          m.value?.content?.type === 'curriculum' &&
+          m.value.author === authorId &&
+          !tombstoned.has(m.key)
+        )
+        .sort((a, b) => b.value.timestamp - a.value.timestamp);
 
-            if (!cvMsgs.length) {
-              return resolve(null);
-            }
+      if (!cvMsgs.length) {
+        return null;
+      }
 
-            const latest = cvMsgs[0];
-            const c = latest.value.content;
-            const visibility = String(c.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC';
-            if (visibility === 'HIDDEN' && authorId !== userId) return resolve(null);
-            resolve({ id: latest.key, ...c, visibility });
-          })
-        );
-      });
+      const latest = cvMsgs[0];
+      const c = latest.value.content;
+      const visibility = String(c.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC';
+      if (visibility === 'HIDDEN' && authorId !== userId) return null;
+      return { id: latest.key, ...c, visibility };
     }
   };
 };

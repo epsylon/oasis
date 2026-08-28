@@ -120,7 +120,7 @@ const renderFacilityList = exports.renderFacilityList = (facilities, filter, spr
       return div({ class: "trending-card tribes-card industry-card" + (isOwn ? " own-content" : "") },
         div({ class: "card-header activity-card-header" },
           span(),
-          renderContentActions(fc.id || fc.key, href, { spread: spreadMap.get(fc.id || fc.key) || null })
+          renderContentActions(fc.id || fc.key, href, { spread: spreadMap.get(fc.id || fc.key) || null, author: fc.steward })
         ),
         div({ class: "card-section tribes-card-body" },
           div({ class: "tribe-card-image-wrapper" },
@@ -219,7 +219,7 @@ const renderGlobalBlueprints = (blueprints, spreadMap = new Map()) => {
       div({ class: "card-header activity-card-header" }, span(), renderContentActions(bp.id, "/industry/blueprint/" + encodeURIComponent(bp.id))),
       div({ class: "industry-blueprint-card" + (bp.author === userId ? " own-content" : "") },
       div({ class: "card-chips-row" },
-        renderSpreadButton(bp.id, spreadMap.get(bp.id)),
+        bp.author === userId ? null : renderSpreadButton(bp.id, spreadMap.get(bp.id)),
         renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
         renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase())
       ),
@@ -271,7 +271,7 @@ const renderBuildCard = (b, opts = {}) => {
   const href = `/industry/build/${encodeURIComponent(b.id)}`
   const card = div({ class: "industry-blueprint-card" + (b.proposer === userId ? " own-content" : "") },
     div({ class: "card-chips-row" },
-      renderSpreadButton(b.id, opts.spread),
+      b.proposer === userId ? null : renderSpreadButton(b.id, opts.spread),
       renderBuildStatusChip(b.status),
       ...((b.blueprintKind && opts.withBlueprintChips !== false) ? [
         renderStateChip("half", b.blueprintKind === "digital" ? "💾" : "📦", i18n["industryKind_" + b.blueprintKind] || b.blueprintKind),
@@ -508,7 +508,7 @@ const renderBlueprintsSection = (fc, blueprints, isMember, spreadMap = new Map()
   const cards = list.map((bp) => {
     const actions = renderBlueprintGovernActions(fc.id, bp, isMember, `/industry/${encodeURIComponent(fc.id)}`)
     return div({ class: "industry-card-wrap" },
-      div({ class: "card-header activity-card-header" }, span(), renderContentActions(bp.id, `/industry/blueprint/${encodeURIComponent(bp.id)}`, { spread: spreadMap.get(bp.id) || null })),
+      div({ class: "card-header activity-card-header" }, span(), renderContentActions(bp.id, `/industry/blueprint/${encodeURIComponent(bp.id)}`, { spread: spreadMap.get(bp.id) || null, author: bp.author })),
       div({ class: "industry-blueprint-card" },
       div({ class: "card-chips-row" },
         renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
@@ -690,7 +690,7 @@ exports.singleFacilityView = async (facility, filter, params = {}) => {
     i18n.industryTitle || "Industry",
     section(
       div({ class: "card-header activity-card-header" },
-        renderContentActions(fc.id || fc.key, null, { spread: params.spreads || null })
+        renderContentActions(fc.id || fc.key, null, { spread: params.spreads || null, author: fc.steward })
       ),
       div({ class: "tags-header" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
       div({ class: "filters" },

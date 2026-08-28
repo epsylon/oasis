@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const { getConfig } = require("../configs/config-manager.js");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { collabContent, openInviteOf } = require('../backend/collab_content');
+const { readTyped } = require("./typed_log");
 const mapCollab = collabContent({ membersField: 'members', undecField: 'encrypted', contentFields: ['title', 'description', 'image'], listFields: ['tags', 'invites', 'markers'] });
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -61,7 +62,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const ssbClient = await openSsb();
       const ssbKeys = require("../server/node_modules/ssb-keys");
       const config = require("../server/ssb_config");
-      const msgs = await new Promise((resolve, reject) => pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? reject(e) : resolve(m))));
+      const msgs = await getAllMessages(ssbClient);
       for (const m of msgs) {
         const c = m.value && m.value.content;
         if (!c || c.type !== "tribe-keys") continue;
@@ -148,13 +149,9 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     }
   };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-      );
-    });
+  const MAP_TYPES = ["map", "mapMarker", "mapMember", "tribe-msg", "tribe-keys", "tombstone"];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, MAP_TYPES, { limit: logLimit });
 
   const getMsg = async (ssbClient, key) =>
     new Promise((resolve) => {
@@ -411,7 +408,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       if (!ownCrypto || typeof ownCrypto.getAllRootIds !== "function") return 0;
       try {
         const ssbClient = await openSsb();
-        const messages = await new Promise((resolve, reject) => pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? reject(e) : resolve(m))));
+        const messages = await getAllMessages(ssbClient);
         const tomb = buildValidatedTombstoneSet(messages);
         const all = ownCrypto.getAllRootIds();
         let removed = 0;

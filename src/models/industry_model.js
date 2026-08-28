@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
+const { readTyped } = require('./typed_log')
 const logLimit = (getConfig().ssbLogStream && getConfig().ssbLogStream.limit) || 1000
 
 module.exports = ({ cooler }) => {
@@ -42,13 +43,10 @@ module.exports = ({ cooler }) => {
     return Number.isFinite(x) && x >= 0 ? x : 0
   }
 
+  const INDUSTRY_TYPES = [TYPE, "industryMember", "industryInvite", "industryApply", "industryVote", "industryOpinion", "industryBlueprint", "industryBuild", "industryBuildStatus", "industryBuildDates", "industryBuildUpdate", "industryContribution", "industryAllocation", "tombstone"]
+
   async function getAllMsgs(ssbClient) {
-    return new Promise((r, j) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((e, m) => (e ? j(e) : r(m)))
-      )
-    })
+    return readTyped(ssbClient, INDUSTRY_TYPES, { limit: logLimit })
   }
 
   function chainMaps(nodeMap) {

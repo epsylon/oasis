@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment")
 const categories = require("../backend/opinion_categories")
 const { getConfig } = require("../configs/config-manager.js")
 const { dedupeByPreferring } = require('../backend/dedupe')
+const { readTyped } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const HOUSING_TYPES = ["sale", "rent", "couchsurfing"]
@@ -111,13 +112,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
     })
   })
 
-  const readAll = async (ssbClient) =>
-    new Promise((resolve, reject) =>
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-      )
-    )
+  const HOUSING_MSG_TYPES = ["housing", "housingOpinion", "housingRequest", "tombstone"]
+
+  const readAll = async (ssbClient) => readTyped(ssbClient, HOUSING_MSG_TYPES, { limit: logLimit, withWindow: true })
 
   const buildIndex = (messages, ssbClient) => {
     const tomb = new Set()

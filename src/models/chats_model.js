@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const crypto = require("crypto")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
+const { readTyped } = require("./typed_log")
 const { collabContent, openInviteOf } = require('../backend/collab_content')
 const chatCollab = collabContent({ membersField: 'members', undecField: 'undecryptable', contentFields: ['title', 'description', 'image', 'category', 'status'], listFields: ['tags', 'invites'] })
 const logLimit = getConfig().ssbLogStream?.limit || 1000
@@ -99,10 +100,9 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     return ks.length ? ks[0] : null
   }
 
-  const readAll = async (ssbClient) =>
-    new Promise((resolve, reject) =>
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => err ? reject(err) : resolve(msgs)))
-    )
+  const CHAT_TYPES = ["chat", "chatMessage", "chatMember", "chatReaction", "chatPin", "tribe-keys", "tombstone"]
+
+  const readAll = async (ssbClient) => readTyped(ssbClient, CHAT_TYPES, { limit: logLimit })
 
   const buildIndex = (messages) => {
     const tomb = new Set()

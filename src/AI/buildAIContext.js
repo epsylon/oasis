@@ -1,4 +1,5 @@
 const pull = require('../server/node_modules/pull-stream')
+const { readTyped } = require('../models/typed_log')
 const { getConfig } = require('../configs/config-manager.js')
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000
@@ -79,48 +80,34 @@ async function publishExchangeVote({ targetId, helpful = true }) {
 async function buildContext(maxItems = 100) {
   const s = await openSsb()
   if (!s) return ''
-  return new Promise((resolve) => {
-    pull(
-      s.createLogStream({ reverse: true, limit: logLimit }),
-      pull.collect((err, msgs) => {
-        if (err || !Array.isArray(msgs)) return resolve('')
-        const lines = []
-        for (const { value } of msgs) {
-          const c = value && value.content || {}
-          if (c.type !== 'aiExchange') continue
-          const d = new Date(value.timestamp || 0).toISOString().slice(0, 10)
-          const q = compact(c.question)
-          const a = compact(c.answer)
-          lines.push(`[${d}] (AIExchange) Q: ${q} | A: ${a}`)
-          if (lines.length >= maxItems) break
-        }
-        if (lines.length === 0) return resolve('')
-        resolve(`## AIEXCHANGE\n\n${lines.join('\n')}`)
-      })
-    )
-  })
+  const msgs = (await readTyped(s, ['aiExchange'], { limit: logLimit }).catch(() => null) || []).reverse()
+  const lines = []
+  for (const { value } of msgs) {
+    const c = value && value.content || {}
+    if (c.type !== 'aiExchange') continue
+    const d = new Date(value.timestamp || 0).toISOString().slice(0, 10)
+    const q = compact(c.question)
+    const a = compact(c.answer)
+    lines.push(`[${d}] (AIExchange) Q: ${q} | A: ${a}`)
+    if (lines.length >= maxItems) break
+  }
+  if (lines.length === 0) return ''
+  return `## AIEXCHANGE\n\n${lines.join('\n')}`
 }
 
 async function getBestTrainedAnswer(question) {
   const s = await openSsb()
   if (!s) return null
   const want = normalize(question)
-  return new Promise((resolve) => {
-    pull(
-      s.createLogStream({ reverse: true, limit: logLimit }),
-      pull.collect((err, msgs) => {
-        if (err || !Array.isArray(msgs)) return resolve(null)
-        for (const { value } of msgs) {
-          const c = value && value.content || {}
-          if (c.type !== 'aiExchange') continue
-          if (normalize(c.question) === want) {
-            return resolve({ answer: String(c.answer || '').trim(), ctx: Array.isArray(c.ctx) ? c.ctx : [] })
-          }
-        }
-        resolve(null)
-      })
-    )
-  })
+  const msgs = (await readTyped(s, ['aiExchange'], { limit: logLimit }).catch(() => null) || []).reverse()
+  for (const { value } of msgs) {
+    const c = value && value.content || {}
+    if (c.type !== 'aiExchange') continue
+    if (normalize(c.question) === want) {
+      return { answer: String(c.answer || '').trim(), ctx: Array.isArray(c.ctx) ? c.ctx : [] }
+    }
+  }
+  return null
 }
 
 module.exports = { fieldsForSnippet, buildContext, clip, publishExchange, publishExchangeVote, getBestTrainedAnswer }

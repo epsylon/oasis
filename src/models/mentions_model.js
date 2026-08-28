@@ -1,5 +1,6 @@
 const fs = require('fs');
 const pull = require('../server/node_modules/pull-stream');
+const { readTyped } = require('./typed_log');
 
 const SEEN_FILE = 'oasis-mentions-seen';
 
@@ -45,13 +46,7 @@ module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-      );
-    });
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, [], { limit: logLimit, withWindow: true });
 
   const mentionsList = (content, feedId) => {
     const m = content && content.mentions;

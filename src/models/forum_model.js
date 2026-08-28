@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const crypto = require('crypto');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
@@ -33,9 +34,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const ssbClient = await openSsb();
       const ssbKeys = require('../server/node_modules/ssb-keys');
       const cfg = require('../server/ssb_config');
-      const msgs = await new Promise((res, rej) =>
-        pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? rej(e) : res(m)))
-      );
+      const msgs = await readForumLog();
       for (const m of msgs) {
         const c = m.value && m.value.content;
         if (!c || c.type !== 'tribe-keys') continue;
@@ -60,9 +59,11 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     return ssb;
   };
 
+  const FORUM_TYPES = ['forum', 'forum-invite', 'forum-invite-tombstone', 'forum-open-invite', 'forum-open-invite-tombstone', 'tribe-keys', 'vote', 'tombstone'];
+
   const readForumLog = async () => {
     const ssbClient = await openSsb();
-    return new Promise((res, rej) => pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? rej(e) : res(m || []))));
+    return readTyped(ssbClient, FORUM_TYPES, { limit: logLimit, withWindow: true });
   };
 
   const scanForumOpenInvite = async (forumId) => {
@@ -89,12 +90,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
   };
 
   async function collectTombstones(ssbClient) {
-    return new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(buildValidatedTombstoneSet(msgs)))
-      );
-    });
+    return buildValidatedTombstoneSet(await readForumLog());
   }
 
   async function findActiveVote(ssbClient, targetId, voter) {
@@ -141,11 +137,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
   }
 
   async function getMessageById(id) {
-    const ssbClient = await openSsb();
-    const msgs = await new Promise((res, rej) =>
-      pull(ssbClient.createLogStream({ limit: logLimit }), 
-      pull.collect((err, data) => err ? rej(err) : res(data)))
-    );
+    const msgs = await readForumLog();
     const msg = msgs.find(m => m.key === id && m.value.content?.type === 'forum');
     if (!msg) throw new Error('Message not found');
     return { key: msg.key, ...msg.value.content, timestamp: msg.value.timestamp };
@@ -288,9 +280,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     joinByInvite: async (code) => {
       if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
       const ssbClient = await openSsb();
-      const messages = await new Promise((res, rej) =>
-        pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((e, m) => e ? rej(e) : res(m)))
-      );
+      const messages = await readForumLog();
       const invTomb = new Set();
       for (const m of messages) {
         const c = m.value && m.value.content;
@@ -356,10 +346,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
 
     listAll: async filter => {
       const ssbClient = await openSsb();
-      const msgs = await new Promise((res, rej) =>
-        pull(ssbClient.createLogStream({ limit: logLimit }), 
-        pull.collect((err, data) => err ? rej(err) : res(data)))
-      );
+      const msgs = await readForumLog();
       const deleted = buildValidatedTombstoneSet(msgs);
       const decode = (m) => {
         const c = m.value && m.value.content;
@@ -442,10 +429,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
 
     getForumById: async id => {
       const ssbClient = await openSsb();
-      const msgs = await new Promise((res, rej) =>
-        pull(ssbClient.createLogStream({ limit: logLimit }), 
-        pull.collect((err, data) => err ? rej(err) : res(data)))
-      );
+      const msgs = await readForumLog();
       const deleted = buildValidatedTombstoneSet(msgs);
       const original = msgs.find(m => m.key === id && !deleted.has(m.key));
       if (!original || original.value.content?.type !== 'forum') throw new Error('Forum not found');
@@ -479,10 +463,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
 
     getMessagesByForumId: async forumId => {
       const ssbClient = await openSsb();
-      const msgs = await new Promise((res, rej) =>
-        pull(ssbClient.createLogStream({ limit: logLimit }), 
-        pull.collect((err, data) => err ? rej(err) : res(data)))
-      );
+      const msgs = await readForumLog();
       const deleted = buildValidatedTombstoneSet(msgs);
       const decodeReply = (m) => {
         const c = m.value && m.value.content;

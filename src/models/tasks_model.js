@@ -3,6 +3,7 @@ const moment = require('../server/node_modules/moment');
 const { normalizeImages, normalizeVideo } = require('./media_gallery');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 const { dedupeBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -23,13 +24,9 @@ module.exports = ({ cooler, pmModel }) => {
     return fallback;
   };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-      );
-    });
+  const TASK_TYPES = ['task', 'taskOpinion', 'taskAssign', 'taskReminderSent', 'tombstone'];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, TASK_TYPES, { limit: logLimit });
 
   const getMsg = async (ssbClient, key) =>
     new Promise((resolve, reject) => {

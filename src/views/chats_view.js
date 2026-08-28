@@ -88,14 +88,14 @@ const renderChatCard = (chat, filter, params = {}) => {
       })
     ),
     div({ class: "tribe-card-image-wrapper" },
-      a({ href: `/chats/${encodeURIComponent(chat.key)}` },
+      a({ href: `/chats/${encodeURIComponent(chat.key)}#chat-latest` },
         renderMediaBlob(chat.image, "/assets/images/default-avatar.png", { class: "tribe-card-hero-image" })
       )
     ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: `/chats/${encodeURIComponent(chat.key)}` }, chat.title || i18n.chatUntitled)
+          a({ href: `/chats/${encodeURIComponent(chat.key)}#chat-latest` }, chat.title || i18n.chatUntitled)
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
@@ -167,7 +167,7 @@ const renderChatTopics = (chats, activeKey) =>
     ...safeArr(chats).slice().sort((a, b) => chatActivityTs(b) - chatActivityTs(a)).map(c => {
       const key = c.rootId || c.key
       const active = activeKey && String(key) === String(activeKey)
-      return a({ href: `/chats/${encodeURIComponent(key)}`, class: active ? "chat-topic chat-topic-active" : "chat-topic" },
+      return a({ href: `/chats/${encodeURIComponent(key)}#chat-latest`, class: active ? "chat-topic chat-topic-active" : "chat-topic" },
         span({ class: "chat-topic-title" }, c.title || i18n.chatUntitled),
         span({ class: "chat-topic-meta" }, `${i18n.chatParticipants}: ${safeArr(c.members).length}`)
       )

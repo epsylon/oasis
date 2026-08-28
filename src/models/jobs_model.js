@@ -3,7 +3,10 @@ const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeByPreferring } = require('../backend/dedupe')
+const { readTyped } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
+
+const JOB_TYPES = ["job", "job_sub", "tombstone"]
 
 const norm = (s) => String(s || "").trim().toLowerCase()
 const toNum = (v) => {
@@ -40,12 +43,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
   const readAll = async (ssbClient) =>
-    new Promise((resolve, reject) =>
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-      )
-    )
+    readTyped(ssbClient, JOB_TYPES, { limit: logLimit, withWindow: true })
 
   const buildIndex = (messages, ssbClient) => {
     const tomb = new Set()

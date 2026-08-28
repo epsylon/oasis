@@ -4,7 +4,10 @@ const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
+const { readTyped } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
+
+const TRANSFER_TYPES = ["transfer", "transferConfirm", "transferOpinion", "ubiClaim", "tombstone"]
 
 const isValidId = (to) => /^@[A-Za-z0-9+/]+={0,2}\.ed25519$/.test(String(to || ""))
 
@@ -30,12 +33,7 @@ module.exports = ({ cooler }) => {
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
   const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-      )
-    })
+    readTyped(ssbClient, TRANSFER_TYPES, { limit: logLimit })
 
   const getMsg = async (ssbClient, key) =>
     new Promise((resolve, reject) => {

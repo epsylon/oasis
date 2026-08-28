@@ -1,7 +1,10 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+
+const PIXELIA_TYPES = ['pixelia', 'tombstone'];
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -13,12 +16,7 @@ module.exports = ({ cooler }) => {
 
   const getPixelByCoordinate = async (coordinateKey) => {
     const ssbClient = await openSsb();
-    const messages = await new Promise((res, rej) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-      );
-    });
+    const messages = await readTyped(ssbClient, PIXELIA_TYPES, { limit: logLimit });
 
     const tombstoned = buildValidatedTombstoneSet(messages);
 
@@ -93,12 +91,7 @@ module.exports = ({ cooler }) => {
 
   const listPixels = async () => {
     const ssbClient = await openSsb();
-    const messages = await new Promise((res, rej) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-      );
-    });
+    const messages = await readTyped(ssbClient, PIXELIA_TYPES, { limit: logLimit });
 
     const tombstoned = buildValidatedTombstoneSet(messages);
     const replaces = new Map();

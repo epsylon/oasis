@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildValidatedTombstoneSet } = require("./tombstone_validator");
+const { readTyped } = require("./typed_log");
 const debug = require("../server/node_modules/debug")("oasis");
 const { isRoot, isReply: isComment } = require("../server/node_modules/ssb-thread-schema");
 const lodash = require("../server/node_modules/lodash");
@@ -962,23 +963,8 @@ models.meta = {
     query,
     filter = null,
   }) => {
-    const source = ssb.createLogStream({ reverse: true,  limit: logLimit });
-
-    return new Promise((resolve, reject) => {
-      pull(
-        source,
-        pull.filter((msg) => {
-          return msg.value.content.type === "post";
-        }),
-        pull.collect((err, collectedMessages) => {
-          if (err) {
-           reject(err);
-          } else {
-           resolve(collectedMessages);
-          }
-        })
-      );
-    });
+    const collected = await readTyped(ssb, ["post"], { limit: logLimit });
+    return collected.filter((msg) => msg.value && msg.value.content && msg.value.content.type === "post").reverse();
   };
 
   const socialFilter = async ({
@@ -2133,12 +2119,7 @@ const post = {
     inbox: async () => {
       const ssb = await cooler.open();
       const myFeedId = ssb.id;
-      const rawMessages = await new Promise((resolve, reject) => {
-        pull(
-          ssb.createLogStream({ reverse: true, limit: logLimit }),
-          pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-        );
-      });
+      const rawMessages = await readTyped(ssb, [], { limit: logLimit, withWindow: true });
      const decryptedMessages = rawMessages.map(msg => {
         try {
           return ssb.private.unbox(msg);
@@ -2152,7 +2133,7 @@ const post = {
           const content = msg.value?.content;
           const author = msg.value?.author;
           return content?.type === 'post' && content?.private === true && (author === myFeedId || content.to?.includes(myFeedId));
-      });
+      }).reverse();
     }
 
   };

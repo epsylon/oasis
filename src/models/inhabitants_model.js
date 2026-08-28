@@ -1,4 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
+const { readTyped } = require('./typed_log');
 const ssbClientGUI = require("../client/gui");
 const coolerInstance = ssbClientGUI({ offline: require('../server/ssb_config').offline });
 const models = require("../models/main_models");
@@ -83,13 +84,7 @@ module.exports = ({ cooler }) => {
   };
 
   async function listAllBase(ssbClient) {
-    const authorsMsgs = await new Promise((res, rej) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit, reverse: true }),
-        pull.filter(msg => !!msg.value?.author && msg.value?.content?.type !== 'tombstone'),
-        pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-      );
-    });
+    const authorsMsgs = (await readTyped(ssbClient, [], { limit: logLimit, withWindow: true })).filter(msg => !!msg.value?.author && msg.value?.content?.type !== 'tombstone').reverse();
     const uniqueFeedIds = Array.from(new Set(authorsMsgs.map(r => r.value.author).filter(Boolean)));
     const users = await Promise.all(
       uniqueFeedIds.map(async (feedId) => {
@@ -143,21 +138,15 @@ module.exports = ({ cooler }) => {
             (u.id || '').toLowerCase().includes(q)
           );
         }
-        const bytesByAuthor = await new Promise((res) => {
-          pull(
-            ssbClient.createLogStream({ limit: logLimit }),
-            pull.collect((err, msgs) => {
-              if (err || !Array.isArray(msgs)) return res({});
-              const acc = {};
-              for (const m of msgs) {
-                const author = m && m.value && m.value.author;
-                if (!author) continue;
-                try { acc[author] = (acc[author] || 0) + Buffer.byteLength(JSON.stringify(m.value), 'utf8'); } catch (_) {}
-              }
-              res(acc);
-            })
-          );
-        });
+        const bytesByAuthor = await readTyped(ssbClient, [], { limit: logLimit, withWindow: true }).then((msgs) => {
+          const acc = {};
+          for (const m of msgs) {
+            const author = m && m.value && m.value.author;
+            if (!author) continue;
+            try { acc[author] = (acc[author] || 0) + Buffer.byteLength(JSON.stringify(m.value), 'utf8'); } catch (_) {}
+          }
+          return acc;
+        }).catch(() => ({}));
         const withMetrics = await Promise.all(users.map(async u => {
           const karmaScore = await getLastKarmaScore(u.id);
           const bytes = (bytesByAuthor && bytesByAuthor[u.id]) || 0;
@@ -199,13 +188,7 @@ module.exports = ({ cooler }) => {
       if (filter === 'SUGGESTED') {
         const base = await listAllBase(ssbClient);
         const active = filterInactive(base);
-        const cvRecords = await new Promise((res) => {
-          pull(
-            ssbClient.createLogStream({ limit: logLimit, reverse: true }),
-            pull.filter(msg => msg && msg.value && msg.value.content && msg.value.content.type === 'curriculum'),
-            pull.collect((err, msgs) => err ? res([]) : res(msgs))
-          );
-        });
+        const cvRecords = (await readTyped(ssbClient, ['curriculum'], { limit: logLimit }).catch(() => [])).reverse();
         const cvByAuthor = new Map();
         for (const r of cvRecords) {
           const c = r.value && r.value.content;
@@ -256,16 +239,7 @@ module.exports = ({ cooler }) => {
       }
 
       if (filter === 'CVs') {
-        const records = await new Promise((res, rej) => {
-          pull(
-            ssbClient.createLogStream({ limit: logLimit, reverse: true}),
-            pull.filter(msg =>
-              msg.value.content?.type === 'curriculum' &&
-              msg.value.content?.type !== 'tombstone'
-            ),
-            pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-          );
-        });
+        const records = (await readTyped(ssbClient, ['curriculum'], { limit: logLimit })).filter(msg => msg.value.content?.type === 'curriculum').reverse();
 
         let cvs = records.map(r => r.value.content);
         cvs = Array.from(new Map(cvs.map(u => [u.author, u])).values());
@@ -435,16 +409,7 @@ module.exports = ({ cooler }) => {
       addAll(tokenize(job.requirements));
       if (keywords.size === 0) return [];
 
-      const records = await new Promise((res, rej) => {
-        pull(
-          ssbClient.createLogStream({ limit: logLimit, reverse: true }),
-          pull.filter(msg =>
-            msg.value?.content?.type === 'curriculum' &&
-            msg.value?.content?.type !== 'tombstone'
-          ),
-          pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-        );
-      });
+      const records = (await readTyped(ssbClient, ['curriculum'], { limit: logLimit })).filter(msg => msg.value?.content?.type === 'curriculum').reverse();
       let cvs = records.map(r => r.value.content);
       cvs = Array.from(new Map(cvs.map(u => [u.author, u])).values());
       cvs = cvs.filter(c => String(c.visibility || 'PUBLIC').toUpperCase() !== 'HIDDEN');

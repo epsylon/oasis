@@ -923,12 +923,50 @@ a.create-button {
 .peers-list .block-info-table td .peer-key,
 .peers-technical-block .block-info-table td .peer-key { text-align: right !important; }
 
+.conn-actions,
+.peers-conn-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  width: 100% !important;
+}
+.conn-actions form,
+.peers-conn-actions form {
+  flex: 1 1 45% !important;
+  min-width: 130px !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  display: block !important;
+}
+.conn-actions form button,
+.peers-conn-actions form button {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
 .relationship-status .relationship-actions { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
 .relationship-status .relationship-actions form,
 .relationship-status .relationship-actions button { width: 100% !important; }
 
 .profile-sensors-box { align-items: center !important; text-align: center !important; }
 .profile-sensors-box > * { margin-left: auto !important; margin-right: auto !important; justify-content: center !important; }
+
+.profile-layout,
+.profile-layout .tribe-side,
+.profile-layout .tribe-main {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+.profile-side-description,
+.profile-side-description p,
+.trending-card .card-section,
+.feed-text {
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+}
 
 .tribe-feed .refeed-column,
 .tribe-feed-full .refeed-column { align-self: center !important; align-items: center !important; justify-content: center !important; }
@@ -987,13 +1025,6 @@ a.create-button {
 .school-lesson-summary-meta {
   flex: 1 1 100% !important;
   white-space: normal !important;
-}
-.feed-opinions-row {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  gap: 8px !important;
 }
 .feed-votes-summary {
   flex-wrap: wrap !important;

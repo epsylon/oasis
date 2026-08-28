@@ -180,6 +180,8 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
   const server = app.listen({ host, port });
 
+  try { require("../backend/updater.js").getRemoteVersion().catch(() => {}); } catch (_) {}
+
   server.on("listening", () => {
     const address = server.address();
 

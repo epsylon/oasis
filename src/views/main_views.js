@@ -120,7 +120,7 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
       )
     : null;
 
-  const spreadBtn = o.spread !== undefined && blockId ? renderSpreadButton(blockId, o.spread) : null;
+  const spreadBtn = o.spread !== undefined && blockId && !(o.author && String(o.author) === String(myId)) ? renderSpreadButton(blockId, o.spread) : null;
 
   const chainBtn = blockId
     ? a({ href: `/blockexplorer/block/${encodeURIComponent(blockId)}`, class: 'btn-singleview', title: i18n.blockchainViewBlockexplorer }, '⦿')
@@ -149,7 +149,7 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     : null;
 
   if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !deleteBtn) return null;
-  return div({ class: 'content-actions' }, spreadBtn, pinBtn, deleteBtn, reportBtn, pmBtn, chainBtn, contentBtn);
+  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, pmBtn, chainBtn, contentBtn);
 };
 exports.renderContentActions = renderContentActions;
 
@@ -265,6 +265,20 @@ const errorView = ({ title, message, backHref }) => {
   );
 };
 exports.errorView = errorView;
+
+const renderVotesSummary = (opinions = {}) => {
+  const entries = Object.entries(opinions).filter(([, v]) => Number(v) > 0);
+  if (!entries.length) return null;
+  entries.sort((a, b) => Number(b[1]) - Number(a[1]) || String(a[0]).localeCompare(String(b[0])));
+  return div(
+    { class: "votes feed-votes-summary" },
+    entries.map(([category, count]) => {
+      const label = i18n['vote' + category.charAt(0).toUpperCase() + category.slice(1)] || category;
+      return span({ class: "vote-category" }, `${label} ${count}`);
+    })
+  );
+};
+exports.renderVotesSummary = renderVotesSummary;
 
 const renderSpreadButton = (msgKey, opts) => {
   if (!msgKey || typeof msgKey !== 'string' || !msgKey.startsWith('%') || !/\.sha256$/.test(msgKey)) return null;

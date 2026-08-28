@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
+const { readTyped } = require("./typed_log")
 const opinionCategories = require("../backend/opinion_categories")
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
@@ -44,13 +45,13 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
-  const readAll = async (ssbClient) =>
-    new Promise((resolve, reject) =>
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-      )
-    )
+  const SCHOOL_TYPES = [
+    "schoolCourse", "schoolLesson", "schoolLessonMedia", "schoolExam", "schoolExamQuestion",
+    "schoolExamResult", "schoolProgress", "schoolOpinion", "schoolCertificate", "schoolCommentHide",
+    "schoolEnroll", "school-invite", "tombstone", "tribe-keys", "transfer", "transferConfirm", "chatMember"
+  ]
+
+  const readAll = async (ssbClient) => readTyped(ssbClient, SCHOOL_TYPES, { limit: logLimit, withWindow: true })
 
   const buildIndex = (messages, ssbClient) => {
     const tomb = new Set()
@@ -387,7 +388,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       let chatId = null
       if (chatsModel) {
         try {
-          const chat = await chatsModel.createChat(`Course: ${title}`, description, null, "school", protectedCourse ? "INVITE-ONLY" : "OPEN", normalizeTags(data.tags))
+          const chat = await chatsModel.createChat(`Course: ${title}`, description, blobId, "school", protectedCourse ? "INVITE-ONLY" : "OPEN", normalizeTags(data.tags))
           chatId = chat && chat.key ? chat.key : null
         } catch {}
       }
@@ -543,7 +544,11 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
         const key = await ensureCourseKey(ssbClient, idx.rootOf(tipId))
         if (key) toPublish = schoolCrypto.encryptContent(next, [key], true)
       }
-      return new Promise((res, rej) => ssbClient.publish(toPublish, (e, m) => e ? rej(e) : res(m)))
+      const published = await new Promise((res, rej) => ssbClient.publish(toPublish, (e, m) => e ? rej(e) : res(m)))
+      if (patch.image !== undefined && existingContent.chatId && chatsModel && typeof chatsModel.updateChatById === "function") {
+        try { await chatsModel.updateChatById(existingContent.chatId, { image: patch.image }) } catch {}
+      }
+      return published
     },
 
     async updateCourseStatus(id, status) {
@@ -975,7 +980,24 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       if (course.visibility !== "INVITE") throw new Error("Only invite courses use invitation codes")
       if (!schoolCrypto) throw new Error("School crypto unavailable")
 
-      if (course.inviteCode) return { code: course.inviteCode, courseId: course.rootId }
+      if (course.inviteCode) {
+        const messages = await readAll(ssbClient)
+        const alive = messages.some(m => {
+          const c = m.value && m.value.content
+          if (!c || c.type !== "school-invite" || c.target !== course.rootId) return false
+          try { return schoolCrypto.hashInviteCode(course.inviteCode, c.salt) === c.codeHash } catch { return false }
+        })
+        if (alive) return { code: course.inviteCode, courseId: course.rootId }
+        const key = await ensureCourseKey(ssbClient, course.rootId)
+        if (!key) throw new Error("Course key unavailable")
+        const salt = schoolCrypto.generateInviteSalt()
+        const ek = schoolCrypto.encryptForInvite(key, course.inviteCode, salt)
+        await new Promise((res, rej) => ssbClient.publish({
+          type: "school-invite", target: course.rootId, ek, salt,
+          codeHash: schoolCrypto.hashInviteCode(course.inviteCode, salt)
+        }, (e) => e ? rej(e) : res()))
+        return { code: course.inviteCode, courseId: course.rootId }
+      }
 
       const key = await ensureCourseKey(ssbClient, course.rootId)
       if (!key) throw new Error("Course key unavailable")
@@ -991,19 +1013,24 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       return { code, courseId: course.rootId }
     },
 
-    async joinByInvite(code) {
+    async joinByInvite(rawCode) {
       if (!schoolCrypto) throw new Error("School crypto unavailable")
       const ssbClient = await openSsb()
       const me = ssbClient.id
       const messages = await readAll(ssbClient)
 
+      const candidates = Array.from(new Set([String(rawCode || "").trim(), String(rawCode || "").trim().toLowerCase()])).filter(Boolean)
       let matched = null
+      let code = null
       for (const m of messages) {
         const c = m.value && m.value.content
         if (!c || c.type !== "school-invite") continue
-        try {
-          if (schoolCrypto.hashInviteCode(code, c.salt) === c.codeHash) { matched = c; break }
-        } catch {}
+        for (const cand of candidates) {
+          try {
+            if (schoolCrypto.hashInviteCode(cand, c.salt) === c.codeHash) { matched = c; code = cand; break }
+          } catch {}
+        }
+        if (matched) break
       }
       if (!matched) throw new Error("Invalid or expired invite code")
 

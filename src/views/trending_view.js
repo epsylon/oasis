@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions} = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary } = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -229,7 +229,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
         span({ class: 'pm-exposition-text' }, String(c.type || '').toUpperCase())
       ),
-      renderContentActions(item.key, detailHref, { spread: spreadMap.get(item.key) || null })
+      renderContentActions(item.key, detailHref, { spread: spreadMap.get(item.key) || null, author: item.value.author })
     ),
     div(
       { class: 'card-section trending-card-body' },
@@ -239,24 +239,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         span({ class: 'date-link' }, `${created} ${i18n.performed} `),
         userLink(item.value.author)
       ),
-      (() => {
-        const ops = c.opinions || {};
-        const entries = Object.entries(ops).filter(([, v]) => v > 0);
-        const dominantPart = (() => {
-          if (!entries.length) return null;
-          const maxVal = Math.max(...entries.map(([, v]) => v));
-          const dominant = entries.filter(([, v]) => v === maxVal).map(([k]) => voteLabelFor(k));
-          return [
-            span({ class: 'trending-dominant-sep' }, '|'),
-            span({ class: 'trending-dominant-text' }, `${i18n.moreVoted || 'More Voted'}: ${dominant.join(' + ')}`)
-          ];
-        })();
-        return h2(
-          `${i18n.trendingTotalOpinions || i18n.trendingTotalCount}: `,
-          span({ class: 'trending-total-count' }, String(votes)),
-          ...(dominantPart || [])
-        );
-      })(),
+      renderVotesSummary(c.opinions),
       details({ class: 'opinions-voting-collapse' },
         summary({ class: 'opinions-summary' },
           span({ class: 'opinions-summary-icon' }, 'ꔍ'),

@@ -3,6 +3,7 @@ const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
+const { readTyped } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -18,10 +19,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
-  const readAll = async (ssbClient) =>
-    new Promise((resolve, reject) =>
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => err ? reject(err) : resolve(msgs)))
-    )
+  const SHOP_TYPES = ["shop", "shopProduct", "shopOpinion", "shopPurchase", "shop-invite", "shop-invite-tombstone", "shop-open-invite", "shop-open-invite-tombstone", "tombstone"]
+
+  const readAll = async (ssbClient) => readTyped(ssbClient, SHOP_TYPES, { limit: logLimit, withWindow: true })
 
   const SELLER_STATUSES = ["ACCEPTED", "REJECTED", "PAID", "SHIPPED"]
   const BUYER_STATUSES = ["RECEIVED"]

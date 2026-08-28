@@ -73,7 +73,7 @@ async function checkMirror(callback) {
 }
 
 exports.getRemoteVersion = async () => {
-  if (existsSync('../../.git')) {
+  if (existsSync(join(__dirname, '..', '..', '.git'))) {
     try {
       const response = await fetch(remoteUrl, {
         method: 'GET',

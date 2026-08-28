@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe')
+const { readTyped } = require("./typed_log")
 const logLimit = (getConfig().ssbLogStream && getConfig().ssbLogStream.limit) || 1000
 
 module.exports = ({ cooler }) => {
@@ -20,13 +21,10 @@ module.exports = ({ cooler }) => {
     return Math.max(0, Math.min(100, x))
   }
 
+  const PROJECT_TYPES = ["project", "projectOpinion", "projectFollow", "projectPledge", "projectClaim", "projectPledgeConfirm", "tombstone"]
+
   async function getAllMsgs(ssbClient) {
-    return new Promise((r, j) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((e, m) => (e ? j(e) : r(m)))
-      )
-    })
+    return readTyped(ssbClient, PROJECT_TYPES, { limit: logLimit })
   }
 
   function extractBlobId(possibleMarkdownImage) {

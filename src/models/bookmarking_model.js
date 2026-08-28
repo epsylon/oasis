@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 const { dedupeBy, norm } = require('../backend/dedupe');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -36,13 +37,9 @@ module.exports = ({ cooler }) => {
     return ssb;
   };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-      );
-    });
+  const BOOKMARK_TYPES = ["bookmark", "bookmarkOpinion", "tombstone"];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, BOOKMARK_TYPES, { limit: logLimit });
 
   const getMsg = async (ssbClient, key) =>
     new Promise((resolve, reject) => {

@@ -675,15 +675,10 @@ const viewerFilters = require('../models/viewer_filters');
 const scanPendingFollows = async (viewerId) => {
   if (!viewerId) return;
   if (!viewerFilters.isFrictionActive()) return;
-  const pullStream = require('../server/node_modules/pull-stream');
+  const { readTyped } = require('../models/typed_log');
   const ssbClient = await cooler.open();
   const limit = getConfig().ssbLogStream?.limit || 1000;
-  const rows = await new Promise((res, rej) => {
-    pullStream(
-      ssbClient.createLogStream({ reverse: true, limit }),
-      pullStream.collect((err, arr) => err ? rej(err) : res(arr || []))
-    );
-  });
+  const rows = (await readTyped(ssbClient, ['contact'], { limit })).reverse();
   const accepted = new Set(viewerFilters.loadAccepted());
   const pendingIds = new Set(viewerFilters.listPending().map(x => x.followerId));
   for (const msg of rows) {
@@ -4194,6 +4189,7 @@ router
     let feeds = await feedModel.listFeeds({ filter, q, tag });
     feeds = await applyListFilters(feeds, ctx);
     await warmAuthorNames(feeds);
+    const feedSpreadMap = await spreads.forMessages(feeds.map(f => f && f.key)).catch(() => new Map());
     const uxFeed = getConfig().ux?.current === 'feed';
     let trendingTags = [];
     let activeUsers = [];
@@ -4212,7 +4208,7 @@ router
         activeUsers = await Promise.all(ids.map(async (id) => ({ id, avatarUrl: getAvatarUrl(await about.image(id).catch(() => null)) })));
       } catch (_) {}
     }
-    ctx.body = feedView(feeds, { filter, q, tag, msg, workspace: uxFeed, trendingTags, activeUsers });
+    ctx.body = feedView(feeds, { filter, q, tag, msg, workspace: uxFeed, trendingTags, activeUsers, spreadMap: feedSpreadMap });
   })
   .get("/feed/create", async (ctx) => {
     const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
@@ -8600,7 +8596,7 @@ router
       }
       throw err;
     }
-    ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(ctx.params.chatId)}`, ['/chats']));
+    ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(ctx.params.chatId)}#chat-latest`, ['/chats']));
   })
   .post("/chats/:chatId/react", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }

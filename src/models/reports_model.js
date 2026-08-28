@@ -3,6 +3,7 @@ const { normalizeImages, normalizeVideo } = require('./media_gallery');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const normU = (v) => String(v || '').trim().toUpperCase();
@@ -50,13 +51,9 @@ module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-      );
-    });
+  const REPORT_TYPES = ['report', 'reportConfirm', 'reportOpinion', 'tombstone'];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, REPORT_TYPES, { limit: logLimit });
 
   const buildIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages);

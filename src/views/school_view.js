@@ -402,9 +402,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     course.chatId && (isTeacher || isStudent || (course.visibility === "PUBLIC" && isFree(course)))
       ? div({ class: "tribe-side-actions shop-visibility-row" },
           span({ class: "card-label" }, `${i18n.schoolCourseChat}: `),
-          form({ method: "GET", action: `/chats/${encodeURIComponent(course.chatId)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, "JOIN")
-          )
+          a({ href: `/chats/${encodeURIComponent(course.chatId)}#chat-latest`, class: "tribe-action-btn" }, "JOIN")
         )
       : null,
     safeArr(course.tags).length

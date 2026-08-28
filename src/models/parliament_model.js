@@ -2,8 +2,18 @@ const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const PARLIAMENT_TYPES = [
+  'parliamentCandidature', 'parliamentCandidatureVote', 'parliamentTerm',
+  'parliamentProposal', 'parliamentRevocation', 'parliamentLaw',
+  'tribe', 'about', 'tombstone'
+];
+const TRIBE_PARLIAMENT_TYPES = [
+  'tribeParliamentTerm', 'tribeParliamentCandidature', 'tribeParliamentRule',
+  'parliamentCandidature', 'tombstone'
+];
 const TERM_DAYS = 60;
 const PROPOSAL_DAYS = 7;
 const REVOCATION_DAYS = 15;
@@ -74,12 +84,7 @@ module.exports = ({ cooler, services = {} }) => {
     const now = Date.now();
     if (logCache.arr && now - logCache.at < CACHE_MS) return logCache.arr;
     const ssbClient = await openSsb();
-    const arr = await new Promise((res, rej) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, out) => (err ? rej(err) : res(out || [])))
-      );
-    });
+    const arr = await readTyped(ssbClient, PARLIAMENT_TYPES, { limit: logLimit });
     logCache = { at: now, arr };
     return arr;
   }
@@ -1308,12 +1313,7 @@ if (c.type === type) {
 
   const tribeReadLog = async () => {
     const client = await openSsb();
-    return new Promise((resolve, reject) => {
-      pull(
-        client.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs || []))
-      );
-    });
+    return readTyped(client, TRIBE_PARLIAMENT_TYPES, { limit: logLimit });
   };
 
   const tribeListByType = async (type, tribeId) => {

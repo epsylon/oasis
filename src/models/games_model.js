@@ -1,6 +1,9 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 5000;
+
+const GAME_TYPES = ['gameScore'];
 
 const VALID_GAMES = new Set([
   'cocoland', 'ecoinflow', 'neoninfiltrator', 'spaceinvaders', 'arkanoid', 'pingpong',
@@ -16,12 +19,7 @@ module.exports = ({ cooler }) => {
   };
 
   async function readAll(ssbClient) {
-    return new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, results) => (err ? reject(err) : resolve(results)))
-      );
-    });
+    return readTyped(ssbClient, GAME_TYPES, { limit: logLimit });
   }
 
   return {

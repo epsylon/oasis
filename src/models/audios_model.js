@@ -1,6 +1,7 @@
 const pull = require("../server/node_modules/pull-stream");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
+const { readTyped } = require('./typed_log');
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 
@@ -31,10 +32,9 @@ module.exports = ({ cooler }) => {
     return ssb;
   };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs))));
-    });
+  const AUDIO_TYPES = ["audio", "audioOpinion", "tombstone"];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, AUDIO_TYPES, { limit: logLimit });
 
   const getMsg = async (ssbClient, key) =>
     new Promise((resolve, reject) => {

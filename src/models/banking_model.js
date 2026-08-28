@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const pull = require("../server/node_modules/pull-stream");
+const { readTyped } = require("./typed_log");
 const { getConfig } = require("../configs/config-manager.js");
 const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state.js");
@@ -260,15 +261,12 @@ module.exports = ({ services } = {}) => {
     return ssbInstance;
   }
 
+  const BANKING_TYPES = ["wallet", "karmaScore", "ubiClaim", "ubiClaimResult", "ubiAllocation", "pubAvailability", "tombstone"];
+
   async function scanLogStream() {
     const ssb = await openSsb();
     if (!ssb) return [];
-    return new Promise((resolve, reject) =>
-      pull(
-        ssb.createLogStream({ limit: getLogLimit(), reverse: true }),
-        pull.collect((err, arr) => err ? reject(err) : resolve(arr))
-      )
-    );
+    return readTyped(ssb, BANKING_TYPES, { limit: getLogLimit(), withWindow: true });
   }
 
   async function getWalletFromSSB(userId) {

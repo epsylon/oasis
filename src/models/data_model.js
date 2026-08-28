@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -85,13 +86,9 @@ module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-      );
-    });
+  const DATA_TYPES = [...Object.values(KINDS).map(v => v.type), 'tombstone'];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, DATA_TYPES, { limit: logLimit });
 
   const buildGraph = async () => {
     const ssbClient = await openSsb();

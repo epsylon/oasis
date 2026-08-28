@@ -225,7 +225,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
 
       const results = await new Promise((resolve, reject) => {
         pull(
-          ssbClient.createLogStream({ reverse: true, limit: logLimit }),
+          ssbClient.createLogStream({ reverse: true }),
           pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
         );
       });

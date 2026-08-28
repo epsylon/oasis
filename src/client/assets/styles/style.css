@@ -5915,6 +5915,12 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .stats-toplist .stats-toplist-name{flex:0 0 auto;color:#FFDD44;font-size:13px;min-width:120px}
 .stats-toplist .stats-toplist-num{flex:0 0 auto;color:#FFDD44;font-size:13px;min-width:36px;text-align:right}
 .peer-key{word-break:break-all;font-size:12px}
+.peers-list .block-info-table{table-layout:fixed;width:100%}
+.peers-list .block-info-table td{overflow-wrap:anywhere}
+.peers-list .block-info-table td:nth-child(1){width:18%}
+.peers-list .block-info-table td:nth-child(2){width:52%}
+.peers-list .block-info-table td:nth-child(3){width:15%}
+.peers-list .block-info-table td:nth-child(4){width:15%}
 .peers-technical-block{margin-top:16px}
 .peers-conn-actions{margin-bottom:12px}
 .invites-pubs-actions{margin:12px 0}
@@ -7674,6 +7680,7 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .school-lesson-header form{margin:0}
 .school-complete-btn--done{border-color:#2ecc71;color:#2ecc71}
 
+.school-invited-list{border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
 .school-pending-block{border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
 .school-pending-row{justify-content:center;border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
 .school-pending-block .doc-export-actions{margin-top:8px;margin-bottom:0}

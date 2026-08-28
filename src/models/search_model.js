@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
@@ -313,12 +314,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     const viewerId = ssbClient.id;
     const queryLower = String(query || '').toLowerCase();
 
-    const messages = await new Promise((res, rej) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => err ? rej(err) : res(msgs))
-      );
-    });
+    const messages = await readTyped(ssbClient, [], { limit: logLimit, withWindow: true });
 
     const tombstoned = buildValidatedTombstoneSet(messages);
     const replacesMap = new Map();

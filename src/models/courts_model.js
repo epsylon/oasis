@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const CASE_ANSWER_DAYS = 7;
@@ -16,6 +17,12 @@ const EVIDENCE_FIELDS = ['text', 'link', 'imageUrl'];
 const ANSWER_FIELDS = ['stance', 'text'];
 const VERDICT_FIELDS = ['result', 'orders'];
 const SETTLEMENT_FIELDS = ['terms'];
+const COURTS_TYPES = [
+  'courtsCase', 'courtsMediators', 'courtsJudge', 'courtsVoteLink', 'courtsVisibility',
+  'courtsAnswer', 'courtsEvidence', 'courtsVerdict', 'courtsSettlementProposal',
+  'courtsSettlementAccepted', 'courtsSupport', 'courtsNomination', 'courtsNominationVote',
+  'courts-key', 'tombstone'
+];
 
 module.exports = ({ cooler, services = {}, tribeCrypto }) => {
   let ssb;
@@ -73,12 +80,7 @@ module.exports = ({ cooler, services = {}, tribeCrypto }) => {
 
   async function readLog() {
     const ssbClient = await openSsb();
-    return new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, arr) => (err ? reject(err) : resolve(arr)))
-      );
-    });
+    return readTyped(ssbClient, COURTS_TYPES, { limit: logLimit });
   }
 
   async function listByType(type) {
@@ -919,12 +921,7 @@ if (c.type === type) {
     const ssbKeys = require('../server/node_modules/ssb-keys');
     const ssbConfig = require('../server/ssb_config');
     const ssbClient = await openSsb();
-    const msgs = await new Promise((res, rej) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, arr) => (err ? rej(err) : res(arr)))
-      );
-    });
+    const msgs = await readLog();
     for (const m of msgs) {
       const c = m.value?.content;
       if (!c || c.type !== 'courts-key') continue;

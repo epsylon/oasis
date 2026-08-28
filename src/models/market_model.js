@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
+const { readTyped } = require('./typed_log')
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
@@ -63,11 +64,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
     return ssb
   }
 
-  const readAll = async (ssbClient) => {
-    return new Promise((resolve, reject) =>
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs))))
-    )
-  }
+  const MARKET_TYPES = ["market", "marketBid", "marketPurchase", "marketOpinion", "tombstone"]
+
+  const readAll = async (ssbClient) => readTyped(ssbClient, MARKET_TYPES, { limit: logLimit })
 
   const buildMarketIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages)

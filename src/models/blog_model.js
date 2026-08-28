@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const OPINION_TYPE = 'blogOpinion';
@@ -9,13 +10,9 @@ module.exports = ({ cooler, isPublic = false }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-      );
-    });
+  const BLOG_TYPES = ['post', OPINION_TYPE, 'tombstone'];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, BLOG_TYPES, { limit: logLimit });
 
   const isRootPost = (c) =>
     !!c && c.type === 'post' && typeof c.text === 'string' &&

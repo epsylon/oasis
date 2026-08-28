@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 const { dedupeBy, mergeDuplicatesBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -27,10 +28,9 @@ module.exports = ({ cooler }) => {
       ssbClient.get(id, (err, val) => (err ? reject(err) : resolve({ key: id, value: val })));
     });
 
-  const getAllMessages = (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs))));
-    });
+  const FEED_TYPES = ["feed", "feedOpinion", "feed-action", "tombstone"];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, FEED_TYPES, { limit: logLimit });
 
   const extractTags = (text) => {
     const list = (String(text || "").match(/#[A-Za-z0-9_]{1,32}/g) || []).map((t) => t.slice(1).toLowerCase());

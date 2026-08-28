@@ -3,6 +3,7 @@ const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
+const { readTyped } = require("./typed_log");
 const contentFavorites = require("../backend/content_favorites");
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -34,13 +35,9 @@ module.exports = ({ cooler }) => {
     return ssb;
   };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-      );
-    });
+  const DOCUMENT_TYPES = ["document", "documentOpinion", "tombstone"];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, DOCUMENT_TYPES, { limit: logLimit });
 
   const buildIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages);

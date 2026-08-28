@@ -6,7 +6,15 @@ const crypto = require('crypto');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
 const { dedupeBy, norm } = require('../backend/dedupe');
+const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+
+const EVENT_TYPES = [
+  'event', 'eventOpinion', 'eventAttend',
+  'event-invite', 'event-invite-tombstone',
+  'event-open-invite', 'event-open-invite-tombstone',
+  'tribe-keys', 'tombstone'
+];
 
 module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
   let ssb;
@@ -17,9 +25,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
   const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null;
 
   const readAll = async (ssbClient) =>
-    new Promise((resolve, reject) =>
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => err ? reject(err) : resolve(msgs)))
-    );
+    readTyped(ssbClient, EVENT_TYPES, { limit: logLimit });
 
   const ingestOwnTribeKeys = async () => {
     if (!ownCrypto) return;
@@ -599,79 +605,72 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     async listAll(author = null, filter = 'all') {
       const ssbClient = await openSsb();
       const userId = await me();
-      return new Promise((resolve, reject) => {
-        pull(
-          ssbClient.createLogStream({ limit: logLimit }),
-          pull.collect((err, results) => {
-            if (err) return reject(new Error("Error listing events: " + err.message));
-            const tombstoned = buildValidatedTombstoneSet(results);
-            const idx = buildEventIndex(results);
-            const collab = collectCollab(results);
+      const results = await readAll(ssbClient);
+      const tombstoned = buildValidatedTombstoneSet(results);
+      const idx = buildEventIndex(results);
+      const collab = collectCollab(results);
 
-            const roots = new Set();
-            for (const r of results) {
-              const rawC = r.value && r.value.content;
-              if (!rawC || rawC.type !== 'event') continue;
-              if (!idx.eventAuthor.has(r.key)) continue;
-              roots.add(idx.rootOf(r.key));
-            }
+      const roots = new Set();
+      for (const r of results) {
+        const rawC = r.value && r.value.content;
+        if (!rawC || rawC.type !== 'event') continue;
+        if (!idx.eventAuthor.has(r.key)) continue;
+        roots.add(idx.rootOf(r.key));
+      }
 
-            const byRoot = new Map();
-            for (const rid of roots) {
-              if (tombstoned.has(rid)) continue;
-              const contentTip = idx.contentTipOf(rid);
-              if (tombstoned.has(contentTip)) continue;
-              const r = results.find(x => x.key === contentTip);
-              if (!r) continue;
-              const rawC = r.value && r.value.content;
-              if (!rawC) continue;
-              const c = rawC.encryptedPayload ? decryptEventContent(rawC, rid) : rawC;
-              if (!c || c._undecryptable) continue;
-              if (author && c.organizer !== author) continue;
+      const byRoot = new Map();
+      for (const rid of roots) {
+        if (tombstoned.has(rid)) continue;
+        const contentTip = idx.contentTipOf(rid);
+        if (tombstoned.has(contentTip)) continue;
+        const r = results.find(x => x.key === contentTip);
+        if (!r) continue;
+        const rawC = r.value && r.value.content;
+        if (!rawC) continue;
+        const c = rawC.encryptedPayload ? decryptEventContent(rawC, rid) : rawC;
+        if (!c || c._undecryptable) continue;
+        if (author && c.organizer !== author) continue;
 
-              const status = deriveStatus(c);
-              const agg = aggregateCollab(c, rid, collab);
+        const status = deriveStatus(c);
+        const agg = aggregateCollab(c, rid, collab);
 
-              byRoot.set(rid, {
-                id: contentTip,
-                title: c.title || '',
-                description: c.description || '',
-                date: c.date || '',
-                location: c.location || '',
-                price: c.price || 0,
-                url: c.url || '',
-                attendees: agg.attendees,
-                tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
-                createdAt: c.createdAt || new Date().toISOString(),
-                organizer: c.organizer || '',
-                status,
-                isPublic: normalizePrivacy(c.isPublic),
-                mapUrl: c.mapUrl || "",
-                images: normalizeImages(c.images),
-                video: normalizeVideo(c.video),
-                intervalWeekly: truthy(c.intervalWeekly),
-                intervalMonthly: truthy(c.intervalMonthly),
-                intervalYearly: truthy(c.intervalYearly),
-                recurrenceUntil: c.recurrenceUntil || '',
-                recurring: hasAnyInterval(truthy(c.intervalWeekly), truthy(c.intervalMonthly), truthy(c.intervalYearly)) && !!c.recurrenceUntil,
-                nextDate: effectiveDate(c),
-                encrypted: normalizePrivacy(c.isPublic) === 'private',
-                opinions: agg.opinions,
-                opinions_inhabitants: agg.opinions_inhabitants
-              });
-            }
+        byRoot.set(rid, {
+          id: contentTip,
+          title: c.title || '',
+          description: c.description || '',
+          date: c.date || '',
+          location: c.location || '',
+          price: c.price || 0,
+          url: c.url || '',
+          attendees: agg.attendees,
+          tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
+          createdAt: c.createdAt || new Date().toISOString(),
+          organizer: c.organizer || '',
+          status,
+          isPublic: normalizePrivacy(c.isPublic),
+          mapUrl: c.mapUrl || "",
+          images: normalizeImages(c.images),
+          video: normalizeVideo(c.video),
+          intervalWeekly: truthy(c.intervalWeekly),
+          intervalMonthly: truthy(c.intervalMonthly),
+          intervalYearly: truthy(c.intervalYearly),
+          recurrenceUntil: c.recurrenceUntil || '',
+          recurring: hasAnyInterval(truthy(c.intervalWeekly), truthy(c.intervalMonthly), truthy(c.intervalYearly)) && !!c.recurrenceUntil,
+          nextDate: effectiveDate(c),
+          encrypted: normalizePrivacy(c.isPublic) === 'private',
+          opinions: agg.opinions,
+          opinions_inhabitants: agg.opinions_inhabitants
+        });
+      }
 
-            let out = Array.from(byRoot.values());
-            out = dedupeBy(out, e => e.title ? [norm(e.organizer), norm(e.title), norm(e.date)].join('|') : null);
+      let out = Array.from(byRoot.values());
+      out = dedupeBy(out, e => e.title ? [norm(e.organizer), norm(e.title), norm(e.date)].join('|') : null);
 
-            if (filter === 'mine') out = out.filter(e => e.organizer === userId);
-            if (filter === 'open') out = out.filter(e => String(e.status).toUpperCase() === 'OPEN');
-            if (filter === 'closed') out = out.filter(e => String(e.status).toUpperCase() === 'CLOSED');
+      if (filter === 'mine') out = out.filter(e => e.organizer === userId);
+      if (filter === 'open') out = out.filter(e => String(e.status).toUpperCase() === 'OPEN');
+      if (filter === 'closed') out = out.filter(e => String(e.status).toUpperCase() === 'CLOSED');
 
-            resolve(out);
-          })
-        );
-      });
+      return out;
     }
   };
 };

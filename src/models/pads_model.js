@@ -3,6 +3,7 @@ const crypto = require("crypto")
 const fs = require("fs")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
 const { collabContent, openInviteOf } = require('../backend/collab_content')
+const { readTyped } = require('./typed_log')
 const padCollab = collabContent({ membersField: 'members', undecField: 'undecryptable', contentFields: ['title', 'deadline', 'status'], listFields: ['tags', 'invites'] })
 const path = require("path")
 const { getConfig } = require("../configs/config-manager.js")
@@ -226,10 +227,9 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     } catch (_) {}
   }
 
-  const readAll = async (ssbClient) =>
-    new Promise((resolve, reject) =>
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => err ? reject(err) : resolve(msgs)))
-    )
+  const PAD_TYPES = ["pad", "padMember", "padEntry", "tribe-keys", "tombstone"]
+
+  const readAll = async (ssbClient) => readTyped(ssbClient, PAD_TYPES, { limit: logLimit })
 
   const buildIndex = (messages) => {
     const tomb = new Set()

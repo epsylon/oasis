@@ -35,10 +35,10 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     const filteredUsers = (users || []).filter(u => u.id !== key);
     const userCount = filteredUsers.length;
     return tr(
-      td(a({ href: peerUrl, class: "user-link" }, name || key.slice(0, 20) + '…')),
-      td(a({ href: peerUrl, class: 'user-link peer-key' }, key)),
-      td(String((versions || {})[key] || '—')),
-      td(String(userCount))
+      td({ 'data-label': i18n.peerHost || 'Pub' }, a({ href: peerUrl, class: "user-link" }, name || key.slice(0, 20) + '…')),
+      td({ 'data-label': i18n.peersOasisId || 'Oasis ID' }, a({ href: peerUrl, class: 'user-link peer-key' }, key)),
+      td({ 'data-label': i18n.peersOasisVersion || 'Version' }, String((versions || {})[key] || '—')),
+      td({ 'data-label': i18n.peersReplicatedFeeds || 'Replicated' }, String(userCount))
     );
   };
 
@@ -69,11 +69,12 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     const action = connected ? 'disconnect' : 'connect';
     const btnLabel = connected ? (i18n.peerDisconnect || 'Disconnect') : (i18n.peerConnect || 'Connect');
     return tr(
-      td(a({ href: `/author/${encodeURIComponent(k)}`, class: 'user-link peer-key' }, k ? k.slice(0, 20) + '…' : '—')),
-      td(String(tp.host || '—')),
-      td(String(tp.port || '—')),
-      td(String(tp.state || tp.source || '—')),
-      td(String(tp.stateChange ? new Date(tp.stateChange).toISOString().slice(0, 16).replace('T', ' ') : '—')),
+      td({ 'data-label': 'Key' }, a({ href: `/author/${encodeURIComponent(k)}`, class: 'user-link peer-key' }, k ? k.slice(0, 20) + '…' : '—')),
+      td({ 'data-label': 'Host' }, String(tp.host || '—')),
+      td({ 'data-label': i18n.peerPort || 'Port' }, String(tp.port || '—')),
+      td({ 'data-label': i18n.peersOasisVersion || 'Version' }, String((versions || {})[k] || '—')),
+      td({ 'data-label': 'State' }, String(tp.state || tp.source || '—')),
+      td({ 'data-label': 'Last change' }, String(tp.stateChange ? new Date(tp.stateChange).toISOString().slice(0, 16).replace('T', ' ') : '—')),
       td(
         form({ method: "POST", action: `/peers/${action}`, class: "inline-form" },
           input({ type: "hidden", name: "key", value: k }),
@@ -107,6 +108,7 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
             td({ class: 'card-label' }, 'Key'),
             td({ class: 'card-label' }, 'Host'),
             td({ class: 'card-label' }, i18n.peerPort || 'Port'),
+            td({ class: 'card-label' }, i18n.peersOasisVersion || 'Version'),
             td({ class: 'card-label' }, 'State'),
             td({ class: 'card-label' }, 'Last change'),
             td({ class: 'card-label' }, '')

@@ -50,6 +50,9 @@ describe('feed: own feed survives cross-author duplicate merge', (t) => {
 
 describe('feed: microblogging workspace mode', (t) => {
   t('workspace layout renders side boxes, plain mode does not', async () => {
+    const cm = require('../../../src/configs/config-manager.js');
+    const origGetConfig = cm.getConfig;
+    cm.getConfig = () => ({ ...origGetConfig(), ux: { current: 'feed' } });
     const { feedView } = require('../../../src/views/feed_view');
     const feed = { key: '%f.sha256', value: { author: '@a.ed25519', timestamp: Date.now(), content: { type: 'feed', text: 'hola mundo', opinions: {}, refeeds: 0 } } };
     const ws = String(feedView([feed], {
@@ -64,6 +67,7 @@ describe('feed: microblogging workspace mode', (t) => {
     ok(ws.includes('hola mundo'), 'timeline still renders');
     const plain = String(feedView([feed], { filter: 'ALL' }));
     ok(!plain.includes('feed-workspace'), 'no workspace outside the mode');
+    cm.getConfig = origGetConfig;
   });
 });
 

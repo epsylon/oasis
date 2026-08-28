@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const crypto = require("crypto")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
+const { readTyped } = require('./typed_log')
 const { collabContent, openInviteOf } = require('../backend/collab_content')
 const calCollab = collabContent({ membersField: 'participants', undecField: 'encrypted', contentFields: ['title', 'deadline', 'status'], listFields: ['tags', 'invites'] })
 const logLimit = getConfig().ssbLogStream?.limit || 1000
@@ -92,10 +93,9 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     } catch (_) {}
   }
 
-  const readAll = async (ssbClient) =>
-    new Promise((resolve, reject) =>
-      pull(ssbClient.createLogStream({ limit: logLimit }), pull.collect((err, msgs) => err ? reject(err) : resolve(msgs)))
-    )
+  const CALENDAR_TYPES = ["calendar", "calendarDate", "calendarNote", "calendarParticipant", "calendarReminderSent", "tribe-keys", "tombstone"]
+
+  const readAll = async (ssbClient) => readTyped(ssbClient, CALENDAR_TYPES, { limit: logLimit, withWindow: true })
 
   const tribeHelpers = tribeCrypto ? tribeCrypto.createHelpers(tribesModel) : null
   const encryptIfTribe = tribeHelpers ? tribeHelpers.encryptIfTribe : async (c) => c

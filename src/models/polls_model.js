@@ -1,6 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readTyped } = require('./typed_log');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -37,13 +38,9 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const getAllMessages = async (ssbClient) =>
-    new Promise((resolve, reject) => {
-      pull(
-        ssbClient.createLogStream({ limit: logLimit }),
-        pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs)))
-      );
-    });
+  const POLLS_TYPES = [POLL_TYPE, VOTE_TYPE, OPINION_TYPE, 'pollClose', 'post', 'tombstone'];
+
+  const getAllMessages = async (ssbClient) => readTyped(ssbClient, POLLS_TYPES, { limit: logLimit });
 
   const decryptField = (value, keys) => {
     if (!tribeCrypto || typeof value !== 'string' || !value) return null;
