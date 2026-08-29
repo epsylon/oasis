@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -72,7 +72,10 @@ const renderChatCard = (chat, filter, params = {}) => {
   const chips = [
     renderChatStatusChip(chat.status),
     renderEncryptedChip(i18n),
-    renderLifespanChip(chat.lifetime, i18n)
+    renderLifespanChip(chat.lifetime, i18n),
+    chat.subscriptionIn === true
+      ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+      : (chat.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
   const href = `/chats/${encodeURIComponent(chat.key)}`
 
@@ -370,10 +373,16 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   const statusLabel = chat.status === "CLOSED" ? i18n.chatStatusClosed :
     chat.status === "INVITE-ONLY" ? i18n.chatStatusInviteOnly : i18n.chatStatusOpen
 
+  const chatShares = isAuthor || isMember
   const detailChips = [
     renderChatStatusChip(chat.status),
     renderEncryptedChip(i18n),
-    renderLifespanChip(chat.lifetime, i18n)
+    renderLifespanChip(chat.lifetime, i18n),
+    chat.subscription && chatShares
+      ? ((isAuthor || chat.subscription.subscribed === true)
+          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          : renderStateChip("closed", "✉", i18n.subscriptionOff))
+      : null
   ].filter(Boolean)
   const chatSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
@@ -387,6 +396,16 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.chatParticipants}: ${safeArr(chat.members).length}`)
     ),
+    chat.subscription && chatShares
+      ? renderSubscriptionBox({
+          target: chat.rootId || chat.key,
+          scope: "chats",
+          subscribed: chat.subscription.subscribed === true,
+          count: chat.subscription.count,
+          isOwner: isAuthor,
+          returnTo
+        })
+      : null,
     table({ class: "tribe-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.chatCreatedAt),

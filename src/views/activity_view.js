@@ -232,7 +232,7 @@ const SPREADABLE_TYPES = new Set([
   'post', 'audio', 'video', 'image', 'document', 'torrent', 'bookmark',
   'event', 'calendar', 'task', 'votes', 'vote', 'market', 'shop', 'shopProduct',
   'project', 'transfer', 'housing', 'job', 'report', 'industry', 'industryBuild', 'industryBlueprint',
-  'chat', 'chatMessage', 'pad', 'padEntry', 'forum', 'map', 'poll', 'blog', 'schoolCourse'
+  'chat', 'chatMessage', 'pad', 'padEntry', 'forum', 'map', 'poll', 'blog', 'schoolCourse', 'feed'
 ]);
 
 function renderActionCards(actions, userId, allActions, spreadMap = new Map(), extras = {}) {

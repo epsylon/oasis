@@ -1,8 +1,10 @@
-const { div, h2, p, section, button, form, input, textarea, br, label, pre, span, strong, a } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, input, textarea, br, label, pre, span, strong, a, select, option, datalist } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { getConfig } = require('../configs/config-manager.js');
 
-exports.pmView = async (initialRecipients = '', initialSubject = '', initialText = '', showPreview = false, sentKey = '', crypterError = false, crypterPreview = null, recipientError = false, fileError = '', fileSharePreview = null) => {
+exports.pmView = async (initialRecipients = '', initialSubject = '', initialText = '', showPreview = false, sentKey = '', crypterError = false, crypterPreview = null, recipientError = false, fileError = '', fileSharePreview = null, opts = {}) => {
+  const mailingLists = Array.isArray(opts.lists) ? opts.lists : [];
+  const selectedList = String(opts.selectedList || '');
   const title = i18n.pmSendTitle;
   const description = i18n.pmDescription;
   const textLen = (initialText || '').length;
@@ -43,11 +45,31 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
               type: "text",
               name: "recipients",
               placeholder: `${i18n.pmRecipientsHint}. ${i18n.pmLimitsHint}`,
-              required: true,
+              ...(mailingLists.length ? {} : { required: true }),
               value: initialRecipients,
               maxlength: "511"
             }),
             br(),
+            mailingLists.length
+              ? div({ class: "pm-list-row" },
+                  label({ for: "pm-list" }, i18n.pmListLabel),
+                  br(),
+                  mailingLists.length <= 12
+                    ? select({ name: "list", id: "pm-list" },
+                        option({ value: "" }, i18n.pmListNone),
+                        mailingLists.map(l =>
+                          option({ value: l.target, ...(selectedList === l.target ? { selected: true } : {}) }, `${l.label} (${l.count})`)
+                        )
+                      )
+                    : div(
+                        input({ type: "text", name: "list", id: "pm-list", list: "pm-list-options", value: (mailingLists.find(l => l.target === selectedList) || {}).label || selectedList, placeholder: i18n.pmListNone }),
+                        datalist({ id: "pm-list-options" },
+                          mailingLists.map(l => option({ value: l.label }, `(${l.count})`))
+                        )
+                      ),
+                  br()
+                )
+              : null,
             label({ for: "subject" }, i18n.pmSubject),
             br(),
             input({ type: "text", name: "subject", placeholder: i18n.pmSubjectHint, value: initialSubject, maxlength: "150" }),
@@ -83,6 +105,7 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
                     div({ class: "pm-preview-content" }, pre({ class: "pm-pre" }, crypterPreview.cipher || '')),
                     form({ method: "POST", action: "/pm", class: "pm-crypter-send-form" },
                       input({ type: "hidden", name: "recipients", value: initialRecipients }),
+                      input({ type: "hidden", name: "list", value: selectedList }),
                       input({ type: "hidden", name: "subject", value: initialSubject }),
                       input({ type: "hidden", name: "text", value: initialText }),
                       input({ type: "hidden", name: "crypter", value: "1" }),
@@ -102,6 +125,7 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
                     ),
                     form({ method: "POST", action: "/pm", class: "pm-send-form" },
                       input({ type: "hidden", name: "recipients", value: initialRecipients }),
+                      input({ type: "hidden", name: "list", value: selectedList }),
                       input({ type: "hidden", name: "subject", value: initialSubject }),
                       input({ type: "hidden", name: "text", value: initialText }),
                       div({ class: "pm-actions" },

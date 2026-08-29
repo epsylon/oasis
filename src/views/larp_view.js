@@ -384,7 +384,7 @@ exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, hous
             p({ class: 'larp-invite-banner-code' }, inviteCode)
           )
         : null,
-      isAcademia && viewerInAcademia ? renderAcademiaJoinPanel(houses, testStatus, housesById, questions, myHouseKey) : null,
+      null,
       showWall
         ? renderPostsBlock(posts, house, canWriteWall)
         : null

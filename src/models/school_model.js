@@ -105,7 +105,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
         const ts = v.timestamp || m.timestamp || 0
         const k = `${c.courseId}::${author}`
         const prev = enrollLatest.get(k)
-        if (!prev || ts >= prev.ts) enrollLatest.set(k, { ts, value: !!c.value, author, courseId: c.courseId, transferId: c.transferId || null })
+        if (!prev || ts >= prev.ts) enrollLatest.set(k, { ts, value: !!c.value, author, courseId: c.courseId, transferId: c.transferId || null, keyProof: c.keyProof || null })
         continue
       }
 
@@ -170,7 +170,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
           if (c.type === "schoolEnroll" && c.courseId) {
             const k = `${c.courseId}::${author}`
             const prev = enrollLatest.get(k)
-            if (!prev || ts >= prev.ts) enrollLatest.set(k, { ts, value: !!c.value, author, courseId: c.courseId, transferId: c.transferId || null })
+            if (!prev || ts >= prev.ts) enrollLatest.set(k, { ts, value: !!c.value, author, courseId: c.courseId, transferId: c.transferId || null, keyProof: c.keyProof || null })
             continue
           }
           if (c.type === "schoolProgress" && c.courseId && c.lessonId) {
@@ -232,10 +232,10 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     for (const r of roots) tipByRoot.set(r, tipOf(r))
 
     const enrollByCourse = new Map()
-    for (const { courseId, author, value, transferId } of enrollLatest.values()) {
+    for (const { courseId, author, value, transferId, keyProof } of enrollLatest.values()) {
       if (!enrollByCourse.has(courseId)) enrollByCourse.set(courseId, new Map())
       const enrollments = enrollByCourse.get(courseId)
-      if (value) enrollments.set(author, { transferId })
+      if (value) enrollments.set(author, { transferId, keyProof: keyProof || null })
       else enrollments.delete(author)
     }
 
@@ -280,11 +280,15 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     return { tomb, courseNodes, lessonNodes, certNodes, examNodes, parent, child, rootOf, tipOf, tipByRoot, enrollByCourse, transferAgg, grantsByCourse, opinionsByCourse, progressByCourse, examResultLatest, lessonRootOf, lessonChildOf, questionNodes }
   }
 
+  const keyProofFor = (keyHex, studentId) => {
+    try { return nodeCrypto.createHmac("sha256", Buffer.from(keyHex, "hex")).update(String(studentId), "utf8").digest("hex") } catch (_) { return null }
+  }
+
   const buildCourseObject = (node, rootId, enrollments, transferAgg, grants, opinionAgg) => {
     let c = node.c || {}
+    const ringKeys = schoolCrypto ? (schoolCrypto.getKeys(rootId) || []) : []
     if (c.encryptedPayload) {
-      const keys = schoolCrypto ? (schoolCrypto.getKeys(rootId) || []) : []
-      const dec = keys.length && schoolCrypto ? schoolCrypto.decryptContent(c, keys.map(k => [k])) : { ...c, _undecryptable: true }
+      const dec = ringKeys.length && schoolCrypto ? schoolCrypto.decryptContent(c, ringKeys.map(k => [k])) : { ...c, _undecryptable: true }
       if (dec._undecryptable) return { undecryptable: true, id: node.key, rootId, author: node.author }
       c = dec
     }
@@ -295,7 +299,9 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     const paid = Number.isFinite(priceN) && priceN > 0
     const students = []
     const pending = []
+    const grantedViaInvite = []
     for (const [student, info] of (enrollments || new Map())) {
+      if (info.keyProof && ringKeys.some(k => keyProofFor(k, student) === info.keyProof)) grantedViaInvite.push(student)
       if (paid) {
         const signatures = info.transferId ? (transferAgg && transferAgg.get(info.transferId)) : null
         if (signatures && signatures.size >= 2) students.push(student)
@@ -314,7 +320,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       price: Number.isFinite(priceN) && priceN > 0 ? priceN.toFixed(6) : "0.000000",
       visibility: String(c.visibility || "PUBLIC").toUpperCase() === "INVITE" ? "INVITE" : "PUBLIC",
       status: String(c.status || "ONGOING").toUpperCase() === "CLOSED" ? "CLOSED" : "ONGOING",
-      invited: normalizeIds(c.invited),
+      invited: normalizeIds(c.invited).filter(id => !students.includes(id)),
       startDate: c.startDate || null,
       chatId: c.chatId || null,
       inviteCode: c.inviteCode || null,
@@ -323,7 +329,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       updatedAt: c.updatedAt || null,
       students,
       pending,
-      granted: grants ? Array.from(grants) : [],
+      granted: Array.from(new Set([...(grants ? Array.from(grants) : []), ...grantedViaInvite])),
       opinions: opinionAgg ? opinionAgg.opinions : {},
       opinions_inhabitants: opinionAgg ? Array.from(opinionAgg.voters) : []
     }
@@ -581,7 +587,6 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
         const key = await ensureCourseKey(ssbClient, course.rootId)
         if (key) await publishKeyGrant(ssbClient, course.rootId, key, ids)
       }
-      await addToChat(ssbClient, course, ids)
       return updated
     },
 
@@ -1059,7 +1064,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
             const bill = await transfersModel.createTransfer(teacherId, "SCHOOL", priceN.toFixed(6), deadline, ["SCHOOL"], "ECONOMIC")
             transferId = bill && bill.key ? bill.key : null
           }
-          const msg = { type: "schoolEnroll", courseId: matched.target, value: true, transferId, createdAt: new Date().toISOString() }
+          const msg = { type: "schoolEnroll", courseId: matched.target, value: true, transferId, keyProof: keyProofFor(courseKey, me), createdAt: new Date().toISOString() }
           await new Promise((res, rej) => ssbClient.private.publish(msg, [me, teacherId], (e, m) => e ? rej(e) : res(m)))
         }
         if (cc.chatId) {
@@ -1198,7 +1203,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       const progressSet = (idx.progressByCourse.get(course.rootId) || new Map()).get(student) || new Set()
       for (const lesson of lessons) {
         const lessonRoot = idx.lessonRootOf(lesson.id)
-        const lessonExams = exams.filter(x => !x.locked && x.lessonId && x.lessonId === lessonRoot)
+        const lessonExams = exams.filter(x => !x.locked && x.questions.length && x.lessonId && x.lessonId === lessonRoot)
         if (lessonExams.length) {
           for (const x of lessonExams) {
             const r = idx.examResultLatest.get(`${x.id}::${student}`)

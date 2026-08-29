@@ -14,7 +14,7 @@ if (!fs.existsSync(configFilePath)) {
     "modules": {
       "blogsMod": "on",
       "pollsMod": "on",
-      "fediverseMod": "off",
+      "fediverseMod": "on",
       "invitesMod": "on",
       "walletMod": "on",
       "legacyMod": "on",

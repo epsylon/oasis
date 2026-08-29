@@ -186,15 +186,27 @@ if (argv[0] === 'start') {
     } catch (_) {}
   }, 1000);
 
+  const ownFeedSeq = () => new Promise((res) => {
+    try {
+      const pull = require('pull-stream');
+      pull(
+        server.createUserStream({ id: server.id, reverse: true, limit: 1 }),
+        pull.collect((err, msgs) => res(err || !msgs || !msgs.length ? 0 : (msgs[0].value && msgs[0].value.sequence) || 0))
+      );
+    } catch (_) { res(0); }
+  });
+
   setTimeout(async () => {
     try {
+      if (!(await ownFeedSeq())) return;
       const bankingModel = require('../models/banking_model.js')({});
       await bankingModel.ensureSelfAddressPublished();
     } catch (_) {}
   }, 5000);
 
-  setTimeout(() => {
+  setTimeout(async () => {
     try {
+      if (!(await ownFeedSeq())) return;
       const pull = require('pull-stream');
       const version = String(require('./package.json').version || '');
       if (!version) return;

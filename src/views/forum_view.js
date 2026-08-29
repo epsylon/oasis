@@ -3,7 +3,7 @@ const {
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -201,7 +201,10 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
               }, f.title),
               f.isPrivate ? renderPrivacyChip(true, i18n) : null,
               f.isPrivate ? renderForumEncryptedChip(i18n) : null,
-              renderLifespanChip(f.lifetime, i18n)
+              renderLifespanChip(f.lifetime, i18n),
+              f.subscriptionIn === true
+                ? renderStateChip('mutuals', '✉', i18n.subscriptionOn)
+                : (f.subscriptionIn === false ? renderStateChip('closed', '✉', i18n.subscriptionOff) : null)
             ),
 	    div({
 	      class: 'forum-body',
@@ -285,6 +288,9 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
 
 exports.singleForumView = async (forum, messagesData, currentFilter) => {
   const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
+  const isForumOwner = String(forum.author) === String(userId);
+  const sharesForum = isForumOwner || (forum.participants || []).includes(userId);
+  const forumSubIn = isForumOwner || (forum.subscription && forum.subscription.subscribed === true);
   return template(forum.title,
     section(
       div({ class: 'tags-header' },
@@ -333,6 +339,9 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
             forum.isPrivate ? renderPrivacyChip(true, i18n) : null,
             forum.isPrivate ? renderForumEncryptedChip(i18n) : null,
             renderLifespanChip(forum.lifetime, i18n),
+            (forum.subscription && sharesForum)
+              ? renderStateChip(forumSubIn ? 'mutuals' : 'closed', '✉', forumSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
+              : null,
             (forum.isPrivate && forum.author === userId)
               ? form({ method: 'POST', action: `/forum/generate-invite/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
                   button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite))
@@ -359,6 +368,16 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
                   button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.forumDeleteButton))
               : null
           ),
+          (forum.subscription && sharesForum)
+            ? renderSubscriptionBox({
+                target: forum.rootId || forum.key,
+                scope: 'forum',
+                subscribed: forum.subscription.subscribed === true,
+                count: forum.subscription.count,
+                isOwner: isForumOwner,
+                returnTo: `/forum/${encodeURIComponent(forum.key)}`
+              })
+            : null,
 	  div({
 	    class: 'forum-body',
 	    innerHTML: sanitizeHtml(renderTextWithStyles(forum.text || ''))

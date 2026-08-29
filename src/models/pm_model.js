@@ -28,6 +28,18 @@ module.exports = ({ cooler }) => {
   return {
     type: 'post',
 
+    async sendToMany(recipients = [], subject = '', text = '', crypter = false, ref = '') {
+      const others = uniqueRecps(recipients).filter(id => id !== userId);
+      if (!others.length) return [];
+      const out = [];
+      for (let i = 0; i < others.length; i += 6) {
+        const batch = others.slice(i, i + 6);
+        const r = await this.sendMessage(batch, subject, text, crypter, ref).catch(() => null);
+        if (r) out.push(r);
+      }
+      return out;
+    },
+
     async sendMessage(recipients = [], subject = '', text = '', crypter = false, ref = '') {
       const ssbClient = await openSsb();
       const recps = uniqueRecps([userId, ...recipients]);

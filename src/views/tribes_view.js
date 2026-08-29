@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox } = require('./main_views');
 const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { renderResults: renderPollResults, renderBallot: renderPollBallot } = require('./polls_view');
 const { config } = require('../server/SSB_server.js');
@@ -279,7 +279,10 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
             t.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
             t.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
             renderModeChip(t.inviteMode, i18n),
-            renderLifespanChip(t.lifetime, i18n)
+            renderLifespanChip(t.lifetime, i18n),
+            t.subscriptionIn === true
+              ? renderStateChip('mutuals', '\u2709', i18n.subscriptionOn)
+              : (t.subscriptionIn === false ? renderStateChip('closed', '\u2709', i18n.subscriptionOff) : null)
           ),
           t.description ? p({ class: 'tribe-card-description' }, ...renderUrl(t.description)) : null,
           renderMapLocationVisitLabel(t.mapUrl),
@@ -1691,7 +1694,17 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           ? a({ class: 'tribe-action-btn', href: inviteHref }, i18n.tribeEnterInvite)
           : null
       ) : null,
-      (isLarpHouse && larpHouseKey === 'academia' && isOutsider)
+      (tribe.subscription && !isOutsider)
+        ? renderSubscriptionBox({
+            target: tribe.id,
+            scope: 'tribes',
+            subscribed: tribe.subscription.subscribed === true,
+            count: tribe.subscription.count,
+            isOwner: String(tribe.author) === String(userIdParam),
+            returnTo: `/tribe/${encodeURIComponent(tribe.id)}`
+          })
+        : null,
+      (isLarpHouse && larpHouseKey === 'academia' && isOutsider && String(tribe.viewerHouse || '') !== 'academia')
         ? div({ class: 'tribe-side-actions' },
             form({ method: 'POST', action: '/larp/join' },
               input({ type: 'hidden', name: 'house', value: 'academia' }),

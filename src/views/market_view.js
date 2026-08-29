@@ -505,9 +505,9 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       ),
                       renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
                       div({ class: "card-chips-row" },
+                        String(item.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
                         renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
                         item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
-                        String(item.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
                         item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
                         item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
                         renderLifespanChip(item.lifetime, i18n)
@@ -565,10 +565,10 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
       (() => {
         const isHidden = String(item.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN'
         const chips = [
+          isHidden ? renderVisibilityChip("HIDDEN", i18n) : null,
           renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
           item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
           item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
-          isHidden ? renderVisibilityChip("HIDDEN", i18n) : null,
           item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
           renderLifespanChip(item.lifetime, i18n),
           renderEcoTax(item.msgSize, item.id)

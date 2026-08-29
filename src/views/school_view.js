@@ -1,5 +1,5 @@
-const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard } = require("./main_views")
+const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, datalist } = require("../server/node_modules/hyperaxe")
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
@@ -60,13 +60,18 @@ const renderPriceChip = (course) =>
     ? renderStateChip("mutuals", "✓", i18n.schoolFree)
     : span({ class: "state-chip" }, `${Number(course.price).toFixed(2)} ECO`)
 
-const renderCourseChips = (course) =>
+const renderCourseChips = (course, subscription = null) =>
   div({ class: "card-chips-row" },
+    course.visibility === "INVITE" ? renderStateChip("whole", "\uD83D\uDD11", i18n.chatStatusInviteOnly) : null,
     course.status === "CLOSED"
       ? renderStateChip("closed", "✗", i18n.schoolClosed)
       : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
-    course.visibility === "INVITE" ? renderStateChip("whole", "\uD83D\uDD11", i18n.chatStatusInviteOnly) : null,
-    renderPriceChip(course)
+    renderPriceChip(course),
+    subscription
+      ? (subscription.in
+          ? renderStateChip("mutuals", "\u2709", i18n.subscriptionOn)
+          : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
+      : null
   )
 
 const renderCourseCard = (course, filter, params = {}) => {
@@ -80,7 +85,7 @@ const renderCourseCard = (course, filter, params = {}) => {
     div({ class: "tribe-card-body" },
       h2({ class: "tribe-card-title" }, a({ href: url }, course.title)),
       renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
-      renderCourseChips(course),
+      renderCourseChips(course, params.subscriptions && (String(course.author) === String(userId) || safeArr(course.students).includes(userId)) ? { in: params.subscriptions.mine.has(course.rootId || course.id) || String(course.author) === String(userId) } : null),
       course.description ? p({ class: "tribe-card-description" }, ...renderUrl(course.description)) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.schoolStudents}: ${course.students.length}`)
@@ -223,6 +228,20 @@ const renderTeacherPanel = (course, certificates, returnTo) =>
       button({ type: "submit" }, i18n.schoolAddLesson), br(), br()
     ),
     br(),
+    course.students.length
+      ? form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}` },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          label(i18n.schoolIssueCertificate), br,
+          input({ type: "text", name: "student", required: true, list: "school-cert-students", placeholder: "@…", maxlength: "80" }),
+          datalist({ id: "school-cert-students" },
+            course.students
+              .filter(s => !safeArr(certificates).some(cert => cert.student === s))
+              .map(s => option({ value: s }))
+          ), br(),
+          input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }), br(),
+          button({ type: "submit" }, i18n.schoolIssueCertificate), br(), br()
+        )
+      : null,
     course.visibility === "INVITE"
       ? div(
           form({ method: "POST", action: `/school/invite/${encodeURIComponent(course.id)}` },
@@ -237,6 +256,12 @@ const renderTeacherPanel = (course, certificates, returnTo) =>
               )
             : null,
           br()
+        )
+      : null,
+    safeArr(course.students).length
+      ? div({ class: "school-students-list school-invited-list" },
+          p(`${i18n.schoolStudents}: `),
+          course.students.map(s => p(userLink(s)))
         )
       : null,
     safeArr(course.pending).length
@@ -271,19 +296,7 @@ const renderTeacherPanel = (course, certificates, returnTo) =>
             : null
         })()
       : null,
-    course.students.length
-      ? form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          label(i18n.schoolIssueCertificate), br,
-          select({ name: "student" },
-            course.students
-              .filter(s => !safeArr(certificates).some(cert => cert.student === s))
-              .map(s => option({ value: s }, s))
-          ), br(),
-          input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }), br(),
-          button({ type: "submit" }, i18n.schoolIssueCertificate)
-        )
-      : null
+    null
   )
 
 exports.singleCourseView = async (course, lessons = [], certificates = [], params = {}) => {
@@ -303,12 +316,17 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     h2({ class: "tribe-card-title" }, course.title),
     renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
     div({ class: "card-chips-row" },
+      course.visibility === "INVITE" ? renderStateChip("whole", "\uD83D\uDD11", i18n.chatStatusInviteOnly) : null,
       course.status === "CLOSED"
         ? renderStateChip("closed", "✗", i18n.schoolClosed)
         : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
-      course.visibility === "INVITE" ? renderStateChip("whole", "\uD83D\uDD11", i18n.chatStatusInviteOnly) : null,
       renderPriceChip(course),
-      courseApproved ? renderStateChip("mutuals", "🎓", i18n.schoolApproved) : null
+      courseApproved ? renderStateChip("mutuals", "🎓", i18n.schoolApproved) : null,
+      params.subscription && (isTeacher || isStudent)
+        ? ((isTeacher || params.subscription.subscribed === true)
+            ? renderStateChip("mutuals", "\u2709", i18n.subscriptionOn)
+            : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
+        : null
     ),
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
     course.description ? p({ class: "tribe-side-description" }, ...renderUrl(course.description)) : null,
@@ -347,8 +365,8 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
                 : null
             )
           : !isStudent && course.status === "ONGOING" && (course.visibility === "PUBLIC" || course.invited.includes(userId))
-            ? div({ class: "tribe-side-actions shop-visibility-row" },
-                span({ class: "card-label" }, `${i18n.schoolEnrollLabel}: `),
+            ? div({ class: "tribe-side-actions shop-visibility-row stacked-action-row" },
+                span({ class: "card-label" }, `${i18n.schoolEnrollLabel}:`),
                 form({ method: "POST", action: `/school/enroll/${encodeURIComponent(course.id)}` },
                   button({ type: "submit", class: "tribe-action-btn" }, isPaid ? `ENROLL (${Number(course.price).toFixed(2)} ECO)` : "ENROLL")
                 )
@@ -400,10 +418,20 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
         )
       : null,
     course.chatId && (isTeacher || isStudent || (course.visibility === "PUBLIC" && isFree(course)))
-      ? div({ class: "tribe-side-actions shop-visibility-row" },
-          span({ class: "card-label" }, `${i18n.schoolCourseChat}: `),
-          a({ href: `/chats/${encodeURIComponent(course.chatId)}#chat-latest`, class: "tribe-action-btn" }, "JOIN")
+      ? div({ class: "tribe-side-actions shop-visibility-row stacked-action-row" },
+          span({ class: "card-label" }, `${i18n.schoolCourseChat}:`),
+          a({ href: `/chats/${encodeURIComponent(course.chatId)}#chat-latest`, class: "tribe-action-btn" }, "VISIT")
         )
+      : null,
+    params.subscription && (isTeacher || isStudent)
+      ? renderSubscriptionBox({
+          target: course.rootId || course.id,
+          scope: "school",
+          subscribed: params.subscription.subscribed === true,
+          count: params.subscription.count,
+          isOwner: isTeacher,
+          returnTo
+        })
       : null,
     safeArr(course.tags).length
       ? div({ class: "tribe-side-tags" }, safeArr(course.tags).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
@@ -422,20 +450,40 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     ? p({ class: "school-progress-self" }, `${i18n.schoolProgress}: ${myCompleted}/${lessons.length}`)
     : null
 
+  const exams = safeArr(params.exams)
+  const readyExams = exams.filter(x => !x.locked && safeArr(x.questions).length)
+
   const teacherProgress = isTeacher && params.progress && Object.keys(params.progress).length
     ? div({ class: "school-progress-list" },
         h2(i18n.schoolProgress),
-        Object.entries(params.progress).map(([student, done]) =>
-          p(userLink(student), span(` — ${done}/${lessons.length}`))
-        )
+        Object.entries(params.progress).map(([student, done]) => {
+          const passedExams = readyExams.filter(x => safeArr(x.results).some(r => r.author === student && r.passed)).length
+          const hasCert = safeArr(certificates).some(cert => cert.student === student)
+          const eligible = Number(done) >= lessons.length && passedExams >= readyExams.length
+          return div({ class: "school-progress-row" },
+            p(
+              userLink(student),
+              span(` — ${i18n.schoolLessons}: ${done}/${lessons.length}`),
+              readyExams.length ? span(` · ${i18n.schoolExams}: ${passedExams}/${readyExams.length}`) : null,
+              hasCert ? span(" · 🎓") : null
+            ),
+            eligible && !hasCert
+              ? form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}`, class: "school-progress-issue" },
+                  input({ type: "hidden", name: "returnTo", value: returnTo }),
+                  input({ type: "hidden", name: "student", value: student }),
+                  input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }),
+                  button({ type: "submit", class: "tribe-action-btn" }, i18n.schoolIssueCertificate)
+                )
+              : null
+          )
+        })
       )
     : null
 
-  const exams = safeArr(params.exams)
   const examsBlock = (isTeacher || isStudent) && (exams.length || (isTeacher && isProtected(course)))
     ? div({ class: "school-exams" },
-        h2(`${i18n.schoolExams} (${exams.length})`),
-        exams.map(exam =>
+        h2(`${i18n.schoolExams} (${isTeacher ? exams.length : readyExams.length})`),
+        (isTeacher ? exams : readyExams).map(exam =>
           exam.locked
             ? null
             : div({ class: "school-exam" },

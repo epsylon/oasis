@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderSubscriptionBox } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -158,6 +158,16 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.blogComments}: ${blog.commentCount || 0}`)
     ),
+    params.subscription
+      ? renderSubscriptionBox({
+          target: blog.author,
+          scope: "blogs",
+          subscribed: params.subscription.subscribed === true,
+          count: params.subscription.count,
+          isOwner: isAuthor,
+          returnTo: href
+        })
+      : null,
   );
 
   const blogMain = div({ class: "tribe-main" },

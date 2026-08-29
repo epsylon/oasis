@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox } = require("./main_views")
 const { renderMapLocationVisitLabel } = require("./maps_view")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -54,7 +54,10 @@ const renderCalendarCard = (cal, spreadInfo) => {
   const chips = [
     renderCalendarStatusChip(cal),
     renderEncryptedChip(i18n),
-    renderLifespanChip(cal.lifetime, i18n)
+    renderLifespanChip(cal.lifetime, i18n),
+    cal.subscriptionIn === true
+      ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+      : (cal.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
   return div({ class: "tribe-card" },
     div({ class: "card-header activity-card-header" },
@@ -250,10 +253,14 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     ? div({ class: "tribe-side-tags" }, ...calendar.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}` }, `#${t} `)))
     : null
 
+  const subscriptionIn = isAuthor || (calendar.subscription && calendar.subscription.subscribed === true)
   const detailChips = [
     renderCalendarStatusChip(calendar),
     renderEncryptedChip(i18n),
-    renderLifespanChip(calendar.lifetime, i18n)
+    renderLifespanChip(calendar.lifetime, i18n),
+    (isAuthor || isParticipant)
+      ? renderStateChip(subscriptionIn ? "mutuals" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff)
+      : null
   ].filter(Boolean)
   const calSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
@@ -308,6 +315,16 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           )
         : null
     ),
+    (calendar.subscription && (isAuthor || isParticipant))
+      ? renderSubscriptionBox({
+          target: calendar.rootId || calendar.key,
+          scope: "calendars",
+          subscribed: calendar.subscription.subscribed === true,
+          count: calendar.subscription.count,
+          isOwner: isAuthor,
+          returnTo: shareUrl
+        })
+      : null,
     isAuthor
       ? div({ class: "tribe-side-actions calendar-owner-actions" },
           form({ method: "GET", action: "/calendars" },

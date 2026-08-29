@@ -1038,3 +1038,42 @@ a.create-button {
 .tribe-open-invite-code {
   font-size: .85em !important;
 }
+
+.school-progress-row {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 6px !important;
+}
+.school-progress-issue {
+  width: 100% !important;
+}
+.school-progress-issue input[type="text"] {
+  max-width: 100% !important;
+  flex: 1 1 100% !important;
+}
+
+.subscription-box-block {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+.subscription-box-block .subscription-form { margin: 0 !important; }
+
+.profile-module-section,
+.profile-module-section .trending-card,
+.profile-module-section .card-body,
+.profile-module-section .card-section {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+.card-section-action {
+  display: flex !important;
+  justify-content: center !important;
+  width: 100% !important;
+}
+.card-section-action .keep-reading-link {
+  text-align: center !important;
+}

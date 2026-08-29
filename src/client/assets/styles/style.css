@@ -4475,14 +4475,23 @@ a.pm-btn:hover { text-decoration: none }
 .tribe-action-btn {
   padding: 6px 16px;
   border-radius: 6px;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.5px;
+  line-height: 1.2;
   cursor: pointer;
   border: 1px solid #ffa300;
   background: transparent;
   color: #ffa300;
+  text-decoration: none;
+  display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
   transition: background 0.15s, color 0.15s;
+}
+.tribe-action-btn:hover {
+  text-decoration: none;
 }
 .tribe-action-btn.danger-btn,
 .tribe-card-actions .tribe-action-btn.danger-btn,
@@ -5961,7 +5970,7 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .larp-detail-description{color:#FFDD44;line-height:1.6;font-size:15px;margin:0}
 .larp-actions{margin-top:12px;background:transparent !important;border:0 !important;padding:0 !important;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .larp-actions form{margin:0;display:inline-flex;align-items:center}
-.larp-actions .filter-btn,.larp-actions button{height:36px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none}
+.larp-actions .filter-btn,.larp-actions button{height:36px;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;margin:0;padding:6px 16px;font-family:inherit;font-size:inherit;line-height:1.2;vertical-align:middle}
 .larp-members-block{margin-top:24px}
 .larp-members-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px;background:transparent !important;border:0 !important;padding:0 !important}
 .larp-member-row{padding:4px 8px;background:#1A1A1A;border:1px solid #333;border-radius:4px}
@@ -7638,8 +7647,8 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .card-field-row{display:flex;gap:.6em;flex-wrap:wrap}
 .card-section-action{margin-top:6px}
 .card-section-text{margin:.4rem 0}
-.post-text-clamped{max-height:180px;overflow:hidden}
-.post-text-clamped:has(video,audio,iframe,embed,object){max-height:none;overflow:visible}
+.post-text-clamped{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7;overflow:hidden;max-height:none}
+.post-text-clamped:has(video,audio,iframe,embed,object){display:block;-webkit-line-clamp:unset;max-height:none;overflow:visible}
 .reply-context{border-left:3px solid #666;padding-left:10px;margin-bottom:8px;opacity:.85}
 .reply-context-label{font-size:.85em}
 .reply-context-text{font-size:.85em;max-height:80px;overflow:hidden;margin-top:4px}
@@ -7681,6 +7690,15 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .school-complete-btn--done{border-color:#2ecc71;color:#2ecc71}
 
 .school-invited-list{border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
+.stacked-action-row{flex-direction:column;align-items:flex-start;gap:6px}
+.stacked-action-row .subscription-form{margin:0}
+.subscription-actions{display:flex;align-items:center;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none !important}
+.subscription-label-row{display:flex;align-items:center;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none !important}
+.pm-list-row{background:transparent !important;border:0 !important;padding:0 !important;margin:8px 0;box-shadow:none !important}
+.school-progress-row{border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0 0 10px 0;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.school-progress-row p{margin:0}
+.school-progress-issue{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
+.school-progress-issue input[type="text"]{max-width:220px}
 .school-pending-block{border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
 .school-pending-row{justify-content:center;border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
 .school-pending-block .doc-export-actions{margin-top:8px;margin-bottom:0}

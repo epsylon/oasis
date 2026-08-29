@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -401,7 +401,10 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
         : null
       const chips = [
         renderProjectStatusChip(pr.status),
-        renderLifespanChip(pr.lifetime, i18n)
+        renderLifespanChip(pr.lifetime, i18n),
+        pr.subscriptionIn === true
+          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          : (pr.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
       ].filter(Boolean)
 
       const isOwn = pr.author && String(pr.author) === String(userId)
@@ -576,7 +579,12 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     renderProjectStatusChip(pr.status),
     isFollower ? renderStateChip("whole", "★", i18n.projectFollowing || "FOLLOWING") : null,
     renderLifespanChip(pr.lifetime, i18n),
-    renderEcoTax(pr.msgSize, pr.id || pr.key)
+    renderEcoTax(pr.msgSize, pr.id || pr.key),
+    pr.subscription
+      ? ((isAuthor || pr.subscription.subscribed === true)
+          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          : renderStateChip("closed", "✉", i18n.subscriptionOff))
+      : null
   ].filter(Boolean)
 
   const sideActions = []
@@ -633,7 +641,18 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     div({ class: "job-price-line card-salary" }, `${i18n.projectFollowers}: ${followersCount(pr)}`),
     renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
     goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    pr.subscription
+      ? renderSubscriptionBox({
+          target: pr.rootId || pr.id,
+          scope: "projects",
+          subscribed: pr.subscription.subscribed === true,
+          count: pr.subscription.count,
+          isOwner: isAuthor,
+          canWrite: isAuthor,
+          returnTo
+        })
+      : null
   )
 
   const projectMain = div({ class: "tribe-main" },

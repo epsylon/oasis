@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, img, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderMapEmbedWithZoom } = require("./maps_view")
@@ -115,7 +115,10 @@ const renderFacilityList = exports.renderFacilityList = (facilities, filter, spr
         renderStateChip("whole", "🏭", sectorLabel(fc.sector)),
         renderStateChip("half", "⚖", policyLabel(fc.membershipPolicy)),
         isMember ? renderStateChip("whole", "★", i18n.industryMemberBadge || "MEMBER") : null,
-        renderLifespanChip(fc.lifetime, i18n)
+        renderLifespanChip(fc.lifetime, i18n),
+        fc.subscriptionIn === true
+          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          : (fc.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
       ].filter(Boolean)
       return div({ class: "trending-card tribes-card industry-card" + (isOwn ? " own-content" : "") },
         div({ class: "card-header activity-card-header" },
@@ -612,13 +615,20 @@ const renderFacilityJobsSection = (fc, jobs) => {
 
 const renderFacilitySide = (fc, returnTo, params = {}) => {
   const isSteward = fc.steward === userId
+  const isMember = safeArr(fc.members).includes(userId)
+  const isOwner = String(fc.steward || fc.author) === String(userId)
   const memberCount = fc.memberCount != null ? fc.memberCount : safeArr(fc.members).length
 
   const chips = [
     renderStateChip("whole", "🏭", sectorLabel(fc.sector)),
     renderStateChip("half", "⚖", policyLabel(fc.membershipPolicy)),
     renderLifespanChip(fc.lifetime, i18n),
-    renderEcoTax(fc.msgSize, fc.id || fc.key)
+    renderEcoTax(fc.msgSize, fc.id || fc.key),
+    (isSteward || isMember)
+      ? ((isOwner || (fc.subscription && fc.subscription.subscribed === true))
+          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          : renderStateChip("closed", "✉", i18n.subscriptionOff))
+      : null
   ].filter(Boolean)
 
   const sideActions = []
@@ -660,6 +670,16 @@ const renderFacilitySide = (fc, returnTo, params = {}) => {
     h2({ class: "tribe-members-count" }, `${i18n.industryMembers || "Members"}: ${memberCount}`),
     renderInviteSection(fc, returnTo),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    (fc.subscription && (isSteward || isMember))
+      ? renderSubscriptionBox({
+          target: fc.rootId || fc.id,
+          scope: "industry",
+          subscribed: fc.subscription.subscribed === true,
+          count: fc.subscription.count,
+          isOwner: isOwner,
+          returnTo: returnTo
+        })
+      : null,
     renderDissolveBlock(fc, returnTo)
   )
 }

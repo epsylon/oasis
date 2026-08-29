@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -130,11 +130,14 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
   const price = parseFloat(e.price || 0);
 
   const chips = [
-    renderEventStatusChip(e.status),
     renderPrivacyChip(isPrivate, i18n),
+    renderEventStatusChip(e.status),
     e.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
     isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
-    renderLifespanChip(e.lifetime, i18n)
+    renderLifespanChip(e.lifetime, i18n),
+    e.subscriptionIn === true
+      ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+      : (e.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean);
 
   const dateText = e.date ? moment(e.date).format("YYYY/MM/DD HH:mm") : "";
@@ -406,15 +409,21 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   const isEncrypted = !!event.encrypted || isPrivate;
   const isAttending = attendees.includes(userId);
   const isOrganizer = String(event.organizer) === String(userId);
+  const isEventOwner = String(event.organizer || event.author) === String(userId);
+  const sharesEvent = isEventOwner || attendees.includes(userId);
+  const eventSubIn = isEventOwner || (event.subscription && event.subscription.subscribed === true);
   const returnToSelf = `/events/${encodeURIComponent(event.id)}?filter=${encodeURIComponent(currentFilter)}`;
 
   const chips = [
-    renderEventStatusChip(event.status),
     renderPrivacyChip(isPrivate, i18n),
+    renderEventStatusChip(event.status),
     isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n),
     isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
     renderLifespanChip(event.lifetime, i18n),
-    renderEcoTax(event.msgSize, event.id)
+    renderEcoTax(event.msgSize, event.id),
+    (event.subscription && sharesEvent)
+      ? renderStateChip(eventSubIn ? "mutuals" : "closed", "✉", eventSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
+      : null
   ].filter(Boolean);
 
   const sideActions = [];
@@ -487,6 +496,16 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     attendeesListNode,
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
+    (event.subscription && sharesEvent)
+      ? renderSubscriptionBox({
+          target: event.id,
+          scope: "events",
+          subscribed: event.subscription.subscribed === true,
+          count: event.subscription.count,
+          isOwner: isEventOwner,
+          returnTo: returnToSelf
+        })
+      : null,
     renderDocumentActions('events', event.id)
   );
 

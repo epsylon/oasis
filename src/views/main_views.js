@@ -52,6 +52,30 @@ const renderInviteQrCard = ({ qrDataUrl }) =>
   qrDataUrl ? div({ class: 'invite-qr-card' }, img({ src: qrDataUrl, alt: 'QR', class: 'invite-qr-img' })) : null;
 exports.renderInviteQrCard = renderInviteQrCard;
 
+const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, returnTo, canWrite }) => {
+  if (!target) return null;
+  if (isOwner && (Number(count) || 0) <= 1) return null;
+  const showPm = canWrite !== undefined ? canWrite : (isOwner || subscribed);
+  return div({ class: 'tribe-side-actions shop-visibility-row stacked-action-row subscription-box-block' },
+    span({ class: 'card-label' }, `${i18n.subscriptionTitle} (${Number(count) || 0})${isOwner ? '' : ':'}`),
+    span({ class: 'subscription-actions' },
+      isOwner
+        ? null
+        : form({ method: 'POST', action: '/subscriptions/toggle', class: 'subscription-form' },
+            input({ type: 'hidden', name: 'target', value: target }),
+            input({ type: 'hidden', name: 'scope', value: String(scope || '') }),
+            input({ type: 'hidden', name: 'on', value: subscribed ? '0' : '1' }),
+            returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
+            button({ type: 'submit', class: subscribed ? 'tribe-action-btn danger-btn' : 'tribe-action-btn' }, String(subscribed ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe).toUpperCase())
+          ),
+      showPm
+        ? a({ href: `/pm?list=${encodeURIComponent(target)}`, class: 'btn-singleview btn-pm', title: i18n.pmCreateButton || 'Write a PM' }, '✉')
+        : null
+    )
+  );
+};
+exports.renderSubscriptionBox = renderSubscriptionBox;
+
 const renderStateChip = (variant, icon, text) =>
   span({ class: `pm-exposition-chip pm-exposition-${variant}` },
     icon ? span({ class: "pm-exposition-icon" }, icon) : null,

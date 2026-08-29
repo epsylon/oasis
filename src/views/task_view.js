@@ -149,8 +149,8 @@ const renderTaskItem = (task, filter, spreadInfo) => {
     : null;
 
   const chips = [
-    renderTaskStatusChip(task.status),
     isPrivate ? renderPrivacyChip(true, i18n) : null,
+    renderTaskStatusChip(task.status),
     renderTaskPriorityChip(task.priority),
     renderLifespanChip(task.lifetime, i18n)
   ].filter(Boolean);
@@ -355,8 +355,8 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
   const ecoTaxChipNode = renderEcoTax(task.msgSize, task.id);
 
   const chips = [
-    renderTaskStatusChip(task.status),
     renderPrivacyChip(isPrivate, i18n),
+    renderTaskStatusChip(task.status),
     renderTaskPriorityChip(task.priority),
     lifespanChipNode,
     ecoTaxChipNode

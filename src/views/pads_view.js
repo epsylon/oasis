@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard, renderSubscriptionBox } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -102,7 +102,10 @@ const renderPadCard = (pad, filter, spreadInfo) => {
   const chips = [
     renderPadStatusChip(pad.status, pad.isClosed),
     renderEncryptedChip(i18n),
-    renderLifespanChip(pad.lifetime, i18n)
+    renderLifespanChip(pad.lifetime, i18n),
+    pad.subscriptionIn === true
+      ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+      : (pad.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
   return div({ class: "tribe-card" },
     div({ class: "card-header activity-card-header" },
@@ -221,10 +224,15 @@ exports.singlePadView = async (pad, entries, params) => {
     ? div({ class: "tribe-side-tags" }, ...pad.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}` }, `#${t}`)))
     : null
 
+  const sharesPad = isAuthor || (pad.members || []).includes(userId)
+  const subscriptionIn = isAuthor || (pad.subscription && pad.subscription.subscribed === true)
   const detailChips = [
     renderPadStatusChip(pad.status, padClosed),
     renderEncryptedChip(i18n),
-    renderLifespanChip(pad.lifetime, i18n)
+    renderLifespanChip(pad.lifetime, i18n),
+    sharesPad
+      ? renderStateChip(subscriptionIn ? "mutuals" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff)
+      : null
   ].filter(Boolean)
   const inviteActions = [
     isAuthor && pad.status === "INVITE-ONLY"
@@ -286,6 +294,16 @@ exports.singlePadView = async (pad, entries, params) => {
         : null
     ),
     (isRestrictedInviteOnly || !inviteActions.length) ? null : div({ class: "tribe-side-actions" }, ...inviteActions),
+    (pad.subscription && sharesPad)
+      ? renderSubscriptionBox({
+          target: pad.rootId || pad.key,
+          scope: "pads",
+          subscribed: pad.subscription.subscribed === true,
+          count: pad.subscription.count,
+          isOwner: isAuthor,
+          returnTo
+        })
+      : null,
     !isAuthor && pad.status === "INVITE-ONLY" && !isMember
       ? div({ class: "pad-invite-section" },
           a({ class: "tribe-action-btn", href: "/invites#invites-pads" }, i18n.tribeEnterInvite)

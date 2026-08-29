@@ -169,9 +169,9 @@ const renderHousingList = (items, filter, params = {}) => {
       const isOwn = item.author && String(item.author) === String(userId)
       const requested = safeArr(item.requests).includes(userId)
       const chips = [
+        item.visibility === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
         renderTypeChip(item),
         renderStatusChip(item.status),
-        item.visibility === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
         requested ? renderRequestedChip() : null,
         renderLifespanChip(item.lifetime, i18n)
       ].filter(Boolean)
@@ -408,9 +408,9 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
   const voters = safeArr(item.opinions_inhabitants)
 
   const chips = [
+    item.visibility === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
     renderTypeChip(item),
     renderStatusChip(item.status),
-    item.visibility === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
     requested ? renderRequestedChip() : null,
     renderLifespanChip(item.lifetime, i18n),
     renderEcoTax(item.msgSize, item.id)

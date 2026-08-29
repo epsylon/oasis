@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -82,7 +82,10 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
         shop.visibility === "CLOSED"
           ? renderStateChip("closed", "✗", i18n.shopClosed)
           : renderStateChip("mutuals", "✓", i18n.shopOpen),
-        renderLifespanChip(shop.lifetime, i18n)
+        renderLifespanChip(shop.lifetime, i18n),
+        shop.subscriptionIn === true
+          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          : (shop.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
       ),
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
@@ -270,7 +273,12 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         : renderStateChip("mutuals", "✓", i18n.shopOpen),
       shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
       renderLifespanChip(shop.lifetime, i18n),
-      renderReachChip(isClearnet, i18n)
+      renderReachChip(isClearnet, i18n),
+      shop.subscription
+        ? ((isAuthor || shop.subscription.subscribed === true)
+            ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+            : renderStateChip("closed", "✉", i18n.subscriptionOff))
+        : null
     ),
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
     shop.description ? p({ class: "tribe-side-description" }, ...renderUrl(shop.description)) : null,
@@ -331,6 +339,17 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
             button({ type: "submit", class: "tribe-action-btn" },
               shop.encrypted ? i18n.shopMakePublic : i18n.shopMakePrivate))
         )
+      : null,
+    shop.subscription
+      ? renderSubscriptionBox({
+          target: shop.rootId || shop.key,
+          scope: "shops",
+          subscribed: shop.subscription.subscribed === true,
+          count: shop.subscription.count,
+          isOwner: isAuthor,
+          canWrite: isAuthor,
+          returnTo
+        })
       : null,
     isAuthor
       ? div({ class: "tribe-side-actions" },

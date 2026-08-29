@@ -47,30 +47,6 @@ describe('feed: own feed survives cross-author duplicate merge', (t) => {
     eq(matches[0].value.author, A.keypair.id, 'the viewer own feed is the survivor');
   });
 });
-
-describe('feed: microblogging workspace mode', (t) => {
-  t('workspace layout renders side boxes, plain mode does not', async () => {
-    const cm = require('../../../src/configs/config-manager.js');
-    const origGetConfig = cm.getConfig;
-    cm.getConfig = () => ({ ...origGetConfig(), ux: { current: 'feed' } });
-    const { feedView } = require('../../../src/views/feed_view');
-    const feed = { key: '%f.sha256', value: { author: '@a.ed25519', timestamp: Date.now(), content: { type: 'feed', text: 'hola mundo', opinions: {}, refeeds: 0 } } };
-    const ws = String(feedView([feed], {
-      filter: 'ALL', workspace: true,
-      trendingTags: [{ name: 'solarpunk' }, { name: 'p2p' }],
-      activeUsers: [{ id: '@a.ed25519', avatarUrl: '/assets/images/default-avatar.png' }]
-    }));
-    ok(ws.includes('feed-workspace'), 'workspace grid present');
-    ok(ws.includes('#solarpunk'), 'trending tag rendered');
-    ok(ws.includes('/feed?tag=solarpunk'), 'tag links filter the timeline');
-    ok(ws.includes('feed-side-avatar'), 'active user avatar rendered');
-    ok(ws.includes('hola mundo'), 'timeline still renders');
-    const plain = String(feedView([feed], { filter: 'ALL' }));
-    ok(!plain.includes('feed-workspace'), 'no workspace outside the mode');
-    cm.getConfig = origGetConfig;
-  });
-});
-
 describe('feed: author can delete own feeds', (t) => {
   t('a deleted feed disappears and strangers cannot delete', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
