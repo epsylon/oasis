@@ -498,8 +498,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '') => {
   );
 
   return `${html}${hasDocuments
-    ? `<script type="module" src="/js/pdf.min.mjs"></script>
-       <script src="/js/pdf-viewer.js"></script>`
+    ? `<script type="module" src="/js/pdf-viewer.js?v=102"></script>`
     : ''}`;
 };
 

@@ -210,22 +210,7 @@ footer a:hover {
   gap: 9px;
 }
 
-.card-tags a.tag-link {
-  text-decoration: none;
-  color: #181818;
-  background: #FFD600;
-  padding: 5px 13px 4px 13px;
-  border-radius: 7px;
-  font-size: .98em;
-  border: none;
-  font-weight: bold;
-}
 
-.card-tags a.tag-link:hover {
-  background: #ffe86a;
-  color: #111;
-  cursor: pointer;
-}
 
 a.user-link {
   background-color: #FFA500; 
@@ -1272,3 +1257,14 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .tribe-card-body { width: 100% !important; box-sizing: border-box !important; padding: 8px !important; }
 .filter-box { width: 100% !important; box-sizing: border-box !important; }
 .filter-box__input { width: 100% !important; }
+
+.main-content { padding: 6px !important; gap: 8px !important; }
+.main-column { padding: 4px !important; }
+.tribe-details { padding: 8px !important; gap: 12px !important; }
+.tribe-side, .tribe-main { padding: 10px !important; width: 100% !important; box-sizing: border-box !important; }
+.feed-container, [class*="-module-section"] { padding: 8px !important; }
+.trending-card { padding: 10px !important; margin: 0 0 10px 0 !important; }
+.card-section { padding: 8px !important; }
+.main-column section { padding-left: 0 !important; padding-right: 0 !important; }
+.card-section-action { padding: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; justify-content: center !important; }
+.card-section-action .keep-reading-link { margin: 6px auto !important; }

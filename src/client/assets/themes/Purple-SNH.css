@@ -277,16 +277,7 @@ header {
   color: #B86ADE;
 }
 
-.card-tags a.tag-link {
-  color: #FFFFFF;
-  background: #D94F4F;
-}
 
-.card-tags a.tag-link:hover {
-  background: #B86ADE;
-  color: #E5E5E5;
-  cursor: pointer;
-}
 
 a.user-link {
   background-color: #FFD600;

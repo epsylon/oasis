@@ -176,7 +176,8 @@ exports.statsView = (stats, filter) => {
     const networkCO2 = parseFloat((totalMB * kWhPerMB * gCO2PerKWh).toFixed(2));
     const inhabitants = stats.usersKPIs?.totalInhabitants || stats.inhabitants || 1;
     const userCO2 = parseFloat((networkCO2 / Math.max(1, inhabitants)).toFixed(2));
-    const maxAnnualCO2 = 500;
+    const gCO2PerInhabitantYear = 50;
+    const maxAnnualCO2 = Math.max(500, Math.max(1, inhabitants) * gCO2PerInhabitantYear);
 
     if (filter === 'MINE') {
       const pct = networkCO2 > 0 ? Math.min(100, (userCO2 / networkCO2) * 100) : 0;
@@ -245,7 +246,7 @@ exports.statsView = (stats, filter) => {
         div({ class: `carbon-bar-fill carbon-bar-network ${wClass(pct)}` })
       ),
       p({ class: 'carbon-bar-note' }, strong(`${pct.toFixed(1)}%`), ` ${i18n.statsCarbonOfEstMax || 'of estimated max capacity'} · `, strong(`${yearPct.toFixed(1)}%`), ` ${i18n.statsCarbonYearProgress || 'of the year elapsed'}`),
-      p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
+      p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'), ` · max: ${gCO2PerInhabitantYear} g CO₂ × ${Math.max(1, inhabitants)} inhabitants`)
     );
   })();
 

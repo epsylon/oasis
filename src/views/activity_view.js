@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 
 const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent']);
@@ -210,14 +210,14 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
           ? {
               id: safeMsgId(rootAction),
               author: rootAction.author,
-              text: excerptPostText(rootAction.value?.content || rootAction.content || {}, 240)
+              text: excerptPostText(rootAction.value?.content || rootAction.content || {}, 600)
             }
           : null,
         replies: replies.map(p => ({
           id: safeMsgId(p),
           author: p.author,
           ts: p.ts,
-          text: excerptPostText(p.value?.content || p.content || {}, 200)
+          text: excerptPostText(p.value?.content || p.content || {}, 600)
         }))
       }
     });
@@ -349,8 +349,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       headerText = `[${String(i18n.typeTask || 'TASK').toUpperCase()} · ASSIGNMENT]`;
     } else if (type === 'shopProduct') {
       headerText = `[SHOP · PRODUCT]`;
-    } else if (type === 'chat') {
-      headerText = `[CHAT \u00b7 ${String(i18n.chatThreadsLabel).toUpperCase()}]`;
     } else if (type === 'pad') {
       headerText = `[PAD · ${String(i18n.padNew || 'NEW').toUpperCase()}]`;
     } else if (type === 'ubiClaim') {
@@ -820,7 +818,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
   if (type === 'post') {
       const { contentWarning, text } = content || {};
       const rawText = text || '';
-      const POST_TRUNCATE_LEN = 300;
+      const POST_TRUNCATE_LEN = 1000;
       const isTruncated = rawText.length > POST_TRUNCATE_LEN;
       const displayText = isTruncated ? rawText.slice(0, POST_TRUNCATE_LEN) + '…' : rawText;
       const isHtml = typeof displayText === 'string' && /<\/?[a-z][\s\S]*>/i.test(displayText);
@@ -834,9 +832,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               (url) =>
                 `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
             );
-       bodyNode = div({ class: 'post-text post-text-clamped', innerHTML: sanitizeHtml(linkified) });
+       bodyNode = div({ class: 'feed-text post-text post-text-clamped', innerHTML: sanitizeHtml(linkified) });
       } else {
-        bodyNode = p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderUrlPreserveNewlines(displayText));
+        bodyNode = div({ class: 'feed-text' },
+          p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderUrlPreserveNewlines(displayText))
+        );
       }
       const threadId = getThreadIdFromPost(action);
       const replyToId = getReplyToIdFromPost(action, byIdAll);
@@ -860,12 +860,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               )
             : '',
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
-          bodyNode,
-          isTruncated && threadId
-            ? div({ class: 'card-section-action' },
-                a({ href: `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(action.id || threadId)}`, class: 'comments-summary chat-thread-summary keep-reading-link' }, i18n.keepReading || 'Keep reading...')
-              )
-            : ''
+          bodyNode
         )
       );
     }
@@ -873,20 +868,19 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     if (type === 'postThread') {
         const c = action.content || {};
         const threadId = c.threadId;
-        const href = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(threadId)}`;
+        const href = `/blogs/${encodeURIComponent(threadId)}`;
         const root = c.root;
         const replies = Array.isArray(c.replies) ? c.replies : [];
         const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
-        const limit = 5;
-        const overflow = repliesAsc.length > limit;
-        const show = repliesAsc.slice(Math.max(0, repliesAsc.length - limit));
-        const lastId = repliesAsc.length ? repliesAsc[repliesAsc.length - 1].id : threadId;
-        const viewMoreHref = `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(lastId)}`;
+        const latest = repliesAsc.length ? repliesAsc[repliesAsc.length - 1] : null;
+        const titleText = root && root.text
+          ? (root.text.length > 90 ? `${root.text.slice(0, 90)}…` : root.text)
+          : threadId;
         return div({ class: 'trending-card post-thread' + (String(action.author) === String(userId) ? ' own-content' : '') },
             div({ class: 'card-header activity-card-header' },
                 div({ class: 'card-chips-row' },
                     span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                        span({ class: 'pm-exposition-text' }, `${String(i18n.typePost || 'POST').toUpperCase()} · THREAD`)
+                        span({ class: 'pm-exposition-text' }, `${String(i18n.typePost || 'BLOG').toUpperCase()} · ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
                     )
                 ),
                 renderContentActions(threadId, href, {
@@ -896,30 +890,22 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 })
             ),
             div({ class: 'card-body' },
-		root && root.text
-		    ? div({ class: 'card-section' },
-			p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(root.text))
-		    )
-		    : '',
-		div({ class: 'card-section' },
-		show.map(r => {
-		    const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
-		    return div({ class: 'thread-reply-item' },
-			div({ class: 'thread-reply' },
-			    r.text ? p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(r.text)) : ''
-			),
-			div({ class: 'card-footer thread-reply-footer' },
-			    span({ class: 'date-link' }, rDate),
-			    userLink(r.author, action.authorNames && action.authorNames[r.author])
-			)
-		    );
-		}),
+                div({ class: 'card-section' },
+                    div({ class: 'card-field activity-update-title' },
+                        a({ href, class: 'card-value user-link' }, titleText),
+                        span({ class: 'card-label activity-update-counts' }, `💬 ${replies.length}`)
+                    ),
+                    latest && latest.text
+                        ? div({ class: 'feed-text activity-update-msg' },
+                            p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(latest.text))
+                          )
+                        : ''
+                )
+            ),
+            p({ class: 'card-footer' },
+                span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
+                userLink(action.author, action.authorNames && action.authorNames[action.author])
             )
-        ),
-        p({ class: 'card-footer' },
-            span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
-            userLink(action.author, action.authorNames && action.authorNames[action.author])
-        )
         );
     }
 
@@ -928,16 +914,15 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         const chatRoot = c.chatRoot;
         const href = `/chats/${encodeURIComponent(chatRoot)}`;
         const chatTitle = c.title || chatRoot;
-        const chatDesc = c.description || '';
         const replies = Array.isArray(c.replies) ? c.replies : [];
         const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
-        const limit = 6;
+        const limit = 2;
         const show = repliesAsc.slice(Math.max(0, repliesAsc.length - limit));
         return div({ class: 'trending-card post-thread chat-thread' + (String(action.author) === String(userId) ? ' own-content' : '') },
             div({ class: 'card-header activity-card-header' },
                 div({ class: 'card-chips-row' },
                     span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                        span({ class: 'pm-exposition-text' }, `${String(i18n.typeChat || 'CHAT').toUpperCase()} \u00b7 ${String(i18n.chatThreadsLabel).toUpperCase()}`)
+                        span({ class: 'pm-exposition-text' }, `${String(i18n.typeChat || 'CHAT').toUpperCase()} \u00b7 ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
                     )
                 ),
                 renderContentActions(chatRoot, href, {
@@ -949,35 +934,18 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             ),
             div({ class: 'card-body' },
                 div({ class: 'card-section chat' },
-                    div({ class: 'card-field' }, a({ href, class: 'card-value user-link' }, chatTitle)),
-                    chatDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, chatDesc)) : '',
-                    div({ class: 'card-field chat-thread-meta' },
-                        span({ class: 'card-label' }, `${i18n.chatParticipants}: `),
-                        span({ class: 'card-value' }, String(c.members || 0)),
-                        span({ class: 'card-label' }, ` · ${i18n.chatMessagesLabel}: `),
-                        span({ class: 'card-value' }, String(c.messageCount || show.length))
+                    div({ class: 'card-field activity-update-title' },
+                        a({ href, class: 'card-value user-link' }, chatTitle),
+                        span({ class: 'card-label activity-update-counts' }, `👥: ${c.members || 0} · 💬 ${c.messageCount || show.length}`)
                     ),
-                show.length
-                    ? div({ class: 'card-section-action' },
-                      details({ class: 'chat-thread-details' },
-                        summary({ class: 'comments-summary chat-thread-summary keep-reading-link' }, i18n.keepReading || 'Keep reading...'),
-                        div({ class: 'card-section' },
-                            show.map(r => {
-                                const rDate = r.ts ? new Date(r.ts).toLocaleString() : '';
-                                return div({ class: 'thread-reply-item' },
-                                    div({ class: 'thread-reply' },
-                                        r.text ? p({ class: 'post-text thread-reply-text' }, ...renderUrlPreserveNewlines(r.text)) : ''
-                                    ),
-                                    div({ class: 'card-footer thread-reply-footer' },
-                                        span({ class: 'date-link' }, rDate),
-                                        userLink(r.author, action.authorNames && action.authorNames[r.author])
-                                    )
-                                );
-                            })
-                        )
-                      )
-                      )
-                    : null
+                    (() => {
+                        const latest = show.length ? show[show.length - 1] : null;
+                        return latest && latest.text
+                            ? div({ class: 'feed-text activity-update-msg' },
+                                p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(latest.text))
+                              )
+                            : '';
+                    })()
                 )
             ),
             p({ class: 'card-footer' },
@@ -1811,7 +1779,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       div({ class: 'card-header activity-card-header' },
         div({ class: 'card-chips-row' },
           span({ class: 'pm-exposition-chip pm-exposition-whole' },
-            span({ class: 'pm-exposition-text' }, String(type || '').toUpperCase())
+            span({ class: 'pm-exposition-text' }, String(headerText || type || '').replace(/^\[|\]$/g, ''))
           )
         ),
         renderContentActions(msgId, detailHref, {
@@ -1828,7 +1796,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         if (!routeFn) return null;
         const ops = (action.value?.content?.opinions) || (action.content?.opinions) || {};
         const opsTotal = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
-        return details({ class: 'opinions-voting-collapse' },
+        return [renderVotesSummary(ops), details({ class: 'opinions-voting-collapse' },
           summary({ class: 'opinions-summary' },
             span({ class: 'opinions-summary-icon' }, 'ꔍ'),
             span({ class: 'opinions-summary-count' }, `(${opsTotal})`)),
@@ -1839,7 +1807,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               )
             )
           )
-        );
+        )].filter(Boolean);
       })(),
       (() => {
         const footerAuthorId = action.author || (content && content.proposer) || '';
@@ -2198,8 +2166,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const hasDocument = actions.some(a => a && a.type === 'document');
   if (hasDocument) {
     html += `
-      <script type="module" src="/js/pdf.min.mjs"></script>
-      <script src="/js/pdf-viewer.js"></script>
+      <script type="module" src="/js/pdf-viewer.js?v=102"></script>
     `;
   }
   return html;

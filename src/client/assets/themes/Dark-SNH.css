@@ -210,22 +210,7 @@ footer a:hover {
   gap: 9px;
 }
 
-.card-tags a.tag-link {
-  text-decoration: none;
-  color: #181818;
-  background: #FFD600;
-  padding: 5px 13px 4px 13px;
-  border-radius: 7px;
-  font-size: .98em;
-  border: none;
-  font-weight: bold;
-}
 
-.card-tags a.tag-link:hover {
-  background: #ffe86a;
-  color: #111;
-  cursor: pointer;
-}
 
 a.user-link {
   background-color: #FFA500; 

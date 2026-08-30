@@ -28,7 +28,7 @@ const renderTags = (tags) => {
   const list = safeArr(tags).map((t) => String(t || "").trim()).filter(Boolean);
   return list.length
     ? div(
-        { class: "card-tags" },
+        { class: "tribe-side-tags" },
         list.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
       )
     : null;
@@ -74,15 +74,6 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
         const commentCount = typeof doc.commentCount === "number" ? doc.commentCount : 0;
         const title = safeText(doc.title);
         const pdfId = safeDomId("pdf-container-", doc.key);
-
-        const topbarLeft =
-          doc.author && String(doc.author) !== String(userId)
-            ? form(
-                { method: "GET", action: "/pm" },
-                input({ type: "hidden", name: "recipients", value: doc.author }),
-                button({ type: "submit", class: "filter-btn" }, i18n.documentMessageAuthorButton)
-              )
-            : null;
 
         const isOwn = doc.author && String(doc.author) === String(userId);
         return div(
@@ -233,7 +224,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
     )
   );
 
-  return `${tpl}<script type="module" src="/js/pdf.min.mjs"></script><script src="/js/pdf-viewer.js"></script>`;
+  return `${tpl}<script type="module" src="/js/pdf-viewer.js?v=102"></script>`;
 };
 
 exports.singleDocumentView = async (doc, filter = "all", comments = [], params = {}) => {
@@ -254,13 +245,6 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   ].filter(Boolean);
 
   const sideActions = [];
-  if (doc.author && String(doc.author) !== String(userId)) {
-    sideActions.push(form(
-      { method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: doc.author }),
-      button({ type: "submit", class: "filter-btn" }, i18n.documentMessageAuthorButton)
-    ));
-  }
   if (isAuthor && !hasOpinions) {
     sideActions.push(form(
       { method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
@@ -290,11 +274,8 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   );
 
   const docSide = div({ class: "tribe-side" },
-    div({ class: "shop-title-row" },
-      title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n)
-    ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    title ? h2({ class: "tribe-card-title" }, title) : null,
+    div({ class: "card-chips-row" }, renderReachChip(isClearnet, i18n), ...chips),
     safeText(doc.description)
       ? p({ class: "tribe-side-description" }, ...renderUrl(doc.description))
       : null,
@@ -358,6 +339,6 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
     )
   );
 
-  return `${tpl}<script type="module" src="/js/pdf.min.mjs"></script><script src="/js/pdf-viewer.js"></script>`;
+  return `${tpl}<script type="module" src="/js/pdf-viewer.js?v=102"></script>`;
 };
 

@@ -197,7 +197,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
           chatRoot: root,
           title: info.title || '',
           description: info.description || '',
-          members: info.members || 0,
+          members: Math.max(info.members || 0, new Set(asc.map(m => m.author)).size),
           messageCount: asc.length,
           replies: asc.slice(-CHAT_THREAD_LIMIT).map(m => ({ id: m.id, author: m.author, ts: m.ts || 0, text: (m.content && m.content.text) || '' }))
         }

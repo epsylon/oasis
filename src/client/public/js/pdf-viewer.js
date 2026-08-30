@@ -1,12 +1,45 @@
-document.addEventListener('DOMContentLoaded', () => {
-  if (typeof pdfjsLib === 'undefined') return;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/js/pdf.worker.min.mjs';
+const showPdfFallback = () => {
+  document.querySelectorAll('.pdf-viewer-container').forEach(container => {
+    if (container.dataset.pdfReady) return;
+    container.dataset.pdfReady = '1';
+    container.textContent = '';
+    const url = container.getAttribute('data-pdf-url');
+    if (url) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.textContent = '📄 PDF';
+      container.appendChild(link);
+    }
+  });
+};
+
+const initPdfViewers = async () => {
+  let pdfjsLib;
+  try {
+    pdfjsLib = await import('/js/pdf.min.mjs?v=102');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/js/pdf.worker.min.mjs?v=102';
+  } catch (err) {
+    showPdfFallback();
+    return;
+  }
 
   document.querySelectorAll('.pdf-viewer-container').forEach(async container => {
     const pdfUrl = container.getAttribute('data-pdf-url');
-    if (!pdfUrl) return;
+    if (!pdfUrl || container.dataset.pdfReady) return;
+    container.dataset.pdfReady = '1';
 
-    const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+    let pdf;
+    try {
+      pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+    } catch (err) {
+      container.textContent = '';
+      const fallback = document.createElement('a');
+      fallback.href = pdfUrl;
+      fallback.textContent = '📄 PDF';
+      container.appendChild(fallback);
+      return;
+    }
+
     let currentPage = 1;
     let scale = 1.5;
     let rotation = 0;
@@ -22,14 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const controls = document.createElement('div');
     controls.className = 'pdf-controls';
     controls.innerHTML = `
-      <button id="prev">⬅️</button>
-      <button id="next">➡️</button>
-      <button id="zoomIn">🔍+</button>
-      <button id="zoomOut">🔍−</button>
-      <button id="rotate">↻</button>
-      <button id="download">⬇️</button>
-      <button id="fullscreen">🔲</button>
-      <button id="metadata">ℹ️</button>
+      <button class="pdf-prev">⬅️</button>
+      <button class="pdf-next">➡️</button>
+      <button class="pdf-zoom-in">🔍+</button>
+      <button class="pdf-zoom-out">🔍−</button>
+      <button class="pdf-rotate">↻</button>
+      <button class="pdf-download">⬇️</button>
+      <button class="pdf-fullscreen">🔲</button>
+      <button class="pdf-metadata">ℹ️</button>
     `;
 
     container.appendChild(controls);
@@ -62,27 +95,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderPage(currentPage);
 
-    controls.querySelector('#prev').onclick = () => goToPage(-1);
-    controls.querySelector('#next').onclick = () => goToPage(1);
-    controls.querySelector('#zoomIn').onclick = () => { scale += 0.2; renderPage(currentPage); };
-    controls.querySelector('#zoomOut').onclick = () => { scale = Math.max(0.5, scale - 0.2); renderPage(currentPage); };
-    controls.querySelector('#rotate').onclick = () => { rotation = (rotation + 90) % 360; renderPage(currentPage); };
-    controls.querySelector('#download').onclick = () => {
+    controls.querySelector('.pdf-prev').onclick = () => goToPage(-1);
+    controls.querySelector('.pdf-next').onclick = () => goToPage(1);
+    controls.querySelector('.pdf-zoom-in').onclick = () => { scale += 0.2; renderPage(currentPage); };
+    controls.querySelector('.pdf-zoom-out').onclick = () => { scale = Math.max(0.5, scale - 0.2); renderPage(currentPage); };
+    controls.querySelector('.pdf-rotate').onclick = () => { rotation = (rotation + 90) % 360; renderPage(currentPage); };
+    controls.querySelector('.pdf-download').onclick = () => {
       const a = document.createElement('a');
       a.href = pdfUrl;
       a.download = 'document.pdf';
       a.click();
     };
-    controls.querySelector('#fullscreen').onclick = () => {
+    controls.querySelector('.pdf-fullscreen').onclick = () => {
       if (canvas.requestFullscreen) canvas.requestFullscreen();
       else if (canvas.webkitRequestFullscreen) canvas.webkitRequestFullscreen();
       else if (canvas.mozRequestFullScreen) canvas.mozRequestFullScreen();
       else if (canvas.msRequestFullscreen) canvas.msRequestFullscreen();
     };
-    controls.querySelector('#metadata').onclick = async () => {
+    controls.querySelector('.pdf-metadata').onclick = async () => {
       const info = await pdf.getMetadata();
       alert(`Title: ${info.info.Title || 'N/A'}\nAuthor: ${info.info.Author || 'N/A'}\nPDF Producer: ${info.info.Producer || 'N/A'}`);
     };
   });
-});
+};
 
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPdfViewers);
+} else {
+  initPdfViewers();
+}

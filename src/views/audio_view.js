@@ -288,13 +288,6 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
 
   const ownerActions = renderAudioOwnerActions(filter, audioObj, { q, sort });
   const sideActions = [];
-  if (audioObj.author && String(audioObj.author) !== String(userId)) {
-    sideActions.push(form(
-      { method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: audioObj.author }),
-      button({ type: "submit", class: "filter-btn" }, i18n.audioMessageAuthorButton)
-    ));
-  }
   if (audioObj.isBcs) {
     sideActions.push(form(
       { method: "GET", action: `/melody/transcode/${encodeURIComponent(audioObj.key)}` },

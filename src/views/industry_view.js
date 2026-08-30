@@ -634,10 +634,6 @@ const renderFacilitySide = (fc, returnTo, params = {}) => {
   const sideActions = []
   for (const act of membershipActions(fc, returnTo)) sideActions.push(act)
   if (!isSteward && fc.steward) {
-    sideActions.push(form({ method: "GET", action: "/pm" },
-      input({ type: "hidden", name: "recipients", value: fc.steward }),
-      button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-    ))
     sideActions.push(a({ href: `/reports?filter=create&category=ABUSE&title=${encodeURIComponent(`${i18n.industryTitle || "Industry"}: ${safeText(fc.name)}`)}`, class: "filter-btn" }, i18n.industryReportButton || "Report"))
   }
   if (isSteward) {

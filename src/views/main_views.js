@@ -389,7 +389,7 @@ const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters) => {
   const total = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
   const myId = (config.keys && config.keys.id) ? config.keys.id : '';
   const alreadyVoted = Array.isArray(voters) && myId ? voters.includes(myId) : false;
-  return details({ class: 'opinions-voting-collapse' },
+  const votingDetails = details({ class: 'opinions-voting-collapse' },
     summary({ class: total > 0 ? 'opinions-summary engage-on' : 'opinions-summary' },
       span({ class: 'opinions-summary-icon' }, 'ꔍ'),
       span({ class: 'opinions-summary-count' }, `(${total})`)),
@@ -404,6 +404,7 @@ const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters) => {
     ),
     alreadyVoted ? p({ class: 'muted' }, i18n.alreadyVoted) : null
   );
+  return [renderVotesSummary(ops), votingDetails].filter(Boolean);
 };
 exports.renderOpinionsVoting = renderOpinionsVoting;
 
@@ -2803,8 +2804,7 @@ exports.authorView = async ({
   const hasDocument = Array.isArray(allActions) && allActions.some(a => a && a.author === feedId && a.type === 'document');
   if (hasDocument) {
     html += `
-      <script type="module" src="/js/pdf.min.mjs"></script>
-      <script src="/js/pdf-viewer.js"></script>
+      <script type="module" src="/js/pdf-viewer.js?v=102"></script>
     `;
   }
   return html;
@@ -3633,8 +3633,7 @@ exports.threadView = ({ messages, spreadMap = null }) => {
 
   return `${tpl}${
     needsPdfViewer
-      ? `<script type="module" src="/js/pdf.min.mjs"></script>
-         <script src="/js/pdf-viewer.js"></script>`
+      ? `<script type="module" src="/js/pdf-viewer.js?v=102"></script>`
       : ""
   }`;
 };

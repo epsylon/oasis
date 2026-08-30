@@ -221,7 +221,7 @@ exports.singlePadView = async (pad, entries, params) => {
   const isRestrictedInviteOnly = !isMember && !isAuthor && pad.status === "INVITE-ONLY"
 
   const tags = !isRestrictedInviteOnly && Array.isArray(pad.tags) && pad.tags.length > 0
-    ? div({ class: "tribe-side-tags" }, ...pad.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}` }, `#${t}`)))
+    ? div({ class: "tribe-side-tags" }, ...pad.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`)))
     : null
 
   const sharesPad = isAuthor || (pad.members || []).includes(userId)

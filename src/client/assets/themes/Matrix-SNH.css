@@ -241,16 +241,7 @@ footer a {
   color: #00FF00;
 }
 
-.card-tags a.tag-link {
-  color: #00FF00;
-  background: #000000;
-}
 
-.card-tags a.tag-link:hover {
-  background: #00FF00;
-  color: #000000;
-  cursor: pointer;
-}
 
 a.user-link {
   background-color: #00FF00;

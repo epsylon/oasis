@@ -114,11 +114,6 @@ const renderCardField = (labelText, value = "") =>
 const renderCardFieldRich = (labelText, parts) =>
   div({ class: "card-field" }, span({ class: "card-label" }, labelText), span({ class: "card-value" }, ...(Array.isArray(parts) ? parts : [parts])))
 
-const renderPmButton = (recipientId) =>
-  recipientId && String(recipientId) !== String(userId)
-    ? form({ method: "GET", action: "/pm" }, input({ type: "hidden", name: "recipients", value: recipientId }), button({ type: "submit", class: "filter-btn" }, i18n.privateMessage))
-    : null
-
 const renderStockBar = (stockValue, maxValue) => {
   const s = Math.max(0, Number(stockValue || 0))
   const m = Math.max(1, Number(maxValue || s || 1))
@@ -209,7 +204,7 @@ const renderMarketOwnerActions = (item, returnTo) => {
 }
 
 const renderMarketTopbar = (item, returnTo) => {
-  const left = [renderPmButton(item && item.seller)].filter(Boolean)
+  const left = []
   const right = item && String(item.seller) === String(userId) ? renderMarketOwnerActions(item, returnTo) : []
   const leftNode = left.length ? div({ class: "bookmark-topbar-left transfer-topbar-left" }, ...left) : null
   const rightNode = right.length ? div({ class: "bookmark-actions transfer-actions" }, ...right) : null

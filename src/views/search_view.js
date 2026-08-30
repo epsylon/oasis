@@ -688,8 +688,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
 
   if (hasDocument) {
     html += `
-      <script type="module" src="/js/pdf.min.mjs"></script>
-      <script src="/js/pdf-viewer.js"></script>
+      <script type="module" src="/js/pdf-viewer.js?v=102"></script>
     `;
   }
 

@@ -6686,7 +6686,7 @@ div .header-content{width:100%}
 .card-body{margin-top:0;padding:0}
 .card-field{display:flex;align-items:baseline;padding:0;margin-bottom:0;border:none;background:none}
 .card-tags{margin:5px 0 3px 0;display:flex;flex-wrap:wrap;gap:9px}
-.card-tags a.tag-link{text-decoration:none;padding:5px 13px 4px 13px;border-radius:7px;font-size:.98em;border:none;font-weight:bold}
+.tribe-side .card-tags{background-color:#222 !important;border:none !important;border-radius:10px;padding:20px !important;margin:0 0 20px 0;box-shadow:0 4px 6px rgba(0,0,0,.1);gap:8px}
 a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bold;text-decoration:none;display:inline-block;border:2px solid transparent;font-size:.8em}
 .date-link{padding:8px 16px;border-radius:5px;margin-left:8px}
 .activitySpreadInhabitant2,.activityVotePost{padding:8px 16px;border-radius:5px;font-weight:bold;text-decoration:none;display:inline-block;border:2px solid transparent}
@@ -7473,6 +7473,11 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
     min-width: 0;
 }
 
+.card-engage > .feed-votes-summary {
+    grid-column: 1 / -1;
+    margin: 0;
+}
+
 .card-engage > details[open] {
     grid-column: 1 / -1;
 }
@@ -7647,7 +7652,7 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .card-field-row{display:flex;gap:.6em;flex-wrap:wrap}
 .card-section-action{margin-top:6px}
 .card-section-text{margin:.4rem 0}
-.post-text-clamped{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:7;overflow:hidden;max-height:none}
+.post-text-clamped{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:16;overflow:hidden;max-height:none}
 .post-text-clamped:has(video,audio,iframe,embed,object){display:block;-webkit-line-clamp:unset;max-height:none;overflow:visible}
 .reply-context{border-left:3px solid #666;padding-left:10px;margin-bottom:8px;opacity:.85}
 .reply-context-label{font-size:.85em}
@@ -7691,6 +7696,10 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 
 .school-invited-list{border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
 .stacked-action-row{flex-direction:column;align-items:flex-start;gap:6px}
+.school-invite-students form{flex-direction:column;align-items:stretch;width:100%}
+.school-invite-students form br{display:none}
+.school-invite-students input[type="text"]{width:100%}
+.school-invite-students form button{align-self:flex-start}
 .stacked-action-row .subscription-form{margin:0}
 .subscription-actions{display:flex;align-items:center;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none !important}
 .subscription-label-row{display:flex;align-items:center;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0;box-shadow:none !important}
@@ -7699,6 +7708,30 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .school-progress-row p{margin:0}
 .school-progress-issue{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
 .school-progress-issue input[type="text"]{max-width:220px}
+.school-progress-failed{font-size:0.85em;color:#e57373;cursor:help}
+.school-lessons .school-lesson,.school-exams .school-lesson{background:transparent !important;border:0 !important;box-shadow:none;padding:0 !important;margin:0 0 16px 0}
+.school-exam-question{background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0 0 14px 0}
+.activity-update-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.activity-update-counts{white-space:nowrap}
+.activity-update-msg{margin:10px 15px 0 0}
+.activity-update-msg .post-text{margin:0}
+.school-exam-question p{margin:2px 0}
+.school-exam-correct{color:#2ecc71}
+.school-exam-option-row{color:#999}
+.school-panel-box{border:1px solid #444;border-radius:8px;margin:0 0 14px 0}
+.school-panel-box h3{margin:0 0 10px 0;color:#ffa300;font-size:.9em;text-transform:uppercase;letter-spacing:1px}
+.school-students-table{width:100%;border-collapse:collapse}
+.school-students-table th{text-align:left;color:#ffa300;font-size:.85em;text-transform:uppercase;letter-spacing:1px;padding:6px 10px;border-bottom:1px solid #444}
+.school-students-table td{padding:6px 10px;border-bottom:1px solid #333;vertical-align:middle}
+.school-students-table .school-progress-issue input[type="text"]{max-width:160px}
+.school-progress-bar{flex:1 1 auto;min-width:100px;height:12px;accent-color:#ffa300}
+.school-progress-count{font-size:.85em;white-space:nowrap}
+.school-unit{background:transparent !important;border:0 !important;padding:0 !important;margin:0 0 14px 0;box-shadow:none}
+.school-unit-summary{cursor:pointer;list-style:none;font-weight:bold;color:#ffa300;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px 0}
+.school-unit-summary::-webkit-details-marker{display:none}
+.school-unit-summary::after{content:" \25BE";opacity:.7}
+details[open] > .school-unit-summary::after{content:" \25B4"}
+.school-lessons .school-lesson-next{border-left:3px solid #ffa300 !important;padding-left:10px !important}
 .school-pending-block{border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
 .school-pending-row{justify-content:center;border:none !important;background:transparent !important;box-shadow:none !important;padding:0;margin:0}
 .school-pending-block .doc-export-actions{margin-top:8px;margin-bottom:0}

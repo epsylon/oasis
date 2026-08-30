@@ -66,6 +66,14 @@ const WORKFLOWS = [
       'images', 'bookmarks', 'melody', 'games', 'pixelia', 'favorites', 'school']
   },
   {
+    key: 'kids',
+    theme: 'Clear-SNH',
+    homePage: 'activity',
+    modules: ['school', 'games', 'pixelia', 'melody', 'images', 'audios', 'videos', 'docs', 'bookmarks',
+      'agenda', 'calendars', 'events', 'tasks', 'favorites', 'feed', 'blogs', 'chats', 'pads', 'maps',
+      'tags', 'trending', 'tribes', 'larp', 'polls', 'opinions', 'invites']
+  },
+  {
     key: 'mobile',
     theme: 'OasisMobile',
     homePage: 'activity',

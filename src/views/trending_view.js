@@ -344,8 +344,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
 
   if (hasDocument) {
     html += `
-      <script type="module" src="/js/pdf.min.mjs"></script>
-      <script src="/js/pdf-viewer.js"></script>
+      <script type="module" src="/js/pdf-viewer.js?v=102"></script>
     `;
   }
 

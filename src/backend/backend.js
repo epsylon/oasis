@@ -1992,11 +1992,10 @@ router
     const lessons = await schoolModel.listLessons(course.rootId);
     const certificates = await schoolModel.listCertificates(course.rootId);
     const fav = await contentFavorites.getFavoriteSet('school').catch(() => new Set());
-    const comments = await getVoteComments(course.rootId || course.id).catch(() => []);
     const exams = await schoolModel.listExams(course.rootId).catch(() => []);
     const progress = course.author === getViewerId() ? await schoolModel.progressForCourse(course.rootId).catch(() => ({})) : {};
     const approved = course.students.includes(getViewerId()) ? await schoolModel.hasPassedCourse(course.rootId, getViewerId()).catch(() => false) : false;
-    ctx.body = await singleCourseView({ ...course, isFavorite: fav.has(String(course.rootId || course.id)) }, lessons, certificates, { comments, exams, progress, approved, subscription: await subscriptionStateFor(course.rootId || course.id, course.author), spreads: await spreads.forMessage(course.id).catch(() => null) });
+    ctx.body = await singleCourseView({ ...course, isFavorite: fav.has(String(course.rootId || course.id)) }, lessons, certificates, { exams, progress, approved, subscription: await subscriptionStateFor(course.rootId || course.id, course.author), spreads: await spreads.forMessage(course.id).catch(() => null) });
   })
   .post('/school/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
@@ -2108,7 +2107,6 @@ router
     try { await schoolModel.createOpinion(ctx.params.id, ctx.params.category); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
   })
-  .post('/school/:courseId/comments', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => commentAction(ctx, 'school', 'courseId'))
   .post('/school/lesson/complete/:courseId/:lessonId', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
     const done = String(ctx.request.body.value || 'true') !== 'false';
@@ -2127,10 +2125,10 @@ router
     await schoolModel.createExam(ctx.params.id, stripDangerousTags(ctx.request.body.title), { lessonId: ctx.request.body.lessonId });
     ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
   })
-  .post('/school/exam/question/add/:courseId/:examId', koaBody(), async (ctx) => {
+  .post('/school/exam/question/add/:courseId', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
-    await schoolModel.addExamQuestion(ctx.params.courseId, ctx.params.examId, { q: stripDangerousTags(b.q), o1: stripDangerousTags(b.o1), o2: stripDangerousTags(b.o2), o3: stripDangerousTags(b.o3), o4: stripDangerousTags(b.o4), correct: b.correct, points: b.points });
+    await schoolModel.addExamQuestion(ctx.params.courseId, b.examId, { q: stripDangerousTags(b.q), o1: stripDangerousTags(b.o1), o2: stripDangerousTags(b.o2), o3: stripDangerousTags(b.o3), o4: stripDangerousTags(b.o4), correct: b.correct, points: b.points });
     ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
   })
   .post('/school/exam/question/delete/:courseId/:examId/:questionId', koaBody(), async (ctx) => {
@@ -2162,31 +2160,7 @@ router
     const lesson = lessons.find(l => l.id === ctx.params.lessonId);
     if (!lesson) { ctx.redirect(`/school/course/${encodeURIComponent(ctx.params.courseId)}`); return; }
     const materials = await schoolModel.listLessonMaterials(course.rootId, lesson.id).catch(() => []);
-    const lessonRoot = await schoolModel.lessonRootOf(lesson.id).catch(() => lesson.id);
-    const hiddenComments = await schoolModel.listHiddenComments(course.rootId).catch(() => new Set());
-    const lessonComments = (await getVoteComments(lessonRoot).catch(() => [])).filter(c => !hiddenComments.has(c.key));
-    ctx.body = await require('../views/school_view').singleLessonView(course, lesson, materials, { edit: String(ctx.query.edit || '') === '1', comments: lessonComments });
-  })
-  .post('/school/lesson/:courseId/:lessonId/comments', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
-    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
-    const rt = `/school/lesson/${encodeURIComponent(ctx.params.courseId)}/${encodeURIComponent(ctx.params.lessonId)}`;
-    const course = await schoolModel.getCourseById(ctx.params.courseId, getViewerId()).catch(() => null);
-    if (!course) { ctx.redirect('/school'); return; }
-    const uid = getViewerId();
-    const isOpenCourse = course.visibility !== 'INVITE' && !(Number(course.price) > 0);
-    if (course.author !== uid && !course.students.includes(uid) && !isOpenCourse) { ctx.redirect(rt); return; }
-    let text = stripDangerousTags((ctx.request.body.text || '').trim());
-    const blobMarkdown = await handleBlobUpload(ctx, 'blob');
-    if (blobMarkdown) text += blobMarkdown;
-    if (!text) { ctx.redirect(rt); return; }
-    const lessonRoot = await schoolModel.lessonRootOf(ctx.params.lessonId).catch(() => ctx.params.lessonId);
-    await post.publish({ text, root: lessonRoot, dest: lessonRoot });
-    ctx.redirect(rt);
-  })
-  .post('/school/lesson/comment/hide/:courseId/:commentId', koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
-    try { await schoolModel.hideComment(ctx.params.courseId, ctx.params.commentId); } catch (_) {}
-    ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.courseId)}`, ['/school']));
+    ctx.body = await require('../views/school_view').singleLessonView(course, lesson, materials, { edit: String(ctx.query.edit || '') === '1' });
   })
   .post('/school/lesson/update/:courseId/:lessonId', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }

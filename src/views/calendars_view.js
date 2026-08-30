@@ -250,7 +250,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
   }
 
   const tags = Array.isArray(calendar.tags) && calendar.tags.length > 0
-    ? div({ class: "tribe-side-tags" }, ...calendar.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}` }, `#${t} `)))
+    ? div({ class: "tribe-side-tags" }, ...calendar.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`)))
     : null
 
   const subscriptionIn = isAuthor || (calendar.subscription && calendar.subscription.subscribed === true)

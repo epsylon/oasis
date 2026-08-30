@@ -1,6 +1,5 @@
-const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, datalist } = require("../server/node_modules/hyperaxe")
+const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress } = require("../server/node_modules/hyperaxe")
 const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox } = require("./main_views")
-const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -179,17 +178,17 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
   )
 }
 
-const renderLesson = (lesson, course, isTeacher, returnTo, isStudent = false) =>
+const renderLesson = (lesson, course, isTeacher, returnTo, isStudent = false, isNext = false) =>
   lesson.locked
     ? div({ class: "school-lesson school-lesson-locked" },
         h3("🔒"),
         p(i18n.schoolLessonLocked),
         div({ class: "school-lesson-meta" }, span(new Date(lesson.createdAt).toLocaleDateString()))
       )
-    : div({ class: "school-lesson" },
-    details({ class: "school-lesson-details" },
+    : div({ class: isNext ? "school-lesson school-lesson-next" : "school-lesson" },
+    details({ class: "school-lesson-details", ...(isNext ? { open: true } : {}) },
       summary({ class: "school-lesson-summary" },
-        span({ class: "school-lesson-summary-title" }, (lesson.completed ? "✓ " : "") + (lesson.unit ? `${lesson.unit} — ${lesson.title}` : lesson.title)),
+        span({ class: "school-lesson-summary-title" }, (lesson.completed ? "✓ " : isNext ? "▶ " : "") + lesson.title),
         span({ class: "school-lesson-summary-meta" },
           lesson.sessionDate ? `${new Date(lesson.sessionDate).toLocaleDateString()} · ` : "",
           new Date(lesson.createdAt).toLocaleDateString()
@@ -211,57 +210,80 @@ const renderLesson = (lesson, course, isTeacher, returnTo, isStudent = false) =>
     )
   )
 
-const renderTeacherPanel = (course, certificates, returnTo) =>
+const renderTeacherPanel = (course, certificates, returnTo, lessons = [], exams = []) =>
   div({ class: "create-tribe-form school-teacher-panel" },
     h2(i18n.schoolTeacherPanel),
-    form({ method: "POST", action: `/school/lesson/add/${encodeURIComponent(course.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      label(i18n.schoolAddLesson), br,
-      input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolLessonTitlePlaceholder }), br(),
-      textarea({ name: "text", rows: 5, required: true, maxlength: "4000", placeholder: i18n.schoolLessonTextPlaceholder }), br,
-      label(i18n.schoolLessonUnit), br,
-      input({ type: "text", name: "unit", maxlength: "60", placeholder: i18n.schoolLessonUnitPlaceholder }), br(),
-      label(i18n.schoolLessonOrder), br,
-      input({ type: "number", name: "order", min: "0", step: "1" }), br(), br(),
-      label(i18n.schoolSessionDate), br,
-      input({ type: "date", name: "sessionDate", min: new Date().toISOString().slice(0, 10) }), br(), br(),
-      button({ type: "submit" }, i18n.schoolAddLesson), br(), br()
+    div({ class: "school-panel-box" },
+      h3(i18n.schoolAddLesson),
+      form({ method: "POST", action: `/school/lesson/add/${encodeURIComponent(course.id)}` },
+        input({ type: "hidden", name: "returnTo", value: returnTo }),
+        input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolLessonTitlePlaceholder }), br(),
+        textarea({ name: "text", rows: 5, required: true, maxlength: "4000", placeholder: i18n.schoolLessonTextPlaceholder }), br,
+        label(i18n.schoolLessonUnit), br,
+        input({ type: "text", name: "unit", maxlength: "60", placeholder: i18n.schoolLessonUnitPlaceholder }), br(),
+        label(i18n.schoolLessonOrder), br,
+        input({ type: "number", name: "order", min: "0", step: "1" }), br(), br(),
+        label(i18n.schoolSessionDate), br,
+        input({ type: "date", name: "sessionDate", min: new Date().toISOString().slice(0, 10) }), br(), br(),
+        button({ type: "submit" }, i18n.schoolAddLesson)
+      )
     ),
-    br(),
+    isProtected(course) && safeArr(lessons).length
+      ? div({ class: "school-panel-box" },
+          h3(i18n.schoolExamCreate),
+          form({ method: "POST", action: `/school/exam/create/${encodeURIComponent(course.id)}` },
+            input({ type: "hidden", name: "returnTo", value: returnTo }),
+            input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolExamTitlePlaceholder }), br(),
+            label(i18n.schoolLessons), br,
+            select({ name: "lessonId" },
+              safeArr(lessons).map(lesson => option({ value: lesson.id }, lesson.title || lesson.id))
+            ), br(), br(),
+            button({ type: "submit" }, i18n.schoolExamCreate)
+          )
+        )
+      : null,
+    (() => {
+      const openExams = safeArr(exams).filter(x => !x.locked)
+      return openExams.length
+        ? div({ class: "school-panel-box" },
+            h3(i18n.schoolExamCreateQuestion),
+            form({ method: "POST", action: `/school/exam/question/add/${encodeURIComponent(course.id)}` },
+              input({ type: "hidden", name: "returnTo", value: returnTo }),
+              select({ name: "examId" },
+                openExams.map(x => option({ value: x.id }, x.title || x.id))
+              ), br(), br(),
+              label(i18n.schoolExamAddQuestion), br,
+              input({ type: "text", name: "q", required: true, maxlength: "300" }), br(),
+              input({ type: "text", name: "o1", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 1` }), br(),
+              input({ type: "text", name: "o2", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 2` }), br(),
+              input({ type: "text", name: "o3", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 3` }), br(),
+              input({ type: "text", name: "o4", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 4` }), br(),
+              label(i18n.schoolExamCorrect), br,
+              select({ name: "correct" },
+                option({ value: "0" }, `${i18n.schoolExamOption} 1`),
+                option({ value: "1" }, `${i18n.schoolExamOption} 2`),
+                option({ value: "2" }, `${i18n.schoolExamOption} 3`),
+                option({ value: "3" }, `${i18n.schoolExamOption} 4`)
+              ), br(), br(),
+              button({ type: "submit" }, i18n.schoolExamAddQuestion)
+            )
+          )
+        : null
+    })(),
     course.students.length
-      ? form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          label(i18n.schoolIssueCertificate), br,
-          input({ type: "text", name: "student", required: true, list: "school-cert-students", placeholder: "@…", maxlength: "80" }),
-          datalist({ id: "school-cert-students" },
-            course.students
-              .filter(s => !safeArr(certificates).some(cert => cert.student === s))
-              .map(s => option({ value: s }))
-          ), br(),
-          input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }), br(),
-          button({ type: "submit" }, i18n.schoolIssueCertificate), br(), br()
-        )
-      : null,
-    course.visibility === "INVITE"
-      ? div(
-          form({ method: "POST", action: `/school/invite/${encodeURIComponent(course.id)}` },
-            label(i18n.schoolInviteStudents), br,
-            input({ type: "text", name: "students", required: true, placeholder: i18n.schoolInvitePlaceholder }), br(),
-            button({ type: "submit" }, i18n.schoolInviteButton)
-          ),
-          course.invited.length
-            ? div({ class: "school-invited-list" },
-                p(`${i18n.schoolInvited}: `),
-                course.invited.map(s => p(userLink(s)))
-              )
-            : null,
-          br()
-        )
-      : null,
-    safeArr(course.students).length
-      ? div({ class: "school-students-list school-invited-list" },
-          p(`${i18n.schoolStudents}: `),
-          course.students.map(s => p(userLink(s)))
+      ? div({ class: "school-panel-box" },
+          h3(i18n.schoolIssueCertificate),
+          form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}` },
+            input({ type: "hidden", name: "returnTo", value: returnTo }),
+            input({ type: "text", name: "student", required: true, list: "school-cert-students", placeholder: "@…", maxlength: "80" }),
+            datalist({ id: "school-cert-students" },
+              course.students
+                .filter(s => !safeArr(certificates).some(cert => cert.student === s))
+                .map(s => option({ value: s }))
+            ), br(),
+            input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }), br(),
+            button({ type: "submit" }, i18n.schoolIssueCertificate)
+          )
         )
       : null,
     safeArr(course.pending).length
@@ -308,6 +330,8 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
   const isPaid = !isFree(course)
   lessons = safeArr(lessons)
   certificates = safeArr(certificates)
+  const myCompleted = lessons.filter(lesson => lesson.completed).length
+  const nextLesson = isStudent ? lessons.find(l => !l.locked && !l.completed) : null
 
   const courseSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
@@ -347,6 +371,19 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.schoolStudents}: ${course.students.length}`)
     ),
+    course.chatId && (isTeacher || isStudent || (course.visibility === "PUBLIC" && isFree(course)))
+      ? div({ class: "tribe-side-actions shop-visibility-row stacked-action-row" },
+          span({ class: "card-label" }, `${i18n.schoolCourseChat}:`),
+          a({ href: `/chats/${encodeURIComponent(course.chatId)}#chat-latest`, class: "tribe-action-btn" }, i18n.chatVisitChat)
+        )
+      : null,
+    isStudent && lessons.length
+      ? div({ class: "tribe-side-actions shop-visibility-row school-progress-side" },
+          span({ class: "card-label" }, `${i18n.schoolProgress}:`),
+          progress({ class: "school-progress-bar", value: String(myCompleted), max: String(lessons.length) }),
+          span({ class: "school-progress-count" }, `${myCompleted}/${lessons.length}`)
+        )
+      : null,
     !isTeacher
       ? (myPending
           ? div({ class: "school-pending-block" },
@@ -368,25 +405,12 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
             ? div({ class: "tribe-side-actions shop-visibility-row stacked-action-row" },
                 span({ class: "card-label" }, `${i18n.schoolEnrollLabel}:`),
                 form({ method: "POST", action: `/school/enroll/${encodeURIComponent(course.id)}` },
-                  button({ type: "submit", class: "tribe-action-btn" }, isPaid ? `ENROLL (${Number(course.price).toFixed(2)} ECO)` : "ENROLL")
+                  button({ type: "submit", class: "tribe-action-btn" }, isPaid ? `${i18n.schoolEnrollButton} (${Number(course.price).toFixed(2)} ECO)` : i18n.schoolEnrollButton)
                 )
               )
             : !isStudent
               ? p(i18n.schoolInviteRequired)
               : null)
-      : null,
-    isTeacher
-      ? div({ class: "tribe-side-actions shop-visibility-row" },
-          span({ class: "card-label" }, `${i18n.schoolStatus}: `),
-          course.status === "CLOSED"
-            ? renderStateChip("closed", "✗", i18n.schoolClosed)
-            : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
-          form({ method: "POST", action: `/school/status/${encodeURIComponent(course.id)}`, class: "inline-form" },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            input({ type: "hidden", name: "status", value: course.status === "CLOSED" ? "ONGOING" : "CLOSED" }),
-            button({ type: "submit", class: "tribe-action-btn" }, course.status === "CLOSED" ? i18n.schoolReopenCourse : i18n.schoolCloseCourse)
-          )
-        )
       : null,
     isTeacher && course.visibility === "INVITE" && !course.inviteCode
       ? div({ class: "tribe-side-actions shop-visibility-row" },
@@ -405,22 +429,19 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
           )
         )
       : null,
-    isTeacher
-      ? div({ class: "tribe-side-actions owner-actions" },
-          form({ method: "GET", action: "/school" },
-            input({ type: "hidden", name: "filter", value: "edit" }),
-            input({ type: "hidden", name: "courseId", value: course.id }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.chatUpdate)
+    isTeacher && course.visibility === "INVITE"
+      ? div({ class: "tribe-side-actions stacked-action-row school-invite-students" },
+          form({ method: "POST", action: `/school/invite/${encodeURIComponent(course.id)}` },
+            label({ class: "card-label" }, `${i18n.schoolInviteStudents}:`), br,
+            input({ type: "text", name: "students", required: true, placeholder: i18n.schoolInvitePlaceholder }), br(),
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.schoolInviteButton)
           ),
-          form({ method: "POST", action: `/school/delete/${encodeURIComponent(course.id)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
-          )
-        )
-      : null,
-    course.chatId && (isTeacher || isStudent || (course.visibility === "PUBLIC" && isFree(course)))
-      ? div({ class: "tribe-side-actions shop-visibility-row stacked-action-row" },
-          span({ class: "card-label" }, `${i18n.schoolCourseChat}:`),
-          a({ href: `/chats/${encodeURIComponent(course.chatId)}#chat-latest`, class: "tribe-action-btn" }, "VISIT")
+          course.invited.length
+            ? div({ class: "school-invited-list" },
+                p(`${i18n.schoolInvited}: `),
+                course.invited.map(s => p(userLink(s)))
+              )
+            : null
         )
       : null,
     params.subscription && (isTeacher || isStudent)
@@ -436,6 +457,31 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     safeArr(course.tags).length
       ? div({ class: "tribe-side-tags" }, safeArr(course.tags).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
       : null,
+    isTeacher
+      ? div({ class: "tribe-side-actions shop-visibility-row" },
+          span({ class: "card-label" }, `${i18n.schoolStatus}: `),
+          course.status === "CLOSED"
+            ? renderStateChip("closed", "✗", i18n.schoolClosed)
+            : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
+          form({ method: "POST", action: `/school/status/${encodeURIComponent(course.id)}`, class: "inline-form" },
+            input({ type: "hidden", name: "returnTo", value: returnTo }),
+            input({ type: "hidden", name: "status", value: course.status === "CLOSED" ? "ONGOING" : "CLOSED" }),
+            button({ type: "submit", class: "tribe-action-btn" }, course.status === "CLOSED" ? i18n.schoolReopenCourse : i18n.schoolCloseCourse)
+          )
+        )
+      : null,
+    isTeacher
+      ? div({ class: "tribe-side-actions owner-actions" },
+          form({ method: "GET", action: "/school" },
+            input({ type: "hidden", name: "filter", value: "edit" }),
+            input({ type: "hidden", name: "courseId", value: course.id }),
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.chatUpdate)
+          ),
+          form({ method: "POST", action: `/school/delete/${encodeURIComponent(course.id)}` },
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
+          )
+        )
+      : null,
     !isTeacher && (isStudent || myPending)
       ? div({ class: "tribe-side-actions owner-actions" },
           form({ method: "POST", action: `/school/unenroll/${encodeURIComponent(course.id)}` },
@@ -445,130 +491,181 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       : null
   )
 
-  const myCompleted = lessons.filter(lesson => lesson.completed).length
-  const progressBlock = isStudent && lessons.length
-    ? p({ class: "school-progress-self" }, `${i18n.schoolProgress}: ${myCompleted}/${lessons.length}`)
-    : null
-
   const exams = safeArr(params.exams)
   const readyExams = exams.filter(x => !x.locked && safeArr(x.questions).length)
 
-  const teacherProgress = isTeacher && params.progress && Object.keys(params.progress).length
+  const teacherProgress = isTeacher && safeArr(course.students).length
     ? div({ class: "school-progress-list" },
-        h2(i18n.schoolProgress),
-        Object.entries(params.progress).map(([student, done]) => {
-          const passedExams = readyExams.filter(x => safeArr(x.results).some(r => r.author === student && r.passed)).length
-          const hasCert = safeArr(certificates).some(cert => cert.student === student)
-          const eligible = Number(done) >= lessons.length && passedExams >= readyExams.length
-          return div({ class: "school-progress-row" },
-            p(
-              userLink(student),
-              span(` — ${i18n.schoolLessons}: ${done}/${lessons.length}`),
-              readyExams.length ? span(` · ${i18n.schoolExams}: ${passedExams}/${readyExams.length}`) : null,
-              hasCert ? span(" · 🎓") : null
-            ),
-            eligible && !hasCert
-              ? form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}`, class: "school-progress-issue" },
-                  input({ type: "hidden", name: "returnTo", value: returnTo }),
-                  input({ type: "hidden", name: "student", value: student }),
-                  input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }),
-                  button({ type: "submit", class: "tribe-action-btn" }, i18n.schoolIssueCertificate)
-                )
-              : null
-          )
-        })
+        h2(`${i18n.schoolStudents} (${course.students.length})`),
+        table({ class: "school-students-table" },
+          tr(
+            th(i18n.schoolStudents),
+            th(i18n.schoolLessons),
+            th(i18n.schoolExams),
+            th("🎓")
+          ),
+          course.students.map(student => {
+            const done = Number((params.progress || {})[student]) || 0
+            const passedExams = readyExams.filter(x => safeArr(x.results).some(r => r.author === student && r.passed)).length
+            const failedExams = readyExams.filter(x => safeArr(x.results).some(r => r.author === student && !r.passed) && !safeArr(x.results).some(r => r.author === student && r.passed))
+            const hasCert = safeArr(certificates).some(cert => cert.student === student)
+            const eligible = done >= lessons.length && passedExams >= readyExams.length
+            return tr(
+              td(userLink(student)),
+              td(`${done}/${lessons.length}`),
+              td(
+                readyExams.length ? `${passedExams}/${readyExams.length}` : "—",
+                failedExams.length
+                  ? span({ class: "school-progress-failed", title: failedExams.map(x => x.title).join(", ") }, ` ✗${failedExams.length}`)
+                  : null
+              ),
+              td(
+                hasCert
+                  ? span("🎓")
+                  : eligible
+                    ? form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}`, class: "school-progress-issue" },
+                        input({ type: "hidden", name: "returnTo", value: returnTo }),
+                        input({ type: "hidden", name: "student", value: student }),
+                        input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }),
+                        button({ type: "submit", class: "tribe-action-btn" }, i18n.schoolIssueCertificate)
+                      )
+                    : span("—")
+              )
+            )
+          })
+        )
       )
     : null
 
-  const examsBlock = (isTeacher || isStudent) && (exams.length || (isTeacher && isProtected(course)))
+  const studentPanel = isStudent && !isTeacher
+    ? (() => {
+        const myPassed = readyExams.filter(x => x.myResult && x.myResult.passed).length
+        const myFailed = readyExams.filter(x => x.myResult && !x.myResult.passed)
+        const myCert = safeArr(certificates).find(cert => cert.student === userId) || null
+        return div({ class: "school-progress-list" },
+          h2(i18n.schoolStudentPanel),
+          table({ class: "school-students-table" },
+            tr(
+              th(i18n.schoolLessons),
+              th(i18n.schoolExams),
+              th("🎓")
+            ),
+            tr(
+              td(`${myCompleted}/${lessons.length}`),
+              td(
+                readyExams.length ? `${myPassed}/${readyExams.length}` : "—",
+                myFailed.length
+                  ? span({ class: "school-progress-failed", title: myFailed.map(x => x.title).join(", ") }, ` ✗${myFailed.length}`)
+                  : null
+              ),
+              td(
+                myCert
+                  ? a({ href: `/school/certificate/pdf/${encodeURIComponent(course.id)}/${encodeURIComponent(myCert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
+                  : span("—")
+              )
+            )
+          )
+        )
+      })()
+    : null
+
+  const examsBlock = (isTeacher || isStudent) && exams.length
     ? div({ class: "school-exams" },
         h2(`${i18n.schoolExams} (${isTeacher ? exams.length : readyExams.length})`),
         (isTeacher ? exams : readyExams).map(exam =>
           exam.locked
             ? null
-            : div({ class: "school-exam" },
-                h3(exam.title),
+            : div({ class: "school-lesson school-exam" },
                 isTeacher
-                  ? div(
-                      exam.questions.map((question, qi) =>
-                        div({ class: "school-exam-question" },
-                          p(`${qi + 1}. ${question.q}`),
-                          question.options.map((opt, oi) =>
-                            p({ class: oi === question.correct ? "school-exam-correct" : "school-exam-option-row" }, `${oi === question.correct ? "✓" : "·"} ${opt}`)
-                          ),
-                          form({ method: "POST", action: `/school/exam/question/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(exam.id)}/${encodeURIComponent(question.id)}` },
-                            input({ type: "hidden", name: "returnTo", value: returnTo }),
-                            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
-                          )
-                        )
+                  ? details({ class: "school-lesson-details" },
+                      summary({ class: "school-lesson-summary" },
+                        span({ class: "school-lesson-summary-title" }, `${exam.title} (${safeArr(exam.questions).length})`)
                       ),
-                      form({ method: "POST", action: `/school/exam/question/add/${encodeURIComponent(course.id)}/${encodeURIComponent(exam.id)}`, class: "create-tribe-form" },
-                        input({ type: "hidden", name: "returnTo", value: returnTo }),
-                        label(i18n.schoolExamAddQuestion), br,
-                        input({ type: "text", name: "q", required: true, maxlength: "300" }), br(),
-                        input({ type: "text", name: "o1", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 1` }), br(),
-                        input({ type: "text", name: "o2", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 2` }), br(),
-                        input({ type: "text", name: "o3", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 3` }), br(),
-                        input({ type: "text", name: "o4", required: true, maxlength: "200", placeholder: `${i18n.schoolExamOption} 4` }), br(),
-                        label(i18n.schoolExamCorrect), br,
-                        select({ name: "correct" },
-                          option({ value: "0" }, `${i18n.schoolExamOption} 1`),
-                          option({ value: "1" }, `${i18n.schoolExamOption} 2`),
-                          option({ value: "2" }, `${i18n.schoolExamOption} 3`),
-                          option({ value: "3" }, `${i18n.schoolExamOption} 4`)
-                        ), br(), br(),
-                        button({ type: "submit" }, i18n.schoolExamAddQuestion)
-                      ),
-                      exam.results.length
-                        ? exam.results.map(res => p(userLink(res.author), span(` — ${res.score}/10 — ${res.passed ? i18n.schoolExamPassed : i18n.schoolExamFailed}`)))
-                        : p(i18n.schoolNoScoresYet),
-                      form({ method: "POST", action: `/school/exam/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(exam.id)}` },
-                        input({ type: "hidden", name: "returnTo", value: returnTo }),
-                        button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
-                      )
-                    )
-                  : exam.myResult && (exam.myResult.passed || Date.now() - Number(exam.myResult.at || 0) < 24 * 60 * 60 * 1000)
-                    ? div(
-                        p(`${i18n.schoolExamScore}: ${exam.myResult.score}/10 — ${exam.myResult.passed ? i18n.schoolExamPassed : i18n.schoolExamFailed}`),
-                        !exam.myResult.passed ? p({ class: "school-exam-retry" }, i18n.schoolExamRetryLater) : null
-                      )
-                    : form({ method: "POST", action: `/school/exam/take/${encodeURIComponent(course.id)}/${encodeURIComponent(exam.id)}` },
-                        input({ type: "hidden", name: "returnTo", value: returnTo }),
+                      div({ class: "school-lesson-body" },
                         exam.questions.map((question, qi) =>
                           div({ class: "school-exam-question" },
-                            p(question.q),
+                            p(`${qi + 1}. ${question.q}`),
                             question.options.map((opt, oi) =>
-                              label({ class: "school-exam-option" },
-                                input({ type: "radio", name: `q${qi}`, value: String(oi), required: true }),
-                                ` ${opt}`
-                              )
+                              p({ class: oi === question.correct ? "school-exam-correct" : "school-exam-option-row" }, `${oi === question.correct ? "✓" : "·"} ${opt}`)
+                            ),
+                            form({ method: "POST", action: `/school/exam/question/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(exam.id)}/${encodeURIComponent(question.id)}` },
+                              input({ type: "hidden", name: "returnTo", value: returnTo }),
+                              button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
                             )
                           )
                         ),
-                        button({ type: "submit" }, i18n.schoolExamSubmit)
+                        form({ method: "POST", action: `/school/exam/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(exam.id)}` },
+                          input({ type: "hidden", name: "returnTo", value: returnTo }),
+                          button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
+                        )
                       )
+                    )
+                  : (() => {
+                      const res = exam.myResult
+                      const blocked = res && (res.passed || Date.now() - Number(res.at || 0) < 24 * 60 * 60 * 1000)
+                      const chip = res && res.passed
+                        ? renderStateChip("mutuals", "✓", i18n.schoolExamPassed)
+                        : blocked
+                          ? renderStateChip("closed", "✗", i18n.schoolExamFailed)
+                          : span({ class: "state-chip" }, i18n.schoolExamPending)
+                      return details({ class: "school-lesson-details" },
+                        summary({ class: "school-lesson-summary" },
+                          span({ class: "school-lesson-summary-title" }, `${exam.title} (${safeArr(exam.questions).length})`),
+                          chip
+                        ),
+                        div({ class: "school-lesson-body" },
+                          blocked
+                            ? div(
+                                p(`${i18n.schoolExamScore}: ${res.score}/10 — ${res.passed ? i18n.schoolExamPassed : i18n.schoolExamFailed}`),
+                                !res.passed ? p({ class: "school-exam-retry" }, i18n.schoolExamRetryLater) : null
+                              )
+                            : form({ method: "POST", action: `/school/exam/take/${encodeURIComponent(course.id)}/${encodeURIComponent(exam.id)}` },
+                                input({ type: "hidden", name: "returnTo", value: returnTo }),
+                                exam.questions.map((question, qi) =>
+                                  div({ class: "school-exam-question" },
+                                    p(question.q),
+                                    question.options.map((opt, oi) =>
+                                      label({ class: "school-exam-option" },
+                                        input({ type: "radio", name: `q${qi}`, value: String(oi), required: true }),
+                                        ` ${opt}`
+                                      )
+                                    )
+                                  )
+                                ),
+                                button({ type: "submit" }, i18n.schoolExamSubmit)
+                              )
+                        )
+                      )
+                    })()
               )
         ),
-        isTeacher && isProtected(course)
-          ? form({ method: "POST", action: `/school/exam/create/${encodeURIComponent(course.id)}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              label(i18n.schoolExamCreate), br,
-              input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolExamTitlePlaceholder }), br(),
-              label(i18n.schoolLessons), br,
-              select({ name: "lessonId" },
-                lessons.map(lesson => option({ value: lesson.id }, lesson.title || lesson.id))
-              ), br(), br(),
-              button({ type: "submit" }, i18n.schoolExamCreate)
-            )
-          : null
+        null
       )
     : null
+
+  const lessonItem = (lesson) => renderLesson(lesson, course, isTeacher, returnTo, isStudent, nextLesson && lesson.id === nextLesson.id)
+  const unitGroups = (() => {
+    const groups = new Map()
+    for (const lesson of lessons) {
+      const unit = safeText(lesson.unit)
+      if (!groups.has(unit)) groups.set(unit, [])
+      groups.get(unit).push(lesson)
+    }
+    return [...groups.entries()]
+  })()
 
   const lessonsBlock = div({ class: "school-lessons" },
     h2(`${i18n.schoolLessons} (${lessons.length})`),
     isTeacher || isStudent || isFree(course)
       ? (lessons.length
-          ? lessons.map(lesson => renderLesson(lesson, course, isTeacher, returnTo, isStudent))
+          ? unitGroups.map(([unit, items]) =>
+              unit
+                ? details({ class: "school-unit", ...(isTeacher ? {} : { open: true }) },
+                    summary({ class: "school-unit-summary" }, `${unit} (${items.length})`),
+                    items.map(lessonItem)
+                  )
+                : items.map(lessonItem)
+            )
           : p(i18n.schoolNoLessons))
       : p(i18n.schoolEnrollToSee)
   )
@@ -598,21 +695,17 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       div({ class: "tribe-details" },
         courseSide,
         div({ class: "tribe-main" },
-          progressBlock,
           lessonsBlock,
           examsBlock,
           teacherProgress,
-          isTeacher ? renderTeacherPanel(course, certificates, returnTo) : null,
+          studentPanel,
+          isTeacher ? renderTeacherPanel(course, certificates, returnTo, lessons, exams) : null,
           certsBlock,
           renderEngagement(course.id,
             isStudent && !isTeacher
               ? renderOpinionsVoting('/school/opinions', course.id, course.opinions, returnTo, course.opinions_inhabitants)
               : null,
-            renderSharedCommentsSection({
-              action: `/school/${encodeURIComponent(course.id)}/comments`,
-              comments: safeArr(params.comments),
-              returnTo
-            })
+            null
           )
         )
       )
@@ -785,18 +878,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
             button({ type: "submit" }, i18n.schoolAddMaterial)
           )
         )
-      : null,
-    renderSharedCommentsSection({
-      action: `/school/lesson/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}/comments`,
-      comments: safeArr(params.comments),
-      returnTo: lessonUrl,
-      commentExtra: isTeacher
-        ? (c) => form({ method: "POST", action: `/school/lesson/comment/hide/${encodeURIComponent(course.id)}/${encodeURIComponent(c.key)}`, class: "inline-form" },
-            input({ type: "hidden", name: "returnTo", value: lessonUrl }),
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
-          )
-        : null
-    })
+      : null
   )
 
   const tpl = template(
@@ -806,7 +888,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
     section(div({ class: "tribe-details" }, lessonSide, lessonMain))
   )
   const hasPdf = safeArr(materials).some(m => !m.locked && /\[pdf:/.test(String(m.media || "")))
-  return hasPdf ? `${tpl}<script type="module" src="/js/pdf.min.mjs"></script><script src="/js/pdf-viewer.js"></script>` : tpl
+  return hasPdf ? `${tpl}<script type="module" src="/js/pdf-viewer.js?v=102"></script>` : tpl
 }
 
 exports.schoolInvitePage = (code) => {
