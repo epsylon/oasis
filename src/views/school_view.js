@@ -3,6 +3,7 @@ const { template, i18n, userLink, renderStateChip, renderContentActions, renderO
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
+const nameCache = require("../backend/nameCache")
 const markdown = require("./markdown")
 const { sanitizeHtml } = require("../backend/sanitizeHtml")
 const renderMd = (text) => div({ class: "styled-text", innerHTML: sanitizeHtml(markdown(String(text || ""))) })
@@ -210,7 +211,7 @@ const renderLesson = (lesson, course, isTeacher, returnTo, isStudent = false, is
     )
   )
 
-const renderTeacherPanel = (course, certificates, returnTo, lessons = [], exams = []) =>
+const renderTeacherPanel = (course, certificates, returnTo, lessons = [], exams = [], progress = {}, certStudent = "") =>
   div({ class: "create-tribe-form school-teacher-panel" },
     h2(i18n.schoolTeacherPanel),
     div({ class: "school-panel-box" },
@@ -271,17 +272,30 @@ const renderTeacherPanel = (course, certificates, returnTo, lessons = [], exams 
         : null
     })(),
     course.students.length
-      ? div({ class: "school-panel-box" },
+      ? div({ class: "school-panel-box", id: "school-cert" },
           h3(i18n.schoolIssueCertificate),
           form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}` },
             input({ type: "hidden", name: "returnTo", value: returnTo }),
-            input({ type: "text", name: "student", required: true, list: "school-cert-students", placeholder: "@…", maxlength: "80" }),
+            input({ type: "text", name: "student", required: true, list: "school-cert-students", placeholder: "@…", maxlength: "120", value: (() => {
+              const id = safeText(certStudent)
+              if (!id) return ""
+              const nick = String(nameCache.get(id) || "").trim()
+              return nick ? `${id} (${nick})` : id
+            })() }),
             datalist({ id: "school-cert-students" },
-              course.students
-                .filter(s => !safeArr(certificates).some(cert => cert.student === s))
-                .map(s => option({ value: s }))
+              (() => {
+                const readyExams = safeArr(exams).filter(x => !x.locked && safeArr(x.questions).length)
+                return course.students
+                  .filter(s => !safeArr(certificates).some(cert => cert.student === s))
+                  .filter(s => (Number((progress || {})[s]) || 0) >= safeArr(lessons).length)
+                  .filter(s => readyExams.filter(x => safeArr(x.results).some(r => r.author === s && r.passed)).length >= readyExams.length)
+                  .map(s => {
+                    const nick = String(nameCache.get(s) || "").trim()
+                    return option({ value: nick ? `${s} (${nick})` : s })
+                  })
+              })()
             ), br(),
-            input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }), br(),
+            textarea({ name: "text", rows: 3, maxlength: "500", placeholder: i18n.schoolCertificateTextPlaceholder }), br,
             button({ type: "submit" }, i18n.schoolIssueCertificate)
           )
         )
@@ -502,15 +516,15 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
             th(i18n.schoolStudents),
             th(i18n.schoolLessons),
             th(i18n.schoolExams),
-            th("🎓")
+            th(i18n.schoolCertified)
           ),
           course.students.map(student => {
             const done = Number((params.progress || {})[student]) || 0
             const passedExams = readyExams.filter(x => safeArr(x.results).some(r => r.author === student && r.passed)).length
             const failedExams = readyExams.filter(x => safeArr(x.results).some(r => r.author === student && !r.passed) && !safeArr(x.results).some(r => r.author === student && r.passed))
-            const hasCert = safeArr(certificates).some(cert => cert.student === student)
+            const cert = safeArr(certificates).find(c => c.student === student) || null
             const eligible = done >= lessons.length && passedExams >= readyExams.length
-            return tr(
+            return tr({ class: eligible ? "school-row-passed" : "" },
               td(userLink(student)),
               td(`${done}/${lessons.length}`),
               td(
@@ -519,18 +533,11 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
                   ? span({ class: "school-progress-failed", title: failedExams.map(x => x.title).join(", ") }, ` ✗${failedExams.length}`)
                   : null
               ),
-              td(
-                hasCert
-                  ? span("🎓")
-                  : eligible
-                    ? form({ method: "POST", action: `/school/certificate/${encodeURIComponent(course.id)}`, class: "school-progress-issue" },
-                        input({ type: "hidden", name: "returnTo", value: returnTo }),
-                        input({ type: "hidden", name: "student", value: student }),
-                        input({ type: "text", name: "text", maxlength: "200", placeholder: i18n.schoolCertificateTextPlaceholder }),
-                        button({ type: "submit", class: "tribe-action-btn" }, i18n.schoolIssueCertificate)
-                      )
-                    : span("—")
-              )
+              td(cert
+                ? a({ href: `/school/certificate/pdf/${encodeURIComponent(course.id)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
+                : eligible
+                  ? a({ href: `${returnTo}?cert=${encodeURIComponent(student)}#school-cert`, class: "filter-btn school-cert-pdf" }, i18n.schoolIssueCertificate)
+                  : span({ class: "school-progress-failed" }, "✗"))
             )
           })
         )
@@ -541,14 +548,13 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     ? (() => {
         const myPassed = readyExams.filter(x => x.myResult && x.myResult.passed).length
         const myFailed = readyExams.filter(x => x.myResult && !x.myResult.passed)
-        const myCert = safeArr(certificates).find(cert => cert.student === userId) || null
         return div({ class: "school-progress-list" },
           h2(i18n.schoolStudentPanel),
           table({ class: "school-students-table" },
             tr(
               th(i18n.schoolLessons),
               th(i18n.schoolExams),
-              th("🎓")
+              th(i18n.schoolCertified)
             ),
             tr(
               td(`${myCompleted}/${lessons.length}`),
@@ -558,11 +564,12 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
                   ? span({ class: "school-progress-failed", title: myFailed.map(x => x.title).join(", ") }, ` ✗${myFailed.length}`)
                   : null
               ),
-              td(
-                myCert
-                  ? a({ href: `/school/certificate/pdf/${encodeURIComponent(course.id)}/${encodeURIComponent(myCert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
-                  : span("—")
-              )
+              td((() => {
+                const cert = safeArr(certificates).find(c => c.student === userId) || null
+                return cert
+                  ? a({ href: `/school/certificate/pdf/${encodeURIComponent(course.id)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
+                  : span({ class: "school-progress-failed" }, "✗")
+              })())
             )
           )
         )
@@ -670,23 +677,6 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       : p(i18n.schoolEnrollToSee)
   )
 
-  const certsBlock = !certificates.length ? null : div({ class: "school-certificates" },
-    h2(`${i18n.schoolCertificates} (${certificates.length})`),
-    certificates.length
-      ? certificates.map(cert =>
-          div({ class: "school-certificate" },
-            span("🎓 "),
-            userLink(cert.student),
-            cert.text ? span(` — ${cert.text}`) : null,
-            span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`),
-            (String(cert.student) === String(userId) || isTeacher)
-              ? a({ href: `/school/certificate/pdf/${encodeURIComponent(course.id)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
-              : null
-          )
-        )
-      : p(i18n.schoolNoCertificates)
-  )
-
   return template(
     course.title,
     section(div({ class: "tags-header" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
@@ -699,8 +689,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
           examsBlock,
           teacherProgress,
           studentPanel,
-          isTeacher ? renderTeacherPanel(course, certificates, returnTo, lessons, exams) : null,
-          certsBlock,
+          isTeacher ? renderTeacherPanel(course, certificates, returnTo, lessons, exams, params.progress, params.certStudent) : null,
           renderEngagement(course.id,
             isStudent && !isTeacher
               ? renderOpinionsVoting('/school/opinions', course.id, course.opinions, returnTo, course.opinions_inhabitants)

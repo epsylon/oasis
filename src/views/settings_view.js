@@ -1,4 +1,4 @@
-const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span, img } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span, img, strong } = require("../server/node_modules/hyperaxe");
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
@@ -19,7 +19,7 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) => {
+const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "" }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -355,6 +355,48 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError }) =
                 input({ type: "password", id: "fediverse_token", name: "token", autocomplete: "off", required: true }), br(),
                 button({ type: "submit" }, i18n.fediverseConnect)
               )
+        ),
+        div({ class: "fediverse-network" },
+          h3("Telegram"),
+          p(i18n.telegramSettingsHelp),
+          telegramError ? p({ class: "fediverse-error" }, i18n[telegramError] || i18n.telegramErrConnect) : "",
+          telegramAccount
+            ? form(
+                { action: "/settings/telegram/disconnect", method: "POST" },
+                p(`${i18n.fediverseConnectedAs}: `, strong(telegramAccount.displayName || ""), telegramAccount.username ? span(` (@${telegramAccount.username})`) : ""),
+                br(),
+                button({ type: "submit" }, i18n.fediverseDisconnect)
+              )
+            : telegramLogin && telegramLogin.step === "code"
+              ? form(
+                  { action: "/settings/telegram/code", method: "POST" },
+                  br(),
+                  p(i18n.telegramCodeHelp),
+                  input({ type: "text", id: "telegram_code", name: "code", autocomplete: "off", inputmode: "numeric", placeholder: "12345", required: true }), br(), br(),
+                  button({ type: "submit" }, i18n.telegramVerify),
+                  " ",
+                  button({ type: "submit", formaction: "/settings/telegram/cancel", class: "delete-btn" }, i18n.telegramCancel)
+                )
+              : telegramLogin && telegramLogin.step === "password"
+                ? form(
+                    { action: "/settings/telegram/password", method: "POST" },
+                    br(),
+                    p(i18n.telegramPasswordHelp),
+                    input({ type: "password", id: "telegram_password", name: "password", autocomplete: "off", required: true }), br(), br(),
+                    button({ type: "submit" }, i18n.telegramVerify),
+                    " ",
+                    button({ type: "submit", formaction: "/settings/telegram/cancel", class: "delete-btn" }, i18n.telegramCancel)
+                  )
+                : form(
+                    { action: "/settings/telegram/start", method: "POST" },
+                    label({ for: "telegram_api_id" }, i18n.telegramApiIdLabel), br(),
+                    input({ type: "text", id: "telegram_api_id", name: "apiId", inputmode: "numeric", placeholder: "12345678", required: true }), br(),
+                    label({ for: "telegram_api_hash" }, i18n.fediverseTokenLabel), br(),
+                    input({ type: "password", id: "telegram_api_hash", name: "apiHash", autocomplete: "off", placeholder: "0123456789abcdef0123456789abcdef", required: true }), br(),
+                    label({ for: "telegram_phone" }, i18n.telegramPhoneLabel), br(),
+                    input({ type: "tel", id: "telegram_phone", name: "phone", placeholder: "+34 60000000", required: true }), br(), br(),
+                    button({ type: "submit" }, i18n.fediverseConnect)
+                  )
         )
       )
     ) : null,

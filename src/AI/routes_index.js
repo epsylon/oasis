@@ -114,7 +114,7 @@ const ROUTES = [
   { path: '/profile',       mod: null,         description: 'my profile, my avatar, my page, my identity, my data, my clearnet link' },
   { path: '/profile/edit',  mod: null,         description: 'edit profile, edit avatar, change name, change description, visibility prefs, sensors, eco tax toggle, clearnet toggle, GPG fingerprint' },
   { path: '/blockexplorer', mod: null, description: 'blockexplorer, blockchain, blockchain explorer, blocks, ledger, chain, carbon footprint per block, chain history' },
-  { path: '/fediverse',     mod: 'fediverseMod', description: 'fediverse, mastodon, activitypub, external social networks, federated timeline, cross-post, fediverse handle, follow external accounts' },
+  { path: '/fediverse',     mod: 'fediverseMod', description: 'multiverse, fediverse, mastodon, telegram, activitypub, external social networks, federated timeline, telegram chats and channels, cross-post, fediverse handle, follow external accounts' },
   { path: '/stats?filter=ALL',  mod: null, description: 'global stats, network kpis, total carbon footprint, total inhabitants, network size' },
   { path: '/stats?filter=MINE', mod: null, description: 'my stats, my carbon footprint, my activity numbers, personal kpis' },
   { path: '/tribes/create', mod: 'tribesMod',   description: 'create tribe, new tribe, new group, start community, create private room' },

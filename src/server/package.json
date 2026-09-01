@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Oasis - Social Networking Utopia",
   "repository": {
     "type": "git",
@@ -118,6 +118,7 @@
     "ssb-threads": "^10.0.4",
     "ssb-unix-socket": "^1.0.0",
     "ssb-ws": "^6.2.3",
+    "telegram": "^2.26.22",
     "util": "^0.12.5",
     "yargs": "^17.7.2"
   },

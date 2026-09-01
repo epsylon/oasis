@@ -832,9 +832,18 @@ const renderTagsLink = () => {
 };
 
 
+const hasMultiverseAccount = () => {
+  try {
+    const store = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'configs', 'fediverse-accounts.json'), 'utf8'));
+    return !!(store && ((store.mastodon && store.mastodon.token) || (store.telegram && store.telegram.session)));
+  } catch (_) {
+    return false;
+  }
+};
+
 const renderMastodonLink = () => {
   const fediverseMod = getConfig().modules.fediverseMod === "on";
-  return fediverseMod
+  return fediverseMod && hasMultiverseAccount()
     ? navLink({
         href: "/fediverse",
         emoji: "ꗵ",

@@ -985,6 +985,8 @@ article img {
 .feed-container .post-audio,.feed-container .audio-container audio{width:100%}
 
 .fediverse-network{border-radius:8px;padding:18px 22px;margin-top:10px;display:flex;flex-direction:column;gap:16px}
+.fediverse-network > p,.fediverse-network form > p{margin:0}
+.fediverse-network form{margin:0}
 .fediverse-network h3{margin:0}
 .fediverse-profile{display:flex;flex-direction:column;gap:24px}
 .fediverse-namerow{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
@@ -1013,6 +1015,13 @@ article img {
 .fediverse-profile,.fediverse-profile-id,.fediverse-namerow,.fediverse-stat,.fediverse-name,.fediverse-compact-actions,.fediverse-author,.fediverse-head,.fediverse-bio,.fediverse-stats,.fediverse-field,.fediverse-field-value,.fediverse-actions,.fediverse-compose,.fediverse-compose-actions,.fediverse-media,.fediverse-reach,.fediverse-preview-card,.fediverse-preview-head,.fediverse-disconnected{border:none !important;background:none !important;padding:0 !important;margin:0 !important;box-shadow:none !important;border-radius:0 !important}
 .fediverse-empty{text-align:center;padding:24px}
 .fediverse-error{color:#ff6b6b;margin:8px 0}
+.telegram-unread-badge{background:#ffa300;color:#111;border-radius:10px;padding:1px 8px;font-size:.8em;font-weight:bold}
+.telegram-preview{margin:0;opacity:.85}
+.telegram-dialog .fediverse-avatar{width:44px;height:44px;border-radius:50%}
+.telegram-message.telegram-out{border-left:3px solid #ffa300}
+.telegram-text{white-space:pre-wrap}
+.telegram-chat-title{display:flex;align-items:center;gap:10px;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0 0 10px 0}
+.telegram-chat-title h3{margin:0}
 .fediverse-compose{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
 .fediverse-compose textarea{width:100%;box-sizing:border-box;resize:vertical}
 .fediverse-compose-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
@@ -7723,6 +7732,7 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .school-students-table{width:100%;border-collapse:collapse}
 .school-students-table th{text-align:left;color:#ffa300;font-size:.85em;text-transform:uppercase;letter-spacing:1px;padding:6px 10px;border-bottom:1px solid #444}
 .school-students-table td{padding:6px 10px;border-bottom:1px solid #333;vertical-align:middle}
+.school-students-table tr.school-row-passed td{background:rgba(46,204,113,.08)}
 .school-students-table .school-progress-issue input[type="text"]{max-width:160px}
 .school-progress-bar{flex:1 1 auto;min-width:100px;height:12px;accent-color:#ffa300}
 .school-progress-count{font-size:.85em;white-space:nowrap}

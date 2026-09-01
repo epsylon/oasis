@@ -1,6 +1,6 @@
 # Connect your Mastodon account
 
-The **Fediverse** module lets you use your Mastodon account from inside Oasis: read your timeline, publish posts (text, images or video), reply, boost and favourite — all in one place.
+The **Multiverse** module lets you use your Mastodon account from inside Oasis: read your timeline, publish posts (text, images or video), reply, boost and favourite — all in one place.
 
 This short guide shows you how to connect your account.
 
@@ -33,21 +33,21 @@ This short guide shows you how to connect your account.
 ## 2) Connect it in Oasis
 
 1. In Oasis, open **Settings**.
-2. Find the **Fediverse** section (the **Mastodon** box).
+2. Find the **Multiverse** section (the **Mastodon** box).
 3. Enter:
    - **Address**: your server, e.g. `mastodon.social`.
    - **Access token**: the token you just copied.
 4. Click **Connect it**.
 
-That's it. Oasis checks the token and opens your timeline. From now on you'll find **Fediverse** in the main menu.
+That's it. Oasis checks the token and opens your timeline. From now on you'll find **Multiverse → Timelines** in the main menu (the entry only appears while at least one account — Mastodon or Telegram — is connected).
 
-To stop using it, go back to **Settings → Fediverse** and click **Disconnect**.
+To stop using it, go back to **Settings → Multiverse** and click **Disconnect**.
 
 ---
 
 ## 3) Using it
 
-Open **Fediverse → Timelines**:
+Open **Multiverse → Timelines → Mastodon**:
 
 - **Read** your timeline, newest first. Use **Load more** to see older posts.
 - **Post**: write in the box, optionally **Attach media** (images or video), **Preview**, then **Publish**.

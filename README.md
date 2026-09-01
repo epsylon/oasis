@@ -79,7 +79,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Documents: Module to discover and manage documents.	
  + Events: Module to discover and manage events.
  + Favorites: Module to manage your favorite content.
- + Fediverse: Manage your other fediverse accounts, including sending and receiving content.
+ + Multiverse: Manage your other accounts (Mastodon, Telegram), including sending and receiving content.
  + Feed: Module to discover and share short-texts (feeds).
  + Forums: Module to discover and manage forums.
  + Games: Module to play and share your scores in various mini-games.	
@@ -203,13 +203,13 @@ Check "The Houses" to review which one fit better with your ambitions:
 
 ----------
 
-## Fediverse
+## Multiverse
 
-Oasis bridges to the **Fediverse**. You can connect your fediverse accounts (ex: **Mastodon**) and use them for content from inside Oasis: read your home timeline, publish (text, images and video), reply, boost and favourite — without storing any third-party content in your SSB log (the feed is fetched live and shown ephemerally; only your credentials are kept locally).
+Oasis bridges to the **Fediverse** and beyond. You can connect your other accounts (**Mastodon**, **Telegram**) and use them from inside Oasis: read your Mastodon home timeline, publish (text, images and video), reply, boost and favourite; read your Telegram chats, groups and channels and send messages or files — without storing any third-party content in your SSB log (everything is fetched live and shown ephemerally; only your credentials are kept locally).
 
   ![SNH](https://solarnethub.com/git/oasis-fediverse.png "SolarNET.HuB")
 
-Connect your account from **Settings → Fediverse**, then open it from the **Fediverse** menu. Each network lives in its own space.
+Connect your accounts from **Settings → Multiverse**, then open them from the **Multiverse** menu (shown only while an account is connected). Each network lives in its own space. See [docs/MULTIVERSE](docs/MULTIVERSE) for step-by-step guides.
 
  + Mastodon connect guide: [docs/FEDIVERSE/MASTODON/connect.md](docs/FEDIVERSE/MASTODON/connect.md)
 

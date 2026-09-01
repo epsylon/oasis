@@ -70,9 +70,7 @@ function buildCertificatePdf({ cert, course, studentName, teacherName }) {
   parts.push(centered('has successfully completed the course', 11, 'F1', pageH - 330, '0.25 0.25 0.25'));
   parts.push(centered(courseTitle, 16, 'F2', pageH - 360));
 
-  if (c.text) parts.push(centered(`"${String(c.text).slice(0, 90)}"`, 10, 'F1', pageH - 392, '0.3 0.3 0.3'));
-
-  parts.push(centered(`Issued on ${issuedStr}`, 10, 'F1', pageH - 425, '0.25 0.25 0.25'));
+  parts.push(centered(`Issued on ${issuedStr}`, 10, 'F1', pageH - 400, '0.25 0.25 0.25'));
 
   const sigY = 135;
   parts.push(`q\n0.3 0.3 0.3 RG\n0.7 w\n${margin + 60} ${sigY + 14} m\n${margin + 280} ${sigY + 14} l\nS\nQ`);
