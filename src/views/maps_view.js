@@ -192,7 +192,7 @@ const renderFilters = (filter, q) =>
       button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterMine).toUpperCase()),
       button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterRecent).toUpperCase()),
       button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterFavorites).toUpperCase()),
-      button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.mapUploadButton)));
+      button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.mapCreateButton)));
 
 const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
   const returnFilter = filter === "create" ? "all" : params.filter || "all";
@@ -401,13 +401,13 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
 
   return template(title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.mapDescription)),
+      div({ class: "tags-header module-header-line" }, h2(title), p(i18n.mapDescription)),
       renderFilters(filter, q)),
     section(
       filter === "create" || filter === "edit"
         ? renderMapForm(filter, mapId, mapToEdit, { ...params, filter })
         : section(
-            div({ class: "maps-search" },
+            div({ class: "maps-search activity-filter-chips activity-toolbar-row" },
               form({ method: "GET", action: "/maps", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.mapSearchPlaceholder, class: "filter-box__input" }),
@@ -500,7 +500,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
   );
 
   return template(mapObj.title || i18n.mapTitle,
-    section(div({ class: "tags-header" }, h2(i18n.mapTitle), p(i18n.mapDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.mapTitle), p(i18n.mapDescription))),
     section(renderFilters(filter, q)),
     section(div({ class: "tribe-details" }, mapSide, mapMain)));
 };

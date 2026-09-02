@@ -646,7 +646,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
   let html = template(
     hashtag ? `#${hashtag}` : i18n.searchTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(hashtag ? `#${hashtag}` : i18n.searchTitle),
         p(hashtag ? i18n.hashtagDescription : i18n.searchDescriptionLabel)
       ),

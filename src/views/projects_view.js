@@ -522,12 +522,11 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
   return template(
     i18n.projectsTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(sectionTitle),
-        p(i18n.projectsDescription)
+        p(i18n.projectsDescription),
+        renderReachChipProjects(viewerClearnetProjects, i18n)
       ),
-      div({ class: "shop-title-row" }, renderReachChipProjects(viewerClearnetProjects, i18n)),
-      br(),
       div(
         { class: "filters" },
         form(
@@ -538,7 +537,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
       ),
       f === "CREATE" || f === "EDIT"
         ? null
-        : div({ class: "filters" },
+        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/projects", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: f }),
               input({ type: "text", name: "q", value: safeText(params.q), placeholder: i18n.projectSearchPlaceholder, class: "filter-box__input" }),
@@ -686,7 +685,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
   return template(
     i18n.projectsTitle,
     section(
-      div({ class: "tags-header" }, h2(i18n.projectsTitle), p(i18n.projectsDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.projectsTitle), p(i18n.projectsDescription)),
       div(
         { class: "filters" },
         form(

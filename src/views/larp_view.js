@@ -216,7 +216,7 @@ const renderPostsBlock = (posts, house, canPost) => {
   );
 };
 
-const renderHouseSearch = (q) => div({ class: 'filters' },
+const renderHouseSearch = (q) => div({ class: 'filters activity-filter-chips activity-toolbar-row' },
   form({ method: 'GET', action: '/larp', class: 'filter-box' },
     input({ type: 'hidden', name: 'filter', value: 'houses' }),
     input({ type: 'text', name: 'q', value: q || '', placeholder: i18n.larpSearchPlaceholder, class: 'filter-box__input' }),
@@ -317,14 +317,14 @@ exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, gover
   return template(
     title,
     section(
-      div({ class: 'tags-header' },
-        h1(title),
+      div({ class: 'tags-header module-header-line' },
+        h2(title),
         p(description)
       ),
-      renderCycleBanner(cycle),
-      renderHouseBadges({ myHouse, governingHouse, houses }),
       renderModeButtons(mode),
       renderHouseSearch(search),
+      renderCycleBanner(cycle),
+      renderHouseBadges({ myHouse, governingHouse, houses }),
       mode === 'houses'
         ? (matched.length
             ? renderHousesGrid(matched, myHouseKey, governingKey)

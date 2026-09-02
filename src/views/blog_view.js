@@ -35,7 +35,7 @@ const renderFilterBar = (filter, q, showSearch = true) =>
       )
     ),
     showSearch
-      ? div({ class: "filters" },
+      ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
           form({ method: "GET", action: "/blogs", class: "filter-box" },
             input({ type: "hidden", name: "filter", value: filter }),
             input({ type: "text", name: "q", value: q || "", placeholder: i18n.blogSearchPlaceholder, class: "filter-box__input" }),
@@ -119,7 +119,7 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
   return template(
     i18n.blogTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.blogTitle),
         p(i18n.blogDescription)
       )
@@ -182,7 +182,7 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
 
   return template(
     blog.subject || i18n.blogTitle,
-    section(div({ class: "tags-header" }, h2(i18n.blogTitle), p(i18n.blogDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.blogTitle), p(i18n.blogDescription))),
     renderFilterBar("ALL", params.q, false),
     section(div({ class: "tribe-details" }, blogSide, blogMain))
   );

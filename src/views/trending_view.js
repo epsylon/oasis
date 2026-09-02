@@ -299,7 +299,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
     filteredItems.sort((a, b) => b.value.timestamp - a.value.timestamp);
   }
 
-  const header = div({ class: 'tags-header' }, h2(title), p(i18n.exploreTrending));
+  const header = div({ class: 'tags-header module-header-line' }, h2(title), p(i18n.exploreTrending));
   const cards = filteredItems
     .map(item =>
       renderTrendingCard(
@@ -325,7 +325,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
           div({ class: 'column' }, row.map(mode => filterButton(mode, filter)))
         )
       ),
-      div({ class: 'filters' },
+      div({ class: 'filters activity-filter-chips activity-toolbar-row' },
         form({ method: 'GET', action: '/trending', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.trendingSearchPlaceholder, class: 'filter-box__input' }),

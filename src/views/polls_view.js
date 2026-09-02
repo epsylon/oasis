@@ -190,7 +190,7 @@ const renderFilterBar = (filter, q, showSearch = true) =>
         button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.pollCreateButton)
       )
     ),
-    showSearch ? div({ class: "filters" },
+    showSearch ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
       form({ method: "GET", action: "/polls", class: "filter-box" },
         input({ type: "hidden", name: "filter", value: filter }),
         input({ type: "text", name: "q", value: q || "", placeholder: i18n.pollSearchPlaceholder, class: "filter-box__input" }),
@@ -209,14 +209,14 @@ exports.pollsView = async (polls = [], filter = "ALL", params = {}) => {
     if (editing) params = { ...params, spreadWarning: await renderSpreadEditWarning(editing.id) };
     return template(
       i18n.pollsTitle,
-      section(div({ class: "tags-header" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
+      section(div({ class: "tags-header module-header-line" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
       renderFilterBar(mode, params.q, false),
       renderCreateForm(editing, params)
     );
   }
   return template(
     i18n.pollsTitle,
-    section(div({ class: "tags-header" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
     renderFilterBar(mode, params.q),
     section(
       polls.length
@@ -310,7 +310,7 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
 
   return template(
     poll.question,
-    section(div({ class: "tags-header" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
     renderFilterBar(String(params.filter || "ALL").toUpperCase(), params.q, false),
     section(div({ class: "tribe-details" }, pollSide, pollMain))
   );

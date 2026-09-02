@@ -155,7 +155,7 @@ exports.welcomeView = async (status, currentLanguage, profile = {}) => {
   return template(
     i18n.welcomeTitle || "Welcome",
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.welcomeTitle || "Welcome"),
         p(i18n.welcomeDescription || "A few things worth doing before you start.")
       ),

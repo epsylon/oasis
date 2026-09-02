@@ -403,7 +403,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '') => {
     .filter(Boolean);
 
   const hasDocuments = items.some(item => item.value.content?.type === 'document');
-  const header = div({ class: 'tags-header' },
+  const header = div({ class: 'tags-header module-header-line' },
     h2(title),
     p(i18n.shareYourOpinions)
   );
@@ -445,8 +445,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '') => {
             )
           )
         )
-      ),
-      div({ class: 'mode-buttons' },
+      ,
         div({ class: 'column' },
           opinionCategories.constructive.slice(0, 5).map(mode =>
             form({ method: 'GET', action: '/opinions' },
@@ -480,7 +479,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '') => {
           )
         )
       ),
-      div({ class: 'filters' },
+      div({ class: 'filters activity-filter-chips activity-toolbar-row' },
         form({ method: 'GET', action: '/opinions', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.opinionsSearchPlaceholder, class: 'filter-box__input' }),

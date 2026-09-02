@@ -18,7 +18,7 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
           return td(
             {
               id: cellId,
-              title: pixel ? `By: ${pixel.author}` : "",
+              title: pixel ? `${pixel.author}` : "",
               class: `pixel-cell ${colorClass}`
             },
             ""
@@ -33,7 +33,7 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(description)
       )

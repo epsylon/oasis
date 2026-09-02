@@ -122,7 +122,7 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
   return template(
     i18n.peers,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(i18n.peers),
         p(i18n.peerConnectionsIntro)
       ),

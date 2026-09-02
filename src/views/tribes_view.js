@@ -169,9 +169,9 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
 
   const title = i18n.tribesTitle;
 
-  const header = div({ class: 'tags-header' }, h2(title), p(i18n.tribeDescription));
+  const header = div({ class: 'tags-header module-header-line' }, h2(title), p(i18n.tribeDescription));
 
-  const filters = div({ class: 'filters' },
+  const filters = div({ class: 'filters activity-filter-chips activity-toolbar-row' },
     form({ method: 'GET', action: '/tribes', class: 'filter-box' },
       input({ type: 'hidden', name: 'filter', value: filter }),
       input({ type: 'text', name: 'search', placeholder: i18n.searchTribesPlaceholder, value: query.search || '', class: 'filter-box__input' }),
@@ -329,8 +329,8 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
   return template(
     title,
     section(header),
-    section(filters),
     section(modeButtons),
+    section(filters),
     section(
       (filter === 'create' || filter === 'edit')
         ? createForm
@@ -614,7 +614,7 @@ const renderTribeTagsSection = (tribe, sectionData, query) => {
   const tribeUrl = `/tribe/${encodeURIComponent(tribe.id)}`;
   const sortedTags = tagsList.slice().sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   return section(
-    div({ class: 'tags-header' },
+    div({ class: 'tags-header module-header-line' },
       h2(i18n.tribeSectionTags || i18n.tagsTitle || 'TAGS'),
       p(i18n.tagsDescription || '')
     ),
@@ -953,7 +953,6 @@ const renderTribePollsSection = (tribe, items, query) => {
           span({ class: 'card-value' }, String(poll.totalVoters))
         ),
         div({ class: 'card-field' },
-          span({ class: 'card-label' }, i18n.createdBy + ': '),
           userLink(poll.author)
         ),
         poll.author === userId && poll.status === 'OPEN'
@@ -1403,7 +1402,7 @@ const renderTribeMapsSection = (tribe, maps) => {
   const createBtn = form({ method: 'GET', action: '/maps' },
     input({ type: 'hidden', name: 'filter', value: 'create' }),
     input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
-    button({ type: 'submit', class: 'create-button' }, i18n.mapUploadButton || 'Create Map'));
+    button({ type: 'submit', class: 'create-button' }, i18n.mapCreateButton || 'Create Map'));
   if (items.length === 0) return div({ class: 'tribe-content-list' }, div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionMaps || 'MAPS'), createBtn), p(i18n.noMaps || 'No maps yet'));
   return div({ class: 'tribe-content-list' },
     div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionMaps || 'MAPS'), createBtn),
@@ -1972,7 +1971,7 @@ const rulesBlock = (tribe, rules, isCreator) => div({},
 const renderGovernance = (tribe, data) => {
   const { filter, term, candidatures, rules, leaders, isCreator, canPublishToGlobal, alreadyPublishedThisGlobalCycle, hasElectedCandidate } = data || {};
   const f = filter || 'government';
-  const header = div({ class: 'tags-header' },
+  const header = div({ class: 'tags-header module-header-line' },
     h2(i18n.tribeSectionGovernance || 'GOVERNANCE'),
     p(i18n.tribeGovernanceDesc || 'Internal governance for this tribe. Propose candidatures, debate rules, elect leaders — mirrors the global Parliament.')
   );

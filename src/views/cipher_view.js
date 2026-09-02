@@ -9,7 +9,7 @@ function generateRandomPassword(length = 32) {
 const cipherView = async (encryptedText = "", decryptedText = "", iv = "", password = "") => {
   const randomPassword = generateRandomPassword();
 
-  const header = div({ class: "tags-header" },
+  const header = div({ class: "tags-header module-header-line" },
     h2(i18n.cipherTitle),
     p(i18n.cipherDescription)
   );

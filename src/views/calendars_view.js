@@ -201,14 +201,14 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
   return template(
     i18n.calendarsTitle || "Calendars",
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(headerText),
         p(i18n.calendarsDescription || "Discover and manage calendars.")
       ),
       renderModeButtons(filter),
       showForm
         ? null
-        : div({ class: "filters" },
+        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/calendars", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: q, placeholder: i18n.calendarSearchPlaceholder || "Search calendars...", class: "filter-box__input" }),
@@ -448,7 +448,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
   return template(
     calendar.title || i18n.calendarsTitle || "Calendar",
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.calendarsTitle || "Calendars"),
         p(i18n.calendarsDescription || "Discover and manage calendars.")
       ),

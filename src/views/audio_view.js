@@ -208,16 +208,16 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.audioDescription)
+      ,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetAudios);
+          return renderReachChip(isClearnet, i18n);
+        })()
       ),
-      (() => {
-        const { renderReachChip } = require('./clearnet_view');
-        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetAudios);
-        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-      })(),
-      br(),
       div(
         { class: "filters" },
         form(
@@ -242,7 +242,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
         ? renderAudioForm(filter, audioId, audioToEdit, { ...params, filter })
         : section(
             div(
-              { class: "audios-search" },
+              { class: "audios-search activity-filter-chips activity-toolbar-row" },
               form(
                 { method: "GET", action: "/audios", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
@@ -290,7 +290,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   const sideActions = [];
   if (audioObj.isBcs) {
     sideActions.push(form(
-      { method: "GET", action: `/melody/transcode/${encodeURIComponent(audioObj.key)}` },
+      { method: "GET", action: `/melody/transcode/${encodeURIComponent(audioObj.key)}`, class: "audio-transcode-form" },
       button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
     ));
   }
@@ -352,7 +352,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   return template(
     i18n.audioTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.audioAllSectionTitle || i18n.audioTitle),
         p(i18n.audioDescription)
       ),
@@ -390,7 +390,7 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.audioTranscodeDetailDescription || "Decode the embedded payload and the original blockchain composition map.")
       ),
@@ -412,9 +412,8 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
         ),
         safeText(audio.description) ? p({ class: "melody-bcs-desc" }, audio.description) : null,
         renderTags(audio.tags),
-        br(),
-        form({ method: "POST", action: `/melody/transcode/${encodeURIComponent(audio.key)}`, class: "audio-transcode-run-form" },
-          button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
+        form({ method: "POST", action: `/melody/transcode/${encodeURIComponent(audio.key)}`, class: "audio-transcode-run-form audio-transcode-form" },
+          button({ type: "submit", class: "create-button" }, i18n.audioTranscodeButton || "TRANSCODE")
         ),
         br(),
         decoded
@@ -426,7 +425,6 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
                       span({ class: "card-value" }, stegoDate || (i18n.audioTranscodeStegoUnknown || "—"))
                     ),
                     div({ class: "transcode-stego-field" },
-                      span({ class: "card-label" }, (i18n.audioTranscodeStegoOasisId || "By") + ": "),
                       stegoPayload.id ? userLink(stegoPayload.id) : span({ class: "card-value" }, i18n.audioTranscodeStegoUnknown || "—")
                     ),
                     div({ class: "transcode-stego-field transcode-stego-msg" },

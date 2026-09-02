@@ -206,13 +206,13 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.bookmarkDescription)),
-      (() => {
-        const { renderReachChip } = require('./clearnet_view');
-        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetBookmarks);
-        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-      })(),
-      br(),
+      div({ class: "tags-header module-header-line" }, h2(title), p(i18n.bookmarkDescription),
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetBookmarks);
+          return renderReachChip(isClearnet, i18n);
+        })()
+      ),
       div(
         { class: "filters" },
         form(
@@ -233,7 +233,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
         ? renderBookmarkForm(filter, bookmarkId, bookmarkToEdit || {}, tags, { ...params, filter, spreadWarning: bookmarkEditWarning })
         : section(
             div(
-              { class: "bookmarks-search" },
+              { class: "bookmarks-search activity-filter-chips activity-toolbar-row" },
               form(
                 { method: "GET", action: "/bookmarks", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
@@ -352,7 +352,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   return template(
     i18n.bookmarkTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.bookmarkAllSectionTitle || i18n.bookmarkTitle),
         p(i18n.bookmarkDescription)
       ),

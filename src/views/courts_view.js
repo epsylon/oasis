@@ -1067,7 +1067,7 @@ const RulesContent = () => {
 
 const CaseSearch = (filter, search = '') =>
   div(
-    { class: 'filters' },
+    { class: 'filters activity-filter-chips activity-toolbar-row' },
     form(
       { method: 'GET', action: '/courts', class: 'filter-box' },
       input({ type: 'hidden', name: 'filter', value: filter }),
@@ -1363,7 +1363,7 @@ const courtsView = async (state) => {
     i18n.courtsTitle,
     section(
       div(
-        { class: 'tags-header' },
+        { class: 'tags-header module-header-line' },
         h2(i18n.courtsTitle),
         p(i18n.courtsDescription)
       ),
@@ -1396,7 +1396,7 @@ const courtsCaseView = async (state) => {
     i18n.courtsTitle,
     section(
       div(
-        { class: 'tags-header' },
+        { class: 'tags-header module-header-line' },
         h2(i18n.courtsTitle),
         p(i18n.courtsDescription)
       ),

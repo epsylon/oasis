@@ -221,16 +221,16 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.imageDescription)
+      ,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetImages);
+          return renderReachChip(isClearnet, i18n);
+        })()
       ),
-      (() => {
-        const { renderReachChip } = require('./clearnet_view');
-        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetImages);
-        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-      })(),
-      br(),
       div(
         { class: "filters" },
         form(
@@ -258,7 +258,7 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
         ? renderImageForm(filter, imageId, imageToEdit, { ...params, filter })
         : section(
             div(
-              { class: "images-search" },
+              { class: "images-search activity-filter-chips activity-toolbar-row" },
               form(
                 { method: "GET", action: "/images", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
@@ -372,7 +372,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   return template(
     i18n.imageTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.imageAllSectionTitle || i18n.imageTitle),
         p(i18n.imageDescription)
       ),

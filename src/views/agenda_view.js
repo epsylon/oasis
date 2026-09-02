@@ -235,7 +235,7 @@ exports.agendaView = async (data, filter, q = '') => {
   return template(
     i18n.agendaTitle,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(i18n.agendaTitle),
         p(i18n.agendaDescription)
       ),
@@ -281,7 +281,7 @@ exports.agendaView = async (data, filter, q = '') => {
             `DISCARDED (${counts.discarded})`)
         )
       ),
-      div({ class: 'filters' },
+      div({ class: 'filters activity-filter-chips activity-toolbar-row' },
         form({ method: 'GET', action: '/agenda', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.agendaSearchPlaceholder, class: 'filter-box__input' }),

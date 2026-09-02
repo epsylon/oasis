@@ -108,7 +108,7 @@ exports.graphosView = ({ filter, me, peers, kpis, focus = null, focusId = null, 
   return template(
     title,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(title),
         p(description)
       ),

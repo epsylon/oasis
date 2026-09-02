@@ -63,7 +63,7 @@ exports.tagsView = async (tags, filter, search = '') => {
   return template(
     title,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(i18n.tagsTitle),
         p(i18n.tagsDescription)
       ),
@@ -77,7 +77,7 @@ exports.tagsView = async (tags, filter, search = '') => {
           button({ type: 'submit', name: 'filter', value: 'cloud', class: filter === 'cloud' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterCloud).toUpperCase())
         )
       ),
-      div({ class: 'tags-search' },
+      div({ class: 'tags-search activity-filter-chips activity-toolbar-row' },
         form({ method: 'GET', action: '/tags', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter || 'all' }),
           input({ type: 'text', name: 'search', value: query, placeholder: i18n.tagsSearchPlaceholder, class: 'filter-box__input' }),

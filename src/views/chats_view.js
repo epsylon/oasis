@@ -332,7 +332,7 @@ exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
   return template(
     i18n.chatsTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(headerText),
         p(i18n.modulesChatsDescription)
       )
@@ -340,7 +340,7 @@ exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
     section(renderModeButtons(filter)),
     !isForm
       ? section(
-          div({ class: "filters" },
+          div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/chats", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", placeholder: i18n.chatSearchPlaceholder, value: q, class: "filter-box__input" }),
@@ -596,7 +596,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   return template(
     chat.title || i18n.chatUntitled,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.chatsTitle),
         p(i18n.modulesChatsDescription)
       ),

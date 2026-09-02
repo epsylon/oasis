@@ -342,7 +342,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
     title,
     section(
       div(
-        { class: "tags-header" },
+        { class: "tags-header module-header-line" },
         h2(i18n.reportsTitle),
         p(i18n.reportsDescription)
       ),
@@ -357,8 +357,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
           button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, String(i18n.reportsFilterFeatures).toUpperCase()),
           button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, String(i18n.reportsFilterBugs).toUpperCase()),
           button({ type: "submit", name: "filter", value: "content", class: btnClass("content") }, String(i18n.reportsFilterContent).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "confirmed", class: btnClass("confirmed") }, String(i18n.reportsFilterConfirmed).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.reportsCreateButton)
+          button({ type: "submit", name: "filter", value: "confirmed", class: btnClass("confirmed") }, String(i18n.reportsFilterConfirmed).toUpperCase())
         ),
         form(
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters reports-subfilters" },
@@ -369,12 +368,13 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
           button({ type: "submit", name: "filter", value: "sev_low", class: btnClass("sev_low") }, String(i18n.reportsSeverityLow).toUpperCase()),
           button({ type: "submit", name: "filter", value: "sev_medium", class: btnClass("sev_medium") }, String(i18n.reportsSeverityMedium).toUpperCase()),
           button({ type: "submit", name: "filter", value: "sev_high", class: btnClass("sev_high") }, String(i18n.reportsSeverityHigh).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "sev_critical", class: btnClass("sev_critical") }, String(i18n.reportsSeverityCritical).toUpperCase())
+          button({ type: "submit", name: "filter", value: "sev_critical", class: btnClass("sev_critical") }, String(i18n.reportsSeverityCritical).toUpperCase()),
+          button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.reportsCreateButton)
         )
       ),
       filter === "edit" || filter === "create"
         ? null
-        : div({ class: "filters" },
+        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/reports", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.reportsSearchPlaceholder, class: "filter-box__input" }),
@@ -579,7 +579,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   return template(
     report.title,
     section(
-      div({ class: "tags-header" }, h2(i18n.reportsTitle), p(i18n.reportsDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.reportsTitle), p(i18n.reportsDescription)),
       div(
         { class: "filters" },
         form(

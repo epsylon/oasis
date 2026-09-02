@@ -21,7 +21,6 @@ const renderCommentCard = (c, extra = null) => {
 
   return div({ class: "votations-comment-card", id: c && c.key ? c.key : undefined },
     span({ class: "created-at" },
-      span(i18n.createdBy),
       author ? userLink(author) : span("(unknown)"),
       absDate ? span(" | ") : "",
       absDate ? span({ class: "votations-comment-date" }, absDate) : "",

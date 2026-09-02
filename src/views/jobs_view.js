@@ -458,12 +458,11 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
   return template(
     i18n.jobsTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(sectionTitle),
-        p(i18n.jobsDescription)
+        p(i18n.jobsDescription),
+        renderReachChipJobs(viewerClearnet, i18n)
       ),
-      div({ class: "shop-title-row" }, renderReachChipJobs(viewerClearnet, i18n)),
-      br(),
       div(
         { class: "filters" },
         form(
@@ -510,26 +509,20 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
             })()
           : section(
               div(
-                { class: "jobs-search" },
+                { class: "jobs-search activity-filter-chips activity-toolbar-row" },
                 form(
                   { method: "GET", action: "/jobs", class: "filter-box" },
                   input({ type: "hidden", name: "filter", value: filter || "ALL" }),
                   input({ type: "text", name: "search", value: search, placeholder: i18n.jobsSearchPlaceholder, class: "filter-box__input" }),
-                  div(
-                    { class: "filter-box__controls" },
-                    div(
-                      { class: "transfer-range" },
-                      input({ type: "number", name: "minSalary", step: "0.000001", min: "0", value: String(minSalary ?? ""), placeholder: i18n.jobsMinSalaryLabel, class: "filter-box__number transfer-amount-input" }),
-                      input({ type: "number", name: "maxSalary", step: "0.000001", min: "0", value: String(maxSalary ?? ""), placeholder: i18n.jobsMaxSalaryLabel, class: "filter-box__number transfer-amount-input" })
-                    ),
-                    select(
-                      { name: "sort", class: "filter-box__select" },
-                      option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.jobsSortRecent),
-                      option({ value: "salary", ...(sort === "salary" ? { selected: true } : {})}, i18n.jobsSortSalary),
-                      option({ value: "subscribers", ...(sort === "subscribers" ? { selected: true } : {})}, i18n.jobsSortSubscribers)
-                    ),
-                    button({ type: "submit", class: "filter-box__button" }, i18n.jobsSearchButton)
-                  )
+                  input({ type: "number", name: "minSalary", step: "0.000001", min: "0", value: String(minSalary ?? ""), placeholder: i18n.jobsMinSalaryLabel, class: "filter-box__number transfer-amount-input" }),
+                  input({ type: "number", name: "maxSalary", step: "0.000001", min: "0", value: String(maxSalary ?? ""), placeholder: i18n.jobsMaxSalaryLabel, class: "filter-box__number transfer-amount-input" }),
+                  select(
+                    { name: "sort", class: "filter-box__select" },
+                    option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.jobsSortRecent),
+                    option({ value: "salary", ...(sort === "salary" ? { selected: true } : {})}, i18n.jobsSortSalary),
+                    option({ value: "subscribers", ...(sort === "subscribers" ? { selected: true } : {})}, i18n.jobsSortSubscribers)
+                  ),
+                  button({ type: "submit", class: "filter-box__button" }, i18n.jobsSearchButton)
                 )
               ),
               br(),
@@ -685,7 +678,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
 
   return template(
     i18n.jobsTitle,
-    section(div({ class: "tags-header" }, h2(i18n.jobsTitle), p(i18n.jobsDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.jobsTitle), p(i18n.jobsDescription))),
     section(
       div(
         { class: "filters" },

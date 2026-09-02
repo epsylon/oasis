@@ -356,7 +356,7 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
   return template(
     i18n.housingTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.housingTitle),
         p(i18n.housingDescriptionText)
       ),
@@ -366,24 +366,20 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
       isForm
         ? renderHousingForm(filter === "EDIT" ? (Array.isArray(items) ? items[0] : items) || {} : (params.draft || {}), filter === "EDIT" ? "edit" : "create", Number(params.maxImages) > 0 ? Number(params.maxImages) : MAX_IMAGES, await renderSpreadEditWarning(filter === "EDIT" ? ((Array.isArray(items) ? items[0] : items) || {}).id : null))
         : section(
-            div({ class: "housing-search" },
+            div({ class: "housing-search activity-filter-chips activity-toolbar-row" },
               form({ method: "GET", action: "/housing", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter || "ALL" }),
                 input({ type: "text", name: "search", value: search, placeholder: i18n.housingSearchPlaceholder, class: "filter-box__input" }),
-                div({ class: "filter-box__controls" },
-                  input({ type: "text", name: "place", value: place, placeholder: i18n.housingPlacePlaceholder, class: "filter-box__input housing-place-input" }),
-                  div({ class: "transfer-range" },
-                    input({ type: "number", name: "minPrice", step: "0.01", min: "0", value: String(minPrice ?? ""), placeholder: i18n.housingMinPrice, class: "filter-box__number transfer-amount-input" }),
-                    input({ type: "number", name: "maxPrice", step: "0.01", min: "0", value: String(maxPrice ?? ""), placeholder: i18n.housingMaxPrice, class: "filter-box__number transfer-amount-input" })
-                  ),
-                  select({ name: "sort", class: "filter-box__select" },
+                input({ type: "text", name: "place", value: place, placeholder: i18n.housingPlacePlaceholder, class: "filter-box__input housing-place-input" }),
+                input({ type: "number", name: "minPrice", step: "0.01", min: "0", value: String(minPrice ?? ""), placeholder: i18n.housingMinPrice, class: "filter-box__number transfer-amount-input" }),
+                input({ type: "number", name: "maxPrice", step: "0.01", min: "0", value: String(maxPrice ?? ""), placeholder: i18n.housingMaxPrice, class: "filter-box__number transfer-amount-input" }),
+                select({ name: "sort", class: "filter-box__select" },
                     option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.housingSortRecent),
                     option({ value: "price", ...(sort === "price" ? { selected: true } : {})}, i18n.housingSortPrice),
                     option({ value: "requests", ...(sort === "requests" ? { selected: true } : {})}, i18n.housingSortRequests),
                     option({ value: "rating", ...(sort === "rating" ? { selected: true } : {})}, i18n.housingSortRating)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.housingSearchButton)
-                )
               )
             ),
             br(),
@@ -488,7 +484,7 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
   return template(
     i18n.housingTitle,
     section(
-      div({ class: "tags-header" }, h2(i18n.housingTitle), p(i18n.housingDescriptionText)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.housingTitle), p(i18n.housingDescriptionText)),
       renderFiltersBar(filter, params),
       div({ class: "tribe-details" }, housingSide, housingMain)
     )

@@ -310,7 +310,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
     return template(
       i18n.blockchain,
       section(
-        div({ class: 'tags-header' },
+        div({ class: 'tags-header module-header-line' },
           h2(i18n.blockchain),
           p(i18n.blockchainDescription)
         ),
@@ -396,7 +396,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
   return template(
     i18n.blockchain,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(i18n.blockchain),
         p(i18n.blockchainDescription)
       ),
@@ -447,7 +447,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
   return template(
     i18n.blockchain,
     section(
-      div({ class:'tags-header' },
+      div({ class:'tags-header module-header-line' },
         h2(i18n.blockchain),
         p(i18n.blockchainDescription)
       ),

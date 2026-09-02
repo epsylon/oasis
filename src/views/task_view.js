@@ -221,7 +221,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
     title,
     section(
       div(
-        { class: "tags-header" },
+        { class: "tags-header module-header-line" },
         h2(i18n.tasksTitle),
         p(i18n.tasksDescription)
       ),
@@ -244,7 +244,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
       ),
       currentFilter === "edit" || currentFilter === "create"
         ? null
-        : div({ class: "filters" },
+        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/tasks", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: currentFilter }),
               input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.taskSearchPlaceholder, class: "filter-box__input" }),
@@ -432,7 +432,7 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
   return template(
     task.title,
     section(
-      div({ class: "tags-header" }, h2(i18n.tasksTitle), p(i18n.tasksDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.tasksTitle), p(i18n.tasksDescription)),
       filterBar,
       div({ class: "tribe-details" }, taskSide, taskMain)
     )

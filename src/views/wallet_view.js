@@ -3,7 +3,7 @@ const QRCode = require('../server/node_modules/qrcode');
 const { template, i18n } = require('./main_views');
 
 const walletViewRender = (balance, address, ...elements) => {
-    const header = div({ class: 'tags-header' }, h2(i18n.walletTitle), p(i18n.walletDescription));
+    const header = div({ class: 'tags-header module-header-line' }, h2(i18n.walletTitle), p(i18n.walletDescription));
     return template(
         i18n.walletTitle,
         section(
@@ -156,7 +156,7 @@ exports.walletSendResultView = async (balance, destination, amount, txId) => {
 };
 
 exports.walletErrorView = async (error) => {
-    const header = div({ class: 'tags-header' }, h2(i18n.walletTitle), p(i18n.walletDescription));
+    const header = div({ class: 'tags-header module-header-line' }, h2(i18n.walletTitle), p(i18n.walletDescription));
     return template(
         i18n.walletTitle,
         section(

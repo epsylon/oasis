@@ -155,7 +155,7 @@ const renderTelegramMedia = (m) => {
 };
 
 const renderTelegramDialog = (d) => {
-  const href = `/fediverse/telegram/chat/${encodeURIComponent(d.id)}`;
+  const href = `/fediverse/telegram/chat/${encodeURIComponent(d.id)}#telegram-latest`;
   const preview = d.last ? ((d.last.out ? "→ " : "") + (d.last.text || (d.last.hasMedia ? "📎" : ""))) : "";
   return div({ class: "feed-card fediverse-card telegram-dialog" + (d.unread > 0 ? " telegram-unread" : "") },
     div({ class: "fediverse-head" },
@@ -186,7 +186,7 @@ const renderTelegramMessage = (m) => div({ class: "feed-card fediverse-card tele
 exports.telegramDialogsView = ({ account, stats, dialogs, error } = {}) => {
   if (!account) return exports.fediverseOverviewView({ account: null });
   const body = [];
-  body.push(div({ class: "tags-header" }, h2(i18n.fediverse), p(i18n.fediverseDescription)));
+  body.push(div({ class: "tags-header module-header-line" }, h2(i18n.fediverse), p(i18n.fediverseDescription)));
   body.push(telegramBox(account, stats, [
     a({ href: "/fediverse", class: "filter-btn" }, `← ${i18n.fediverse}`),
     a({ href: "/fediverse/telegram?refresh=1", class: "filter-btn" }, i18n.fediverseRefresh)
@@ -201,18 +201,27 @@ exports.telegramDialogsView = ({ account, stats, dialogs, error } = {}) => {
 exports.telegramChatView = ({ account, stats, chat, error } = {}) => {
   if (!account) return exports.fediverseOverviewView({ account: null });
   const header = section(
-    div({ class: "tags-header" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
+    div({ class: "tags-header module-header-line" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
     telegramBox(account, stats, [
       a({ href: "/fediverse/telegram", class: "filter-btn" }, `← ${i18n.telegramChats}`)
     ], false)
   );
   if (!chat) return template(i18n.fediverse, header, section(div({ class: "fediverse-error" }, i18n[error] || i18n.telegramErrFetch)));
   const body = [];
-  body.push(div({ class: "telegram-chat-title" }, h3(chat.title), span({ class: "fediverse-acct" }, telegramKindLabel(chat.kind))));
+  body.push(div({ class: "telegram-chat-title" },
+    h3(chat.title),
+    span({ class: "fediverse-acct" }, telegramKindLabel(chat.kind)),
+    a({ href: "#telegram-latest", class: "filter-btn chat-jump-latest" }, i18n.chatJumpLatest)
+  ));
   if (error) body.push(div({ class: "fediverse-error" }, i18n[error] || i18n.telegramErrConnect));
   const list = Array.isArray(chat.messages) ? chat.messages : [];
   if (!list.length) body.push(p({ class: "muted" }, i18n.telegramNoMessages));
-  else body.push(section({ class: "feed-container" }, list.map(renderTelegramMessage)));
+  else body.push(section({ class: "feed-container" },
+    list.map((m, idx) => {
+      const node = renderTelegramMessage(m);
+      return idx === list.length - 1 ? div({ id: "telegram-latest", class: "chat-latest-anchor" }, node) : node;
+    })
+  ));
   body.push(br(), hr(), br());
   body.push(div({ class: "publish-form" },
     form({ method: "POST", action: `/fediverse/telegram/chat/${encodeURIComponent(chat.id)}/send`, enctype: "multipart/form-data" },
@@ -241,7 +250,7 @@ exports.fediverseOverviewView = ({ account, stats, telegram, telegramStats } = {
   }
 
   return template(i18n.fediverse, section(
-    div({ class: "tags-header" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
+    div({ class: "tags-header module-header-line" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
     boxes.length ? boxes : disconnectedBlock()
   ));
 };
@@ -250,7 +259,7 @@ exports.fediverseView = ({ account, posts, error, stats } = {}) => {
   if (!account) return exports.fediverseOverviewView({ account: null });
 
   const body = [];
-  body.push(div({ class: "tags-header" }, h2(i18n.fediverse), p(i18n.fediverseDescription)));
+  body.push(div({ class: "tags-header module-header-line" }, h2(i18n.fediverse), p(i18n.fediverseDescription)));
   body.push(mastodonBox(account, stats, [
     a({ href: "/fediverse", class: "filter-btn" }, `← ${i18n.fediverse}`),
     a({ href: "/fediverse/mastodon?refresh=1", class: "filter-btn" }, i18n.fediverseRefresh),
@@ -270,7 +279,7 @@ exports.fediverseView = ({ account, posts, error, stats } = {}) => {
 
 exports.fediverseThreadView = ({ account, stats, thread, error } = {}) => {
   const header = section(
-    div({ class: "tags-header" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
+    div({ class: "tags-header module-header-line" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
     account ? mastodonBox(account, stats, [
       a({ href: "/fediverse/mastodon", class: "filter-btn" }, `← ${i18n.fediverse}`)
     ], true) : ""
@@ -312,7 +321,7 @@ exports.fediversePreviewView = ({ account, stats, text, media, error, replyToId,
 
   return template(i18n.fediverse,
     section(
-      div({ class: "tags-header" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
       account ? mastodonBox(account, stats, [
         a({ href: backHref, class: "filter-btn" }, `← ${i18n.fediverse}`)
       ], true) : ""

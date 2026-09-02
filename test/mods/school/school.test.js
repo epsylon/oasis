@@ -486,12 +486,14 @@ describe('school: course chat and dates', (t) => {
 
   t('startDate and lesson sessionDate are stored', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const r = await A.use('school').createCourse(course({ startDate: '2026-09-01' }));
-    await A.use('school').addLesson(r.key, { title: 'S1', text: 't', sessionDate: '2026-09-02' });
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const r = await A.use('school').createCourse(course({ startDate: today }));
+    await A.use('school').addLesson(r.key, { title: 'S1', text: 't', sessionDate: tomorrow });
     const c = await A.use('school').getCourseById(r.key, A.keypair.id);
-    ok(String(c.startDate).startsWith('2026-09-01'));
+    ok(String(c.startDate).startsWith(today));
     const lessons = await A.use('school').listLessons(r.key);
-    ok(String(lessons[0].sessionDate).startsWith('2026-09-02'));
+    ok(String(lessons[0].sessionDate).startsWith(tomorrow));
   });
 
   t('a teaching course appears in the teacher agenda', async () => {

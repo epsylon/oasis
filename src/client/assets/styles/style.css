@@ -1159,18 +1159,12 @@ button.create-button:hover {
   vertical-align: middle;
 }
 
-div:has(> .filter-box) {
-  border: none !important;
-  background: transparent !important;
-  padding: 0 !important;
-  box-shadow: none !important;
-}
-
 .filter-box div {
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
   padding: 0 !important;
+  margin: 0 !important;
 }
 
 .filter-box__controls .filter-box__input,
@@ -1214,8 +1208,9 @@ div:has(> .filter-box) {
 }
 
 .filter-box__input {
-  width: 100%;
-  flex: 1 1 100%;
+  width: auto;
+  flex: 0 1 320px;
+  min-width: 160px;
   box-sizing: border-box;
   height: 42px;
   padding: 10px 12px;
@@ -1235,7 +1230,7 @@ div:has(> .filter-box) {
   gap: 12px;
   align-items: center;
   margin-top: 0;
-  flex: 1 1 100%;
+  flex: 0 1 auto;
   flex-wrap: wrap;
 }
 
@@ -1772,25 +1767,30 @@ display:flex; gap:8px; margin-top:16px;
   gap: 12px;
 }
 
-.tribe-feed .refeed-column,
-.tribe-feed-full .refeed-column {
-  flex: 0 0 68px;
-  min-width: 68px;
-  max-width: 68px;
+.refeed-column {
+  flex: 0 0 80px;
+  min-width: 80px;
+  max-width: 80px;
   padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 88px;
+  box-sizing: border-box;
+  gap: 6px;
 }
 
-.tribe-feed .refeed-column h1,
-.tribe-feed-full .refeed-column h1 {
-  margin: 0 0 8px 0;
+.refeed-column h1 {
+  margin: 0;
   font-size: 24px;
 }
 
-.tribe-feed .refeed-btn,
-.tribe-feed-full .refeed-btn {
-  padding: 6px 8px;
+.refeed-btn {
+  padding: 6px 4px;
   font-size: 12px;
   width: 100%;
+  white-space: nowrap;
 }
 
 .tribe-feed .feed-main,
@@ -1807,8 +1807,7 @@ display:flex; gap:8px; margin-top:16px;
     flex-direction: column;
   }
 
-  .tribe-feed .refeed-column,
-  .tribe-feed-full .refeed-column {
+  .refeed-column {
     width: 100%;
     min-width: 0;
     max-width: none;
@@ -1826,8 +1825,7 @@ display:flex; gap:8px; margin-top:16px;
 
 .tribe-feed .feed-actions form,
 .tribe-feed-full .feed-actions form,
-.tribe-feed .refeed-column form,
-.tribe-feed-full .refeed-column form {
+.refeed-column form {
   margin: 0;
 }
 
@@ -3900,15 +3898,20 @@ a.pm-btn:hover { text-decoration: none }
 .melody-upload-submit{width:auto;display:inline-block;padding:6px 18px;align-self:flex-start}
 .melody-upload-label{color:#FFD700;font-size:13px;font-weight:600;display:inline-block;margin-top:6px}
 .melody-bcs-list{display:flex;flex-direction:column;gap:14px;margin-top:14px;background:transparent !important;border:0 !important;padding:0 !important}
-.audio-container{display:flex;flex-direction:column;gap:8px;align-items:stretch;width:100%;background:transparent !important;border:0 !important;padding:0 !important}
-.audio-container audio{width:100%}
 .video-container{display:flex;flex-direction:column;align-items:center;width:100%;background:transparent !important;border:0 !important;padding:0 !important}
 .video-container video{width:100%;max-width:720px;max-height:480px;height:auto}
 .audio-transcode-form{display:inline-block;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
+.audio-container{display:flex;flex-direction:row;align-items:center;gap:10px;width:100%;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0 0 8px 0}
+.audio-container audio{flex:1 1 auto;min-width:0;width:100%}
+.audio-transcode-form .filter-btn{background:transparent;color:inherit;font-size:.75em;padding:3px 10px;border:1px solid #555;border-radius:12px;white-space:nowrap;line-height:1.5}
+.audio-transcode-form .filter-btn:hover{border-color:#ffa300;color:#ffa300;background:transparent}
+.audio-transcode-form .create-button{margin:0;font-size:.75em;padding:3px 12px;border-radius:12px;border:1px solid #ffcc00;background:#ffcc00;color:#111;font-weight:bold;line-height:1.5;cursor:pointer}
+.audio-transcode-run-form{margin:6px 0 16px 0 !important}
 .melody-bcs-card{background:#161616;border:1px solid #2a2a2a;border-radius:6px;padding:12px 16px}
 .melody-bcs-head{display:flex;flex-direction:column;gap:4px;background:transparent !important;border:0 !important;padding:0 !important}
 .melody-bcs-title{color:#FFA500;margin:0;font-size:17px}
-.melody-bcs-meta{color:#bbb;font-size:13px;background:transparent !important;border:0 !important;padding:0 !important}
+.melody-bcs-meta{color:#bbb;font-size:13px;background:transparent !important;border:0 !important;padding:0 !important;display:flex;align-items:center;gap:10px;margin:6px 0 0 0}
+.melody-bcs-date{opacity:.75}
 .melody-bcs-player{margin:10px 0;background:transparent !important;border:0 !important;padding:0 !important}
 .melody-bcs-desc{color:#ccc;font-size:13px;margin:6px 0 0 0;line-height:1.5}
 .melody-bcs-actions{margin-top:10px;background:transparent !important;border:0 !important;padding:0 !important}
@@ -7627,9 +7630,9 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 
 .ai-prompt-form{margin-bottom:0}
 .ai-submit-row{display:flex;gap:1.5em;justify-content:flex-end;align-items:center;margin-top:.7em}
-.ai-clear-row{display:flex;justify-content:flex-end;margin-bottom:2em}
 .ai-clear-form{display:inline}
-.ai-clear-btn{background:#b80c09;color:#fff;border:none;padding:.4em 1.2em;border-radius:6px;cursor:pointer;font-size:1em;margin-left:1em}
+.ai-clear-btn{background:transparent;color:#d9534f;border:1px solid #d9534f;padding:.4em 1.2em;border-radius:6px;cursor:pointer;font-size:1em}
+.ai-clear-btn:hover{background:#d9534f;color:#fff}
 .user-prompt{margin-bottom:2em;font-size:.95em;color:#888}
 .user-prompt-text{font-style:italic}
 .chat-entry{margin-bottom:2em;position:relative;background:#191919;border-radius:10px;box-shadow:0 0 8px #0004;padding-top:1.8em}
@@ -7642,10 +7645,10 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .ai-train-approved{color:#5ad25a;font-weight:600}
 .ai-train-rejected{color:#ff6b6b;font-weight:600}
 
-.modules-counts{margin-bottom:16px}
+.modules-counts{display:flex;flex-wrap:wrap;gap:18px;align-items:baseline;padding:10px 14px !important;margin-bottom:10px}
 .modules-count-value{color:#ffa300}
 .modules-count-list{list-style-type:none;padding:0;margin:0}
-.modules-count-item{margin:8px 0}
+.modules-count-item{margin:0}
 .modules-preset-form{display:inline;margin:0}
 .module-status-cell{text-align:center}
 .save-button-container{margin-top:20px;text-align:center}
@@ -7720,7 +7723,60 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .school-progress-failed{font-size:0.85em;color:#e57373;cursor:help}
 .school-lessons .school-lesson,.school-exams .school-lesson{background:transparent !important;border:0 !important;box-shadow:none;padding:0 !important;margin:0 0 16px 0}
 .school-exam-question{background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0 0 14px 0}
+.top-bar-center .ai-ask-form{flex:1 1 auto;min-width:220px}
+.ai-suggestion-inline{display:inline-flex;align-items:center;gap:6px;background:transparent !important;border:0 !important;padding:0 !important;margin:0 0 0 12px !important;box-shadow:none;font-size:.85em;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden}
+.ai-suggestion-inline .update-banner-link{display:inline-block;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.ai-suggestion-inline .welcome-banner-close{margin:0;padding:0;background:transparent;border:0;box-shadow:none;display:inline}
 .activity-update-title{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.tags-header:not(.module-header-line):not(.activity-header-line) > h2{display:inline-block;margin:0 12px 8px 0;vertical-align:middle}
+.tags-header:not(.module-header-line):not(.activity-header-line) > h2 + p{display:inline-block;margin:0 0 8px 0;font-size:.9em;opacity:.8;vertical-align:middle}
+.activity-header-line,.module-header-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px}
+.activity-header-line h2,.module-header-line h2{margin:0;line-height:1.1}
+.activity-header-line p,.module-header-line p{margin:0;font-size:.9em;opacity:.8;line-height:1.2;padding-top:2px}
+.module-header-line .pm-exposition-chip,.module-header-line .pm-exposition-chip-link{align-self:center}
+.tribe-mode-buttons,.ui-toolbar--filters,.mode-buttons,.mode-buttons-row,.mode-buttons-cols,.filters,.inhabitant-action{display:flex;flex-wrap:wrap;gap:5px !important;align-items:center}
+.tribe-mode-buttons .filter-btn,.ui-toolbar--filters .filter-btn,.mode-buttons .filter-btn,.mode-buttons-row .filter-btn,.mode-buttons-cols .filter-btn,.filters .filter-btn,.inhabitant-action .filter-btn{background:transparent;color:inherit;font-size:.75em;padding:2px 9px;border:1px solid #555;border-radius:12px;white-space:nowrap;line-height:1.5}
+.tribe-mode-buttons .filter-btn:hover,.ui-toolbar--filters .filter-btn:hover,.mode-buttons .filter-btn:hover,.mode-buttons-row .filter-btn:hover,.mode-buttons-cols .filter-btn:hover,.filters .filter-btn:hover,.inhabitant-action .filter-btn:hover{border-color:#ffa300;color:#ffa300;background:transparent}
+.tribe-mode-buttons .filter-btn.active,.ui-toolbar--filters .filter-btn.active,.mode-buttons .filter-btn.active,.mode-buttons-row .filter-btn.active,.mode-buttons-cols .filter-btn.active,.filters .filter-btn.active,.inhabitant-action .filter-btn.active{background:#ffa300;border-color:#ffa300;color:#111;font-weight:bold}
+.tribe-mode-buttons .create-button,.ui-toolbar--filters .create-button,.mode-buttons .create-button,.mode-buttons-row .create-button,.filters .create-button{font-size:.75em;padding:2px 10px;border-radius:12px;border:1px solid #ffcc00;line-height:1.5;background:#ffcc00;color:#111;font-weight:bold}
+.filter-box{padding:0;justify-content:flex-end;border:none;background:transparent}
+.filter-box input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),.filter-box select,.filter-box button{height:32px !important}
+.filter-box input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"]),.filter-box select{height:32px;padding:0 12px}
+.activity-filter-chips{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:10px 14px !important;margin-bottom:10px}
+.activity-chip{text-decoration:none;font-size:.75em;padding:2px 9px;border:1px solid #555;border-radius:12px;color:inherit;white-space:nowrap;line-height:1.5}
+.activity-chip:hover{border-color:#ffa300;color:#ffa300}
+.activity-chip.active{background:#ffa300;border-color:#ffa300;color:#111;font-weight:bold}
+.activity-toolbar-row{margin-top:-4px;max-width:100%;box-sizing:border-box}
+.activity-toolbar-row .filter-box{margin-left:auto;flex:0 1 auto;flex-wrap:nowrap;max-width:100%;min-width:0}
+.activity-toolbar-row .filter-box select{flex:0 1 auto !important;width:auto !important;max-width:220px;height:32px !important}
+.activity-toolbar-row .filter-box .transfer-range{flex:0 1 auto !important;width:auto !important;min-width:0 !important;display:flex;gap:8px}
+.activity-toolbar-row .filter-box .transfer-range input{flex:0 1 130px;min-width:90px;width:auto !important}
+.activity-toolbar-row .filter-box__controls{gap:8px !important;justify-content:flex-end !important}
+.activity-toolbar-row .filter-box__controls > *{margin:0 !important;flex:0 1 auto !important;width:auto !important}
+.activity-toolbar-row .filter-box__controls > .transfer-range{min-width:0 !important}
+.activity-toolbar-row .inbox-exposition{margin:0 !important;padding:0 !important;background:transparent !important;border:0 !important;box-shadow:none;display:flex;align-items:center;gap:8px}
+.activity-toolbar-row .inbox-exposition .btn{margin:0;padding:2px 10px;font-size:.75em;border-radius:12px;line-height:1.5}
+.activity-toolbar-row .inbox-exposition form{margin:0;padding:0;background:transparent;border:0;box-shadow:none}
+.activity-toolbar-row .filter-box > input[type="number"]{flex:0 0 150px;min-width:150px}
+.activity-toolbar-row .filter-box > .housing-place-input{flex:0 1 220px;min-width:140px}
+.activity-toolbar-row .filter-box__controls{flex-wrap:nowrap;flex:0 0 auto}
+.activity-toolbar-row .filter-box .filter-box__input{min-width:0}
+.activity-toolbar-row .filter-box__controls{flex:0 0 auto}
+.filters{padding:10px 14px;margin-bottom:10px}
+.mode-buttons-row,.mode-buttons,.tribe-mode-buttons,.inhabitant-action{padding:10px 14px !important;margin-bottom:10px !important}
+.mode-buttons-cols{display:contents !important}
+.filters > form:not(.filter-box),.inhabitant-action > form,.tribe-mode-buttons > form,.mode-buttons > form,.mode-buttons-row > form,.filter-group > form,.activity-filter-grid > form{display:contents}
+.mode-buttons .column,.mode-buttons-row .column,.mode-buttons-row .filter-column,.mode-buttons-cols .filter-column,.mode-buttons-row .filter-group,.mode-buttons .filter-group,.forum-create-col,.activity-filter-col{display:contents !important}
+.activity-filter-grid,.filter-group,.activity-sub-filter{display:flex !important;flex-wrap:wrap;gap:5px !important;align-items:center;padding:10px 14px !important;margin-bottom:10px !important;grid-template-columns:none !important}
+.activity-filter-grid form,.filter-group form,.activity-sub-filter form,.sub-filter-form{margin:0 !important;padding:0 !important;background:transparent !important;border:none !important;box-shadow:none !important}
+.activity-filter-grid .filter-btn,.filter-group .filter-btn,.activity-sub-filter .filter-btn{margin:0;background:transparent;color:inherit;font-size:.75em;padding:2px 9px;border:1px solid #555;border-radius:12px;white-space:nowrap;line-height:1.5}
+.activity-filter-grid .filter-btn.active,.filter-group .filter-btn.active,.activity-sub-filter .filter-btn.active{background:#ffa300;border-color:#ffa300;color:#111;font-weight:bold}
+.filter-group .create-button,.activity-sub-filter .create-button,.activity-filter-grid .create-button{margin:0;font-size:.75em;padding:2px 10px;border-radius:12px;border:1px solid #ffcc00;background:#ffcc00;color:#111;font-weight:bold;line-height:1.5}
+.mode-buttons-row form,.mode-buttons form,.tribe-mode-buttons form{margin:0 !important;padding:0 !important;background:transparent !important;border:none !important;box-shadow:none !important}
+.mode-buttons-row .filter-btn,.mode-buttons-row .create-button,.mode-buttons .filter-btn,.mode-buttons .create-button,.tribe-mode-buttons .filter-btn,.tribe-mode-buttons .create-button{margin:0}
+.filters form{margin:0;padding:0;background:transparent;border:none;box-shadow:none}
+.filters .filter-btn,.filters .create-button,.ui-toolbar--filters .filter-btn,.ui-toolbar--filters .create-button{margin:0}
+.activity-subchip-label{color:#ffa300;font-weight:bold}
 .activity-update-counts{white-space:nowrap}
 .activity-update-msg{margin:10px 15px 0 0}
 .activity-update-msg .post-text{margin:0}

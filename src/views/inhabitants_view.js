@@ -259,11 +259,17 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
   return template(
     title,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(title),
         p(i18n.discoverPeople)
       ),
-      div({ class: 'filters' },
+      renderMainFilters(filter, isTop),
+      isTop
+        ? div({ class: 'inhabitant-action inhabitant-subfilters' },
+            ...generateFilterButtons(TOP_FILTERS, filter, (mode) => filterLabel(mode).replace(/^TOP\s+/, ''))
+          )
+        : null,
+      div({ class: 'filters activity-filter-chips activity-toolbar-row' },
         form({ method: 'GET', action: '/inhabitants', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({
@@ -285,12 +291,6 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
           )
         )
       ),
-      renderMainFilters(filter, isTop),
-      isTop
-        ? div({ class: 'inhabitant-action inhabitant-subfilters' },
-            ...generateFilterButtons(TOP_FILTERS, filter, (mode) => filterLabel(mode).replace(/^TOP\s+/, ''))
-          )
-        : null,
       filter === 'GALLERY'
         ? renderGalleryInhabitants(inhabitants)
         : div({ class: 'inhabitants-list' },
@@ -385,7 +385,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
   return template(
     name,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(title),
         p(i18n.discoverPeople)
       ),

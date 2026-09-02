@@ -178,7 +178,7 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "") => {
   return template(
     i18n.favoritesTitle,
     section(
-      div({ class: "tags-header" }, h2(i18n.favoritesTitle), p(i18n.favoritesDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.favoritesTitle), p(i18n.favoritesDescription)),
       div(
         { class: "filters" },
         form(
@@ -200,7 +200,7 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "") => {
         )
       ),
       div(
-        { class: "filters" },
+        { class: "filters activity-filter-chips activity-toolbar-row" },
         form(
           { method: "GET", action: "/favorites", class: "filter-box" },
           input({ type: "hidden", name: "filter", value: filter }),

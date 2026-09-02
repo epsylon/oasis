@@ -75,7 +75,7 @@ exports.gameShellView = (name) => {
   return template(
     game ? game.title() : name,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(i18n.gamesTitle),
         p(i18n.gamesDescription || 'Discover and play some mini-games in your network.')
       ),
@@ -111,7 +111,7 @@ exports.gamesView = (filter = 'all', hall = null, q = '') => {
     )
   );
 
-  const searchBox = div({ class: 'filters' },
+  const searchBox = div({ class: 'filters activity-filter-chips activity-toolbar-row' },
     form({ method: 'GET', action: '/games', class: 'filter-box' },
       input({ type: 'hidden', name: 'filter', value: filter }),
       input({ type: 'text', name: 'q', value: q, placeholder: i18n.gamesSearchPlaceholder, class: 'filter-box__input' }),
@@ -151,7 +151,7 @@ exports.gamesView = (filter = 'all', hall = null, q = '') => {
   return template(
     i18n.gamesTitle,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(i18n.gamesTitle),
         p(filter === 'scoring' ? i18n.gamesHallOfFame : (i18n.gamesDescription || 'Discover and play some mini-games in your network.'))
       ),

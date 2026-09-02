@@ -21,7 +21,7 @@ exports.indexingView = ({ percent }) => {
   return template(
     headingText,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(`❤  ${headingText}`),
         p(message)
       ),

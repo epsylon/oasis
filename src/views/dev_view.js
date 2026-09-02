@@ -41,7 +41,7 @@ const fileHref = (path, from) => `/dev/file?path=${encodeURIComponent(path)}${fr
 const dirHref = (path) => (path ? `/dev?path=${encodeURIComponent(path)}` : "/dev")
 
 const renderHeader = (active) => [
-  div({ class: "tags-header" },
+  div({ class: "tags-header module-header-line" },
     h2(i18n.devTitle || "Developer"),
     p(i18n.devDescription || "Explore the source code running on this node.")
   ),
@@ -95,7 +95,7 @@ const renderBreadcrumb = (parents, currentIsFile) => div({ class: "dev-breadcrum
   ])
 )
 
-const renderSearchForm = (query, ext) => div({ class: "dev-search" },
+const renderSearchForm = (query, ext) => div({ class: "dev-search activity-filter-chips activity-toolbar-row" },
   form({ method: "GET", action: "/dev/search", class: "filter-box" },
     input({ type: "text", name: "q", value: safeText(query), placeholder: i18n.devSearchPlaceholder || "Text to find in the code", minlength: "2", required: true, class: "filter-box__input" }),
     div({ class: "filter-box__controls" },
@@ -103,7 +103,7 @@ const renderSearchForm = (query, ext) => div({ class: "dev-search" },
         option({ value: "", ...(ext ? {} : { selected: true }) }, i18n.devAnyExtension || "Any file"),
         [".js", ".json", ".css", ".md", ".sh"].map(x => option({ value: x, ...(ext === x ? { selected: true } : {}) }, x))
       ),
-      button({ type: "submit", class: "filter-btn" }, i18n.devFilterSearch || "SEARCH")
+      button({ type: "submit", class: "filter-box__button" }, i18n.searchButton || "Search")
     )
   )
 )

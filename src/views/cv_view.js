@@ -15,7 +15,7 @@ exports.createCVView = async (cv = {}, editMode = false) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.cvDescription)
       ),
@@ -111,7 +111,7 @@ exports.cvView = async (cv, certificates = []) => {
     return template(
       title,
       section(
-        div({ class: "tags-header" },
+        div({ class: "tags-header module-header-line" },
           h2(title),
           p(i18n.cvDescription)
         ),
@@ -252,7 +252,7 @@ exports.cvView = async (cv, certificates = []) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.cvDescription)
       ),

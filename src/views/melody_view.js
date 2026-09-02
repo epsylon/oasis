@@ -101,23 +101,23 @@ const renderBcsList = (bcsAudios) => {
       div({ class: "melody-bcs-head" },
         a.title ? h2({ class: "melody-bcs-title" }, a.title) : null,
         div({ class: "melody-bcs-meta" },
-          span({ class: "card-label" }, `${i18n.melodyByLabel || "By"}: `),
           userLink(a.author),
-          span({ class: "melody-meta-sep" }, " · "),
-          span({ class: "card-value" }, moment(a.createdAt).format("YYYY/MM/DD HH:mm"))
+          span({ class: "melody-bcs-date" }, moment(a.createdAt).format("YYYY/MM/DD HH:mm"))
         )
       ),
       a.url
         ? div({ class: "audio-container melody-bcs-player" },
-            audio({ controls: true, preload: "metadata", src: `/blob/${encodeURIComponent(a.url)}` })
+            audio({ controls: true, preload: "metadata", src: `/blob/${encodeURIComponent(a.url)}` }),
+            form({ method: "GET", action: `/melody/transcode/${encodeURIComponent(a.key)}`, class: "audio-transcode-form" },
+              button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
+            )
           )
-        : null,
-      a.description ? p({ class: "melody-bcs-desc" }, a.description) : null,
-      div({ class: "melody-bcs-actions" },
-        form({ method: "GET", action: `/melody/transcode/${encodeURIComponent(a.key)}` },
-          button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
-        )
-      )
+        : div({ class: "melody-bcs-actions" },
+            form({ method: "GET", action: `/melody/transcode/${encodeURIComponent(a.key)}`, class: "audio-transcode-form" },
+              button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
+            )
+          ),
+      a.description ? p({ class: "melody-bcs-desc" }, a.description) : null
     ))
   );
 };
@@ -133,7 +133,7 @@ exports.melodyView = ({ feedId, total, sequence, filter, bcsAudios }) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(description)
       ),

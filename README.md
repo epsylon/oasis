@@ -79,7 +79,6 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Documents: Module to discover and manage documents.	
  + Events: Module to discover and manage events.
  + Favorites: Module to manage your favorite content.
- + Multiverse: Manage your other accounts (Mastodon, Telegram), including sending and receiving content.
  + Feed: Module to discover and share short-texts (feeds).
  + Forums: Module to discover and manage forums.
  + Games: Module to play and share your scores in various mini-games.	
@@ -97,6 +96,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Market: Module to exchange goods or services.
  + Matches: Module to explore and visualize the matches in the blockchain.
  + Melody: Module to generate and share the "sound" of your blockchain.
+ + Multiverse: Module to manage your other accounts, including sending and receiving content.
  + Opinions: Module to discover and vote on opinions.	
  + Pads: Module to manage collaborative encrypted text editors.
  + Parliament: Module to elect governments and vote on laws.	
@@ -211,7 +211,8 @@ Oasis bridges to the **Fediverse** and beyond. You can connect your other accoun
 
 Connect your accounts from **Settings → Multiverse**, then open them from the **Multiverse** menu (shown only while an account is connected). Each network lives in its own space. See [docs/MULTIVERSE](docs/MULTIVERSE) for step-by-step guides.
 
- + Mastodon connect guide: [docs/FEDIVERSE/MASTODON/connect.md](docs/FEDIVERSE/MASTODON/connect.md)
+ + Mastodon connect guide: [docs/MULTIVERSE/MASTODON/connect.md](docs/MULTIVERSE/MASTODON/connect.md)
+ + Telegram connect guide: [docs/MULTIVERSE/TELEGRAM/connect.md](docs/MULTIVERSE/TELEGRAM/connect.md)
 
 ----------
   

@@ -248,11 +248,11 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
   const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
   return template(i18n.forumTitle,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(i18n.forumTitle),
         p(i18n.forumDescription)
       ),
-      div({ class: 'mode-buttons-cols' },
+      div({ class: 'mode-buttons-row' },
         generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,
@@ -266,7 +266,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
       ),
       currentFilter === 'create'
         ? null
-        : div({ class: 'filters' },
+        : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
             form({ method: 'GET', action: '/forum', class: 'filter-box' },
               input({ type: 'hidden', name: 'filter', value: currentFilter || 'all' }),
               input({ type: 'text', name: 'q', value: params.q || '', placeholder: i18n.forumSearchPlaceholder, class: 'filter-box__input' }),
@@ -293,11 +293,11 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
   const forumSubIn = isForumOwner || (forum.subscription && forum.subscription.subscribed === true);
   return template(forum.title,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(i18n.forumTitle),
         p(i18n.forumDescription)
       ),
-       div({ class: 'mode-buttons-cols' },
+       div({ class: 'mode-buttons-row' },
         generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,

@@ -66,24 +66,25 @@ const modulesView = () => {
   const totalModulesCount = modules.length;
   const disabledModulesCount = totalModulesCount - activeModulesCount;
 
-  const header = div({ class: 'tags-header' },
+  const header = [div({ class: 'tags-header module-header-line' },
     h2(i18n.modulesViewTitle),
-    p(i18n.modulesViewDescription),
+    p(i18n.modulesViewDescription)
+  ),
     div({ class: 'modules-counts' },
-      `${i18n.modulesTotalModulesLabel}: `,
-      strong({ class: 'modules-count-value' }, totalModulesCount),
-      ul({ class: 'modules-count-list' },
-        li({ class: 'modules-count-item' },
-          `${i18n.modulesEnabledModulesLabel}: `,
-          strong({ class: 'modules-count-value' }, activeModulesCount)
-        ),
-        li({ class: 'modules-count-item' },
-          `${i18n.modulesDisabledModulesLabel}: `,
-          strong({ class: 'modules-count-value' }, disabledModulesCount)
-        )
+      span({ class: 'modules-count-item' },
+        `${i18n.modulesTotalModulesLabel}: `,
+        strong({ class: 'modules-count-value' }, totalModulesCount)
+      ),
+      span({ class: 'modules-count-item' },
+        `${i18n.modulesEnabledModulesLabel}: `,
+        strong({ class: 'modules-count-value' }, activeModulesCount)
+      ),
+      span({ class: 'modules-count-item' },
+        `${i18n.modulesDisabledModulesLabel}: `,
+        strong({ class: 'modules-count-value' }, disabledModulesCount)
       )
     )
-  );
+  ];
 
   const PRESETS = {
     minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'blogs', 'polls', 'opinions', 'cipher', 'legacy'],

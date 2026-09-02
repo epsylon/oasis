@@ -67,12 +67,13 @@ describe('comments: opinions and comments side by side', (t) => {
     const { renderOpinionsVoting } = require('../../../src/views/main_views');
     const { renderCommentsSection } = require('../../../src/views/comments_view');
 
-    const emptyOpinions = String(renderOpinionsVoting('/tasks/opinions', '%x.sha256', {}, null, []).outerHTML);
+    const htmlOf = (n) => Array.isArray(n) ? n.map(x => (x && x.outerHTML) || String(x)).join('') : String(n && n.outerHTML);
+    const emptyOpinions = htmlOf(renderOpinionsVoting('/tasks/opinions', '%x.sha256', {}, null, []));
     const emptyComments = String(renderCommentsSection({ action: '/tasks/%x/comments', comments: [] }).outerHTML);
     notOk(emptyOpinions.includes('engage-on'), 'no opinions, no highlight');
     notOk(emptyComments.includes('engage-on'), 'no comments, no highlight');
 
-    const withOpinions = String(renderOpinionsVoting('/tasks/opinions', '%x.sha256', { interesting: 2 }, null, []).outerHTML);
+    const withOpinions = htmlOf(renderOpinionsVoting('/tasks/opinions', '%x.sha256', { interesting: 2 }, null, []));
     const withComments = String(renderCommentsSection({
       action: '/tasks/%x/comments',
       comments: [{ key: '%c.sha256', value: { author: '@a.ed25519', timestamp: 1, content: { text: 'hi' } } }]

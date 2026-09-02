@@ -48,7 +48,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
   return template(
     i18n.mentions,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.mentions),
         p(i18n.mentionsDescription)
       ),
@@ -62,7 +62,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
             )
           )
         : null,
-      div({ class: "filters" },
+      div({ class: "filters activity-filter-chips activity-toolbar-row" },
         form({ method: "GET", action: "/mentions", class: "filter-box" },
           input({ type: "hidden", name: "filter", value: filter }),
           input({ type: "text", name: "q", value: q, placeholder: i18n.mentionsSearchPlaceholder, class: "filter-box__input" }),

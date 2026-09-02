@@ -10,7 +10,7 @@ function generateRandomPassword(length = 32) {
 const legacyView = async () => {
   const randomPassword = generateRandomPassword();
 
-  const header = div({ class: 'tags-header' },
+  const header = div({ class: 'tags-header module-header-line' },
     h2(i18n.legacyTitle),
     p(i18n.legacyDescription)
   );

@@ -969,7 +969,7 @@ const parliamentView = async (state) => {
 
   return template(
     i18n.parliamentTitle,
-    section(div({ class: 'tags-header' }, h2(i18n.parliamentTitle), p(i18n.parliamentDescription)), Tabs(filter)),
+    section(div({ class: 'tags-header module-header-line' }, h2(i18n.parliamentTitle), p(i18n.parliamentDescription)), Tabs(filter)),
     section(
       filter === 'government' ? GovernmentCard(gov, powerMeta) : null,
       filter === 'candidatures' ? CandidaturesSection(gov, candidatures, leaderMeta, electionQuorum) : null,

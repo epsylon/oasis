@@ -319,7 +319,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
   return template(
     i18n.industryTitle || "Industry",
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.industryTitle || "Industry"),
         p(i18n.industryDescription || "Network-owned production facilities.")
       ),
@@ -341,7 +341,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
         : f === "BUILDS"
         ? div({ class: "industry-list" }, renderGlobalBuilds(facilitiesOrForm, params.spreadMap || new Map()))
         : section(
-            div({ class: "industry-search" },
+            div({ class: "industry-search activity-filter-chips activity-toolbar-row" },
               form({ method: "GET", action: "/industry", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: f || "ALL" }),
                 input({ type: "text", name: "search", value: search, placeholder: i18n.industrySearchPlaceholder || "Search facilities…", class: "filter-box__input" }),
@@ -708,7 +708,7 @@ exports.singleFacilityView = async (facility, filter, params = {}) => {
       div({ class: "card-header activity-card-header" },
         renderContentActions(fc.id || fc.key, null, { spread: params.spreads || null, author: fc.steward })
       ),
-      div({ class: "tags-header" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
+      div({ class: "tags-header module-header-line" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
       div({ class: "filters" },
         form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
           FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
@@ -726,7 +726,7 @@ exports.blueprintEditView = async (bp, fc) => template(
     div({ class: "card-header activity-card-header" },
       renderContentActions(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`)
     ),
-    div({ class: "tags-header" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
+    div({ class: "tags-header module-header-line" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
     div({ class: "filters" },
       form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
         FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
@@ -743,7 +743,7 @@ exports.buildEditView = async (b, fc) => template(
     div({ class: "card-header activity-card-header" },
       renderContentActions(b.id, `/industry/build/${encodeURIComponent(b.id)}`)
     ),
-    div({ class: "tags-header" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
+    div({ class: "tags-header module-header-line" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
     div({ class: "filters" },
       form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
         FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
@@ -763,7 +763,7 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
 
   return template(
     i18n.industryTitle || "Industry",
-    section(div({ class: "tags-header" }, h2(i18n.industryTitle), p(i18n.industryDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.industryTitle), p(i18n.industryDescription))),
     section(
       div({ class: "filters" },
         form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
@@ -948,7 +948,7 @@ exports.singleBuildView = async (build, params = {}) => {
 
   return template(
     i18n.industryTitle || "Industry",
-    section(div({ class: "tags-header" }, h2(i18n.industryTitle), p(i18n.industryDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.industryTitle), p(i18n.industryDescription))),
     section(
       div({ class: "filters" },
         form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },

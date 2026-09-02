@@ -190,16 +190,16 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.torrentsDescription)
+      ,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetTorrents);
+          return renderReachChip(isClearnet, i18n);
+        })()
       ),
-      (() => {
-        const { renderReachChip } = require('./clearnet_view');
-        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetTorrents);
-        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-      })(),
-      br(),
       div(
         { class: "filters" },
         form(
@@ -223,7 +223,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
         ? renderTorrentForm(filter, torrentId, torrentToEdit, { ...params, filter })
         : section(
             div(
-              { class: "audios-search" },
+              { class: "audios-search activity-filter-chips activity-toolbar-row" },
               form(
                 { method: "GET", action: "/torrents", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
@@ -329,7 +329,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   return template(
     i18n.torrentsTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.torrentAllSectionTitle || i18n.torrentsTitle),
         p(i18n.torrentDescription)
       ),

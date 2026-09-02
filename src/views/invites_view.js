@@ -96,7 +96,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
   return template(
     title,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header module-header-line' },
         h2(title),
         p(description)
       )

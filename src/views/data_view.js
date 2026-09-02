@@ -64,7 +64,7 @@ const renderFilters = (current, q) =>
         )
       )
     ),
-    div({ class: "data-search" },
+    div({ class: "data-search activity-filter-chips activity-toolbar-row" },
       form({ method: "GET", action: "/data", class: "filter-box" },
         input({ type: "hidden", name: "filter", value: current }),
         input({ type: "text", name: "q", value: q || "", placeholder: i18n.dataSearchPlaceholder, class: "filter-box__input" }),
@@ -82,7 +82,7 @@ const renderCohesion = (c) => {
   const measurable = c.entities >= 2;
   const pct = measurable ? Number(c.percent) || 0 : 0;
   return section(
-    div({ class: "tags-header" },
+    div({ class: "tags-header module-header-line" },
       h2(i18n.dataCohesionTitle),
       p(i18n.dataCohesionHint)
     ),
@@ -152,7 +152,7 @@ exports.dataView = async (payload = {}) => {
 
   return template(
     i18n.dataTitle,
-    section(div({ class: "tags-header" }, h2(i18n.dataTitle), p(i18n.dataDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.dataTitle), p(i18n.dataDescription))),
     renderFilters(filter, q),
     payload.cohesion ? renderCohesion(payload.cohesion) : null,
     section(

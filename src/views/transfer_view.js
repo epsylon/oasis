@@ -264,7 +264,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.transfersDescription)),
+      div({ class: "tags-header module-header-line" }, h2(title), p(i18n.transfersDescription)),
       div(
         { class: "filters" },
         form(
@@ -358,18 +358,14 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
           )
         : section(
             div(
-              { class: "transfers-search" },
+              { class: "transfers-search activity-filter-chips activity-toolbar-row" },
               form(
                 { method: "GET", action: "/transfers", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: normalizedFilter || "all" }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.transfersSearchPlaceholder, class: "filter-box__input" }),
-                div(
-                  { class: "filter-box__controls" },
-                  div(
-                    { class: "transfer-range" },
-                    input({ type: "number", name: "minAmount", step: "0.000001", min: "0", value: String(minAmountRaw ?? ""), placeholder: i18n.transfersMinAmountLabel, class: "filter-box__number transfer-amount-input" }),
-                    input({ type: "number", name: "maxAmount", step: "0.000001", min: "0", value: String(maxAmountRaw ?? ""), placeholder: i18n.transfersMaxAmountLabel, class: "filter-box__number transfer-amount-input" })
-                  ),
+                                                      input({ type: "number", name: "minAmount", step: "0.000001", min: "0", value: String(minAmountRaw ?? ""), placeholder: i18n.transfersMinAmountLabel, class: "filter-box__number transfer-amount-input" }),
+                    input({ type: "number", name: "maxAmount", step: "0.000001", min: "0", value: String(maxAmountRaw ?? ""), placeholder: i18n.transfersMaxAmountLabel, class: "filter-box__number transfer-amount-input" }),
+
                   select(
                     { name: "sort", class: "filter-box__select" },
                     option({ value: "recent", selected: sort === "recent" ? "selected" : undefined }, i18n.transfersSortRecent),
@@ -377,7 +373,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
                     option({ value: "deadline", selected: sort === "deadline" ? "selected" : undefined }, i18n.transfersSortDeadline)
                   ),
                   button({ type: "submit", class: "filter-box__button" }, i18n.transfersSearchButton)
-                )
+                
               )
             ),
             br(),
@@ -517,7 +513,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
 
   return template(
     transfer.concept,
-    section(div({ class: "tags-header" }, h2(i18n.transfersTitle), p(i18n.transfersDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.transfersTitle), p(i18n.transfersDescription))),
     section(
       div(
         { class: "filters" },

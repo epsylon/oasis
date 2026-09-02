@@ -44,7 +44,7 @@ const renderFilterBar = (current, hasItems = true) =>
 
 const renderSearchBox = (current, search) => {
   const q = search || {};
-  return div({ class: "logs-search" },
+  return div({ class: "logs-search activity-filter-chips activity-toolbar-row" },
     form({ method: "GET", action: "/logs", class: "filter-box" },
       input({ type: "hidden", name: "filter", value: current || 'today' }),
       input({
@@ -214,7 +214,7 @@ exports.logsView = (items, filter, mode, opts = {}) => {
   const screen = (...blocks) => template(
     listTitle,
     section(
-      div({ class: "tags-header" }, h2(listTitle), p(description)),
+      div({ class: "tags-header module-header-line" }, h2(listTitle), p(description)),
       renderFilterBar(filter),
       ...blocks
     )
@@ -230,7 +230,7 @@ exports.logsView = (items, filter, mode, opts = {}) => {
     return screen(renderDetail(opts.entry));
   }
   const body = section(
-    div({ class: "tags-header" }, h2(listTitle), p(description)),
+    div({ class: "tags-header module-header-line" }, h2(listTitle), p(description)),
     renderToolbar(filter, opts.search || {}, hasItems),
     div({ class: "logs-list" }, renderTable(items))
   );

@@ -303,10 +303,10 @@ describe('activity: the TOP filter', (t) => {
 });
 
 describe('activity: filter layout', (t) => {
-  t('each column follows the order of its menu group, and no filter is lost', () => {
+  t('chips follow the order of their menu group, and no filter is lost', () => {
     const { activityView } = require('../../../src/views/activity_view');
     const html = String(activityView([], 'all', '@me.ed25519'));
-    const at = (type) => html.indexOf(`value="${type}"`);
+    const at = (type) => html.indexOf(`/activity?filter=${type}"`);
 
     const economy = ['banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'];
     for (const type of economy) ok(at(type) > 0, `${type} is rendered`);
@@ -320,11 +320,14 @@ describe('activity: filter layout', (t) => {
       ok(at(office[i]) > at(office[i - 1]), `${office[i]} comes after ${office[i - 1]}`);
     }
 
-    ok(at('banking') < at('post'), 'the economy column comes before the network one');
+    ok(at('banking') < at('post'), 'the economy group comes before the network one');
 
     for (const type of ['all', 'mine', 'recent', 'top', 'video', 'banking', 'courts']) {
-      ok(html.includes(`value="${type}"`), `${type} survived the regrouping`);
+      ok(at(type) > 0, `${type} survived the regrouping`);
     }
+
+    ok(/class="activity-chip active"[^>]*href="\/activity\?filter=all"|href="\/activity\?filter=all"[^>]*class="activity-chip active"/.test(html),
+      'the current filter is highlighted');
   });
 });
 

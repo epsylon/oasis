@@ -61,7 +61,7 @@ describe('conventions: one implementation per shared piece', (t) => {
         const isForm = /(view|filter|mode)\s*===\s*["'](create|edit|CREATE|EDIT)["']/.test(chunk)
           || /renderCreateForm|renderEditForm/.test(chunk);
         if (!isForm) continue;
-        if (!/class: ["']tags-header["']/.test(chunk)) offenders.push(`${f}: ${chunk.split('\n')[0].slice(0, 50)}`);
+        if (!/class: ["']tags-header[^"']*["']/.test(chunk)) offenders.push(`${f}: ${chunk.split('\n')[0].slice(0, 50)}`);
       }
     }
     eq(offenders.length, 0, `a form screen without its module title: ${offenders.join(' | ')}`);

@@ -13,17 +13,14 @@ exports.aiView = (history = [], userPrompt = '') => {
           `${i18n.aiPromptUsed || 'System Prompt'}: `,
           span({ class: 'user-prompt-text' }, `"${userPrompt}"`)
         ) : null,
-        form({ method: 'POST', action: '/ai', class: 'ai-prompt-form' },
-          textarea({ maxlength: "5000", name: 'input', rows: 4, placeholder: i18n.aiInputPlaceholder, required: true }),
-          br(),
-          div({ class: 'ai-submit-row' },
-            button({ type: 'submit' }, i18n.aiSubmitButton)
-          )
+        form({ id: 'ai-prompt-form', method: 'POST', action: '/ai', class: 'ai-prompt-form' },
+          textarea({ maxlength: "5000", name: 'input', rows: 4, placeholder: i18n.aiInputPlaceholder, required: true })
         ),
-        div({ class: 'ai-clear-row' },
+        div({ class: 'ai-submit-row' },
           form({ method: 'POST', action: '/ai/clear', class: 'ai-clear-form' },
             button({ type: 'submit', class: 'ai-clear-btn' }, i18n.aiClearHistory)
-          )
+          ),
+          button({ type: 'submit', form: 'ai-prompt-form' }, i18n.aiSubmitButton)
         ),
         br(),
         ...history.map(entry =>

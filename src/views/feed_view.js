@@ -122,7 +122,6 @@ const renderFeedCard = (feed, spreadMap = null) => {
                         { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
                         button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", ...(alreadyRefeeded ? { disabled: true } : {}) }, i18n.refeedButton)
                     ),
-                alreadyRefeeded ? p({ class: "muted" }, i18n.alreadyRefeeded) : null
             ),
             div(
                 { class: "feed-main" },
@@ -191,7 +190,7 @@ exports.feedView = (feeds, opts = "ALL") => {
                 ? `${i18n.searchTitle || "Search"}: “${q}”`
                 : i18n.feedTitle;
 
-  const header = div({ class: "tags-header" }, h2(title), p(i18n.FeedshareYourOpinions));
+  const header = div({ class: "tags-header module-header-line" }, h2(title), p(i18n.FeedshareYourOpinions));
   const successBanner = msg === 'feedPublished'
     ? div({ class: 'feed-success-msg' }, p('✓ ' + (i18n.feedPublishedSuccess || 'Feed published successfully!')))
     : null;
@@ -207,12 +206,12 @@ exports.feedView = (feeds, opts = "ALL") => {
       form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button filter-btn" }, i18n.createFeedTitle || "Create Feed"))
     ),
     div(
-      { class: "feed-tools-row" },
+      { class: "feed-tools-row activity-filter-chips activity-toolbar-row" },
       form(
         { method: "GET", action: "/feed", class: "filter-box" },
         input({ type: "hidden", name: "filter", value: filter }),
         tag ? input({ type: "hidden", name: "tag", value: tag }) : null,
-        input({ type: "text", name: "q", value: q, placeholder: i18n.searchPlaceholder || "Search", class: "filter-box__input" }),
+        input({ type: "text", name: "q", value: q, placeholder: i18n.feedSearchPlaceholder || i18n.searchPlaceholder || "Search", class: "filter-box__input" }),
         div({ class: "filter-box__controls" },
           button({ type: "submit", class: "filter-box__button" }, i18n.searchButton || "Search")
         )
@@ -260,7 +259,7 @@ exports.feedCreateView = (opts = {}) => {
   return template(
     i18n.createFeedTitle,
     section(
-      div({ class: "tags-header" }, h2(i18n.createFeedTitle), p(i18n.FeedshareYourOpinions)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.createFeedTitle), p(i18n.FeedshareYourOpinions)),
       div({ class: "mode-buttons-row" }, ...generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"], "CREATE", "/feed", { q, tag })),
       form(
         { method: "POST", action: "/feed/create" },
@@ -295,7 +294,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
 
   return template(
     i18n.feedDetailTitle || "Feed",
-    section(div({ class: "tags-header" }, h2(i18n.feedTitle), p(i18n.FeedshareYourOpinions))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.feedTitle), p(i18n.FeedshareYourOpinions))),
     section(
       div(
         { class: "filters" },
@@ -331,7 +330,6 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
                   { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
                   button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", ...(alreadyRefeeded ? { disabled: true } : {}) }, i18n.refeedButton)
               ),
-            alreadyRefeeded ? p({ class: "muted" }, i18n.alreadyRefeeded) : null
           ),
           div(
             { class: "feed-main" },

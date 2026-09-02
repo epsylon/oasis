@@ -249,7 +249,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
   const secondRow = ["CONFUSED", "FOLLOW_MAJORITY", "NOT_INTERESTED"];
 
   const header = div(
-    { class: "tags-header" },
+    { class: "tags-header module-header-line" },
     h2(i18n.votationsTitle),
     p(i18n.votationsDescription)
   );
@@ -286,7 +286,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
         )
       ),
       mode !== "create" && mode !== "edit"
-        ? div({ class: "filters" },
+        ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/votes", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: mode }),
               input({ type: "text", name: "q", value: (params && params.q) || "", placeholder: i18n.votesSearchPlaceholder, class: "filter-box__input" }),

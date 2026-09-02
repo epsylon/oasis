@@ -147,11 +147,11 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
 
   return template(
     title,
-    section(div({ class: "tags-header" }, h2(title), p(i18n.schoolDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.schoolDescription))),
     section(renderModeButtons(filter)),
     !isForm
       ? section(
-          div({ class: "filters" },
+          div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/school", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: q, placeholder: i18n.schoolSearchPlaceholder, class: "filter-box__input" }),
@@ -679,7 +679,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
 
   return template(
     course.title,
-    section(div({ class: "tags-header" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
     section(renderModeButtons("all")),
     section(
       div({ class: "tribe-details" },
@@ -872,7 +872,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
 
   const tpl = template(
     lesson.title,
-    section(div({ class: "tags-header" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
     section(renderModeButtons("all")),
     section(div({ class: "tribe-details" }, lessonSide, lessonMain))
   )

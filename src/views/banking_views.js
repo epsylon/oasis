@@ -618,7 +618,7 @@ const renderBankingView = (data, filter, userId, isPub) =>
   template(
     i18n.banking,
     section(
-      div({ class: "tags-header" }, h2(i18n.banking), p(i18n.bankingDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.banking), p(i18n.bankingDescription)),
       data.flash ? div({ class: "flash-banner" }, p(flashText(data.flash) || data.flash)) : null,
       generateFilterButtons(["overview","exchange","taxes","mine","pending","closed","claimed","expired","epochs","rules","addresses"], filter, "/banking"),
       filter === "overview"

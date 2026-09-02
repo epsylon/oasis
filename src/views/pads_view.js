@@ -185,13 +185,13 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
     : pads
 
   const body = div({ class: "main-column" },
-    div({ class: "tags-header" },
+    div({ class: "tags-header module-header-line" },
       h2(headerText),
       p(i18n.padsDescription || "Manage collaborative encrypted text editors in your network.")
     ),
     renderModeButtons(filter),
     !isForm
-      ? div({ class: "filters" },
+      ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
           form({ method: "GET", action: "/pads", class: "filter-box" },
             input({ type: "hidden", name: "filter", value: filter }),
             input({ type: "text", name: "q", placeholder: i18n.padSearchPlaceholder || "Search pads...", value: q, class: "filter-box__input" }),
@@ -387,7 +387,7 @@ exports.singlePadView = async (pad, entries, params) => {
   return template(
     pad.title || i18n.padsTitle || "Pad",
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.padsTitle || "Pads"),
         p(i18n.padsDescription || "Manage collaborative encrypted text editors in your network.")
       ),

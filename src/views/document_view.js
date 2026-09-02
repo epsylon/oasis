@@ -169,16 +169,16 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
   const tpl = template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.documentDescription)
+      ,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetDocuments);
+          return renderReachChip(isClearnet, i18n);
+        })()
       ),
-      (() => {
-        const { renderReachChip } = require('./clearnet_view');
-        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetDocuments);
-        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-      })(),
-      br(),
       div(
         { class: "filters" },
         form(
@@ -202,7 +202,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
         ? renderDocumentForm(filter, documentId, docToEdit || {}, { ...params, filter })
         : section(
             div(
-              { class: "documents-search" },
+              { class: "documents-search activity-filter-chips activity-toolbar-row" },
               form(
                 { method: "GET", action: "/documents", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
@@ -314,7 +314,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   const tpl = template(
     i18n.documentTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.documentAllSectionTitle || i18n.documentTitle),
         p(i18n.documentDescription)
       ),

@@ -289,7 +289,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(i18n.marketTitle), p(i18n.marketDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription)),
       div(
         { class: "filters" },
         form(
@@ -312,16 +312,12 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
       ),
       !isFormMode
         ? div(
-            { class: "market-search" },
+            { class: "market-search activity-filter-chips activity-toolbar-row" },
             form(
               { method: "GET", action: "/market", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter || "all" }),
               input({ type: "text", name: "q", value: q, placeholder: i18n.marketSearchPlaceholder, class: "filter-box__input" }),
-              div(
-                { class: "filter-box__controls" },
-                div(
-                  { class: "transfer-range" },
-                  input({
+                                                input({
                     type: "number",
                     name: "minPrice",
                     step: "0.000001",
@@ -338,8 +334,8 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                     value: String(maxPrice ?? ""),
                     placeholder: i18n.marketMaxPriceLabel,
                     class: "filter-box__number transfer-amount-input"
-                  })
-                ),
+                  }),
+
                 select(
                   { name: "sort", class: "filter-box__select" },
                   option({ value: "recent", ...(sort === "recent" ? { selected: true } : {})}, i18n.marketSortRecent),
@@ -347,7 +343,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                   option({ value: "deadline", ...(sort === "deadline" ? { selected: true } : {})}, i18n.marketSortDeadline)
                 ),
                 button({ type: "submit", class: "filter-box__button" }, i18n.marketSearchButton)
-              )
+              
             )
           )
         : null
@@ -532,7 +528,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
 
   return template(
     item.title,
-    section(div({ class: "tags-header" }, h2(i18n.marketTitle), p(i18n.marketDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription))),
     section(
       div(
         { class: "filters" },

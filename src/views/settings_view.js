@@ -83,9 +83,9 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
   return template(
     i18n.settings,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.settings),
-        p(a({ href: snhUrl, target: "_blank" }, i18n.settingsIntro({ version }))),
+        p(i18n.settingsDescription),
         updateButton
       )
     ),
@@ -331,7 +331,6 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         h2(i18n.fediverseSettingsTitle),
         div({ class: "fediverse-network" },
           h3("Mastodon"),
-          p(i18n.fediverseTokenHelp),
           fediverseError ? p({ class: "fediverse-error" }, i18n[fediverseError] || i18n.fediverseError) : "",
           fediverseAccount
             ? (() => {
@@ -358,7 +357,6 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         ),
         div({ class: "fediverse-network" },
           h3("Telegram"),
-          p(i18n.telegramSettingsHelp),
           telegramError ? p({ class: "fediverse-error" }, i18n[telegramError] || i18n.telegramErrConnect) : "",
           telegramAccount
             ? form(

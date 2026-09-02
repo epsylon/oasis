@@ -226,7 +226,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.eventsTitle),
         p(i18n.eventsDescription)
       ),
@@ -248,7 +248,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
       ),
       currentFilter === "edit" || currentFilter === "create"
         ? null
-        : div({ class: "filters" },
+        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/events", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: currentFilter }),
               input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.eventSearchPlaceholder, class: "filter-box__input" }),
@@ -530,7 +530,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   return template(
     event.title,
     section(
-      div({ class: "tags-header" }, h2(i18n.eventsTitle), p(i18n.eventsDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.eventsTitle), p(i18n.eventsDescription)),
       filterBar,
       div({ class: "tribe-details" }, eventSide, eventMain)
     )

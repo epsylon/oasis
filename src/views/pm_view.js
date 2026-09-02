@@ -22,9 +22,10 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
   return template(
     title,
     section(
-      div({ class: "tags-header" },
-        div({ class: "title-with-chip" }, h2(title), renderEncryptedChip(i18n)),
-        p(description)
+      div({ class: "tags-header module-header-line" },
+        h2(title),
+        p(description),
+        renderEncryptedChip(i18n)
       ),
       crypterError
         ? div({ class: "pm-form-error-msg" }, p('✗ ' + i18n.pmCrypterTooLong))

@@ -1035,7 +1035,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         : div({ class: 'post-text activity-spread-text activity-spread-missing' }, i18n.spreadContentUnavailable || 'Content not yet available (pending replication)'),
       spreadOriginalAuthor
         ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.spreadBy || 'By') + ': '),
             span({ class: 'card-value' }, userLink(spreadOriginalAuthor))
           )
         : '',
@@ -2113,44 +2112,35 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   let html = template(
     title,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header activity-header-line' },
         h2(i18n.activityList),
         p(desc)
       ),
-      div({ class: 'activity-filter-grid' },
-        ...(() => {
-          const COLUMNS = [
-            ['all', 'mine', 'recent', 'top'],
-            ['inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts'],
-            ['votes', 'event', 'calendar', 'task', 'report'],
-            ['banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'],
-            ['post', 'feed', 'chat', 'pad', 'forum', 'map'],
-            ['audio', 'bookmark', 'document', 'image', 'torrent', 'video']
+      div({ class: 'activity-filter-chips' },
+        (() => {
+          const ORDER = [
+            'all', 'mine', 'recent', 'top',
+            'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts',
+            'votes', 'event', 'calendar', 'task', 'report',
+            'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
+            'post', 'feed', 'chat', 'pad', 'forum', 'map',
+            'audio', 'bookmark', 'document', 'image', 'torrent', 'video'
           ];
           const byType = new Map(activityTypes.map(t => [t.type, t]));
-          const placed = new Set(COLUMNS.flat());
-          const leftovers = activityTypes.filter(t => !placed.has(t.type));
-          return COLUMNS
-            .map(col => col.map(type => byType.get(type)).filter(Boolean))
-            .concat(leftovers.length ? [leftovers] : [])
-            .filter(col => col.length);
-        })().map(col =>
-          div({ class: 'activity-filter-col' },
-            col.map(({ type, label }) =>
-              form({ method: 'GET', action: '/activity' },
-                input({ type: 'hidden', name: 'filter', value: type }),
-                button({ type: 'submit', class: filter === type ? 'filter-btn active' : 'filter-btn' }, label)
-              )
-            )
-          )
-        )
+          const placed = new Set(ORDER);
+          const ordered = ORDER.map(type => byType.get(type)).filter(Boolean)
+            .concat(activityTypes.filter(t => !placed.has(t.type)));
+          return ordered.map(({ type, label }) =>
+            a({
+              href: `/activity?filter=${encodeURIComponent(type)}`,
+              class: filter === type ? 'activity-chip active' : 'activity-chip'
+            }, label)
+          );
+        })()
       ),
-      sub
-        ? div({ class: 'activity-sub-filter' },
-            sub.filters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'filter-btn' }, String(f).toUpperCase()))
-          )
-        : null,
-      div({ class: 'filters' },
+      div({ class: 'activity-filter-chips activity-toolbar-row' },
+        sub ? span({ class: 'activity-subchip-label' }, '\u21b3') : '',
+        sub ? sub.filters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'activity-chip' }, String(f).toUpperCase())) : '',
         form({ method: 'GET', action: '/activity', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: qs, placeholder: i18n.activitySearchPlaceholder, class: 'filter-box__input' }),

@@ -204,16 +204,16 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
   return template(
     title,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.videoDescription)
+      ,
+        (() => {
+          const { renderReachChip } = require('./clearnet_view');
+          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetVideos);
+          return renderReachChip(isClearnet, i18n);
+        })()
       ),
-      (() => {
-        const { renderReachChip } = require('./clearnet_view');
-        const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetVideos);
-        return div({ class: "shop-title-row" }, renderReachChip(isClearnet, i18n));
-      })(),
-      br(),
       div(
         { class: "filters" },
         form(
@@ -237,7 +237,7 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
         ? renderVideoForm(filter, videoId, videoToEdit, { ...params, filter })
         : section(
             div(
-              { class: "videos-search" },
+              { class: "videos-search activity-filter-chips activity-toolbar-row" },
               form(
                 { method: "GET", action: "/videos", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
@@ -340,7 +340,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   return template(
     i18n.videoTitle,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.videoAllSectionTitle || i18n.videoTitle),
         p(i18n.videoDescription)
       ),

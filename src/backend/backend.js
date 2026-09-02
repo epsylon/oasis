@@ -2799,7 +2799,7 @@ router
     const messages = await buildInboxMessages();
     await refreshInboxCount(messages);
     const notice = ctx.query.filestatus === 'unavailable' ? 'unavailable' : (ctx.query.filekey === 'bad' ? 'badkey' : '');
-    ctx.body = await privateView({ messages }, ctx.query.filter || undefined, null, notice);
+    ctx.body = await privateView({ messages }, ctx.query.filter || undefined, null, notice, String(ctx.query.q || ''));
   })
   .post('/inbox/decrypt', koaBody(), async ctx => {
     if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }

@@ -1253,6 +1253,28 @@ const renderTasksLink = () => {
 const template = (titlePrefix, ...elements) => {
   const currentConfig = getConfig();
   const theme = currentConfig.themes.current || "Dark-SNH";
+  const buildAiSuggestion = (compact) => {
+    try {
+      const { getConfig } = require('../configs/config-manager.js');
+      if (getConfig().ai?.suggestions === false) return null;
+    } catch (_) {}
+    const suggestion = sharedState.getBestMatch ? sharedState.getBestMatch() : null;
+    if (!suggestion || !suggestion.href) return null;
+    if (sharedState.getDismissedSuggestion && sharedState.getDismissedSuggestion() === suggestion.href) return null;
+    const cap = compact ? 42 : 80;
+    const t = String(suggestion.title || '').trim();
+    const label = `${t.length > cap ? t.slice(0, cap) + '…' : t} (${(((Number(suggestion.score) || 0) * 100).toFixed(1)).replace(/\.0$/, '')}%)`;
+    return div(
+      { class: compact ? "ai-suggestion-banner ai-suggestion-inline" : "update-banner ai-suggestion-banner" },
+      span({ class: "update-banner-icon" }, "🤖"),
+      compact ? null : span({ class: "update-banner-text" }, i18n.aiSuggestionBanner),
+      a({ href: suggestion.href, class: "update-banner-link" }, label),
+      form(
+        { method: "POST", action: "/ai/suggestion/dismiss", class: "welcome-banner-close" },
+        button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
+      )
+    );
+  };
   const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : "blocks";
   const themeLink = link({
     rel: "stylesheet",
@@ -1350,7 +1372,8 @@ const template = (titlePrefix, ...elements) => {
                 autofocus: uxMode === 'ainav' ? 'autofocus' : undefined
               }),
               button({ type: 'submit', class: 'ai-ask-btn' }, '➤')
-            )
+            ),
+            buildAiSuggestion(true)
           );
         })(),
         uxMode === "ainav" ? div(
@@ -1412,25 +1435,7 @@ const template = (titlePrefix, ...elements) => {
           return null;
         }
       })(),
-      (() => {
-        try {
-          const { getConfig } = require('../configs/config-manager.js');
-          if (getConfig().ai?.suggestions === false) return null;
-        } catch (_) {}
-        const suggestion = sharedState.getBestMatch ? sharedState.getBestMatch() : null;
-        if (!suggestion || !suggestion.href) return null;
-        if (sharedState.getDismissedSuggestion && sharedState.getDismissedSuggestion() === suggestion.href) return null;
-        return div(
-          { class: "update-banner ai-suggestion-banner" },
-          span({ class: "update-banner-icon" }, "🤖"),
-          span({ class: "update-banner-text" }, i18n.aiSuggestionBanner),
-          a({ href: suggestion.href, class: "update-banner-link" }, `${(() => { const t = String(suggestion.title || '').trim(); return t.length > 80 ? t.slice(0, 80) + '…' : t; })()} (${(((Number(suggestion.score) || 0) * 100).toFixed(1)).replace(/\.0$/, '')}%)`),
-          form(
-            { method: "POST", action: "/ai/suggestion/dismiss", class: "welcome-banner-close" },
-            button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
-          )
-        );
-      })(),
+      (getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? null : buildAiSuggestion(false),
       div(
         { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" ? "main-content chatsux-only" : "main-content" },
         uxMode !== "blocks" ? null : div(
@@ -2224,7 +2229,6 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
                 ),
                 span(
                     { class: "created-at" },
-                    `${i18n.createdBy} `,
                     userLink(authorIdForName, msg.value?.meta?.author?.name),
                     ` | ${timeAbsolute} | ${i18n.sendTime} `,
                     a({ href: url.link }, timeAgo)
@@ -2356,7 +2360,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
         ),
         br(), br(),
         div({ class: "prefs-card" },
-          div({ class: "tags-header" },
+          div({ class: "tags-header module-header-line" },
             h2(i18n.profileContentSectionTitle || 'Avatar Content'),
             p({ class: "prefs-help" }, i18n.profileContentHelp || 'Choose which of your modules will be displayed on your profile.')
           ),
@@ -2376,7 +2380,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
         ),
         br(),
         div({ class: "prefs-card" },
-          div({ class: "tags-header" },
+          div({ class: "tags-header module-header-line" },
             h2(i18n.profileSensorsSectionTitle || 'Sensors'),
             p({ class: "prefs-help" }, i18n.profileSensorsHelp || 'Optional metrics shown on your profile.')
           ),
@@ -2394,7 +2398,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
         ),
         br(),
         div({ class: "prefs-card" },
-          div({ class: "tags-header" },
+          div({ class: "tags-header module-header-line" },
             h2(i18n.clearnetSectionTitle || 'Clearnet'),
             p({ class: "prefs-help" }, i18n.profileClearnetHelp || 'Modules that can be accessed from outside Oasis.')
           ),
@@ -2997,7 +3001,7 @@ const renderMessage = (msg) => {
 
 
 
-exports.privateView = async (messagesInput, filter, decrypted = null, notice = '') => {
+exports.privateView = async (messagesInput, filter, decrypted = null, notice = '', q = '') => {
   const noticeText = notice === 'unavailable'
     ? (i18n.fileShareUnavailable || 'This file is not available right now. Try again later.')
     : notice === 'badkey'
@@ -3005,6 +3009,13 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       : ''
   const messagesRaw = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages
   const messages = (messagesRaw || []).filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true)
+  const qNorm = String(q || '').trim().toLowerCase()
+  const qMatch = (m) => {
+    if (!qNorm) return true
+    const c = m.value.content || {}
+    return [c.subject, c.text, c.from, m.value.author, ...(Array.isArray(c.to) ? c.to : [])]
+      .some(v => String(v || '').toLowerCase().includes(qNorm))
+  }
   const userId = await getUserId()
 
   const isSent = m => (m?.value?.author === userId) || (m?.value?.content?.from === userId)
@@ -3208,11 +3219,12 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     return /^(Task Reminder:|Calendar Reminder:)/i.test(s)
   }
 
-  const data =
+  const data = (
     filter === 'sent' ? messages.filter(m => isSent(m) && !isReminder(m)) :
     filter === 'reminders' ? messages.filter(isReminder) :
     filter === 'inbox' ? Array.from(inboxSet).filter(m => !isReminder(m)) :
     messages
+  ).filter(qMatch)
 
   const inboxCount = Array.from(inboxSet).filter(m => !isReminder(m)).length
   const sentCount = messages.filter(m => isSent(m) && !isReminder(m)).length
@@ -3416,31 +3428,12 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   return template(
     i18n.private,
     section(
-      div({ class: 'tags-header' },
-        div({ class: 'title-with-chip' }, h2(i18n.private), renderEncryptedChip(i18n)),
-        p(i18n.privateDescription)
+      div({ class: 'tags-header module-header-line' },
+        h2(i18n.private),
+        p(i18n.privateDescription),
+        renderEncryptedChip(i18n)
       ),
       noticeText ? div({ class: 'pm-form-error-msg' }, p('✗ ' + noticeText)) : null,
-      (() => {
-        const pmVis = getConfig().pmVisibility === 'mutuals' ? 'mutuals' : 'whole'
-        const pmVisLabel = pmVis === 'mutuals' ? i18n.settingsPmVisibilityMutuals : i18n.settingsPmVisibilityWhole
-        const pmVisIcon = pmVis === 'mutuals' ? '🤝' : '🌐'
-        const nextVis = pmVis === 'mutuals' ? 'whole' : 'mutuals'
-        const nextLabel = nextVis === 'mutuals'
-          ? (i18n.inboxToggleToMutuals || 'Switch to mutuals')
-          : (i18n.inboxToggleToWhole || 'Switch to whole')
-        return div({ class: 'pm-exposition inbox-exposition' },
-          span({ class: 'inbox-filters-label' }, i18n.inboxFiltersLabel || 'Filters:'),
-          span({ class: `pm-exposition-chip pm-exposition-${pmVis}` },
-            span({ class: 'pm-exposition-icon' }, pmVisIcon),
-            span({ class: 'pm-exposition-text' }, pmVisLabel)
-          ),
-          form({ method: 'POST', action: '/settings/pm-visibility?returnTo=/inbox', class: 'inbox-vis-toggle' },
-            input({ type: 'hidden', name: 'pmVisibility', value: nextVis }),
-            button({ type: 'submit', class: 'btn' }, nextLabel)
-          )
-        )
-      })(),
       div({ class: 'filters' },
         form({ method: 'GET', action: '/inbox' }, [
           button({
@@ -3470,6 +3463,33 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             formmethod: 'GET'
           }, i18n.pmCreateButton)
         ])
+      ),
+      div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+      (() => {
+        const pmVis = getConfig().pmVisibility === 'mutuals' ? 'mutuals' : 'whole'
+        const pmVisLabel = pmVis === 'mutuals' ? i18n.settingsPmVisibilityMutuals : i18n.settingsPmVisibilityWhole
+        const pmVisIcon = pmVis === 'mutuals' ? '🤝' : '🌐'
+        const nextVis = pmVis === 'mutuals' ? 'whole' : 'mutuals'
+        const nextLabel = nextVis === 'mutuals'
+          ? (i18n.inboxToggleToMutuals || 'Switch to mutuals')
+          : (i18n.inboxToggleToWhole || 'Switch to whole')
+        return div({ class: 'pm-exposition inbox-exposition' },
+          span({ class: 'inbox-filters-label' }, i18n.inboxFiltersLabel || 'Filters:'),
+          span({ class: `pm-exposition-chip pm-exposition-${pmVis}` },
+            span({ class: 'pm-exposition-icon' }, pmVisIcon),
+            span({ class: 'pm-exposition-text' }, pmVisLabel)
+          ),
+          form({ method: 'POST', action: '/settings/pm-visibility?returnTo=/inbox', class: 'inbox-vis-toggle' },
+            input({ type: 'hidden', name: 'pmVisibility', value: nextVis }),
+            button({ type: 'submit', class: 'btn' }, nextLabel)
+          )
+        )
+      })(),
+        form({ method: 'GET', action: '/inbox', class: 'filter-box' },
+          input({ type: 'hidden', name: 'filter', value: filter || 'inbox' }),
+          input({ type: 'text', name: 'q', value: String(q || ''), placeholder: i18n.inboxSearchPlaceholder || 'Search in Inbox...', class: 'filter-box__input' }),
+          button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+        )
       ),
       div({ class: 'message-list' },
         (() => {
@@ -3652,7 +3672,7 @@ exports.likesView = async ({ messages, feed, name, spreadMap = null }) => {
   return template(
     i18n.viewLikes,
     section(
-      div({ class: "tags-header" },
+      div({ class: "tags-header module-header-line" },
         h2(i18n.viewLikes),
         p(userLink(feed, name))
       )
@@ -3875,7 +3895,7 @@ const messageListView = ({
   const hasHeader = !!viewElements;
   const titleBlock = hasHeader
     ? viewElements
-    : div({ class: "tags-header" },
+    : div({ class: "tags-header module-header-line" },
         h2(viewTitle),
         p(viewDescription)
       );
@@ -3893,7 +3913,7 @@ const messageListView = ({
 
 
 exports.spreadedView = ({ messages }) => {
-  const header = div({ class: "tags-header" },
+  const header = div({ class: "tags-header module-header-line" },
     h2(i18n.spreaded),
     p(i18n.spreadedDescription)
   );

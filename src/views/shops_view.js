@@ -216,11 +216,11 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
 
   return template(
     title,
-    section(div({ class: "tags-header" }, h2(title), p(i18n.shopDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.shopDescription))),
     section(renderModeButtons(filter)),
     !isForm
       ? section(
-          div({ class: "filters" },
+          div({ class: "filters activity-filter-chips activity-toolbar-row" },
             form({ method: "GET", action: "/shops", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: q, placeholder: i18n.shopSearchPlaceholder, class: "filter-box__input" }),
@@ -391,7 +391,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
 
   return template(
     shop.title || i18n.shopTitle,
-    section(div({ class: "tags-header" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
     section(renderModeButtons(filter)),
     section(
       div({ class: "tribe-details" },
@@ -494,7 +494,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
 
   return template(
     product.title || i18n.shopProductTitle,
-    section(div({ class: "tags-header" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
     section(renderModeButtons("products")),
     section(div({ class: "tribe-details" }, productSide, productMain))
   )
@@ -566,7 +566,7 @@ exports.shopOrdersView = async (shop, orders) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.shopOrdersDescription || "Encrypted purchase orders received by this shop.")),
+      div({ class: "tags-header module-header-line" }, h2(title), p(i18n.shopOrdersDescription || "Encrypted purchase orders received by this shop.")),
       a({ href: `/shops/${encodeURIComponent(shop.key || shop.id || "")}`, class: "filter-btn" }, i18n.goBack || "Go back")
     ),
     section(
@@ -603,7 +603,7 @@ exports.myPurchasesView = async (purchases) => {
   return template(
     title,
     section(
-      div({ class: "tags-header" }, h2(title), p(i18n.shopMyOrdersDescription || "Your encrypted purchase orders."))
+      div({ class: "tags-header module-header-line" }, h2(title), p(i18n.shopMyOrdersDescription || "Your encrypted purchase orders."))
     ),
     section(renderModeButtons("purchases")),
     section(
