@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderContentActions } = require("./main_views");
+const { template, i18n, userLink, renderContentActions, renderModuleStats } = require("./main_views");
 const { getViewDetailsAction } = require("./activity_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -63,6 +63,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
           )
         : null,
       div({ class: "filters activity-filter-chips activity-toolbar-row" },
+        renderModuleStats(items.length),
         form({ method: "GET", action: "/mentions", class: "filter-box" },
           input({ type: "hidden", name: "filter", value: filter }),
           input({ type: "text", name: "q", value: q, placeholder: i18n.mentionsSearchPlaceholder, class: "filter-box__input" }),

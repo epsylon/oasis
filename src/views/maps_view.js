@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, label, br, a, span, textar
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderInviteQrCard } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderInviteQrCard, renderModuleStats } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapWithPins, renderZoomedMapWithPins, getViewportBounds, latLngToPx, pxToLatLng, MAP_W, MAP_H, getMaxTileZoom } = require("../maps/map_renderer");
@@ -408,6 +408,7 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
         ? renderMapForm(filter, mapId, mapToEdit, { ...params, filter })
         : section(
             div({ class: "maps-search activity-filter-chips activity-toolbar-row" },
+              renderModuleStats(list.length),
               form({ method: "GET", action: "/maps", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.mapSearchPlaceholder, class: "filter-box__input" }),

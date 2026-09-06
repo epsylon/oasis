@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderSubscriptionBox } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderSubscriptionBox, renderModuleStats } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -24,7 +24,7 @@ const excerpt = (text, max = 420) => {
   return s.length > max ? s.slice(0, max) + "…" : s;
 };
 
-const renderFilterBar = (filter, q, showSearch = true) =>
+const renderFilterBar = (filter, q, showSearch = true, total = null) =>
   section(
     div({ class: "filters" },
       form({ method: "GET", action: "/blogs", class: "ui-toolbar ui-toolbar--filters" },
@@ -36,6 +36,7 @@ const renderFilterBar = (filter, q, showSearch = true) =>
     ),
     showSearch
       ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          total != null ? renderModuleStats(total) : null,
           form({ method: "GET", action: "/blogs", class: "filter-box" },
             input({ type: "hidden", name: "filter", value: filter }),
             input({ type: "text", name: "q", value: q || "", placeholder: i18n.blogSearchPlaceholder, class: "filter-box__input" }),
@@ -124,7 +125,7 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
         p(i18n.blogDescription)
       )
     ),
-    renderFilterBar(showForm ? "ALL" : filter, params.q, !showForm),
+    renderFilterBar(showForm ? "ALL" : filter, params.q, !showForm, Array.isArray(blogs) ? blogs.length : 0),
     showForm
       ? renderCreateForm()
       : section(

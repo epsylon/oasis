@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
 const moment = require('../server/node_modules/moment');
-const { template, i18n, userLink, renderStateChip } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderModuleStatsBy } = require('./main_views');
 
 const CourtsE2EChip = () => renderStateChip('encrypted', '🔒', i18n.encryptedChipLabel || 'E2E');
 
@@ -1065,9 +1065,10 @@ const RulesContent = () => {
   );
 };
 
-const CaseSearch = (filter, search = '') =>
+const CaseSearch = (filter, search = '', items = null) =>
   div(
     { class: 'filters activity-filter-chips activity-toolbar-row' },
+    items ? renderModuleStatsBy(items, c => c.status === 'OPEN' ? 'OPEN' : c.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'DONE', [{ value: 'OPEN', label: i18n.taskStatusOpen }, { value: 'IN_PROGRESS', label: i18n.taskStatusInProgress }, { value: 'DONE', label: i18n.taskStatusClosed }]) : null,
     form(
       { method: 'GET', action: '/courts', class: 'filter-box' },
       input({ type: 'hidden', name: 'filter', value: filter }),
@@ -1368,7 +1369,7 @@ const courtsView = async (state) => {
         p(i18n.courtsDescription)
       ),
       Tabs(filter),
-      filter === 'cases' ? CaseSearch(filter, search) : null
+      filter === 'cases' ? CaseSearch(filter, search, cases) : null
     ),
     section(
       filter === 'cases' ? CasesTable(cases) : null,

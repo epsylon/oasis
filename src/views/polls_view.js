@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -180,7 +180,7 @@ const renderComments = (poll, comments, basePath) => {
   });
 };
 
-const renderFilterBar = (filter, q, showSearch = true) =>
+const renderFilterBar = (filter, q, showSearch = true, items = null) =>
   section(
     div({ class: "filters" },
       form({ method: "GET", action: "/polls", class: "ui-toolbar ui-toolbar--filters" },
@@ -191,6 +191,7 @@ const renderFilterBar = (filter, q, showSearch = true) =>
       )
     ),
     showSearch ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
+      items ? renderModuleStatsBy(items, pl => String(pl.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.pollStatusOpen }, { value: 'CLOSED', label: i18n.pollStatusClosed }]) : null,
       form({ method: "GET", action: "/polls", class: "filter-box" },
         input({ type: "hidden", name: "filter", value: filter }),
         input({ type: "text", name: "q", value: q || "", placeholder: i18n.pollSearchPlaceholder, class: "filter-box__input" }),
@@ -217,7 +218,7 @@ exports.pollsView = async (polls = [], filter = "ALL", params = {}) => {
   return template(
     i18n.pollsTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
-    renderFilterBar(mode, params.q),
+    renderFilterBar(mode, params.q, true, polls),
     section(
       polls.length
         ? div({ class: "jobs-grid" }, ...polls.map(pl => renderPollCard(pl, mode, spreadMap.get(pl.id))))

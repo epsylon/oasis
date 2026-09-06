@@ -3,7 +3,7 @@ const {
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -267,6 +267,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
       currentFilter === 'create'
         ? null
         : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+          renderModuleStats(getFilteredForums(currentFilter || 'all', forums).length),
             form({ method: 'GET', action: '/forum', class: 'filter-box' },
               input({ type: 'hidden', name: 'filter', value: currentFilter || 'all' }),
               input({ type: 'text', name: 'q', value: params.q || '', placeholder: i18n.forumSearchPlaceholder, class: 'filter-box__input' }),

@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, input, ul, li, a, h3, span, strong, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink } = require('./main_views');
+const sharedState = require('../configs/shared-state');
 
 Object.assign(i18n, {
   statsChat: "Chats",
@@ -286,7 +287,8 @@ exports.statsView = (stats, filter) => {
       kpi(i18n.statsTotalMsgs || 'Total messages', networkKPIs.totalMsgs || 0),
       kpi(i18n.statsLogsTitle || 'Logs', stats?.logsCount || 0),
       kpi(i18n.statsAITraining, C(stats, 'aiExchange') || 0),
-      kpi(i18n.statsPUBs, stats.pubsCount || 0)
+      kpi(i18n.statsPUBs, stats.pubsCount || 0),
+      kpi(i18n.statsSyncedPeers, sharedState.getSyncedPeerCount() || 0)
     )
   );
 

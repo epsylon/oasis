@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { renderUrl } = require('../backend/renderUrl');
@@ -480,6 +480,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '') => {
         )
       ),
       div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+        renderModuleStats(cards.length),
         form({ method: 'GET', action: '/opinions', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.opinionsSearchPlaceholder, class: 'filter-box__input' }),

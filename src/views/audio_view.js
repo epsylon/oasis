@@ -17,7 +17,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
@@ -243,6 +243,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
         : section(
             div(
               { class: "audios-search activity-filter-chips activity-toolbar-row" },
+                renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/audios", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),

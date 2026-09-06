@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -313,6 +313,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
       !isFormMode
         ? div(
             { class: "market-search activity-filter-chips activity-toolbar-row" },
+              renderModuleStatsBy(filtered, e => normStatus(e.status || 'FOR SALE'), [{ value: 'FOR SALE', label: i18n.marketFilterForSale }, { value: 'SOLD', label: i18n.marketFilterSold }, { value: 'DISCARDED', label: i18n.marketFilterDiscarded }]),
             form(
               { method: "GET", action: "/market", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter || "all" }),

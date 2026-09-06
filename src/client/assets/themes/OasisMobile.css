@@ -1268,3 +1268,73 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .main-column section { padding-left: 0 !important; padding-right: 0 !important; }
 .card-section-action { padding: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; justify-content: center !important; }
 .card-section-action .keep-reading-link { margin: 6px auto !important; }
+
+.tribe-mode-buttons .filter-btn, .ui-toolbar--filters .filter-btn, .mode-buttons .filter-btn, .mode-buttons-row .filter-btn, .mode-buttons-cols .filter-btn, .filters .filter-btn, .inhabitant-action .filter-btn, .activity-filter-grid .filter-btn, .activity-filter-col .filter-btn, .activity-sub-filter .filter-btn {
+  min-height: 0 !important;
+  height: auto !important;
+  font-size: .75em !important;
+  padding: 2px 9px !important;
+  border: 1px solid #555 !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  color: inherit !important;
+  line-height: 1.5 !important;
+  font-weight: normal !important;
+}
+.tribe-mode-buttons .filter-btn.active, .ui-toolbar--filters .filter-btn.active, .mode-buttons .filter-btn.active, .mode-buttons-row .filter-btn.active, .mode-buttons-cols .filter-btn.active, .filters .filter-btn.active, .inhabitant-action .filter-btn.active, .activity-filter-grid .filter-btn.active, .activity-filter-col .filter-btn.active, .activity-sub-filter .filter-btn.active {
+  background: #ffa300 !important;
+  border-color: #ffa300 !important;
+  color: #111 !important;
+  font-weight: bold !important;
+}
+.tribe-mode-buttons .create-button, .ui-toolbar--filters .create-button, .mode-buttons .create-button, .mode-buttons-row .create-button, .filters .create-button {
+  min-height: 0 !important;
+  height: auto !important;
+  font-size: .75em !important;
+  padding: 2px 10px !important;
+  border: 1px solid #ffcc00 !important;
+  border-radius: 12px !important;
+  background: #ffcc00 !important;
+  color: #111 !important;
+  font-weight: bold !important;
+  line-height: 1.5 !important;
+}
+.tribe-mode-buttons, .ui-toolbar--filters, .mode-buttons, .mode-buttons-row, .mode-buttons-cols, .filters, .inhabitant-action {
+  gap: 5px !important;
+  margin-top: 8px !important;
+}
+
+.tags-header.module-header-line, .tags-header.activity-header-line {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 4px 10px !important;
+  padding: 8px 10px !important;
+}
+.module-header-line h2, .activity-header-line h2 { margin: 0 !important; flex: 0 0 auto !important; }
+.module-header-line p, .activity-header-line p { margin: 0 !important; flex: 1 1 auto !important; min-width: 0 !important; font-size: .85em !important; }
+.module-header-line .pm-exposition-chip, .module-header-line .pm-exposition-chip-link, .activity-header-line .pm-exposition-chip, .activity-header-line .pm-exposition-chip-link {
+  margin-left: auto !important;
+  flex: 0 0 auto !important;
+}
+.filter-box button, .filter-box .filter-box__button, .filter-box input[type="submit"] {
+  min-height: 0 !important;
+  height: 32px !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
+  font-size: .85em !important;
+  padding: 0 14px !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: inherit !important;
+  font-weight: normal !important;
+}
+
+.module-header-line + .shop-title-row, .activity-header-line + .shop-title-row {
+  display: flex !important;
+  justify-content: flex-end !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+}

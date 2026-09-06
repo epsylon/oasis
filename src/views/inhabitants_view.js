@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, span, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock } = require('./main_views');
+const { template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock, renderModuleStats } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { renderContentStats } = require('./clearnet_view');
 const { renderUrl } = require('../backend/renderUrl');
@@ -253,6 +253,11 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
   const title = i18n.allInhabitants;
 
   const showCVFilters = filter === 'CVs';
+  const bucketCounts = inhabitants.reduce((acc, u) => {
+    const b = u && u.lastActivityBucket;
+    if (b === 'green' || b === 'orange' || b === 'red') acc[b]++;
+    return acc;
+  }, { green: 0, orange: 0, red: 0 });
   const TOP_FILTERS = ['TOP ACTIVITY', 'TOP INACTIVITY', 'TOP KARMA', 'TOP ECO'];
   const isTop = TOP_FILTERS.includes(filter);
 
@@ -270,6 +275,11 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
           )
         : null,
       div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+        renderModuleStats(inhabitants.length, [
+          { label: '<2w', count: bucketCounts.green },
+          { label: '2w–6m', count: bucketCounts.orange },
+          { label: '>6m', count: bucketCounts.red }
+        ]),
         form({ method: 'GET', action: '/inhabitants', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({

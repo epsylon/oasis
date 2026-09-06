@@ -17,6 +17,7 @@ const os = require('os');
 
 const ssbRef = require("../server/node_modules/ssb-ref");
 const nameCache = require('../backend/nameCache');
+const sharedState = require('../configs/shared-state');
 
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -210,6 +211,7 @@ module.exports = ({ cooler, isPublic }) => {
     all_the_names = {};
 
     const allFeeds = Object.keys(feeds_to_name);
+    sharedState.setSyncedPeerCount(allFeeds.length);
     console.log(`- Synced-peers: [ ${allFeeds.length} ]`);
     console.time("- Sync-time");
 

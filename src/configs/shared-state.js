@@ -3,6 +3,7 @@ let _carbonHcT = 0;
 let _carbonHcH = 0;
 let _lastRefresh = 0;
 let _onlinePeers = null;
+let _syncedPeers = null;
 let _inboxUnread = null;
 let _lastSyncTs = null;
 let _ecoValue = null;
@@ -23,6 +24,8 @@ module.exports = {
   setLastRefresh: (t) => { _lastRefresh = t; },
   getOnlinePeerCount: () => _onlinePeers,
   setOnlinePeerCount: (n) => { _onlinePeers = n; },
+  getSyncedPeerCount: () => _syncedPeers,
+  setSyncedPeerCount: (n) => { _syncedPeers = Math.max(0, Number(n) || 0); },
   getInboxUnreadCount: () => _inboxUnread,
   setInboxUnreadCount: (n) => { _inboxUnread = n; },
   getLastSyncTs: () => _lastSyncTs,

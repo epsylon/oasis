@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 
 const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent']);
@@ -2139,6 +2139,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
         })()
       ),
       div({ class: 'activity-filter-chips activity-toolbar-row' },
+        renderModuleStats(filteredActions.length),
         sub ? span({ class: 'activity-subchip-label' }, '\u21b3') : '',
         sub ? sub.filters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'activity-chip' }, String(f).toUpperCase())) : '',
         form({ method: 'GET', action: '/activity', class: 'filter-box' },

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -221,6 +221,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
     !isForm
       ? section(
           div({ class: "filters activity-filter-chips activity-toolbar-row" },
+            isProducts ? renderModuleStats(list.length) : renderModuleStatsBy(list, s => String(s.visibility || '').toUpperCase(), [{ value: 'OPEN', label: i18n.shopOpen }, { value: 'CLOSED', label: i18n.shopClosed }]),
             form({ method: "GET", action: "/shops", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: q, placeholder: i18n.shopSearchPlaceholder, class: "filter-box__input" }),

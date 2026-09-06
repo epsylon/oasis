@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, span, table, thead, tbody, tr, th, td, input, textarea, br, option, select, a, label } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require("./main_views");
+const { template, i18n, renderModuleStatsBy } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -42,9 +42,10 @@ const renderFilterBar = (current, hasItems = true) =>
       : null
   );
 
-const renderSearchBox = (current, search) => {
+const renderSearchBox = (current, search, items = null) => {
   const q = search || {};
   return div({ class: "logs-search activity-filter-chips activity-toolbar-row" },
+    items ? renderModuleStatsBy(items, e => (e && e.mode === 'ai' ? 'ai' : 'manual'), [{ value: 'manual', label: i18n.logsModeManual }, { value: 'ai', label: i18n.logsModeAI }]) : null,
     form({ method: "GET", action: "/logs", class: "filter-box" },
       input({ type: "hidden", name: "filter", value: current || 'today' }),
       input({
@@ -68,10 +69,10 @@ const renderSearchBox = (current, search) => {
   );
 };
 
-const renderToolbar = (current, search, hasItems) =>
+const renderToolbar = (current, search, hasItems, items = null) =>
   div({ class: "logs-toolbar-wrap" },
     renderFilterBar(current, hasItems),
-    renderSearchBox(current, search)
+    renderSearchBox(current, search, items)
   );
 
 const truncate = (value, max = 160) => {
@@ -231,7 +232,7 @@ exports.logsView = (items, filter, mode, opts = {}) => {
   }
   const body = section(
     div({ class: "tags-header module-header-line" }, h2(listTitle), p(description)),
-    renderToolbar(filter, opts.search || {}, hasItems),
+    renderToolbar(filter, opts.search || {}, hasItems, items),
     div({ class: "logs-list" }, renderTable(items))
   );
   return template(listTitle, body);

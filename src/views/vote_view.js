@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -287,6 +287,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
       ),
       mode !== "create" && mode !== "edit"
         ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          renderModuleStatsBy(filtered, v => normalizeStatus(v.status || 'OPEN'), [{ value: 'OPEN', label: i18n.voteStatusOpen }, { value: 'CLOSED', label: i18n.voteStatusClosed }]),
             form({ method: "GET", action: "/votes", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: mode }),
               input({ type: "text", name: "q", value: (params && params.q) || "", placeholder: i18n.votesSearchPlaceholder, class: "filter-box__input" }),

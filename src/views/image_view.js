@@ -3,7 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -259,6 +259,7 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
         : section(
             div(
               { class: "images-search activity-filter-chips activity-toolbar-row" },
+                renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/images", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),

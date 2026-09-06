@@ -6763,9 +6763,8 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .industry-build-notes{margin:22px 0}
 .industry-dates-row{border:none;background:transparent;padding:0;box-shadow:none;border-radius:0;margin:8px 0}
 .industry-dates-row p{margin:0}
-.dev-breadcrumb,.dev-stats,.dev-file-meta,.dev-file-head,.dev-listing,.dev-pager,.dev-actions,.dev-result-text,.dev-result-head,.dev-desktop{border:none;background:transparent;padding:0;box-shadow:none;border-radius:0}
-.dev-stats{margin:12px 0}
-.dev-stats p,.dev-file-meta p{margin:4px 0;line-height:1.9}
+.dev-breadcrumb,.dev-file-meta,.dev-file-head,.dev-listing,.dev-pager,.dev-actions,.dev-result-text,.dev-result-head,.dev-desktop{border:none;background:transparent;padding:0;box-shadow:none;border-radius:0}
+.dev-file-meta p{margin:4px 0;line-height:1.9}
 .dev-label{font-weight:bold}
 .dev-sep{opacity:.45}
 .dev-hint{opacity:.75;font-style:italic}
@@ -7755,6 +7754,8 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .activity-toolbar-row .filter-box__controls > *{margin:0 !important;flex:0 1 auto !important;width:auto !important}
 .activity-toolbar-row .filter-box__controls > .transfer-range{min-width:0 !important}
 .activity-toolbar-row .inbox-exposition{margin:0 !important;padding:0 !important;background:transparent !important;border:0 !important;box-shadow:none;display:flex;align-items:center;gap:8px}
+.activity-toolbar-row .module-stats-line{margin:0 !important;padding:0 !important;background:transparent !important;border:0 !important;box-shadow:none;display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:.85em;white-space:nowrap;text-transform:uppercase}
+.module-stats-line strong{text-transform:none}
 .activity-toolbar-row .inbox-exposition .btn{margin:0;padding:2px 10px;font-size:.75em;border-radius:12px;line-height:1.5}
 .activity-toolbar-row .inbox-exposition form{margin:0;padding:0;background:transparent;border:0;box-shadow:none}
 .activity-toolbar-row .filter-box > input[type="number"]{flex:0 0 150px;min-width:150px}

@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -245,6 +245,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
       currentFilter === "edit" || currentFilter === "create"
         ? null
         : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          renderModuleStatsBy(filtered, t => normalizeStatus(t.status || 'OPEN'), [{ value: 'OPEN', label: i18n.taskStatusOpen }, { value: 'IN-PROGRESS', label: i18n.taskStatusInProgress }, { value: 'CLOSED', label: i18n.taskStatusClosed }]),
             form({ method: "GET", action: "/tasks", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: currentFilter }),
               input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.taskSearchPlaceholder, class: "filter-box__input" }),

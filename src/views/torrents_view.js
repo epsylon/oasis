@@ -20,7 +20,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -224,6 +224,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
         : section(
             div(
               { class: "audios-search activity-filter-chips activity-toolbar-row" },
+                renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/torrents", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),

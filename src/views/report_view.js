@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
@@ -375,6 +375,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
       filter === "edit" || filter === "create"
         ? null
         : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          renderModuleStatsBy(filtered, r => normalizeStatus(r.status || 'OPEN'), [{ value: 'OPEN', label: i18n.reportsStatusOpen }, { value: 'UNDER_REVIEW', label: i18n.reportsStatusUnderReview }, { value: 'RESOLVED', label: i18n.reportsStatusResolved }, { value: 'CLOSED', label: i18n.reportsStatusClosed }, { value: 'INVALID', label: i18n.reportsStatusInvalid }]),
             form({ method: "GET", action: "/reports", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.reportsSearchPlaceholder, class: "filter-box__input" }),

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -359,6 +359,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
         : section(
             div(
               { class: "transfers-search activity-filter-chips activity-toolbar-row" },
+                renderModuleStatsBy(filtered, t => String(t.status || '').toUpperCase(), [{ value: 'UNCONFIRMED', label: i18n.transfersFilterUnconfirmed }, { value: 'CLOSED', label: i18n.transfersFilterClosed }, { value: 'DISCARDED', label: i18n.transfersFilterDiscarded }]),
               form(
                 { method: "GET", action: "/transfers", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: normalizedFilter || "all" }),

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats } = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -326,6 +326,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
         )
       ),
       div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+        renderModuleStats(cards.length),
         form({ method: 'GET', action: '/trending', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.trendingSearchPlaceholder, class: 'filter-box__input' }),

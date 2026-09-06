@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -538,6 +538,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
       f === "CREATE" || f === "EDIT"
         ? null
         : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          renderModuleStatsBy(projectsOrForm, pr => String(pr.status || 'ACTIVE').toUpperCase(), [{ value: 'ACTIVE', label: i18n.projectStatusACTIVE }, { value: 'PAUSED', label: i18n.projectStatusPAUSED }, { value: 'COMPLETED', label: i18n.projectStatusCOMPLETED }, { value: 'CANCELLED', label: i18n.projectStatusCANCELLED }]),
             form({ method: "GET", action: "/projects", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: f }),
               input({ type: "text", name: "q", value: safeText(params.q), placeholder: i18n.projectSearchPlaceholder, class: "filter-box__input" }),

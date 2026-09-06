@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderVotesSummary } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderVotesSummary, renderModuleStats } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
 const moment = require("../server/node_modules/moment");
@@ -207,6 +207,7 @@ exports.feedView = (feeds, opts = "ALL") => {
     ),
     div(
       { class: "feed-tools-row activity-filter-chips activity-toolbar-row" },
+        renderModuleStats(feeds.length),
       form(
         { method: "GET", action: "/feed", class: "filter-box" },
         input({ type: "hidden", name: "filter", value: filter }),

@@ -18,7 +18,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -238,6 +238,7 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
         : section(
             div(
               { class: "videos-search activity-filter-chips activity-toolbar-row" },
+                renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/videos", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),

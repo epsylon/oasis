@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -510,6 +510,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
           : section(
               div(
                 { class: "jobs-search activity-filter-chips activity-toolbar-row" },
+                  renderModuleStatsBy(jobsOrCVs, j => String(j.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.jobsFilterOpen }, { value: 'CLOSED', label: i18n.jobsFilterClosed }]),
                 form(
                   { method: "GET", action: "/jobs", class: "filter-box" },
                   input({ type: "hidden", name: "filter", value: filter || "ALL" }),

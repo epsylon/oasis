@@ -384,6 +384,21 @@ const renderEngagement = (id, opinionsNode, commentsNode) => {
 };
 exports.renderEngagement = renderEngagement;
 
+const renderModuleStats = (total, segments = [], totalLabel = null) =>
+  div({ class: 'module-stats-line' },
+    span(`${totalLabel || i18n.statsTotalLabel}: `, strong(String(total))),
+    ...segments.filter(Boolean).map(s => span(`${s.label}: `, strong(String(s.count))))
+  );
+exports.renderModuleStats = renderModuleStats;
+
+const renderModuleStatsBy = (items, field, specs, totalLabel = null) => {
+  const arr = Array.isArray(items) ? items : [];
+  const counts = {};
+  for (const it of arr) { const v = typeof field === 'function' ? field(it) : (it && it[field]); counts[v] = (counts[v] || 0) + 1; }
+  return renderModuleStats(arr.length, specs.map(s => ({ label: s.label, count: counts[s.value] || 0 })), totalLabel);
+};
+exports.renderModuleStatsBy = renderModuleStatsBy;
+
 const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters) => {
   const ops = opinions || {};
   const total = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
@@ -483,6 +498,7 @@ const renderFooter = () => {
   const hcH = sharedState.getCarbonHcH();
 
   const peersOnline = sharedState.getOnlinePeerCount ? sharedState.getOnlinePeerCount() : null;
+  const syncedPeers = sharedState.getSyncedPeerCount ? sharedState.getSyncedPeerCount() : null;
   const inboxUnread = sharedState.getInboxUnreadCount ? sharedState.getInboxUnreadCount() : null;
   const lastSyncTs = sharedState.getLastSyncTs ? sharedState.getLastSyncTs() : null;
   const lastSyncLabel = lastSyncTs ? moment(lastSyncTs).fromNow() : '–';
@@ -508,6 +524,12 @@ const renderFooter = () => {
           a({ href: "/profile" }, span(myId))
         ];
       })(),
+      br(),
+      span({ class: "oasis-footer-peers" },
+        span("Synced-peers: [ "),
+        a({ href: "/peers" }, syncedPeers != null ? String(syncedPeers) : '–'),
+        span(" ]")
+      ),
       br(),
       span({ class: "oasis-footer-carbon" },
         span("HcT: "),

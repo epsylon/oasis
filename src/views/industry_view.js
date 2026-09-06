@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, img, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderMapEmbedWithZoom } = require("./maps_view")
@@ -342,6 +342,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
         ? div({ class: "industry-list" }, renderGlobalBuilds(facilitiesOrForm, params.spreadMap || new Map()))
         : section(
             div({ class: "industry-search activity-filter-chips activity-toolbar-row" },
+              renderModuleStatsBy(facilitiesOrForm, fc => String(fc.status || 'ACTIVE').toUpperCase(), [{ value: 'ACTIVE', label: i18n.industryStatusActive }, { value: 'PAUSED', label: i18n.industryStatusPaused }, { value: 'DISSOLVED', label: i18n.industryStatusDissolved }]),
               form({ method: "GET", action: "/industry", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: f || "ALL" }),
                 input({ type: "text", name: "search", value: search, placeholder: i18n.industrySearchPlaceholder || "Search facilities…", class: "filter-box__input" }),

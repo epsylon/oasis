@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, img, input, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderContentActions } = require('./main_views');
+const { template, i18n, userLink, renderContentActions, renderModuleStats } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
@@ -282,6 +282,7 @@ exports.agendaView = async (data, filter, q = '') => {
         )
       ),
       div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+        renderModuleStats(items.length),
         form({ method: 'GET', action: '/agenda', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.agendaSearchPlaceholder, class: 'filter-box__input' }),

@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, a, span, img } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink, renderContentActions } = require("./main_views");
+const { template, i18n, userLink, renderContentActions, renderModuleStats } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -201,6 +201,7 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "") => {
       ),
       div(
         { class: "filters activity-filter-chips activity-toolbar-row" },
+          renderModuleStats(items.length),
         form(
           { method: "GET", action: "/favorites", class: "filter-box" },
           input({ type: "hidden", name: "filter", value: filter }),

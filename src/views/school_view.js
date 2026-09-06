@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -152,6 +152,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
     !isForm
       ? section(
           div({ class: "filters activity-filter-chips activity-toolbar-row" },
+            renderModuleStatsBy(list, c => String(c.status || 'ONGOING').toUpperCase(), [{ value: 'ONGOING', label: i18n.schoolOngoing }, { value: 'CLOSED', label: i18n.schoolClosed }]),
             form({ method: "GET", action: "/school", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: q, placeholder: i18n.schoolSearchPlaceholder, class: "filter-box__input" }),

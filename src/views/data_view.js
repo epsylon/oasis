@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, span, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink } = require("./main_views");
+const { template, i18n, userLink, renderModuleStats } = require("./main_views");
 
 const KIND_LABEL = {
   inhabitants: () => i18n.dataKindInhabitants,
@@ -55,7 +55,7 @@ const filterButton = (mode, current, q) =>
     }, String(filterLabel(mode)).toUpperCase())
   );
 
-const renderFilters = (current, q) =>
+const renderFilters = (current, q, total = null) =>
   section(
     div({ class: "activity-filter-grid" },
       ...FILTER_COLUMNS.map(col =>
@@ -65,6 +65,7 @@ const renderFilters = (current, q) =>
       )
     ),
     div({ class: "data-search activity-filter-chips activity-toolbar-row" },
+      total != null ? renderModuleStats(total) : null,
       form({ method: "GET", action: "/data", class: "filter-box" },
         input({ type: "hidden", name: "filter", value: current }),
         input({ type: "text", name: "q", value: q || "", placeholder: i18n.dataSearchPlaceholder, class: "filter-box__input" }),
@@ -153,7 +154,7 @@ exports.dataView = async (payload = {}) => {
   return template(
     i18n.dataTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.dataTitle), p(i18n.dataDescription))),
-    renderFilters(filter, q),
+    renderFilters(filter, q, matches.length),
     payload.cohesion ? renderCohesion(payload.cohesion) : null,
     section(
       div({ class: "tags-header" },

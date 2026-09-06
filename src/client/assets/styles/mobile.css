@@ -261,7 +261,7 @@ h3 { font-size: 1em !important; }
   display: flex !important;
   flex-direction: row !important;
   flex-wrap: wrap !important;
-  justify-content: center !important;
+  justify-content: flex-start !important;
   align-items: center !important;
   width: 100% !important;
   max-width: 100% !important;
@@ -288,8 +288,8 @@ h3 { font-size: 1em !important; }
 }
 .inhabitant-action .filter-btn {
   min-height: 0 !important;
-  padding: 7px 12px !important;
-  font-size: 13px !important;
+  padding: 2px 9px !important;
+  font-size: .75em !important;
   white-space: nowrap !important;
 }
 .profile-sensors-box {
@@ -315,8 +315,8 @@ h3 { font-size: 1em !important; }
 .activity-filter-col .filter-btn,
 .activity-sub-filter .filter-btn {
   min-height: 0 !important;
-  padding: 7px 12px !important;
-  font-size: 13px !important;
+  padding: 2px 9px !important;
+  font-size: .75em !important;
   white-space: nowrap !important;
 }
 
@@ -626,6 +626,7 @@ a.filter-btn,
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;
+  flex: 0 0 auto !important;
   height: 42px !important;
   font-size: 16px !important;
   box-sizing: border-box !important;

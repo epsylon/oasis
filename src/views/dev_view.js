@@ -1,4 +1,4 @@
-const { form, button, div, h2, p, section, input, a, span, ul, li, table, thead, tbody, tr, td, th, pre, code, select, option } = require("../server/node_modules/hyperaxe")
+const { form, button, div, h2, p, section, input, a, span, strong, ul, li, table, thead, tbody, tr, td, th, pre, code, select, option } = require("../server/node_modules/hyperaxe")
 const { template, i18n } = require("./main_views")
 
 const FILTERS = [
@@ -68,20 +68,16 @@ const renderPathRow = (parents, currentIsFile, group) => (group
   : renderBreadcrumb(parents, currentIsFile))
 
 const renderStats = (stats) => {
-  const bit = (labelKey, fallback, value) => [
-    span({ class: "dev-label" }, `${i18n[labelKey] || fallback}: `),
-    span(String(value))
-  ]
-  return div({ class: "dev-stats" },
-    p(
-      ...bit("devVersion", "Version", stats.version || "-"), span({ class: "dev-sep" }, " · "),
-      ...bit("devNodeVersion", "Node", stats.node || "-"), span({ class: "dev-sep" }, " · "),
-      ...bit("devStatsFiles", "Files", fmtCount(stats.files)), span({ class: "dev-sep" }, " · "),
-      ...bit("devStatsLines", "Lines", fmtCount(stats.lines)), span({ class: "dev-sep" }, " · "),
-      ...bit("devStatsModules", "Modules", fmtCount(stats.modules)), span({ class: "dev-sep" }, " · "),
-      ...bit("devStatsLanguages", "Languages", fmtCount(stats.languages)), span({ class: "dev-sep" }, " · "),
-      ...bit("devStatsTests", "Test suites", fmtCount(stats.testMods))
-    )
+  const bit = (labelKey, fallback, value) =>
+    span(`${i18n[labelKey] || fallback}: `, strong(String(value)))
+  return div({ class: "module-stats-line" },
+    bit("devVersion", "Version", stats.version || "-"),
+    bit("devNodeVersion", "Node", stats.node || "-"),
+    bit("devStatsFiles", "Files", fmtCount(stats.files)),
+    bit("devStatsLines", "Lines", fmtCount(stats.lines)),
+    bit("devStatsModules", "Modules", fmtCount(stats.modules)),
+    bit("devStatsLanguages", "Languages", fmtCount(stats.languages)),
+    bit("devStatsTests", "Tests", fmtCount(stats.testMods))
   )
 }
 
@@ -95,7 +91,8 @@ const renderBreadcrumb = (parents, currentIsFile) => div({ class: "dev-breadcrum
   ])
 )
 
-const renderSearchForm = (query, ext) => div({ class: "dev-search activity-filter-chips activity-toolbar-row" },
+const renderSearchForm = (query, ext, stats = null) => div({ class: "dev-search activity-filter-chips activity-toolbar-row" },
+  stats ? renderStats(stats) : null,
   form({ method: "GET", action: "/dev/search", class: "filter-box" },
     input({ type: "text", name: "q", value: safeText(query), placeholder: i18n.devSearchPlaceholder || "Text to find in the code", minlength: "2", required: true, class: "filter-box__input" }),
     div({ class: "filter-box__controls" },
@@ -154,8 +151,7 @@ exports.devTreeView = async (tree, stats, active) => {
     i18n.devTitle || "Developer",
     section(
       ...renderHeader(active || (tree.group ? tree.group : "tree")),
-      renderStats(stats),
-      renderSearchForm("", ""),
+      renderSearchForm("", "", stats),
       renderPathRow(tree.parents, false, tree.group),
       renderDesktop(tree)
     )

@@ -83,9 +83,7 @@ const cipherView = async (encryptedText = "", decryptedText = "", iv = "", passw
     i18n.cipherTitle,
     section(
       header,
-      div({ id: "randomPassword" },
-        h2({ class: "generated-password" }, randomPassword)
-      ),
+      p({ id: "randomPassword" }, h2({ class: "generated-password" }, randomPassword)),
       div({ class: "div-center" },
         encryptForm,
         br(),

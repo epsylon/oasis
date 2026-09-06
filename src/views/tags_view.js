@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, table, thead, tr, th, td, a, tbody, input } = require("../server/node_modules/hyperaxe");
-const { template, i18n } = require('./main_views');
+const { template, i18n, renderModuleStats } = require('./main_views');
 
 const getFilteredTags = (filter, tags) => {
   const filteredTags = Array.isArray(tags) ? [...tags] : [];
@@ -78,6 +78,7 @@ exports.tagsView = async (tags, filter, search = '') => {
         )
       ),
       div({ class: 'tags-search activity-filter-chips activity-toolbar-row' },
+        renderModuleStats(filteredTags.length),
         form({ method: 'GET', action: '/tags', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter || 'all' }),
           input({ type: 'text', name: 'search', value: query, placeholder: i18n.tagsSearchPlaceholder, class: 'filter-box__input' }),

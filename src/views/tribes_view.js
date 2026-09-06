@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStatsBy } = require('./main_views');
 const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { renderResults: renderPollResults, renderBallot: renderPollBallot } = require('./polls_view');
 const { config } = require('../server/SSB_server.js');
@@ -172,6 +172,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
   const header = div({ class: 'tags-header module-header-line' }, h2(title), p(i18n.tribeDescription));
 
   const filters = div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+    renderModuleStatsBy(sorted, t => t.isAnonymous ? 'PRIVATE' : 'PUBLIC', [{ value: 'PUBLIC', label: i18n.tribePublic }, { value: 'PRIVATE', label: i18n.tribePrivate }]),
     form({ method: 'GET', action: '/tribes', class: 'filter-box' },
       input({ type: 'hidden', name: 'filter', value: filter }),
       input({ type: 'text', name: 'search', placeholder: i18n.searchTribesPlaceholder, value: query.search || '', class: 'filter-box__input' }),

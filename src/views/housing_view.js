@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning } = require("./main_views")
+const { template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderMediaThumb, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -367,6 +367,7 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
         ? renderHousingForm(filter === "EDIT" ? (Array.isArray(items) ? items[0] : items) || {} : (params.draft || {}), filter === "EDIT" ? "edit" : "create", Number(params.maxImages) > 0 ? Number(params.maxImages) : MAX_IMAGES, await renderSpreadEditWarning(filter === "EDIT" ? ((Array.isArray(items) ? items[0] : items) || {}).id : null))
         : section(
             div({ class: "housing-search activity-filter-chips activity-toolbar-row" },
+              renderModuleStatsBy(items, it => String(it.status || '').toUpperCase(), [{ value: 'OPEN', label: i18n.housingFilterOpen }, { value: 'CLOSED', label: i18n.housingFilterClosed }]),
               form({ method: "GET", action: "/housing", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter || "ALL" }),
                 input({ type: "text", name: "search", value: search, placeholder: i18n.housingSearchPlaceholder, class: "filter-box__input" }),

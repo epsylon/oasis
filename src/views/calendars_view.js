@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
 const { renderMapLocationVisitLabel } = require("./maps_view")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -209,6 +209,7 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
       showForm
         ? null
         : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          renderModuleStatsBy(calendars, c => c.isClosed ? 'CLOSED' : String(c.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.calendarStatusOpen }, { value: 'CLOSED', label: i18n.calendarStatusClosed }]),
             form({ method: "GET", action: "/calendars", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: q, placeholder: i18n.calendarSearchPlaceholder || "Search calendars...", class: "filter-box__input" }),
