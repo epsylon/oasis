@@ -305,7 +305,11 @@ describe('activity: the TOP filter', (t) => {
 describe('activity: filter layout', (t) => {
   t('chips follow the order of their menu group, and no filter is lost', () => {
     const { activityView } = require('../../../src/views/activity_view');
-    const html = String(activityView([], 'all', '@me.ed25519'));
+    const TYPES = ['bankWallet', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
+      'votes', 'event', 'calendar', 'task', 'report', 'post', 'feed', 'chat', 'pad', 'forum', 'map',
+      'audio', 'bookmark', 'document', 'image', 'torrent', 'video', 'courtsCase'];
+    const actions = TYPES.map((type, i) => ({ type, id: 'a' + i, author: '@x.ed25519', ts: 1, content: {} }));
+    const html = String(activityView(actions, 'recent', '@me.ed25519'));
     const at = (type) => html.indexOf(`/activity?filter=${type}"`);
 
     const economy = ['banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'];
@@ -326,7 +330,7 @@ describe('activity: filter layout', (t) => {
       ok(at(type) > 0, `${type} survived the regrouping`);
     }
 
-    ok(/class="activity-chip active"[^>]*href="\/activity\?filter=all"|href="\/activity\?filter=all"[^>]*class="activity-chip active"/.test(html),
+    ok(/class="activity-chip active"[^>]*href="\/activity\?filter=recent"|href="\/activity\?filter=recent"[^>]*class="activity-chip active"/.test(html),
       'the current filter is highlighted');
   });
 });

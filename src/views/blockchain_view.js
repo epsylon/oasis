@@ -443,6 +443,9 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
 
   const shown = filterBlocks(blocks, filter, userId);
   const qs = toQueryString(filter, s);
+  const censusBlocks = Array.isArray(extras && extras.censusBlocks) ? extras.censusBlocks : blocks;
+  const chipVisible = (mode) => mode === filter || filterBlocks(censusBlocks, mode, userId).length > 0;
+  const baseChips = ['recent', 'all', 'mine', ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
 
   return template(
     i18n.blockchain,
@@ -453,15 +456,15 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
       ),
       div({ class:'mode-buttons-row' },
         div({ class: 'filter-column' },
-          generateFilterButtons(BASE_FILTERS, filter, '/blockexplorer', s)
+          generateFilterButtons(baseChips, filter, '/blockexplorer', s)
         ),
         div({ class: 'filter-column' },
-          generateFilterButtons(CAT_BLOCK1, filter, '/blockexplorer', s),
-          generateFilterButtons(CAT_BLOCK2, filter, '/blockexplorer', s)
+          generateFilterButtons(CAT_BLOCK1.filter(chipVisible), filter, '/blockexplorer', s),
+          generateFilterButtons(CAT_BLOCK2.filter(chipVisible), filter, '/blockexplorer', s)
         ),
         div({ class: 'filter-column' },
-          generateFilterButtons(CAT_BLOCK3, filter, '/blockexplorer', s),
-          generateFilterButtons(CAT_BLOCK4, filter, '/blockexplorer', s)
+          generateFilterButtons(CAT_BLOCK3.filter(chipVisible), filter, '/blockexplorer', s),
+          generateFilterButtons(CAT_BLOCK4.filter(chipVisible), filter, '/blockexplorer', s)
         )
       ),
 	div({ class: 'blockexplorer-search' },

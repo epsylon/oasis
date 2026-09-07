@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 
 const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent']);
@@ -18,18 +18,19 @@ const { renderUrl } = require('../backend/renderUrl');
 const { letterOf } = require('./polls_view');
 const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
+const { renderZoomableImage } = require('./gallery_view');
 
 const renderMediaBlob = (value, fallbackSrc = null) => {
   if (!value) return fallbackSrc ? img({ src: fallbackSrc, class: 'post-image' }) : null
   const s = String(value).trim()
   if (!s) return fallbackSrc ? img({ src: fallbackSrc, class: 'post-image' }) : null
-  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, class: 'post-image' })
+  if (s.startsWith('&')) return renderZoomableImage(`/blob/${encodeURIComponent(s)}`, { imgClass: 'post-image' })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mVideo) return videoHyperaxe({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mAudio) return audioHyperaxe({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mImg) return img({ src: `/blob/${encodeURIComponent(mImg[1])}`, class: 'post-image' })
+  if (mImg) return renderZoomableImage(`/blob/${encodeURIComponent(mImg[1])}`, { imgClass: 'post-image' })
   return fallbackSrc ? img({ src: fallbackSrc, class: 'post-image' }) : null
 }
 
@@ -565,7 +566,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ),
           image
             ? (/^(\/|https?:)/.test(String(image))
-                ? img({ src: image, class: 'feed-image tribe-image' })
+                ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
           p({ class: 'tribe-description' }, ...renderUrl(description || ''))
@@ -600,7 +601,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           photo ?
             [
               br(),
-              img({ class: "cv-photo", src: `/blob/${encodeURIComponent(photo)}` }),
+              renderZoomableImage(`/blob/${encodeURIComponent(photo)}`, { imgClass: 'cv-photo', linkClass: 'zoom-inline' }),
               br()
             ]
             : "",
@@ -629,7 +630,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const { url } = content;
       cardBody.push(
         div({ class: 'card-section image' },
-          img({ src: `/blob/${encodeURIComponent(url)}`, class: 'post-image' })
+          renderZoomableImage(`/blob/${encodeURIComponent(url)}`, { imgClass: 'post-image' })
         )
       );
     }
@@ -1069,11 +1070,19 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const imgId = image ? (typeof image === 'string' ? image : (image.link || '')) : '';
       cardBody.push(
         div({ class: 'card-section about' },
-          imgId
-            ? img({ src: `/blob/${encodeURIComponent(imgId)}`, alt: name, class: 'activity-avatar' })
-            : img({ src: '/assets/images/default-avatar.png', alt: name, class: 'activity-avatar' }),
-          h2(userLink(about, name)),
-          description ? p({ class: 'tribe-side-description' }, ...renderUrlPreserveNewlines(String(description))) : null
+          div({ class: 'about-card-cols' },
+            div({ class: 'about-card-col-img' },
+              imgId
+                ? renderZoomableImage(`/blob/${encodeURIComponent(imgId)}`, { imgClass: 'activity-avatar', alt: name, linkClass: 'zoom-inline' })
+                : img({ src: '/assets/images/default-avatar.png', alt: name, class: 'activity-avatar' })
+            ),
+            div({ class: 'about-card-col-desc' },
+              h2({ class: 'about-card-header' }, userLink(about, name)),
+              description
+                ? p({ class: 'tribe-side-description' }, ...renderUrlPreserveNewlines(String(description)))
+                : null
+            )
+          )
         )
       );
     }
@@ -1085,10 +1094,19 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const src = pr.image ? `/blob/${encodeURIComponent(pr.image)}` : '/assets/images/default-avatar.png';
       cardBody.push(
         div({ class: 'card-section pub activity-pub' },
-          br(),
-          userLink(pr.id, pr.name),
-          br(),
-          img({ src, alt: pr.name || pr.id, class: 'activity-avatar' })
+          div({ class: 'about-card-cols' },
+            div({ class: 'about-card-col-img' },
+              pr.image
+                ? renderZoomableImage(src, { imgClass: 'activity-avatar', alt: pr.name || pr.id, linkClass: 'zoom-inline' })
+                : img({ src, alt: pr.name || pr.id, class: 'activity-avatar' })
+            ),
+            div({ class: 'about-card-col-desc' },
+              h2({ class: 'about-card-header' }, userLink(pr.id, pr.name)),
+              (address && address.host)
+                ? p({ class: 'tribe-side-description' }, `${address.host}${address.port ? ':' + address.port : ''}`)
+                : null
+            )
+          )
         )
      );
     }
@@ -1198,7 +1216,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ),
           image
             ? (/^(\/|https?:)/.test(String(image))
-                ? img({ src: image, class: 'feed-image tribe-image' })
+                ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
           p({ class: 'tribe-description' }, ...renderUrl(description || '')),
@@ -1227,7 +1245,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ) : null,
           image
             ? (/^(\/|https?:)/.test(String(image))
-                ? img({ src: image, class: 'feed-image tribe-image' })
+                ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
           notes ? p({ class: 'tribe-description' }, ...renderUrl(notes)) : ""
@@ -1251,7 +1269,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ),
           image
             ? (/^(\/|https?:)/.test(String(image))
-                ? img({ src: image, class: 'feed-image tribe-image' })
+                ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
           description ? p({ class: 'tribe-description' }, ...renderUrl(description)) : ""
@@ -1790,12 +1808,16 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       ),
       ...cardBody,
       (() => {
-        if (!OPINION_TYPES.has(type)) return null;
-        const routeFn = OPINION_ROUTES[type];
-        if (!routeFn) return null;
+        const footerAuthorId = action.author || (content && content.proposer) || '';
+        const footerNode = p({ class: 'card-footer' },
+          span({ class: 'date-link' }, `${date} ${i18n.performed} `),
+          userLink(footerAuthorId, (action.authorNames && action.authorNames[footerAuthorId]) || getProfile(footerAuthorId).name)
+        );
+        const routeFn = OPINION_TYPES.has(type) ? OPINION_ROUTES[type] : null;
+        if (!routeFn) return footerNode;
         const ops = (action.value?.content?.opinions) || (action.content?.opinions) || {};
         const opsTotal = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
-        return [renderVotesSummary(ops), details({ class: 'opinions-voting-collapse' },
+        const votingNode = details({ class: 'opinions-voting-collapse' },
           summary({ class: 'opinions-summary' },
             span({ class: 'opinions-summary-icon' }, 'ꔍ'),
             span({ class: 'opinions-summary-count' }, `(${opsTotal})`)),
@@ -1806,14 +1828,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               )
             )
           )
-        )].filter(Boolean);
-      })(),
-      (() => {
-        const footerAuthorId = action.author || (content && content.proposer) || '';
-        return p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${date} ${i18n.performed} `),
-          userLink(footerAuthorId, (action.authorNames && action.authorNames[footerAuthorId]) || getProfile(footerAuthorId).name)
         );
+        return [renderVotesSummary(ops), renderCardMetaRow(votingNode, footerNode)];
       })()
     );
   });
@@ -1931,6 +1947,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'recent',    label: i18n.typeRecent },
     { type: 'top',       label: i18n.typeTop },
     { type: 'inhabitants', label: i18n.typeInhabitants },
+    { type: 'pub',       label: i18n.typePub },
     { type: 'tribe',     label: i18n.typeTribe },
     { type: 'larp',      label: i18n.typeLarp },
     { type: 'parliament',label: i18n.typeParliament },
@@ -2108,6 +2125,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   };
 
   const sub = MODULE_SUB_FILTERS[filter];
+  const emptyAct = actions.length === 0 && !qs;
 
   let html = template(
     title,
@@ -2116,11 +2134,11 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
         h2(i18n.activityList),
         p(desc)
       ),
-      div({ class: 'activity-filter-chips' },
+      emptyAct ? null : div({ class: 'activity-filter-chips' },
         (() => {
           const ORDER = [
             'all', 'mine', 'recent', 'top',
-            'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts',
+            'inhabitants', 'pub', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts',
             'votes', 'event', 'calendar', 'task', 'report',
             'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
             'post', 'feed', 'chat', 'pad', 'forum', 'map',
@@ -2128,8 +2146,13 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
           ];
           const byType = new Map(activityTypes.map(t => [t.type, t]));
           const placed = new Set(ORDER);
+          const presentActionTypes = new Set(actions.map(a2 => a2.type));
+          const metaKeep = new Set(['all', 'mine', 'recent', 'top']);
+          const hasContentFor = (type) =>
+            metaKeep.has(type) || (GROUP_SUBTYPES[type] || [type]).some(t2 => presentActionTypes.has(t2));
           const ordered = ORDER.map(type => byType.get(type)).filter(Boolean)
-            .concat(activityTypes.filter(t => !placed.has(t.type)));
+            .concat(activityTypes.filter(t => !placed.has(t.type)))
+            .filter(({ type }) => hasContentFor(type));
           return ordered.map(({ type, label }) =>
             a({
               href: `/activity?filter=${encodeURIComponent(type)}`,
@@ -2138,8 +2161,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
           );
         })()
       ),
-      div({ class: 'activity-filter-chips activity-toolbar-row' },
-        renderModuleStats(filteredActions.length),
+      emptyAct ? null : div({ class: 'activity-filter-chips activity-toolbar-row' },
+        renderModuleStats(filteredActions.length, [], null, { showInhabitants: true, showTribes: true }),
         sub ? span({ class: 'activity-subchip-label' }, '\u21b3') : '',
         sub ? sub.filters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'activity-chip' }, String(f).toUpperCase())) : '',
         form({ method: 'GET', action: '/activity', class: 'filter-box' },

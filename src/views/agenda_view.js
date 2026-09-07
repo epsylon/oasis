@@ -232,6 +232,7 @@ const renderAgendaItem = (item, userId, filter) => {
 exports.agendaView = async (data, filter, q = '') => {
   const { items = [], counts: _c = {} } = data || {};
   const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, calendars: 0, housing: 0, discarded: 0, ..._c };
+  const emptyAgenda = Number(counts.all || 0) === 0 && !String(q || '').trim();
   return template(
     i18n.agendaTitle,
     section(
@@ -239,49 +240,35 @@ exports.agendaView = async (data, filter, q = '') => {
         h2(i18n.agendaTitle),
         p(i18n.agendaDescription)
       ),
-      div({ class: 'filters' },
+      emptyAgenda ? null : div({ class: 'filters' },
         form({ method: 'GET', action: '/agenda' },
-          button({ type: 'submit', name: 'filter', value: 'all', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterAll} (${counts.all})`),
-          button({ type: 'submit', name: 'filter', value: 'today', class: filter === 'today' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterToday || 'TODAY'} (${counts.today || 0})`),
-          button({ type: 'submit', name: 'filter', value: 'upcoming', class: filter === 'upcoming' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterUpcoming || 'UPCOMING'} (${counts.upcoming || 0})`),
-          button({ type: 'submit', name: 'filter', value: 'overdue', class: filter === 'overdue' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterOverdue || 'OVERDUE'} (${counts.overdue || 0})`),
-          button({ type: 'submit', name: 'filter', value: 'open', class: filter === 'open' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterOpen} (${counts.open})`),
-          button({ type: 'submit', name: 'filter', value: 'closed', class: filter === 'closed' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterClosed} (${counts.closed})`),
-          button({ type: 'submit', name: 'filter', value: 'events', class: filter === 'events' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterEvents} (${counts.events})`),
-          button({ type: 'submit', name: 'filter', value: 'tasks', class: filter === 'tasks' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterTasks} (${counts.tasks})`),
-          button({ type: 'submit', name: 'filter', value: 'reports', class: filter === 'reports' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterReports} (${counts.reports})`),
-          button({ type: 'submit', name: 'filter', value: 'tribes', class: filter === 'tribes' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterTribes} (${counts.tribes})`),
-          button({ type: 'submit', name: 'filter', value: 'jobs', class: filter === 'jobs' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterJobs} (${counts.jobs})`),
-          button({ type: 'submit', name: 'filter', value: 'market', class: filter === 'market' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterMarket} (${counts.market})`),
-          button({ type: 'submit', name: 'filter', value: 'projects', class: filter === 'projects' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterProjects} (${counts.projects})`),
-          button({ type: 'submit', name: 'filter', value: 'industry', class: filter === 'industry' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterIndustry || 'INDUSTRY'} (${counts.industry || 0})`),
-          button({ type: 'submit', name: 'filter', value: 'housing', class: filter === 'housing' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterHousing || 'HOUSING'} (${counts.housing || 0})`),
-          button({ type: 'submit', name: 'filter', value: 'school', class: filter === 'school' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterSchool || 'SCHOOL'} (${counts.school || 0})`),
-          button({ type: 'submit', name: 'filter', value: 'calendars', class: filter === 'calendars' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterCalendars || 'CALENDARS'} (${counts.calendars})`),
-          button({ type: 'submit', name: 'filter', value: 'transfers', class: filter === 'transfers' ? 'filter-btn active' : 'filter-btn' },
-            `${i18n.agendaFilterTransfers} (${counts.transfers})`),
-          button({ type: 'submit', name: 'filter', value: 'discarded', class: filter === 'discarded' ? 'filter-btn active' : 'filter-btn' },
-            `DISCARDED (${counts.discarded})`)
+          ...[
+            ['all', i18n.agendaFilterAll],
+            ['today', i18n.agendaFilterToday || 'TODAY'],
+            ['upcoming', i18n.agendaFilterUpcoming || 'UPCOMING'],
+            ['overdue', i18n.agendaFilterOverdue || 'OVERDUE'],
+            ['open', i18n.agendaFilterOpen],
+            ['closed', i18n.agendaFilterClosed],
+            ['events', i18n.agendaFilterEvents],
+            ['tasks', i18n.agendaFilterTasks],
+            ['reports', i18n.agendaFilterReports],
+            ['tribes', i18n.agendaFilterTribes],
+            ['jobs', i18n.agendaFilterJobs],
+            ['market', i18n.agendaFilterMarket],
+            ['projects', i18n.agendaFilterProjects],
+            ['industry', i18n.agendaFilterIndustry || 'INDUSTRY'],
+            ['housing', i18n.agendaFilterHousing || 'HOUSING'],
+            ['school', i18n.agendaFilterSchool || 'SCHOOL'],
+            ['calendars', i18n.agendaFilterCalendars || 'CALENDARS'],
+            ['transfers', i18n.agendaFilterTransfers],
+            ['discarded', 'DISCARDED']
+          ].filter(([value]) => value === 'all' || filter === value || Number(counts[value] || 0) > 0)
+            .map(([value, labelText]) =>
+              button({ type: 'submit', name: 'filter', value, class: filter === value ? 'filter-btn active' : 'filter-btn' },
+                `${labelText} (${counts[value] || 0})`))
         )
       ),
-      div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+      emptyAgenda ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
         renderModuleStats(items.length),
         form({ method: 'GET', action: '/agenda', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),

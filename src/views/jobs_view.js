@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -210,7 +210,7 @@ const renderJobExtraDetails = (job) => {
 const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
   const list = safeArr(jobs)
 
-  if (!list.length) return p(i18n.noJobsMatch || i18n.noJobsFound)
+  if (!list.length) return p((params.search || params.q || params.minSalary || params.maxSalary) ? (i18n.noJobsMatch || i18n.noJobsFound) : (i18n.noJobsFound || i18n.noJobsMatch))
 
   return div({ class: "jobs-grid" },
     list.map((job) => {
@@ -430,6 +430,7 @@ const renderCVList = (inhabitants) =>
               div(
                 { class: "cv-actions" },
                 form({ method: "GET", action: `/inhabitant/${encodeURIComponent(user.id)}` }, button({ type: "submit", class: "filter-btn" }, i18n.cvVisitButton)),
+                user.pdf ? a({ href: `/blob/${encodeURIComponent(user.pdf)}`, target: "_blank", rel: "noopener", class: "filter-btn" }, "📄 " + i18n.cvPdfLabel) : null,
                 form({ method: "GET", action: `/cv/pdf/${encodeURIComponent(user.id)}` }, button({ type: "submit", class: "filter-btn" }, i18n.generatePdf)),
                 form({ method: "POST", action: `/cv/share/${encodeURIComponent(user.id)}` }, button({ type: "submit", class: "filter-btn" }, i18n.sharePm)),
                 !isMe ? renderPmButton(user.id) : null
@@ -450,6 +451,21 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
   const maxSalary = params.maxSalary ?? ""
   const sort = safeText(params.sort || "recent")
 
+  const emptyMod = moduleIsEmpty(Array.isArray(jobsOrCVs) ? jobsOrCVs : [], filter, "ALL", search || String(minSalary || "") || String(maxSalary || ""));
+  const censusJ = Array.isArray(params.censusList) ? params.censusList : (Array.isArray(jobsOrCVs) ? jobsOrCVs : []);
+  const jobChip = (x) => {
+    const m = x.key;
+    if (m === filter) return true;
+    if (m === "MINE") return censusJ.some(j => String(j.author) === String(userId));
+    if (m === "RECENT") return censusJ.some(j => (Date.parse(j.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "APPLIED") return censusJ.some(j => safeArr(j.subscribers).includes(userId));
+    if (m === "REMOTE") return censusJ.some(j => String(j.location || "").toLowerCase() === "remote");
+    if (m === "PRESENCIAL") return censusJ.some(j => String(j.location || "").toLowerCase() === "presencial");
+    if (m === "FREELANCER" || m === "EMPLOYEE" || m === "EXCHANGE") return censusJ.some(j => String(j.job_type || "").toUpperCase() === m);
+    if (m === "OPEN" || m === "CLOSED") return censusJ.some(j => String(j.status || "OPEN").toUpperCase() === m);
+    if (m === "CV") return params.anyCVs !== false;
+    return true;
+  };
   const filterObj = FILTERS.find((f) => f.key === filter) || FILTERS[0]
   const sectionTitle = i18n[filterObj.title] || i18n.jobsTitle
   const { renderReachChip: renderReachChipJobs } = require('./clearnet_view');
@@ -471,9 +487,9 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
           input({ type: "hidden", name: "minSalary", value: String(minSalary ?? "") }),
           input({ type: "hidden", name: "maxSalary", value: String(maxSalary ?? "") }),
           input({ type: "hidden", name: "sort", value: sort }),
-          ...FILTERS.map((f) =>
+          ...(emptyMod ? [] : FILTERS.filter(jobChip).map((f) =>
             button({ type: "submit", name: "filter", value: f.key, class: filter === f.key ? "filter-btn active" : "filter-btn" }, String(i18n[f.i18n]).toUpperCase())
-          ),
+          )),
           button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.jobsCreateJob)
         )
       )
@@ -508,7 +524,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
               return renderJobForm(jobToEdit, filter === "EDIT" ? "edit" : "create", params.spreadWarning)
             })()
           : section(
-              div(
+              emptyMod ? null : div(
                 { class: "jobs-search activity-filter-chips activity-toolbar-row" },
                   renderModuleStatsBy(jobsOrCVs, j => String(j.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.jobsFilterOpen }, { value: 'CLOSED', label: i18n.jobsFilterClosed }]),
                 form(
@@ -526,7 +542,6 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
                   button({ type: "submit", class: "filter-box__button" }, i18n.jobsSearchButton)
                 )
               ),
-              br(),
               div({ class: "jobs-list" }, renderJobList(jobsOrCVs, filter, { ...params, search, minSalary, maxSalary, sort }))
             )
     )

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -261,6 +261,23 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
     selectedCategory === "TRUST" ? (i18n.transfersUnitTrust || "trust") :
     (i18n.transfersUnitEco || "ECO")
 
+  const emptyMod = moduleIsEmpty(list, normalizedFilter, "all", q || String(minAmountRaw || "") || String(maxAmountRaw || ""));
+  const censusT = Array.isArray(params.censusList) ? params.censusList : list
+  const stT = (t) => String(t.status || "").toUpperCase()
+  const trChip = (mode) => {
+    if (mode === normalizedFilter) return true
+    if (mode === "mine") return censusT.some(t => t.from === userId || t.to === userId)
+    if (mode === "ubi") return censusT.some(t => safeArr(t.tags).some(tag => String(tag).toUpperCase() === "UBI"))
+    if (mode === "economic") return censusT.some(t => categoryOf(t) === "ECONOMIC")
+    if (mode === "time") return censusT.some(t => categoryOf(t) === "TIME")
+    if (mode === "trust") return censusT.some(t => categoryOf(t) === "TRUST")
+    if (mode === "market") return censusT.length > 0
+    if (mode === "pending") return censusT.some(t => stT(t) === "UNCONFIRMED" && t.to === userId && !safeArr(t.confirmedBy).includes(userId))
+    if (mode === "unconfirmed") return censusT.some(t => stT(t) === "UNCONFIRMED")
+    if (mode === "closed" || mode === "top") return censusT.some(t => stT(t) === "CLOSED")
+    if (mode === "discarded") return censusT.some(t => stT(t) === "DISCARDED")
+    return true
+  }
   return template(
     title,
     section(
@@ -273,18 +290,20 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
           input({ type: "hidden", name: "minAmount", value: String(minAmountRaw ?? "") }),
           input({ type: "hidden", name: "maxAmount", value: String(maxAmountRaw ?? "") }),
           input({ type: "hidden", name: "sort", value: sort }),
+          ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUBI).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "economic", class: normalizedFilter === "economic" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterEconomic || (i18n.transfersCategoryEconomic || "ECONOMIC")),
-          button({ type: "submit", name: "filter", value: "time", class: normalizedFilter === "time" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTime || (i18n.transfersCategoryTime || "TIME")),
-          button({ type: "submit", name: "filter", value: "trust", class: normalizedFilter === "trust" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTrust || (i18n.transfersCategoryTrust || "TRUST")),
-          button({ type: "submit", name: "filter", value: "market", class: normalizedFilter === "market" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMarket).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "pending", class: normalizedFilter === "pending" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterPending).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "unconfirmed", class: normalizedFilter === "unconfirmed" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUnconfirmed).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "closed", class: normalizedFilter === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterClosed).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "discarded", class: normalizedFilter === "discarded" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterDiscarded).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "top", class: normalizedFilter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterTop).toUpperCase()),
+          ...(trChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMine).toUpperCase())] : []),
+          ...(trChip("ubi") ? [button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUBI).toUpperCase())] : []),
+          ...(trChip("economic") ? [button({ type: "submit", name: "filter", value: "economic", class: normalizedFilter === "economic" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterEconomic || (i18n.transfersCategoryEconomic || "ECONOMIC"))] : []),
+          ...(trChip("time") ? [button({ type: "submit", name: "filter", value: "time", class: normalizedFilter === "time" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTime || (i18n.transfersCategoryTime || "TIME"))] : []),
+          ...(trChip("trust") ? [button({ type: "submit", name: "filter", value: "trust", class: normalizedFilter === "trust" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTrust || (i18n.transfersCategoryTrust || "TRUST"))] : []),
+          ...(trChip("market") ? [button({ type: "submit", name: "filter", value: "market", class: normalizedFilter === "market" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMarket).toUpperCase())] : []),
+          ...(trChip("pending") ? [button({ type: "submit", name: "filter", value: "pending", class: normalizedFilter === "pending" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterPending).toUpperCase())] : []),
+          ...(trChip("unconfirmed") ? [button({ type: "submit", name: "filter", value: "unconfirmed", class: normalizedFilter === "unconfirmed" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUnconfirmed).toUpperCase())] : []),
+          ...(trChip("closed") ? [button({ type: "submit", name: "filter", value: "closed", class: normalizedFilter === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterClosed).toUpperCase())] : []),
+          ...(trChip("discarded") ? [button({ type: "submit", name: "filter", value: "discarded", class: normalizedFilter === "discarded" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterDiscarded).toUpperCase())] : []),
+          ...(trChip("top") ? [button({ type: "submit", name: "filter", value: "top", class: normalizedFilter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterTop).toUpperCase())] : []),
+          ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.transfersCreateButton)
         )
       )
@@ -357,7 +376,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
             )
           )
         : section(
-            div(
+            emptyMod ? null : div(
               { class: "transfers-search activity-filter-chips activity-toolbar-row" },
                 renderModuleStatsBy(filtered, t => String(t.status || '').toUpperCase(), [{ value: 'UNCONFIRMED', label: i18n.transfersFilterUnconfirmed }, { value: 'CLOSED', label: i18n.transfersFilterClosed }, { value: 'DISCARDED', label: i18n.transfersFilterDiscarded }]),
               form(
@@ -377,12 +396,11 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
                 
               )
             ),
-            br(),
             filtered.length
               ? div({ class: "jobs-grid" },
                   filtered.map(t => generateTransferCard(t, normalizedFilter, { q, minAmount: minAmountRaw, maxAmount: maxAmountRaw, sort, spreadMap: params.spreadMap }))
                 )
-              : p(q || String(minAmountRaw) || String(maxAmountRaw) ? i18n.transfersNoMatch : i18n.transfersNoItems)
+              : div({ class: "no-content-box" }, p(q || String(minAmountRaw) || String(maxAmountRaw) ? i18n.transfersNoMatch : i18n.transfersNoItems))
           )
     )
   )

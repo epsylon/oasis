@@ -55,8 +55,9 @@ const filterButton = (mode, current, q) =>
     }, String(filterLabel(mode)).toUpperCase())
   );
 
-const renderFilters = (current, q, total = null) =>
-  section(
+const renderFilters = (current, q, total = null) => {
+  if (Number(total || 0) === 0 && String(current || 'ALL').toUpperCase() === 'ALL' && !String(q || '').trim()) return null;
+  return section(
     div({ class: "activity-filter-grid" },
       ...FILTER_COLUMNS.map(col =>
         div({ class: "activity-filter-col" },
@@ -75,6 +76,7 @@ const renderFilters = (current, q, total = null) =>
       )
     )
   );
+};
 
 const scorePct = (score) => ((Number(score) || 0) * 100).toFixed(1).replace(/\.0$/, '');
 const scaleOf = (pct) => Math.min(4, Math.floor((Number(pct) || 0) / 20));
@@ -150,14 +152,15 @@ exports.dataView = async (payload = {}) => {
   const q = payload.q || '';
 
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
+  const emptyData = matches.length === 0 && payload.hasProfile === false && String(filter || 'ALL').toUpperCase() === 'ALL' && !String(q || '').trim();
 
   return template(
     i18n.dataTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.dataTitle), p(i18n.dataDescription))),
     renderFilters(filter, q, matches.length),
-    payload.cohesion ? renderCohesion(payload.cohesion) : null,
+    emptyData ? null : (payload.cohesion ? renderCohesion(payload.cohesion) : null),
     section(
-      div({ class: "tags-header" },
+      emptyData ? null : div({ class: "tags-header" },
         h2(q ? `${i18n.dataTopicTitle} #${q}` : i18n.dataMatchesTitle),
         p(q ? i18n.dataTopicHint : i18n.dataMatchesHint),
         typeof payload.total === "number" && payload.total > matches.length
@@ -166,9 +169,9 @@ exports.dataView = async (payload = {}) => {
       ),
       matches.length
         ? div({ class: "data-list" }, ...matches.map((m, idx) => renderMatchRow(m, idx === 0)))
-        : p({ class: "no-content" }, payload.hasProfile === false
+        : div({ class: "no-content-box" }, p({ class: "no-content" }, payload.hasProfile === false
             ? i18n.dataNoProfile
-            : i18n.dataNoMatches)
+            : i18n.dataNoMatches))
     )
   );
 };

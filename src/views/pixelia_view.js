@@ -64,7 +64,7 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
             option({ value: "#d3d3d3", class: "pixelia-swatch pixelia-swatch-d3d3d3" }, "Light Grey"),
             option({ value: "#ff6347", class: "pixelia-swatch pixelia-swatch-ff6347" }, "Tomato")
           ),
-          button({ type: "submit" }, i18n.paintButton)
+          button({ type: "submit", class: "filter-btn" }, String(i18n.paintButton).toUpperCase())
         )
       ),
       errorMessage ? div({ class: "error-message" }, errorMessage) : null,

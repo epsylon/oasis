@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const { renderMapLocationVisitLabel } = require("./maps_view")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -21,15 +21,17 @@ const renderNoteText = (text) => {
   return result
 }
 
-const renderModeButtons = (currentFilter) =>
+const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
-    ["all", "mine", "recent", "favorites", "open", "closed"].map(f =>
+    ...(emptyMod ? [] : [
+    ["all", "mine", "recent", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
       form({ method: "GET", action: "/calendars" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" },
           i18n[`calendarFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
       )
     ),
+    ]),
     form({ method: "GET", action: "/calendars" },
       input({ type: "hidden", name: "filter", value: "create" }),
       button({ type: "submit", class: "create-button" }, i18n.calendarCreate || "Create Calendar")
@@ -196,6 +198,7 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
   if (calendarToEdit) params = { ...(params || {}), spreadWarning: await renderSpreadEditWarning(calendarToEdit.id || calendarToEdit.key || calendarToEdit.rootId) };
   const q = (params && params.q) || ""
   const showForm = filter === "create" || filter === "edit" || !!calendarToEdit
+  const emptyMod = moduleIsEmpty(Array.isArray(calendars) ? calendars : [], filter || "all", "all", q)
   const headerText = i18n.calendarsTitle || "Calendars"
 
   return template(
@@ -205,8 +208,8 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
         h2(headerText),
         p(i18n.calendarsDescription || "Discover and manage calendars.")
       ),
-      renderModeButtons(filter),
-      showForm
+      renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null),
+      showForm || emptyMod
         ? null
         : div({ class: "filters activity-filter-chips activity-toolbar-row" },
           renderModuleStatsBy(calendars, c => c.isClosed ? 'CLOSED' : String(c.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.calendarStatusOpen }, { value: 'CLOSED', label: i18n.calendarStatusClosed }]),
@@ -224,7 +227,7 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
         ? renderCreateForm(calendarToEdit, params)
         : (calendars.length > 0
             ? div({ class: "tribe-grid" }, ...calendars.map(c => renderCalendarCard(c, params && params.spreadMap && params.spreadMap.get(c.rootId))))
-            : p({ class: "no-content" }, i18n.calendarsNoItems || "No calendars found."))
+            : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.calendarsNoItems || "No calendars found.")))
     )
   )
 }
@@ -292,7 +295,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           div({ class: "tribe-open-invite" },
             span({ class: "card-label" }, i18n.tribeInviteCodeText),
             span({ class: "tribe-open-invite-code" }, openInvite.code),
-            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(openInvite.code)}` })
+            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/calendars/${encodeURIComponent(openInvite.code)}` })
           ),
           form({ method: "POST", action: `/calendars/open-invite/remove/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)

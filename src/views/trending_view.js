@@ -1,6 +1,7 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
 const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
+const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
 const opinionCategories = require('../backend/opinion_categories');
@@ -47,7 +48,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       div({ class: 'card-section image' },
         title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"), p(...renderUrl(description))] : null,
-        div({ class: 'card-field' }, img({ src: `/blob/${encodeURIComponent(url)}`, class: 'feed-image' }))
+        div({ class: 'card-field' }, renderZoomableImage(`/blob/${encodeURIComponent(url)}`, { imgClass: 'post-image' }))
       )
     );
   } else if (c.type === 'audio') {
@@ -57,7 +58,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.audioTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, i18n.audioDescriptionLabel + ":"), p(...renderUrl(description))] : null,
         url
-          ? div({ class: 'card-field audio-container' }, audioHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(url)}`, type: mimeType }))
+          ? div({ class: 'card-field audio-container' }, audioHyperaxe({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(url)}`, type: mimeType }))
           : div({ class: 'card-field' }, p(i18n.audioNoFile))
       )
     );
@@ -69,7 +70,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         description ? [span({ class: 'card-label' }, i18n.videoDescriptionLabel + ":"), p(...renderUrl(description))] : null,
         br(),
         url
-          ? div({ class: 'card-field video-container' }, videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(url)}`, type: mimeType, preload: 'metadata', width: '640', height: '360' }))
+          ? div({ class: 'card-field video-container' }, videoHyperaxe({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(url)}`, type: mimeType, preload: 'metadata' }))
           : div({ class: 'card-field' }, p(i18n.videoNoFile))
       )
     );
@@ -233,13 +234,10 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     ),
     div(
       { class: 'card-section trending-card-body' },
-      contentHtml,
-      p(
-        { class: 'card-footer' },
-        span({ class: 'date-link' }, `${created} ${i18n.performed} `),
-        userLink(item.value.author)
-      ),
-      renderVotesSummary(c.opinions),
+      contentHtml
+    ),
+    renderVotesSummary(c.opinions),
+    renderCardMetaRow(
       details({ class: 'opinions-voting-collapse' },
         summary({ class: 'opinions-summary' },
           span({ class: 'opinions-summary-icon' }, 'ꔍ'),
@@ -255,12 +253,17 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
             )
           )
         )
+      ),
+      p(
+        { class: 'card-footer' },
+        span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+        userLink(item.value.author)
       )
     )
   );
 };
 
-exports.trendingView = (items, filter, categories = opinionCategories, spreadMap = new Map(), q = '') => {
+exports.trendingView = (items, filter, categories = opinionCategories, spreadMap = new Map(), q = '', allItems = null) => {
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
@@ -275,6 +278,9 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
     const c = item.value?.content || item.content;
     return c && typeof c === 'object' && c.type !== 'tombstone';
   });
+  const censusItems = Array.isArray(allItems) ? allItems : filteredItems;
+  const presentTypes = new Set(censusItems.map(item => (item.value?.content || item.content || {}).type).filter(Boolean));
+  const emptyTrend = censusItems.length === 0 && !String(q || '').trim();
 
   if (filter === 'MINE') {
     filteredItems = filteredItems.filter(item => item.value.author === userId);
@@ -318,14 +324,15 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
     title,
     section(
       header,
-      div(
+      emptyTrend ? null : div(
         { class: 'mode-buttons' },
         div({ class: 'column' }, baseFilters.map(mode => filterButton(mode, filter))),
-        ...contentFilters.map(row =>
-          div({ class: 'column' }, row.map(mode => filterButton(mode, filter)))
-        )
+        ...contentFilters.map(row => {
+          const visible = row.filter(mode => presentTypes.has(mode) || (mode === 'votes' && presentTypes.has('poll')));
+          return visible.length ? div({ class: 'column' }, visible.map(mode => filterButton(mode, filter))) : null;
+        })
       ),
-      div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+      emptyTrend ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
         renderModuleStats(cards.length),
         form({ method: 'GET', action: '/trending', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),

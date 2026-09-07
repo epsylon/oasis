@@ -1,5 +1,5 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -44,14 +44,16 @@ const buildReturnTo = (filter, params = {}) => {
   return `/chats?${parts.join("&")}`
 }
 
-const renderModeButtons = (currentFilter) =>
+const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
-    ["all", "mine", "recent", "favorites", "open", "closed"].map(f =>
+    ...(emptyMod ? [] : [
+    ["all", "mine", "recent", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
       form({ method: "GET", action: "/chats" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`chatFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
       )
     ),
+    ]),
     form({ method: "GET", action: "/chats" },
       input({ type: "hidden", name: "filter", value: "create" }),
       button({ type: "submit", class: "create-button" }, i18n.chatCreate)
@@ -234,8 +236,17 @@ const renderMessage = (msg, chat, opts = {}) => {
   const isAuthor = String(msg.author) === String(chat.author)
   const isSelf = String(msg.author) === String(userId)
   const imageSrc = blobSrcOf(msg.image)
+  const mime = String(msg.mimeType || "")
   const imageNode = imageSrc
-    ? renderZoomableImage(imageSrc, { imgClass: "chat-message-image" })
+    ? (mime.startsWith("video/")
+        ? videoHyperaxe({ controls: true, class: "post-video chat-message-media", src: imageSrc, type: mime, preload: "metadata" })
+        : mime.startsWith("audio/")
+          ? audioHyperaxe({ controls: true, class: "post-audio chat-message-media", src: imageSrc, type: mime, preload: "metadata" })
+          : mime === "application/pdf"
+            ? a({ href: imageSrc, target: "_blank", rel: "noopener", class: "filter-btn chat-message-file" }, "📄 PDF")
+            : mime.includes("bittorrent") || mime === "application/x-torrent"
+              ? a({ href: imageSrc, class: "filter-btn chat-message-file" }, `🧲 ${i18n.torrentDownload}`)
+              : renderZoomableImage(imageSrc, { imgClass: "chat-message-image" }))
     : (msg.image ? renderMediaBlob(msg.image, null, { class: "chat-message-image" }) : null)
 
   const counts = (msg.reactions && msg.reactions.counts) || {}
@@ -310,6 +321,7 @@ exports.renderChatInvitePage = (code) => {
 exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
   const q = safeText(params.q || "")
   const list = safeArr(chats)
+  const emptyMod = moduleIsEmpty(list, filter || "all", "all", q)
 
   const isForm = filter === "create" || filter === "edit"
 
@@ -337,8 +349,8 @@ exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
         p(i18n.modulesChatsDescription)
       )
     ),
-    section(renderModeButtons(filter)),
-    !isForm
+    section(renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null)),
+    !isForm && !emptyMod
       ? section(
           div({ class: "filters activity-filter-chips activity-toolbar-row" },
             renderModuleStatsBy(list, c => String(c.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.chatStatusOpen }, { value: 'INVITE-ONLY', label: i18n.chatStatusInviteOnly }, { value: 'CLOSED', label: i18n.chatStatusClosed }]),
@@ -438,7 +450,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           div({ class: "tribe-open-invite" },
             span({ class: "card-label" }, i18n.tribeInviteCodeText),
             span({ class: "tribe-open-invite-code" }, openInvite.code),
-            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(openInvite.code)}` })
+            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/chats/${encodeURIComponent(openInvite.code)}` })
           ),
           form({ method: "POST", action: `/chats/open-invite/remove` },
             input({ type: "hidden", name: "chatId", value: chat.key }),
@@ -549,7 +561,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
             replyMsg ? input({ type: "hidden", name: "replyTo", value: replyMsg.key }) : null,
             textarea({ name: "text", rows: 3, maxlength: "3000", placeholder: i18n.chatMessagePlaceholder }), br(),
             span(i18n.uploadMedia), br(),
-            input({ type: "file", name: "image", accept: "image/*,video/*" }), br(), br(),
+            input({ type: "file", name: "image", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
             button({ type: "submit", class: "filter-btn" }, i18n.chatSendMessage)
           )
         )

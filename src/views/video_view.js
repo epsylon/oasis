@@ -18,7 +18,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -199,6 +199,16 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
   const sort = safeText(params.sort || "recent");
 
   const list = safeArr(videos);
+  const emptyMod = moduleIsEmpty(list, filter, "all", q);
+  const censusM = Array.isArray(params.censusList) ? params.censusList : list;
+  const mediaChip = (mode) => {
+    if (mode === filter) return true;
+    if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+    if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
+    if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+    if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
+    return true;
+  };
   const videoToEdit = videoId ? list.find((v) => v.key === videoId) : null;
 
   return template(
@@ -220,14 +230,17 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
           { method: "GET", action: "/videos", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
+          ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase()),          button(
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase())] : []),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.videoFilterFavorites).toUpperCase()
-          ),
+          )] : []),
 
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterTop).toUpperCase()),
+          ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.videoCreateButton)
         )
       )
@@ -236,7 +249,7 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
       filter === "create" || filter === "edit"
         ? renderVideoForm(filter, videoId, videoToEdit, { ...params, filter })
         : section(
-            div(
+            emptyMod ? null : div(
               { class: "videos-search activity-filter-chips activity-toolbar-row" },
                 renderModuleStats(list.length),
               form(

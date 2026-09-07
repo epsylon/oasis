@@ -3,7 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
 
@@ -164,6 +164,16 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
   const sort = safeText(params.sort || "recent");
 
   const list = safeArr(documents);
+  const emptyMod = moduleIsEmpty(list, filter, "all", q);
+  const censusM = Array.isArray(params.censusList) ? params.censusList : list;
+  const mediaChip = (mode) => {
+    if (mode === filter) return true;
+    if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+    if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
+    if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+    if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
+    return true;
+  };
   const docToEdit = documentId ? list.find((d) => d.key === documentId) : null;
 
   const tpl = template(
@@ -185,14 +195,16 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
           { method: "GET", action: "/documents", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
+          ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase()),
-          button(
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.documentFilterFavorites).toUpperCase()
-          ),
+          )] : []),
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterTop).toUpperCase()),
+          ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.documentCreateButton)
         )
       )
@@ -201,7 +213,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
       filter === "create" || filter === "edit"
         ? renderDocumentForm(filter, documentId, docToEdit || {}, { ...params, filter })
         : section(
-            div(
+            emptyMod ? null : div(
               { class: "documents-search activity-filter-chips activity-toolbar-row" },
                 renderModuleStats(list.length),
               form(

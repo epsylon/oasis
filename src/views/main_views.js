@@ -384,11 +384,21 @@ const renderEngagement = (id, opinionsNode, commentsNode) => {
 };
 exports.renderEngagement = renderEngagement;
 
-const renderModuleStats = (total, segments = [], totalLabel = null) =>
-  div({ class: 'module-stats-line' },
+const renderModuleStats = (total, segments = [], totalLabel = null, opts = {}) => {
+  if (!(Number(total) > 0)) return null;
+  const inh = opts.showInhabitants && sharedState.getInhabitantCount ? sharedState.getInhabitantCount() : 0;
+  const trb = opts.showTribes && sharedState.getTribesCount ? sharedState.getTribesCount() : 0;
+  const network = [
+    inh > 0 ? { label: i18n.inhabitants, count: inh } : null,
+    trb > 0 ? { label: i18n.tribesTitle, count: trb } : null
+  ];
+  const toNode = s => span(`${s.label}: `, strong(String(s.count)));
+  return div({ class: 'module-stats-line' },
+    ...network.filter(Boolean).map(toNode),
     span(`${totalLabel || i18n.statsTotalLabel}: `, strong(String(total))),
-    ...segments.filter(Boolean).map(s => span(`${s.label}: `, strong(String(s.count))))
+    ...segments.filter(s => s && Number(s.count) > 0).map(toNode)
   );
+};
 exports.renderModuleStats = renderModuleStats;
 
 const renderModuleStatsBy = (items, field, specs, totalLabel = null) => {
@@ -398,6 +408,19 @@ const renderModuleStatsBy = (items, field, specs, totalLabel = null) => {
   return renderModuleStats(arr.length, specs.map(s => ({ label: s.label, count: counts[s.value] || 0 })), totalLabel);
 };
 exports.renderModuleStatsBy = renderModuleStatsBy;
+
+const moduleIsEmpty = (items, filter, defaultFilter = 'all', q = '') =>
+  (!items || items.length === 0) &&
+  String(filter || defaultFilter).toUpperCase() === String(defaultFilter).toUpperCase() &&
+  !String(q || '').trim();
+exports.moduleIsEmpty = moduleIsEmpty;
+
+const renderCardMetaRow = (...nodes) => {
+  const flat = nodes.flat(Infinity).filter(Boolean);
+  if (!flat.length) return null;
+  return div({ class: 'card-meta-row' }, ...flat);
+};
+exports.renderCardMetaRow = renderCardMetaRow;
 
 const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters) => {
   const ops = opinions || {};
@@ -527,7 +550,7 @@ const renderFooter = () => {
       br(),
       span({ class: "oasis-footer-peers" },
         span("Synced-peers: [ "),
-        a({ href: "/peers" }, syncedPeers != null ? String(syncedPeers) : '–'),
+        a({ href: "/peers" }, String(syncedPeers || 0)),
         span(" ]")
       ),
       br(),
@@ -2671,7 +2694,7 @@ const renderUserSensors = (u, opts = {}) => {
       })()
     : null;
   const contentNode = opts.excludeContent ? null : renderContentStats(u.stats, i18n);
-  return [fediverseNode, opts.relationshipNode || null, sensorsBox, larpNode, reachNode, contentNode].filter(Boolean);
+  return [opts.relationshipNode || null, sensorsBox, fediverseNode, larpNode, reachNode, contentNode].filter(Boolean);
 };
 exports.renderUserSensors = renderUserSensors;
 

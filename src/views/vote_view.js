@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -255,6 +255,15 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
   );
 
   const listReturnTo = standardFilters.includes(activeFilter) ? `/votes?filter=${encodeURIComponent(activeFilter)}` : "/votes";
+  const emptyMod = moduleIsEmpty(filtered, mode, "all", (params && params.q) || "");
+  const censusV = Array.isArray(params && params.censusList) ? params.censusList : list;
+  const voteChip = (m) => {
+    if (m === mode) return true;
+    if (m === "mine") return censusV.some((v) => v.createdBy === userId);
+    if (m === "open") return censusV.some((v) => normalizeStatus(v.status) === "OPEN");
+    if (m === "closed") return censusV.some((v) => normalizeStatus(v.status) === "CLOSED");
+    return true;
+  };
 
   const minVoteDays = Number(params.minVoteDays) > 0 ? Number(params.minVoteDays) : 7;
   const deadlineMin = moment().add(minVoteDays, "days").format("YYYY-MM-DDTHH:mm");
@@ -278,14 +287,16 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
         { class: "filters" },
         form(
           { method: "GET", action: "/votes" },
+          ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: mode === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: mode === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "open", class: mode === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterOpen).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "closed", class: mode === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterClosed).toUpperCase()),
+          ...(voteChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: mode === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterMine).toUpperCase())] : []),
+          ...(voteChip("open") ? [button({ type: "submit", name: "filter", value: "open", class: mode === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterOpen).toUpperCase())] : []),
+          ...(voteChip("closed") ? [button({ type: "submit", name: "filter", value: "closed", class: mode === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterClosed).toUpperCase())] : []),
+          ]),
           button({ type: "submit", name: "filter", value: "create", class: mode === "create" ? "create-button active" : "create-button" }, i18n.voteCreateButton)
         )
       ),
-      mode !== "create" && mode !== "edit"
+      mode !== "create" && mode !== "edit" && !emptyMod
         ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
           renderModuleStatsBy(filtered, v => normalizeStatus(v.status || 'OPEN'), [{ value: 'OPEN', label: i18n.voteStatusOpen }, { value: 'CLOSED', label: i18n.voteStatusClosed }]),
             form({ method: "GET", action: "/votes", class: "filter-box" },
@@ -332,7 +343,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
           ? renderVoteDetail(filtered[0] || list.find(v => v.id === voteId) || {}, voteOptions, firstRow, secondRow, mode, activeFilter, { ...params, comments })
           : filtered.length > 0
             ? div({ class: "jobs-grid" }, filtered.map((v) => renderVoteListItem(v, voteOptions, activeFilter, params.spreadMap && params.spreadMap.get(v.id))))
-            : p(i18n.novotes),
+            : div({ class: "no-content-box" }, p(i18n.novotes)),
     )
   );
 };

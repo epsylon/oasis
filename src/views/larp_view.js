@@ -328,7 +328,7 @@ exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, gover
       mode === 'houses'
         ? (matched.length
             ? renderHousesGrid(matched, myHouseKey, governingKey)
-            : p({ class: 'no-content' }, i18n.larpNoHousesMatch))
+            : div({ class: 'no-content-box' }, p({ class: 'no-content' }, i18n.larpNoHousesMatch)))
         : mode === 'rules'
           ? renderRules()
           : [

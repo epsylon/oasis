@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
@@ -318,6 +318,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
   }
 
   filtered = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const emptyMod = moduleIsEmpty(filtered, filter, "all", params.q);
 
   const reportToEdit = filter === "edit"
     ? (Array.isArray(reports) ? reports.find((r) => r.id === reportId) : null)
@@ -348,7 +349,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
       ),
       div(
         { class: "filters" },
-        form(
+        ...(emptyMod ? [] : [form(
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
           button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
           button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase()),
@@ -358,9 +359,10 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
           button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, String(i18n.reportsFilterBugs).toUpperCase()),
           button({ type: "submit", name: "filter", value: "content", class: btnClass("content") }, String(i18n.reportsFilterContent).toUpperCase()),
           button({ type: "submit", name: "filter", value: "confirmed", class: btnClass("confirmed") }, String(i18n.reportsFilterConfirmed).toUpperCase())
-        ),
+        )]),
         form(
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters reports-subfilters" },
+          ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "open", class: btnClass("open") }, String(i18n.reportsFilterOpen).toUpperCase()),
           button({ type: "submit", name: "filter", value: "under_review", class: btnClass("under_review") }, String(i18n.reportsFilterUnderReview).toUpperCase()),
           button({ type: "submit", name: "filter", value: "resolved", class: btnClass("resolved") }, String(i18n.reportsFilterResolved).toUpperCase()),
@@ -369,12 +371,13 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
           button({ type: "submit", name: "filter", value: "sev_medium", class: btnClass("sev_medium") }, String(i18n.reportsSeverityMedium).toUpperCase()),
           button({ type: "submit", name: "filter", value: "sev_high", class: btnClass("sev_high") }, String(i18n.reportsSeverityHigh).toUpperCase()),
           button({ type: "submit", name: "filter", value: "sev_critical", class: btnClass("sev_critical") }, String(i18n.reportsSeverityCritical).toUpperCase()),
+          ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.reportsCreateButton)
         )
       ),
       filter === "edit" || filter === "create"
         ? null
-        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+        : emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
           renderModuleStatsBy(filtered, r => normalizeStatus(r.status || 'OPEN'), [{ value: 'OPEN', label: i18n.reportsStatusOpen }, { value: 'UNDER_REVIEW', label: i18n.reportsStatusUnderReview }, { value: 'RESOLVED', label: i18n.reportsStatusResolved }, { value: 'CLOSED', label: i18n.reportsStatusClosed }, { value: 'INVALID', label: i18n.reportsStatusInvalid }]),
             form({ method: "GET", action: "/reports", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
@@ -422,6 +425,8 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                     h2({ class: "report-template-main-title" }, i18n.reportsTemplateSectionTitle),
                     renderTemplateForCategory(selectedCategory, params.draft || {}),
                     ...renderGalleryFields(formData, false, 8),
+                    label(i18n.attachmentLabel), br(),
+                    input({ type: "file", name: "blob" }), br(), br(),
                     br(),
                     label("Tags"),
                     br(),
@@ -489,7 +494,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
           )
         : filtered.length > 0
           ? div({ class: "jobs-grid" }, filtered.map((r) => renderReportCard(r, userId, filter, params.spreadMap && params.spreadMap.get(r.id))))
-          : p(i18n.reportsNoItems)
+          : div({ class: "no-content-box" }, p(i18n.reportsNoItems))
     )
   );
 };

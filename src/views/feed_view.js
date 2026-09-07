@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderVotesSummary, renderModuleStats } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderVotesSummary, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
 const moment = require("../server/node_modules/moment");
@@ -196,16 +196,24 @@ exports.feedView = (feeds, opts = "ALL") => {
     : null;
 
   const extra = { q, tag };
+  const emptyMod = moduleIsEmpty(feeds, filter, "ALL", q || tag);
+  const censusF = Array.isArray(opts.censusList) ? opts.censusList : feeds;
+  const feedChip = (mode) => {
+    if (mode === filter) return true;
+    if (mode === "MINE") return censusF.some((f) => String(f && f.value && f.value.author) === String(config.keys.id));
+    if (mode === "TODAY") return censusF.some((f) => (Number(f && f.value && f.value.timestamp) || 0) >= Date.now() - 86400000);
+    return true;
+  };
 
   const centerContent = section(
     header,
     successBanner,
     div(
       { class: "mode-buttons-row" },
-      ...generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"], filter, "/feed", extra),
+      ...(emptyMod ? [] : generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"].filter(feedChip), filter, "/feed", extra)),
       form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button filter-btn" }, i18n.createFeedTitle || "Create Feed"))
     ),
-    div(
+    emptyMod ? null : div(
       { class: "feed-tools-row activity-filter-chips activity-toolbar-row" },
         renderModuleStats(feeds.length),
       form(

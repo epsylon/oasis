@@ -10,6 +10,7 @@ let _ecoValue = null;
 let _lastActivity = null;
 let _maxBlockBytes = 0;
 let _inhabitantCount = 0;
+let _tribesCount = 0;
 let _mentionsCount = 0;
 let _bestMatch = null;
 let _dismissedSuggestion = null;
@@ -40,6 +41,8 @@ module.exports = {
   setMentionsCount: (n) => { _mentionsCount = Math.max(0, Number(n) || 0); },
   getInhabitantCount: () => _inhabitantCount,
   setInhabitantCount: (n) => { _inhabitantCount = Math.max(0, Number(n) || 0); },
+  getTribesCount: () => _tribesCount,
+  setTribesCount: (n) => { _tribesCount = Math.max(0, Number(n) || 0); },
   getBestMatch: () => _bestMatch,
   setBestMatch: (m) => { _bestMatch = m || null; },
   getDismissedSuggestion: () => _dismissedSuggestion,

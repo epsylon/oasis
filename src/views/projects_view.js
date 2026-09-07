@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -467,6 +467,9 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       br(),
       input({ type: "file", name: "image" }),
       br(),
+      label(i18n.attachmentLabel), br(),
+      input({ type: "file", name: "blob" }),
+      br(),
       pr.image ? renderMediaBlob(pr.image) : null,
       br(),
       label(i18n.projectGoal),
@@ -518,6 +521,19 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
   const sectionTitle = i18n[filterObj.title] || i18n.projectAllTitle
   const { renderReachChip: renderReachChipProjects } = require('./clearnet_view');
   const viewerClearnetProjects = !!(params.viewerPrefs && params.viewerPrefs.clearnetProjects);
+  const emptyMod = moduleIsEmpty(Array.isArray(projectsOrForm) ? projectsOrForm : [], f, "ALL", params.q);
+  const censusP = Array.isArray(params.censusList) ? params.censusList : (Array.isArray(projectsOrForm) ? projectsOrForm : []);
+  const projChip = (x) => {
+    const m = x.key;
+    if (m === f) return true;
+    if (m === "MINE") return censusP.some(pr => String(pr.author) === String(userId));
+    if (m === "APPLIED") return censusP.some(pr => String(pr.author) !== String(userId) && [pr.members, pr.participants, pr.applicants].some(l => Array.isArray(l) && l.includes(userId)));
+    if (m === "ACTIVE" || m === "PAUSED" || m === "COMPLETED") return censusP.some(pr => String(pr.status || "ACTIVE").toUpperCase() === m);
+    if (m === "FOLLOWING") return censusP.some(pr => Array.isArray(pr.followers) && pr.followers.includes(userId));
+    if (m === "RECENT") return censusP.some(pr => (Date.parse(pr.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "BACKERS") return censusP.some(pr => safeArr(pr.backers).length > 0);
+    return true;
+  };
 
   return template(
     i18n.projectsTitle,
@@ -531,13 +547,13 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
         { class: "filters" },
         form(
           { method: "GET", action: "/projects", class: "ui-toolbar ui-toolbar--filters" },
-          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, String(i18n[x.i18n]).toUpperCase()))
+          (emptyMod ? [] : FILTERS.filter(projChip).map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, String(i18n[x.i18n]).toUpperCase())))
             .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.projectCreateProject))
         )
       ),
       f === "CREATE" || f === "EDIT"
         ? null
-        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+        : emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
           renderModuleStatsBy(projectsOrForm, pr => String(pr.status || 'ACTIVE').toUpperCase(), [{ value: 'ACTIVE', label: i18n.projectStatusACTIVE }, { value: 'PAUSED', label: i18n.projectStatusPAUSED }, { value: 'COMPLETED', label: i18n.projectStatusCOMPLETED }, { value: 'CANCELLED', label: i18n.projectStatusCANCELLED }]),
             form({ method: "GET", action: "/projects", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: f }),

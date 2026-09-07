@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, img, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, renderCardMetaRow, moduleIsEmpty } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderMapEmbedWithZoom } = require("./maps_view")
@@ -175,6 +175,10 @@ const renderFacilityForm = (facility, mode, spreadWarning = null) => {
       label(i18n.uploadMedia || "Upload media (max-size: 50MB)"),
       br(),
       input({ type: "file", name: "image" }),
+      br(),
+      label(i18n.attachmentLabel),
+      br(),
+      input({ type: "file", name: "blob" }),
       fc.image ? div({ class: "industry-form-media" }, renderMediaBlob(fc.image, { class: "industry-hero-image" })) : null,
       br(),
       label(i18n.industrySector || "Sector"),
@@ -316,6 +320,17 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
   const sectorSel = safeText(params.sector)
   const isForm = f === "CREATE" || f === "EDIT"
   const isRules = f === "RULES"
+  const emptyMod = moduleIsEmpty(safeArr(facilitiesOrForm), f, "ALL", search || sectorSel)
+  const censusI = Array.isArray(params.censusList) ? params.censusList : safeArr(facilitiesOrForm)
+  const indChip = (x) => {
+    const m = x.key
+    if (m === f) return true
+    if (m === "MINE") return censusI.some(fc => String(fc.steward) === String(userId) || safeArr(fc.members).includes(userId))
+    if (m === "ACTIVE" || m === "PAUSED" || m === "DISSOLVED") return censusI.some(fc => String(fc.status || "ACTIVE").toUpperCase() === m)
+    if (m === "MEMBER") return censusI.some(fc => safeArr(fc.members).includes(userId))
+    if (m === "BLUEPRINTS" || m === "BUILDS") return censusI.length > 0
+    return true
+  }
   return template(
     i18n.industryTitle || "Industry",
     section(
@@ -323,12 +338,11 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
         h2(i18n.industryTitle || "Industry"),
         p(i18n.industryDescription || "Network-owned production facilities.")
       ),
-      br(),
       div({ class: "filters" },
         form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "search", value: search }),
           input({ type: "hidden", name: "sector", value: sectorSel }),
-          FILTERS.map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase()))
+          (emptyMod ? [] : FILTERS.filter(indChip).map((x) => button({ type: "submit", name: "filter", value: x.key, class: f === x.key ? "filter-btn active" : "filter-btn" }, String(i18n[x.i18n] || x.key).toUpperCase())))
             .concat(button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.industryCreateFacility || "Create facility"))
         )
       ),
@@ -341,7 +355,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
         : f === "BUILDS"
         ? div({ class: "industry-list" }, renderGlobalBuilds(facilitiesOrForm, params.spreadMap || new Map()))
         : section(
-            div({ class: "industry-search activity-filter-chips activity-toolbar-row" },
+            emptyMod ? null : div({ class: "industry-search activity-filter-chips activity-toolbar-row" },
               renderModuleStatsBy(facilitiesOrForm, fc => String(fc.status || 'ACTIVE').toUpperCase(), [{ value: 'ACTIVE', label: i18n.industryStatusActive }, { value: 'PAUSED', label: i18n.industryStatusPaused }, { value: 'DISSOLVED', label: i18n.industryStatusDissolved }]),
               form({ method: "GET", action: "/industry", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: f || "ALL" }),
@@ -355,7 +369,6 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
                 )
               )
             ),
-            br(),
             div({ class: "industry-list" }, renderFacilityList(facilitiesOrForm, f, params.spreadMap))
           )
     )
@@ -692,7 +705,7 @@ exports.singleFacilityView = async (facility, filter, params = {}) => {
     renderBlueprintsSection(fc, params.blueprints, isMember, params.childSpreadMap || new Map()),
     renderBuildsSection(fc, params.builds, params.blueprints, isMember, params.childSpreadMap || new Map()),
     renderFacilityJobsSection(fc, params.facilityJobs),
-    renderOpinionsVoting('/industry/opinions', fc.id || fc.key, fc.opinions, null, fc.opinions_inhabitants),
+    renderCardMetaRow(renderOpinionsVoting('/industry/opinions', fc.id || fc.key, fc.opinions, null, fc.opinions_inhabitants)),
     div({ class: "industry-section" },
       h2(i18n.industryMembers || "Members"),
       ul({ class: "industry-members-list" }, safeArr(fc.members).map((mid) => li(

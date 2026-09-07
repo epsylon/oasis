@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -180,17 +180,28 @@ const renderComments = (poll, comments, basePath) => {
   });
 };
 
-const renderFilterBar = (filter, q, showSearch = true, items = null) =>
-  section(
+const renderFilterBar = (filter, q, showSearch = true, items = null, censusList = null) => {
+  const emptyMod = items !== null && moduleIsEmpty(items, filter, "ALL", q);
+  const censusPl = Array.isArray(censusList) ? censusList : (Array.isArray(items) ? items : []);
+  const pollChip = (x) => {
+    const m = x.key;
+    if (m === filter) return true;
+    if (m === "MINE") return censusPl.some(pl => String(pl.author || pl.createdBy) === String(userId));
+    if (m === "RECENT") return censusPl.some(pl => (Date.parse(pl.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "VOTED") return censusPl.some(pl => pl.hasVoted || safeArr(pl.myChoices).length > 0);
+    if (m === "OPEN" || m === "CLOSED") return censusPl.some(pl => String(pl.status || "OPEN").toUpperCase() === m);
+    return true;
+  };
+  return section(
     div({ class: "filters" },
       form({ method: "GET", action: "/polls", class: "ui-toolbar ui-toolbar--filters" },
-        ...FILTERS.map(f =>
+        ...(emptyMod ? [] : FILTERS.filter(pollChip).map(f =>
           button({ type: "submit", name: "filter", value: f.key, class: filter === f.key ? "filter-btn active" : "filter-btn" }, String(i18n[f.i18n]).toUpperCase())
-        ),
+        )),
         button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.pollCreateButton)
       )
     ),
-    showSearch ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
+    showSearch && !emptyMod ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
       items ? renderModuleStatsBy(items, pl => String(pl.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.pollStatusOpen }, { value: 'CLOSED', label: i18n.pollStatusClosed }]) : null,
       form({ method: "GET", action: "/polls", class: "filter-box" },
         input({ type: "hidden", name: "filter", value: filter }),
@@ -201,6 +212,7 @@ const renderFilterBar = (filter, q, showSearch = true, items = null) =>
       )
     ) : null
   );
+};
 
 exports.pollsView = async (polls = [], filter = "ALL", params = {}) => {
   const mode = String(filter).toUpperCase();
@@ -218,11 +230,11 @@ exports.pollsView = async (polls = [], filter = "ALL", params = {}) => {
   return template(
     i18n.pollsTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
-    renderFilterBar(mode, params.q, true, polls),
+    renderFilterBar(mode, params.q, true, polls, params.censusList),
     section(
       polls.length
         ? div({ class: "jobs-grid" }, ...polls.map(pl => renderPollCard(pl, mode, spreadMap.get(pl.id))))
-        : p({ class: "no-content" }, i18n.pollsNoItems)
+        : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.pollsNoItems))
     )
   );
 };

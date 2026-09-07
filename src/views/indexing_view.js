@@ -16,7 +16,6 @@ exports.indexingView = ({ percent }) => {
   const headingText = i18n.indexingTitle || 'Synchronizing';
   const message = i18n.indexingMessage || 'Oasis is trying to syncronize a huge network of inhabitants. Just wait!';
   const refreshNote = i18n.indexingRefreshNote || 'This page refreshes every 10 seconds.';
-  const editProfileLabel = i18n.indexingEditProfileLink || 'Set up my avatar';
 
   return template(
     headingText,
@@ -29,10 +28,6 @@ exports.indexingView = ({ percent }) => {
         progress({ value: String(pct), max: '100', class: 'indexing-progress' }),
         p({ class: 'indexing-percent' }, strong(`${pct.toFixed(1)} %`)),
         p({ class: 'indexing-note' }, refreshNote)
-      ),
-      div({ class: 'indexing-actions' },
-        a({ href: '/profile/edit', class: 'filter-btn welcome-action-primary' }, editProfileLabel),
-        a({ href: '/modules', class: 'filter-btn' }, i18n.modulesTitle || 'Modules')
       )
     )
   ).replace('</head>', '<meta http-equiv="refresh" content="10"></head>');

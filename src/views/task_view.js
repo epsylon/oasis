@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -216,6 +216,17 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
   const ret = typeof returnTo === "string" && returnTo.startsWith("/tasks")
     ? returnTo
     : "/tasks?filter=mine";
+  const emptyMod = moduleIsEmpty(filtered, currentFilter, "all", params.q);
+  const taskChipVisible = (mode) => {
+    if (mode === currentFilter) return true;
+    if (mode === "mine") return visible.some((t) => t.author === userId);
+    if (mode === "assigned") return visible.some((t) => safeArray(t.assignees).includes(userId));
+    if (mode === "open") return visible.some((t) => normalizeStatus(t.status) === "OPEN");
+    if (mode === "in-progress") return visible.some((t) => normalizeStatus(t.status) === "IN-PROGRESS");
+    if (mode === "closed") return visible.some((t) => normalizeStatus(t.status) === "CLOSED");
+    if (mode.indexOf("priority-") === 0) { const pr = mode.slice(9).toUpperCase(); return visible.some((t) => String(t.priority).toUpperCase() === pr); }
+    return true;
+  };
 
   return template(
     title,
@@ -229,22 +240,24 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
         { class: "filters" },
         form(
           { method: "GET", action: "/tasks" },
+          ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAssigned).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterOpen).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterInProgress).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "closed", class: currentFilter === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterClosed).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "priority-low", class: currentFilter === "priority-low" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterLow).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "priority-medium", class: currentFilter === "priority-medium" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMedium).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "priority-high", class: currentFilter === "priority-high" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterHigh).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "priority-urgent", class: currentFilter === "priority-urgent" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterUrgent).toUpperCase()),
+          ...(taskChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMine).toUpperCase())] : []),
+          ...(taskChipVisible("assigned") ? [button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAssigned).toUpperCase())] : []),
+          ...(taskChipVisible("open") ? [button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterOpen).toUpperCase())] : []),
+          ...(taskChipVisible("in-progress") ? [button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterInProgress).toUpperCase())] : []),
+          ...(taskChipVisible("closed") ? [button({ type: "submit", name: "filter", value: "closed", class: currentFilter === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterClosed).toUpperCase())] : []),
+          ...(taskChipVisible("priority-low") ? [button({ type: "submit", name: "filter", value: "priority-low", class: currentFilter === "priority-low" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterLow).toUpperCase())] : []),
+          ...(taskChipVisible("priority-medium") ? [button({ type: "submit", name: "filter", value: "priority-medium", class: currentFilter === "priority-medium" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMedium).toUpperCase())] : []),
+          ...(taskChipVisible("priority-high") ? [button({ type: "submit", name: "filter", value: "priority-high", class: currentFilter === "priority-high" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterHigh).toUpperCase())] : []),
+          ...(taskChipVisible("priority-urgent") ? [button({ type: "submit", name: "filter", value: "priority-urgent", class: currentFilter === "priority-urgent" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterUrgent).toUpperCase())] : []),
+          ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.taskCreateButton)
         )
       ),
       currentFilter === "edit" || currentFilter === "create"
         ? null
-        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+        : emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
           renderModuleStatsBy(filtered, t => normalizeStatus(t.status || 'OPEN'), [{ value: 'OPEN', label: i18n.taskStatusOpen }, { value: 'IN-PROGRESS', label: i18n.taskStatusInProgress }, { value: 'CLOSED', label: i18n.taskStatusClosed }]),
             form({ method: "GET", action: "/tasks", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: currentFilter }),
@@ -308,7 +321,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
           )
         : filtered.length > 0
           ? div({ class: "jobs-grid" }, filtered.map((t) => renderTaskItem(t, currentFilter, params.spreadMap && params.spreadMap.get(t.id))))
-          : p(i18n.notasks)
+          : div({ class: "no-content-box" }, p(i18n.notasks))
     )
   );
 };

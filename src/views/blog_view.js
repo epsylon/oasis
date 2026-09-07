@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderSubscriptionBox, renderModuleStats } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl");
@@ -24,17 +24,27 @@ const excerpt = (text, max = 420) => {
   return s.length > max ? s.slice(0, max) + "…" : s;
 };
 
-const renderFilterBar = (filter, q, showSearch = true, total = null) =>
-  section(
+const renderFilterBar = (filter, q, showSearch = true, total = null, censusList = null) => {
+  const emptyMod = total !== null && moduleIsEmpty({ length: Number(total) || 0 }, filter, "ALL", q);
+  const censusB = Array.isArray(censusList) ? censusList : null;
+  const blogChip = (x) => {
+    const m = x.key;
+    if (!censusB || m === filter) return true;
+    if (m === "MINE") return censusB.some(b => String(b.author) === String(userId));
+    if (m === "RECENT") return censusB.some(b => (Date.parse(b.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "FAVORITES") return censusB.some(b => b.isFavorite);
+    return true;
+  };
+  return section(
     div({ class: "filters" },
       form({ method: "GET", action: "/blogs", class: "ui-toolbar ui-toolbar--filters" },
-        ...FILTERS.map(f =>
+        ...(emptyMod ? [] : FILTERS.filter(blogChip).map(f =>
           button({ type: "submit", name: "filter", value: f.key, class: filter === f.key ? "filter-btn active" : "filter-btn" }, String(i18n[f.i18n]).toUpperCase())
-        ),
+        )),
         button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.blogCreateButton)
       )
     ),
-    showSearch
+    showSearch && !emptyMod
       ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
           total != null ? renderModuleStats(total) : null,
           form({ method: "GET", action: "/blogs", class: "filter-box" },
@@ -47,6 +57,7 @@ const renderFilterBar = (filter, q, showSearch = true, total = null) =>
         )
       : null
   );
+};
 
 const renderBlogCard = (blog, filter, spreadInfo) => {
   const href = `/blogs/${encodeURIComponent(blog.id)}`;
@@ -125,13 +136,13 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
         p(i18n.blogDescription)
       )
     ),
-    renderFilterBar(showForm ? "ALL" : filter, params.q, !showForm, Array.isArray(blogs) ? blogs.length : 0),
+    renderFilterBar(showForm ? "ALL" : filter, params.q, !showForm, Array.isArray(blogs) ? blogs.length : 0, params.censusList),
     showForm
       ? renderCreateForm()
       : section(
           blogs.length
             ? div({ class: "jobs-grid" }, ...blogs.map(b => renderBlogCard(b, filter, spreadMap.get(b.id))))
-            : p({ class: "no-content" }, i18n.blogNoItems)
+            : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.blogNoItems))
         )
   );
 };

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -44,9 +44,10 @@ const buildReturnTo = (filter, params = {}) => {
   return `/shops?${parts.join("&")}`
 }
 
-const renderModeButtons = (currentFilter) =>
+const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
-    ["all", "recent", "mine", "top", "products", "prices", "favorites"].map(f =>
+    ...(emptyMod ? [] : [
+    ["all", "recent", "mine", "top", "products", "prices", "favorites"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
       form({ method: "GET", action: "/shops" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`shopFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
@@ -55,6 +56,7 @@ const renderModeButtons = (currentFilter) =>
     form({ method: "GET", action: "/shops/purchases" },
       button({ type: "submit", class: currentFilter === "purchases" ? "filter-btn active" : "filter-btn" }, (i18n.shopPurchasesButton || "Purchases").toUpperCase())
     ),
+    ]),
     form({ method: "GET", action: "/shops" },
       input({ type: "hidden", name: "filter", value: "create" }),
       button({ type: "submit", class: "create-button" }, i18n.shopUpload)
@@ -210,6 +212,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
   const q = safeText(params.q || "")
   const sort = safeText(params.sort || "recent")
   const list = safeArr(shops)
+  const emptyMod = moduleIsEmpty(list, filter || "all", "all", q)
   const title = i18n.shopsTitle
   const isForm = filter === "create" || filter === "edit"
   const isProducts = filter === "products" || filter === "prices"
@@ -217,8 +220,8 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
   return template(
     title,
     section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.shopDescription))),
-    section(renderModeButtons(filter)),
-    !isForm
+    section(renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null)),
+    !isForm && !emptyMod
       ? section(
           div({ class: "filters activity-filter-chips activity-toolbar-row" },
             isProducts ? renderModuleStats(list.length) : renderModuleStatsBy(list, s => String(s.visibility || '').toUpperCase(), [{ value: 'OPEN', label: i18n.shopOpen }, { value: 'CLOSED', label: i18n.shopClosed }]),

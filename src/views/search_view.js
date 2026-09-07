@@ -641,7 +641,9 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         })
       )
     )
-    : div({ class: 'no-results' }, p(i18n.noResultsFound));
+    : (String(query || '').trim() || hashtag
+        ? div({ class: 'no-results' }, p(i18n.noResultsFound))
+        : null);
 
   let html = template(
     hashtag ? `#${hashtag}` : i18n.searchTitle,

@@ -44,6 +44,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
   const counts = params.counts || {};
   const types = Object.keys(counts).sort((a, b) => (counts[b] - counts[a]) || a.localeCompare(b));
   const q = params.q || '';
+  const emptyMentions = (!Array.isArray(items) || items.length === 0) && String(filter || 'ALL').toUpperCase() === 'ALL' && !q.trim();
 
   return template(
     i18n.mentions,
@@ -62,7 +63,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
             )
           )
         : null,
-      div({ class: "filters activity-filter-chips activity-toolbar-row" },
+      emptyMentions ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
         renderModuleStats(items.length),
         form({ method: "GET", action: "/mentions", class: "filter-box" },
           input({ type: "hidden", name: "filter", value: filter }),
@@ -76,7 +77,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
     section(
       items.length
         ? div({ class: "mentions-list" }, ...items.map(renderMentionCard))
-        : p({ class: "empty" }, i18n.noMentions)
+        : div({ class: "no-content-box" }, p({ class: "empty" }, i18n.noMentions))
     )
   );
 };

@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, label, br, a, span, textar
   require("../server/node_modules/hyperaxe");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderInviteQrCard, renderModuleStats } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderInviteQrCard, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapWithPins, renderZoomedMapWithPins, getViewportBounds, latLngToPx, pxToLatLng, MAP_W, MAP_H, getMaxTileZoom } = require("../maps/map_renderer");
@@ -172,7 +172,7 @@ const renderMapOwnerActions = (filter, mapObj, params = {}) => {
       actions.push(div({ class: 'tribe-open-invite' },
         span({ class: 'card-label' }, i18n.tribeInviteCodeText),
         span({ class: 'tribe-open-invite-code' }, openInvite.code),
-        renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(openInvite.code)}` })
+        renderInviteQrCard({ qrDataUrl: `/qr-invite-code/maps/${encodeURIComponent(openInvite.code)}` })
       ));
       actions.push(form({ method: "POST", action: `/maps/open-invite/remove/${encodeURIComponent(mapObj.key)}` },
         button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)));
@@ -184,14 +184,16 @@ const renderMapOwnerActions = (filter, mapObj, params = {}) => {
   return actions;
 };
 
-const renderFilters = (filter, q) =>
+const renderFilters = (filter, q, emptyMod = false, chip = null) =>
   div({ class: "filters" },
     form({ method: "GET", action: "/maps", class: "ui-toolbar ui-toolbar--filters" },
       input({ type: "hidden", name: "q", value: q || "" }),
+      ...(emptyMod ? [] : [
       button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterAll).toUpperCase()),
-      button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterMine).toUpperCase()),
-      button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterRecent).toUpperCase()),
-      button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterFavorites).toUpperCase()),
+      ...(!chip || chip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterMine).toUpperCase())] : []),
+      ...(!chip || chip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterRecent).toUpperCase())] : []),
+      ...(!chip || chip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterFavorites).toUpperCase())] : []),
+      ]),
       button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.mapCreateButton)));
 
 const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
@@ -398,16 +400,25 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
   const list = safeArr(maps);
   const mapToEdit = mapId ? list.find((m) => m.key === mapId) : null;
   const allMarkers = list.map((m) => ({ lat: m.lat, lng: m.lng, href: `/maps/${encodeURIComponent(m.key)}` }));
+  const emptyMod = moduleIsEmpty(list, filter, "all", q);
+  const censusMp = Array.isArray(params.censusList) ? params.censusList : list;
+  const mapsChip = (mode) => {
+    if (mode === filter) return true;
+    if (mode === "mine") return censusMp.some((x) => String(x.author) === String(userId));
+    if (mode === "recent") return censusMp.some((x) => (Date.parse(x.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (mode === "favorites") return censusMp.some((x) => x.isFavorite);
+    return true;
+  };
 
   return template(title,
     section(
       div({ class: "tags-header module-header-line" }, h2(title), p(i18n.mapDescription)),
-      renderFilters(filter, q)),
+      renderFilters(filter, q, emptyMod, mapsChip)),
     section(
       filter === "create" || filter === "edit"
         ? renderMapForm(filter, mapId, mapToEdit, { ...params, filter })
         : section(
-            div({ class: "maps-search activity-filter-chips activity-toolbar-row" },
+            emptyMod ? null : div({ class: "maps-search activity-filter-chips activity-toolbar-row" },
               renderModuleStats(list.length),
               form({ method: "GET", action: "/maps", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),

@@ -32,14 +32,14 @@ const renderMediaThumb = (entry, alt = "") => isVideoEntry(entry)
 const lightboxId = (scope, itemId, index) => `${scope}-photo-${encodeURIComponent(itemId)}-${index}`
 
 let zoomSeq = 0
-const renderZoomableImage = (src, { alt = "", imgClass = "" } = {}) => {
+const renderZoomableImage = (src, { alt = "", imgClass = "", linkClass = "" } = {}) => {
   if (!src) return null
   zoomSeq = (zoomSeq + 1) % 1000000
   const id = `zoom-${zoomSeq}-${String(src).replace(/[^a-zA-Z0-9]/g, "").slice(-10)}`
   return [
-    a({ href: `#${id}`, class: "zoom-link" }, img({ src, class: imgClass, alt })),
+    a({ href: `#${id}`, id: `${id}-src`, class: linkClass ? `zoom-link ${linkClass}` : "zoom-link" }, img({ src, class: imgClass, alt })),
     div({ id, class: "lightbox" },
-      a({ href: "#", class: "lightbox-close" }, "×"),
+      a({ href: `#${id}-src`, class: "lightbox-close" }, "×"),
       img({ src, class: "lightbox-image", alt })
     )
   ]
@@ -56,13 +56,13 @@ const renderPhotoGallery = (item, scope = "media") => {
           list.map((entry, i) =>
             isVideoEntry(entry)
               ? span({ class: "gallery-item" }, renderMediaThumb(entry))
-              : a({ href: `#${lightboxId(scope, id, i)}`, class: "gallery-item" }, renderMediaThumb(entry))
+              : a({ href: `#${lightboxId(scope, id, i)}`, id: `${lightboxId(scope, id, i)}-src`, class: "gallery-item" }, renderMediaThumb(entry))
           )
         )
       : null,
     list.filter(entry => !isVideoEntry(entry)).map((entry) =>
       div({ id: lightboxId(scope, id, list.indexOf(entry)), class: "lightbox" },
-        a({ href: "#", class: "lightbox-close" }, "×"),
+        a({ href: `#${lightboxId(scope, id, list.indexOf(entry))}-src`, class: "lightbox-close" }, "×"),
         img({ src: blobUrl(blobIdOf(entry)), class: "lightbox-image", alt: "" })
       )
     ),

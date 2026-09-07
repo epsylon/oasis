@@ -64,12 +64,14 @@ const CycleInfo = (start, end, labels = {
     KPI((labels.end + ': ').toUpperCase(), fmt(end)),
     KPI((labels.remaining + ': ').toUpperCase(), timeLeft(end))
   );
-const Tabs = (active) =>
+const Tabs = (active, avail = null) =>
   div(
     { class: 'filters' },
     form(
       { method: 'GET', action: '/parliament' },
-      ['government', 'candidatures', 'proposals', 'laws', 'revocations', 'historical', 'leaders', 'rules'].map(f =>
+      ['government', 'candidatures', 'proposals', 'laws', 'revocations', 'historical', 'leaders', 'rules']
+        .filter(f => !avail || f === 'government' || f === 'rules' || f === active || avail[f])
+        .map(f =>
         button({ type: 'submit', name: 'filter', value: f, class: active === f ? 'filter-btn active' : 'filter-btn' }, i18n[`parliamentFilter${f.charAt(0).toUpperCase()+f.slice(1)}`])
       )
     )
@@ -969,7 +971,14 @@ const parliamentView = async (state) => {
 
   return template(
     i18n.parliamentTitle,
-    section(div({ class: 'tags-header module-header-line' }, h2(i18n.parliamentTitle), p(i18n.parliamentDescription)), Tabs(filter)),
+    section(div({ class: 'tags-header module-header-line' }, h2(i18n.parliamentTitle), p(i18n.parliamentDescription)), Tabs(filter, {
+      candidatures: (candidatures || []).length > 0,
+      proposals: (proposals || []).length > 0,
+      laws: (laws || []).length > 0 || (futureLaws || []).length > 0,
+      revocations: (revocations || []).length > 0 || (futureRevocations || []).length > 0,
+      historical: (historical || []).length > 0,
+      leaders: (leaders || []).length > 0
+    })),
     section(
       filter === 'government' ? GovernmentCard(gov, powerMeta) : null,
       filter === 'candidatures' ? CandidaturesSection(gov, candidatures, leaderMeta, electionQuorum) : null,

@@ -3,7 +3,7 @@ const {
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderUrl } = require('../backend/renderUrl');
@@ -83,7 +83,7 @@ const renderVotes = (target, score, forumId) =>
 
 const renderForumForm = () =>
   div({ class: 'forum-form' },
-    form({ action: '/forum/create', method: 'POST' },
+    form({ action: '/forum/create', method: 'POST', enctype: 'multipart/form-data' },
       label(i18n.forumCategoryLabel), br(),
       select({ name: 'category', required: true },
         ALL_CATS.map(cat => option({ value: cat }, catLabel(cat)))
@@ -107,6 +107,8 @@ const renderForumForm = () =>
         rows: 4,
         placeholder: i18n.forumMessagePlaceholder
       }), br(), br(),
+      label(i18n.uploadMedia), br(),
+      input({ type: 'file', name: 'blob' }), br(), br(),
       button({ type: 'submit' }, i18n.forumCreateButton)
     )
   );
@@ -156,7 +158,8 @@ const renderThread = (nodes, level = 0, forumId) => {
           form({
             method: 'POST',
             action: `/forum/${encodeURIComponent(forumId)}/message`,
-            class: 'comment-form'
+            class: 'comment-form',
+            enctype: 'multipart/form-data'
           },
             input({ type: 'hidden', name: 'parentId', value: m.key }),
             textarea({ maxlength: "5000",
@@ -166,6 +169,7 @@ const renderThread = (nodes, level = 0, forumId) => {
               placeholder: i18n.forumMessagePlaceholder,
               class: 'comment-textarea'
             }),
+            div({ class: 'comment-file-upload' }, input({ type: 'file', name: 'blob' })),
             button({ type: 'submit', class: 'forum-send-btn' }, 'Reply')
           )
         )
@@ -246,6 +250,8 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
 
 exports.forumView = async (forums, currentFilter, params = {}) => {
   const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
+  const emptyModForum = moduleIsEmpty(getFilteredForums(currentFilter || 'all', forums), currentFilter || 'all', 'all', params.q);
+  const presentCats = new Set((Array.isArray(forums) ? forums : []).map(f => f && f.category).filter(Boolean));
   return template(i18n.forumTitle,
     section(
       div({ class: 'tags-header module-header-line' },
@@ -253,20 +259,22 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
         p(i18n.forumDescription)
       ),
       div({ class: 'mode-buttons-row' },
+        ...(emptyModForum ? [] : [
         generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,
           recent: i18n.forumFilterRecent,
           top: i18n.forumFilterTop
         }),
-        generateFilterButtons(CAT_BLOCK1, currentFilter, '/forum', CAT_I18N_MAP_UP),
-        generateFilterButtons(CAT_BLOCK2, currentFilter, '/forum', CAT_I18N_MAP_UP),
-        generateFilterButtons(CAT_BLOCK3, currentFilter, '/forum', CAT_I18N_MAP_UP),
+        generateFilterButtons(CAT_BLOCK1.filter(c => presentCats.has(c) || c === currentFilter), currentFilter, '/forum', CAT_I18N_MAP_UP),
+        generateFilterButtons(CAT_BLOCK2.filter(c => presentCats.has(c) || c === currentFilter), currentFilter, '/forum', CAT_I18N_MAP_UP),
+        generateFilterButtons(CAT_BLOCK3.filter(c => presentCats.has(c) || c === currentFilter), currentFilter, '/forum', CAT_I18N_MAP_UP)
+        ]),
         renderCreateForumButton()
       ),
       currentFilter === 'create'
         ? null
-        : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+        : emptyModForum ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
           renderModuleStats(getFilteredForums(currentFilter || 'all', forums).length),
             form({ method: 'GET', action: '/forum', class: 'filter-box' },
               input({ type: 'hidden', name: 'filter', value: currentFilter || 'all' }),
@@ -355,7 +363,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
               ? div({ class: 'tribe-open-invite' },
                   span({ class: 'card-label' }, i18n.tribeInviteCodeText),
                   span({ class: 'tribe-open-invite-code' }, forum.openInviteCode),
-                  renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(forum.openInviteCode)}` }))
+                  renderInviteQrCard({ qrDataUrl: `/qr-invite-code/forum/${encodeURIComponent(forum.openInviteCode)}` }))
               : null,
             (forum.isPrivate && forum.author === userId && forum.openInviteCode)
               ? form({ method: 'POST', action: `/forum/open-invite/remove/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
@@ -404,7 +412,8 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
         form({
           method: 'POST',
           action: `/forum/${encodeURIComponent(forum.key)}/message`,
-          class: 'new-message-form'
+          class: 'new-message-form',
+          enctype: 'multipart/form-data'
         },
           textarea({ maxlength: "5000",
             name: 'message',
@@ -413,6 +422,8 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
             placeholder: i18n.forumMessagePlaceholder,
             class: 'new-message-textarea'
           }), br(),
+          label(i18n.uploadMedia), br(),
+          input({ type: 'file', name: 'blob' }), br(),
           button({ type: 'submit', class: 'forum-send-btn' }, i18n.forumSendButton)
         )
       ),

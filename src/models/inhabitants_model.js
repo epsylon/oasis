@@ -282,6 +282,7 @@ module.exports = ({ cooler }) => {
         name: c.name,
         description: c.description,
         photo,
+        pdf: c.pdf || null,
         skills: [
           ...(c.personalSkills || []),
           ...(c.oasisSkills || []),
@@ -354,7 +355,7 @@ module.exports = ({ cooler }) => {
           case 'housing': return up(c.visibility) !== 'HIDDEN' || isOwner;
           case 'market': return up(c.visibility) !== 'HIDDEN' || isOwner;
           case 'shop':   return up(c.visibility) !== 'CLOSED' || isOwner;
-          case 'tribe':  { const st = up(c.status); return !(st === 'PRIVATE' || st === 'INVITE-ONLY') || isOwner || arr(c.members).includes(viewer); }
+          case 'tribe':  { const st = up(c.status); return !(c.isAnonymous === true || st === 'PRIVATE' || st === 'INVITE-ONLY') || isOwner || arr(c.members).includes(viewer); }
           default: return true;
         }
       };

@@ -315,6 +315,10 @@ exports.statsView = (stats, filter) => {
     const max = Math.max(1, ...rows.map(r => Number(r.count) || 0));
     return div({ class: 'stats-block' },
       h2(i18n.statsActivity7d),
+      kpiGrid(
+        kpi(i18n.statsActivity7dTotal, stats.activity?.daily7Total || 0),
+        kpi(i18n.statsActivity30dTotal, stats.activity?.daily30Total || 0)
+      ),
       rows.length
         ? ul({ class: 'stats-toplist' },
             ...rows.map(row => {
@@ -329,11 +333,7 @@ exports.statsView = (stats, filter) => {
               );
             })
           )
-        : p({ class: 'no-content' }, i18n.no_results || 'No data'),
-      div({ class: 'stats-activity-totals' },
-        span(`${i18n.statsActivity7dTotal}: `, strong(String(stats.activity?.daily7Total || 0))),
-        span(`${i18n.statsActivity30dTotal}: `, strong(String(stats.activity?.daily30Total || 0)))
-      )
+        : p({ class: 'no-content' }, i18n.no_results || 'No data')
     );
   })();
 

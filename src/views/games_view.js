@@ -27,7 +27,7 @@ const shortId = (feedId) => feedId ? '@' + feedId.slice(1, 9) + '...' : '?';
 const renderHallOfFame = (hall, games) => {
   const gamesWithScores = games.filter(g => hall[g.id] && hall[g.id].length > 0);
   if (gamesWithScores.length === 0) {
-    return p({ class: 'no-content' }, i18n.gamesNoScores || 'No scores yet.');
+    return div({ class: 'no-content-box' }, p({ class: 'no-content' }, i18n.gamesNoScores || 'No scores yet.'));
   }
   return div({ class: 'games-scoring-list' },
     gamesWithScores.map(game =>

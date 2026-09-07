@@ -27,7 +27,7 @@ module.exports = ({ cooler }) => {
   return {
     type: 'curriculum',
 
-    async createCV(data, photoBlobId) {
+    async createCV(data, photoBlobId, pdfBlobId = null) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const content = {
@@ -36,6 +36,7 @@ module.exports = ({ cooler }) => {
         name: data.name,
         description: data.description,
         photo: extractBlobId(photoBlobId) || null,
+        pdf: extractBlobId(pdfBlobId) || null,
         contact: userId,
         personalSkills: parseCSV(data.personalSkills),
         personalExperiences: data.personalExperiences || '',
@@ -59,7 +60,7 @@ module.exports = ({ cooler }) => {
       });
     },
 
-    async updateCV(id, data, photoBlobId) {
+    async updateCV(id, data, photoBlobId, pdfBlobId = null) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
@@ -91,6 +92,7 @@ module.exports = ({ cooler }) => {
         name: data.name,
         description: data.description,
         photo: extractBlobId(photoBlobId) || old.content.photo || null,
+        pdf: extractBlobId(pdfBlobId) || old.content.pdf || null,
         contact: userId,
         personalSkills: parseCSV(data.personalSkills),
         personalExperiences: data.personalExperiences || '',

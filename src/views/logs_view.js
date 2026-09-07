@@ -21,9 +21,9 @@ const filterLabel = (f) => {
   return map[f] || f.toUpperCase();
 };
 
-const renderFilterBar = (current, hasItems = true) =>
+const renderFilterBar = (current, hasItems = true, emptyLogs = false) =>
   div({ class: "activity-sub-filter" },
-    form({ method: "GET", action: "/logs", class: "sub-filter-form" },
+    emptyLogs ? null : form({ method: "GET", action: "/logs", class: "sub-filter-form" },
       FILTERS.map(f =>
         button({
           type: "submit", name: "filter", value: f,
@@ -69,10 +69,10 @@ const renderSearchBox = (current, search, items = null) => {
   );
 };
 
-const renderToolbar = (current, search, hasItems, items = null) =>
+const renderToolbar = (current, search, hasItems, items = null, emptyLogs = false) =>
   div({ class: "logs-toolbar-wrap" },
-    renderFilterBar(current, hasItems),
-    renderSearchBox(current, search, items)
+    renderFilterBar(current, hasItems, emptyLogs),
+    emptyLogs ? null : renderSearchBox(current, search, items)
   );
 
 const truncate = (value, max = 160) => {
@@ -230,9 +230,11 @@ exports.logsView = (items, filter, mode, opts = {}) => {
   if (view === 'detail' && opts.entry) {
     return screen(renderDetail(opts.entry));
   }
+  const sr = opts.search || {};
+  const emptyLogs = Number(opts.total ?? items.length) === 0 && !String(sr.q || '').trim() && !String(sr.type || '').trim() && !String(sr.date || '').trim();
   const body = section(
     div({ class: "tags-header module-header-line" }, h2(listTitle), p(description)),
-    renderToolbar(filter, opts.search || {}, hasItems, items),
+    renderToolbar(filter, opts.search || {}, hasItems, items, emptyLogs),
     div({ class: "logs-list" }, renderTable(items))
   );
   return template(listTitle, body);

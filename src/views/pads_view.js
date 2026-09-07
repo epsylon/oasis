@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -82,15 +82,17 @@ const renderPadStatusChip = (status, isClosed) => {
   return renderStateChip(variant, icon, label)
 }
 
-const renderModeButtons = (currentFilter) =>
+const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
-    ["all", "mine", "recent", "open", "closed"].map(f =>
+    ...(emptyMod ? [] : [
+    ["all", "mine", "recent", "open", "closed"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
       form({ method: "GET", action: "/pads" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" },
           i18n[`padFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
       )
     ),
+    ]),
     form({ method: "GET", action: "/pads" },
       input({ type: "hidden", name: "filter", value: "create" }),
       button({ type: "submit", class: "create-button" }, i18n.padCreate || "Create Pad")
@@ -179,18 +181,19 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
   const q = String((params && params.q) || "").trim()
   const isForm = filter === "create" || filter === "edit"
   const headerText = i18n.padsTitle
+  const emptyMod = moduleIsEmpty(Array.isArray(pads) ? pads : [], filter || "all", "all", q)
 
   const filteredPads = q
     ? pads.filter(pd => String(pd.title || "").toLowerCase().includes(q.toLowerCase()))
     : pads
 
-  const body = div({ class: "main-column" },
+  const body = section(
     div({ class: "tags-header module-header-line" },
       h2(headerText),
       p(i18n.padsDescription || "Manage collaborative encrypted text editors in your network.")
     ),
-    renderModeButtons(filter),
-    !isForm
+    renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null),
+    !isForm && !emptyMod
       ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
         renderModuleStatsBy(filteredPads, pd => pd.isClosed ? 'CLOSED' : String(pd.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.padStatusOpen }, { value: 'INVITE-ONLY', label: i18n.padStatusInviteOnly }, { value: 'CLOSED', label: i18n.padStatusClosed }]),
           form({ method: "GET", action: "/pads", class: "filter-box" },
@@ -249,7 +252,7 @@ exports.singlePadView = async (pad, entries, params) => {
         div({ class: "tribe-open-invite" },
           span({ class: "card-label" }, i18n.tribeInviteCodeText),
           span({ class: "tribe-open-invite-code" }, openInvite.code),
-          renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(openInvite.code)}` })
+          renderInviteQrCard({ qrDataUrl: `/qr-invite-code/pads/${encodeURIComponent(openInvite.code)}` })
         ),
         form({ method: "POST", action: `/pads/open-invite/remove/${encodeURIComponent(pad.rootId)}` },
           button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)

@@ -49,6 +49,8 @@ exports.createCVView = async (cv = {}, editMode = false) => {
             input({ type: "text", name: "languages", value: cv.languages || "" }), br(),
             label(i18n.cvPhotoLabel), br(),
             input({ type: "file", name: "image" }), br(), br(),
+            label(i18n.cvPdfLabel), br(),
+            input({ type: "file", name: "cvPdf", accept: "application/pdf" }), br(), br(),
             label(i18n.cvPersonalExperiencesLabel), br(),
             textarea({ maxlength: "5000", name: "personalExperiences", rows: 4 }, cv.personalExperiences || ""), br(),
             label(i18n.cvPersonalSkillsLabel), br(),
@@ -115,12 +117,12 @@ exports.cvView = async (cv, certificates = []) => {
           h2(title),
           p(i18n.cvDescription)
         ),
-        div({ class: "no-cv" },
-          p(i18n.cvNoCV),
+        div({ class: "filters" },
           form({ method: "GET", action: "/cv/create" },
-            button({ type: "submit" }, i18n.cvCreateButton)
+            button({ type: "submit", class: "create-button" }, i18n.cvCreateButton)
           )
         ),
+        div({ class: "no-content-box" }, p(i18n.cvNoCV)),
         Array.isArray(certificates) && certificates.length
           ? div({ class: "cv-section-block school-certificates" },
               h2(i18n.schoolCertificates),
@@ -194,6 +196,9 @@ exports.cvView = async (cv, certificates = []) => {
             img({ class: 'profile-qr-img', src: `/qr/${encodeURIComponent(cv.contact || cv.author)}?size=240`, alt: 'QR' })))
       : null,
     cv.contact ? p(userLink(cv.contact)) : null,
+    cv.pdf
+      ? p(a({ href: `/blob/${encodeURIComponent(cv.pdf)}`, target: "_blank", rel: "noopener", class: "filter-btn" }, "📄 " + i18n.cvPdfLabel))
+      : null,
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     uniqueSkills.length
       ? div({ class: "tribe-card-members" },

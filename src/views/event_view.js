@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -78,7 +78,7 @@ const renderEventOwnerActions = (e, returnTo) => {
       actions.push(div({ class: "tribe-open-invite" },
         span({ class: "card-label" }, i18n.tribeInviteCodeText),
         span({ class: "tribe-open-invite-code" }, e.openInviteCode),
-        renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(e.openInviteCode)}` })
+        renderInviteQrCard({ qrDataUrl: `/qr-invite-code/events/${encodeURIComponent(e.openInviteCode)}` })
       ));
       actions.push(form(
         { method: "POST", action: `/events/open-invite/remove/${encodeURIComponent(e.id)}` },
@@ -216,6 +216,18 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   const minCreate = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm");
 
   const ret = typeof returnTo === "string" && returnTo.startsWith("/events") ? returnTo : "/events?filter=mine";
+  const emptyMod = moduleIsEmpty(filtered, currentFilter, "all", params.q);
+  const pubE = (e) => normalizePrivacy(e.isPublic) === "public";
+  const eventChipVisible = (mode) => {
+    if (mode === currentFilter) return true;
+    if (mode === "mine") return visible.some((e) => e.organizer === userId);
+    if (mode === "today") return visible.some((e) => pubE(e) && moment(e.date).isSame(moment(), "day"));
+    if (mode === "week") return visible.some((e) => pubE(e) && moment(e.date).isBetween(moment(), moment().add(7, "days"), null, "[]"));
+    if (mode === "month") return visible.some((e) => pubE(e) && moment(e.date).isBetween(moment(), moment().add(1, "month"), null, "[]"));
+    if (mode === "year") return visible.some((e) => pubE(e) && moment(e.date).isBetween(moment(), moment().add(1, "year"), null, "[]"));
+    if (mode === "archived") return visible.some((e) => pubE(e) && normalizeEventStatus(e.status) === "CLOSED");
+    return true;
+  };
   const editPrivacy = normalizePrivacy(formData.isPublic);
   const editInterval = formData.interval
     || (formData.intervalWeekly ? "weekly" : formData.intervalMonthly ? "monthly" : formData.intervalYearly ? "yearly" : "");
@@ -228,27 +240,28 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
     section(
       div({ class: "tags-header module-header-line" },
         h2(i18n.eventsTitle),
-        p(i18n.eventsDescription)
+        p(i18n.eventsDescription),
+        renderReachChipEvents(viewerClearnetEvents, i18n)
       ),
-      div({ class: "shop-title-row" }, renderReachChipEvents(viewerClearnetEvents, i18n)),
-      br(),
       div(
         { class: "filters" },
         form(
           { method: "GET", action: "/events" },
+          ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "year", class: currentFilter === "year" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterYear).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "archived", class: currentFilter === "archived" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterArchived).toUpperCase()),
+          ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
+          ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),
+          ...(eventChipVisible("week") ? [button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase())] : []),
+          ...(eventChipVisible("month") ? [button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase())] : []),
+          ...(eventChipVisible("year") ? [button({ type: "submit", name: "filter", value: "year", class: currentFilter === "year" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterYear).toUpperCase())] : []),
+          ...(eventChipVisible("archived") ? [button({ type: "submit", name: "filter", value: "archived", class: currentFilter === "archived" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterArchived).toUpperCase())] : []),
+          ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.eventCreateButton)
         )
       ),
       currentFilter === "edit" || currentFilter === "create"
         ? null
-        : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+        : emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
           renderModuleStatsBy(filtered, e => normalizeEventStatus(e.status), [{ value: 'OPEN', label: i18n.eventStatusOpen }, { value: 'CLOSED', label: i18n.eventStatusClosed }]),
             form({ method: "GET", action: "/events", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: currentFilter }),
@@ -289,6 +302,8 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
               ),
               br(),
               ...renderGalleryFields(formData, currentFilter === "edit"),
+              label(i18n.attachmentLabel), br(),
+              input({ type: "file", name: "blob" }), br(), br(),
               br(),
               label(i18n.eventDateLabel),
               br(),
@@ -367,7 +382,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
           )
         : filtered.length > 0
           ? div({ class: "jobs-grid" }, filtered.map((e) => renderEventItem(e, currentFilter, params.spreadMap && params.spreadMap.get(e.id))))
-          : p(i18n.noevents)
+          : div({ class: "no-content-box" }, p(i18n.noevents))
     )
   );
 };

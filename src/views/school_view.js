@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
@@ -41,14 +41,16 @@ const buildReturnTo = (filter, params = {}) => {
   return `/school?${parts.join("&")}`
 }
 
-const renderModeButtons = (currentFilter) =>
+const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
-    ["all", "mine", "recent", "top", "applied", "open", "favorites"].map(f =>
+    ...(emptyMod ? [] : [
+    ["all", "mine", "recent", "top", "applied", "open", "favorites"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
       form({ method: "GET", action: "/school" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`schoolFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
       )
     ),
+    ]),
     form({ method: "GET", action: "/school" },
       input({ type: "hidden", name: "filter", value: "create" }),
       button({ type: "submit", class: "create-button" }, i18n.schoolCreateButton)
@@ -142,14 +144,15 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
   const q = safeText(params.q || "")
   const sort = safeText(params.sort || "recent")
   const list = safeArr(courses)
+  const emptyMod = moduleIsEmpty(list, filter || "all", "all", q)
   const title = i18n.schoolTitle
   const isForm = filter === "create" || filter === "edit"
 
   return template(
     title,
     section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.schoolDescription))),
-    section(renderModeButtons(filter)),
-    !isForm
+    section(renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null)),
+    !isForm && !emptyMod
       ? section(
           div({ class: "filters activity-filter-chips activity-toolbar-row" },
             renderModuleStatsBy(list, c => String(c.status || 'ONGOING').toUpperCase(), [{ value: 'ONGOING', label: i18n.schoolOngoing }, { value: 'CLOSED', label: i18n.schoolClosed }]),
@@ -200,6 +203,9 @@ const renderLesson = (lesson, course, isTeacher, returnTo, isStudent = false, is
         renderMd(lesson.text),
         div({ class: "school-lesson-actions" },
           a({ href: `/school/lesson/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}`, class: "filter-btn" }, i18n.schoolLessonOpen || "Open lesson"),
+          isTeacher
+            ? a({ href: `/school/lesson/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}?edit=1`, class: "filter-btn" }, i18n.chatUpdate)
+            : null,
           isStudent
             ? form({ method: "POST", action: `/school/lesson/complete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}`, class: "inline-form" },
                 input({ type: "hidden", name: "value", value: lesson.completed ? "false" : "true" }),
@@ -440,7 +446,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
           div({ class: "tribe-open-invite" },
             span({ class: "card-label" }, i18n.tribeInviteCodeText),
             span({ class: "tribe-open-invite-code" }, course.inviteCode),
-            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/${encodeURIComponent(course.inviteCode)}` })
+            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/school/${encodeURIComponent(course.inviteCode)}` })
           )
         )
       : null,

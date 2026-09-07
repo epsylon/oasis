@@ -327,6 +327,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       chatId: c.chatId || "",
       text,
       image: c.image || null,
+      mimeType: typeof c.mimeType === "string" ? c.mimeType : null,
       replyTo: typeof c.replyTo === "string" ? c.replyTo : null,
       author: c.author || node.author,
       createdAt: c.createdAt || new Date(node.ts).toISOString()
@@ -848,7 +849,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       } catch (_) { return 0 }
     },
 
-    async sendMessage(chatId, text, image = null, replyTo = null) {
+    async sendMessage(chatId, text, image = null, replyTo = null, mimeType = null) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const chat = await this.getChatById(chatId)
@@ -880,6 +881,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         createdAt: now
       }
       if (image) content.image = image
+      if (image && mimeType) content.mimeType = String(mimeType)
       if (replyTo) {
         const idxAll = buildIndex(messages)
         const target = idxAll.msgNodes.get(replyTo)

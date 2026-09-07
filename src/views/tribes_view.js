@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStatsBy } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require('./main_views');
 const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { renderResults: renderPollResults, renderBallot: renderPollBallot } = require('./polls_view');
 const { config } = require('../server/SSB_server.js');
@@ -86,7 +86,7 @@ const renderGallery = (sortedTribes) => {
   return div({ class: "gallery" },
     sortedTribes.length
       ? sortedTribes.map(t =>
-          a({ href: `#tribe-${encodeURIComponent(t.id)}`, class: "gallery-item" },
+          a({ href: `#tribe-${encodeURIComponent(t.id)}`, id: `tribe-${encodeURIComponent(t.id)}-src`, class: "gallery-item" },
            img({ src: toImageUrl(t.image, '/assets/images/default-tribe.png'), alt: t.title || "", class: "gallery-image" })
           )
         )
@@ -98,7 +98,7 @@ const renderLightbox = (sortedTribes) => {
   return sortedTribes.map(t =>
     div(
       { id: `tribe-${encodeURIComponent(t.id)}`, class: "lightbox" },
-      a({ href: "#", class: "lightbox-close" }, "×"),
+      a({ href: `#tribe-${encodeURIComponent(t.id)}-src`, class: "lightbox-close" }, "×"),
       img({ src: toImageUrl(t.image, '/assets/images/default-tribe.png'), class: "lightbox-image", alt: t.title || "" })
     )
   );
@@ -171,7 +171,17 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
 
   const header = div({ class: 'tags-header module-header-line' }, h2(title), p(i18n.tribeDescription));
 
-  const filters = div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+  const emptyMod = moduleIsEmpty(Array.isArray(tribes) ? tribes : [], filter || 'all', 'all', query.search);
+  const nowChip = Date.now();
+  const tribeChip = (m) => {
+    if (m === filter) return true;
+    if (m === 'mine') return tribes.some(t => t.author === userId);
+    if (m === 'membership') return tribes.some(t => Array.isArray(t.members) && t.members.includes(userId));
+    if (m === 'subtribes') return tribes.some(t => !!t.parentTribeId);
+    if (m === 'recent') return tribes.some(t => ((typeof t.createdAt === 'string' ? Date.parse(t.createdAt) : t.createdAt) || 0) >= nowChip - 86400000);
+    return true;
+  };
+  const filters = emptyMod ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
     renderModuleStatsBy(sorted, t => t.isAnonymous ? 'PRIVATE' : 'PUBLIC', [{ value: 'PUBLIC', label: i18n.tribePublic }, { value: 'PRIVATE', label: i18n.tribePrivate }]),
     form({ method: 'GET', action: '/tribes', class: 'filter-box' },
       input({ type: 'hidden', name: 'filter', value: filter }),
@@ -183,7 +193,8 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
   );
 
   const modeButtons = div({ class: 'tribe-mode-buttons' },
-    ['all','recent','mine','membership','subtribes','top','gallery'].map(f =>
+    ...(emptyMod ? [] : [
+    ['all','recent','mine','membership','subtribes','top','gallery'].filter(tribeChip).map(f =>
     form({ method: 'GET', action: '/tribes' },
       input({ type: 'hidden', name: 'filter', value: f }),
       button({ type: 'submit', class: filter === f ? 'filter-btn active' : 'filter-btn' },
@@ -191,6 +202,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
         )
       )
     ),
+    ]),
     form({ method: 'GET', action: '/tribes/create' },
       button({ type: 'submit', class: 'create-button' }, i18n.tribeCreateButton)
     )
@@ -331,15 +343,15 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     title,
     section(header),
     section(modeButtons),
-    section(filters),
+    filters ? section(filters) : null,
     section(
       (filter === 'create' || filter === 'edit')
         ? createForm
         : filter === 'gallery'
           ? renderGallery(sorted)
-          : div({ class: 'tribe-grid' },
-              tribeCards.length > 0 ? tribeCards : p(i18n.noTribes)
-            )
+          : tribeCards.length > 0
+            ? div({ class: 'tribe-grid' }, tribeCards)
+            : div({ class: "no-content-box" }, p(i18n.noTribes))
      ),
     ...renderLightbox(sorted)
   );
