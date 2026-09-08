@@ -167,7 +167,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       const c = a.content || {};
       if (c.tribeId || c.encryptedText) continue;
       const root = c.chatId;
-      if (!root || typeof c.text !== 'string' || !c.text) continue;
+      if (!root) continue;
+      if (!(typeof c.text === 'string' && c.text) && !c.image) continue;
       if (!msgsByRoot.has(root)) msgsByRoot.set(root, []);
       msgsByRoot.get(root).push(a);
     }
@@ -199,7 +200,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
           description: info.description || '',
           members: Math.max(info.members || 0, new Set(asc.map(m => m.author)).size),
           messageCount: asc.length,
-          replies: asc.slice(-CHAT_THREAD_LIMIT).map(m => ({ id: m.id, author: m.author, ts: m.ts || 0, text: (m.content && m.content.text) || '' }))
+          replies: asc.slice(-CHAT_THREAD_LIMIT).map(m => ({ id: m.id, author: m.author, ts: m.ts || 0, text: (m.content && m.content.text) || '', image: (m.content && m.content.image) || null, mimeType: (m.content && m.content.mimeType) || '' }))
         }
       });
     }

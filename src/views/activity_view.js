@@ -941,10 +941,26 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                     ),
                     (() => {
                         const latest = show.length ? show[show.length - 1] : null;
-                        return latest && latest.text
-                            ? div({ class: 'feed-text activity-update-msg' },
-                                p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(latest.text))
-                              )
+                        if (!latest) return '';
+                        const rawBlob = String(latest.image || '').trim();
+                        const attSrc = rawBlob.startsWith('&') ? `/blob/${encodeURIComponent(rawBlob)}` : null;
+                        const mime = String(latest.mimeType || '');
+                        const attNode = attSrc
+                            ? (mime.startsWith('video/')
+                                ? videoHyperaxe({ controls: true, class: 'post-video', src: attSrc, type: mime, preload: 'metadata' })
+                                : mime.startsWith('audio/')
+                                  ? audioHyperaxe({ controls: true, class: 'post-audio', src: attSrc, type: mime, preload: 'metadata' })
+                                  : mime === 'application/pdf'
+                                    ? a({ href: attSrc, target: '_blank', rel: 'noopener', class: 'filter-btn' }, '📄 PDF')
+                                    : mime.includes('bittorrent') || mime === 'application/x-torrent'
+                                      ? a({ href: attSrc, class: 'filter-btn' }, `🧲 ${i18n.torrentDownload}`)
+                                      : renderZoomableImage(attSrc, { imgClass: 'post-image' }))
+                            : renderMediaBlob(latest.image);
+                        const textNode = latest.text
+                            ? p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(latest.text))
+                            : null;
+                        return (textNode || attNode)
+                            ? div({ class: 'feed-text activity-update-msg' }, ...[textNode, attNode].filter(Boolean))
                             : '';
                     })()
                 )
@@ -1085,30 +1101,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           )
         )
       );
-    }
-
-    if (type === 'pub') {
-      const { address } = content || {};
-      const { key } = address || {};
-      const pr = getProfile(key || '');
-      const src = pr.image ? `/blob/${encodeURIComponent(pr.image)}` : '/assets/images/default-avatar.png';
-      cardBody.push(
-        div({ class: 'card-section pub activity-pub' },
-          div({ class: 'about-card-cols' },
-            div({ class: 'about-card-col-img' },
-              pr.image
-                ? renderZoomableImage(src, { imgClass: 'activity-avatar', alt: pr.name || pr.id, linkClass: 'zoom-inline' })
-                : img({ src, alt: pr.name || pr.id, class: 'activity-avatar' })
-            ),
-            div({ class: 'about-card-col-desc' },
-              h2({ class: 'about-card-header' }, userLink(pr.id, pr.name)),
-              (address && address.host)
-                ? p({ class: 'tribe-side-description' }, `${address.host}${address.port ? ':' + address.port : ''}`)
-                : null
-            )
-          )
-        )
-     );
     }
 
     if (type === 'market') {
@@ -1911,7 +1903,6 @@ function getViewDetailsAction(type, action) {
     case 'task':       return `/tasks/${id}`;
     case 'taskAssignment': return `/tasks/${encodeURIComponent(action.content?.taskId || action.tipId || action.id)}`;
     case 'about':      return `/author/${encodeURIComponent(action.author)}`;
-    case 'pub':        return `/invites`;
     case 'market':     return `/market/${id}`;
     case 'shop':       return `/shops/${id}`;
     case 'shopProduct': return `/shops/product/${id}`;
@@ -1947,7 +1938,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'recent',    label: i18n.typeRecent },
     { type: 'top',       label: i18n.typeTop },
     { type: 'inhabitants', label: i18n.typeInhabitants },
-    { type: 'pub',       label: i18n.typePub },
     { type: 'tribe',     label: i18n.typeTribe },
     { type: 'larp',      label: i18n.typeLarp },
     { type: 'parliament',label: i18n.typeParliament },
@@ -2138,7 +2128,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
         (() => {
           const ORDER = [
             'all', 'mine', 'recent', 'top',
-            'inhabitants', 'pub', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts',
+            'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts',
             'votes', 'event', 'calendar', 'task', 'report',
             'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
             'post', 'feed', 'chat', 'pad', 'forum', 'map',

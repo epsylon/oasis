@@ -165,7 +165,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       span(i18n.audioFileLabel),
       br(),
-      input({ type: "file", name: "audio", required: filter !== "edit" }),
+      input({ type: "file", name: "audio", accept: "audio/*", required: filter !== "edit" }),
       br(),
       br(),
       span(i18n.audioTitleLabel),

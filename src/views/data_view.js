@@ -55,15 +55,24 @@ const filterButton = (mode, current, q) =>
     }, String(filterLabel(mode)).toUpperCase())
   );
 
-const renderFilters = (current, q, total = null) => {
+const renderFilters = (current, q, total = null, payload = {}) => {
   if (Number(total || 0) === 0 && String(current || 'ALL').toUpperCase() === 'ALL' && !String(q || '').trim()) return null;
+  const kindsAvail = payload.kindsAvail || null;
+  const chipVisible = (mode) => {
+    if (mode === current || mode === 'ALL') return true;
+    if (mode === 'RECENT' || mode === 'TOP') return payload.anyMatches !== false;
+    return !kindsAvail || kindsAvail[mode.toLowerCase()] === true;
+  };
   return section(
     div({ class: "activity-filter-grid" },
-      ...FILTER_COLUMNS.map(col =>
-        div({ class: "activity-filter-col" },
-          ...col.map(mode => filterButton(mode, current, q))
-        )
-      )
+      ...FILTER_COLUMNS.map(col => {
+        const modes = col.filter(chipVisible);
+        return modes.length
+          ? div({ class: "activity-filter-col" },
+              ...modes.map(mode => filterButton(mode, current, q))
+            )
+          : null;
+      }).filter(Boolean)
     ),
     div({ class: "data-search activity-filter-chips activity-toolbar-row" },
       total != null ? renderModuleStats(total) : null,
@@ -157,7 +166,7 @@ exports.dataView = async (payload = {}) => {
   return template(
     i18n.dataTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.dataTitle), p(i18n.dataDescription))),
-    renderFilters(filter, q, matches.length),
+    renderFilters(filter, q, matches.length, payload),
     emptyData ? null : (payload.cohesion ? renderCohesion(payload.cohesion) : null),
     section(
       emptyData ? null : div({ class: "tags-header" },

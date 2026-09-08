@@ -48,7 +48,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       div({ class: 'card-section image' },
         title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"), p(...renderUrl(description))] : null,
-        div({ class: 'card-field' }, renderZoomableImage(`/blob/${encodeURIComponent(url)}`, { imgClass: 'post-image' }))
+        div({ class: 'card-field image-container' }, renderZoomableImage(`/blob/${encodeURIComponent(url)}`, { imgClass: 'post-image' }))
       )
     );
   } else if (c.type === 'audio') {

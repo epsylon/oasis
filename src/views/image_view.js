@@ -7,6 +7,7 @@ const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, render
 const { config } = require("../server/SSB_server.js");
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationVisitLabel } = require("./maps_view");
+const { renderZoomableImage } = require("./gallery_view");
 
 const userId = config.keys.id;
 
@@ -39,14 +40,7 @@ const renderImageMedia = (imgObj, filter, params = {}) => {
   return imgObj?.url
     ? div(
         { class: "image-container image-container-row" },
-        a(
-          {
-            href: `/images/${encodeURIComponent(imgObj.key)}?filter=${encodeURIComponent(filter || "all")}${
-              params.q ? `&q=${encodeURIComponent(params.q)}` : ""
-            }${params.sort ? `&sort=${encodeURIComponent(params.sort)}` : ""}`
-          },
-          img({ src, alt: imgObj.title || "", class: "media-preview", loading: "lazy" })
-        )
+        renderZoomableImage(src, { alt: imgObj.title || "", imgClass: "post-image" })
       )
     : p(i18n.imageNoFile);
 };

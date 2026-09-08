@@ -70,10 +70,17 @@ const renderSearchBox = (current, search, items = null) => {
 };
 
 const renderToolbar = (current, search, hasItems, items = null, emptyLogs = false) =>
-  div({ class: "logs-toolbar-wrap" },
-    renderFilterBar(current, hasItems, emptyLogs),
-    emptyLogs ? null : renderSearchBox(current, search, items)
-  );
+  emptyLogs
+    ? div({ class: "filters" },
+        form({ method: "GET", action: "/logs", class: "ui-toolbar ui-toolbar--filters" },
+          input({ type: "hidden", name: "view", value: "create" }),
+          button({ type: "submit", class: "create-button" }, i18n.logsCreate || 'Create Log')
+        )
+      )
+    : div({ class: "logs-toolbar-wrap" },
+        renderFilterBar(current, hasItems, emptyLogs),
+        renderSearchBox(current, search, items)
+      );
 
 const truncate = (value, max = 160) => {
   const text = String(value == null ? '' : value).trim();

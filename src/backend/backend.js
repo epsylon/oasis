@@ -772,7 +772,7 @@ const reportsModel = require('../models/reports_model')({ cooler, isPublic: conf
 const transfersModel = require('../models/transfers_model')({ cooler, isPublic: config.public });
 const calendarsModel = require('../models/calendars_model')({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel });
 const cvModel = require('../models/cv_model')({ cooler, isPublic: config.public });
-const inhabitantsModel = require('../models/inhabitants_model')({ cooler, isPublic: config.public });
+const inhabitantsModel = require('../models/inhabitants_model')({ cooler, isPublic: config.public, tribesModel });
 const feedModel = require('../models/feed_model')({ cooler, isPublic: config.public });
 const imagesModel = require("../models/images_model")({ cooler, isPublic: config.public });
 const audiosModel = require("../models/audios_model")({ cooler, isPublic: config.public });
@@ -4705,12 +4705,12 @@ router
   .get('/data', async ctx => {
     const filter = String(ctx.query.filter || 'ALL').toUpperCase();
     const q = String(ctx.query.q || '').trim();
-    const [{ matches, total, hasProfile }, cohesion] = await Promise.all([
+    const [{ matches, total, hasProfile, kindsAvail, anyMatches }, cohesion] = await Promise.all([
       dataModel.listMatches(filter, { q }),
       dataModel.cohesion().catch(() => null)
     ]);
     await warmAuthorNames(matches);
-    ctx.body = await dataView({ filter, q, matches, total, hasProfile, cohesion });
+    ctx.body = await dataView({ filter, q, matches, total, hasProfile, cohesion, kindsAvail, anyMatches });
   })
   .get('/polls', async ctx => {
     if (!checkMod(ctx, 'pollsMod')) { ctx.redirect('/modules'); return; }

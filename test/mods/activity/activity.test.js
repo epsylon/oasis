@@ -248,6 +248,45 @@ describe('activity: general OPEN chat replies surface in activity as a thread', 
     ok(feed.find(a => a.type === 'chatThread' && a.content.chatRoot === r.key), 'third party sees the thread');
   });
 
+  t('every chat attachment format carries into the thread and the view renders it', async () => {
+    const FORMATS = [
+      { name: 'ImgRoom', mime: 'image/png', marker: 'zoom-link' },
+      { name: 'VideoRoom', mime: 'video/mp4', marker: '<video' },
+      { name: 'AudioRoom', mime: 'audio/mpeg', marker: '<audio' },
+      { name: 'PdfRoom', mime: 'application/pdf', marker: '📄 PDF' },
+      { name: 'TorrentRoom', mime: 'application/x-bittorrent', marker: '🧲' }
+    ];
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    for (const f of FORMATS) {
+      const r = await A.use('chats').createChat(f.name, 'g', null, 'general', 'OPEN', [], null);
+      await A.use('chats').sendMessage(r.key, `sharing ${f.mime}`, '&aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=.sha256', null, f.mime);
+    }
+    const feed = await A.use('activity').listFeed('all');
+    for (const f of FORMATS) {
+      const th = feed.find(a => a.type === 'chatThread' && a.content.title === f.name);
+      ok(th, `thread present for ${f.mime}`);
+      const reply = th.content.replies.find(m => m.text === `sharing ${f.mime}`);
+      ok(reply, `reply embedded for ${f.mime}`);
+      eq(reply.mimeType, f.mime);
+      ok(String(reply.image || '').startsWith('&'), `blob carried for ${f.mime}`);
+    }
+    const { activityView } = require('../../../src/views/activity_view');
+    const html = String(await activityView(feed, 'chat', A.keypair.id, '', {}));
+    for (const f of FORMATS) {
+      ok(html.includes(f.marker), `activity renders ${f.mime} attachment (${f.marker})`);
+    }
+  });
+
+  t('an attachment-only chat message still surfaces in the thread', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('chats').createChat('OnlyMedia', 'g', null, 'general', 'OPEN', [], null);
+    await A.use('chats').sendMessage(r.key, '', '&bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=.sha256', null, 'audio/ogg');
+    const feed = await A.use('activity').listFeed('all');
+    const th = feed.find(a => a.type === 'chatThread' && a.content.chatRoot === r.key);
+    ok(th, 'thread present for attachment-only message');
+    ok(th.content.replies.some(m => String(m.image || '').startsWith('&')), 'attachment reply embedded');
+  });
+
   t('closing the chat removes its thread from activity', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('chats').createChat('Temp', 'g', null, 'general', 'OPEN', [], null);

@@ -16,7 +16,7 @@ function toImageUrl(imgId, size=256){
   return `/image/${size}/${encodeURIComponent(imgId)}`;
 }
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, tribesModel = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -344,7 +344,7 @@ module.exports = ({ cooler }) => {
       const isOwner = viewer === target;
       const arr = (v) => Array.isArray(v) ? v : [];
       const up = (v) => String(v || '').toUpperCase();
-      const COUNTED = new Set(['post','event','task','forum','tribe','market','job','housing','project','industry','shop','image','video','audio','document','bookmark','transfer','map']);
+      const COUNTED = new Set(['post','event','task','forum','market','job','housing','project','industry','shop','image','video','audio','document','bookmark','transfer','map']);
       const accessible = (type, c) => {
         if (c.encryptedPayload) return false;
         switch (type) {
@@ -355,7 +355,6 @@ module.exports = ({ cooler }) => {
           case 'housing': return up(c.visibility) !== 'HIDDEN' || isOwner;
           case 'market': return up(c.visibility) !== 'HIDDEN' || isOwner;
           case 'shop':   return up(c.visibility) !== 'CLOSED' || isOwner;
-          case 'tribe':  { const st = up(c.status); return !(c.isAnonymous === true || st === 'PRIVATE' || st === 'INVITE-ONLY') || isOwner || arr(c.members).includes(viewer); }
           default: return true;
         }
       };
@@ -374,6 +373,13 @@ module.exports = ({ cooler }) => {
           }, () => resolve())
         );
       });
+      if (tribesModel) {
+        try {
+          const visible = await tribesModel.listTribesForViewer(viewer);
+          const n = visible.filter(t => String(t.author) === String(target)).length;
+          if (n > 0) counts.tribe = n;
+        } catch (_) {}
+      }
       return counts;
     },
 

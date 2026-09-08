@@ -187,6 +187,12 @@ module.exports = ({ cooler }) => {
         out.push({ ...strip(n), score, common, connections: common.length });
       }
 
+      const anyMatches = out.length > 0;
+      const kindsAvail = {};
+      for (const n of use) {
+        if (String(n.author) !== String(viewerId)) kindsAvail[n.kind] = true;
+      }
+
       if (f === 'RECENT') {
         const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
         out = out.filter(s => s.ts >= cutoff);
@@ -201,11 +207,21 @@ module.exports = ({ cooler }) => {
       if (f === 'RECENT') out.sort((x, y) => y.ts - x.ts || y.score - x.score);
       else out.sort((x, y) => y.score - x.score || y.ts - x.ts);
 
+      if (!out.length && KINDS[f.toLowerCase()]) {
+        const kind = f.toLowerCase();
+        let sugg = use.filter(n => n.kind === kind && String(n.author) !== String(viewerId));
+        if (q) sugg = sugg.filter(n => norm(n.title).includes(q));
+        sugg.sort((x, y) => y.ts - x.ts);
+        out = sugg.slice(0, 10).map(n => ({ ...strip(n), score: 0, common: [], connections: 0, suggested: true }));
+      }
+
       return {
         matches: out.slice(0, MAX_PAIRS),
         total: out.length,
         hasProfile: myTermSet.size > 0,
-        myTerms: [...myTermSet]
+        myTerms: [...myTermSet],
+        kindsAvail,
+        anyMatches
       };
     },
 

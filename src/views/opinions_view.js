@@ -176,7 +176,7 @@ const renderContentHtml = (content, key) => {
               ]
             : null,
           br(),
-          div({ class: 'card-field' },
+          div({ class: 'card-field image-container' },
             renderZoomableImage(`/blob/${encodeURIComponent(content.url)}`, { imgClass: 'post-image' })
           )
         )
@@ -218,7 +218,7 @@ const renderContentHtml = (content, key) => {
                 p(...renderUrl(content.description))
               ]
             : null,
-          div({ class: 'card-field' },
+          div({ class: 'card-field audio-container' },
             audioHyperaxe({
               controls: true,
               class: 'post-audio',
