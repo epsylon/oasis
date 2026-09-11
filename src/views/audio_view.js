@@ -195,6 +195,17 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
   );
 };
 
+const mediaChipFor = (filter, censusM) => (mode) => {
+  if (mode === filter) return true;
+  if (!Array.isArray(censusM)) return true;
+  if (mode === "top") return censusM.length > 0;
+  if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+  if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
+  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
+  return true;
+};
+
 exports.audioView = async (audios, filter = "all", audioId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(audioId) };
   const title = i18n.audioTitle;
@@ -204,15 +215,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
 
   const list = safeArr(audios);
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
-  const censusM = Array.isArray(params.censusList) ? params.censusList : list;
-  const mediaChip = (mode) => {
-    if (mode === filter) return true;
-    if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-    if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
-    if (mode === "favorites") return censusM.some((x) => x.isFavorite);
-    if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
-    return true;
-  };
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const audioToEdit = audioId ? list.find((a) => a.key === audioId) : null;
 
   return template(
@@ -225,7 +228,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
         (() => {
           const { renderReachChip } = require('./clearnet_view');
           const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetAudios);
-          return renderReachChip(isClearnet, i18n);
+          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
         })()
       ),
       div(
@@ -242,7 +245,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.audioFilterFavorites).toUpperCase()
           )] : []),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterTop).toUpperCase()),
+          ...(mediaChip("top") ? [button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterTop).toUpperCase())] : []),
           ...(mediaChip("bcs") ? [button({ type: "submit", name: "filter", value: "bcs", class: filter === "bcs" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterBcs || "BCS")] : []),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.audioCreateButton)
@@ -285,6 +288,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
 };
 
 exports.singleAudioView = async (audioObj, filter = "all", comments = [], params = {}) => {
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : null);
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
@@ -325,7 +329,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   const audioSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n)
+      renderReachChip(isClearnet, i18n, `/c/audios/${encodeURIComponent(audioObj.key)}`)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(audioObj.description)
@@ -376,14 +380,14 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterRecent).toUpperCase()),
-          button(
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterMine).toUpperCase())] : []),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.audioFilterFavorites).toUpperCase()
-          ),
+          )] : []),
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterTop).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "bcs", class: filter === "bcs" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterBcs || "BCS"),
+          ...(mediaChip("bcs") ? [button({ type: "submit", name: "filter", value: "bcs", class: filter === "bcs" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterBcs || "BCS")] : []),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.audioCreateButton)
         )
       ),

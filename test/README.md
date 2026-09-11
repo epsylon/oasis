@@ -2,7 +2,7 @@
 
 Per-module unit/integration tests covering all publishing actions across the network.
 
-**Current status:** 82 test files / 1069 tests passing.
+**Current status:** 89 test files / 1179 tests passing.
 
 Module tests live under `test/mods/` to keep them grouped and the top-level
 `test/` directory clean (so `results/`, the runner, and the README are easy
@@ -104,78 +104,87 @@ test/
     mock-ssb.js                In-memory SSB network (multi-peer + box1 + private msgs)
     setup.js                   makePeer / makeNetwork helpers per module
 
-  mods/actions          actions.test.js
-  mods/activity         activity.test.js
-  mods/agenda           agenda.test.js
-  mods/ai               ai_nav.test.js
-  mods/banking          banking.test.js
-  mods/blockchain       blockchain.test.js
-  mods/blogs            blogs.test.js
-  mods/calendars        calendars.test.js
-  mods/chats            chats.test.js
-  mods/cipher           cipher.test.js
-  mods/comments         comments.test.js
-  mods/conventions      conventions.test.js
-  mods/courts           courts.test.js rules.test.js
-  mods/crypto           invite-safety.test.js primitives.test.js tombstone-author.test.js
-  mods/cv               cv.test.js
-  mods/data             data.test.js
-  mods/dev              dev.test.js
-  mods/events           crypto.test.js events.test.js recurrence.test.js
-  mods/favorites        favorites.test.js
-  mods/feed             feed.test.js
-  mods/fileshare        fileshare.test.js
-  mods/forum            crypto.test.js forum.test.js
-  mods/gallery          gallery.test.js
-  mods/games            games.test.js
-  mods/housing          housing.test.js
-  mods/i18n             i18n.test.js
-  mods/industry         industry.test.js
-  mods/inhabitants      inhabitants.test.js
-  mods/jobs             jobs.test.js
-  mods/larp             larp.test.js
-  mods/legacy           legacy.test.js
-  mods/logs             logs.test.js
-  mods/maps             maps.test.js
-  mods/market           market.test.js
-  mods/media            media.test.js
-  mods/media/audios     audios.test.js
-  mods/media/bookmarks  bookmarks.test.js
-  mods/media/documents  documents.test.js
-  mods/media/images     images.test.js
-  mods/media/videos     videos.test.js
-  mods/melody           melody.test.js
-  mods/mentions         mentions.test.js
-  mods/multiuser        multiuser.test.js
-  mods/opinions         opinions.test.js
-  mods/pads             pads.test.js
-  mods/parliament       cycles.test.js parliament.test.js rules.test.js
-  mods/pdf              content-pdf.test.js
-  mods/pixelia          pixelia.test.js
-  mods/pm               pm.test.js pm_refs.test.js
-  mods/politicalbot     politicalbot.test.js
-  mods/polls            polls.test.js
-  mods/profile          qr.test.js
-  mods/projects         projects.test.js
-  mods/reports          reports.test.js
-  mods/search           search.test.js
-  mods/security         security.test.js
-  mods/shops            shops.test.js
-  mods/spread           spread.test.js
-  mods/stats            stats.test.js
-  mods/sub-tribes       basic.test.js content.test.js
-  mods/tags             tags.test.js
-  mods/tasks            tasks.test.js
-  mods/torrents         torrents.test.js
-  mods/transfers        transfers.test.js
-  mods/trending         trending.test.js
-  mods/tribes           basic.test.js
-  mods/votes            rules.test.js votes.test.js
-  mods/welcome          welcome.test.js
-  mods/workflows        workflows.test.js
+  mods/actions             actions.test.js
+  mods/activity            activity.test.js
+  mods/agenda              agenda.test.js
+  mods/ai                  ai_nav.test.js
+  mods/backup              backup.test.js
+  mods/banking             banking.test.js
+  mods/blockchain          blockchain.test.js
+  mods/blogs               blogs.test.js
+  mods/calendars           calendars.test.js
+  mods/campaigns           campaigns.test.js
+  mods/chats               chats.test.js
+  mods/cipher              cipher.test.js
+  mods/clearnet            hub.test.js
+  mods/comments            comments.test.js
+  mods/conventions         conventions.test.js
+  mods/courts              courts.test.js rules.test.js
+  mods/crypto              invite-safety.test.js primitives.test.js tombstone-author.test.js
+  mods/cv                  cv.test.js
+  mods/data                data.test.js
+  mods/dev                 dev.test.js
+  mods/emergencies         emergencies.test.js
+  mods/events              crypto.test.js events.test.js recurrence.test.js
+  mods/favorites           favorites.test.js
+  mods/feed                feed.test.js
+  mods/fileshare           fileshare.test.js
+  mods/forum               crypto.test.js forum.test.js
+  mods/gallery             gallery.test.js
+  mods/games               games.test.js
+  mods/housing             housing.test.js
+  mods/i18n                i18n.test.js
+  mods/industry            industry.test.js
+  mods/inhabitants         inhabitants.test.js
+  mods/jobs                jobs.test.js
+  mods/larp                larp.test.js
+  mods/logistics           logistics.test.js
+  mods/logs                logs.test.js
+  mods/mailing             mailing.test.js
+  mods/maps                maps.test.js
+  mods/market              market.test.js
+  mods/media               media.test.js
+  mods/media/audios        audios.test.js
+  mods/media/bookmarks     bookmarks.test.js
+  mods/media/documents     documents.test.js
+  mods/media/images        images.test.js
+  mods/media/videos        videos.test.js
+  mods/melody              melody.test.js
+  mods/mentions            mentions.test.js
+  mods/multiuser           multiuser.test.js
+  mods/opinions            opinions.test.js
+  mods/pads                pads.test.js
+  mods/parliament          cycles.test.js parliament.test.js rules.test.js
+  mods/pdf                 content-pdf.test.js
+  mods/pixelia             pixelia.test.js
+  mods/pm                  pm.test.js pm_refs.test.js
+  mods/podcasts            podcasts.test.js
+  mods/politicalbot        politicalbot.test.js
+  mods/polls               polls.test.js
+  mods/profile             qr.test.js
+  mods/projects            projects.test.js
+  mods/reports             reports.test.js
+  mods/school              school.test.js
+  mods/search              search.test.js
+  mods/security            security.test.js
+  mods/shops               shops.test.js
+  mods/spread              spread.test.js
+  mods/stats               stats.test.js
+  mods/sub-tribes          basic.test.js content.test.js
+  mods/tags                tags.test.js
+  mods/tasks               tasks.test.js
+  mods/torrents            torrents.test.js
+  mods/transfers           transfers.test.js
+  mods/trending            trending.test.js
+  mods/tribes              basic.test.js
+  mods/views               views.test.js
+  mods/votes               rules.test.js votes.test.js
+  mods/welcome             welcome.test.js
+  mods/wiki                wiki.test.js
+  mods/workflows           workflows.test.js
 ```
 
-Most module directories have their own `run.sh` (48 of 71); for the rest use
+Most module directories have their own `run.sh` (54 of 78); for the rest use
 `node test/run.js mods/<module>`:
 ```sh
 bash test/mods/tribes/run.sh
@@ -255,6 +264,10 @@ Every `bash test/run.sh` generates `test/results/unit_test_<YYYY-MM-DD_HH-MM-SS>
 - Sub-tribe content publishing + parent/sub key isolation
 - Banking address management + epoch / claim history (no RPC parts)
 - i18n translation-key consistency across all languages (`mods/i18n`)
+- Wiki pages (versions, restore, wikilinks, tribe scoping), emergencies (severity, confirmations, updates), mailing lists (open/closed, subscription on write, threads), logistics (bookings, ratings, opinions), podcasts (channels, episodes, views, opinions), campaigns (signatures, goal, updates, opinions, Parliament proposal)
+- Backup: encrypted keys export/import, full `.oasisbk` round trip and restore
+- Clearnet HUB: public listing, filters, search and read-only guarantee (`mods/clearnet`)
+- Every module view boots from a cold start and detail views never leak content chips on an empty census (`mods/views`)
 
 ## i18n consistency (`mods/i18n`)
 
@@ -281,7 +294,6 @@ keys involved, so adding a label means: add its key to **every** language file.
 
 These models are deliberately not tested as unit tests:
 
-- **`legacy`** — broken crypto (audit found); disable in production.
 - **`panicmode`** / **`exportmode`** — destructive operations.
 - **`wallet`** — requires external `localhost:7474` RPC; tested via `banking` mock.
 - **`tribes_content`** — covered by `tribes` and `sub-tribes` test suites.

@@ -62,7 +62,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     'bookmark','event','task','votes','report','feed','project','industry','industryBlueprint',
     'image','torrent','audio','video','document','transfer','post','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
-    'pad','padEntry','gameScore','calendar','calendarDate','calendarNote','log',
+    'pad','padEntry','wikiPage','emergency','emergencyConfirm','emergencyUpdate','mailingList','logisticsRoute','logisticsRating','podcast','podcastEpisode','podcastPlay','campaign','campaignSignature','campaignUpdate','gameScore','calendar','calendarDate','calendarNote','log',
     'schoolCourse','schoolLesson','schoolEnroll','schoolCertificate',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
@@ -286,6 +286,18 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       else if (t === 'schoolopinion' || rawType === 'schoolopinion') score += 2;
       else if (t === 'shop-purchase') score += 2;
       else if (t === 'pad' || t === 'padentry') score += 3;
+      else if (t === 'wikipage') score += 3;
+      else if (t === 'emergency') score += 4;
+      else if (t === 'emergencyconfirm' || t === 'emergencyupdate') score += 1;
+      else if (t === 'mailinglist') score += 3;
+      else if (t === 'logisticsroute') score += 3;
+      else if (t === 'logisticsrating') score += 1;
+      else if (t === 'podcast') score += 4;
+      else if (t === 'podcastepisode') score += 3;
+      else if (t === 'podcastopinion' || t === 'podcastplay') score += 1;
+      else if (t === 'campaign') score += 4;
+      else if (t === 'campaignsignature') score += 1;
+      else if (t === 'campaignupdate') score += 2;
       else if (t === 'calendar' || t === 'calendarnote' || t === 'calendardate') score += 3;
       else if (t === 'chat') score += 1;
       else if (t === 'gamescore') score += 2;
@@ -298,6 +310,19 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       else if (rawType === 'industryvote') score += 2;
       else if (rawType === 'industrymember') score += 2;
       else if (rawType === 'industryopinion') score += 1;
+      else if (rawType === 'wikipage') score += c.replaces ? 2 : 6;
+      else if (rawType === 'emergency') score += c.replaces ? 1 : 5;
+      else if (rawType === 'emergencyconfirm') score += 1;
+      else if (rawType === 'emergencyupdate') score += 2;
+      else if (rawType === 'mailinglist') score += c.replaces ? 1 : 3;
+      else if (rawType === 'logisticsroute') score += c.replaces ? 1 : 4;
+      else if (rawType === 'logisticsrating' || rawType === 'logisticsopinion') score += 1;
+      else if (rawType === 'podcast') score += c.replaces ? 1 : 5;
+      else if (rawType === 'podcastepisode') score += c.replaces ? 1 : 4;
+      else if (rawType === 'podcastopinion' || rawType === 'podcastplay') score += 1;
+      else if (rawType === 'campaign') score += c.replaces ? 1 : 5;
+      else if (rawType === 'campaignsignature' || rawType === 'campaignopinion') score += 1;
+      else if (rawType === 'campaignupdate') score += 2;
     }
     return Math.max(0, Math.round(score));
   };
@@ -399,6 +424,11 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       .filter(n => n.content?.isAnonymous !== false && Array.isArray(n.content?.members) && n.content.members.includes(userId))
       .map(n => ({ id: findRoot('tribe', n.key), name: n.content.name || n.content.title || n.key }));
 
+    const opinionTargets = new Set();
+    for (const m of allMsgs) {
+      const c = m && m.value && m.value.content;
+      if (c && typeof c.type === 'string' && c.type.endsWith('Opinion') && typeof c.target === 'string') opinionTargets.add(c.target);
+    }
     const content = {};
     const opinions = {};
     for (const t of types) {
@@ -410,7 +440,9 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         if (t === 'forum') vals = vals.filter(c => !(c.root && tombTargets.has(c.root)));
       }
       content[t] = vals.length || 0;
-      opinions[t] = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length || 0;
+      const embedded = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length || 0;
+      const external = t === 'tribe' ? 0 : Array.from(tipOf[t].keys()).filter(root => opinionTargets.has(root)).length;
+      opinions[t] = Math.max(embedded, external);
     }
 
     if (filter === 'MINE') {

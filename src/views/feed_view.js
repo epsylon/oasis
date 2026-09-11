@@ -168,6 +168,14 @@ const renderFeedSideUsers = (activeUsers) =>
     )
   );
 
+const feedChipFor = (filter, censusF) => (mode) => {
+  if (mode === filter) return true;
+  if (!Array.isArray(censusF)) return true;
+  if (mode === "MINE") return censusF.some((f) => String(f && f.value && f.value.author) === String(config.keys.id));
+  if (mode === "TODAY") return censusF.some((f) => (Number(f && f.value && f.value.timestamp) || 0) >= Date.now() - 86400000);
+  return true;
+};
+
 exports.feedView = (feeds, opts = "ALL") => {
   const { filter, q, tag, msg } = normalizeOptions(opts);
   const workspace = !!(opts && typeof opts === "object" && opts.workspace) && require("../configs/config-manager.js").getConfig().ux?.current === "feed";
@@ -198,12 +206,7 @@ exports.feedView = (feeds, opts = "ALL") => {
   const extra = { q, tag };
   const emptyMod = moduleIsEmpty(feeds, filter, "ALL", q || tag);
   const censusF = Array.isArray(opts.censusList) ? opts.censusList : feeds;
-  const feedChip = (mode) => {
-    if (mode === filter) return true;
-    if (mode === "MINE") return censusF.some((f) => String(f && f.value && f.value.author) === String(config.keys.id));
-    if (mode === "TODAY") return censusF.some((f) => (Number(f && f.value && f.value.timestamp) || 0) >= Date.now() - 86400000);
-    return true;
-  };
+  const feedChip = feedChipFor(filter, censusF);
 
   const centerContent = section(
     header,
@@ -269,7 +272,7 @@ exports.feedCreateView = (opts = {}) => {
     i18n.createFeedTitle,
     section(
       div({ class: "tags-header module-header-line" }, h2(i18n.createFeedTitle), p(i18n.FeedshareYourOpinions)),
-      div({ class: "mode-buttons-row" }, ...generateFilterButtons(["ALL", "MINE", "TODAY", "TOP"], "CREATE", "/feed", { q, tag })),
+      div({ class: "mode-buttons-row" }, ...generateFilterButtons(["ALL"], "CREATE", "/feed", { q, tag })),
       form(
         { method: "POST", action: "/feed/create" },
         textarea({
@@ -289,6 +292,7 @@ exports.feedCreateView = (opts = {}) => {
 };
 
 exports.singleFeedView = (feed, comments = [], params = {}) => {
+  const feedChip = feedChipFor("ALL", Array.isArray(params.censusList) ? params.censusList : null);
   const content = feed.value?.content || {};
   const rawText = typeof content.text === "string" ? content.text : "";
   const safeText = rawText.trim();
@@ -310,8 +314,8 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
         form(
           { method: "GET", action: "/feed", class: "ui-toolbar ui-toolbar--filters" },
           button({ type: "submit", name: "filter", value: "ALL", class: "filter-btn" }, i18n.ALLButton || "ALL"),
-          button({ type: "submit", name: "filter", value: "MINE", class: "filter-btn" }, i18n.MINEButton || "MINE"),
-          button({ type: "submit", name: "filter", value: "TODAY", class: "filter-btn" }, i18n.TODAYButton || "TODAY"),
+          ...(feedChip("MINE") ? [button({ type: "submit", name: "filter", value: "MINE", class: "filter-btn" }, i18n.MINEButton || "MINE")] : []),
+          ...(feedChip("TODAY") ? [button({ type: "submit", name: "filter", value: "TODAY", class: "filter-btn" }, i18n.TODAYButton || "TODAY")] : []),
           button({ type: "submit", name: "filter", value: "TOP", class: "filter-btn" }, i18n.TOPButton || "TOP"),
           form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button" }, i18n.createFeedTitle || "Create Feed"))
         )

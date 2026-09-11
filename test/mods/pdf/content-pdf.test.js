@@ -1,6 +1,6 @@
 const { eq, ok, notOk } = require('../../helpers/assert');
-const { buildContentPdf, pdfFilename, isSupported } = require('../../../src/backend/contentPdf');
-const { buildDocumentPdf } = require('../../../src/backend/pdfDocument');
+const { buildContentPdf, pdfFilename, isSupported } = require('../../../src/backend/pdf');
+const { buildDocumentPdf } = require('../../../src/backend/pdf');
 
 const asText = (buf) => buf.toString('latin1');
 
@@ -117,7 +117,7 @@ describe('pdf: content documents', (t) => {
 
 describe('pdf: text that is not plain ASCII', (t) => {
   t('accents, eñes and question marks survive the export', () => {
-    const { buildLogsPdf } = require('../../../src/backend/logsPdf');
+    const { buildLogsPdf } = require('../../../src/backend/pdf');
     const text = 'La niña compró piñones en A Coruña, ¿vale?';
     const out = asText(buildLogsPdf([{ ts: Date.UTC(2026, 0, 1), text }], '@me.ed25519'));
     ok(out.includes('La ni\xF1a compr\xF3 pi\xF1ones en A Coru\xF1a, \xBFvale?'), 'written as WinAnsi bytes');
@@ -125,7 +125,7 @@ describe('pdf: text that is not plain ASCII', (t) => {
   });
 
   t('typographic dashes, quotes and the euro sign are mapped, not dropped', () => {
-    const { buildDocumentPdf } = require('../../../src/backend/pdfDocument');
+    const { buildDocumentPdf } = require('../../../src/backend/pdf');
     const out = asText(buildDocumentPdf({
       title: 'OASIS', sections: [{ kind: 'kv', label: 'Note', value: '20 € — “quoted”…' }]
     }));
@@ -133,7 +133,7 @@ describe('pdf: text that is not plain ASCII', (t) => {
   });
 
   t('characters no 8-bit font can show degrade to a question mark, not to broken bytes', () => {
-    const { buildDocumentPdf } = require('../../../src/backend/pdfDocument');
+    const { buildDocumentPdf } = require('../../../src/backend/pdf');
     const out = asText(buildDocumentPdf({
       title: 'OASIS', sections: [{ kind: 'kv', label: 'Note', value: 'ok 你好' }]
     }));
@@ -141,7 +141,7 @@ describe('pdf: text that is not plain ASCII', (t) => {
   });
 
   t('the stream length matches the bytes actually written', () => {
-    const { buildDocumentPdf } = require('../../../src/backend/pdfDocument');
+    const { buildDocumentPdf } = require('../../../src/backend/pdf');
     const buf = buildDocumentPdf({ title: 'OASIS', sections: [{ kind: 'kv', label: 'Ñ', value: 'ñññ' }] });
     const text = buf.toString('latin1');
     const m = text.match(/<< \/Length (\d+) >>\nstream\n([\s\S]*?)\nendstream/);

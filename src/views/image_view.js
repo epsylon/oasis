@@ -202,6 +202,18 @@ const renderImageCommentsSection = (imageKey, comments = [], returnTo = null) =>
   });
 };
 
+const mediaChipFor = (filter, censusM) => (mode) => {
+  if (mode === filter) return true;
+  if (!Array.isArray(censusM)) return true;
+  if (mode === "top") return censusM.length > 0;
+  if (mode === "gallery") return censusM.length > 0;
+  if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+  if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
+  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
+  return true;
+};
+
 exports.imageView = async (images, filter = "all", imageId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(imageId) };
   const title = i18n.imageTitle;
@@ -211,15 +223,7 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
 
   const list = safeArr(images);
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
-  const censusM = Array.isArray(params.censusList) ? params.censusList : list;
-  const mediaChip = (mode) => {
-    if (mode === filter) return true;
-    if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-    if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
-    if (mode === "favorites") return censusM.some((x) => x.isFavorite);
-    if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
-    return true;
-  };
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const imageToEdit = imageId ? list.find((im) => im.key === imageId) : null;
 
   return template(
@@ -232,7 +236,7 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
         (() => {
           const { renderReachChip } = require('./clearnet_view');
           const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetImages);
-          return renderReachChip(isClearnet, i18n);
+          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
         })()
       ),
       div(
@@ -250,11 +254,11 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
             String(i18n.imageFilterFavorites).toUpperCase()
           )] : []),
 
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterTop).toUpperCase()),
-          button(
+          ...(mediaChip("top") ? [button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterTop).toUpperCase())] : []),
+          ...(mediaChip("gallery") ? [button(
             { type: "submit", name: "filter", value: "gallery", class: filter === "gallery" ? "filter-btn active" : "filter-btn" },
             String(i18n.imageFilterGallery).toUpperCase()
-          ),
+          )] : []),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.imageCreateButton)
         )
@@ -297,6 +301,7 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
 };
 
 exports.singleImageView = async (imageObj, filter = "all", comments = [], params = {}) => {
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : null);
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
@@ -330,7 +335,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   const imageSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n)
+      renderReachChip(isClearnet, i18n, `/c/images/${encodeURIComponent(imageObj.key)}`)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(imageObj.description)
@@ -391,17 +396,17 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterRecent).toUpperCase()),          button(
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterMine).toUpperCase())] : []),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterRecent).toUpperCase())] : []),          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.imageFilterFavorites).toUpperCase()
-          ),
+          )] : []),
 
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterTop).toUpperCase()),
-          button(
+          ...(mediaChip("gallery") ? [button(
             { type: "submit", name: "filter", value: "gallery", class: filter === "gallery" ? "filter-btn active" : "filter-btn" },
             String(i18n.imageFilterGallery).toUpperCase()
-          ),
+          )] : []),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.imageCreateButton)
         )
       ),

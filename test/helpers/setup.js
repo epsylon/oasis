@@ -36,6 +36,14 @@ const FACTORIES = {
   tasks: '../../src/models/tasks_model',
   chats: '../../src/models/chats_model',
   pads: '../../src/models/pads_model',
+  wiki: '../../src/models/wiki_model',
+  emergencies: '../../src/models/emergencies_model',
+  mailing: '../../src/models/mailing_model',
+  logistics: '../../src/models/logistics_model',
+  podcasts: '../../src/models/podcasts_model',
+  campaigns: '../../src/models/campaigns_model',
+  backup: '../../src/models/backup_model',
+  subscriptions: '../../src/models/subscriptions_model',
   maps: '../../src/models/maps_model',
   torrents: '../../src/models/torrents_model',
   calendars: '../../src/models/calendars_model',
@@ -120,6 +128,12 @@ function makePeer(network, keypair) {
       deps = { ...baseDeps, housingModel: requireOnce('housing'), schoolModel: requireOnce('school') };
     } else if (name === 'activity') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes'), industryModel: requireOnce('industry') };
+    } else if (name === 'wiki') {
+      deps = { ...baseDeps, tribesModel: requireOnce('tribes') };
+    } else if (name === 'mailing') {
+      deps = { ...baseDeps, subscriptionsModel: requireOnce('subscriptions') };
+    } else if (name === 'inhabitants') {
+      deps = { ...baseDeps, tribesModel: requireOnce('tribes'), dataModel: requireOnce('data') };
     } else if (name === 'stats' || name === 'blockchain' || name === 'larp') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes') };
     } else if (name === 'events') {

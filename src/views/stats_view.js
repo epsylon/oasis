@@ -40,7 +40,7 @@ exports.statsView = (stats, filter) => {
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project', 'industry', 'industryBlueprint',
     'image', 'torrent', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
-    'chat', 'chatMessage', 'pad', 'padEntry', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
+    'chat', 'chatMessage', 'pad', 'padEntry', 'wikiPage', 'emergency', 'emergencyConfirm', 'emergencyUpdate', 'mailingList', 'logisticsRoute', 'logisticsRating', 'podcast', 'podcastEpisode', 'podcastPlay', 'campaign', 'campaignSignature', 'campaignUpdate', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
     'schoolCourse', 'schoolLesson', 'schoolEnroll', 'schoolCertificate',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
@@ -74,6 +74,19 @@ exports.statsView = (stats, filter) => {
     chatMessage: i18n.statsChatMessage,
     pad: i18n.statsPad,
     padEntry: i18n.statsPadEntry,
+    wikiPage: i18n.statsWiki,
+    emergency: i18n.statsEmergency,
+    emergencyConfirm: i18n.statsEmergencyConfirm,
+    emergencyUpdate: i18n.statsEmergencyUpdate,
+    mailingList: i18n.statsMailingList,
+    logisticsRoute: i18n.statsLogisticsRoute,
+    logisticsRating: i18n.statsLogisticsRating,
+    podcast: i18n.statsPodcast,
+    podcastEpisode: i18n.statsPodcastEpisode,
+    podcastPlay: i18n.statsPodcastPlay,
+    campaign: i18n.statsCampaign,
+    campaignSignature: i18n.statsCampaignSignature,
+    campaignUpdate: i18n.statsCampaignUpdate,
     gameScore: i18n.statsGameScore,
     schoolCourse: i18n.statsSchoolCourse,
     schoolLesson: i18n.statsSchoolLesson,
@@ -423,8 +436,8 @@ exports.statsView = (stats, filter) => {
 
   const allMode = filter === 'ALL'
     ? div({ class: 'stats-container' }, [
-        networkBlock,
         activityBlock,
+        networkBlock,
         totalOpinions > 0
           ? div({ class: 'stats-block' },
               h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
@@ -442,8 +455,8 @@ exports.statsView = (stats, filter) => {
 
   const mineMode = filter === 'MINE'
     ? div({ class: 'stats-container' }, [
-        networkBlock,
         activityBlock,
+        networkBlock,
         totalOpinions > 0
           ? div({ class: 'stats-block' },
               h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),
@@ -514,11 +527,11 @@ exports.statsView = (stats, filter) => {
         )
       ),
       section(
-        filter === 'ALL' ? networkStrip : null,
         filter === 'MINE' ? accountCard : null,
         filter === 'ALL' ? storageCard : null,
+        filter === 'ALL' ? networkStrip : null,
         tombMode,
-        carbonCard,
+        filter === 'TOMBSTONE' && !(Number(stats.userTombstoneCount || 0) || Number(stats.tombstoneKPIs?.networkTombstoneCount || 0)) ? null : carbonCard,
         filter !== 'TOMBSTONE' ? ecoTaxBlock : null,
         allMode,
         mineMode

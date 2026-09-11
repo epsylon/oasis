@@ -27,6 +27,8 @@ function getViewDetailsAction(item) {
     case 'industry': return `/industry/build/${encodeURIComponent(item.id)}`;
     case 'housing': return `/housing/${encodeURIComponent(item.id)}`;
     case 'schoolCourse': return `/school/course/${encodeURIComponent(item.id)}`;
+    case 'campaign': return `/campaigns/${encodeURIComponent(item.id)}`;
+    case 'logisticsRoute': return `/logistics/${encodeURIComponent(item.id)}`;
     case 'calendar': return `/calendars/${encodeURIComponent(item.id)}`;
     default: return `/messages/${encodeURIComponent(item.id)}`;
   }
@@ -152,6 +154,21 @@ const renderAgendaItem = (item, userId, filter) => {
     ];
   }
 
+  if (item.type === 'campaign') {
+    details = [
+      renderCardField(i18n.campaignSignaturesLabel + ":", `${item.signatureCount || 0} / ${item.goal || 0}`),
+      item.deadline ? renderCardField(i18n.campaignDeadlineLabel + ":", fmt(item.deadline)) : null
+    ].filter(Boolean);
+  }
+
+  if (item.type === 'logisticsRoute') {
+    details = [
+      renderCardField(i18n.logisticsKindLabel + ":", `${String(item.kind || '').toUpperCase()} · ${String(item.mode || '').toUpperCase()}`),
+      renderCardField(i18n.logisticsOriginLabel + ":", `${item.origin || ''} → ${item.destination || ''}`),
+      item.date ? renderCardField(i18n.logisticsDateLabel + ":", fmt(item.date)) : null
+    ].filter(Boolean);
+  }
+
   if (item.type === 'housing') {
     const isOwner = String(item.author) === String(userId);
     const requestCount = Number(item.requestCount) || 0;
@@ -259,6 +276,8 @@ exports.agendaView = async (data, filter, q = '') => {
             ['industry', i18n.agendaFilterIndustry || 'INDUSTRY'],
             ['housing', i18n.agendaFilterHousing || 'HOUSING'],
             ['school', i18n.agendaFilterSchool || 'SCHOOL'],
+            ['campaigns', i18n.agendaFilterCampaigns || 'CAMPAIGNS'],
+            ['logistics', i18n.agendaFilterLogistics || 'LOGISTICS'],
             ['calendars', i18n.agendaFilterCalendars || 'CALENDARS'],
             ['transfers', i18n.agendaFilterTransfers],
             ['discarded', 'DISCARDED']

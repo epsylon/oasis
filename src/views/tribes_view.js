@@ -1,6 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require('./main_views');
+const { renderTribeWikiSection } = require('./wiki_view');
 const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { renderResults: renderPollResults, renderBallot: renderPollBallot } = require('./polls_view');
 const { config } = require('../server/SSB_server.js');
@@ -174,7 +175,8 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
   const emptyMod = moduleIsEmpty(Array.isArray(tribes) ? tribes : [], filter || 'all', 'all', query.search);
   const nowChip = Date.now();
   const tribeChip = (m) => {
-    if (m === filter) return true;
+    if (m === filter || m === 'all') return true;
+    if (m === 'top' || m === 'gallery') return tribes.length > 0;
     if (m === 'mine') return tribes.some(t => t.author === userId);
     if (m === 'membership') return tribes.some(t => Array.isArray(t.members) && t.members.includes(userId));
     if (m === 'subtribes') return tribes.some(t => !!t.parentTribeId);
@@ -409,7 +411,7 @@ const renderSectionNav = (tribe, section) => {
   const sections = [
     { items: firstGroup },
     { items: [{ key: 'votations', label: i18n.tribeSectionVotations }, { key: 'polls', label: i18n.pollsTitle }, { key: 'events', label: i18n.tribeSectionEvents }, { key: 'tasks', label: i18n.tribeSectionTasks }] },
-    { items: [{ key: 'feed', label: i18n.tribeSectionFeed }, { key: 'forum', label: i18n.tribeSectionForum }, { key: 'maps', label: i18n.tribeSectionMaps || 'MAPS' }, { key: 'torrents', label: i18n.tribeSectionTorrents || 'TORRENTS' }, { key: 'pads', label: i18n.tribeSectionPads || 'PADS' }, { key: 'chats', label: i18n.tribeSectionChats || 'CHATS' }, { key: 'calendars', label: i18n.tribeSectionCalendars || 'CALENDARS' }] },
+    { items: [{ key: 'feed', label: i18n.tribeSectionFeed }, { key: 'forum', label: i18n.tribeSectionForum }, { key: 'maps', label: i18n.tribeSectionMaps || 'MAPS' }, { key: 'torrents', label: i18n.tribeSectionTorrents || 'TORRENTS' }, { key: 'pads', label: i18n.tribeSectionPads || 'PADS' }, { key: 'wiki', label: i18n.tribeSectionWiki || 'WIKI' }, { key: 'chats', label: i18n.tribeSectionChats || 'CHATS' }, { key: 'calendars', label: i18n.tribeSectionCalendars || 'CALENDARS' }] },
     { items: [{ key: 'images', label: i18n.tribeSectionImages || 'IMAGES' }, { key: 'audios', label: i18n.tribeSectionAudios || 'AUDIOS' }, { key: 'videos', label: i18n.tribeSectionVideos || 'VIDEOS' }, { key: 'documents', label: i18n.tribeSectionDocuments || 'DOCUMENTS' }, { key: 'bookmarks', label: i18n.tribeSectionBookmarks || 'BOOKMARKS' }] },
     { items: [{ key: 'tags', label: i18n.tribeSectionTags || 'TAGS' }, { key: 'search', label: i18n.tribeSectionSearch }] },
   ];
@@ -790,6 +792,7 @@ const renderCreateForm = (tribe, contentType, fields) => {
         if (f.type === 'select') return [...prefix, label({ for: f.name }, f.label), br, select({ name: f.name, id: f.name }, ...f.options.map(o => option({ value: o.value }, o.label))), br()];
         if (f.type === 'file') return [...prefix, label({ for: f.name }, f.label), br, input({ type: 'file', name: f.name, id: f.name, accept: f.accept || '*/*' }), br()];
         const attrs = { type: f.type || 'text', name: f.name, id: f.name, required: f.required, placeholder: f.placeholder };
+        if (f.maxlength) attrs.maxlength = f.maxlength;
         if (f.min) attrs.min = f.min;
         return [...prefix, br, label({ for: f.name }, f.label), br, input(attrs), br()];
       }).flat(),br(),
@@ -804,7 +807,7 @@ const renderEventsSection = (tribe, items, query) => {
   const today = new Date().toISOString().split('T')[0];
   if (action === 'create') {
     return renderCreateForm(tribe, 'events', [
-      { name: 'title', label: i18n.tribeEventTitle, required: true, placeholder: i18n.tribeEventTitle },
+      { name: 'title', label: i18n.tribeEventTitle, maxlength: '100', required: true, placeholder: i18n.tribeEventTitle },
       { name: 'description', type: 'textarea', label: i18n.tribeEventDescription, required: true, placeholder: i18n.tribeEventDescription },
       { name: 'date', type: 'date', label: i18n.tribeEventDate, required: true, min: today },
       { name: 'location', label: i18n.tribeEventLocation, placeholder: i18n.tribeEventLocation },
@@ -857,7 +860,7 @@ const renderTasksSection = (tribe, items, query) => {
   const today = new Date().toISOString().split('T')[0];
   if (action === 'create') {
     return renderCreateForm(tribe, 'tasks', [
-      { name: 'title', label: i18n.tribeTaskTitle, required: true, placeholder: i18n.tribeTaskTitle },
+      { name: 'title', label: i18n.tribeTaskTitle, maxlength: '100', required: true, placeholder: i18n.tribeTaskTitle },
       { name: 'description', type: 'textarea', label: i18n.tribeTaskDescription, required: true, placeholder: i18n.tribeTaskDescription },
       { name: 'priority', type: 'select', label: i18n.tribeTaskPriority, options: [
         { value: 'LOW', label: i18n.tribePriorityLow }, { value: 'MEDIUM', label: i18n.tribePriorityMedium },
@@ -1078,7 +1081,7 @@ const renderForumSection = (tribe, items, query) => {
 
   if (action === 'create') {
     return renderCreateForm(tribe, 'forum', [
-      { name: 'title', label: i18n.tribeForumTitle, required: true, placeholder: i18n.tribeForumTitle },
+      { name: 'title', label: i18n.tribeForumTitle, maxlength: '100', required: true, placeholder: i18n.tribeForumTitle },
       { name: 'description', type: 'textarea', label: i18n.tribeForumText, required: true, placeholder: i18n.tribeForumText, rows: 6 },
       { name: 'category', type: 'select', label: i18n.tribeForumCategory, options: [
         { value: 'GENERAL', label: i18n.tribeForumCatGeneral }, { value: 'PROPOSAL', label: i18n.tribeForumCatProposal },
@@ -1374,7 +1377,7 @@ const renderSubTribesSection = (tribe, items, query) => {
 
   if (action === 'create' && canCreate) {
     return renderCreateForm(tribe, 'subtribes', [
-      { name: 'title', label: i18n.tribeTitleLabel, required: true, placeholder: 'Name of the sub-tribe' },
+      { name: 'title', label: i18n.tribeTitleLabel, maxlength: '100', required: true, placeholder: 'Name of the sub-tribe' },
       { name: 'description', type: 'textarea', label: i18n.tribeDescriptionLabel, required: true, placeholder: 'Description of the sub-tribe' },
       { name: 'location', label: i18n.tribeLocationLabel, placeholder: 'Where is this sub-tribe located?' },
       { name: 'mapUrl', label: i18n.mapLocationTitle || 'Map Location', placeholder: i18n.mapUrlPlaceholder || '/maps/MAP_ID', spaceBefore: true },
@@ -1623,6 +1626,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
     case 'torrents': sectionContent = renderTribeTorrentsSection(tribe, sectionData); break;
     case 'maps': sectionContent = renderTribeMapsSection(tribe, sectionData); break;
     case 'pads': sectionContent = renderTribePadsSection(tribe, sectionData); break;
+    case 'wiki': sectionContent = renderTribeWikiSection(tribe, sectionData); break;
     case 'chats': sectionContent = renderTribeChatsSection(tribe, sectionData); break;
     case 'calendars': sectionContent = renderTribeCalendarsSection(tribe, sectionData); break;
     case 'governance': sectionContent = renderGovernance(tribe, sectionData); break;

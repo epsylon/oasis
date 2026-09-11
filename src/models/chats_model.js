@@ -425,7 +425,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       return tip
     },
 
-    async createChat(title, description, image, category, status, tagsRaw, tribeId) {
+    async createChat(title, description, image, category, status, tagsRaw, tribeId, extra = {}) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const blobId = image ? String(image).trim() || null : null
@@ -446,7 +446,8 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         author: userId,
         createdAt: now,
         updatedAt: now,
-        ...(tribeId ? { tribeId } : {})
+        ...(tribeId ? { tribeId } : {}),
+        ...(extra && typeof extra === "object" && typeof extra.courseId === "string" && extra.courseId ? { courseId: extra.courseId } : {})
       }
 
       if (!tribeCrypto) {

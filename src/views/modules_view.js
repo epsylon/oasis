@@ -9,6 +9,11 @@ const modulesView = () => {
     { name: 'agenda', label: i18n.modulesAgendaLabel, description: i18n.modulesAgendaDescription },
     { name: 'ai', label: i18n.modulesAILabel, description: i18n.modulesAIDescription },
     { name: 'aiNav', label: i18n.modulesAINavLabel, description: i18n.modulesAINavDescription },
+    { name: 'emergencies', label: i18n.modulesEmergenciesLabel, description: i18n.modulesEmergenciesDescription },
+    { name: 'mailing', label: i18n.modulesMailingLabel, description: i18n.modulesMailingDescription },
+    { name: 'logistics', label: i18n.modulesLogisticsLabel, description: i18n.modulesLogisticsDescription },
+    { name: 'podcasts', label: i18n.modulesPodcastsLabel, description: i18n.modulesPodcastsDescription },
+    { name: 'campaigns', label: i18n.modulesCampaignsLabel, description: i18n.modulesCampaignsDescription },
     { name: 'audios', label: i18n.modulesAudiosLabel, description: i18n.modulesAudiosDescription },
     { name: 'banking', label: i18n.modulesBankingLabel, description: i18n.modulesBankingDescription },
     { name: 'bookmarks', label: i18n.modulesBookmarksLabel, description: i18n.modulesBookmarksDescription },
@@ -32,7 +37,7 @@ const modulesView = () => {
     { name: 'invites', label: i18n.modulesInvitesLabel, description: i18n.modulesInvitesDescription },
     { name: 'jobs', label: i18n.modulesJobsLabel, description: i18n.modulesJobsDescription },
     { name: 'larp', label: i18n.modulesLarpLabel, description: i18n.modulesLarpDescription },
-    { name: 'legacy', label: i18n.modulesLegacyLabel, description: i18n.modulesLegacyDescription },
+    { name: 'backup', label: i18n.modulesBackupLabel, description: i18n.modulesBackupDescription },
     { name: 'logs', label: i18n.modulesLogsLabel, description: i18n.modulesLogsDescription },
     { name: 'maps', label: i18n.modulesMapLabel, description: i18n.modulesMapDescription },
     { name: 'market', label: i18n.modulesMarketLabel, description: i18n.modulesMarketDescription },
@@ -54,8 +59,9 @@ const modulesView = () => {
     { name: 'tribes', label: i18n.modulesTribesLabel, description: i18n.modulesTribesDescription },
     { name: 'videos', label: i18n.modulesVideosLabel, description: i18n.modulesVideosDescription },
     { name: 'votes', label: i18n.modulesVotationsLabel, description: i18n.modulesVotationsDescription },
-    { name: 'wallet', label: i18n.modulesWalletLabel, description: i18n.modulesWalletDescription }
-  ];
+    { name: 'wallet', label: i18n.modulesWalletLabel, description: i18n.modulesWalletDescription },
+    { name: 'wiki', label: i18n.modulesWikiLabel, description: i18n.modulesWikiDescription }
+  ].sort((x, y) => String(x.label || x.name).localeCompare(String(y.label || y.name), undefined, { sensitivity: 'base' }));
 
   const moduleStates = modules.reduce((acc, mod) => {
     acc[`${mod.name}Mod`] = config[`${mod.name}Mod`] === 'on' ? 'on' : 'off';
@@ -69,8 +75,9 @@ const modulesView = () => {
   const header = [div({ class: 'tags-header module-header-line' },
     h2(i18n.modulesViewTitle),
     p(i18n.modulesViewDescription)
-  ),
-    div({ class: 'modules-counts' },
+  )];
+
+  const counts = div({ class: 'modules-counts' },
       span({ class: 'modules-count-item' },
         `${i18n.modulesTotalModulesLabel}: `,
         strong({ class: 'modules-count-value' }, totalModulesCount)
@@ -83,13 +90,12 @@ const modulesView = () => {
         `${i18n.modulesDisabledModulesLabel}: `,
         strong({ class: 'modules-count-value' }, disabledModulesCount)
       )
-    )
-  ];
+    );
 
   const PRESETS = {
-    minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'blogs', 'polls', 'opinions', 'cipher', 'legacy'],
-    social: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'school', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes'],
-    economy: ['agenda', 'audios', 'bookmarks', 'calendars', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'legacy', 'logs', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'parliament', 'pixelia', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry', 'school'],
+    minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'blogs', 'polls', 'opinions', 'cipher', 'backup'],
+    social: ['agenda', 'emergencies', 'audios', 'bookmarks', 'calendars', 'campaigns', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'backup', 'logs', 'mailing', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'wiki', 'parliament', 'pixelia', 'podcasts', 'melody', 'projects', 'reports', 'school', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes'],
+    economy: ['agenda', 'emergencies', 'audios', 'bookmarks', 'calendars', 'campaigns', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'backup', 'logs', 'mailing', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'wiki', 'parliament', 'pixelia', 'podcasts', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry', 'school', 'logistics', 'podcasts', 'campaigns'],
     mobile: MOBILE_MODULES,
     full: ALL_MODULES
   };
@@ -114,6 +120,7 @@ const modulesView = () => {
     section(
       h2(i18n.modulesPresetTitle || "Common Configurations"),
       presetButtons,
+      counts,
       form(
         { action: "/save-modules", method: "post" },
         table(

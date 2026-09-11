@@ -303,7 +303,7 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       br(),
       label(i18n.housingAvailableFrom),
       br(),
-      input({ type: "date", name: "availableFrom", required: true, min: isEdit ? undefined : today(), value: item.availableFrom ? String(item.availableFrom).slice(0, 10) : "" }),
+      input({ type: "date", name: "availableFrom", required: true, min: today(), value: item.availableFrom ? String(item.availableFrom).slice(0, 10) : "" }),
       br(),
       br(),
       label(i18n.housingAvailableTo),
@@ -313,7 +313,7 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       br(),
       label(i18n.housingTags),
       br(),
-      input({ type: "text", name: "tags", value: Array.isArray(item.tags) ? item.tags.join(", ") : (item.tags || "") }),
+      input({ type: "text", name: "tags", placeholder: i18n.tagsPlaceholder, value: Array.isArray(item.tags) ? item.tags.join(", ") : (item.tags || "") }),
       br(),
       br(),
       label(i18n.visibilityLabel || "Visibility"),
@@ -332,6 +332,7 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
 const housingChip = (censusH, filter, x) => {
   const m = x.key
   if (m === filter) return true
+  if (m === "TOP") return censusH.length > 0
   if (m === "MINE") return censusH.some(h => String(h.author) === String(userId))
   if (m === "RECENT") return censusH.some(h => (Date.parse(h.createdAt || "") || 0) >= Date.now() - 86400000)
   if (m === "REQUESTED") return censusH.some(h => safeArr(h.requests).includes(userId))

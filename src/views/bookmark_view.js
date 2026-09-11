@@ -192,6 +192,17 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
   );
 };
 
+const mediaChipFor = (filter, censusM) => (mode) => {
+  if (mode === filter) return true;
+  if (!Array.isArray(censusM)) return true;
+  if (mode === "top") return censusM.length > 0;
+  if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+  if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
+  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
+  return true;
+};
+
 exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, params = {}) => {
   const bookmarkEditWarning = filter === "edit" ? await renderSpreadEditWarning(bookmarkId) : null;
   const title = i18n.bookmarkTitle;
@@ -201,15 +212,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
 
   const list = safeArr(bookmarks);
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
-  const censusM = Array.isArray(params.censusList) ? params.censusList : list;
-  const mediaChip = (mode) => {
-    if (mode === filter) return true;
-    if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-    if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
-    if (mode === "favorites") return censusM.some((x) => x.isFavorite);
-    if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
-    return true;
-  };
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const bookmarkToEdit = bookmarkId ? list.find((b) => b.id === bookmarkId) : null;
   const tags = bookmarkToEdit && Array.isArray(bookmarkToEdit.tags) ? bookmarkToEdit.tags : [];
 
@@ -220,7 +223,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
         (() => {
           const { renderReachChip } = require('./clearnet_view');
           const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetBookmarks);
-          return renderReachChip(isClearnet, i18n);
+          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
         })()
       ),
       div(
@@ -234,7 +237,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterMine).toUpperCase())] : []),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterRecent).toUpperCase())] : []),
           ...(mediaChip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterFavorites).toUpperCase())] : []),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterTop).toUpperCase()),
+          ...(mediaChip("top") ? [button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterTop).toUpperCase())] : []),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.bookmarkCreateButton)
         )
@@ -270,6 +273,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
 };
 
 exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], params = {}) => {
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : null);
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
   const returnTo = params.returnTo || buildReturnTo(filter, { q, sort });
@@ -326,7 +330,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   const bookmarkSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, bookmark.url ? urlLink : (bookmark.title || "")),
-      renderReachChip(isClearnet, i18n)
+      renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`)
     ),
     bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null,
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
@@ -376,9 +380,9 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterRecent).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterFavorites).toUpperCase()),
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterMine).toUpperCase())] : []),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterFavorites).toUpperCase())] : []),
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.bookmarkCreateButton)
         )

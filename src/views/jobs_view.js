@@ -309,7 +309,7 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null) => {
       br(),
       label(i18n.jobsTagsLabel),
       br(),
-      input({ type: "text", name: "tags", value: Array.isArray(job.tags) ? job.tags.join(", ") : (job.tags || "") }),
+      input({ type: "text", name: "tags", placeholder: i18n.tagsPlaceholder, value: Array.isArray(job.tags) ? job.tags.join(", ") : (job.tags || "") }),
       br(),
       br(),
       label(i18n.jobLanguages),
@@ -456,6 +456,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
   const jobChip = (x) => {
     const m = x.key;
     if (m === filter) return true;
+    if (m === "TOP") return censusJ.length > 0;
     if (m === "MINE") return censusJ.some(j => String(j.author) === String(userId));
     if (m === "RECENT") return censusJ.some(j => (Date.parse(j.createdAt || "") || 0) >= Date.now() - 86400000);
     if (m === "APPLIED") return censusJ.some(j => safeArr(j.subscribers).includes(userId));
@@ -463,7 +464,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
     if (m === "PRESENCIAL") return censusJ.some(j => String(j.location || "").toLowerCase() === "presencial");
     if (m === "FREELANCER" || m === "EMPLOYEE" || m === "EXCHANGE") return censusJ.some(j => String(j.job_type || "").toUpperCase() === m);
     if (m === "OPEN" || m === "CLOSED") return censusJ.some(j => String(j.status || "OPEN").toUpperCase() === m);
-    if (m === "CV") return params.anyCVs !== false;
+    if (m === "CV") return params.anyCVs === true;
     return true;
   };
   const filterObj = FILTERS.find((f) => f.key === filter) || FILTERS[0]
@@ -625,7 +626,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
     renderLifespanChip(job.lifetime, i18n),
     renderEcoTax(job.msgSize, job.id),
-    renderReachChip(isClearnet, i18n)
+    renderReachChip(isClearnet, i18n, `/c/jobs/${encodeURIComponent(job.id)}`)
   ].filter(Boolean)
 
   const nextVisibility = visibility === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC'
@@ -716,9 +717,9 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
 }
 
 exports.clearnetJobView = async (job) => {
-  const { escapeHtml: esc, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
+  const { escapeHtml: esc, renderRichText, renderKindTag, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
   const title = esc(job.title || 'Job');
-  const desc = esc(job.description || '');
+  const desc = renderRichText(job.description || '');
   const req = esc(job.requirements || '');
   const lang = esc(String(job.languages || '').toUpperCase());
   const loc = esc(String(job.location || '').toUpperCase());
@@ -744,12 +745,14 @@ exports.clearnetJobView = async (job) => {
   const body = `
   <h1 class="cn-job-title">${title}</h1>
   <div class="cn-job-meta">
+    <span class="cn-job-meta-item">${renderKindTag('job')}</span>
     <span class="cn-job-meta-item">💼 ${jobTypeLabel}</span>
     ${job.createdAt ? `<span class="cn-job-meta-item">📅 ${esc(new Date(job.createdAt).toISOString().slice(0,10))}</span>` : ''}
     ${loc ? `<span class="cn-job-meta-item">📍 ${loc}</span>` : ''}
     ${lang ? `<span class="cn-job-meta-item">🗣 ${lang}</span>` : ''}
   </div>
   <div class="cn-job-comp">${compensation}</div>
+  <hr class="cn-sep"/>
   ${jobImg ? `<img class="cn-job-img" src="${jobImg}" alt="${title}"/>` : ''}
   ${desc ? `<div class="cn-job-section"><h2>Description</h2><p>${desc}</p></div>` : ''}
   ${req ? `<div class="cn-job-section"><h2>Requirements</h2><p>${req}</p></div>` : ''}

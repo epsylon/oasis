@@ -26,10 +26,11 @@ const excerpt = (text, max = 420) => {
 
 const renderFilterBar = (filter, q, showSearch = true, total = null, censusList = null) => {
   const emptyMod = total !== null && moduleIsEmpty({ length: Number(total) || 0 }, filter, "ALL", q);
-  const censusB = Array.isArray(censusList) ? censusList : null;
+  const censusB = Array.isArray(censusList) ? censusList : [];
   const blogChip = (x) => {
     const m = x.key;
-    if (!censusB || m === filter) return true;
+    if (m === filter || m === "ALL") return true;
+    if (m === "TOP") return censusB.length > 0;
     if (m === "MINE") return censusB.some(b => String(b.author) === String(userId));
     if (m === "RECENT") return censusB.some(b => (Date.parse(b.createdAt || "") || 0) >= Date.now() - 86400000);
     if (m === "FAVORITES") return censusB.some(b => b.isFavorite);
@@ -136,7 +137,7 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
         p(i18n.blogDescription)
       )
     ),
-    renderFilterBar(showForm ? "ALL" : filter, params.q, !showForm, Array.isArray(blogs) ? blogs.length : 0, params.censusList),
+    renderFilterBar(showForm ? "CREATE" : filter, params.q, !showForm, Array.isArray(blogs) ? blogs.length : 0, params.censusList),
     showForm
       ? renderCreateForm()
       : section(
@@ -195,7 +196,7 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
   return template(
     blog.subject || i18n.blogTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.blogTitle), p(i18n.blogDescription))),
-    renderFilterBar("ALL", params.q, false),
+    renderFilterBar("ALL", params.q, false, null, params.censusList),
     section(div({ class: "tribe-details" }, blogSide, blogMain))
   );
 };

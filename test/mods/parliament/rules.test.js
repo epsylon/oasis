@@ -62,6 +62,9 @@ describe('parliament: the rules of candidatures and proposals', (t) => {
     await throwsAsync(() => A.use('parliament').createProposal({ title: 'ok', description: 'x'.repeat(1001) }), /too long/);
     const r = await A.use('parliament').createProposal({ title: 'Plant trees', description: 'greener city' });
     ok(r && r.key);
+    const fromCampaign = await A.use('parliament').createProposal({ title: 'Bike lanes', description: '', campaignId: '%campaign.sha256', signatures: 12 });
+    ok(fromCampaign && fromCampaign.key);
+    await throwsAsync(() => A.use('parliament').createProposal({ title: 'Bike lanes again', description: '', campaignId: '%campaign.sha256', signatures: 12 }), /already raised/);
     const term = await A.use('parliament').getCurrentTerm();
     ok(term, 'a term was created by the first proposal');
     eq(String(term.method).toUpperCase(), 'ANARCHY');

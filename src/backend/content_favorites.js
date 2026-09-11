@@ -10,10 +10,12 @@ const storePath = () => {
 };
 
 const DEFAULT = {
+  emergencies: [],
   audios: [],
   blogs: [],
   bookmarks: [],
   calendars: [],
+  campaigns: [],
   chats: [],
   documents: [],
   events: [],
@@ -21,9 +23,12 @@ const DEFAULT = {
   housing: [],
   images: [],
   jobs: [],
+  logistics: [],
   logs: [],
+  mailing: [],
   maps: [],
   pads: [],
+  podcasts: [],
   polls: [],
   projects: [],
   reports: [],
@@ -35,7 +40,8 @@ const DEFAULT = {
   torrents: [],
   transfers: [],
   videos: [],
-  votes: []
+  votes: [],
+  wiki: []
 };
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);

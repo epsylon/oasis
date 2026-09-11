@@ -467,7 +467,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       br(),
       input({ type: "file", name: "image" }),
       br(),
-      label(i18n.attachmentLabel), br(),
+      label(i18n.uploadMedia), br(),
       input({ type: "file", name: "blob" }),
       br(),
       pr.image ? renderMediaBlob(pr.image) : null,
@@ -526,6 +526,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
   const projChip = (x) => {
     const m = x.key;
     if (m === f) return true;
+    if (m === "TOP") return censusP.length > 0;
     if (m === "MINE") return censusP.some(pr => String(pr.author) === String(userId));
     if (m === "APPLIED") return censusP.some(pr => String(pr.author) !== String(userId) && [pr.members, pr.participants, pr.applicants].some(l => Array.isArray(l) && l.includes(userId)));
     if (m === "ACTIVE" || m === "PAUSED" || m === "COMPLETED") return censusP.some(pr => String(pr.status || "ACTIVE").toUpperCase() === m);
@@ -717,10 +718,10 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
 }
 
 exports.clearnetProjectView = async (project) => {
-  const { escapeHtml: esc, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
+  const { escapeHtml: esc, renderRichText, renderKindTag, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
   const pr = project || {};
   const title = esc(pr.title || 'Project');
-  const desc = esc(pr.description || '');
+  const desc = renderRichText(pr.description || '');
   const goal = Math.max(0, toNum(pr.goal) || 0);
   const pledged = Math.max(0, toNum(pr.pledged) || 0);
   const fundingPct = goal > 0 ? Math.min(100, Math.round((pledged / goal) * 100)) : 0;
@@ -754,9 +755,11 @@ ${Array.from({ length: 21 }, (_, i) => `.cn-prj-bar-fill-${i * 5}{width:${i * 5}
   const body = `
   <h1 class="cn-prj-title">${title}</h1>
   <div class="cn-prj-meta">
+    ${renderKindTag('project')}
     <span class="cn-prj-status">${esc(status)}</span>
     ${pr.createdAt ? `<span class="cn-prj-date">📅 ${esc(new Date(pr.createdAt).toISOString().slice(0,10))}</span>` : ''}
   </div>
+  <hr class="cn-sep"/>
   ${projectImg ? `<img class="cn-prj-img" src="${projectImg}" alt="${title}"/>` : ''}
   ${goal > 0 ? `
   <div class="cn-prj-funding">

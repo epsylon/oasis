@@ -102,6 +102,20 @@ function makeNode(network, keypair, opts = {}) {
       if (!m) return cb(new Error('not found'));
       cb(null, m.value);
     },
+    add(value, cb) {
+      if (!value || !value.author || typeof value.sequence !== 'number') { if (cb) cb(new Error('invalid message')); return; }
+      const last = network.log.filter(m => m.value && m.value.author === value.author).reduce((max, m) => Math.max(max, m.value.sequence || 0), 0);
+      if (value.sequence !== last + 1) { if (cb) cb(new Error('out of order')); return; }
+      let key;
+      try { key = require('../../src/server/node_modules/ssb-validate').id(value); } catch (_) { key = generateMsgKey(); }
+      const msg = { key, value, timestamp: Date.now() };
+      network.publish(msg);
+      if (cb) cb(null, msg);
+    },
+    createHistoryStream(opt = {}) {
+      const items = network.log.filter(m => m.value && m.value.author === opt.id).sort((a, b) => (a.value.sequence || 0) - (b.value.sequence || 0));
+      return pull.values(opt.limit ? items.slice(0, opt.limit) : items);
+    },
     private: {
       publish(content, recps, cb) {
         let actualContent;
@@ -147,6 +161,10 @@ function makeNode(network, keypair, opts = {}) {
         });
       },
       get(ref) { const buf = network.blobs.get(ref); return pull.values(buf ? [buf] : []); },
+      ls(opts = {}) {
+        const items = Array.from(network.blobs.entries()).filter(([ref]) => !network.blobsRemoved.has(ref));
+        return pull.values(opts && (opts.long || opts.size || opts.meta) ? items.map(([id, buf]) => ({ id, size: buf.length, ts: Date.now() })) : items.map(([id]) => id));
+      },
       want(ref, cb) { if (cb) cb(null); },
       rm(ref, cb) { const had = network.blobs.delete(ref); network.blobsRemoved.add(ref); if (cb) cb(null, had); }
     },

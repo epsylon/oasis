@@ -22,6 +22,7 @@ const getUserId = async () => {
   if (!userId) userId = ssb.id;
   return userId;
 };
+exports.getUserId = getUserId;
 
 const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, table, td, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
 
@@ -289,6 +290,13 @@ const errorView = ({ title, message, backHref }) => {
   );
 };
 exports.errorView = errorView;
+
+exports.renderInlineError = (message, dismissHref) => String(section({ class: 'inline-error' },
+  div({ class: 'tags-header inline-error-box' },
+    p({ class: 'error-page-message' }, String(message || '')),
+    dismissHref ? a({ href: dismissHref, class: 'filter-btn' }, i18n.errorDismiss || 'OK') : null
+  )
+));
 
 const renderVotesSummary = (opinions = {}) => {
   const entries = Object.entries(opinions).filter(([, v]) => Number(v) > 0);
@@ -700,15 +708,15 @@ const renderDevLink = () => {
   return "";
 };
 
-const renderLegacyLink = () => {
-  const legacyMod = getConfig().modules.legacyMod === "on";
-  if (legacyMod) {
+const renderBackupLink = () => {
+  const backupMod = getConfig().modules.backupMod === "on";
+  if (backupMod) {
     return [
       navLink({
-        href: "/legacy",
+        href: "/backup",
         emoji: "ꖤ",
-        text: i18n.legacy,
-        class: "legacy-link enabled"
+        text: i18n.backupTitle,
+        class: "backup-link enabled"
       })
     ];
   }
@@ -1052,6 +1060,66 @@ const renderCourtsLink = () => {
     : "";
 };
 
+const renderEmergenciesLink = () => {
+  const emergenciesMod = getConfig().modules.emergenciesMod === "on";
+  return emergenciesMod
+    ? navLink({
+        href: "/emergencies",
+        emoji: "ꕥ",
+        text: i18n.emergenciesTitle,
+        class: "emergencies-link enabled"
+      })
+    : "";
+};
+
+const renderCampaignsLink = () => {
+  const campaignsMod = getConfig().modules.campaignsMod === "on";
+  return campaignsMod
+    ? navLink({
+        href: "/campaigns",
+        emoji: "✍",
+        text: i18n.campaignsTitle,
+        class: "campaigns-link enabled"
+      })
+    : "";
+};
+
+const renderPodcastsLink = () => {
+  const podcastsMod = getConfig().modules.podcastsMod === "on";
+  return podcastsMod
+    ? navLink({
+        href: "/podcasts",
+        emoji: "ꖜ",
+        text: i18n.podcastsTitle,
+        class: "podcasts-link enabled"
+      })
+    : "";
+};
+
+const renderLogisticsLink = () => {
+  const logisticsMod = getConfig().modules.logisticsMod === "on";
+  return logisticsMod
+    ? navLink({
+        href: "/logistics",
+        emoji: "⇄",
+        text: i18n.logisticsTitle,
+        class: "logistics-link enabled"
+      })
+    : "";
+};
+
+const renderMailingLink = () => {
+  const mailingMod = getConfig().modules.mailingMod === "on";
+  return mailingMod
+    ? navLink({
+        href: "/mailing",
+        emoji: "✉",
+        text: i18n.mailingTitle,
+        class: "mailing-link enabled"
+      })
+    : "";
+};
+
 const renderVotationsLink = () => {
   const votesMod = getConfig().modules.votesMod === "on";
   return votesMod
@@ -1117,6 +1185,20 @@ const renderPadsLink = () => {
           emoji: "ꔗ",
           text: i18n.padsTitle,
           class: "pads-link enabled"
+        })
+      ]
+    : "";
+};
+
+const renderWikiLink = () => {
+  const wikiMod = getConfig().modules.wikiMod === "on";
+  return wikiMod
+    ? [
+        navLink({
+          href: "/wiki",
+          emoji: "ꔮ",
+          text: i18n.wikiTitle,
+          class: "wiki-link enabled"
         })
       ]
     : "";
@@ -1295,6 +1377,24 @@ const renderTasksLink = () => {
     : "";
 };
 
+const renderEmergencyBanner = (featured, opts = {}) => {
+  if (!featured || !featured.href) return null;
+  const compact = !!opts.compact;
+  const cap = compact ? 42 : 80;
+  const sev = String(featured.severity || "UNVERIFIED");
+  const sevLabel = String(i18n[`emergencySeverity${sev.charAt(0) + sev.slice(1).toLowerCase()}`] || sev).toUpperCase();
+  const t = String(featured.title || "").trim();
+  const label = `${t.length > cap ? t.slice(0, cap) + "…" : t} (${sevLabel} · ${featured.confirmationCount || 0})`;
+  return div(
+    { class: (compact ? "ai-suggestion-banner ai-suggestion-inline" : "update-banner ai-suggestion-banner") + ` emergency-banner emergency-banner-${sev.toLowerCase()}` },
+    span({ class: "update-banner-icon" }, "🚨"),
+    compact ? null : span({ class: "update-banner-text" }, i18n.emergencyBannerLabel),
+    a({ href: featured.href, class: "update-banner-link" }, label),
+    form({ method: "POST", action: "/emergencies/banner/dismiss", class: "welcome-banner-close" },
+      button({ type: "submit", class: "welcome-banner-close-btn" }, "✕"))
+  );
+};
+
 const template = (titlePrefix, ...elements) => {
   const currentConfig = getConfig();
   const theme = currentConfig.themes.current || "Dark-SNH";
@@ -1319,6 +1419,15 @@ const template = (titlePrefix, ...elements) => {
         button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
       )
     );
+  };
+  const buildEmergencyBanner = (compact) => {
+    try {
+      if (getConfig().modules.emergenciesMod !== "on") return null;
+      const featured = sharedState.getFeaturedEmergency ? sharedState.getFeaturedEmergency() : null;
+      if (!featured || !featured.id) return null;
+      if (sharedState.getDismissedEmergency && sharedState.getDismissedEmergency() === featured.id) return null;
+      return renderEmergencyBanner(featured, { compact });
+    } catch (_) { return null; }
   };
   const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : "blocks";
   const themeLink = link({
@@ -1418,7 +1527,8 @@ const template = (titlePrefix, ...elements) => {
               }),
               button({ type: 'submit', class: 'ai-ask-btn' }, '➤')
             ),
-            buildAiSuggestion(true)
+            buildAiSuggestion(true),
+            buildEmergencyBanner(true)
           );
         })(),
         uxMode === "ainav" ? div(
@@ -1481,6 +1591,7 @@ const template = (titlePrefix, ...elements) => {
         }
       })(),
       (getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? null : buildAiSuggestion(false),
+      buildEmergencyBanner(false),
       div(
         { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" ? "main-content chatsux-only" : "main-content" },
         uxMode !== "blocks" ? null : div(
@@ -1533,7 +1644,8 @@ const template = (titlePrefix, ...elements) => {
                 renderLarpLink(),
                 renderSchoolLink(),
                 renderParliamentLink(),
-                renderCourtsLink()
+                renderCourtsLink(),
+                renderEmergenciesLink()
               ),
               navGroup(
                 {
@@ -1544,6 +1656,7 @@ const template = (titlePrefix, ...elements) => {
                 renderBankingLink(),
                 renderWalletLink(),
                 renderMarketLink(),
+                renderLogisticsLink(),
                 renderHousingLink(),
                 renderProjectsLink(),
                 renderIndustryLink(),
@@ -1559,10 +1672,12 @@ const template = (titlePrefix, ...elements) => {
                 },
                 renderVotationsLink(),
                 renderPollsLink(),
+                renderCampaignsLink(),
                 renderEventsLink(),
                 renderCalendarsLink(),
                 renderTasksLink(),
-                renderReportsLink()
+                renderReportsLink(),
+                renderMailingLink()
               ),
               navGroup(
                 {
@@ -1580,12 +1695,12 @@ const template = (titlePrefix, ...elements) => {
                 navLink({ href: "/peers", emoji: "⧖", text: i18n.peers }),
                 renderDevLink(),
                 renderCipherLink(),
-                renderLegacyLink(),
                 navLink({
                   href: "/stats",
                   emoji: "ꕷ",
                   text: i18n.statistics
-                })
+                }),
+                renderBackupLink()
               )
             )
           )
@@ -1606,12 +1721,13 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "ꔙ",
                   text: i18n.activityTitle
                 }),
-                renderFeedLink(),
-                renderBlogsLink(),
                 renderTrendingLink(),
                 renderOpinionsLink(),
-                renderPadsLink(),
+                renderFeedLink(),
+                renderBlogsLink(),
                 renderForumLink(),
+                renderPadsLink(),
+                renderWikiLink(),
                 renderMapsLink(),
                 renderChatsLink()
               ),
@@ -1626,7 +1742,8 @@ const template = (titlePrefix, ...elements) => {
                 renderDocsLink(),
                 renderImagesLink(),
                 renderTorrentsLink(),
-                renderVideosLink()
+                renderVideosLink(),
+                renderPodcastsLink()
               ),
               navGroup(
                 {
@@ -2333,6 +2450,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     clearnetDocuments: visibilityPrefs.clearnetDocuments === true,
     clearnetTorrents:  visibilityPrefs.clearnetTorrents  === true,
     clearnetBookmarks: visibilityPrefs.clearnetBookmarks === true,
+    clearnetPodcasts:  visibilityPrefs.clearnetPodcasts  === true,
     profileShops:      visibilityPrefs.profileShops      === true,
     profileJobs:       visibilityPrefs.profileJobs       === true,
     profileEvents:     visibilityPrefs.profileEvents     === true,
@@ -2344,13 +2462,15 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     profileDocuments:  visibilityPrefs.profileDocuments  === true,
     profileTorrents:   visibilityPrefs.profileTorrents   === true,
     profileBookmarks:  visibilityPrefs.profileBookmarks  === true,
+    profilePodcasts:   visibilityPrefs.profilePodcasts   === true,
+    profileSchool:     visibilityPrefs.profileSchool     === true,
     ecoTax:            visibilityPrefs.ecoTax            !== false,
     larpSign:          visibilityPrefs.larpSign          === true,
     fediverse:         visibilityPrefs.fediverse         === true,
     gpg:               visibilityPrefs.gpg               === true
   };
   const fediverseHandleValue = typeof visibilityPrefs.fediverseHandle === 'string' ? visibilityPrefs.fediverseHandle : '';
-  prefs.clearnet = prefs.clearnetShops || prefs.clearnetSchool || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks;
+  prefs.clearnet = prefs.clearnetShops || prefs.clearnetSchool || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks || prefs.clearnetPodcasts;
   const togglePill = (key, labelText, forced = false) => label(
     { class: forced ? "pref-pill pref-pill-forced" : "pref-pill", for: forced ? undefined : `vis_${key}`, title: forced ? (i18n.profileDeviceLockedHint || 'On mobile devices this sensor is mandatory and cannot be disabled.') : undefined },
     forced ? input({ type: "hidden", name: `vis_${key}`, value: "1" }) : null,
@@ -2411,6 +2531,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
           ),
           div({ class: "pref-pill-row" },
             togglePill('profileShops',     i18n.profileClearnetShopsLabel     || 'Shops'),
+            togglePill('profileSchool',    i18n.profileClearnetSchoolLabel    || 'School'),
             togglePill('profileJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'),
             togglePill('profileEvents',    i18n.profileClearnetEventsLabel    || 'Events'),
             togglePill('profileProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'),
@@ -2420,7 +2541,8 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             togglePill('profileImages',    i18n.profileClearnetImagesLabel    || 'Images'),
             togglePill('profileDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'),
             togglePill('profileTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'),
-            togglePill('profileBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks')
+            togglePill('profileBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks'),
+            togglePill('profilePodcasts',  i18n.profileClearnetPodcastsLabel  || 'Podcasts')
           )
         ),
         br(),
@@ -2459,7 +2581,8 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             togglePill('clearnetImages',    i18n.profileClearnetImagesLabel    || 'Images'),
             togglePill('clearnetDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'),
             togglePill('clearnetTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'),
-            togglePill('clearnetBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks')
+            togglePill('clearnetBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks'),
+            togglePill('clearnetPodcasts',  i18n.profileClearnetPodcastsLabel  || 'Podcasts')
           )
         ),
         br(),
@@ -2475,7 +2598,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
 };
 
 exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWarning, sentAt }) => {
-  const { escapeHtml: esc, renderClearnetPage } = require('./clearnet_view');
+  const { escapeHtml: esc, renderKindTag, renderClearnetPage } = require('./clearnet_view');
   const rawText = String(text || '');
   const renderedHtml = sanitizeHtml(markdown(rawText))
     .replace(/(["'])\/blob\//g, '$1/c/blob/');
@@ -2502,9 +2625,11 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
 `;
   const body = `
   <div class="cn-blog-meta">
+    ${renderKindTag('blog')}
     ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
   </div>
   ${cw ? `<div class="cn-blog-cw">${cw}</div>` : ''}
+  <hr class="cn-sep"/>
   <article class="cn-blog-body">${renderedHtml}</article>
 `;
   return renderClearnetPage({
@@ -2517,17 +2642,116 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
   });
 };
 
+const CLEARNET_MODULES = [
+  { key: 'shops',     label: 'Shops',     kind: 'Shop',     prefKey: 'clearnetShops' },
+  { key: 'school',    label: 'School',    kind: 'Course',   prefKey: 'clearnetSchool' },
+  { key: 'jobs',      label: 'Jobs',      kind: 'Job',      prefKey: 'clearnetJobs' },
+  { key: 'events',    label: 'Events',    kind: 'Event',    prefKey: 'clearnetEvents' },
+  { key: 'projects',  label: 'Projects',  kind: 'Project',  prefKey: 'clearnetProjects' },
+  { key: 'posts',     label: 'Blogs',     kind: 'Blog',     prefKey: 'clearnetPosts',     modulePath: 'blog' },
+  { key: 'audios',    label: 'Audios',    kind: 'Audio',    prefKey: 'clearnetAudios' },
+  { key: 'videos',    label: 'Videos',    kind: 'Video',    prefKey: 'clearnetVideos' },
+  { key: 'images',    label: 'Images',    kind: 'Image',    prefKey: 'clearnetImages' },
+  { key: 'documents', label: 'Documents', kind: 'Document', prefKey: 'clearnetDocuments' },
+  { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' },
+  { key: 'bookmarks', label: 'Bookmarks', kind: 'Bookmark', prefKey: 'clearnetBookmarks' },
+  { key: 'podcasts',  label: 'Podcasts',  kind: 'Podcast',  prefKey: 'clearnetPodcasts' }
+];
+
+const CLEARNET_HUB_CSS = `
+.cn-filter-row{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 12px 0}
+.cn-filter-btn{display:inline-block;padding:6px 14px;background:var(--bg-elev);color:var(--fg-soft);border:1px solid var(--border);border-radius:14px;font-size:13px;text-decoration:none;transition:border-color .15s ease,color .15s ease,background .15s ease}
+.cn-filter-btn:hover{border-color:var(--fg);color:var(--fg);text-decoration:none}
+.cn-filter-btn.active{background:var(--bg-sub);border-color:var(--fg);color:var(--fg);font-weight:600}
+.cn-hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:16px}
+.cn-hub-kind{color:var(--fg-dim);font-size:10px;text-transform:uppercase;letter-spacing:2px;font-weight:600}
+.cn-hub-card{display:flex;flex-direction:column;background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color .15s ease;color:var(--fg);text-decoration:none}
+.cn-hub-card:hover{border-color:var(--fg);text-decoration:none}
+.cn-hub-thumb{width:100%;height:140px;object-fit:cover;background:#000;border-bottom:1px solid var(--border)}
+.cn-hub-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.cn-hub-title{color:var(--fg);font-weight:600;font-size:15px;word-break:break-word}
+.cn-hub-snippet{color:var(--fg-soft);font-size:13px;line-height:1.4;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cn-hub-snippet .cn-url{text-decoration:underline}
+.cn-hub-meta{color:var(--fg-dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-top:auto}
+.cn-hub-author{color:var(--fg-dim);font-size:11px;word-break:break-all}
+.cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
+`;
+
+const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '', query = '', showAuthor = false }) => {
+  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText } = require('./clearnet_view');
+  const renderHubItem = (modulePath, it) => {
+    const blob = cnBlob(it.image);
+    const title = esc(it.title || 'Untitled');
+    const snippet = renderRichText((it.snippet || '').slice(0, 160), { links: false });
+    const meta = esc(it.meta || '');
+    const kind = esc(it.kind || '');
+    const authorLine = showAuthor && it.author ? `<div class="cn-hub-author">${esc(it.authorName || it.author)}</div>` : '';
+    return `<a class="cn-hub-card" href="/c/${modulePath}/${encodeURIComponent(it.id)}">
+      ${blob ? `<img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/>` : ''}
+      <div class="cn-hub-body">
+        ${kind ? `<div class="cn-hub-kind">${kind}</div>` : ''}
+        <div class="cn-hub-title">${title}</div>
+        ${snippet ? `<div class="cn-hub-snippet">${snippet}${(it.snippet || '').length > 160 ? '…' : ''}</div>` : ''}
+        ${authorLine}
+        ${meta ? `<div class="cn-hub-meta">${meta}</div>` : ''}
+      </div>
+    </a>`;
+  };
+  const q = String(query || '').trim().toLowerCase();
+  const matches = (it) => !q || [it.title, it.snippet, it.meta, it.authorName].some(v => String(v || '').toLowerCase().includes(q));
+  const allItems = [];
+  for (const m of CLEARNET_MODULES) {
+    if (prefs && !prefs[m.prefKey]) continue;
+    for (const it of (items[m.key] || [])) {
+      if (!matches(it)) continue;
+      allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: m.kind, _moduleKey: m.key });
+    }
+  }
+  const activeFilter = String(filterType || '').toLowerCase();
+  const visibleItems = activeFilter ? allItems.filter(it => it._moduleKey === activeFilter) : allItems;
+  const qs = q ? `&q=${encodeURIComponent(query)}` : '';
+  const filterButtons = `<div class="cn-filter-row">
+    <a class="cn-filter-btn${activeFilter ? '' : ' active'}" href="${filterBase}${q ? `?q=${encodeURIComponent(query)}` : ''}">All (${allItems.length})</a>
+    ${CLEARNET_MODULES.filter(m => allItems.some(it => it._moduleKey === m.key)).map(m => {
+      const count = allItems.filter(it => it._moduleKey === m.key).length;
+      return `<a class="cn-filter-btn${activeFilter === m.key ? ' active' : ''}" href="${filterBase}?type=${m.key}${qs}">${esc(m.label)} (${count})</a>`;
+    }).join('')}
+  </div>`;
+  const sections = visibleItems.length
+    ? `${filterButtons}<h2 class="cn-section">Public Content (${visibleItems.length})</h2><div class="cn-hub-grid">${visibleItems.map(it => renderHubItem(it.modulePath, it)).join('')}</div>`
+    : (allItems.length ? `${filterButtons}<div class="cn-empty-content">No content in this category.</div>` : '');
+  return { sections, total: allItems.length, visible: visibleItems.length };
+};
+
+exports.clearnetHubView = async ({ authors = [], items = {}, filterType = '', query = '' }) => {
+  const { escapeHtml: esc, renderClearnetPage } = require('./clearnet_view');
+  const hub = buildClearnetHub({ items, filterBase: '/c', filterType, query, showAuthor: true });
+  const extraCss = CLEARNET_HUB_CSS + `
+`;
+  const body = `
+  ${hub.total ? hub.sections : '<div class="cn-empty-content">No public content has been shared to Clearnet yet.</div>'}
+`;
+  return renderClearnetPage({
+    title: 'Oasis HUB',
+    ogTitle: 'Oasis HUB',
+    ogDescription: 'Public content shared by the inhabitants of this Oasis network.',
+    extraCss,
+    body,
+    headerExtra: `<form class="cn-search" method="GET" action="/c">${filterType ? `<input type="hidden" name="type" value="${esc(filterType)}"/>` : ''}<input type="text" name="q" value="${esc(query || '')}" placeholder="Search…" autocomplete="off"/></form>`
+  });
+};
+
 exports.clearnetInhabitantView = async ({ feedId, name, description, image, prefs, items = {}, query = '', filterType = '' }) => {
-  const { blobUrl: cnBlob, escapeHtml: esc, renderClearnetPage } = require('./clearnet_view');
+  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderClearnetPage } = require('./clearnet_view');
   const blobAvatarUrl = cnBlob(image);
   const avatarSrc = blobAvatarUrl || '/assets/images/default-avatar.png';
   const qrSrc = feedId ? `/qr/${encodeURIComponent(feedId)}` : null;
   const displayName = esc(name || 'Anonymous');
-  const desc = esc(description || '');
+  const desc = renderRichText(description || '');
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
     const title = esc(it.title || 'Untitled');
-    const snippet = esc((it.snippet || '').slice(0, 160));
+    const snippet = renderRichText((it.snippet || '').slice(0, 160), { links: false });
     const meta = esc(it.meta || '');
     const kind = esc(it.kind || '');
     return `<a class="cn-hub-card" href="/c/${modulePath}/${encodeURIComponent(it.id)}">
@@ -2552,7 +2776,8 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
     { key: 'images',    label: 'Images',    kind: 'Image',    prefKey: 'clearnetImages' },
     { key: 'documents', label: 'Documents', kind: 'Document', prefKey: 'clearnetDocuments' },
     { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' },
-    { key: 'bookmarks', label: 'Bookmarks', kind: 'Bookmark', prefKey: 'clearnetBookmarks' }
+    { key: 'bookmarks', label: 'Bookmarks', kind: 'Bookmark', prefKey: 'clearnetBookmarks' },
+    { key: 'podcasts',  label: 'Podcasts',  kind: 'Podcast',  prefKey: 'clearnetPodcasts' }
   ];
   const allItems = [];
   for (const m of moduleDef) {
@@ -2599,6 +2824,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
 .cn-hub-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cn-hub-title{color:var(--fg);font-weight:600;font-size:15px;word-break:break-word}
 .cn-hub-snippet{color:var(--fg-soft);font-size:13px;line-height:1.4;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cn-hub-snippet .cn-url{text-decoration:underline}
 .cn-hub-meta{color:var(--fg-dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-top:auto}
 .cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
 `;
@@ -2743,7 +2969,7 @@ exports.authorView = async ({
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : '',
     gpg:      rawPrefs.gpg      === true
   };
-  const clearnetSubKeys = ['clearnetShops','clearnetSchool','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
+  const clearnetSubKeys = ['clearnetShops','clearnetSchool','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks','clearnetPodcasts'];
   const anySubClearnet = clearnetSubKeys.some(k => rawPrefs[k] === true);
   prefs.clearnet = prefs.clearnet || anySubClearnet;
   const showField = (key) => prefs[key];
@@ -2797,10 +3023,13 @@ exports.authorView = async ({
       videos:    new Set(['video']),
       images:    new Set(['image']),
       documents: new Set(['document']),
-      torrents:  new Set(['torrent'])
+      torrents:  new Set(['torrent']),
+      podcasts:  new Set(['podcast']),
+      school:    new Set(['schoolCourse'])
     };
     const moduleDef = [
       { key: 'shops',     label: i18n.profileClearnetShopsLabel     || 'Shops' },
+      { key: 'school',    label: i18n.profileClearnetSchoolLabel    || 'School' },
       { key: 'jobs',      label: i18n.profileClearnetJobsLabel      || 'Jobs' },
       { key: 'events',    label: i18n.profileClearnetEventsLabel    || 'Events' },
       { key: 'projects',  label: i18n.profileClearnetProjectsLabel  || 'Projects' },
@@ -2809,13 +3038,15 @@ exports.authorView = async ({
       { key: 'videos',    label: i18n.profileClearnetVideosLabel    || 'Videos' },
       { key: 'images',    label: i18n.profileClearnetImagesLabel    || 'Images' },
       { key: 'documents', label: i18n.profileClearnetDocumentsLabel || 'Documents' },
-      { key: 'torrents',  label: i18n.profileClearnetTorrentsLabel  || 'Torrents' }
+      { key: 'torrents',  label: i18n.profileClearnetTorrentsLabel  || 'Torrents' },
+      { key: 'podcasts',  label: i18n.profileClearnetPodcastsLabel  || 'Podcasts' }
     ];
     const enabledKeys = moduleDef.filter(m => rawPrefs[`profile${m.key.charAt(0).toUpperCase() + m.key.slice(1)}`] === true).map(m => m.key);
     if (enabledKeys.length > 0) {
       const allowedTypes = new Set();
       for (const k of enabledKeys) for (const t of keyToTypes[k]) allowedTypes.add(t);
-      const authorActions = allActions.filter(a => a && a.author === feedId && allowedTypes.has(a.type));
+      const channelsWithEpisodes = new Set(allActions.filter(a => a && a.type === 'podcastEpisode' && a.content && a.content.channel).map(a => String(a.content.channel)));
+      const authorActions = allActions.filter(a => a && a.author === feedId && allowedTypes.has(a.type) && (a.type !== 'podcast' || channelsWithEpisodes.has(String(a.rootId || a.id)) || channelsWithEpisodes.has(String(a.id))));
       const counts = {};
       for (const k of enabledKeys) counts[k] = 0;
       for (const a of authorActions) {
@@ -3046,6 +3277,15 @@ const renderMessage = (msg) => {
 
 
 
+const INBOX_BOT_SUBJECTS = new Set([
+  'JOB_MATCH', 'JOB_SUBSCRIBED', 'JOB_UNSUBSCRIBED', 'PROJECT_FOLLOWED', 'PROJECT_UNFOLLOWED', 'PROJECT_PLEDGE',
+  'MARKET_SOLD', 'SHOP_SOLD', 'LARP_RULING', 'PARLIAMENT_GOV', 'TRIBE_GOV',
+  'SCHOOL_ENROLLED', 'SCHOOL_INVITED', 'SCHOOL_ADMITTED', 'SCHOOL_CERTIFICATE', 'SCHOOL_PASSED', 'SCHOOL_LESSON_NEW',
+  'INDUSTRY_ADMITTED', 'INDUSTRY_APPLICATION', 'INDUSTRY_INVITED', 'INDUSTRY_DISSOLVED', 'INDUSTRY_BUILD_APPROVED', 'INDUSTRY_DISTRIBUTED',
+  'HOUSING_REQUESTED', 'HOUSING_CANCELLED', 'HOUSING_UNAVAILABLE', 'WIKI_EDITED', 'WIKI_RESTORED', 'EMERGENCY_UPDATED', 'EMERGENCY_RESOLVED', 'PODCAST_EPISODE', 'CAMPAIGN_UPDATED', 'CAMPAIGN_ACHIEVED', 'CAMPAIGN_RAISED',
+  'LOGISTICS_UPDATED', 'LOGISTICS_CLOSED', 'LOGISTICS_BOOKED', 'LOGISTICS_CANCELLED', 'LOGISTICS_CONFIRMED', 'LOGISTICS_REJECTED', 'LOGISTICS_DELIVERED'
+]);
+
 exports.privateView = async (messagesInput, filter, decrypted = null, notice = '', q = '') => {
   const noticeText = notice === 'unavailable'
     ? (i18n.fileShareUnavailable || 'This file is not available right now. Try again later.')
@@ -3053,6 +3293,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       ? (i18n.pmCrypterBadKey || 'Your shared key is incorrect!')
       : ''
   const messagesRaw = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages
+  const listTitles = (!Array.isArray(messagesInput) && messagesInput.listTitles && typeof messagesInput.listTitles === 'object') ? messagesInput.listTitles : {}
   const messages = (messagesRaw || []).filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true)
   const qNorm = String(q || '').trim().toLowerCase()
   const qMatch = (m) => {
@@ -3064,6 +3305,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   const userId = await getUserId()
 
   const isSent = m => (m?.value?.author === userId) || (m?.value?.content?.from === userId)
+  const isList = m => !!(m?.value?.content?.list)
   const isToUser = m => Array.isArray(m?.value?.content?.to) && m.value.content.to.includes(userId)
 
   const linkAuthor = (id) => userLink(id)
@@ -3170,7 +3412,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   }
 
   function threadId(m) {
-    return canonicalSubject(m?.value?.content?.subject || '') + '||' + participantsKey(m)
+    const c = m?.value?.content || {}
+    if (c.list) return canonicalSubject(c.subject || '') + '||list:' + String(c.thread || c.list)
+    return canonicalSubject(c.subject || '') + '||' + participantsKey(m)
   }
 
   function threadLevel(s) {
@@ -3263,17 +3507,30 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const s = String(m?.value?.content?.subject || '')
     return /^(Task Reminder:|Calendar Reminder:)/i.test(s)
   }
+  const isNotification = m => {
+    const c = m?.value?.content || {}
+    return INBOX_BOT_SUBJECTS.has(String(c.subject || '').toUpperCase()) || (c.meta && c.meta.type === 'project-pledge') || isReminder(m)
+  }
+  const received = Array.from(inboxSet)
+  const notifications = messages.filter(m => isNotification(m) && (!isSent(m) || isReminder(m)))
+  const mailing = messages.filter(isList)
 
   const data = (
     filter === 'sent' ? messages.filter(m => isSent(m) && !isReminder(m)) :
     filter === 'reminders' ? messages.filter(isReminder) :
-    filter === 'inbox' ? Array.from(inboxSet).filter(m => !isReminder(m)) :
+    filter === 'pms' ? received.filter(m => !isNotification(m) && !isList(m)) :
+    filter === 'notifications' ? notifications :
+    filter === 'mailing' ? mailing :
+    filter === 'inbox' ? received.filter(m => !isReminder(m)) :
     messages
   ).filter(qMatch)
 
-  const inboxCount = Array.from(inboxSet).filter(m => !isReminder(m)).length
+  const inboxCount = received.filter(m => !isReminder(m)).length
   const sentCount = messages.filter(m => isSent(m) && !isReminder(m)).length
-  const reminderCount = messages.filter(isReminder).length
+  const pmCount = received.filter(m => !isNotification(m) && !isList(m)).length
+  const notifCount = notifications.length
+  const mailingCount = mailing.length
+  const emptyInbox = messages.length === 0 && !qNorm
 
   const sorted = [...data].sort((a, b) => {
     const ta = threadId(a)
@@ -3434,6 +3691,108 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
+  function EmergencyBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const titleMap = {
+      EMERGENCY_UPDATED: i18n.emergencyBotUpdatedTitle || 'An emergency you follow has an update.',
+      EMERGENCY_RESOLVED: i18n.emergencyBotResolvedTitle || 'An emergency you follow has been resolved.'
+    }
+    const title = titleMap[subjectU] || (i18n.pmBotEmergencies || 'EmergencyBot')
+    return div(
+      { class: 'pm-card emergency-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `🚨 ${i18n.pmBotEmergencies || 'EmergencyBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
+  function MailingCard({ sentAt, from, toLinks, subject, text, key, msgSize, content }) {
+    const listId = String(content.list || '')
+    const info = listTitles[listId] || null
+    const listHref = `/mailing/${encodeURIComponent(listId)}`
+    const listName = info && info.title ? info.title : (i18n.mailingTitle || 'Mailing list')
+    const subjectReply = /^(\s*RE:\s*)/i.test(subject || '') ? (subject || '') : `RE: ${subject || ''}`
+    const canReply = !!info && info.status === 'ACTIVE'
+    const replyForm = canReply
+      ? form({ method: 'POST', action: `${listHref}/message`, class: 'pm-action-form mailing-inbox-reply', onclick: 'event.stopPropagation()' },
+          input({ type: 'hidden', name: 'thread', value: String(content.thread || content.mid || '') }),
+          input({ type: 'hidden', name: 'subject', value: subjectReply }),
+          input({ type: 'hidden', name: 'returnTo', value: '/inbox?filter=mailing' }),
+          textarea({ name: 'text', rows: 2, maxlength: '7000', required: true, placeholder: i18n.mailingReplyPlaceholder || 'Reply to the list...', class: 'mailing-inbox-reply-text' }),
+          button({ type: 'submit', class: 'pm-btn reply-btn' }, String(i18n.mailingReplyToList || 'Reply to list').toUpperCase())
+        )
+      : null
+    return div(
+      { class: 'pm-card mailing-pm' },
+      headerLine({ sentAt, from, toLinks, subject, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, '✉ ', a({ href: listHref, class: 'mailing-inbox-list' }, listName)),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: userId, subjectRaw: subject, text, extra: replyForm })
+    )
+  }
+
+  function CampaignBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const titleMap = {
+      CAMPAIGN_UPDATED: i18n.campaignBotUpdatedTitle || 'A campaign you follow has an update.',
+      CAMPAIGN_ACHIEVED: i18n.campaignBotAchievedTitle || 'A campaign you follow has reached its goal.',
+      CAMPAIGN_RAISED: i18n.campaignBotRaisedTitle || 'A campaign you signed has been raised to Parliament.'
+    }
+    const title = titleMap[subjectU] || (i18n.pmBotCampaigns || 'CampaignBot')
+    return div(
+      { class: 'pm-card campaign-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `✍ ${i18n.pmBotCampaigns || 'CampaignBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
+  function LogisticsBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const titleMap = {
+      LOGISTICS_UPDATED: i18n.logisticsBotUpdatedTitle || 'A route you booked has changed.',
+      LOGISTICS_CLOSED: i18n.logisticsBotClosedTitle || 'A route you booked has been closed.',
+      LOGISTICS_BOOKED: i18n.logisticsBotBookedTitle || 'Someone booked your route.',
+      LOGISTICS_CANCELLED: i18n.logisticsBotCancelledTitle || 'A booking on your route was cancelled.',
+      LOGISTICS_CONFIRMED: i18n.logisticsBotConfirmedTitle || 'Your booking was confirmed: the package is on its way.',
+      LOGISTICS_REJECTED: i18n.logisticsBotRejectedTitle || 'Your booking was rejected.',
+      LOGISTICS_DELIVERED: i18n.logisticsBotDeliveredTitle || 'Your package has arrived.'
+    }
+    const title = titleMap[subjectU] || (i18n.pmBotLogistics || 'LogisticsBot')
+    return div(
+      { class: 'pm-card logistics-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `${i18n.pmBotLogistics || 'LogisticsBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
+  function PodcastBotCard({ sentAt, from, toLinks, text, key, msgSize }) {
+    const title = i18n.podcastBotEpisodeTitle || 'A podcast you follow has a new episode.'
+    return div(
+      { class: 'pm-card podcast-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `${i18n.pmBotPodcasts || 'PodcastBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
+  function WikiBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const titleMap = {
+      WIKI_EDITED: i18n.wikiBotEditedTitle || 'A wiki page you follow has been edited.',
+      WIKI_RESTORED: i18n.wikiBotRestoredTitle || 'An earlier version of a wiki page you follow has been restored.'
+    }
+    const title = titleMap[subjectU] || (i18n.pmBotWiki || 'WikiBot')
+    return div(
+      { class: 'pm-card wiki-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `📖 ${i18n.pmBotWiki || 'WikiBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
   function JobsBotCard({ sentAt, from, toLinks, text, key, msgSize }) {
     const title = i18n.jobsBotMatchTitle
     return div(
@@ -3481,24 +3840,38 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       noticeText ? div({ class: 'pm-form-error-msg' }, p('✗ ' + noticeText)) : null,
       div({ class: 'filters' },
         form({ method: 'GET', action: '/inbox' }, [
+          ...(emptyInbox ? [] : [
           button({
             type: 'submit',
             name: 'filter',
             value: 'inbox',
             class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
-          }, `${i18n.privateInbox} (${inboxCount})`),
-          button({
+          }, `${String(i18n.allButton || 'ALL').toUpperCase()} (${inboxCount})`),
+          (pmCount > 0 || filter === 'pms') ? button({
             type: 'submit',
             name: 'filter',
-            value: 'reminders',
-            class: filter === 'reminders' ? 'filter-btn active' : 'filter-btn'
-          }, `${i18n.privateReminders || 'Reminders'} (${reminderCount})`),
-          button({
+            value: 'pms',
+            class: filter === 'pms' ? 'filter-btn active' : 'filter-btn'
+          }, `${String(i18n.inboxFilterPms || 'PMs').toUpperCase()} (${pmCount})`) : null,
+          (notifCount > 0 || filter === 'notifications' || filter === 'reminders') ? button({
+            type: 'submit',
+            name: 'filter',
+            value: 'notifications',
+            class: (filter === 'notifications' || filter === 'reminders') ? 'filter-btn active' : 'filter-btn'
+          }, `${String(i18n.inboxFilterNotifications || 'Notifications').toUpperCase()} (${notifCount})`) : null,
+          (mailingCount > 0 || filter === 'mailing') ? button({
+            type: 'submit',
+            name: 'filter',
+            value: 'mailing',
+            class: filter === 'mailing' ? 'filter-btn active' : 'filter-btn'
+          }, `${String(i18n.inboxFilterMailing || 'Mailing lists').toUpperCase()} (${mailingCount})`) : null,
+          (sentCount > 0 || filter === 'sent') ? button({
             type: 'submit',
             name: 'filter',
             value: 'sent',
             class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
-          }, `${i18n.privateSent} (${sentCount})`),
+          }, `${String(i18n.privateSent || 'SENT').toUpperCase()} (${sentCount})`) : null,
+          ]),
           button({
             type: 'submit',
             name: 'filter',
@@ -3530,7 +3903,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
           )
         )
       })(),
-        form({ method: 'GET', action: '/inbox', class: 'filter-box' },
+        emptyInbox ? null : form({ method: 'GET', action: '/inbox', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter || 'inbox' }),
           input({ type: 'text', name: 'q', value: String(q || ''), placeholder: i18n.inboxSearchPlaceholder || 'Search in Inbox...', class: 'filter-box__input' }),
           button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
@@ -3606,8 +3979,26 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             if (subjectU === 'HOUSING_REQUESTED' || subjectU === 'HOUSING_CANCELLED' || subjectU === 'HOUSING_UNAVAILABLE') {
               return HousingBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
+            if (subjectU === 'WIKI_EDITED' || subjectU === 'WIKI_RESTORED') {
+              return WikiBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU === 'EMERGENCY_UPDATED' || subjectU === 'EMERGENCY_RESOLVED') {
+              return EmergencyBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU === 'PODCAST_EPISODE') {
+              return PodcastBotCard({ sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU === 'CAMPAIGN_UPDATED' || subjectU === 'CAMPAIGN_ACHIEVED' || subjectU === 'CAMPAIGN_RAISED') {
+              return CampaignBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU.startsWith('LOGISTICS_')) {
+              return LogisticsBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
             if (subjectU === 'PROJECT_PLEDGE' || content.meta?.type === 'project-pledge') {
               return ProjectPledgeCard({ sentAt, from: fromResolved, toLinks, content, text, key: msg.key, msgSize })
+            }
+            if (content.list) {
+              return MailingCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key, msgSize, content })
             }
 
             if (content.crypter === true) {

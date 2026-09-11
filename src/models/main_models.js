@@ -328,6 +328,7 @@ models.about = {
       clearnetDocuments: result.clearnetDocuments === true,
       clearnetTorrents:  result.clearnetTorrents  === true,
       clearnetBookmarks: result.clearnetBookmarks === true,
+      clearnetPodcasts:  result.clearnetPodcasts  === true,
       profileShops:      result.profileShops      === true,
       profileJobs:       result.profileJobs       === true,
       profileEvents:     result.profileEvents     === true,
@@ -338,7 +339,9 @@ models.about = {
       profileImages:     result.profileImages     === true,
       profileDocuments:  result.profileDocuments  === true,
       profileTorrents:   result.profileTorrents   === true,
-      profileBookmarks:  result.profileBookmarks  === true
+      profileBookmarks:  result.profileBookmarks  === true,
+      profilePodcasts:   result.profilePodcasts   === true,
+      profileSchool:     result.profileSchool     === true
     };
   },
   name: async (feedId) => {
@@ -1935,6 +1938,7 @@ const post = {
           clearnetDocuments: r.clearnetDocuments === true,
           clearnetTorrents:  r.clearnetTorrents  === true,
           clearnetBookmarks: r.clearnetBookmarks === true,
+          clearnetPodcasts:  r.clearnetPodcasts  === true,
           profileShops:      r.profileShops      === true,
           profileJobs:       r.profileJobs       === true,
           profileEvents:     r.profileEvents     === true,
@@ -1945,7 +1949,9 @@ const post = {
           profileImages:     r.profileImages     === true,
           profileDocuments:  r.profileDocuments  === true,
           profileTorrents:   r.profileTorrents   === true,
-          profileBookmarks:  r.profileBookmarks  === true
+          profileBookmarks:  r.profileBookmarks  === true,
+          profilePodcasts:   r.profilePodcasts   === true,
+          profileSchool:     r.profileSchool     === true
         };
       };
       const prefs = visibilityPrefs ? normalizePrefs(visibilityPrefs) : undefined;

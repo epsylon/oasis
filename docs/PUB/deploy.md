@@ -219,3 +219,7 @@ sed -i 's/"aiMod": *"on"/"aiMod": "off"/' src/configs/oasis-config.json
 ## 14) Joining the Oasis network
 
 The default seed PUB at `solarnethub.com` is included in `autofollow.feeds` above. As soon as your PUB connects to it (or to any peer that knows about it), gossip propagates the rest of the network's pub list.
+
+## 15) Clearnet HUB
+
+The PUB also serves a read-only web HUB with the public content of the inhabitants it replicates. See [`clearnet.md`](./clearnet.md) for the URLs and the reverse proxy setup.

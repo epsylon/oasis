@@ -14,7 +14,7 @@
     "multiverseMod": "on",
     "invitesMod": "on",
     "walletMod": "off",
-    "legacyMod": "off",
+    "backupMod": "on",
     "cipherMod": "off",
     "bookmarksMod": "on",
     "videosMod": "on",

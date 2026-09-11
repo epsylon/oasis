@@ -44,7 +44,7 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "mine", "recent", "top", "applied", "open", "favorites"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
+    ["all", "mine", "recent", "top", "applied", "open", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
       form({ method: "GET", action: "/school" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`schoolFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
@@ -687,7 +687,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
   return template(
     course.title,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
-    section(renderModeButtons("all")),
+    section(renderModeButtons("all", false, (params && params.modesAvail) || null)),
     section(
       div({ class: "tribe-details" },
         courseSide,
@@ -710,9 +710,9 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
 }
 
 exports.clearnetCourseView = async (course, lessons = []) => {
-  const { escapeHtml: esc, blobUrl: cnBlob, renderClearnetPage } = require("./clearnet_view")
+  const { escapeHtml: esc, blobUrl: cnBlob, renderRichText, renderKindTag, renderClearnetPage } = require("./clearnet_view")
   const title = esc(course.title || "Course")
-  const desc = esc(course.description || "")
+  const desc = renderRichText(course.description || "")
   const courseImg = cnBlob(course.image)
   const visibleLessons = safeArr(lessons).filter(lesson => !lesson.locked)
   const extraCss = `
@@ -730,10 +730,12 @@ exports.clearnetCourseView = async (course, lessons = []) => {
   const body = `
   <h1 class="cn-course-title">${title}</h1>
   <div class="cn-course-meta">
+    <span class="cn-course-meta-item">${renderKindTag('course')}</span>
     <span class="cn-course-meta-item">🎓 Open course</span>
     ${course.startDate ? `<span class="cn-course-meta-item">📅 ${esc(new Date(course.startDate).toISOString().slice(0, 10))}</span>` : ""}
     <span class="cn-course-meta-item">👥 ${safeArr(course.students).length} students</span>
   </div>
+  <hr class="cn-sep"/>
   ${courseImg ? `<img class="cn-course-img" src="${courseImg}" alt="${title}">` : ""}
   ${desc ? `<div class="cn-course-section"><h2>Description</h2><p>${desc}</p></div>` : ""}
   ${visibleLessons.length ? `<div class="cn-course-section"><h2>Lessons (${visibleLessons.length})</h2>${visibleLessons.map(lesson => `
@@ -880,7 +882,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
   const tpl = template(
     lesson.title,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
-    section(renderModeButtons("all")),
+    section(renderModeButtons("all", false, (params && params.modesAvail) || null)),
     section(div({ class: "tribe-details" }, lessonSide, lessonMain))
   )
   const hasPdf = safeArr(materials).some(m => !m.locked && /\[pdf:/.test(String(m.media || "")))

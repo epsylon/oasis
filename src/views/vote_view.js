@@ -331,7 +331,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
                 name: "deadline",
                 id: "deadline",
                 required: true,
-                min: mode === "create" ? deadlineMin : undefined,
+                min: deadlineMin,
                 value: deadlineValue
               }), br(), br(),
               label(i18n.voteTagsLabel), br(),

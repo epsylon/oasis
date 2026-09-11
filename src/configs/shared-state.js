@@ -14,6 +14,9 @@ let _tribesCount = 0;
 let _mentionsCount = 0;
 let _bestMatch = null;
 let _dismissedSuggestion = null;
+let _featuredEmergency = null;
+let _dismissedEmergency = null;
+
 module.exports = {
   getInboxCount: () => _inboxCount,
   setInboxCount: (n) => { _inboxCount = n; },
@@ -43,6 +46,10 @@ module.exports = {
   setInhabitantCount: (n) => { _inhabitantCount = Math.max(0, Number(n) || 0); },
   getTribesCount: () => _tribesCount,
   setTribesCount: (n) => { _tribesCount = Math.max(0, Number(n) || 0); },
+  getFeaturedEmergency: () => _featuredEmergency,
+  setFeaturedEmergency: (a) => { _featuredEmergency = a || null; },
+  getDismissedEmergency: () => _dismissedEmergency,
+  setDismissedEmergency: (id) => { _dismissedEmergency = id || null; },
   getBestMatch: () => _bestMatch,
   setBestMatch: (m) => { _bestMatch = m || null; },
   getDismissedSuggestion: () => _dismissedSuggestion,

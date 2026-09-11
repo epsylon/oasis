@@ -80,6 +80,13 @@ async function step(name, fn) {
   models.chats = require(path.join(__dirname, '..', 'src', 'models', 'chats_model'))({ cooler: sCooler, tribeCrypto, chatCrypto, tribesModel });
   models.calendars = require(path.join(__dirname, '..', 'src', 'models', 'calendars_model'))({ cooler: sCooler, tribeCrypto, calendarCrypto, tribesModel });
   models.maps = require(path.join(__dirname, '..', 'src', 'models', 'maps_model'))({ cooler: sCooler, tribeCrypto, mapCrypto, tribesModel });
+  models.wiki = require(path.join(__dirname, '..', 'src', 'models', 'wiki_model'))({ cooler: sCooler, tribeCrypto, tribesModel });
+  models.emergencies = require(path.join(__dirname, '..', 'src', 'models', 'emergencies_model'))({ cooler: sCooler });
+  models.subscriptions = require(path.join(__dirname, '..', 'src', 'models', 'subscriptions_model'))({ cooler: sCooler });
+  models.mailing = require(path.join(__dirname, '..', 'src', 'models', 'mailing_model'))({ cooler: sCooler, subscriptionsModel: models.subscriptions });
+  models.logistics = require(path.join(__dirname, '..', 'src', 'models', 'logistics_model'))({ cooler: sCooler });
+  models.podcasts = require(path.join(__dirname, '..', 'src', 'models', 'podcasts_model'))({ cooler: sCooler });
+  models.campaigns = require(path.join(__dirname, '..', 'src', 'models', 'campaigns_model'))({ cooler: sCooler });
   models.parliament = require(path.join(__dirname, '..', 'src', 'models', 'parliament_model'))({ cooler: sCooler, services: { votes: models.votes, tribes: tribesModel } });
   models.larp = require(path.join(__dirname, '..', 'src', 'models', 'larp_model'))({ cooler: sCooler, tribesModel, tribeCrypto });
   models.courts = require(path.join(__dirname, '..', 'src', 'models', 'courts_model'))({ cooler: sCooler, services: { parliament: models.parliament }, tribeCrypto });
@@ -193,6 +200,7 @@ async function step(name, fn) {
 
   console.log('\nSEED: tribes + content inside');
   const tribe = await step('public tribe', () => tribesModel.createTribe(`Tribe ${hash(2)}`, 'public tribe demo', null, '', pickTags(2), false, 'strict', null, 'OPEN', ''));
+  if (tribe && tribe.key) await step('tribe wiki', () => models.wiki.createPage({ title: `Tribe notes ${hash(2)}`, body: `Encrypted wiki inside the tribe.`, tags: pickTags(1), tribeId: tribe.key }));
   if (tribe && tribe.key) {
     await step('feed inside tribe', () => models.tribesContent.create(tribe.key, 'feed', { description: `tribe feed ${longHash()}` }));
     await step('event inside tribe', () => models.tribesContent.create(tribe.key, 'event', { title: `tribe event ${hash(2)}`, description: 'demo', date: futureISO(15) }));
@@ -265,9 +273,46 @@ async function step(name, fn) {
     }, (e, m) => e ? rej(e) : res(m)))));
   }
 
+  console.log('\nSEED: wikis');
+  const wikiGuideTitle = `Guide ${hash(2)}`;
+  const seedWiki = await step('wiki', () => models.wiki.createPage({ title: `Wiki ${hash(2)}`, body: `Shared knowledge for the network.\n\nSee also [[${wikiGuideTitle}]] and the missing [[Roadmap ${hash(2)}]].\nTag with #oasis and reach https://solarnethub.com`, tags: pickTags(2) }));
+  const seedWikiGuide = await step('wiki (linked)', () => models.wiki.createPage({ title: wikiGuideTitle, body: `A guide linked from the first wiki.`, tags: pickTags(2), editPolicy: 'CLOSED' }));
+  if (seedWiki && seedWiki.key) await step('wiki edit (second version)', () => models.wiki.updatePage(seedWiki.key, { body: `Shared knowledge for the network — revised.\n\nSee also [[${wikiGuideTitle}]].`, summary: 'seed revision' }));
+
+  console.log('\nSEED: emergencies');
+  const seedEmergency = await step('emergency', () => models.emergencies.createEmergency({ title: `Water cut ${hash(2)}`, text: 'No water in the north district since this morning. #oasis', category: 'INFRASTRUCTURE', tags: pickTags(2), expiresIn: '3d' }));
+  await step('emergency (weather)', () => models.emergencies.createEmergency({ title: `Storm warning ${hash(2)}`, text: 'Strong winds expected tonight.', category: 'WEATHER', tags: pickTags(1), expiresIn: '1d' }));
+  if (seedEmergency && seedEmergency.key) await step('emergency update', () => models.emergencies.addUpdate(seedEmergency.key, 'Repair crews are on site; expected back by noon.'));
+
+  console.log('\nSEED: mailing lists');
+  const seedMailing = await step('mailing list (open)', () => models.mailing.createList({ title: `Neighbours ${hash(2)}`, description: 'Street news and shared errands. #oasis', listType: 'OPEN', tags: pickTags(2) }));
+  await step('mailing list (closed)', () => models.mailing.createList({ title: `Circle ${hash(2)}`, description: 'A closed, encrypted circle.', listType: 'CLOSED', tags: pickTags(1) }));
+  if (seedMailing && seedMailing.key) await step('mailing list edit', () => models.mailing.updateList(seedMailing.key, { description: 'Street news, shared errands and the odd party. #oasis' }));
+
+  console.log('\nSEED: logistics');
+  const seedRoute = await step('logistics trip (offer)', () => models.logistics.createRoute({ kind: 'TRIP', mode: 'OFFER', title: `Ride to town ${hash(2)}`, description: 'Leaving from the square, room for three. #oasis', origin: 'Village', destination: 'Town', date: new Date(Date.now() + 3 * 86400000).toISOString(), seats: 3, priceType: 'ECO', price: 2, recurrence: 'WEEKLY', tags: pickTags(2) }));
+  await step('logistics shipment (request)', () => models.logistics.createRoute({ kind: 'SHIPMENT', mode: 'REQUEST', title: `Move a bookshelf ${hash(2)}`, description: 'Needs a van and two pairs of hands.', origin: 'Town', destination: 'Village', date: new Date(Date.now() + 5 * 86400000).toISOString(), size: '2m x 1m', weight: '40kg', priceType: 'TIME', price: 2, tags: pickTags(1) }));
+  if (seedRoute && seedRoute.key) await step('logistics edit', () => models.logistics.updateRoute(seedRoute.key, { description: 'Leaving from the square at nine, room for three. #oasis' }));
+
+  console.log('\nSEED: podcasts');
+  const seedPodcast = await step('podcast channel', () => models.podcasts.createChannel({ title: `Night talks ${hash(2)}`, description: 'Late conversations about the network. #oasis', category: 'TALK', tags: pickTags(2) }));
+  if (seedPodcast && seedPodcast.key) {
+    const seedEpisode = await step('podcast episode', () => models.podcasts.addEpisode(seedPodcast.key, { title: `Pilot ${hash(2)}`, description: 'First episode.', media: `\n[audio:pilot.mp3](&${hash(2)}${'0'.repeat(40)}${hash(2)}.sha256)`, tags: pickTags(1) }));
+    await step('podcast episode (second)', () => models.podcasts.addEpisode(seedPodcast.key, { title: `Second ${hash(2)}`, description: 'Second episode.', media: `\n[audio:second.mp3](&${hash(2)}${'0'.repeat(40)}${hash(2)}.sha256)` }));
+    if (seedEpisode && seedEpisode.key) await step('podcast play', () => models.podcasts.markPlayed(seedEpisode.key));
+  }
+
+  console.log('\nSEED: campaigns');
+  const seedCampaign = await step('campaign', () => models.campaigns.createCampaign({ title: `Save the park ${hash(2)}`, text: 'No parking lot on the old orchard. #oasis', category: 'ENVIRONMENT', goal: 25, deadline: new Date(Date.now() + 30 * 86400000).toISOString(), tags: pickTags(2) }));
+  await step('campaign (infrastructure)', () => models.campaigns.createCampaign({ title: `Bike lanes ${hash(2)}`, text: 'Safe lanes from the school to the square.', category: 'INFRASTRUCTURE', goal: 50, tags: pickTags(1) }));
+  if (seedCampaign && seedCampaign.key) {
+    await step('campaign update', () => models.campaigns.addUpdate(seedCampaign.key, 'We handed the first batch of signatures to the council.', true));
+    await step('campaign signature', () => models.campaigns.sign(seedCampaign.key, 'Trees over asphalt.'));
+  }
+
   console.log('\nSEED: favorites');
   const contentFavorites = require(path.join(__dirname, '..', 'src', 'backend', 'content_favorites'));
-  for (const [kind, obj] of [['chats', seedChat], ['pads', seedPad], ['calendars', seedCalendar]]) {
+  for (const [kind, obj] of [['chats', seedChat], ['pads', seedPad], ['calendars', seedCalendar], ['wiki', seedWiki], ['emergencies', seedEmergency], ['mailing', seedMailing], ['logistics', seedRoute], ['podcasts', seedPodcast], ['campaigns', seedCampaign]]) {
     if (obj && obj.key) await step(`favorite ${kind}`, () => contentFavorites.addFavorite(kind, obj.key));
   }
 

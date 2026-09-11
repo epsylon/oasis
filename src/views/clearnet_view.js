@@ -23,6 +23,14 @@ const escapeHtml = (s) => String(s || '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(String(kind || '').toUpperCase())}]</span>`;
+
+const renderRichText = (s, { links = true } = {}) => String(s || '')
+  .replace(/\r\n?/g, '\n')
+  .split('\n')
+  .map(line => escapeHtml(line).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)"'])/g, (url) => links ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>` : `<span class="cn-url">${url}</span>`))
+  .join('<br/>');
+
 const blobIdOf = (v) => {
   if (!v) return null;
   const s = String(v).trim();
@@ -98,7 +106,8 @@ const INTERNAL_OASIS_PATHS = [
   'tribes','tribe','forum','votes','votations','reports','tasks','maps','chats','pads',
   'calendars','trending','opinions','feed','pixelia','cv','invites','peers','stats',
   'blockexplorer','modules','publish','search','tags','mentions','popular','threads',
-  'topics','latest','summaries','multiverse','legacy','cipher','graphos','agenda',
+  'topics','latest','summaries','multiverse','backup','cipher','graphos','agenda',
+  'podcasts','mailing','logistics','campaigns','emergencies','wiki','school',
   'favorites','logs','games','parliament','courts','market','ai','public','spread',
   'follow','unfollow','block','like','unlike'
 ];
@@ -189,6 +198,8 @@ header.cn-header{display:flex;align-items:center;gap:16px;padding-bottom:16px;ma
 .cn-brand{font-size:20px;font-weight:700;color:var(--fg);letter-spacing:1px}
 .cn-brand-sub{color:var(--fg-dim);font-size:12px;text-transform:uppercase;letter-spacing:2px;margin-top:2px}
 .cn-header-extra{flex:1 1 auto;display:flex;justify-content:flex-end;align-items:center;min-width:0}
+.cn-kind-tag{font-weight:700;color:var(--fg);letter-spacing:1px}
+.cn-sep{border:0;border-top:1px solid var(--border);margin:24px 0}
 h2.cn-section{color:var(--fg);font-size:18px;text-transform:uppercase;letter-spacing:2px;margin:32px 0 16px 0;padding-bottom:8px;border-bottom:1px solid var(--border)}
 footer.cn-footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:12px;color:var(--fg-dim);text-align:center;letter-spacing:0.5px}
 footer.cn-footer a{color:var(--fg-soft)}
@@ -204,7 +215,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   const brandInner = `<div class="cn-brand">⛱ Oasis HUB</div><div class="cn-brand-sub">Libre · P2P · Federated</div>`;
   const brandBlock = hubFeedId
     ? `<a class="cn-brand-block cn-brand-link" href="/c/inhabitant/${encodeURIComponent(hubFeedId)}">${brandInner}</a>`
-    : `<div class="cn-brand-block">${brandInner}</div>`;
+    : `<a class="cn-brand-block cn-brand-link" href="/c">${brandInner}</a>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -218,6 +229,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   <meta name="robots" content="index, follow"/>
   <style>${baseCss}${CLEARNET_SEARCH_CSS}${extraCss}
 .cn-brand-link{display:block;text-decoration:none}
+
 .cn-brand-link:hover .cn-brand{color:var(--accent)}
 .cn-brand-link:hover{text-decoration:none}
 </style>
@@ -249,7 +261,7 @@ const renderClearnetNotFound = () => {
 const renderClearnetMediaView = ({ kind, item }) => {
   const blob = blobUrl(item.url);
   const title = escapeHtml(item.title || 'Untitled');
-  const desc = escapeHtml(item.description || '');
+  const desc = renderRichText(item.description || '');
   const dateStr = item.createdAt ? escapeHtml(new Date(item.createdAt).toISOString().slice(0, 10)) : '';
   const extraCss = `
 .cn-media-meta{color:var(--fg-dim);font-size:13px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
@@ -276,9 +288,11 @@ const renderClearnetMediaView = ({ kind, item }) => {
   }
   const body = `
   <div class="cn-media-meta">
+    ${renderKindTag(kind)}
     ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
   </div>
   <h1 class="cn-media-title">${title}</h1>
+  <hr class="cn-sep"/>
   ${mediaHtml ? `<div class="cn-media-frame">${mediaHtml}</div>` : ''}
   ${desc ? `<p class="cn-media-desc">${desc}</p>` : ''}
 `;
@@ -293,8 +307,55 @@ const renderClearnetMediaView = ({ kind, item }) => {
   });
 };
 
+const renderClearnetPodcastView = ({ channel }) => {
+  const title = escapeHtml(channel.title || 'Untitled');
+  const desc = renderRichText(channel.description || '');
+  const cover = channel.cover && channel.cover.blobId ? blobUrl(channel.cover.blobId) : null;
+  const coverIsVideo = !!(channel.cover && channel.cover.kind === 'video');
+  const dateStr = channel.createdAt ? escapeHtml(new Date(channel.createdAt).toISOString().slice(0, 10)) : '';
+  const extraCss = `
+.cn-media-meta{color:var(--fg-dim);font-size:13px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
+.cn-media-title{color:var(--fg);font-size:26px;font-weight:700;margin:0 0 12px 0}
+.cn-media-desc{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;margin:16px 0}
+.cn-podcast-cover{max-width:240px;width:100%;border-radius:6px;border:1px solid var(--border);display:block;margin:12px 0}
+.cn-episode{border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin:12px 0;background:var(--bg-elev)}
+.cn-episode h2{margin:0 0 8px 0;font-size:17px;color:var(--fg)}
+.cn-episode .cn-episode-meta{color:var(--fg-dim);font-size:12px;margin-bottom:8px}
+.cn-episode audio,.cn-episode video{width:100%;max-width:100%;display:block;border-radius:6px;background:#000}
+.cn-episode p{color:var(--fg-soft);white-space:pre-wrap;line-height:1.5;margin:8px 0 0 0}
+`;
+  const episodes = Array.isArray(channel.episodes) ? channel.episodes.slice().reverse() : [];
+  const epHtml = episodes.map(ep => {
+    const src = ep.media && ep.media.blobId ? blobUrl(ep.media.blobId) : null;
+    const player = !src ? '' : (ep.media.kind === 'video'
+      ? `<video controls preload="metadata" src="${src}"></video>`
+      : `<audio controls preload="metadata" src="${src}"></audio>`);
+    const epDate = ep.createdAt ? escapeHtml(new Date(ep.createdAt).toISOString().slice(0, 10)) : '';
+    return `<div class="cn-episode"><h2>#${Number(ep.number) || 0} · ${escapeHtml(ep.title || '')}</h2><div class="cn-episode-meta">${epDate}</div>${player}${ep.description ? `<p>${renderRichText(ep.description)}</p>` : ''}</div>`;
+  }).join('');
+  const body = `
+  <div class="cn-media-meta">${renderKindTag('podcast')}${dateStr ? `<span>📅 ${dateStr}</span>` : ''}<span>🎧 ${episodes.length}</span></div>
+  <h1 class="cn-media-title">${title}</h1>
+  ${cover ? (coverIsVideo ? `<video class="cn-podcast-cover" controls muted preload="metadata" src="${cover}"></video>` : `<img class="cn-podcast-cover" src="${cover}" alt="${title}"/>`) : ''}
+  ${desc ? `<p class="cn-media-desc">${desc}</p>` : ''}
+  ${epHtml ? `<hr class="cn-sep"/>${epHtml}` : ''}
+`;
+  return renderClearnetPage({
+    title: `${title} — Oasis`,
+    ogTitle: channel.title || 'Oasis',
+    ogDescription: channel.description || '',
+    ogImage: cover && !coverIsVideo ? cover : null,
+    extraCss,
+    body,
+    hubFeedId: channel.author || null
+  });
+};
+
 module.exports = {
+  renderClearnetPodcastView,
   escapeHtml,
+  renderRichText,
+  renderKindTag,
   blobIdOf,
   blobUrl,
   renderReachChip,

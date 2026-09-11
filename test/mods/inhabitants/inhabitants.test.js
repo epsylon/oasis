@@ -33,3 +33,28 @@ describe('inhabitants: public content stats (no private leak)', (t) => {
     eq(stats.task || 0, 2);
   });
 });
+
+describe('inhabitants: suggested', (t) => {
+  const publishAs = (peer, content) => new Promise((res, rej) =>
+    peer.node.publish(content, (err, msg) => err ? rej(err) : res(msg)));
+  const cv = (skills) => ({
+    type: 'curriculum', name: 'someone', personalSkills: skills,
+    oasisSkills: [], educationalSkills: [], professionalSkills: [],
+    createdAt: new Date().toISOString()
+  });
+
+  t('suggests the most alike inhabitants and leaves the unrelated out', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor(); await publishAs(A, cv(['solder', 'weld', 'paint']));
+    B.setActor(); await publishAs(B, cv(['solder', 'weld', 'cook']));
+    C.setActor(); await publishAs(C, cv(['piano']));
+
+    A.setActor();
+    const list = await A.use('inhabitants').listInhabitants({ filter: 'SUGGESTED', includeInactive: true });
+    const b = list.find(u => u.id === B.keypair.id);
+    ok(b, 'the alike inhabitant is suggested');
+    ok(!list.some(u => u.id === C.keypair.id), 'the unrelated one is left out');
+    ok(b.commonSkills.includes('solder') && b.commonSkills.includes('weld'), 'with the shared skills named');
+    ok(b.affinity > 0.1, `and a visible affinity (got ${b.affinity})`);
+  });
+});

@@ -22,7 +22,8 @@ module.exports = ({ cooler }) => {
   const types = [
     'bookmark', 'votes', 'poll', 'feed',
     'image', 'audio', 'video', 'document', 'torrent', 'transfer',
-    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse'
+    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse',
+    'podcast', 'podcastEpisode', 'campaign', 'logisticsRoute'
   ];
 
   const categories = opinionCategories;

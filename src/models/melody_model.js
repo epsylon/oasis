@@ -39,7 +39,20 @@ const TYPE_TO_DEGREE = {
   courts: 0,
   market: 1,
   aiExchange: 6,
-  tombstone: 4
+  tombstone: 4,
+  wikiPage: 2,
+  emergency: 11,
+  emergencyConfirm: 11,
+  emergencyUpdate: 11,
+  mailingList: 5,
+  logisticsRoute: 3,
+  logisticsRating: 3,
+  podcast: 8,
+  podcastEpisode: 8,
+  podcastPlay: 8,
+  campaign: 9,
+  campaignSignature: 9,
+  campaignUpdate: 9
 };
 
 const NOTE_FREQS = (() => {

@@ -42,7 +42,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
     "report", "task", "event", "bookmark", "image", "audio", "video", "document", "torrent",
-    "bankWallet", "bankClaim", "project", "job", "industry", "industryBlueprint", "forum", "vote", "contact", "map", "shop", "shopProduct", "chat", "pad", "schoolCourse", "all"
+    "bankWallet", "bankClaim", "project", "job", "industry", "industryBlueprint", "forum", "vote", "contact", "map", "shop", "shopProduct", "chat", "pad", "schoolCourse", "wikiPage", "emergency", "mailingList", "logisticsRoute", "podcast", "podcastEpisode", "campaign", "all"
   ];
 
   const filterSelect = select(
@@ -105,6 +105,13 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'shopProduct': return `/shops/product/${encodeURIComponent(contentId)}`;
       case 'chat': return `/chats/${encodeURIComponent(contentId)}`;
       case 'pad': return `/pads/${encodeURIComponent(contentId)}`;
+      case 'wikiPage': return `/wiki/${encodeURIComponent(contentId)}`;
+      case 'emergency': return `/emergencies/${encodeURIComponent(contentId)}`;
+      case 'mailingList': return `/mailing/${encodeURIComponent(contentId)}`;
+      case 'logisticsRoute': return `/logistics/${encodeURIComponent(contentId)}`;
+      case 'podcast': return `/podcasts/${encodeURIComponent(contentId)}`;
+      case 'podcastEpisode': return `/podcasts/episode/${encodeURIComponent(contentId)}`;
+      case 'campaign': return `/campaigns/${encodeURIComponent(contentId)}`;
       case 'torrent': return `/torrents/${encodeURIComponent(contentId)}`;
       case 'gameScore': return content && content.game ? `/games/${encodeURIComponent(content.game)}` : '/games';
       default: return '#';

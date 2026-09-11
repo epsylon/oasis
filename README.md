@@ -67,16 +67,19 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + AI: Module to talk with a LLM called '42'.
  + AINav: Module for natural-language queries about the network's content.
  + Audios: Module to discover and manage audios.
- + Banking: Module to determine the real value of ECOIN and distribute a UBI using the common treasury.
+ + Backup: Module to export and import your keys and make encrypted backups.
+ + Banking: Module to manage the common treasury: ECOIN value, taxes and UBI.
  + BlockExplorer: Module to navigate the blockchain.
  + Blogs: Module to discover and manage blogs.
  + Bookmarks: Module to discover and manage bookmarks.	
  + Calendars: Module to discover and manage calendars.
- + Chats: Module to discover and manage encrypted chats.
+ + Campaigns: Discover and manage campaigns in your network.
+ + Chats: Module to discover and manage chats.
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
  + Courts: Module to resolve conflicts and emit veredicts.	
  + Developer: Module to manage the Oasis source code.
  + Documents: Module to discover and manage documents.	
+ + Emergencies: Module to raise, confirm and follow emergencies in the network.
  + Events: Module to discover and manage events.
  + Favorites: Module to manage your favorite content.
  + Feed: Module to discover and share short-texts (feeds).
@@ -89,20 +92,22 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Industry: Module to manage the means of production collectively.
  + Invites: Module to manage and apply invite codes.
  + Jobs: Module to discover and manage jobs.	
- + Legacy: Module to manage your secret (private key) quickly and securely.	
- + L.A.R.P.: Module for a live-action role-playing layer with 9 houses.
+ + L.A.R.P.: Module for the live-action role-playing layer.
+ + Logistics: Discover and manage logistic plans in your network.
  + Logs: Module to record (via AI assistant) your experiences.
+ + Mailing Lists: Discover and manage mailing lists in your network.
  + Maps: Module to manage and share offline maps.
  + Market: Module to exchange goods or services.
  + Matches: Module to explore and visualize the matches in the blockchain.
  + Melody: Module to generate and share the "sound" of your blockchain.
  + Multiverse: Module to manage your other accounts, including sending and receiving content.
  + Opinions: Module to discover and vote on opinions.	
- + Pads: Module to manage collaborative encrypted text editors.
+ + Pads: Module to manage collaborative text editors.
  + Parliament: Module to elect governments and vote on laws.	
  + Pixelia: Module to draw on a collaborative grid.	
- + Projects: Module to explore, crowd-funding and manage projects.
+ + Podcasts: Module to publish podcast channels.
  + Polls: Module to ask the network and count the answers.
+ + Projects: Module to explore, crowd-funding and manage projects.
  + Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.	
  + School: Module to exchange knowledge.
  + Shops: Module to manage and discover shops.	
@@ -114,6 +119,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Tribes: Module to explore or create tribes (groups).	
  + Videos: Module to discover and manage videos.	
  + Wallet: Module to manage your digital assets (ECOin).	
+ + Wikis: Module to build shared knowledge pages, versioned and linked.
 
 Both the codebase and the inhabitants can generate new modules.
 

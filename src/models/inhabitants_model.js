@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const { readTyped } = require('./typed_log');
+const { isContentVisibleTo } = require('./content_visibility');
 const ssbClientGUI = require("../client/gui");
 const coolerInstance = ssbClientGUI({ offline: require('../server/ssb_config').offline });
 const models = require("../models/main_models");
@@ -16,7 +17,10 @@ function toImageUrl(imgId, size=256){
   return `/image/${size}/${encodeURIComponent(imgId)}`;
 }
 
-module.exports = ({ cooler, tribesModel = null }) => {
+const MIN_SUGGESTION_AFFINITY = 0.1;
+const MAX_SUGGESTED = 12;
+
+module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -188,54 +192,41 @@ module.exports = ({ cooler, tribesModel = null }) => {
       if (filter === 'SUGGESTED') {
         const base = await listAllBase(ssbClient);
         const active = filterInactive(base);
-        const cvRecords = (await readTyped(ssbClient, ['curriculum'], { limit: logLimit }).catch(() => [])).reverse();
-        const cvByAuthor = new Map();
-        for (const r of cvRecords) {
-          const c = r.value && r.value.content;
-          if (c && c.author && !cvByAuthor.has(c.author)) cvByAuthor.set(c.author, c);
-        }
-        const extractSkills = (cv) => cv ? [
-          ...(cv.personalSkills || []),
-          ...(cv.oasisSkills || []),
-          ...(cv.educationalSkills || []),
-          ...(cv.professionalSkills || [])
-        ].map(s => String(s || '').toLowerCase()).filter(Boolean) : [];
-        const mecv = await this.getCVByUserId().catch(() => null);
-        const mySkills = extractSkills(mecv);
+        const affinities = dataModel ? await dataModel.authorAffinities().catch(() => null) : null;
+        const byAuthor = affinities ? affinities.byAuthor : new Map();
         const rels = await Promise.all(
           active.map(async u => {
             if (u.id === userId) return null;
             const rel = await friend.getRelationship(u.id).catch(() => ({}));
             const n = normalizeRel(rel);
             if (n.iFollow || n.blocking || n.blockedBy) return null;
+            const aff = byAuthor.get(u.id) || { score: 0, common: [], reasons: [] };
+            const tribeMate = aff.reasons.includes('tribe');
+            if (aff.score < MIN_SUGGESTION_AFFINITY && !n.followsMe && !tribeMate) return null;
+            const social = (n.followsMe ? 0.15 : 0) + (tribeMate ? 0.1 : 0);
+            const activityBonus = u.lastActivityBucket === 'green' ? 0.05 : (u.lastActivityBucket === 'orange' ? 0.02 : 0);
+            const suggestionScore = Math.min(1, aff.score + social + activityBonus);
             const karmaScore = await getLastKarmaScore(u.id);
-            const theirSkills = extractSkills(cvByAuthor.get(u.id));
-            const commonSkills = mySkills.length && theirSkills.length
-              ? Array.from(new Set(mySkills.filter(s => theirSkills.includes(s))))
-              : [];
-            const followsMeBonus = n.followsMe ? 20 : 0;
-            const karmaBonus = Math.min(20, Math.log10(1 + Math.max(0, karmaScore)) * 5);
-            const skillBonus = commonSkills.length * 4;
-            const activityBonus = u.lastActivityBucket === 'green' ? 5 : (u.lastActivityBucket === 'orange' ? 2 : 0);
-            const suggestionScore = followsMeBonus + karmaBonus + skillBonus + activityBonus;
-            return { user: u, rel: n, karmaScore, commonSkills, suggestionScore };
+            return { user: u, rel: n, karmaScore, commonSkills: aff.common, reasons: aff.reasons, suggestionScore };
           })
         );
-        const candidates = rels.filter(Boolean).filter(x => x.suggestionScore > 0);
+        const candidates = rels.filter(Boolean);
         const enriched = candidates.map(x => ({
           ...x.user,
           karmaScore: x.karmaScore,
           followsYou: x.rel.followsMe,
           commonSkills: x.commonSkills,
+          reasons: x.reasons,
           mutualCount: x.rel.followsMe ? 1 : 0,
-          suggestionScore: x.suggestionScore
+          suggestionScore: x.suggestionScore,
+          affinity: x.suggestionScore
         }));
         const unique = Array.from(new Map(enriched.map(u => [u.id, u])).values());
         return unique.sort((a, b) =>
           (b.suggestionScore || 0) - (a.suggestionScore || 0) ||
           (b.karmaScore || 0) - (a.karmaScore || 0) ||
           (b.lastActivityTs || 0) - (a.lastActivityTs || 0)
-        );
+        ).slice(0, MAX_SUGGESTED);
       }
 
       if (filter === 'CVs') {
@@ -345,19 +336,7 @@ module.exports = ({ cooler, tribesModel = null }) => {
       const arr = (v) => Array.isArray(v) ? v : [];
       const up = (v) => String(v || '').toUpperCase();
       const COUNTED = new Set(['post','event','task','forum','market','job','housing','project','industry','shop','image','video','audio','document','bookmark','transfer','map']);
-      const accessible = (type, c) => {
-        if (c.encryptedPayload) return false;
-        switch (type) {
-          case 'task':   return up(c.isPublic) !== 'PRIVATE' || isOwner || arr(c.assignees).includes(viewer);
-          case 'event':  return String(c.isPublic || '').toLowerCase() !== 'private' || isOwner || arr(c.attendees).includes(viewer);
-          case 'forum':  return c.isPrivate !== true || isOwner;
-          case 'job':    return up(c.visibility) !== 'HIDDEN' || isOwner || arr(c.subscribers).includes(viewer);
-          case 'housing': return up(c.visibility) !== 'HIDDEN' || isOwner;
-          case 'market': return up(c.visibility) !== 'HIDDEN' || isOwner;
-          case 'shop':   return up(c.visibility) !== 'CLOSED' || isOwner;
-          default: return true;
-        }
-      };
+      const accessible = (type, c) => isOwner || isContentVisibleTo(type, c, viewer, target);
       const counts = {};
       await new Promise((resolve) => {
         pull(

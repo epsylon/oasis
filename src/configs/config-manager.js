@@ -17,7 +17,7 @@ if (!fs.existsSync(configFilePath)) {
       "fediverseMod": "on",
       "invitesMod": "on",
       "walletMod": "on",
-      "legacyMod": "on",
+      "backupMod": "on",
       "devMod": "on",
       "cipherMod": "on",
       "bookmarksMod": "on",
@@ -35,6 +35,12 @@ if (!fs.existsSync(configFilePath)) {
       "reportsMod": "on",
       "opinionsMod": "on",
       "padsMod": "on",
+      "wikiMod": "on",
+      "emergenciesMod": "on",
+      "mailingMod": "on",
+      "logisticsMod": "on",
+      "podcastsMod": "on",
+      "campaignsMod": "on",
       "calendarsMod": "on",
       "transfersMod": "on",
       "feedMod": "on",
@@ -97,6 +103,12 @@ const getConfig = () => {
   if (cfg.ux.current !== 'blocks' && cfg.ux.current !== 'ainav' && cfg.ux.current !== 'chats' && cfg.ux.current !== 'feed') cfg.ux.current = 'blocks';
   if (cfg.ux.current === 'ainav' && cfg.modules && cfg.modules.aiNavMod !== 'on') cfg.ux.current = 'blocks';
   if (cfg.ux.current === 'chats' && cfg.modules && cfg.modules.chatsMod !== 'on') cfg.ux.current = 'blocks';
+  if (cfg.modules && typeof cfg.modules === 'object') {
+    if (cfg.modules.backupMod === undefined) cfg.modules.backupMod = cfg.modules.legacyMod === 'off' ? 'off' : 'on';
+    for (const mod of ['wikiMod', 'emergenciesMod', 'mailingMod', 'logisticsMod', 'podcastsMod', 'campaignsMod']) {
+      if (cfg.modules[mod] === undefined) cfg.modules[mod] = 'on';
+    }
+  }
   return cfg;
 };
 

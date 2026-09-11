@@ -6,7 +6,7 @@ const { config } = require("../server/SSB_server.js")
 const { renderUrl } = require("../backend/renderUrl")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const opinionCategories = require("../backend/opinion_categories")
-const { renderReachChip, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml } = require("./clearnet_view")
+const { renderReachChip, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderRichText: cnRichText, renderKindTag: cnKindTag } = require("./clearnet_view")
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -47,15 +47,15 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "top", "products", "prices", "favorites"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
+    ["all", "recent", "mine", "top", "products", "prices", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
       form({ method: "GET", action: "/shops" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`shopFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
       )
     ),
-    form({ method: "GET", action: "/shops/purchases" },
+    ...((currentFilter === "purchases" || !modesAvail || modesAvail.purchases !== false) ? [form({ method: "GET", action: "/shops/purchases" },
       button({ type: "submit", class: currentFilter === "purchases" ? "filter-btn active" : "filter-btn" }, (i18n.shopPurchasesButton || "Purchases").toUpperCase())
-    ),
+    )] : []),
     ]),
     form({ method: "GET", action: "/shops" },
       input({ type: "hidden", name: "filter", value: "create" }),
@@ -159,7 +159,7 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       label(i18n.mapLocationTitle || "Map Location"), br,
       input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: shop.mapUrl || "" }), br,
       label(i18n.shopTags), br,
-      input({ type: "text", name: "tags", placeholder: i18n.shopTagsPlaceholder || "tag1, tag2, tag3", value: safeArr(shop.tags).join(", ") }), br,
+      input({ type: "text", name: "tags", placeholder: i18n.shopTagsPlaceholder || "Enter tags separated by commas", value: safeArr(shop.tags).join(", ") }), br,
       isEdit ? null : label(i18n.shopVisibility),
       isEdit ? null : br,
       isEdit ? null : select({ name: "visibility" },
@@ -277,7 +277,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         : renderStateChip("mutuals", "✓", i18n.shopOpen),
       shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
       renderLifespanChip(shop.lifetime, i18n),
-      renderReachChip(isClearnet, i18n),
+      renderReachChip(isClearnet, i18n, `/c/shops/${encodeURIComponent(shop.rootId || shop.key)}`),
       shop.subscription
         ? ((isAuthor || shop.subscription.subscribed === true)
             ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
@@ -396,7 +396,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
   return template(
     shop.title || i18n.shopTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
-    section(renderModeButtons(filter)),
+    section(renderModeButtons(filter, false, (params && params.modesAvail) || null)),
     section(
       div({ class: "tribe-details" },
         shopSide,
@@ -499,7 +499,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
   return template(
     product.title || i18n.shopProductTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
-    section(renderModeButtons("products")),
+    section(renderModeButtons("products", false, (params && params.modesAvail) || null)),
     section(div({ class: "tribe-details" }, productSide, productMain))
   )
 }
@@ -579,8 +579,8 @@ exports.shopOrdersView = async (shop, orders) => {
   )
 }
 
-exports.myPurchasesView = async (purchases) => {
-  const title = i18n.shopMyOrdersTitle || "My orders"
+exports.myPurchasesView = async (purchases, params = {}) => {
+  const title = i18n.shopsTitle
   const buyerActions = (o) => {
     const acts = []
     if (o.seller) acts.push(a({ href: `/pm?recipients=${encodeURIComponent(o.seller)}`, class: "tribe-action-btn" }, i18n.shopOrderPmSeller || i18n.privateMessage || "PM"))
@@ -609,9 +609,9 @@ exports.myPurchasesView = async (purchases) => {
     section(
       div({ class: "tags-header module-header-line" }, h2(title), p(i18n.shopMyOrdersDescription || "Your encrypted purchase orders."))
     ),
-    section(renderModeButtons("purchases")),
+    section(renderModeButtons("purchases", false, params.modesAvail || null)),
     section(
-      rows.length ? div({ class: "shop-orders-list" }, ...rows) : p(i18n.shopMyOrdersEmpty || "You have no purchases yet.")
+      rows.length ? div({ class: "shop-orders-list" }, ...rows) : div({ class: "tribe-grid" }, p(i18n.shopMyOrdersEmpty || "You have no purchases yet."))
     )
   )
 }
@@ -626,14 +626,14 @@ exports.clearnetShopView = async (shop, products = []) => {
     return `<article class="cn-product">
       ${pImg ? `<img class="cn-product-img" src="${pImg}" alt="" loading="lazy"/>` : ''}
       <h3 class="cn-product-title">${cnEscapeHtml(prod.title || '')}</h3>
-      ${prod.description ? `<p class="cn-product-desc">${cnEscapeHtml(prod.description)}</p>` : ''}
+      ${prod.description ? `<p class="cn-product-desc">${cnRichText(prod.description)}</p>` : ''}
       <p class="cn-product-price">${fmtPrice(prod.price)} ECO</p>
       ${Number(prod.stock) > 0 ? `<p class="cn-product-stock">Stock: ${prod.stock}</p>` : ''}
     </article>`;
   }).join('\n');
   const shopBlobUrl = cnBlobUrl(shop.image);
   const shopImg = shopBlobUrl ? `<img class="cn-shop-img" src="${shopBlobUrl}" alt="${cnEscapeHtml(shop.title || '')}"/>` : '';
-  const desc = cnEscapeHtml(shop.shortDescription || shop.description || '');
+  const desc = cnRichText(shop.shortDescription || shop.description || '');
   const extraCss = `
 .cn-hero{display:flex;gap:24px;margin-bottom:24px;flex-wrap:wrap;align-items:flex-start}
 .cn-shop-img{display:block;max-width:280px;width:100%;border:3px solid var(--fg);border-radius:8px;background:#000}
@@ -659,11 +659,13 @@ exports.clearnetShopView = async (shop, products = []) => {
       <h1 class="cn-shop-title">${cnEscapeHtml(shop.title || '')}</h1>
       ${desc ? `<p class="cn-shop-desc">${desc}</p>` : ''}
       <div class="cn-shop-meta">
+        <span class="cn-shop-meta-item">${cnKindTag('shop')}</span>
         ${shop.createdAt ? `<span class="cn-shop-meta-item">📅 ${new Date(shop.createdAt).toISOString().slice(0,10)}</span>` : ''}
         ${shop.location ? `<span class="cn-shop-meta-item">📍 ${cnEscapeHtml(shop.location)}</span>` : ''}
       </div>
     </div>
   </div>
+  <hr class="cn-sep"/>
   <h2 class="cn-section">Products</h2>
   ${productCards ? `<div class="cn-products">${productCards}</div>` : '<div class="cn-empty">No products available.</div>'}
 `;

@@ -414,3 +414,67 @@ describe('activity: every card can be visited', (t) => {
     eq(href, `/feed/${encodeURIComponent('%f.sha256')}`, 'the feed card points at the feed detail');
   });
 });
+
+describe('activity: wiki pages surface as cards', (t) => {
+  t('a wiki page appears in the feed and under the wiki filter, once even after edits', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const created = await A.use('wiki').createPage({ title: 'Field guide', body: 'v1', tags: ['nature'] });
+    await A.use('wiki').updatePage(created.key, { body: 'v2', summary: 'typo' });
+    const all = await A.use('activity').listFeed('all');
+    const wikiActions = all.filter(a => a.type === 'wikiPage');
+    eq(wikiActions.length, 1, 'one card for the page, not one per version');
+    const wikiOnly = await A.use('activity').listFeed('wiki');
+    eq(wikiOnly.length, 1, 'the wiki filter lists it');
+    const { activityView } = require('../../../src/views/activity_view');
+    const html = String(await activityView(all, 'wiki', A.keypair.id, '', {}));
+    ok(html.includes('Field guide') && html.includes('/wiki/'), 'the card shows the title and links to the wiki');
+    ok(html.includes('name="filter" value="wiki"') || html.includes('value="wiki"'), 'the WIKI chip is offered');
+  });
+});
+
+describe('activity: emergencies surface as cards', (t) => {
+  t('an emergency appears in the feed, under the emergency filter, once even after an update', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const created = await A.use('emergencies').createEmergency({ title: 'Bridge closed', text: 'detour', category: 'SECURITY', tags: ['traffic'] });
+    await A.use('emergencies').updateEmergency(created.key, { text: 'detour via north' });
+    const all = await A.use('activity').listFeed('all');
+    eq(all.filter(a => a.type === 'emergency').length, 1, 'one card for the emergency, not one per version');
+    const only = await A.use('activity').listFeed('emergency');
+    eq(only.length, 1, 'the emergency filter lists it');
+    const { activityView } = require('../../../src/views/activity_view');
+    const html = String(await activityView(all, 'emergency', A.keypair.id, '', {}));
+    ok(html.includes('Bridge closed') && html.includes('/emergencies/'), 'the card shows the title and links to the emergency');
+  });
+});
+
+describe('activity: mailing lists surface as cards, closed ones never do', (t) => {
+  t('an OPEN list appears once under the mailing filter; a CLOSED list leaves no public trace', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const created = await A.use('mailing').createList({ title: 'Neighbours', description: 'Street news', listType: 'OPEN', tags: ['street'] });
+    await A.use('mailing').updateList(created.key, { description: 'Street news, revised' });
+    await A.use('mailing').createList({ title: 'Secret circle', listType: 'CLOSED' });
+    const all = await A.use('activity').listFeed('all');
+    const listActions = all.filter(a => a.type === 'mailingList');
+    eq(listActions.length, 1, 'one card for the list, not one per version, and none for the closed list');
+    const only = await A.use('activity').listFeed('mailing');
+    eq(only.length, 1, 'the mailing filter lists it');
+    const { activityView } = require('../../../src/views/activity_view');
+    const html = String(await activityView(all, 'mailing', A.keypair.id, '', {}));
+    ok(html.includes('Neighbours') && html.includes('/mailing/'), 'the card shows the title and links to the list');
+    ok(!html.includes('Secret circle'), 'the closed list never surfaces');
+  });
+});
+
+describe('activity: podcasts surface as cards', (t) => {
+  t('a channel and its episode appear under the podcast filter, once each even after edits', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const ch = await A.use('podcasts').createChannel({ title: 'Night talks', category: 'TALK' });
+    const ep = await A.use('podcasts').addEpisode(ch.key, { title: 'Pilot', media: '\n[audio:p.mp3](&p.sha256)' });
+    await A.use('podcasts').updateEpisode(ep.key, { title: 'Pilot (fixed)' });
+    const only = await A.use('activity').listFeed('podcast');
+    eq(only.length, 2, 'one card for the channel and one for the episode');
+    const { activityView } = require('../../../src/views/activity_view');
+    const html = String(await activityView(only, 'podcast', A.keypair.id, '', {}));
+    ok(html.includes('Night talks') && html.includes('/podcasts/episode/'), 'cards link to the channel and the episode');
+  });
+});

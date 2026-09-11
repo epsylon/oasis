@@ -20,7 +20,7 @@ function writeAgendaConfig(cfg) {
   fs.writeFileSync(agendaConfigPath, JSON.stringify(cfg, null, 2));
 }
 
-module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel, industryModel, housingModel, schoolModel }) => {
+module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel, industryModel, housingModel, schoolModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -190,7 +190,15 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
         ? schoolModel.listCourses('ALL', userId, {}).then(normalize).catch(() => [])
         : [];
 
-      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll, projectsAll, calendarsAll, industryAll, housingAll, schoolAll] = await Promise.all([
+      const campaignsViaModel = campaignsModel && typeof campaignsModel.listAll === 'function'
+        ? campaignsModel.listAll({ filter: 'all' }).catch(() => [])
+        : [];
+
+      const logisticsViaModel = logisticsModel && typeof logisticsModel.listAll === 'function'
+        ? logisticsModel.listAll({ filter: 'all' }).catch(() => [])
+        : [];
+
+      const [tasksAll, eventsAll, transfersAll, tribesAll, marketAll, reportsAll, jobsAll, projectsAll, calendarsAll, industryAll, housingAll, schoolAll, campaignsAll, logisticsAll] = await Promise.all([
         tasksViaModel,
         eventsViaModel,
         fetchItems('transfer'),
@@ -202,7 +210,9 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
         calendarsViaModel,
         industryViaModel,
         housingViaModel,
-        schoolViaModel
+        schoolViaModel,
+        campaignsViaModel,
+        logisticsViaModel
       ]);
 
       const tasks = tasksAll.filter(c => Array.isArray(c.assignees) && c.assignees.includes(userId)).map(t => ({ ...t, type: 'task' }));
@@ -219,6 +229,12 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
       const schoolCourses = schoolAll
         .filter(c => c.author === userId || (Array.isArray(c.students) && c.students.includes(userId)) || (Array.isArray(c.pending) && c.pending.some(pn => pn.author === userId)))
         .map(c => ({ ...c, type: 'schoolCourse', title: c.title, date: c.startDate || c.createdAt, teaching: c.author === userId }));
+      const campaigns = (Array.isArray(campaignsAll) ? campaignsAll : [])
+        .filter(c => c && c.deadline && (c.author === userId || (Array.isArray(c.signers) && c.signers.includes(userId))))
+        .map(c => ({ ...c, type: 'campaign', date: c.deadline, status: c.closed ? 'CLOSED' : 'OPEN' }));
+      const routes = (Array.isArray(logisticsAll) ? logisticsAll : [])
+        .filter(r => r && r.date && (r.author === userId || !!r.myBooking))
+        .map(r => ({ ...r, type: 'logisticsRoute', status: r.status === 'CLOSED' ? 'CLOSED' : 'OPEN' }));
       const housingPlaces = housingAll
         .filter(h => h.author === userId || (Array.isArray(h.requests) && h.requests.includes(userId)))
         .map(h => ({ ...h, type: 'housing', date: h.availableFrom || h.createdAt, requested: Array.isArray(h.requests) && h.requests.includes(userId) }));
@@ -260,6 +276,8 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
         ...industryBuilds,
         ...housingPlaces,
         ...schoolCourses,
+        ...campaigns,
+        ...routes,
         ...calendars,
         ...calendarDates
       ];
@@ -282,6 +300,8 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
         else if (filter === 'industry') filtered = filtered.filter(i => i.type === 'industry');
         else if (filter === 'housing') filtered = filtered.filter(i => i.type === 'housing');
         else if (filter === 'school') filtered = filtered.filter(i => i.type === 'schoolCourse');
+        else if (filter === 'campaigns') filtered = filtered.filter(i => i.type === 'campaign');
+        else if (filter === 'logistics') filtered = filtered.filter(i => i.type === 'logisticsRoute');
         else if (filter === 'calendars') filtered = filtered.filter(i => i.type === 'calendar' || i.type === 'calendarDate');
         else if (filter === 'today') {
           const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
@@ -338,6 +358,8 @@ module.exports = ({ cooler, calendarsModel, eventsModel, tasksModel, marketModel
           industry: mainItems.filter(i => i.type === 'industry').length,
           housing: mainItems.filter(i => i.type === 'housing').length,
           school: mainItems.filter(i => i.type === 'schoolCourse').length,
+          campaigns: mainItems.filter(i => i.type === 'campaign').length,
+          logistics: mainItems.filter(i => i.type === 'logisticsRoute').length,
           calendars: mainItems.filter(i => i.type === 'calendar' || i.type === 'calendarDate').length,
           today: mainItems.filter(i => { const d = itemTs(i); return d >= startOfDay.getTime() && d <= endOfDay.getTime(); }).length,
           upcoming: mainItems.filter(i => itemTs(i) > now).length,

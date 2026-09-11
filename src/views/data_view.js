@@ -24,60 +24,74 @@ const KIND_LABEL = {
   maps: () => i18n.mapTitle,
   calendars: () => i18n.calendarsTitle,
   forum: () => i18n.forumTitle,
-  school: () => i18n.schoolTitle
+  school: () => i18n.schoolTitle,
+  wiki: () => i18n.wikiTitle,
+  emergencies: () => i18n.emergenciesTitle,
+  mailing: () => i18n.mailingTitle,
+  logistics: () => i18n.logisticsTitle,
+  podcasts: () => i18n.podcastsTitle,
+  campaigns: () => i18n.campaignsTitle
+};
+
+const REASON_LABEL = {
+  mutual: () => i18n.dataReasonMutual,
+  following: () => i18n.dataReasonFollowing,
+  supportsYou: () => i18n.dataReasonSupportsYou,
+  tribe: () => i18n.dataReasonTribe,
+  alike: () => i18n.dataReasonAlike,
+  cv: () => i18n.dataReasonCv,
+  content: () => i18n.dataReasonContent,
+  pinned: () => i18n.dataReasonPinned,
+  related: () => i18n.dataReasonRelated,
+  rated: () => i18n.dataReasonRated,
+  near: () => i18n.dataReasonNear
 };
 
 const FILTER_COLUMNS = [
   ["ALL", "RECENT", "TOP"],
   ["INHABITANTS", "TRIBES"],
-  ["VOTES", "EVENTS", "CALENDARS", "TASKS", "REPORTS"],
-  ["MARKET", "HOUSING", "JOBS", "PROJECTS", "INDUSTRY"],
-  ["FORUM", "CHATS", "PADS", "MAPS", "SCHOOL"],
-  ["AUDIOS", "BOOKMARKS", "DOCUMENTS", "IMAGES", "TORRENTS", "VIDEOS"]
+  ["VOTES", "EVENTS", "CALENDARS", "TASKS", "REPORTS", "EMERGENCIES", "MAILING", "CAMPAIGNS"],
+  ["MARKET", "HOUSING", "JOBS", "PROJECTS", "INDUSTRY", "LOGISTICS"],
+  ["FORUM", "CHATS", "PADS", "WIKI", "MAPS", "SCHOOL"],
+  ["AUDIOS", "BOOKMARKS", "DOCUMENTS", "IMAGES", "TORRENTS", "VIDEOS", "PODCASTS"]
 ];
 
 const kindLabel = (kind) => (KIND_LABEL[kind] ? KIND_LABEL[kind]() : String(kind || '').toUpperCase());
 
-const filterLabel = (key) => {
-  const map = {
-    ALL: i18n.dataFilterAll, MINE: i18n.dataFilterMine,
-    RECENT: i18n.dataFilterRecent, TOP: i18n.dataFilterTop
-  };
-  return map[key] || kindLabel(key.toLowerCase());
-};
-
-const filterButton = (mode, current, q) =>
+const reasonButton = (value, label, current, q) =>
   form({ method: "GET", action: "/data" },
     input({ type: "hidden", name: "q", value: q || "" }),
-    button({
-      type: "submit", name: "filter", value: mode,
-      class: current === mode ? "filter-btn active" : "filter-btn"
-    }, String(filterLabel(mode)).toUpperCase())
+    value ? input({ type: "hidden", name: "reason", value }) : null,
+    button({ type: "submit", class: current === value ? "filter-btn active" : "filter-btn" }, String(label).toUpperCase())
   );
 
-const renderFilters = (current, q, total = null, payload = {}) => {
-  if (Number(total || 0) === 0 && String(current || 'ALL').toUpperCase() === 'ALL' && !String(q || '').trim()) return null;
-  const kindsAvail = payload.kindsAvail || null;
-  const chipVisible = (mode) => {
-    if (mode === current || mode === 'ALL') return true;
-    if (mode === 'RECENT' || mode === 'TOP') return payload.anyMatches !== false;
-    return !kindsAvail || kindsAvail[mode.toLowerCase()] === true;
-  };
+const sectionId = (kind) => `data-${String(kind || '').toLowerCase()}`;
+
+const renderFilters = (q, payload = {}, kindsPresent = []) => {
+  const matches = Array.isArray(payload.matches) ? payload.matches : [];
+  const reason = String(payload.reason || "");
+  if (!matches.length && !String(q || "").trim() && !reason) return null;
+  const avail = (Array.isArray(payload.reasonsAvail) ? payload.reasonsAvail : []).filter(r => REASON_LABEL[r]);
+  const present = new Set(kindsPresent);
+  const columns = FILTER_COLUMNS.slice(1)
+    .map(col => col.filter(k => present.has(k.toLowerCase())))
+    .filter(col => col.length);
   return section(
-    div({ class: "activity-filter-grid" },
-      ...FILTER_COLUMNS.map(col => {
-        const modes = col.filter(chipVisible);
-        return modes.length
-          ? div({ class: "activity-filter-col" },
-              ...modes.map(mode => filterButton(mode, current, q))
-            )
-          : null;
-      }).filter(Boolean)
+    div({ class: "activity-sub-filter" },
+      reasonButton("", i18n.dataFilterAll, reason, q),
+      ...avail.map(r => reasonButton(r, REASON_LABEL[r](), reason, q))
+    ),
+    reason || !columns.length ? null : div({ class: "activity-filter-grid" },
+      ...columns.map(col =>
+        div({ class: "activity-filter-col" },
+          ...col.map(k => a({ href: `#${sectionId(k)}`, class: "filter-btn" }, String(kindLabel(k.toLowerCase())).toUpperCase()))
+        )
+      )
     ),
     div({ class: "data-search activity-filter-chips activity-toolbar-row" },
-      total != null ? renderModuleStats(total) : null,
+      renderModuleStats(matches.length),
       form({ method: "GET", action: "/data", class: "filter-box" },
-        input({ type: "hidden", name: "filter", value: current }),
+        reason ? input({ type: "hidden", name: "reason", value: reason }) : null,
         input({ type: "text", name: "q", value: q || "", placeholder: i18n.dataSearchPlaceholder, class: "filter-box__input" }),
         div({ class: "filter-box__controls" },
           button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
@@ -87,7 +101,7 @@ const renderFilters = (current, q, total = null, payload = {}) => {
   );
 };
 
-const scorePct = (score) => ((Number(score) || 0) * 100).toFixed(1).replace(/\.0$/, '');
+const scorePct = (score) => ((Number(score) || 0) * 100).toFixed(2).replace(/\.?0+$/, '');
 const scaleOf = (pct) => Math.min(4, Math.floor((Number(pct) || 0) / 20));
 
 const renderCohesion = (c) => {
@@ -130,6 +144,12 @@ const renderCohesion = (c) => {
   );
 };
 
+const TITLE_MAX = 120;
+const shortTitle = (title) => {
+  const t = String(title || "").replace(/\s+/g, " ").trim();
+  return t.length > TITLE_MAX ? `${t.slice(0, TITLE_MAX - 1)}…` : t;
+};
+
 const shortId = (id) => {
   const value = String(id || "");
   return value.length > 14 ? `${value.slice(0, 12)}…` : value;
@@ -137,6 +157,7 @@ const shortId = (id) => {
 
 const renderMatchRow = (m, isBest) => {
   const common = Array.isArray(m.common) ? m.common : [];
+  const reasons = (Array.isArray(m.reasons) ? m.reasons : []).filter(r => REASON_LABEL[r]);
   return div({ class: isBest ? "data-card data-best-card" : "data-card" },
     div({ class: "data-side-top" },
       span({ class: "data-kind-chip" }, String(kindLabel(m.kind)).toUpperCase()),
@@ -144,7 +165,7 @@ const renderMatchRow = (m, isBest) => {
       span({ class: isBest ? "data-score-value data-best-score" : "data-score-value" }, `${scorePct(m.score)}%`),
       a({ href: m.href, class: "btn-singleview btn-content data-side-visit", title: i18n.visitContent }, "↗")
     ),
-    a({ href: m.href, class: "data-card-title" }, m.title || shortId(m.id)),
+    a({ href: m.href, class: "data-card-title" }, shortTitle(m.title) || shortId(m.id)),
     span({ class: "data-card-author" }, userLink(m.author)),
     common.length
       ? div({ class: "data-common-row" },
@@ -152,32 +173,62 @@ const renderMatchRow = (m, isBest) => {
           ...common.slice(0, 8).map(t =>
             a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`))
         )
+      : null,
+    reasons.length
+      ? div({ class: "data-reasons-row" },
+          ...reasons.map(r => span({ class: "data-kind-chip data-reason-chip" }, REASON_LABEL[r]()))
+        )
       : null
   );
 };
 
+const groupByKind = (matches) => {
+  const groups = new Map();
+  for (const m of matches) {
+    if (!groups.has(m.kind)) groups.set(m.kind, []);
+    groups.get(m.kind).push(m);
+  }
+  const ordered = [...groups.entries()].map(([kind, items]) => {
+    items.sort((x, y) => (y.score || 0) - (x.score || 0) || (y.ts || 0) - (x.ts || 0));
+    return { kind, items };
+  });
+  ordered.sort((x, y) => (y.items[0].score || 0) - (x.items[0].score || 0));
+  return ordered;
+};
+
 exports.dataView = async (payload = {}) => {
-  const filter = String(payload.filter || 'ALL').toUpperCase();
   const q = payload.q || '';
+  const reason = String(payload.reason || '');
 
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
-  const emptyData = matches.length === 0 && payload.hasProfile === false && String(filter || 'ALL').toUpperCase() === 'ALL' && !String(q || '').trim();
+  const emptyData = matches.length === 0 && payload.hasProfile === false && !String(q || '').trim() && !reason;
+  const groups = groupByKind(matches);
+  const best = groups.length ? groups[0].items[0] : null;
 
   return template(
     i18n.dataTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.dataTitle), p(i18n.dataDescription))),
-    renderFilters(filter, q, matches.length, payload),
+    renderFilters(q, { ...payload, matches }, groups.map(g => g.kind)),
     emptyData ? null : (payload.cohesion ? renderCohesion(payload.cohesion) : null),
     section(
       emptyData ? null : div({ class: "tags-header" },
         h2(q ? `${i18n.dataTopicTitle} #${q}` : i18n.dataMatchesTitle),
-        p(q ? i18n.dataTopicHint : i18n.dataMatchesHint),
-        typeof payload.total === "number" && payload.total > matches.length
-          ? p({ class: "data-cohesion-hint" }, `${matches.length} / ${payload.total}`)
-          : null
+        p(q ? i18n.dataTopicHint : i18n.dataMatchesHint)
+      ),
+      best
+        ? div({ class: "data-section data-top-best" },
+            h2({ class: "data-section-title" }, String(i18n.dataBestMatch).toUpperCase()),
+            div({ class: "data-list" }, renderMatchRow(best, true))
+          )
+        : null,
+      ...groups.map(g =>
+        div({ id: sectionId(g.kind), class: "data-section" },
+          h2({ class: "data-section-title" }, `${String(kindLabel(g.kind)).toUpperCase()} (${g.items.length})`),
+          div({ class: "data-list" }, ...g.items.map((m, idx) => renderMatchRow(m, idx === 0)))
+        )
       ),
       matches.length
-        ? div({ class: "data-list" }, ...matches.map((m, idx) => renderMatchRow(m, idx === 0)))
+        ? null
         : div({ class: "no-content-box" }, p({ class: "no-content" }, payload.hasProfile === false
             ? i18n.dataNoProfile
             : i18n.dataNoMatches))

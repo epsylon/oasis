@@ -24,7 +24,8 @@ module.exports = ({ cooler }) => {
   const validTypes = [
     'bookmark', 'votes', 'transfer',
     'feed', 'image', 'audio', 'video', 'document', 'torrent',
-    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse'
+    'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse',
+    'podcast', 'podcastEpisode', 'campaign', 'logisticsRoute'
   ];
 
   const getPreview = c => {
@@ -50,7 +51,11 @@ module.exports = ({ cooler }) => {
     shopProduct: 'shopOpinion',
     housing: 'housingOpinion',
     market: 'marketOpinion',
-    schoolCourse: 'schoolOpinion'
+    schoolCourse: 'schoolOpinion',
+    podcast: 'podcastOpinion',
+    podcastEpisode: 'podcastOpinion',
+    campaign: 'campaignOpinion',
+    logisticsRoute: 'logisticsOpinion'
   };
 
   const createVote = async (contentId, category) => {

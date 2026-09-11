@@ -21,10 +21,10 @@ const filterLabel = (f) => {
   return map[f] || f.toUpperCase();
 };
 
-const renderFilterBar = (current, hasItems = true, emptyLogs = false) =>
+const renderFilterBar = (current, hasItems = true, emptyLogs = false, avail = null) =>
   div({ class: "activity-sub-filter" },
     emptyLogs ? null : form({ method: "GET", action: "/logs", class: "sub-filter-form" },
-      FILTERS.map(f =>
+      FILTERS.filter(f => f === current || f === "always" || !avail || avail[f] !== false).map(f =>
         button({
           type: "submit", name: "filter", value: f,
           class: current === f ? "filter-btn active" : "filter-btn"
@@ -69,7 +69,7 @@ const renderSearchBox = (current, search, items = null) => {
   );
 };
 
-const renderToolbar = (current, search, hasItems, items = null, emptyLogs = false) =>
+const renderToolbar = (current, search, hasItems, items = null, emptyLogs = false, avail = null) =>
   emptyLogs
     ? div({ class: "filters" },
         form({ method: "GET", action: "/logs", class: "ui-toolbar ui-toolbar--filters" },
@@ -78,7 +78,7 @@ const renderToolbar = (current, search, hasItems, items = null, emptyLogs = fals
         )
       )
     : div({ class: "logs-toolbar-wrap" },
-        renderFilterBar(current, hasItems, emptyLogs),
+        renderFilterBar(current, hasItems, emptyLogs, avail),
         renderSearchBox(current, search, items)
       );
 
@@ -241,7 +241,7 @@ exports.logsView = (items, filter, mode, opts = {}) => {
   const emptyLogs = Number(opts.total ?? items.length) === 0 && !String(sr.q || '').trim() && !String(sr.type || '').trim() && !String(sr.date || '').trim();
   const body = section(
     div({ class: "tags-header module-header-line" }, h2(listTitle), p(description)),
-    renderToolbar(filter, opts.search || {}, hasItems, items, emptyLogs),
+    renderToolbar(filter, opts.search || {}, hasItems, items, emptyLogs, opts.avail || null),
     div({ class: "logs-list" }, renderTable(items))
   );
   return template(listTitle, body);

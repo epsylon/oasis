@@ -28,6 +28,10 @@ const detailHref = (type, key) => {
     case 'shopProduct': return `/shops/product/${encodeURIComponent(key)}`;
     case 'housing': return `/housing/${encodeURIComponent(key)}`;
     case 'market': return `/market/${encodeURIComponent(key)}`;
+    case 'podcast': return `/podcasts/${encodeURIComponent(key)}`;
+    case 'podcastEpisode': return `/podcasts/episode/${encodeURIComponent(key)}`;
+    case 'campaign': return `/campaigns/${encodeURIComponent(key)}`;
+    case 'logisticsRoute': return `/logistics/${encodeURIComponent(key)}`;
     default: return null;
   }
 };

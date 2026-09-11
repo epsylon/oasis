@@ -24,7 +24,7 @@ const renderNoteText = (text) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "mine", "recent", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
+    ["all", "mine", "recent", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
       form({ method: "GET", action: "/calendars" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" },
@@ -119,7 +119,7 @@ const renderCreateForm = (calendarToEdit, params) => {
       span(i18n.calendarTitleLabel || "Title"), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.calendarTitlePlaceholder || "Calendar title...", value: calendarToEdit ? calendarToEdit.title : "" }),
       br(), br(),
-      span(i18n.calendarStatusLabel || "Status"), br(),
+      span(i18n.calendarTypeLabel), br(),
       select({ name: "status", required: true },
         option({ value: "OPEN", ...((!calendarToEdit || calendarToEdit.status === "OPEN") ? { selected: true } : {}) }, i18n.calendarStatusOpen || "OPEN"),
         option({ value: "CLOSED", ...((calendarToEdit && calendarToEdit.status === "CLOSED") ? { selected: true } : {}) }, i18n.calendarStatusClosed || "CLOSED")
@@ -129,7 +129,7 @@ const renderCreateForm = (calendarToEdit, params) => {
       input({ type: "datetime-local", name: "deadline", required: true, min: now, value: calendarToEdit && calendarToEdit.deadline ? moment(calendarToEdit.deadline).format("YYYY-MM-DDTHH:mm") : "" }),
       br(), br(),
       span(i18n.calendarTagsLabel || "Tags"), br(),
-      input({ type: "text", name: "tags", placeholder: i18n.calendarTagsPlaceholder || "tag1, tag2...", value: calendarToEdit && Array.isArray(calendarToEdit.tags) ? calendarToEdit.tags.join(", ") : "" }),
+      input({ type: "text", name: "tags", placeholder: i18n.calendarTagsPlaceholder || "Enter tags separated by commas", value: calendarToEdit && Array.isArray(calendarToEdit.tags) ? calendarToEdit.tags.join(", ") : "" }),
       br(), br(),
       span(i18n.mapLocationTitle || "Map Location"), br(),
       input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: (calendarToEdit && calendarToEdit.mapUrl) || "" }),
@@ -456,7 +456,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
         h2(i18n.calendarsTitle || "Calendars"),
         p(i18n.calendarsDescription || "Discover and manage calendars.")
       ),
-      renderModeButtons("all")
+      renderModeButtons("all", false, (params && params.modesAvail) || null)
     ),
     section(div({ class: "tribe-details" }, calSide, calMain))
   )

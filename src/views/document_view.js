@@ -156,6 +156,17 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
   );
 };
 
+const mediaChipFor = (filter, censusM) => (mode) => {
+  if (mode === filter) return true;
+  if (!Array.isArray(censusM)) return true;
+  if (mode === "top") return censusM.length > 0;
+  if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+  if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
+  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
+  return true;
+};
+
 exports.documentView = async (documents, filter = "all", documentId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(documentId) };
   const title = i18n.documentTitle;
@@ -165,15 +176,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
 
   const list = safeArr(documents);
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
-  const censusM = Array.isArray(params.censusList) ? params.censusList : list;
-  const mediaChip = (mode) => {
-    if (mode === filter) return true;
-    if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-    if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
-    if (mode === "favorites") return censusM.some((x) => x.isFavorite);
-    if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
-    return true;
-  };
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const docToEdit = documentId ? list.find((d) => d.key === documentId) : null;
 
   const tpl = template(
@@ -186,7 +189,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
         (() => {
           const { renderReachChip } = require('./clearnet_view');
           const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetDocuments);
-          return renderReachChip(isClearnet, i18n);
+          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
         })()
       ),
       div(
@@ -203,7 +206,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.documentFilterFavorites).toUpperCase()
           )] : []),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterTop).toUpperCase()),
+          ...(mediaChip("top") ? [button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterTop).toUpperCase())] : []),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.documentCreateButton)
         )
@@ -241,6 +244,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
 };
 
 exports.singleDocumentView = async (doc, filter = "all", comments = [], params = {}) => {
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : null);
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
@@ -288,7 +292,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
 
   const docSide = div({ class: "tribe-side" },
     title ? h2({ class: "tribe-card-title" }, title) : null,
-    div({ class: "card-chips-row" }, renderReachChip(isClearnet, i18n), ...chips),
+    div({ class: "card-chips-row" }, renderReachChip(isClearnet, i18n, `/c/documents/${encodeURIComponent(doc.key)}`), ...chips),
     safeText(doc.description)
       ? p({ class: "tribe-side-description" }, ...renderUrl(doc.description))
       : null,
@@ -338,12 +342,12 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase()),
-          button(
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.documentFilterFavorites).toUpperCase()
-          ),
+          )] : []),
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.documentCreateButton)
         )

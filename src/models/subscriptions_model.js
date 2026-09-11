@@ -64,6 +64,19 @@ module.exports = ({ cooler }) => {
       return out;
     },
 
+    async subscribersMap(targets) {
+      const ssbClient = await openSsb();
+      const messages = await readTyped(ssbClient, ['subscription'], { limit: logLimit });
+      const latest = latestByTargetAuthor(messages);
+      const out = new Map();
+      for (const t of targets || []) out.set(t, []);
+      for (const entry of latest.values()) {
+        if (!out.has(entry.target) || !entry.on) continue;
+        out.get(entry.target).push(entry.author);
+      }
+      return out;
+    },
+
     async subscriberCounts(targets) {
       const ssbClient = await openSsb();
       const messages = await readTyped(ssbClient, ['subscription'], { limit: logLimit });

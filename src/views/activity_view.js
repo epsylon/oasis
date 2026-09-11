@@ -20,6 +20,17 @@ const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const { renderZoomableImage } = require('./gallery_view');
 
+const MEDIA_MD_RE = /!?\[(?:image|video|audio|pdf|torrent)[^\]]*\]\(\s*&[^)\s]+\s*\)/g
+const stripMediaMarkdown = (text) => String(text || '').replace(MEDIA_MD_RE, '').replace(/\n{3,}/g, '\n\n').trim()
+const renderMediaObject = (m, href = null) => {
+  if (!m || typeof m !== 'object' || !m.blobId) return null
+  const src = `/blob/${encodeURIComponent(String(m.blobId))}`
+  if (href && m.kind !== 'video' && m.kind !== 'audio') return div({ class: 'card-field image-container media-left' }, a({ href, class: 'podcast-cover-link' }, img({ src, class: 'post-image', alt: '' })))
+  if (m.kind === 'video') return div({ class: 'card-field video-container' }, videoHyperaxe({ controls: true, class: 'post-video', src, preload: 'metadata' }))
+  if (m.kind === 'audio') return div({ class: 'card-field audio-container' }, audioHyperaxe({ controls: true, class: 'post-audio', src, preload: 'metadata' }))
+  return div({ class: 'card-field image-container media-left' }, renderZoomableImage(src, { imgClass: 'post-image' }))
+}
+
 const renderMediaBlob = (value, fallbackSrc = null) => {
   if (!value) return fallbackSrc ? img({ src: fallbackSrc, class: 'post-image' }) : null
   const s = String(value).trim()
@@ -233,7 +244,7 @@ const SPREADABLE_TYPES = new Set([
   'post', 'audio', 'video', 'image', 'document', 'torrent', 'bookmark',
   'event', 'calendar', 'task', 'votes', 'vote', 'market', 'shop', 'shopProduct',
   'project', 'transfer', 'housing', 'job', 'report', 'industry', 'industryBuild', 'industryBlueprint',
-  'chat', 'chatMessage', 'pad', 'padEntry', 'forum', 'map', 'poll', 'blog', 'schoolCourse', 'feed'
+  'chat', 'chatMessage', 'pad', 'padEntry', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign', 'forum', 'map', 'poll', 'blog', 'schoolCourse', 'feed'
 ]);
 
 function renderActionCards(actions, userId, allActions, spreadMap = new Map(), extras = {}) {
@@ -356,6 +367,14 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       headerText = `[UBI · CLAIM]`;
     } else if (type === 'ubiclaimresult') {
       headerText = `[UBI · RESULT]`;
+    } else if (type === 'wikiPage') {
+      headerText = `[${String(i18n.typeWiki || 'WIKI').toUpperCase()}]`;
+    } else if (type === 'emergencyUpdate') {
+      headerText = `[${String(i18n.typeEmergency || 'EMERGENCY').toUpperCase()} · ${String(i18n.emergencyLastUpdate || 'LAST UPDATE').toUpperCase()}]`;
+    } else if (type === 'campaignUpdate') {
+      headerText = `[${String(i18n.typeCampaign || 'CAMPAIGN').toUpperCase()} · ${String(i18n.emergencyLastUpdate || 'LAST UPDATE').toUpperCase()}]`;
+    } else if (type === 'podcastEpisode') {
+      headerText = `[${String(i18n.typePodcast || 'PODCAST').toUpperCase()} · ${String(i18n.typePodcastEpisode || 'EPISODE').toUpperCase()}]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -1161,9 +1180,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const displayDesc = shortDescription || (description ? (description.length > 140 ? description.slice(0, 140) + "\u2026" : description) : "");
       cardBody.push(
         div({ class: 'card-section shop' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopTitle || 'Shop') + ':'), span({ class: 'card-value' }, shopKey ? a({ href: `/shops/${encodeURIComponent(shopKey)}`, class: 'user-link' }, title || shopKey) : (title || ''))),
+          div({ class: 'card-field' }, span({ class: 'card-value' }, shopKey ? a({ href: `/shops/${encodeURIComponent(shopKey)}`, class: 'user-link' }, title || shopKey) : (title || ''))),
           displayDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, displayDesc)) : "",
-          visibility ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopVisibility || 'Visibility') + ':'), span({ class: 'card-value' }, visibility)) : "",
           location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopLocation || 'Location') + ':'), span({ class: 'card-value' }, location)) : ""
         )
       );
@@ -1303,6 +1321,123 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section' },
           div({ class: 'card-field' }, padKey ? a({ href: `/pads/${encodeURIComponent(padKey)}`, class: 'card-value user-link' }, padTitle || padKey) : span({ class: 'card-value' }, padTitle || '')),
           content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padDeadlineLabel || 'Deadline') + ':'), span({ class: 'card-value' }, content.deadline)) : ''
+        )
+      );
+    }
+
+    if (type === 'emergency') {
+      const emergencyKey = action.id || action.key || '';
+      const emergencyTitle = content.title || action.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'card-field' }, emergencyKey ? a({ href: `/emergencies/${encodeURIComponent(emergencyKey)}`, class: 'card-value user-link' }, emergencyTitle || emergencyKey) : span({ class: 'card-value' }, emergencyTitle || '')),
+          content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.statusLabel || 'Status') + ':'), span({ class: 'card-value' }, String(content.status).toUpperCase())) : '',
+          content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.emergencyCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
+          renderMediaBlob(content.text, null),
+          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderUrl(stripMediaMarkdown(content.text))) : ''
+        )
+      );
+    }
+
+    if (type === 'mailingList') {
+      const listKey = action.id || action.key || '';
+      const listTitle = content.title || action.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'card-field' }, listKey ? a({ href: `/mailing/${encodeURIComponent(listKey)}`, class: 'card-value user-link' }, listTitle || listKey) : span({ class: 'card-value' }, listTitle || '')),
+          content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, String(content.description))) : ''
+        )
+      );
+    }
+
+    if (type === 'logisticsRoute') {
+      const routeKey = action.id || action.key || '';
+      const routeTitle = content.title || action.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'card-field' }, routeKey ? a({ href: `/logistics/${encodeURIComponent(routeKey)}`, class: 'card-value user-link' }, routeTitle || routeKey) : span({ class: 'card-value' }, routeTitle || '')),
+          content.origin || content.destination ? div({ class: 'card-field' }, span({ class: 'card-value' }, `${content.origin || ''} → ${content.destination || ''}`)) : '',
+          content.kind ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.logisticsKindLabel || 'Type') + ':'), span({ class: 'card-value' }, `${String(content.kind).toUpperCase()} · ${String(content.mode || '').toUpperCase()}`)) : '',
+          content.date ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.logisticsDateLabel || 'Date') + ':'), span({ class: 'card-value' }, moment(content.date).format('YYYY/MM/DD HH:mm'))) : '',
+          renderMediaBlob(content.description, null),
+          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderUrl(stripMediaMarkdown(content.description))) : ''
+        )
+      );
+    }
+
+    if (type === 'podcast' || type === 'podcastEpisode') {
+      const pKey = action.id || action.key || '';
+      const pTitle = content.title || action.title || '';
+      const pHref = type === 'podcast' ? `/podcasts/${encodeURIComponent(pKey)}` : `/podcasts/episode/${encodeURIComponent(pKey)}`;
+      cardBody.push(
+        div({ class: 'card-section' },
+          type === 'podcastEpisode' ? '' : div({ class: 'card-field' }, pKey ? a({ href: pHref, class: 'card-value user-link' }, pTitle || pKey) : span({ class: 'card-value' }, pTitle || '')),
+          type === 'podcast' && content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.podcastCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
+          renderMediaObject(type === 'podcast' ? content.cover : content.media, type === 'podcast' ? pHref : null),
+          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderUrl(stripMediaMarkdown(content.description).slice(0, 280))) : ''
+        )
+      );
+    }
+
+    if (type === 'campaign') {
+      const cpKey = action.id || action.key || '';
+      const cpTitle = content.title || action.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'card-field' }, cpKey ? a({ href: `/campaigns/${encodeURIComponent(cpKey)}`, class: 'card-value user-link' }, cpTitle || cpKey) : span({ class: 'card-value' }, cpTitle || '')),
+          content.goal ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ':'), span({ class: 'card-value' }, `${new Set(all.filter(x => x && x.type === 'campaignSignature' && x.content && (x.content.target === cpKey || x.content.target === (action.rootId || cpKey))).map(x => x.author)).size} / ${content.goal}`)) : '',
+          content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.campaignCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
+          content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.statusLabel || 'Status') + ':'), span({ class: 'card-value' }, String(content.status).toUpperCase())) : '',
+          renderMediaBlob(content.text, null),
+          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderUrl(stripMediaMarkdown(content.text))) : ''
+        )
+      );
+    }
+
+    if (type === 'campaignUpdate') {
+      const targetId = String(content.target || '');
+      const parent = all.find(x => x && (x.id === targetId || x.key === targetId || x.rootId === targetId || x.tipId === targetId)) || null;
+      const parentContent = parent ? (parent.value?.content || parent.content || {}) : {};
+      const parentTitle = parentContent.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'reply-context' },
+            span({ class: 'reply-context-meta' },
+              a({ href: `/campaigns/${encodeURIComponent(targetId)}`, class: 'tag-link' }, i18n.emergencyLastUpdate || 'LAST UPDATE'),
+              parentTitle ? span(' ', a({ href: `/campaigns/${encodeURIComponent(targetId)}`, class: 'user-link' }, parentTitle)) : ''
+            )
+          ),
+          renderMediaBlob(content.text, null),
+          stripMediaMarkdown(content.text) ? div({ class: 'card-field' }, p({ class: 'forum-reply-text' }, ...renderUrl(stripMediaMarkdown(content.text)))) : ''
+        )
+      );
+    }
+
+    if (type === 'emergencyUpdate') {
+      const targetId = String(content.target || '');
+      const parent = all.find(x => x && (x.id === targetId || x.key === targetId || x.rootId === targetId || x.tipId === targetId)) || null;
+      const parentContent = parent ? (parent.value?.content || parent.content || {}) : {};
+      const parentTitle = parentContent.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'reply-context' },
+            span({ class: 'reply-context-meta' },
+              a({ href: `/emergencies/${encodeURIComponent(targetId)}`, class: 'tag-link' }, i18n.emergencyLastUpdate || 'LAST UPDATE'),
+              parentTitle ? span(' ', a({ href: `/emergencies/${encodeURIComponent(targetId)}`, class: 'user-link' }, parentTitle)) : ''
+            )
+          ),
+          renderMediaBlob(content.text, null),
+          stripMediaMarkdown(content.text) ? div({ class: 'card-field' }, p({ class: 'forum-reply-text' }, ...renderUrl(stripMediaMarkdown(content.text)))) : ''
+        )
+      );
+    }
+
+    if (type === 'wikiPage') {
+      const wikiKey = action.id || action.key || '';
+      const wikiTitle = content.title || action.title || '';
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'card-field' }, wikiKey ? a({ href: `/wiki/${encodeURIComponent(wikiKey)}`, class: 'card-value user-link' }, wikiTitle || wikiKey) : span({ class: 'card-value' }, wikiTitle || ''))
         )
       );
     }
@@ -1571,10 +1706,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           description ? div({ class: 'card-field' },
             span({ class: 'card-value' }, String(description).length > 220 ? String(description).slice(0, 220) + '…' : description)
           ) : null,
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.schoolCourseType || 'Course type') + ':'),
-            span({ class: 'card-value' }, String(visibility || '').toUpperCase() === 'INVITE' ? 'INVITE-ONLY' : (coursePaid ? 'PAID' : 'OPEN'))
-          ),
           coursePaid ? div({ class: 'card-field' },
             span({ class: 'card-label' }, (i18n.schoolPrice || 'Price (ECO)') + ':'),
             span({ class: 'card-value' }, `${Number(price).toFixed(2)} ECO`)
@@ -1665,7 +1796,13 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'parliamentProposal') {
-      const { title, description, method, status, voteId, createdAt } = content;
+      const { title, method, status, voteId, createdAt } = content;
+      const legacy = !content.campaignId ? String(content.description || '').match(/\n*\s*(\d+) signatures: \/campaigns\/(%[^\s]+\.sha256)\s*$/) : null;
+      const description = legacy ? String(content.description || '').slice(0, legacy.index).trim() : content.description;
+      const campaignId = content.campaignId || (legacy ? legacy[2] : '');
+      const liveSignatures = campaignId ? new Set(all.filter(x => x && x.type === 'campaignSignature' && x.content && x.content.target === campaignId).map(x => x.author)).size : 0;
+      const signatures = Math.max(liveSignatures, content.campaignId ? (Number(content.signatures) || 0) : (legacy ? Number(legacy[1]) || 0 : 0));
+      const goal = Number(content.goal) || 0;
 
       const methodUpper = String(
         i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
@@ -1674,7 +1811,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section parliament' },
           title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
-          description ? p({ class: 'card-section-text' }, description) : '',
+          renderMediaBlob(description, null),
+          stripMediaMarkdown(description) ? p({ class: 'card-section-text' }, ...renderUrl(stripMediaMarkdown(description))) : '',
+          campaignId ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ':'), span({ class: 'card-value' }, `${signatures}${goal > 0 ? ` / ${goal}` : ''}`)) : '',
+          campaignId ? div({ class: 'card-field' }, a({ href: `/campaigns/${encodeURIComponent(campaignId)}`, class: 'card-value user-link' }, title || campaignId)) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
           createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, new Date(createdAt).toLocaleString())) : '',
           voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
@@ -1839,7 +1979,9 @@ const FAV_KIND_BY_TYPE = {
   report: 'reports', votes: 'votes', poll: 'polls', market: 'market',
   housing: 'housing', job: 'jobs', project: 'projects', shop: 'shops',
   chat: 'chats', chatThread: 'chats', pad: 'pads', calendar: 'calendars',
-  map: 'maps', forum: 'forum', transfer: 'transfers', post: 'blogs'
+  map: 'maps', forum: 'forum', transfer: 'transfers', post: 'blogs',
+  wikiPage: 'wiki', emergency: 'emergencies', mailingList: 'mailing', logisticsRoute: 'logistics',
+  podcast: 'podcasts', podcastEpisode: 'podcasts', campaign: 'campaigns', campaignUpdate: 'campaigns'
 };
 
 const favOptsFor = (type, id, extras = {}) => {
@@ -1908,6 +2050,15 @@ function getViewDetailsAction(type, action) {
     case 'shopProduct': return `/shops/product/${id}`;
     case 'chat':       return `/chats/${id}`;
     case 'pad':        return `/pads/${id}`;
+    case 'wikiPage':   return `/wiki/${id}`;
+    case 'emergency':      return `/emergencies/${id}`;
+    case 'emergencyUpdate': return action.content && action.content.target ? `/emergencies/${encodeURIComponent(action.content.target)}` : '/emergencies';
+    case 'campaignUpdate': return action.content && action.content.target ? `/campaigns/${encodeURIComponent(action.content.target)}` : '/campaigns';
+    case 'mailingList': return `/mailing/${id}`;
+    case 'logisticsRoute': return `/logistics/${id}`;
+    case 'podcast': return `/podcasts/${id}`;
+    case 'podcastEpisode': return `/podcasts/episode/${id}`;
+    case 'campaign': return `/campaigns/${id}`;
     case 'calendar':   return `/calendars/${id}`;
     case 'housing':    return `/housing/${id}`;
     case 'job':        return `/jobs/${id}`;
@@ -1951,6 +2102,12 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'feed',      label: i18n.typeFeed },
     { type: 'chat',      label: i18n.typeChat },
     { type: 'pad',       label: i18n.typePad },
+    { type: 'wiki',      label: i18n.typeWiki },
+    { type: 'emergency',     label: i18n.typeEmergency },
+    { type: 'mailing',   label: i18n.typeMailingList },
+    { type: 'logistics', label: i18n.typeLogisticsRoute },
+    { type: 'podcast',   label: i18n.typePodcast },
+    { type: 'campaign',  label: i18n.typeCampaign },
     { type: 'forum',     label: i18n.typeForum },
     { type: 'map',       label: i18n.typeMap },
     { type: 'banking',   label: i18n.typeBanking },
@@ -1981,6 +2138,12 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     larp:       ['larpHousePost'],
     inhabitants:['about'],
     chat:       ['chat', 'chatThread'],
+    wiki:       ['wikiPage'],
+    mailing:    ['mailingList'],
+    emergency:  ['emergency', 'emergencyUpdate'],
+    logistics:  ['logisticsRoute'],
+    podcast:    ['podcast', 'podcastEpisode'],
+    campaign:   ['campaign', 'campaignUpdate'],
     industry:   ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation']
   };
   const ALLOWED_TYPES = new Set();
@@ -1989,6 +2152,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     if (GROUP_SUBTYPES[type]) GROUP_SUBTYPES[type].forEach(t => ALLOWED_TYPES.add(t));
     else ALLOWED_TYPES.add(type);
   }
+  const rawActions = actions;
   actions = actions.filter(action => ALLOWED_TYPES.has(action.type));
 
   let filteredActions;
@@ -2018,6 +2182,18 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action => action.type === 'torrent');
   } else if (filter === 'chat') {
     filteredActions = actions.filter(action => (action.type === 'chat' || action.type === 'chatThread') && action.type !== 'tombstone');
+  } else if (filter === 'wiki') {
+    filteredActions = actions.filter(action => action.type === 'wikiPage');
+  } else if (filter === 'emergency') {
+    filteredActions = actions.filter(action => action.type === 'emergency' || action.type === 'emergencyUpdate');
+  } else if (filter === 'mailing') {
+    filteredActions = actions.filter(action => action.type === 'mailingList');
+  } else if (filter === 'logistics') {
+    filteredActions = actions.filter(action => action.type === 'logisticsRoute');
+  } else if (filter === 'podcast') {
+    filteredActions = actions.filter(action => action.type === 'podcast' || action.type === 'podcastEpisode');
+  } else if (filter === 'campaign') {
+    filteredActions = actions.filter(action => action.type === 'campaign' || action.type === 'campaignUpdate');
   } else if (filter === 'industry') {
     filteredActions = actions.filter(action => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(action.type) && action.type !== 'tombstone');
   } else {
@@ -2128,11 +2304,11 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
         (() => {
           const ORDER = [
             'all', 'mine', 'recent', 'top',
-            'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts',
-            'votes', 'event', 'calendar', 'task', 'report',
-            'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
-            'post', 'feed', 'chat', 'pad', 'forum', 'map',
-            'audio', 'bookmark', 'document', 'image', 'torrent', 'video'
+            'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts', 'emergency',
+            'votes', 'event', 'calendar', 'task', 'report', 'campaign',
+            'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer', 'logistics',
+            'post', 'feed', 'chat', 'pad', 'wiki', 'mailing', 'forum', 'map',
+            'audio', 'bookmark', 'document', 'image', 'torrent', 'video', 'podcast'
           ];
           const byType = new Map(activityTypes.map(t => [t.type, t]));
           const placed = new Set(ORDER);
@@ -2163,7 +2339,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
           )
         )
       ),
-    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, actions, spreadMap, extras))
+    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, rawActions, spreadMap, extras))
     )
   );
 

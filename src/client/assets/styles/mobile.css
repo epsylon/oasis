@@ -1078,3 +1078,5 @@ a.create-button {
 .card-section-action .keep-reading-link {
   text-align: center !important;
 }
+.card-field.image-container,.card-field.video-container,.card-field.audio-container { justify-content: center !important; }
+.card-field.media-left { justify-content: flex-start !important; }

@@ -85,7 +85,7 @@ const renderPadStatusChip = (status, isClosed) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "mine", "recent", "open", "closed"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
+    ["all", "mine", "recent", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
       form({ method: "GET", action: "/pads" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" },
@@ -143,7 +143,7 @@ const renderCreateForm = (padToEdit, params) => {
       span(i18n.padTitleLabel || "Title"), require("../server/node_modules/hyperaxe").br(),
       input({ type: "text", name: "title", maxlength: "100", value: padToEdit ? padToEdit.title : "", placeholder: i18n.padTitlePlaceholder || "Enter pad title...", required: true }),
       require("../server/node_modules/hyperaxe").br(), require("../server/node_modules/hyperaxe").br(),
-      span(i18n.padStatusLabel || "Status"), require("../server/node_modules/hyperaxe").br(),
+      span(i18n.padTypeLabel), require("../server/node_modules/hyperaxe").br(),
       select({ name: "status" },
         ["OPEN", "INVITE-ONLY"].map(s =>
           option({ value: s, ...(padToEdit && padToEdit.status === s ? { selected: true } : {}) }, s)
@@ -159,7 +159,7 @@ const renderCreateForm = (padToEdit, params) => {
       }),
       require("../server/node_modules/hyperaxe").br(), require("../server/node_modules/hyperaxe").br(),
       span(i18n.padTagsLabel || "Tags"), require("../server/node_modules/hyperaxe").br(),
-      input({ type: "text", name: "tags", value: padToEdit ? padToEdit.tags.join(", ") : "", placeholder: i18n.padTagsPlaceholder || "tag1, tag2, ..." }),
+      input({ type: "text", name: "tags", value: padToEdit ? padToEdit.tags.join(", ") : "", placeholder: i18n.padTagsPlaceholder || "Enter tags separated by commas" }),
       require("../server/node_modules/hyperaxe").br(), require("../server/node_modules/hyperaxe").br(),
       button({ type: "submit", class: "create-button" }, padToEdit ? (i18n.padUpdate || "Update Pad") : (i18n.padCreate || "Create Pad"))
     )
@@ -395,7 +395,7 @@ exports.singlePadView = async (pad, entries, params) => {
         h2(i18n.padsTitle || "Pads"),
         p(i18n.padsDescription || "Manage collaborative encrypted text editors in your network.")
       ),
-      renderModeButtons("all")
+      renderModeButtons("all", false, (params && params.modesAvail) || null)
     ),
     section(div({ class: "tribe-details" }, padSide, padMain))
   )

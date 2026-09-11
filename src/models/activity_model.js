@@ -791,6 +791,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       else if (filter === 'industry')
         out = deduped.filter(a => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(a.type) && isVisible(a));
       else if (filter === 'pad') out = deduped.filter(a => a.type === 'pad' && (a.content || {}).status === 'OPEN');
+      else if (filter === 'wiki') out = deduped.filter(a => a.type === 'wikiPage' && isVisible(a));
+      else if (filter === 'emergency') out = deduped.filter(a => (a.type === 'emergency' || a.type === 'emergencyUpdate') && isVisible(a));
+      else if (filter === 'campaign') out = deduped.filter(a => (a.type === 'campaign' || a.type === 'campaignUpdate') && isVisible(a));
+      else if (filter === 'mailing') out = deduped.filter(a => a.type === 'mailingList' && isVisible(a));
+      else if (filter === 'logistics') out = deduped.filter(a => a.type === 'logisticsRoute' && isVisible(a));
+      else if (filter === 'podcast') out = deduped.filter(a => (a.type === 'podcast' || a.type === 'podcastEpisode') && isVisible(a));
       else if (filter === 'chat') out = deduped.filter(a => (a.type === 'chat' || a.type === 'chatThread') && isAllowedTribeActivity(a) && isVisible(a));
       else if (filter === 'calendar') out = deduped.filter(a => a.type === 'calendar' && (a.content || {}).status === 'OPEN');
       else if (filter === 'transfer') out = deduped.filter(a => a.type === 'transfer' && isVisible(a));

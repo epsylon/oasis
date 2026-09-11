@@ -251,7 +251,15 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
 exports.forumView = async (forums, currentFilter, params = {}) => {
   const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
   const emptyModForum = moduleIsEmpty(getFilteredForums(currentFilter || 'all', forums), currentFilter || 'all', 'all', params.q);
-  const presentCats = new Set((Array.isArray(forums) ? forums : []).map(f => f && f.category).filter(Boolean));
+  const censusForums = Array.isArray(params.censusList) ? params.censusList : (Array.isArray(forums) ? forums : []);
+  const presentCats = new Set(censusForums.map(f => f && f.category).filter(Boolean));
+  const dayAgoForum = Date.now() - 86400000;
+  const baseChipVisible = (mode) => {
+    if (mode === currentFilter || mode === 'all') return true;
+    if (mode === 'mine') return censusForums.some(f => String(f.author) === String(userId));
+    if (mode === 'recent') return censusForums.some(f => new Date(f.createdAt).getTime() >= dayAgoForum);
+    return censusForums.length > 0;
+  };
   return template(i18n.forumTitle,
     section(
       div({ class: 'tags-header module-header-line' },
@@ -260,7 +268,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
       ),
       div({ class: 'mode-buttons-row' },
         ...(emptyModForum ? [] : [
-        generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
+        generateFilterButtons(BASE_FILTERS.filter(baseChipVisible), currentFilter, '/forum', {
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,
           recent: i18n.forumFilterRecent,

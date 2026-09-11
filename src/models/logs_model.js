@@ -33,7 +33,11 @@ const ACTION_TYPES = new Set([
   'courtsCase', 'courtsEvidence', 'courtsAnswer', 'courtsVerdict',
   'courtsNomination', 'courtsNominationVote',
   'courtsSettlementProposal', 'courtsSettlementAccepted',
-  'tribeParliamentCandidature', 'tribeParliamentRule'
+  'tribeParliamentCandidature', 'tribeParliamentRule',
+  'wikiPage', 'emergency', 'emergencyConfirm', 'emergencyUpdate', 'mailingList',
+  'logisticsRoute', 'logisticsRating', 'logisticsOpinion',
+  'podcast', 'podcastEpisode', 'podcastOpinion', 'podcastPlay',
+  'campaign', 'campaignSignature', 'campaignUpdate', 'campaignOpinion'
 ]);
 
 const ACTION_PHRASES = {
@@ -91,7 +95,23 @@ const ACTION_PHRASES = {
   courtsSettlementProposal: 'proposed a courts settlement',
   courtsSettlementAccepted: 'accepted a courts settlement',
   tribeParliamentCandidature: 'stood for a tribe parliament',
-  tribeParliamentRule: 'contributed a tribe parliament rule'
+  tribeParliamentRule: 'contributed a tribe parliament rule',
+  wikiPage: 'edited a wiki page',
+  emergency: 'reported an emergency',
+  emergencyConfirm: 'confirmed an emergency',
+  emergencyUpdate: 'posted an emergency update',
+  mailingList: 'created a mailing list',
+  logisticsRoute: 'published a logistics route',
+  logisticsRating: 'rated a logistics route',
+  logisticsOpinion: 'gave an opinion on a route',
+  podcast: 'created a podcast',
+  podcastEpisode: 'published a podcast episode',
+  podcastOpinion: 'gave an opinion on a podcast',
+  podcastPlay: 'listened to a podcast episode',
+  campaign: 'started a campaign',
+  campaignSignature: 'signed a campaign',
+  campaignUpdate: 'posted a campaign update',
+  campaignOpinion: 'gave an opinion on a campaign'
 };
 
 const compact = (s, n = 200) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -375,6 +395,7 @@ module.exports = ({ cooler }) => {
     getLogById,
     listLogs,
     countLogs,
-    isAImodOn
+    isAImodOn,
+    FILTER_WINDOWS
   };
 };

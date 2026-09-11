@@ -216,7 +216,11 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     event: 'events',
     shopProduct: 'shops/product',
     housing: 'housing',
-    market: 'market'
+    market: 'market',
+    podcast: 'podcasts',
+    podcastEpisode: 'podcasts/episode',
+    campaign: 'campaigns',
+    logisticsRoute: 'logistics'
   };
   const detailHref = detailPaths[c.type]
     ? `/${detailPaths[c.type]}/${encodeURIComponent(item.key)}`
@@ -228,7 +232,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     div(
       { class: 'card-header activity-card-header' },
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
-        span({ class: 'pm-exposition-text' }, String(c.type || '').toUpperCase())
+        span({ class: 'pm-exposition-text' }, String(i18n['type' + String(c.type || '').charAt(0).toUpperCase() + String(c.type || '').slice(1)] || c.type || '').toUpperCase())
       ),
       renderContentActions(item.key, detailHref, { spread: spreadMap.get(item.key) || null, author: item.value.author })
     ),
@@ -271,7 +275,8 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   const contentFilters = [
     ['votes', 'event', 'task', 'report'],
     ['feed', 'project', 'industry', 'shopProduct', 'transfer'],
-    ['audio', 'bookmark', 'document', 'image', 'torrent', 'video']
+    ['audio', 'bookmark', 'document', 'image', 'torrent', 'video'],
+    ['podcast', 'podcastEpisode', 'campaign', 'logisticsRoute']
   ];
 
   let filteredItems = items.filter(item => {

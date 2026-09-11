@@ -177,6 +177,17 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
   );
 };
 
+const mediaChipFor = (filter, censusM) => (mode) => {
+  if (mode === filter) return true;
+  if (!Array.isArray(censusM)) return true;
+  if (mode === "top") return censusM.length > 0;
+  if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+  if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
+  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
+  return true;
+};
+
 exports.torrentsView = async (torrents, filter = "all", torrentId = null, params = {}) => {
   if (filter === "edit") params = { ...params, spreadWarning: await renderSpreadEditWarning(torrentId) };
   const title = i18n.torrentsTitle;
@@ -186,15 +197,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
 
   const list = safeArr(torrents);
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
-  const censusM = Array.isArray(params.censusList) ? params.censusList : list;
-  const mediaChip = (mode) => {
-    if (mode === filter) return true;
-    if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-    if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
-    if (mode === "favorites") return censusM.some((x) => x.isFavorite);
-    if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
-    return true;
-  };
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const torrentToEdit = torrentId ? list.find((t) => t.key === torrentId) : null;
 
   return template(
@@ -207,7 +210,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
         (() => {
           const { renderReachChip } = require('./clearnet_view');
           const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetTorrents);
-          return renderReachChip(isClearnet, i18n);
+          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
         })()
       ),
       div(
@@ -225,7 +228,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
             String(i18n.torrentFilterFavorites).toUpperCase()
           )] : []),
 
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterTop).toUpperCase()),
+          ...(mediaChip("top") ? [button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterTop).toUpperCase())] : []),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.torrentCreateButton)
         )
@@ -267,6 +270,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
 };
 
 exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], params = {}) => {
+  const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : null);
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
@@ -300,7 +304,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   const torrentSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n)
+      renderReachChip(isClearnet, i18n, `/c/torrents/${encodeURIComponent(torrentObj.key)}`)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(torrentObj.description)
@@ -354,11 +358,11 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase()),          button(
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase())] : []),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase())] : []),          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.torrentFilterFavorites).toUpperCase()
-          ),
+          )] : []),
 
           button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterTop).toUpperCase()),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.torrentCreateButton)

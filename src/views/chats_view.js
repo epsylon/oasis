@@ -47,7 +47,7 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "mine", "recent", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || !modesAvail || modesAvail[f] !== false).map(f =>
+    ["all", "mine", "recent", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
       form({ method: "GET", action: "/chats" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`chatFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
@@ -133,7 +133,7 @@ const renderChatForm = (filter, chat = {}, params = {}) => {
           option({ value: cat, ...((chat.category || "GENERAL") === cat ? { selected: true } : {}) }, catLabel(cat))
         )
       ), br(), br(),
-      span(i18n.chatStatusLabel || "Status"), br(),
+      span(i18n.chatTypeLabel), br(),
       select({ name: "status" },
         option({ value: "OPEN", ...((!chat.status || chat.status === "OPEN") ? { selected: true } : {}) }, i18n.chatStatusOpen),
         option({ value: "INVITE-ONLY", ...(chat.status === "INVITE-ONLY" ? { selected: true } : {}) }, i18n.chatStatusInviteOnly)
@@ -613,7 +613,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
         h2(i18n.chatsTitle),
         p(i18n.modulesChatsDescription)
       ),
-      renderModeButtons(filter || "all")
+      renderModeButtons(filter || "all", false, (params && params.modesAvail) || null)
     ),
     section(
       div({ class: "tribe-details" },

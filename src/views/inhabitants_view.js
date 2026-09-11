@@ -141,7 +141,7 @@ const renderCvFields = (user) => {
 const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) => {
   const isMe = user.id === currentUserId;
   const raw = user.visibilityPrefs || {};
-  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
+  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks','clearnetPodcasts'];
   const hasClearnet = raw.clearnet === true || clearnetSubKeys.some(k => raw[k] === true);
   const prefs = {
     activity: raw.activity === true,
@@ -205,7 +205,7 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
         filter === 'CVs' ? renderCvFields(user) : null,
         filter === 'SUGGESTED' && user.commonSkills?.length
           ? div({ class: 'suggested-meta' },
-              p(`${i18n.commonSkills || 'Common skills'}: ${user.commonSkills.join(', ')}`)
+              p(`${i18n.commonSkills || 'Common skills'}: ${user.commonSkills.slice(0, 8).join(', ')}`)
             )
           : null,
         filter === 'blocked' && user.isBlocked
@@ -363,7 +363,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
   const totalClaimed = typeof safe.totalClaimed === 'number' ? safe.totalClaimed : 0;
   const ecoAddress = typeof safe.ecoAddress === 'string' ? safe.ecoAddress : null;
   const rawPrefs = safe.visibilityPrefs || {};
-  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks'];
+  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks','clearnetPodcasts'];
   const prefs = {
     activity: rawPrefs.activity === true,
     device:   rawPrefs.device   === true,

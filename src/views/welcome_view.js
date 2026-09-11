@@ -125,7 +125,7 @@ const stepContent = (key, lang, profile) => {
     text: i18n.welcomeStepBackupText || "Your identity is a key file on this device.",
     extra: profile.id ? div({ class: "welcome-oasisid" }, a({ class: "user-link", href: `/author/${encodeURIComponent(profile.id)}` }, String(profile.id))) : null,
     warning: i18n.welcomeStepBackupWarning || "IF YOU LOSE IT, NOBODY CAN RECOVER IT FOR YOU.",
-    action: linkAction("/legacy", i18n.welcomeStepBackupAction || "Backup!")
+    action: linkAction("/backup", i18n.welcomeStepBackupAction || "Backup!")
   }
   return {
     title: i18n.welcomeStepGreetingTitle || "Send a \"Hello world!\"",

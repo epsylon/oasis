@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
+const { isContentVisibleTo } = require('./content_visibility');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -30,7 +31,13 @@ const KINDS = {
   maps: { type: 'map', href: (id) => `/maps/${encodeURIComponent(id)}` },
   calendars: { type: 'calendar', href: (id) => `/calendars/${encodeURIComponent(id)}` },
   forum: { type: 'forum', href: (id) => `/forum/${encodeURIComponent(id)}` },
-  school: { type: 'schoolCourse', href: (id) => `/school/course/${encodeURIComponent(id)}` }
+  school: { type: 'schoolCourse', href: (id) => `/school/course/${encodeURIComponent(id)}` },
+  wiki: { type: 'wikiPage', href: (id) => `/wiki/${encodeURIComponent(id)}` },
+  emergencies: { type: 'emergency', href: (id) => `/emergencies/${encodeURIComponent(id)}` },
+  mailing: { type: 'mailingList', href: (id) => `/mailing/${encodeURIComponent(id)}` },
+  logistics: { type: 'logisticsRoute', href: (id) => `/logistics/${encodeURIComponent(id)}` },
+  podcasts: { type: 'podcast', href: (id) => `/podcasts/${encodeURIComponent(id)}` },
+  campaigns: { type: 'campaign', href: (id) => `/campaigns/${encodeURIComponent(id)}` }
 };
 
 const KIND_BY_TYPE = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [v.type, k]));
@@ -70,6 +77,26 @@ const termsOf = (kind, c) => {
   return Array.from(new Set(out.map(norm).filter(t => t && !PLACEHOLDERS.has(t))));
 };
 
+const DESC_TERMS_MAX = 40;
+const descTerms = (c) => String(c.description || c.text || c.body || '')
+  .toLowerCase()
+  .split(/[^\p{L}\p{N}]+/u)
+  .filter(w => w.length >= 4 && !TITLE_STOPWORDS.has(w) && !/^\d+$/.test(w))
+  .slice(0, DESC_TERMS_MAX);
+
+const FAV_KIND = Object.fromEntries(Object.keys(KINDS).map(k => [k, k === 'votes' ? 'polls' : k]));
+
+const ALIKE_MIN_AFFINITY = 0.3;
+const RATED_MIN_OPINIONS = 3;
+const REASON_ORDER = ['related', 'content', 'mutual', 'following', 'supportsYou', 'tribe', 'alike', 'cv', 'pinned', 'rated', 'near'];
+
+const opinionsTotalOf = (c) => {
+  const ops = c && typeof c.opinions === 'object' && c.opinions ? c.opinions : {};
+  let total = 0;
+  for (const v of Object.values(ops)) total += Number(v) || 0;
+  return total;
+};
+
 const titleOf = (kind, c, author) => {
   if (kind === 'inhabitants') return c.name || author || '';
   return c.title || c.name || c.question || c.concept || '';
@@ -82,11 +109,11 @@ const jaccard = (a, b) => {
   return { score: union > 0 ? common.length / union : 0, common };
 };
 
-module.exports = ({ cooler }) => {
+module.exports = ({ cooler, favoriteIdsFor = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const DATA_TYPES = [...Object.values(KINDS).map(v => v.type), 'tombstone'];
+  const DATA_TYPES = [...Object.values(KINDS).map(v => v.type), 'tombstone', 'contact', 'about'];
 
   const getAllMessages = async (ssbClient) => readTyped(ssbClient, DATA_TYPES, { limit: logLimit });
 
@@ -96,27 +123,52 @@ module.exports = ({ cooler }) => {
     const messages = await getAllMessages(ssbClient);
     const tomb = buildValidatedTombstoneSet(messages);
 
-    const latestByKey = new Map();
-    const replaced = new Set();
+    const candidates = new Map();
+    const parentOf = new Map();
+    const follows = new Map();
+    const followers = new Map();
+    const aboutTerms = new Set();
     for (const m of messages) {
       const v = m && m.value;
       const c = v && v.content;
       if (!c || typeof c !== 'object' || !c.type) continue;
+      if (c.type === 'contact') {
+        if (typeof c.contact !== 'string' || typeof c.following !== 'boolean') continue;
+        if (v.author === viewerId) follows.set(c.contact, c.following);
+        else if (c.contact === viewerId) followers.set(v.author, c.following);
+        continue;
+      }
+      if (c.type === 'about') {
+        if (v.author === viewerId && c.about === viewerId && typeof c.description === 'string') for (const t of descTerms(c)) aboutTerms.add(norm(t));
+        continue;
+      }
       if (tomb.has(m.key)) continue;
-      if (c.encryptedPayload || c.encryptedQuestion) continue;
       if (c.tribeId && c.type !== 'tribe') continue;
       const kind = KIND_BY_TYPE[c.type];
       if (!kind) continue;
-      if (typeof c.replaces === 'string') replaced.add(c.replaces);
-      latestByKey.set(m.key, { key: m.key, author: v.author, ts: v.timestamp || m.timestamp || 0, kind, c });
+      if (!isContentVisibleTo(c.type, c, viewerId, v.author)) continue;
+      if (typeof c.replaces === 'string') parentOf.set(m.key, c.replaces);
+      candidates.set(m.key, { key: m.key, author: v.author, ts: v.timestamp || m.timestamp || 0, kind, c });
+    }
+
+    const rootOf = (key) => {
+      const seen = new Set();
+      let cur = key;
+      while (parentOf.has(cur) && !seen.has(cur)) { seen.add(cur); cur = parentOf.get(cur); }
+      return cur;
+    };
+    const latestByRoot = new Map();
+    for (const cand of candidates.values()) {
+      const root = rootOf(cand.key);
+      const prev = latestByRoot.get(root);
+      if (!prev || cand.ts >= prev.ts) latestByRoot.set(root, { ...cand, key: root });
     }
 
     const nodes = [];
     const byAuthorCv = new Map();
-    for (const node of latestByKey.values()) {
-      if (replaced.has(node.key)) continue;
+    for (const node of latestByRoot.values()) {
       const coreTerms = termsOf(node.kind, node.c);
-      const extra = node.kind === 'inhabitants' ? [] : titleTerms(node.c).map(norm).filter(t => t && !PLACEHOLDERS.has(t));
+      const extra = node.kind === 'inhabitants' ? [] : [...titleTerms(node.c), ...descTerms(node.c)].map(norm).filter(t => t && !PLACEHOLDERS.has(t));
       const terms = Array.from(new Set([...coreTerms, ...extra]));
       if (!terms.length) continue;
       const entry = {
@@ -129,7 +181,10 @@ module.exports = ({ cooler }) => {
         coreTermSet: new Set(coreTerms),
         ts: node.ts,
         createdAt: node.c.createdAt || new Date(node.ts).toISOString(),
-        href: KINDS[node.kind].href(node.key, node.c)
+        href: KINDS[node.kind].href(node.key, node.c),
+        members: node.kind === 'tribes' && Array.isArray(node.c.members) ? node.c.members : null,
+        location: norm(node.c.location || ''),
+        opinionsTotal: opinionsTotalOf(node.c)
       };
       if (node.kind === 'inhabitants') {
         const prev = byAuthorCv.get(entry.author);
@@ -141,7 +196,26 @@ module.exports = ({ cooler }) => {
     }
     for (const cv of byAuthorCv.values()) nodes.push(cv);
 
-    return { viewerId, nodes, cvByAuthor: byAuthorCv };
+    const following = new Set([...follows.entries()].filter(([, on]) => on).map(([id]) => id));
+    const supporters = new Set([...followers.entries()].filter(([, on]) => on).map(([id]) => id));
+    return { viewerId, nodes, cvByAuthor: byAuthorCv, following, supporters, aboutTerms };
+  };
+
+  const favoriteIds = async () => {
+    if (typeof favoriteIdsFor !== 'function') return new Set();
+    const out = new Set();
+    await Promise.all(Object.values(FAV_KIND).map(async (k) => {
+      try { for (const id of await favoriteIdsFor(k)) out.add(String(id)); } catch (_) {}
+    }));
+    return out;
+  };
+
+  const diversify = (items) => {
+    const leaders = new Map();
+    for (const it of items) if (!leaders.has(it.kind)) leaders.set(it.kind, it);
+    const lead = new Set(leaders.values());
+    return [...leaders.values()].sort((x, y) => y.score - x.score || y.ts - x.ts)
+      .concat(items.filter(it => !lead.has(it)));
   };
 
   const MAX_ENTITIES = 400;
@@ -152,39 +226,128 @@ module.exports = ({ cooler }) => {
     href: n.href, createdAt: n.createdAt, ts: n.ts
   });
 
+  const buildProfile = async (graph) => {
+    const { viewerId, nodes, cvByAuthor, aboutTerms } = graph;
+    const use = nodes.slice(0, MAX_ENTITIES);
+    const favs = await favoriteIds();
+
+    const myTermSet = new Set();
+    const cvTerms = new Set();
+    const contentTerms = new Set();
+    const mineCv = cvByAuthor.get(viewerId);
+    if (mineCv) for (const t of mineCv.terms) { myTermSet.add(t); cvTerms.add(t); }
+    for (const t of aboutTerms) if (t && !PLACEHOLDERS.has(t)) myTermSet.add(t);
+    const tribeMates = new Set();
+    const pinnedTerms = new Set();
+    let myLocation = mineCv ? mineCv.location : '';
+    for (const n of use) {
+      if (String(n.author) === String(viewerId)) {
+        for (const t of n.terms) { myTermSet.add(t); contentTerms.add(t); }
+        if (!myLocation && n.location) myLocation = n.location;
+      }
+      if (favs.has(String(n.id))) for (const t of n.terms) { myTermSet.add(t); pinnedTerms.add(t); }
+      if (n.members && (String(n.author) === String(viewerId) || n.members.includes(viewerId))) for (const m of n.members) tribeMates.add(m);
+    }
+    tribeMates.delete(viewerId);
+
+    const df = new Map();
+    for (const n of use) for (const t of n.termSet) df.set(t, (df.get(t) || 0) + 1);
+    const total = use.length || 1;
+    const weightOf = (t) => Math.log(1 + total / (df.get(t) || 1));
+    return { use, myTermSet, cvTerms, contentTerms, pinnedTerms, tribeMates, myLocation, df, weightOf, total };
+  };
+
+  const affinitiesFor = (viewerId, { use, myTermSet, pinnedTerms, tribeMates, weightOf }) => {
+    const termsByAuthor = new Map();
+    for (const n of use) {
+      if (String(n.author) === String(viewerId)) continue;
+      if (!termsByAuthor.has(n.author)) termsByAuthor.set(n.author, new Set());
+      const set = termsByAuthor.get(n.author);
+      for (const t of n.termSet) set.add(t);
+    }
+    let myW = 0;
+    for (const t of myTermSet) myW += weightOf(t);
+    const byAuthor = new Map();
+    for (const [author, terms] of termsByAuthor) {
+      const common = [...terms].filter(t => myTermSet.has(t));
+      let commonW = 0;
+      for (const t of common) commonW += weightOf(t);
+      let theirW = 0;
+      for (const t of terms) theirW += weightOf(t);
+      const floor = Math.min(myW, theirW);
+      const score = floor > 0 ? Math.min(1, commonW / floor) : 0;
+      common.sort((x, y) => weightOf(y) - weightOf(x) || x.localeCompare(y));
+      const reasons = [];
+      if (tribeMates.has(String(author))) reasons.push('tribe');
+      if (common.some(t => pinnedTerms.has(t))) reasons.push('pinned');
+      byAuthor.set(author, { score, common, reasons });
+    }
+    for (const m of tribeMates) if (!byAuthor.has(m)) byAuthor.set(m, { score: 0, common: [], reasons: ['tribe'] });
+    return byAuthor;
+  };
+
   return {
     KINDS: Object.keys(KINDS),
 
+    async authorAffinities() {
+      const graph = await buildGraph();
+      const profile = await buildProfile(graph);
+      return { viewerId: graph.viewerId, byAuthor: affinitiesFor(graph.viewerId, profile), hasProfile: profile.myTermSet.size > 0 };
+    },
+
     async listMatches(filter = 'ALL', opts = {}) {
-      const { viewerId, nodes, cvByAuthor } = await buildGraph();
-      const use = nodes.slice(0, MAX_ENTITIES);
+      const graph = await buildGraph();
+      const { viewerId, following, supporters } = graph;
+      const profile = await buildProfile(graph);
+      const { use, myTermSet, cvTerms, contentTerms, pinnedTerms, tribeMates, myLocation, df, weightOf, total } = profile;
+      const affinity = affinitiesFor(viewerId, profile);
       const f = String(filter || 'ALL').toUpperCase();
 
-      const myTermSet = new Set();
-      const mineCv = cvByAuthor.get(viewerId);
-      if (mineCv) for (const t of mineCv.terms) myTermSet.add(t);
+      const expanded = new Set();
       for (const n of use) {
-        if (String(n.author) === String(viewerId)) for (const t of n.terms) myTermSet.add(t);
+        if (String(n.author) === String(viewerId)) continue;
+        if (![...n.termSet].some(t => myTermSet.has(t))) continue;
+        for (const t of n.termSet) if (!myTermSet.has(t)) expanded.add(t);
       }
-
-      const df = new Map();
-      for (const n of use) for (const t of n.termSet) df.set(t, (df.get(t) || 0) + 1);
-      const total = use.length || 1;
-      const weightOf = (t) => Math.log(1 + total / (df.get(t) || 1));
 
       let out = [];
       for (const n of use) {
+        if (!myTermSet.size) break;
         if (String(n.author) === String(viewerId)) continue;
         const common = [...n.termSet].filter(t => myTermSet.has(t));
-        if (!common.length) continue;
         let commonW = 0;
         for (const t of common) commonW += weightOf(t);
+        let indirectW = 0;
+        for (const t of n.termSet) if (!myTermSet.has(t) && expanded.has(t)) indirectW += weightOf(t);
         let itemW = 0;
         for (const t of n.termSet) itemW += weightOf(t);
-        const score = itemW > 0 ? Math.min(1, commonW / itemW) : 0;
-        if (score <= 0) continue;
+        const direct = itemW > 0 ? Math.min(1, commonW / itemW) : 0;
+        const indirect = itemW > 0 ? Math.min(1, indirectW / itemW) : 0;
+        let dfSum = 0;
+        for (const t of n.termSet) dfSum += (df.get(t) || 1) / total;
+        const connectivity = n.termSet.size ? dfSum / n.termSet.size : 0;
+        const base = 0.8 * direct + 0.15 * indirect + 0.05 * connectivity;
+        const ageDays = Math.max(0, (Date.now() - (n.ts || 0)) / 86400000);
+        const recency = 0.8 + 0.2 * Math.exp(-ageDays / 60);
+        const social = (following.has(String(n.author)) ? 0.1 : 0) + (tribeMates.has(String(n.author)) ? 0.05 : 0);
+        const score = Math.min(1, base * recency + social);
         common.sort((x, y) => weightOf(y) - weightOf(x) || x.localeCompare(y));
-        out.push({ ...strip(n), score, common, connections: common.length });
+        const author = String(n.author);
+        const flags = new Set();
+        if (!common.length && indirect > 0) flags.add('related');
+        if (common.some(t => contentTerms.has(t))) flags.add('content');
+        if (following.has(author) && supporters.has(author)) flags.add('mutual');
+        else if (following.has(author)) flags.add('following');
+        else if (supporters.has(author)) flags.add('supportsYou');
+        if (tribeMates.has(author)) flags.add('tribe');
+        const aff = affinity.get(n.author);
+        if (aff && aff.score >= ALIKE_MIN_AFFINITY) flags.add('alike');
+        if (common.some(t => cvTerms.has(t))) flags.add('cv');
+        if (common.some(t => pinnedTerms.has(t))) flags.add('pinned');
+        if (n.opinionsTotal >= RATED_MIN_OPINIONS) flags.add('rated');
+        if (myLocation && n.location && n.location === myLocation) flags.add('near');
+        const reasons = REASON_ORDER.filter(r => flags.has(r));
+        out.push({ ...strip(n), score, common, connections: common.length, reasons });
       }
 
       const anyMatches = out.length > 0;
@@ -204,16 +367,15 @@ module.exports = ({ cooler }) => {
       const q = norm(opts.q);
       if (q) out = out.filter(s => norm(s.title).includes(q) || s.common.some(t => t.includes(q)));
 
+      const present = new Set();
+      for (const s of out) for (const r of s.reasons) present.add(r);
+      const reasonsAvail = REASON_ORDER.filter(r => present.has(r));
+      const reason = String(opts.reason || '').trim();
+      if (reason && REASON_ORDER.includes(reason)) out = out.filter(s => s.reasons.includes(reason));
+
       if (f === 'RECENT') out.sort((x, y) => y.ts - x.ts || y.score - x.score);
       else out.sort((x, y) => y.score - x.score || y.ts - x.ts);
-
-      if (!out.length && KINDS[f.toLowerCase()]) {
-        const kind = f.toLowerCase();
-        let sugg = use.filter(n => n.kind === kind && String(n.author) !== String(viewerId));
-        if (q) sugg = sugg.filter(n => norm(n.title).includes(q));
-        sugg.sort((x, y) => y.ts - x.ts);
-        out = sugg.slice(0, 10).map(n => ({ ...strip(n), score: 0, common: [], connections: 0, suggested: true }));
-      }
+      if (f === 'ALL' || f === 'TOP') out = diversify(out);
 
       return {
         matches: out.slice(0, MAX_PAIRS),
@@ -221,7 +383,9 @@ module.exports = ({ cooler }) => {
         hasProfile: myTermSet.size > 0,
         myTerms: [...myTermSet],
         kindsAvail,
-        anyMatches
+        anyMatches,
+        reasonsAvail,
+        reason: reasonsAvail.includes(reason) ? reason : ''
       };
     },
 

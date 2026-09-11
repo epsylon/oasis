@@ -5,6 +5,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { template, selectedLanguage, i18n, setLanguage } = require('./main_views');
 const i18nBase = require("../client/assets/translations/i18n");
 const { WORKFLOWS, currentWorkflow } = require('../models/workflows_model');
+const { renderVerificationReport } = require('./backup_view');
 
 const snhUrl = "https://wiki.solarnethub.com/socialnet/overview";
 
@@ -19,7 +20,7 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "" }) => {
+const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "", verification = null }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -398,6 +399,14 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ) : null,
+    section(
+      div({ class: "tags-header" },
+        h2(i18n.verificationTitle),
+        p(i18n.verificationDescription),
+        form({ action: "/settings/verify", method: "post" }, button({ type: "submit" }, i18n.verificationRun)),
+        verification && verification.error ? p({ class: "backup-check-bad" }, verification.error) : renderVerificationReport(verification)
+      )
+    ),
     section(
       div({ class: "tags-header" },
         h2(i18n.indexes),
