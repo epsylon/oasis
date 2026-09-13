@@ -55,19 +55,21 @@ Nothing is ever deleted by a restore. It only appends what is missing.
 
 ## Moving to a new device (the order matters)
 
-SSB feeds are hash chains: every message links to the previous one of the same author. A device that has published *anything* with your identity has started its own chain, and a backup of the real chain can no longer be applied on top of it. The result is a "fork": the same identity with two different histories, and your other devices and the network will only ever accept one of them.
+In Oasis every message you publish links to the one you published before, forming a chain that only you can extend. A device that has published *anything* with your identity has started its own chain, and a backup of the real chain can no longer be applied on top of it. The result is a "fork": the same identity with two different histories, and your other devices and the network will only ever accept one of them.
 
-Do it in this order:
+That is why the backup goes in **before** the key, not after:
 
-1. Install Oasis on the new device and open it once.
-2. **RESTORE BACKUP › Import keys** (or place the recovery-kit secret in `~/.ssb/secret`).
-3. Restart Oasis.
-4. **RESTORE BACKUP › Restore backup** with your `.oasisbk` copy, *before* editing your profile, following anyone or publishing anything.
+1. Install Oasis on the new device and open it once. It creates an identity of its own, which you are about to replace.
+2. **RESTORE BACKUP › Restore backup** with your `.oasisbk` copy. Your old feed lands in the log while that identity is still a stranger, so nothing can collide with it.
+3. **RESTORE BACKUP › Import keys** (or place the recovery-kit secret in `~/.ssb/secret`).
+4. Restart Oasis. You are now yourself, and your history is already underneath you.
 5. Check **Settings › Verification**: your feed should show no gaps, no broken links and no forks.
 
-If the summary shows **Diverged** messages for your own identity, step 4 came too late: the device already published on its own. The only clean way out is to remove this device's `~/.ssb`, and start again from step 1 with the same key file.
+Doing it the other way round leaves a window where Oasis is running as you with an empty log. Anything published in that window becomes message number one of your feed, and the copy no longer fits.
 
-Without a full backup, steps 1 to 3 are still enough to get your identity back; the content then arrives from the network as the pubs and friends that replicate you reconnect. That can take a while and only brings back what they still hold, which is why the full backup exists.
+If the summary shows **Diverged** messages for your own identity, that window caught you. The only clean way out is to remove this device's `~/.ssb` and start again from step 1.
+
+Without a full backup, importing the key is still enough to get your identity back; the content then arrives from the network as the pubs and friends that replicate you reconnect. That can take a while and only brings back what they still hold, which is why the full backup exists.
 
 ## Checking a copy or a device
 

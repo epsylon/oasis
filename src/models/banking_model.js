@@ -498,9 +498,21 @@ module.exports = ({ services } = {}) => {
     });
   }
 
+async function ownFeedSeq(ssb) {
+  return new Promise((res) => {
+    try {
+      pull(
+        ssb.createUserStream({ id: ssb.id, reverse: true, limit: 1 }),
+        pull.collect((err, msgs) => res(err || !msgs || !msgs.length ? 0 : (msgs[0].value && msgs[0].value.sequence) || 0))
+      );
+    } catch (_) { res(0); }
+  });
+}
+
 async function publishKarmaScore(userId, karmaScore) {
   const ssb = await openSsb();
   if (!ssb || !ssb.publish) return false;
+  if (!(await ownFeedSeq(ssb))) return false;
   const timestamp = new Date().toISOString();
   const content = { type: "karmaScore", karmaScore, userId, timestamp };
   return new Promise((resolve, reject) => {

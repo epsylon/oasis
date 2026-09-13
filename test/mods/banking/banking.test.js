@@ -32,6 +32,19 @@ describe('banking: address management (no RPC)', (t) => {
   });
 });
 
+describe('banking: a restored identity is not disturbed', (t) => {
+  t('karma is never published onto an empty feed', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    eq(net.log.length, 0, 'the feed starts empty, as it does right after importing keys');
+    await A.use('banking').getUserEngagementScore(A.keypair.id);
+    eq(net.log.length, 0, 'looking at your own profile publishes nothing before you have a history');
+    A.node.publish({ type: 'post', text: 'my first message' }, () => {});
+    const before = net.log.length;
+    await A.use('banking').getUserEngagementScore(A.keypair.id);
+    ok(net.log.length >= before, 'and once there is a history the score may be published');
+  });
+});
+
 describe('banking: claims and epochs (no RPC)', (t) => {
   t('hasClaimedThisMonth returns boolean', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
