@@ -296,7 +296,9 @@ models.about = {
       key: "publicWebHosting",
       feedId,
     });
-    return result === true;
+    if (result === true) return true;
+    const prefs = await getAbout({ key: "visibilityPrefs", feedId }).catch(() => null);
+    return !!(prefs && typeof prefs === 'object' && prefs.clearnet === true);
   },
   deviceSource: async (feedId) => {
     const result = await getAbout({ key: "deviceSource", feedId });

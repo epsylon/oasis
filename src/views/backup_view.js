@@ -1,4 +1,4 @@
-const { div, h2, h3, p, section, button, form, a, span, br, hr, input, label, select, option, pre, img, ul, li, strong } = require("../server/node_modules/hyperaxe");
+const { div, h2, h3, p, section, button, form, a, span, br, hr, input, label, select, option, pre, img, ul, li, strong, progress } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const crypto = require("crypto");
@@ -77,14 +77,40 @@ const renderFullBackup = (options) => {
   );
 };
 
-const renderRestore = (restored) =>
+const restoreSummary = (r) =>
+  `${i18n.backupRestoredMessages}: ${r.messages} · ${i18n.backupRestoredSkipped}: ${r.skipped} · ${i18n.backupRestoredBlobs}: ${r.blobs}${r.forked ? ` · ${i18n.backupRestoredForked}: ${r.forked}` : ""}${r.failed ? ` · ${i18n.backupRestoredFailed}: ${r.failed}` : ""}`;
+
+const renderRestoreStatus = (job) => {
+  if (!job) return null;
+  if (job.running) {
+    const elapsed = Math.max(0, Math.round((Date.now() - Date.parse(job.startedAt)) / 1000));
+    const pct = Math.max(0, Math.min(100, Number((job.progress || {}).percent) || 0));
+    return div({ class: "backup-restored" },
+      p({ class: "backup-warning" }, `⏳ ${i18n.backupRestoreRunning}`),
+      div({ class: "indexing-progress-block" },
+        progress({ value: String(pct), max: "100", class: "indexing-progress" }),
+        p({ class: "indexing-percent" }, strong(`${pct.toFixed(1)} %`))
+      ),
+      p(`${restoreSummary(job.progress || {})} · ${i18n.backupRestoreElapsed}: ${elapsed}s`)
+    );
+  }
+  if (job.error) return div({ class: "backup-restored" }, p({ class: "backup-warning" }, `✗ ${i18n.backupRestoreFailedLine} ${job.error}`));
+  const r = job.result || {};
+  const forks = r.forks || [];
+  const mine = forks.some(f => f.mine);
+  const errors = r.errors || [];
+  return div({ class: "backup-restored" },
+    p(`✓ ${i18n.backupRestoredLine} ${restoreSummary(r)}`),
+    mine ? p({ class: "backup-warning" }, `⚠ ${i18n.backupRestoreForkMine}`) : null,
+    !mine && forks.length ? p({ class: "backup-hint" }, i18n.backupRestoreForkOthers) : null,
+    errors.length ? p({ class: "backup-hint" }, `${i18n.backupRestoreErrors}: ${errors.map(e => `${e.reason} (×${e.count})`).join(" · ")}`) : null
+  );
+};
+
+const renderRestore = (job) =>
   div({ class: "backup-section" },
-    restored
-      ? div({ class: "backup-restored" },
-          p(`✓ ${i18n.backupRestoredLine} ${i18n.backupRestoredMessages}: ${restored.messages} · ${i18n.backupRestoredSkipped}: ${restored.skipped} · ${i18n.backupRestoredBlobs}: ${restored.blobs}${restored.failed ? ` · ${i18n.backupRestoredFailed}: ${restored.failed}` : ""}`)
-        )
-      : null,
-    form({ method: "POST", action: "/backup/import", enctype: "multipart/form-data" },
+    renderRestoreStatus(job),
+    job && job.running ? null : form({ method: "POST", action: "/backup/import", enctype: "multipart/form-data" },
       input({ type: "file", name: "uploadedFile", required: true, accept: ".oasisbk" }), br(), br(),
       p(i18n.backupRestorePassword),
       input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(),
@@ -100,13 +126,13 @@ const renderRestore = (restored) =>
     )
   );
 
-exports.backupView = async ({ type = "RECOVERY", options = null, restored = null, kit = null } = {}) => {
+exports.backupView = async ({ type = "RECOVERY", options = null, restoreJob = null, kit = null } = {}) => {
   const t = normalizeType(type);
   const body = t === "RECOVERY" ? renderRecovery(kit)
     : t === "KEYS" ? renderKeysExport()
     : t === "FULL" ? renderFullBackup(options)
-    : renderRestore(restored);
-  return template(
+    : renderRestore(restoreJob);
+  const html = template(
     i18n.backupTitle,
     section(
       div({ class: "tags-header module-header-line" }, h2(i18n.backupTitle), p(i18n.backupDescription)),
@@ -116,6 +142,7 @@ exports.backupView = async ({ type = "RECOVERY", options = null, restored = null
       div({ class: "div-center backup-wrap" }, body)
     )
   );
+  return restoreJob && restoreJob.running ? html.replace('</head>', '<meta http-equiv="refresh" content="5"></head>') : html;
 };
 
 exports.recoveryKitView = async (kit) => exports.backupView({ type: "RECOVERY", kit });

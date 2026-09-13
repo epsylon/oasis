@@ -23,7 +23,7 @@ const { renderCommentsSection: renderSharedCommentsSection } = require("./commen
 const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 
 const userId = config.keys.id;
 
@@ -308,7 +308,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(torrentObj.description)
-      ? p({ class: "tribe-side-description" }, ...renderUrl(torrentObj.description))
+      ? p({ class: "tribe-side-description" }, ...renderStyledText(torrentObj.description))
       : null,
     tagsNode,
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null

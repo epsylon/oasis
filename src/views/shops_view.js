@@ -3,7 +3,7 @@ const { renderCommentsSection: renderSharedCommentsSection } = require("./commen
 const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
-const { renderUrl } = require("../backend/renderUrl")
+const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { renderReachChip, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderRichText: cnRichText, renderKindTag: cnKindTag } = require("./clearnet_view")
@@ -108,7 +108,7 @@ const renderProductCard = (product, shopId, returnTo) => {
       product.shopTitle ? p(a({ href: `/shops/${encodeURIComponent(shopId)}`, class: "user-link" }, product.shopTitle)) : null,
       h2(a({ href: productUrl }, product.title || i18n.shopProductUntitled)),
       renderStarRating(product.opinions, voterCount),
-      product.description ? p(...renderUrl(product.description)) : null,
+      product.description ? p(...renderStyledText(product.description)) : null,
       div({ class: "shop-product-price" }, `${Number(product.price || 0).toFixed(6)} ECO`),
       div({ class: "confirmations-block stock-block" },
         div({ class: "card-field" },
@@ -285,7 +285,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         : null
     ),
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    shop.description ? p({ class: "tribe-side-description" }, ...renderUrl(shop.description)) : null,
+    shop.description ? p({ class: "tribe-side-description" }, ...renderStyledText(shop.description)) : null,
     table({ class: "tribe-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.shopCreatedAt || "CREATED"),
@@ -293,7 +293,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       ),
       shop.location ? tr(
         td({ class: "tribe-info-label" }, i18n.shopLocation),
-        td({ class: "tribe-info-value", colspan: "3" }, ...renderUrl(shop.location))
+        td({ class: "tribe-info-value", colspan: "3" }, ...renderStyledText(shop.location))
       ) : null,
       tr(
         td({ class: "tribe-info-label" }, i18n.shopStatus || "STATUS"),
@@ -301,7 +301,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       ),
       shop.url ? tr(
         td({ class: "tribe-info-label" }, i18n.shopUrl),
-        td({ class: "tribe-info-value", colspan: "3" }, ...renderUrl(shop.url))
+        td({ class: "tribe-info-value", colspan: "3" }, ...renderStyledText(shop.url))
       ) : null,
       tr(
         td({ class: "tribe-info-value", colspan: "4" }, userLink(shop.author))
@@ -461,7 +461,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
     product.description
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.marketItemDescription || i18n.shopDescription),
-          p({ class: "tribe-side-description" }, ...renderUrl(product.description))
+          p({ class: "tribe-side-description" }, ...renderStyledText(product.description))
         )
       : null,
     !isAuthor && stock > 0

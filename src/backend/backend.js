@@ -143,7 +143,8 @@ const sendErrorPage = (ctx, message, { title, status } = {}) => {
       }
     }
   } catch (_) {}
-  if (backUrl && ctx.method !== 'GET' && (!status || status === 400 || status === 403 || status === 404) && !backUrl.pathname.startsWith('/c/')) {
+  const backIsPage = !!backUrl && (() => { try { return !!router.match(backUrl.pathname, 'GET').route; } catch (_) { return false; } })();
+  if (backUrl && backIsPage && ctx.method !== 'GET' && (!status || status === 400 || status === 403 || status === 404) && !backUrl.pathname.startsWith('/c/')) {
     backUrl.searchParams.set('error', String(message || ''));
     ctx.redirect(backUrl.pathname + backUrl.search + backUrl.hash);
     return;
@@ -368,10 +369,11 @@ const resolveExternalBaseUrl = (ctx) => {
 const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
     const MAX_PER_SECTION = max;
   const items = { shops: [], jobs: [], events: [], projects: [], posts: [], audios: [], videos: [], images: [], documents: [], torrents: [], podcasts: [], school: [] };
-  const mediaItemMapper = (m, { withImage = false } = {}) => ({
+  const mediaItemMapper = (m, { withImage = false, mediaKind = null } = {}) => ({
     id: m.key,
     title: m.title || 'Untitled',
     image: withImage ? (m.url || null) : null,
+    media: mediaKind && m.url ? { kind: mediaKind, blobId: m.url } : null,
     snippet: m.description || '',
     meta: m.createdAt ? new Date(m.createdAt).toISOString().slice(0, 10) : ''
   });
@@ -467,13 +469,13 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
   if (prefs.clearnetAudios) {
     try {
       const audios = await audiosModel.listAll('all').catch(() => []);
-      items.audios = (audios || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m));
+      items.audios = (audios || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m, { mediaKind: 'audio' }));
     } catch (_) {}
   }
   if (prefs.clearnetVideos) {
     try {
       const videos = await videosModel.listAll('all').catch(() => []);
-      items.videos = (videos || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m));
+      items.videos = (videos || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m, { mediaKind: 'video' }));
     } catch (_) {}
   }
   if (prefs.clearnetImages) {
@@ -501,6 +503,7 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         id: c.id,
         title: c.title || 'Untitled',
         image: c.cover && c.cover.kind === 'image' ? c.cover.blobId : null,
+        media: (() => { const eps = Array.isArray(c.episodes) ? c.episodes : []; const last = eps[eps.length - 1]; return last && last.media && last.media.blobId ? { kind: last.media.kind === 'video' ? 'video' : 'audio', blobId: last.media.blobId } : null; })(),
         snippet: c.description || '',
         meta: c.createdAt ? new Date(c.createdAt).toISOString().slice(0, 10) : ''
       }));
@@ -535,6 +538,23 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
   return items;
 };
 const QR_ACTION_BASE = 'http://localhost:3000';
+const sendFeedQr = async (ctx) => {
+  const feedId = decodeURIComponent(ctx.params.feedId || '');
+  const reqSize = parseInt(ctx.query.size, 10);
+  const width = Number.isFinite(reqSize) ? Math.max(64, Math.min(512, reqSize)) : 240;
+  try {
+    const QRCode = require('../server/node_modules/qrcode');
+    const targetUrl = `${QR_ACTION_BASE}/qr-action/follow/${encodeURIComponent(feedId)}`;
+    const buf = await QRCode.toBuffer(targetUrl, { type: 'png', width, margin: 1, errorCorrectionLevel: 'M' });
+    ctx.set('Content-Type', 'image/png');
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = buf;
+  } catch (e) {
+    ctx.status = 500;
+    ctx.body = '';
+  }
+  };
+
 const QR_JOIN_MODS = {
   school:    { mod: 'schoolMod',    join: async (code) => { const { courseId } = await schoolModel.joinByInvite(code); return `/school/course/${encodeURIComponent(courseId)}`; } },
   forum:     { mod: 'forumMod',     join: async (code) => { const { forumId } = await forumModel.joinByInvite(code); return `/forum/${encodeURIComponent(forumId)}`; } },
@@ -657,6 +677,7 @@ Alternatively, you can set the default port in ${defaultConfigFile} with:
   } else if (err && (err.name === 'OpenError' || (typeof err.message === 'string' && /Resource temporarily unavailable/i.test(err.message) && /\.ssb\/.*LOCK/i.test(err.message)))) {
     console.log("");
     console.log("Another Oasis instance is already running on this machine. Close the other instance (or kill the process) and try again.");
+    console.log(`Detail: ${String((err && err.message) || err)}`);
     console.log("");
     process.exit(1);
   } else {
@@ -975,13 +996,19 @@ const notifyEmergencyWatchers = async (rootId, subject) => {
   } catch (_) {}
 };
 
+const subscribeOnFirstTouch = async (target, scope) => {
+  try {
+    if (await subscriptionsModel.myState(target)) return;
+    await subscriptionsModel.setSubscription(target, scope, true);
+  } catch (_) {}
+};
+
 const notifyWikiWatchers = async (rootId, subject, tribeId = null) => {
   try {
     const page = await wikiModel.getPage(rootId, { tribeId });
     if (!page) return;
     const actor = getViewerId();
-    const editors = Array.isArray(page.versions) ? page.versions.map(v => v && v.author).filter(Boolean) : [];
-    const recipients = Array.from(new Set([...(await listRecipientsFor({ target: page.id, owner: page.author })), ...editors])).filter(id => String(id) !== String(actor));
+    const recipients = (await listRecipientsFor({ target: page.id, owner: page.author })).filter(id => String(id) !== String(actor));
     if (!recipients.length) return;
     const href = `/wiki/${encodeURIComponent(page.id)}${page.tribeId ? `?tribeId=${encodeURIComponent(page.tribeId)}` : ''}`;
     const verb = subject === 'WIKI_RESTORED' ? 'restored an earlier version of' : 'edited';
@@ -4522,23 +4549,6 @@ router
     ctx.set('Content-Disposition', `attachment; filename="${encodeURIComponent(feedId)}.asc"`);
     ctx.body = armored;
   })
-  .post("/profile/clearnet-toggle", koaBody(), async (ctx) => {
-    const myFeedId = await meta.myFeedId();
-    const current = await about.visibilityPrefs(myFeedId).catch(() => null) || {};
-    const subKeys = [
-      'clearnetShops', 'clearnetSchool', 'clearnetJobs', 'clearnetEvents', 'clearnetProjects',
-      'clearnetPosts', 'clearnetAudios', 'clearnetVideos', 'clearnetImages',
-      'clearnetDocuments', 'clearnetTorrents', 'clearnetBookmarks', 'clearnetPodcasts'
-    ];
-    const anyEnabled = subKeys.some(k => current[k] === true) || current.clearnet === true;
-    const nextOn = !anyEnabled;
-    const nextPrefs = { ...current, clearnet: nextOn };
-    for (const k of subKeys) nextPrefs[k] = nextOn;
-    try {
-      await post.publishProfileEdit({ visibilityPrefs: nextPrefs });
-    } catch (e) { console.error('profile/clearnet-toggle:', e.message); }
-    ctx.redirect('/profile');
-  })
   .get("/json/:message", async (ctx) => {
     if (config.public) {
       throw new Error(
@@ -4589,22 +4599,8 @@ router
     }
     ctx.body = buffer;
   })
-  .get("/qr/:feedId", async (ctx) => {
-    const feedId = decodeURIComponent(ctx.params.feedId || '');
-    const reqSize = parseInt(ctx.query.size, 10);
-    const width = Number.isFinite(reqSize) ? Math.max(64, Math.min(512, reqSize)) : 240;
-    try {
-      const QRCode = require('../server/node_modules/qrcode');
-      const targetUrl = `${QR_ACTION_BASE}/qr-action/follow/${encodeURIComponent(feedId)}`;
-      const buf = await QRCode.toBuffer(targetUrl, { type: 'png', width, margin: 1, errorCorrectionLevel: 'M' });
-      ctx.set('Content-Type', 'image/png');
-      ctx.set('Cache-Control', 'no-store');
-      ctx.body = buf;
-    } catch (e) {
-      ctx.status = 500;
-      ctx.body = '';
-    }
-  })
+  .get("/qr/:feedId", sendFeedQr)
+  .get("/c/qr/:feedId", sendFeedQr)
   .get("/qr-invite/tribe/:id", async (ctx) => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.status = 404; ctx.body = ''; return; }
     try {
@@ -5672,11 +5668,11 @@ router
       const q = ctx.query || {};
       const rawMods = q.modules === undefined ? [] : (Array.isArray(q.modules) ? q.modules : [q.modules]);
       const opts = { scope: q.scope || 'all', blobs: q.blobs === undefined ? '1' : q.blobs, modules: rawMods, since: q.since || '' };
-      const type = String(q.type || (q.restored !== undefined ? 'RESTORE' : 'RECOVERY')).toUpperCase();
-      const restored = q.restored !== undefined ? { messages: Number(q.restored) || 0, skipped: Number(q.skipped) || 0, blobs: Number(q.blobs_added) || 0, failed: Number(q.failed) || 0 } : null;
+      const type = String(q.type || 'RECOVERY').toUpperCase();
+      const restoreJob = type === 'RESTORE' ? backupModel.restoreStatus() : null;
       const kit = type === 'RECOVERY' && isLoopbackRequest(ctx) ? backupModel.recoveryKit() : null;
-      if (kit) ctx.set('Cache-Control', 'no-store');
-      ctx.body = await backupView({ type, options: { scope: opts.scope, sinceTs: opts.since ? Date.parse(opts.since) || null : null }, restored, kit });
+      if (kit || restoreJob) ctx.set('Cache-Control', 'no-store');
+      ctx.body = await backupView({ type, options: { scope: opts.scope, sinceTs: opts.since ? Date.parse(opts.since) || null : null }, restoreJob, kit });
     } catch (error) { sendErrorPage(ctx, error.message); }
   })
   .get('/backup/recovery-kit', async (ctx) => {
@@ -8183,8 +8179,11 @@ router
     const uploadedFile = ctx.request.files?.uploadedFile, pw = ctx.request.body.importPassword;
     if (!uploadedFile) return ctx.redirect('/backup');
     if (!pw || pw.length < 32) return ctx.redirect('/backup');
-    try { await backupModel.importKeys({ filePath: uploadedFile.filepath, password: pw }); ctx.redirect('/backup'); }
-    catch (error) { sendErrorPage(ctx, error.message, { status: 400 }); }
+    try {
+      const imported = await backupModel.importKeys({ filePath: uploadedFile.filepath, password: pw });
+      try { onboardingModel.adopt(imported.id); } catch (_) {}
+      ctx.redirect('/backup');
+    } catch (error) { sendErrorPage(ctx, error.message, { status: 400 }); }
   })
   .post('/backup/export', koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
@@ -8208,12 +8207,12 @@ router
   .post('/backup/import', koaBody({ multipart: true, formidable: { keepExtensions: true, uploadDir: os.tmpdir(), maxFileSize: 4 * 1024 * 1024 * 1024 } }), async (ctx) => {
     if (!checkMod(ctx, 'backupMod')) return ctx.redirect('/modules');
     const uploadedFile = ctx.request.files?.uploadedFile, pw = ctx.request.body.importPassword;
-    if (!uploadedFile || !pw || String(pw).length < 32) return ctx.redirect('/backup');
-    try {
-      const res = await backupModel.restoreBackup({ filePath: uploadedFile.filepath, password: String(pw) });
-      try { activityModel.invalidateCache(); } catch (_) {}
-      ctx.redirect(`/backup?restored=${res.messages}&skipped=${res.skipped}&blobs_added=${res.blobs}&failed=${res.failed}`);
-    } catch (error) { sendErrorPage(ctx, error.message, { status: 400 }); }
+    if (!uploadedFile || !pw || String(pw).length < 32) return ctx.redirect('/backup?type=RESTORE');
+    const current = backupModel.restoreStatus();
+    if (current && current.running) { try { fs.unlinkSync(uploadedFile.filepath); } catch (_) {} return ctx.redirect('/backup?type=RESTORE'); }
+    const job = backupModel.startRestore({ filePath: uploadedFile.filepath, password: String(pw) });
+    job.promise.then(() => { try { activityModel.invalidateCache(); } catch (_) {} });
+    ctx.redirect('/backup?type=RESTORE');
   })
 
   .post('/trending/:contentId/:category', async (ctx) => {
@@ -10166,8 +10165,22 @@ router
     let body = stripDangerousTags(String(b.body || ""));
     const blobMarkdown = await handleBlobUpload(ctx, 'blob');
     if (blobMarkdown) body += blobMarkdown;
-    const res = await wikiModel.createPage({ title: stripDangerousTags(String(b.title || "")), body, tags: b.tags || "", editPolicy: String(b.status || b.editPolicy || "OPEN"), tribeId });
-    ctx.redirect(`/wiki/${encodeURIComponent(res.key)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`);
+    try {
+      const title = stripDangerousTags(String(b.title || ""));
+      const res = await wikiModel.createPage({ title, body, tags: b.tags || "", editPolicy: String(b.status || b.editPolicy || "OPEN"), tribeId });
+      if (res.existing) {
+        const censusList = await wikiModel.listPages({ tribeId, filter: 'all' }).catch(() => []);
+        const tribe = tribeId ? await tribesModel.getTribeById(tribeId).catch(() => null) : null;
+        const draft = { title: title.slice(0, 100), body, tags: stripDangerousTags(String(b.tags || "")), status: String(b.status || "OPEN"), summary: "" };
+        ctx.status = 409;
+        ctx.body = await wikiView([], 'create', { draft, tribe, tribeId, censusList, returnTo: String(b.returnTo || ""), notice: require('../views/main_views').i18n.wikiDuplicateTitle });
+        return;
+      }
+      ctx.redirect(`/wiki/${encodeURIComponent(res.key)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`);
+    } catch (e) {
+      if (isSsbTooLargeError(e)) { sendErrorPage(ctx, require('../views/main_views').i18n.publishTooLong || 'Your post is too long. Please shorten it.', { status: 400 }); return; }
+      sendErrorPage(ctx, e.message || String(e), { status: 400 });
+    }
   })
   .post("/wiki/preview", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'wikiMod')) { ctx.redirect('/modules'); return; }
@@ -10195,18 +10208,26 @@ router
     if (blobMarkdown) body += blobMarkdown;
     try {
       const res = await wikiModel.updatePage(ctx.params.id, { title: stripDangerousTags(String(b.title || "")), body, tags: b.tags || "", editPolicy: b.status || b.editPolicy, summary: stripDangerousTags(String(b.summary || "")) });
+      if (String(res.author || '') !== String(getViewerId())) await subscribeOnFirstTouch(res.rootId, 'wiki');
       await notifyWikiWatchers(res.rootId, 'WIKI_EDITED', b.tribeId || null);
       ctx.redirect(`/wiki/${encodeURIComponent(res.rootId)}${b.tribeId ? `?tribeId=${encodeURIComponent(b.tribeId)}` : ""}`);
-    } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); }
+    } catch (e) {
+      if (isSsbTooLargeError(e)) { sendErrorPage(ctx, require('../views/main_views').i18n.publishTooLong || 'Your post is too long. Please shorten it.', { status: 400 }); return; }
+      sendErrorPage(ctx, e.message || String(e), { status: 403 });
+    }
   })
   .post("/wiki/restore/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'wikiMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
     try {
       const res = await wikiModel.restoreVersion(ctx.params.id, String(b.version || ""));
+      if (String(res.author || '') !== String(getViewerId())) await subscribeOnFirstTouch(res.rootId, 'wiki');
       await notifyWikiWatchers(res.rootId, 'WIKI_RESTORED', b.tribeId || null);
       ctx.redirect(`/wiki/${encodeURIComponent(res.rootId)}${b.tribeId ? `?tribeId=${encodeURIComponent(b.tribeId)}` : ""}`);
-    } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); }
+    } catch (e) {
+      if (isSsbTooLargeError(e)) { sendErrorPage(ctx, require('../views/main_views').i18n.publishTooLong || 'Your post is too long. Please shorten it.', { status: 400 }); return; }
+      sendErrorPage(ctx, e.message || String(e), { status: 403 });
+    }
   })
   .post("/wiki/delete/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'wikiMod')) { ctx.redirect('/modules'); return; }

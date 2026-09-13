@@ -3,7 +3,7 @@ const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, render
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderMapEmbedWithZoom } = require("./maps_view")
-const { renderUrl } = require("../backend/renderUrl")
+const { renderStyledText } = require("../backend/renderStyledText")
 
 const userId = config.keys.id
 
@@ -233,7 +233,7 @@ const renderGlobalBlueprints = (blueprints, spreadMap = new Map()) => {
       p({ class: "industry-facility-line" }, span({ class: "industry-meta-label" }, `${i18n.industryFacility || "Facility"}: `), a({ href: `/industry/${encodeURIComponent(bp.facilityId)}` }, safeText(bp.facilityName))),
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/blueprint/${encodeURIComponent(bp.id)}` }, safeText(bp.name)))),
       bp.image ? renderMediaBlob(bp.image, { class: "post-image" }) : null,
-      bp.description ? p({ class: "tribe-card-description" }, ...renderUrl(safeText(bp.description))) : null,
+      bp.description ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(bp.description))) : null,
       renderBlueprintLaborHours(bp),
       safeArr(bp.materials).length ? div({ class: "industry-materials" }, ul({ class: "industry-materials-list" }, bp.materials.map(m => li(`${m.qty || 0} × ${safeText(m.item)}${m.price != null ? ` = ${m.price} ECO` : ""}`)))) : null,
       renderBlueprintEstimate(bp, i18n.industryBuildingPrice || "Building price"),
@@ -289,7 +289,7 @@ const renderBuildCard = (b, opts = {}) => {
     opts.withProposer !== false ? p(span({ class: "industry-meta-label" }, `${i18n.industryProposer || "Proposer"}: `), userLink(b.proposer)) : null,
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href }, safeText(b.title)))),
     b.blueprintImage ? renderMediaBlob(b.blueprintImage, { class: "post-image" }) : null,
-    b.notes ? p({ class: "tribe-card-description" }, ...renderUrl(safeText(b.notes))) : null,
+    b.notes ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(b.notes))) : null,
     div({ class: "industry-blueprint-meta industry-dates-row" },
       b.startDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildStart || "Start date"}: `), moment(b.startDate).format("YYYY/MM/DD")) : null,
       b.endDate ? p(span({ class: "industry-meta-label" }, `${i18n.industryBuildEnd || "End date"}: `), moment(b.endDate).format("YYYY/MM/DD")) : null,
@@ -533,7 +533,7 @@ const renderBlueprintsSection = (fc, blueprints, isMember, spreadMap = new Map()
       ),
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, safeText(bp.name))),
       bp.image ? renderMediaBlob(bp.image, { class: "post-image" }) : null,
-      bp.description ? p({ class: "tribe-card-description" }, ...renderUrl(safeText(bp.description))) : (bp.outItem ? p(span({ class: "industry-meta-label" }, `${i18n.industryOutput || "Output"}: `), `${bp.outQty || 0} × ${safeText(bp.outItem)}`) : null),
+      bp.description ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(bp.description))) : (bp.outItem ? p(span({ class: "industry-meta-label" }, `${i18n.industryOutput || "Output"}: `), `${bp.outQty || 0} × ${safeText(bp.outItem)}`) : null),
       renderBlueprintLaborHours(bp),
       safeArr(bp.materials).length ? div({ class: "industry-materials" }, ul({ class: "industry-materials-list" }, bp.materials.map(m => li(`${m.qty || 0} × ${safeText(m.item)}${m.price != null ? ` = ${m.price} ECO` : ""}`)))) : null,
       renderBlueprintEstimate(bp, i18n.industryBuildingPrice || "Building price"),
@@ -665,7 +665,7 @@ const renderFacilitySide = (fc, returnTo, params = {}) => {
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/${encodeURIComponent(fc.id)}` }, safeText(fc.name) || (i18n.industryTitle || "Industry")))),
     div({ class: "card-chips-row" }, ...chips),
     fc.image ? renderMediaBlob(fc.image, { class: "tribe-detail-image" }) : null,
-    fc.description ? p({ class: "tribe-side-description" }, ...renderUrl(safeText(fc.description))) : null,
+    fc.description ? p({ class: "tribe-side-description" }, ...renderStyledText(safeText(fc.description))) : null,
     table({ class: "tribe-info-table" },
       tr(td({ class: "tribe-info-label" }, i18n.industryLaborRate || "Labor rate"), td({ class: "tribe-info-value", colspan: "3" }, `${fc.laborRate || 0} ECO/h`)),
       tr(td({ class: "tribe-info-label" }, i18n.industryQuorum || "Quorum"), td({ class: "tribe-info-value", colspan: "3" }, String(fc.quorum))),
@@ -799,7 +799,7 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
         p({ class: "industry-facility-line" }, span({ class: "industry-meta-label" }, `${i18n.industryFacility || "Facility"}: `), a({ href: facilityHref }, safeText(bp.facilityName))),
         h2(safeText(bp.name)),
         bp.image ? div({ class: "shop-detail-media" }, renderMediaBlob(bp.image, { class: "post-image" })) : null,
-        bp.description ? p({ class: "tribe-card-description" }, ...renderUrl(safeText(bp.description))) : null,
+        bp.description ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(bp.description))) : null,
         div({ class: "industry-meta" },
           p(span({ class: "industry-meta-label" }, `${i18n.industryAuthor || "Author"}: `), userLink(bp.author))
         ),

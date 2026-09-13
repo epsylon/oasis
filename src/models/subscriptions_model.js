@@ -34,6 +34,15 @@ module.exports = ({ cooler }) => {
       return new Promise((res, rej) => ssbClient.publish(content, (e, m) => (e ? rej(e) : res(m))));
     },
 
+    async myState(target) {
+      const ssbClient = await openSsb();
+      const messages = await readTyped(ssbClient, ['subscription'], { limit: logLimit });
+      const latest = latestByTargetAuthor(messages);
+      const mine = latest.get(`${target}::${ssbClient.id}`);
+      if (!mine) return null;
+      return mine.on ? 'on' : 'off';
+    },
+
     async isSubscribed(target) {
       const ssbClient = await openSsb();
       const messages = await readTyped(ssbClient, ['subscription'], { limit: logLimit });

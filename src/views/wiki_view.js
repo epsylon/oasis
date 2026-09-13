@@ -1,13 +1,13 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const FILTERS = ["all", "mine", "recent", "orphans"];
+const FILTERS = ["all", "mine", "recent", "linked"];
 
 const pageHref = (idOrSlug, tribeId = null) =>
   `/wiki/${encodeURIComponent(idOrSlug)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`;
@@ -22,31 +22,19 @@ const listHref = (filter, q, tribeId = null) => {
 const renderWikiBody = (body, opts = {}) => {
   const missing = new Set(opts.missing || []);
   const tribeId = opts.tribeId || null;
+  const wikiLink = (target, slug, label) => {
+    const isMissing = missing.has(slug);
+    return a({
+      href: isMissing ? `/wiki?filter=create&title=${encodeURIComponent(target)}${tribeId ? `&tribeId=${encodeURIComponent(tribeId)}` : ""}` : pageHref(slug, tribeId),
+      class: isMissing ? "wiki-link wiki-link-missing" : "wiki-link",
+      title: isMissing ? (i18n.wikiMissingLink || "Page does not exist yet") : label
+    }, label);
+  };
   const paragraphs = String(body || "").replace(/\r\n/g, "\n").split(/\n{2,}/);
   return div({ class: "wiki-body" },
-    ...paragraphs.filter(par => par.trim()).map(par => {
-      const lines = par.split("\n");
-      const nodes = [];
-      lines.forEach((line, i) => {
-        if (i > 0) nodes.push(br());
-        let cursor = 0;
-        for (const m of line.matchAll(WIKILINK_RE)) {
-          if (m.index > cursor) nodes.push(...renderUrl(line.slice(cursor, m.index)));
-          const target = linkTarget(m[1]);
-          const slug = slugify(target);
-          const text = (m[2] || target).trim();
-          const isMissing = missing.has(slug);
-          nodes.push(a({
-            href: isMissing ? `/wiki?filter=create&title=${encodeURIComponent(target)}${tribeId ? `&tribeId=${encodeURIComponent(tribeId)}` : ""}` : pageHref(slug, tribeId),
-            class: isMissing ? "wiki-link wiki-link-missing" : "wiki-link",
-            title: isMissing ? (i18n.wikiMissingLink || "Page does not exist yet") : text
-          }, text));
-          cursor = m.index + m[0].length;
-        }
-        if (cursor < line.length) nodes.push(...renderUrl(line.slice(cursor)));
-      });
-      return p({ class: "wiki-paragraph" }, ...nodes);
-    })
+    ...paragraphs.filter(par => par.trim()).map(par =>
+      p({ class: "wiki-paragraph" }, ...renderStyledText(par, { wikiLink }))
+    )
   );
 };
 
@@ -82,8 +70,8 @@ const renderDiff = (oldText, newText) =>
 const pageChips = (page) => [
   page.encrypted ? renderEncryptedChip(i18n) : null,
   renderStateChip(page.editPolicy === "author" ? "closed" : "open", "", page.editPolicy === "author" ? i18n.wikiStatusClosed : i18n.wikiStatusOpen),
-  page.isOrphan ? renderStateChip("closed", "", i18n.wikiOrphanChip || "Orphan") : null,
-  renderStateChip("neutral", "", `${page.versionCount} ${i18n.wikiVersions || "versions"}`)
+  page.versionCount > 1 ? renderStateChip("neutral", "", `${page.versionCount} ${i18n.wikiVersions || "versions"}`) : null,
+  page.isLinked ? renderStateChip("open", "", i18n.wikiLinkedChip || "Linked") : null
 ].filter(Boolean);
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
@@ -112,7 +100,7 @@ const renderFilters = (filter, q, params = {}, census = []) => {
     if (mode === filter || mode === "all") return true;
     if (mode === "mine") return census.some(p => String(p.author) === String(userId) || (p.versions || []).some(v => String(v.author) === String(userId)));
     if (mode === "recent") return census.some(p => p.ts >= dayAgo);
-    if (mode === "orphans") return census.some(p => p.isOrphan);
+    if (mode === "linked") return census.some(p => p.isLinked);
     return true;
   };
   const labelOf = (mode) => String(i18n[`wikiFilter${mode.charAt(0).toUpperCase() + mode.slice(1)}`] || mode).toUpperCase();
@@ -143,6 +131,9 @@ const renderForm = (page, params = {}) => {
   ];
   return div({ class: "div-center audio-form" },
     h2(page ? i18n.wikiUpdateSectionTitle : i18n.wikiCreateSectionTitle),
+    params.notice
+      ? div({ class: "tags-header inline-error-box" }, p({ class: "error-page-message" }, params.notice))
+      : null,
     draft
       ? section({ class: "post-preview wiki-preview" },
           div({ class: "preview-content" },
@@ -159,7 +150,7 @@ const renderForm = (page, params = {}) => {
       label(i18n.wikiTitleLabel), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.wikiTitlePlaceholder, value: titleValue }), br(),
       label(i18n.wikiBodyLabel), br(),
-      textarea({ name: "body", rows: 14, maxlength: "20000", placeholder: i18n.wikiBodyPlaceholder }, bodyValue), br(),
+      richTextarea({ name: "body", rows: 14, maxlength: "20000", placeholder: i18n.wikiBodyPlaceholder }, bodyValue), br(),
       label(i18n.uploadMedia), br(),
       input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
       page ? [label(i18n.wikiSummaryLabel), br(), input({ type: "text", name: "summary", maxlength: "200", placeholder: i18n.wikiSummaryPlaceholder, value: summaryValue }), br()] : null,
@@ -298,6 +289,9 @@ exports.wikiPageView = async (page, params = {}) => {
   const shownBody = version ? version.body : page.body;
   const census = Array.isArray(params.censusList) ? params.censusList : [];
   const actions = div({ class: "tribe-side-actions wiki-actions-top" },
+    params.subscription
+      ? span({ class: "wiki-actions-subscription" }, ...(renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base, inline: true }) || []))
+      : null,
     page.canEdit && !version
       ? form({ method: "GET", action: "/wiki" },
           input({ type: "hidden", name: "filter", value: "edit" }),
@@ -340,19 +334,16 @@ exports.wikiPageView = async (page, params = {}) => {
           diffBlock || renderWikiBody(shownBody, { missing: page.missingLinks, tribeId }),
           renderTags(page.tags),
           renderCardMetaRow(p({ class: "card-footer" },
-            span({ class: "date-link" }, `${moment(page.updatedAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
-            userLink(page.lastAuthor || page.author)
+            span({ class: "date-link" }, `${moment(page.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+            userLink(page.author)
           ))
         ),
-        params.subscription
-          ? renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base })
-          : null
       ),
       div({ class: "card-section wiki-backlinks" },
-        h3(i18n.wikiBacklinks),
-        page.backlinks && page.backlinks.length
-          ? ul(...page.backlinks.map(b => li(a({ href: pageHref(b.tribeId ? b.id : b.slug, b.tribeId) }, b.title))))
-          : p(i18n.wikiNoBacklinks)
+        h3(i18n.wikiLinkedPages),
+        page.linkedPages && page.linkedPages.length
+          ? ul(...page.linkedPages.map(b => li(a({ href: pageHref(b.tribeId ? b.id : b.slug, b.tribeId) }, b.title))))
+          : p(i18n.wikiNoLinkedPages)
       )
     )
   );

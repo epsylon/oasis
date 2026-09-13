@@ -1,4 +1,4 @@
-const { ok, eq } = require('../../helpers/assert');
+const { ok, eq, notOk } = require('../../helpers/assert');
 
 const REGISTRY = [
   ['activity_view', 'activityView', () => [[], 'all', '@viewer.ed25519', '', {}]],
@@ -159,4 +159,148 @@ describe('views: a detail screen offers no content filters when the module has n
       eq(chips.length, 0, `content chips offered with an empty census: ${chips.join(', ')}`);
     });
   }
+});
+
+
+describe('views: the shared text renderer', (t) => {
+  const { renderStyledText, renderStyledHtml, renderTextPreview } = require('../../../src/backend/renderStyledText');
+  const html = (text, opts) => renderStyledText(text, opts).map(n => (n && n.outerHTML) || String(n)).join('');
+
+  t('each marker becomes its own element', () => {
+    ok(html('a **b** c').includes('<strong>b</strong>'), 'bold');
+    ok(html('a *b* c').includes('<em>b</em>'), 'italic');
+    ok(html('a __b__ c').includes('<u>b</u>'), 'underline');
+    ok(html('a ~~b~~ c').includes('<s>b</s>'), 'strikethrough');
+    ok(html('a `b` c').includes('rt-code'), 'inline code');
+    ok(html('### T ###').includes('rt-header-3'), 'closed header');
+    ok(html('# T').includes('rt-header-1'), 'spaced header');
+    ok(html('- one').includes('rt-item'), 'bullet list');
+    ok(html('1. one').includes('rt-item-number'), 'numbered list');
+    ok(html('> said').includes('rt-quote'), 'quote');
+    ok(html('---\n').includes('rt-rule'), 'rule');
+    ok(html('```\nx\n```').includes('rt-code-block'), 'code block');
+  });
+
+  t('markers nest and only the outer one wins', () => {
+    const out = html('### a **b** ###');
+    ok(out.includes('rt-header-3') && out.includes('<strong>b</strong>'), 'a header keeps its inner formatting');
+    ok(!html('**bold**').includes('<em>'), 'bold is not read as two italics');
+    ok(html('#tag').includes('tag-link'), 'a hashtag is not read as a header');
+  });
+
+  t('references keep working alongside the formatting', () => {
+    ok(html('see https://example.org').includes('href="https://example.org"'), 'links');
+    ok(html('hi @' + 'a'.repeat(43) + '=.ed25519').includes('/author/'), 'mentions');
+    ok(html('read [[A page]]').includes('/wiki/a-page'), 'wikilinks');
+    ok(html('![x](&' + 'b'.repeat(43) + '=.sha256)').includes('<img'), 'blobs');
+    ok(html('write to a@b.org').includes('mailto:'), 'emails');
+  });
+
+  t('labelled links point where they say and refuse anything but http and internal paths', () => {
+    ok(html('[a label](https://example.org)').includes('href="https://example.org"'), 'external link');
+    ok(html('[my profile](/profile)').includes('href="/profile"'), 'internal path');
+    notOk(html('[a label](https://example.org)').includes('target='), 'a link written by someone else never steals a new tab');
+    eq(html('[x](javascript:alert(1))'), '[x](javascript:alert(1))', 'a script target is left as plain text');
+    ok(html('![pic](https://x.org/a.png)').includes('<a href="https://x.org/a.png"'), 'a remote image becomes a link, never a request to a third party');
+    ok(html('![x](&' + 'b'.repeat(43) + '=.sha256)').includes('<img'), 'a blob image is still an image');
+  });
+
+  t('text written by others is never rendered as markup', () => {
+    const attack = '<img src=x onerror=alert(1)>';
+    for (const wrapper of ['%s', '**%s**', '### %s ###', '- %s', '> %s', '`%s`', '```%s```']) {
+      const out = renderStyledHtml(wrapper.replace('%s', attack));
+      ok(!out.includes('<img src=x'), `escaped inside ${wrapper}`);
+      ok(out.includes('&lt;img'), `kept as text inside ${wrapper}`);
+    }
+    ok(!renderStyledHtml('[[a" onmouseover="x]]').includes('onmouseover="x"'), 'attributes are escaped too');
+  });
+
+  t('no text a peer can publish crashes or stalls the renderer', () => {
+    for (const [name, input] of [
+      ['nested quotes', '>'.repeat(2000)],
+      ['nested bullets', '- '.repeat(1500)],
+      ['a wall of hashes', '#'.repeat(20000)],
+      ['numbered runs', '1. '.repeat(3000)],
+      ['open brackets', '['.repeat(20000)],
+      ['stars', '*'.repeat(20000)]
+    ]) {
+      const started = Date.now();
+      let threw = null;
+      try { renderStyledHtml(input); } catch (e) { threw = e.message; }
+      eq(threw, null, `${name} crashed the renderer: ${threw}`);
+      ok(Date.now() - started < 500, `${name} took too long to render`);
+    }
+  });
+
+  t('emphasis nests both ways and survives real prose', () => {
+    eq(html('*italic with **bold** inside*'), '<em>italic with <strong>bold</strong> inside</em>');
+    eq(html('**bold with *italic* inside**'), '<strong>bold with <em>italic</em> inside</strong>');
+    eq(html('2 * 3 * 4'), '2 * 3 * 4');
+    eq(html('file__name__here'), 'file__name__here');
+    eq(html('\\*not italic\\*'), '*not italic*');
+  });
+
+  t('text typed in a browser form renders the same as text with plain newlines', () => {
+    const withCrlf = html('a\r\n```\r\ncode\r\n```\r\nb');
+    const withLf = html('a\n```\ncode\n```\nb');
+    ok(withCrlf.includes('rt-code-block'), 'a code block written in a form is still a code block');
+    eq(withCrlf.replace(/\r/g, ''), withLf);
+    eq(html('- one\r\n'), '<span class="rt-item rt-item-1">one</span>');
+  });
+
+  t('links stop where the sentence does and never steal the tab', () => {
+    eq(html('Visit https://example.org. Thanks'), 'Visit <a href="https://example.org" rel="noopener noreferrer">https://example.org</a>. Thanks');
+    eq(html('(https://example.org)'), '(<a href="https://example.org" rel="noopener noreferrer">https://example.org</a>)');
+    notOk(html('see https://example.org').includes('target='), 'nothing a peer writes opens a new tab');
+  });
+
+  t('a hashtag keeps accents and a wikilink cannot swallow the page', () => {
+    ok(html('#español').includes('>#español<'), 'the whole word is the tag');
+    notOk(html('intro [[page one\nand more]] tail').includes('wiki-link'), 'an unclosed wikilink stops at the line');
+  });
+
+  t('an indented list keeps its levels', () => {
+    const out = html('- one\n  - two\n    - three\n- back');
+    ok(out.includes('rt-item-1">one'), 'the first level');
+    ok(out.includes('rt-item-2">two'), 'the second level');
+    ok(out.includes('rt-item-3">three'), 'the third level');
+    ok(out.includes('rt-item-1">back'), 'and back out again');
+  });
+
+  t('the public hub keeps the formatting but never links into the private app', () => {
+    const hub = { blobPrefix: '/c/blob/', internalLinks: false };
+    const out = renderStyledHtml('**bold** [[Page]] #tag @' + 'a'.repeat(43) + '=.ed25519 https://example.org', hub);
+    ok(out.includes('<strong>bold</strong>'), 'formatting still applies');
+    notOk(out.includes('/wiki/'), 'no wiki links');
+    notOk(out.includes('/author/'), 'no inhabitant links');
+    notOk(out.includes('/search?'), 'no search links');
+    ok(out.includes('href="https://example.org"'), 'external links stay');
+    ok(renderStyledHtml('![i](&' + 'b'.repeat(43) + '=.sha256)', hub).includes('/c/blob/'), 'media is served from the public path');
+  });
+
+  t('a link written by someone else can never jump to another site pretending to be internal', () => {
+    eq(html('[Click](//evil.example/login)'), '[Click](//evil.example/login)', 'a protocol-relative target is not a link at all');
+    eq(html('[Click](/\\evil.example)'), '[Click](/\\evil.example)', 'nor a backslash disguised as one');
+    ok(html('[Profile](/profile)').includes('href="/profile"'), 'a real internal path still links');
+  });
+
+  t('a code block keeps its first line unless that line names the language', () => {
+    eq(html('```\nhello\nworld```'), '<span class="rt-code-block">hello\nworld</span>');
+    eq(html('```js\nconst x=1;\n```'), '<span class="rt-code-block">const x=1;</span>');
+    eq(html('```code```'), '<span class="rt-code-block">code</span>');
+  });
+
+  t('stripping markers stays cheap on hostile text', () => {
+    for (const input of ['['.repeat(20000), '[a]('.repeat(5000), '!['.repeat(10000)]) {
+      const started = Date.now();
+      renderTextPreview(input);
+      ok(Date.now() - started < 250, `stripping took too long for ${input.slice(0, 6)}…`);
+    }
+  });
+
+  t('previews drop the markers instead of showing them', () => {
+    const preview = renderTextPreview('### T ###\n- one\n**b** and `c`');
+    ok(!/[*`#]/.test(preview), `markers left in the preview: ${preview}`);
+    ok(preview.includes('one') && preview.includes('b'), 'the words survive');
+  });
 });

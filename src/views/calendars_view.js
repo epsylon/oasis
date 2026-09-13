@@ -1,4 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
+const { renderStyledText } = require("../backend/renderStyledText")
 const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const { renderMapLocationVisitLabel } = require("./maps_view")
 const { renderEncryptedChip } = require("./clearnet_view")
@@ -7,19 +8,7 @@ const { config } = require("../server/SSB_server.js")
 
 const userId = config.keys.id
 
-const renderNoteText = (text) => {
-  if (!text) return []
-  const urlRegex = /(https?:\/\/[^\s]+)/g
-  const result = []
-  let last = 0
-  text.replace(urlRegex, (match, _g, offset) => {
-    if (offset > last) result.push(text.slice(last, offset))
-    result.push(a({ href: match, target: "_blank" }, match))
-    last = offset + match.length
-  })
-  if (last < text.length) result.push(text.slice(last))
-  return result
-}
+const renderNoteText = (text) => renderStyledText(String(text || ""))
 
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },

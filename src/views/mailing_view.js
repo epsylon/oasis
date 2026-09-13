@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, details, summary, ul, li, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderContentActions, renderModuleStats, moduleIsEmpty } = require("./main_views");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
@@ -156,7 +156,7 @@ exports.mailingView = async (lists, filter = "ALL", params = {}) => {
                 div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
               )
             ),
-            list.length ? ul({ class: "mailing-archive" }, ...list.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0)).map(l => renderArchiveItem(l, params))) : p(i18n.mailingNoItems)
+            list.length ? ul({ class: "mailing-archive" }, ...list.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0)).map(l => renderArchiveItem(l, params))) : div({ class: "tribe-grid" }, p(i18n.mailingNoItems))
           ]
     )
   );
@@ -177,7 +177,7 @@ const renderMessage = (list, m, opts = {}) =>
           )
         : null
     ),
-    div({ class: "mailing-message-text" }, ...renderUrl(m.text || "")),
+    div({ class: "mailing-message-text" }, ...renderStyledText(m.text || "")),
     p({ class: "card-footer" }, span({ class: "date-link" }, fmt(m.sentAt)), userLink(m.author))
   );
 
@@ -268,7 +268,7 @@ exports.singleMailingView = async (list, params = {}) => {
     ),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, list.title)),
     div({ class: "card-chips-row" }, renderOpenClosedChip(list.listType, i18n), statusChip(list)),
-    list.description ? p({ class: "tribe-side-description" }, ...renderUrl(list.description)) : null,
+    list.description ? p({ class: "tribe-side-description" }, ...renderStyledText(list.description)) : null,
     table({ class: "tribe-info-table jobs-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.createdAtLabel || "Created at"),

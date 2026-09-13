@@ -1,7 +1,7 @@
 const { div, p, h2, span, a, form, input, textarea, button, label, br, details, summary } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const { i18n, userLink } = require("./main_views");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 
 const COMMENT_ICON = "✑";
 
@@ -27,7 +27,7 @@ const renderCommentCard = (c, extra = null) => {
       relDate ? span({ class: "votations-comment-date" }, " | ", i18n.sendTime) : "",
       relDate && rootId ? a({ href: `/thread/${encodeURIComponent(rootId)}#${encodeURIComponent(c.key)}` }, relDate) : ""
     ),
-    p({ class: "votations-comment-text" }, ...renderUrl(String(text))),
+    p({ class: "votations-comment-text" }, ...renderStyledText(String(text))),
     extra
   );
 };

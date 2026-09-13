@@ -4,7 +4,7 @@ const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
-const { renderUrl } = require("../backend/renderUrl")
+const { renderStyledText } = require("../backend/renderStyledText")
 const { renderZoomableImage } = require("./gallery_view")
 
 const userId = config.keys.id
@@ -145,17 +145,7 @@ const renderChatForm = (filter, chat = {}, params = {}) => {
   )
 }
 
-const renderMessageText = (text) => {
-  if (!text) return span({ class: "chat-message-text" }, "")
-  const lines = String(text).split("\n")
-  const nodes = []
-  lines.forEach((line, idx) => {
-    const rendered = renderUrl(line)
-    nodes.push(...rendered)
-    if (idx < lines.length - 1) nodes.push(br())
-  })
-  return span({ class: "chat-message-text" }, ...nodes)
-}
+const renderMessageText = (text) => span({ class: "chat-message-text" }, ...renderStyledText(String(text || "")))
 
 const chatActivityTs = (c) => Math.max(
   Number(c.lastMsgAt || 0),

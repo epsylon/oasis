@@ -4,7 +4,7 @@ const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, render
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 
 const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null;
@@ -59,7 +59,7 @@ const renderCardField = (labelText, value = "") =>
   div(
     { class: "card-field" },
     span({ class: "card-label" }, labelText),
-    span({ class: "card-value" }, ...renderUrl(String(value ?? "")))
+    span({ class: "card-value" }, ...renderStyledText(String(value ?? "")))
   );
 
 const renderStackedTextField = (lbl, val) =>
@@ -67,7 +67,7 @@ const renderStackedTextField = (lbl, val) =>
     ? div(
         { class: "card-field card-field-stacked" },
         span({ class: "card-label" }, lbl),
-        span({ class: "card-value" }, ...renderUrl(String(val)))
+        span({ class: "card-value" }, ...renderStyledText(String(val)))
       )
     : null;
 

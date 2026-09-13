@@ -2,7 +2,7 @@ const { div, h2, p, section, button, form, span, table, thead, tbody, tr, th, td
 const { template, i18n, renderModuleStatsBy } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 
 const userId = config.keys.id;
 
@@ -89,7 +89,7 @@ const truncate = (value, max = 160) => {
 
 const renderLogPreview = (item) => {
   const text = truncate(item.text);
-  return div({ class: "logs-entry-text" }, ...renderUrl(text));
+  return div({ class: "logs-entry-text" }, ...renderStyledText(text));
 };
 
 const renderTable = (items) => {
@@ -193,7 +193,7 @@ const renderDetail = (entry) => {
   return div({ class: "div-center audio-form logs-detail" },
     h2(headerLine),
     entry.label ? div({ class: "logs-entry-label" }, entry.label) : null,
-    div({ class: "logs-detail-text" }, ...renderUrl(String(entry.text || ''))),
+    div({ class: "logs-detail-text" }, ...renderStyledText(String(entry.text || ''))),
     div({ class: "tribe-side-actions logs-detail-actions" },
       form({ method: "GET", action: "/logs" },
         button({ type: "submit", class: "tribe-action-btn" }, i18n.walletBack || 'Back')

@@ -2,8 +2,7 @@ const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: 
 const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
-const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
-const { renderUrl } = require('../backend/renderUrl');
+const { renderStyledText, renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const opinionCategories = require('../backend/opinion_categories');
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
@@ -53,7 +52,7 @@ const renderContentHtml = (content, key) => {
             span({ class: 'card-label' }, i18n.industryMembershipPolicy + ':'),
             span({ class: 'card-value' }, String(i18n['industryPolicy_' + content.membershipPolicy] || content.membershipPolicy).toUpperCase())
           ) : "",
-          content.description ? p(...renderUrl(content.description)) : null,
+          content.description ? p(...renderStyledText(content.description)) : null,
           Array.isArray(content.tags) && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
@@ -75,7 +74,7 @@ const renderContentHtml = (content, key) => {
             span({ class: 'card-label' }, i18n.industryLaborHours + ':'),
             span({ class: 'card-value' }, String(content.laborHours))
           ) : "",
-          content.description ? p(...renderUrl(content.description)) : null
+          content.description ? p(...renderStyledText(content.description)) : null
         )
       );
     case 'housing': {
@@ -114,7 +113,7 @@ const renderContentHtml = (content, key) => {
             span({ class: 'card-label' }, i18n.housingCapacity + ':'),
             span({ class: 'card-value' }, String(content.capacity))
           ) : null,
-          content.description ? p(...renderUrl(content.description)) : null,
+          content.description ? p(...renderStyledText(content.description)) : null,
           Array.isArray(content.tags) && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
@@ -141,7 +140,7 @@ const renderContentHtml = (content, key) => {
             span({ class: 'card-label' }, (i18n.marketItemPrice || i18n.price) + ':'),
             span({ class: 'card-value' }, `${content.price} ECO`)
           ),
-          content.description ? p(...renderUrl(content.description)) : null,
+          content.description ? p(...renderStyledText(content.description)) : null,
           Array.isArray(content.tags) && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
                 a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
@@ -152,7 +151,7 @@ const renderContentHtml = (content, key) => {
       return div({ class: 'opinion-bookmark' },
         div({ class: 'card-section bookmark' },
           h2(content.url ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, p(a({ href: content.url, target: '_blank', class: "bookmark-url" }, content.url)))
+            span({ class: 'card-label' }, p(a({ href: safeExternalHref(content.url), target: '_blank', class: "bookmark-url" }, content.url)))
           ) : ""),
           content.lastVisit ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bookmarkLastVisitLabel + ':'),
@@ -161,7 +160,7 @@ const renderContentHtml = (content, key) => {
           content.description
             ? [
                 span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ":"),
-                p(...renderUrl(content.description))
+                p(...renderStyledText(content.description))
               ]
             : null
         )
@@ -176,7 +175,7 @@ const renderContentHtml = (content, key) => {
           content.description
             ? [
                 span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"),
-                p(...renderUrl(content.description))
+                p(...renderStyledText(content.description))
               ]
             : null,
           br(),
@@ -195,7 +194,7 @@ const renderContentHtml = (content, key) => {
           content.description
             ? [
                 span({ class: 'card-label' }, i18n.videoDescriptionLabel + ":"),
-                p(...renderUrl(content.description))
+                p(...renderStyledText(content.description))
               ]
             : null,
           div({ class: 'card-field' },
@@ -219,7 +218,7 @@ const renderContentHtml = (content, key) => {
           content.description
             ? [
                 span({ class: 'card-label' }, i18n.audioDescriptionLabel + ":"),
-                p(...renderUrl(content.description))
+                p(...renderStyledText(content.description))
               ]
             : null,
           div({ class: 'card-field audio-container' },
@@ -252,7 +251,7 @@ const renderContentHtml = (content, key) => {
           content.description
             ? [
                 span({ class: 'card-label' }, i18n.documentDescriptionLabel + ":"),
-                p(...renderUrl(content.description))
+                p(...renderStyledText(content.description))
               ]
             : null,
           div({ class: 'card-field' },
@@ -264,7 +263,7 @@ const renderContentHtml = (content, key) => {
     case 'feed':
       return div({ class: 'opinion-feed' },
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text', innerHTML: sanitizeHtml(renderTextWithStyles(content.text)) }),
+          div({ class: 'feed-text', innerHTML: sanitizeHtml(renderStyledHtml(content.text)) }),
           content.refeeds
             ? h2({ class: 'card-field' }, span({ class: 'card-label' }, `${i18n.tribeFeedRefeeds}: `), span({ class: 'card-value' }, content.refeeds))
             : ""
@@ -332,7 +331,7 @@ const renderContentHtml = (content, key) => {
       return div({ class: 'styled-text' },
         div({ class: 'card-section styled-text-content' },
           div({ class: 'card-field' },
-            span({ class: 'card-value', innerHTML: sanitizeHtml(content.title || content.name || content.text || content.description || '[no content]') })
+            span({ class: 'card-value', innerHTML: sanitizeHtml(renderStyledHtml(content.title || content.name || content.text || content.description || '[no content]')) })
           )
         )
       );

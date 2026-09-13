@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, img, input, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
+const { safeExternalHref } = require("../backend/renderStyledText");
 const { template, i18n, userLink, renderContentActions, renderModuleStats } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
@@ -103,7 +104,7 @@ const renderAgendaItem = (item, userId, filter) => {
       renderCardField(i18n.eventPriceLabel + ":", `${item.price} ECO`),
       renderCardField(
         i18n.eventUrlLabel + ":",
-        item.url ? p(a({ href: item.url, target: "_blank" }, item.url)) : p(i18n.noUrl)
+        item.url ? p(a({ href: safeExternalHref(item.url), target: "_blank" }, item.url)) : p(i18n.noUrl)
       )
     ];
     actionButton = actionButton || form({ method: 'POST', action: `/events/attend/${encodeURIComponent(item.id)}` },

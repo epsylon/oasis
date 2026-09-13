@@ -1,4 +1,5 @@
 const { div, h1, h2, h3, p, section, button, form, input, span, img, a, br, table, tr, td, textarea, label, strong, details, summary } = require("../server/node_modules/hyperaxe");
+const { renderStyledText } = require("../backend/renderStyledText");
 const { template, i18n, userLink } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 
@@ -210,7 +211,7 @@ const renderPostsBlock = (posts, house, canPost) => {
               userLink(entry.post.author),
               span({ class: 'larp-post-time' }, moment(entry.post.createdAt).format('YYYY/MM/DD HH:mm'))
             ),
-            p({ class: 'larp-post-text' }, entry.post.text)
+            p({ class: 'larp-post-text' }, ...renderStyledText(String(entry.post.text || '')))
           ))
         )
   );

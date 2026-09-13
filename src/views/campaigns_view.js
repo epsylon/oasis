@@ -2,7 +2,7 @@ const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, lab
 const { template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapLocationVisitLabel } = require("./maps_view");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state");
@@ -171,7 +171,7 @@ const renderUpdate = (cp, u, href, editing) =>
           input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
           button({ type: "submit", class: "create-button" }, i18n.campaignUpdate)
         )
-      : div({ class: "campaign-update-text" }, ...renderUrl(u.text)),
+      : div({ class: "campaign-update-text" }, ...renderStyledText(u.text)),
     p({ class: "card-footer" }, span({ class: "date-link" }, fmt(u.createdAt)), userLink(u.author))
   );
 
@@ -255,7 +255,7 @@ exports.singleCampaignView = async (cp, params = {}) => {
       : null
   );
   const main = div({ class: "tribe-main" },
-    cp.text ? div({ class: "campaign-body" }, ...renderUrl(cp.text)) : null,
+    cp.text ? div({ class: "campaign-body" }, ...renderStyledText(cp.text)) : null,
     cp.canSign
       ? div({ class: "card-section campaign-sign" },
           h3(i18n.campaignSignTitle),

@@ -3,7 +3,7 @@ const { form, button, div, h2, p, section, input, a, span, img } = require("../s
 const { template, i18n, userLink, renderContentActions, renderModuleStats } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
 
 const userId = config.keys.id;
 
@@ -95,7 +95,7 @@ const renderBookmarkUrl = (item) => {
   if (!item.url) return null;
   return p(
     a(
-      { href: item.url, target: "_blank", rel: "noreferrer noopener", class: "bookmark-url" },
+      { href: safeExternalHref(item.url), target: "_blank", rel: "noreferrer noopener", class: "bookmark-url" },
       item.url
     )
   );
@@ -159,7 +159,7 @@ const renderFavoriteCard = (item, filter) => {
       title ? h2(title) : null,
       renderImagePreview(item),
       renderBookmarkUrl(item),
-      safeText(item.description) ? p(...renderUrl(item.description)) : null,
+      safeText(item.description) ? p(...renderStyledText(item.description)) : null,
       renderDetailFields(item),
       renderTags(item.tags),
       p(

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const { plainText } = require('./renderStyledText');
 
 const LOGO_PATH = path.join(__dirname, '..', 'client', 'assets', 'images', 'snh-oasis.jpg');
 
@@ -140,7 +141,7 @@ const flattenSections = (sections) => {
       const txt = `${s.label}: ${s.value == null ? '' : s.value}`;
       for (const w of wrap(txt, 82)) lines.push({ kind: 'kv', text: w });
     } else if (s.kind === 'text') {
-      for (const w of wrap(s.text, 82)) lines.push({ kind: 'kv', text: w });
+      for (const w of wrap(plainText(s.text), 82)) lines.push({ kind: 'kv', text: w });
     } else {
       lines.push({ kind: s.kind, text: s.text });
     }

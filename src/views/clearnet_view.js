@@ -1,4 +1,5 @@
 const { a, br, div, input, span, strong } = require("../server/node_modules/hyperaxe");
+const { renderStyledHtml } = require('../backend/renderStyledText');
 
 const STAT_TYPE_KEYS = { post:'statsPost', event:'statsEvent', task:'statsTask', forum:'statsForum', tribe:'statsTribe', market:'statsMarket', job:'statsJob', project:'statsProject', shop:'statsShop', image:'statsImage', video:'statsVideo', audio:'statsAudio', document:'statsDocument', bookmark:'statsBookmark', transfer:'statsTransfer', map:'statsMap' };
 const STAT_ORDER = ['post','event','task','forum','tribe','market','job','project','shop','image','video','audio','document','bookmark','transfer','map'];
@@ -25,11 +26,12 @@ const escapeHtml = (s) => String(s || '')
 
 const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(String(kind || '').toUpperCase())}]</span>`;
 
-const renderRichText = (s, { links = true } = {}) => String(s || '')
-  .replace(/\r\n?/g, '\n')
-  .split('\n')
-  .map(line => escapeHtml(line).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)"'])/g, (url) => links ? `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>` : `<span class="cn-url">${url}</span>`))
-  .join('<br/>');
+const renderRichText = (s, { links = true } = {}) => renderStyledHtml(s, {
+  blobPrefix: '/c/blob/',
+  internalLinks: false,
+  links,
+  plainUrlClass: 'cn-url'
+});
 
 const blobIdOf = (v) => {
   if (!v) return null;
@@ -213,9 +215,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   const palette = getCurrentPalette();
   const baseCss = buildBaseCss(palette);
   const brandInner = `<div class="cn-brand">⛱ Oasis HUB</div><div class="cn-brand-sub">Libre · P2P · Federated</div>`;
-  const brandBlock = hubFeedId
-    ? `<a class="cn-brand-block cn-brand-link" href="/c/inhabitant/${encodeURIComponent(hubFeedId)}">${brandInner}</a>`
-    : `<a class="cn-brand-block cn-brand-link" href="/c">${brandInner}</a>`;
+  const brandBlock = `<a class="cn-brand-block cn-brand-link" href="/c">${brandInner}</a>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -241,7 +241,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   </header>
   ${stripInternalAnchors(body)}
   <footer class="cn-footer">
-    <a href="https://code.03c8.net/krakenslab/oasis" target="_blank" rel="noopener"><img class="cn-footer-logo" src="/assets/images/snh-oasis.jpg" alt="Oasis"/></a>
+    <a href="https://wiki.solarnethub.com" target="_blank" rel="noopener"><img class="cn-footer-logo" src="/c/assets/images/snh-oasis.jpg" alt="Oasis"/></a>
     Powered by <a href="https://code.03c8.net/krakenslab/oasis" target="_blank" rel="noopener">Oasis</a>
   </footer>
 </body>
@@ -297,7 +297,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
   ${desc ? `<p class="cn-media-desc">${desc}</p>` : ''}
 `;
   return renderClearnetPage({
-    title: `${title} — Oasis`,
+    title: `${item.title || 'Untitled'} — Oasis`,
     ogTitle: item.title || 'Oasis',
     ogDescription: item.description || '',
     ogImage: (kind === 'image') ? blob : null,
@@ -341,7 +341,7 @@ const renderClearnetPodcastView = ({ channel }) => {
   ${epHtml ? `<hr class="cn-sep"/>${epHtml}` : ''}
 `;
   return renderClearnetPage({
-    title: `${title} — Oasis`,
+    title: `${channel.title || 'Untitled'} — Oasis`,
     ogTitle: channel.title || 'Oasis',
     ogDescription: channel.description || '',
     ogImage: cover && !coverIsVideo ? cover : null,

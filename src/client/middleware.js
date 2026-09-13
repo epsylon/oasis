@@ -98,6 +98,7 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   });
 
   app.use(mount("/assets", assets));
+  app.use(mount("/c/assets", assets));
 
   const maptiles = new Koa();
   maptiles.use(koaStatic(join(__dirname, "..", "maps", "tiles")));

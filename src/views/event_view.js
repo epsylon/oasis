@@ -5,7 +5,7 @@ const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view");
 
 const userId = config.keys.id;
@@ -32,12 +32,6 @@ const normalizePrivacy = (v) => {
 
 const privacyLabel = (v) => (normalizePrivacy(v) === "private" ? i18n.eventPrivate : i18n.eventPublic);
 
-const safeExternalHref = (url) => {
-  const s = String(url || "").trim();
-  const lower = s.toLowerCase();
-  if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("mailto:")) return s;
-  return "";
-};
 
 const normalizeEventStatus = (v) => {
   const up = String(v || "").toUpperCase();
@@ -538,7 +532,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     event.description
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.eventDescriptionLabel),
-          p({ class: "tribe-side-description" }, ...renderUrl(event.description))
+          p({ class: "tribe-side-description" }, ...renderStyledText(event.description))
         )
       : null,
     event.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, event.mapUrl)) : null,

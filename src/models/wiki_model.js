@@ -1,9 +1,10 @@
+const pull = require('../server/node_modules/pull-stream');
 const { readTyped } = require('./typed_log');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-const WIKILINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+const WIKILINK_RE = /\[\[([^\]|\n]{1,120})(?:\|([^\]\n]{1,120}))?\]\]/g;
 
 const slugify = (value) => String(value == null ? '' : value)
   .normalize('NFD')
@@ -45,6 +46,14 @@ const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CHANGES = 60;
 const MAX_TITLE = 100;
 const IMAGE_RE = /!\[image:[^\]]*\]\((&[^)]+)\)/;
+const BODY_INLINE_MAX = 6000;
+const bodyCache = new Map();
+const addBlob = (ssbClient, buf) => new Promise((resolve, reject) => pull(pull.values([buf]), ssbClient.blobs.add((err, ref) => err ? reject(err) : resolve(ref))));
+const getBlob = (ssbClient, ref) => new Promise((resolve) => {
+  try {
+    pull(ssbClient.blobs.get(ref), pull.collect((err, chunks) => resolve(err || !chunks || !chunks.length ? null : Buffer.concat(chunks.map(c => Buffer.isBuffer(c) ? c : Buffer.from(c))))));
+  } catch (_) { resolve(null); }
+});
 
 const safeText = (v) => String(v == null ? '' : v).trim();
 const normalizeList = (raw) => {
@@ -73,6 +82,37 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
     return tribeCrypto.getKey(rootId) || null;
   };
 
+  const storeBody = async (ssbClient, body, tribeId) => {
+    const text = safeText(body);
+    if (Buffer.byteLength(text, 'utf8') <= BODY_INLINE_MAX) return { body: text };
+    let payload = text;
+    if (tribeId) {
+      const key = await tribeKeyFor(tribeId);
+      if (!key) throw new Error('Missing tribe key — cannot publish encrypted wiki page');
+      payload = JSON.stringify(tribeCrypto.encryptContent({ body: text }, [key], true));
+    }
+    const ref = await addBlob(ssbClient, Buffer.from(payload, 'utf8'));
+    bodyCache.set(ref, text);
+    return { body: '', bodyBlob: ref };
+  };
+
+  const resolveBody = async (ssbClient, c) => {
+    if (!c || typeof c.bodyBlob !== 'string' || !c.bodyBlob) return c;
+    if (bodyCache.has(c.bodyBlob)) return { ...c, body: bodyCache.get(c.bodyBlob) };
+    const buf = await getBlob(ssbClient, c.bodyBlob);
+    if (!buf) return { ...c, body: safeText(c.body) };
+    let text = buf.toString('utf8');
+    if (c.tribeId) {
+      try {
+        const key = await tribeKeyFor(c.tribeId);
+        const r = tribeCrypto.decryptContent(JSON.parse(text), key ? [[key]] : []);
+        text = r && !r._undecryptable && typeof r.body === 'string' ? r.body : '';
+      } catch (_) { text = ''; }
+    }
+    bodyCache.set(c.bodyBlob, text);
+    return { ...c, body: text };
+  };
+
   const readEntries = async (ssbClient) => {
     const msgs = await readTyped(ssbClient, [WIKI_TYPE, 'tombstone', ENVELOPE_TYPE], { limit: logLimit });
     const fpIdx = tribeCrypto && typeof tribeCrypto.buildFingerprintIndex === 'function' ? tribeCrypto.buildFingerprintIndex() : null;
@@ -93,6 +133,10 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
       } else if (body.k === 'tombstone' && typeof body.target === 'string') {
         out.push({ ...m, value: { ...v, content: { type: 'tombstone', target: body.target, deletedAt: body.deletedAt, author: body.author || v.author } } });
       }
+    }
+    for (let i = 0; i < out.length; i++) {
+      const c = out[i].value && out[i].value.content;
+      if (c && c.type === WIKI_TYPE && c.bodyBlob) out[i] = { ...out[i], value: { ...out[i].value, content: await resolveBody(ssbClient, c) } };
     }
     return out;
   };
@@ -194,7 +238,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
       ...p,
       backlinkCount: (inbound.get(p.id) || new Set()).size,
       missingLinks: p.links.filter(s => !bySlug.has(s)),
-      isOrphan: !(inbound.get(p.id) || new Set()).size
+      isLinked: (inbound.get(p.id) || new Set()).size > 0
     }));
   };
 
@@ -256,7 +300,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         type: WIKI_TYPE,
         title: cleanTitle,
         slug,
-        body: safeText(body),
+        ...(await storeBody(ssbClient, body, tribeId)),
         tags: normalizeList(tags),
         aliases: normalizeList(aliases).map(slugify).filter(Boolean),
         editPolicy: normalizePolicy(editPolicy),
@@ -280,7 +324,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         type: WIKI_TYPE,
         title: nextTitle || page.title,
         slug: page.slug,
-        body: data.body !== undefined ? safeText(data.body) : page.body,
+        ...(await storeBody(ssbClient, data.body !== undefined ? data.body : page.body, page.tribeId || null)),
         tags: data.tags !== undefined ? normalizeList(data.tags) : page.tags,
         aliases: data.aliases !== undefined ? normalizeList(data.aliases).map(slugify).filter(Boolean) : page.aliases,
         editPolicy: data.editPolicy !== undefined ? normalizePolicy(data.editPolicy) : page.editPolicy,
@@ -292,7 +336,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         ...(page.tribeId ? { tribeId: page.tribeId } : {})
       };
       const res = await publishContent(ssbClient, content);
-      return { key: res.key, rootId: page.id };
+      return { key: res.key, rootId: page.id, author: page.author };
     },
 
     async restoreVersion(id, versionKey) {
@@ -334,7 +378,18 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
       const bySlug = new Map();
       for (const p of scoped) for (const s of [p.slug, ...p.aliases]) if (s && !bySlug.has(s)) bySlug.set(s, p);
       const backlinks = decorated.filter(p => p.id !== full.id && p.links.some(s => bySlug.get(s) && bySlug.get(s).id === full.id));
-      return { ...full, backlinks, canEdit: await canEdit(full, ssbClient.id), isOwner: String(full.author) === String(ssbClient.id) };
+      const outbound = [];
+      const seen = new Set([full.id]);
+      for (const slug of full.links) {
+        const target = bySlug.get(slug);
+        if (!target || seen.has(target.id)) continue;
+        seen.add(target.id);
+        outbound.push(decorated.find(p => p.id === target.id) || target);
+      }
+      const linkedPages = [...backlinks];
+      const inList = new Set(backlinks.map(p => p.id));
+      for (const p of outbound) if (!inList.has(p.id)) linkedPages.push(p);
+      return { ...full, backlinks, outbound, linkedPages, canEdit: await canEdit(full, ssbClient.id), isOwner: String(full.author) === String(ssbClient.id) };
     },
 
     async listPages({ tribeId = null, filter = 'all', q = '', viewerId } = {}) {
@@ -345,7 +400,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
       const f = String(filter || 'all').toLowerCase();
       if (f === 'mine') list = list.filter(p => String(p.author) === String(me) || p.versions.some(v => String(v.author) === String(me)));
       else if (f === 'recent') list = list.filter(p => Date.now() - p.ts <= RECENT_MS);
-      else if (f === 'orphans') list = list.filter(p => p.isOrphan);
+      else if (f === 'linked') list = list.filter(p => p.isLinked);
       const needle = safeText(q).toLowerCase();
       if (needle) list = list.filter(p => p.title.toLowerCase().includes(needle) || p.body.toLowerCase().includes(needle) || p.tags.some(t => t.toLowerCase().includes(needle)));
       return list.slice().sort((a, b) => b.ts - a.ts);

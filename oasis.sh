@@ -80,11 +80,6 @@ case "$MODE" in
       rm -f "$CONFIG_FILE.bak"
     fi
     shift
-    cd "$CURRENT_DIR/src/server" || exit 1
-    node SSB_server.js start &
-    SSB_PID=$!
-    trap 'kill $SSB_PID 2>/dev/null' EXIT INT TERM
-    sleep 10
     cd "$CURRENT_DIR/src/backend" || exit 1
     exec node backend.js --public --no-open --host=0.0.0.0 "$@"
     ;;

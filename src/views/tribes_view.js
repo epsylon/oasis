@@ -5,7 +5,7 @@ const { renderTribeWikiSection } = require('./wiki_view');
 const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { renderResults: renderPollResults, renderBallot: renderPollBallot } = require('./polls_view');
 const { config } = require('../server/SSB_server.js');
-const { renderUrl } = require('../backend/renderUrl');
+const { renderStyledText, safeExternalHref } = require('../backend/renderStyledText');
 const { renderMapLocationUrl, renderMapLocationGrid, renderMapLocationVisitLabel } = require("./maps_view");
 const opinion_categories = require('../backend/opinion_categories.js');
 
@@ -299,7 +299,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
               ? renderStateChip('mutuals', '\u2709', i18n.subscriptionOn)
               : (t.subscriptionIn === false ? renderStateChip('closed', '\u2709', i18n.subscriptionOff) : null)
           ),
-          t.description ? p({ class: 'tribe-card-description' }, ...renderUrl(t.description)) : null,
+          t.description ? p({ class: 'tribe-card-description' }, ...renderStyledText(t.description)) : null,
           renderMapLocationVisitLabel(t.mapUrl),
           (parentTribe || t.location) ? table({ class: 'tribe-info-table' },
             parentTribe ? tr(
@@ -308,7 +308,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
             ) : null,
             t.location ? tr(
               td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
-              td({ class: 'tribe-info-value', colspan: '3' }, ...renderUrl(t.location))
+              td({ class: 'tribe-info-value', colspan: '3' }, ...renderStyledText(t.location))
             ) : null
           ) : null,
           div({ class: 'tribe-card-members' },
@@ -390,7 +390,7 @@ const renderFeedTribeView = async (feedItems, tribe, query = {}, filter) => {
               div({ class: 'feed-main' },
                 p(`${new Date(m.createdAt).toLocaleString()} — `, userLink(m.author)),
                 br,
-                p(...renderUrl(m.description))
+                p(...renderStyledText(m.description))
               )
             )
           ))
@@ -565,7 +565,7 @@ const renderTribeActivitySection = (tribe, sectionData) => {
         : item.contentType === 'media' && item.mediaType === 'document' && blobUrl
           ? a({ href: blobUrl, target: '_blank', class: 'tribe-action-btn' }, i18n.readDocument || 'Read Document')
         : item.contentType === 'media' && item.mediaType === 'bookmark' && (item.url || item.description)
-          ? a({ href: item.url || item.description, target: '_blank', class: 'tribe-action-btn' }, item.url || item.description)
+          ? a({ href: safeExternalHref(item.url || item.description), target: '_blank', class: 'tribe-action-btn' }, item.url || item.description)
         : null;
       return div({ class: 'card card-rpg tribe-card-padded' },
         div({ class: 'card-header' },
@@ -717,7 +717,7 @@ const renderOverviewSection = (tribe, query, sectionData) => {
         recentFeed.map(m =>
           div({ class: 'feed-item' },
             p(`${new Date(m.createdAt).toLocaleString()} — `, userLink(m.author)),
-            p(...renderUrl(m.description))
+            p(...renderStyledText(m.description))
           )
         )
     ),
@@ -826,14 +826,14 @@ const renderEventsSection = (tribe, items, query) => {
     events.length === 0 ? p(i18n.tribeEventsEmpty) :
       events.map(e => div({ class: 'tribe-content-card' },
         h2(e.title),
-        e.description ? p(...renderUrl(e.description)) : null,
+        e.description ? p(...renderStyledText(e.description)) : null,
         e.date ? div({ class: 'card-field' },
           span({ class: 'card-label' }, (i18n.tribeEventDate || 'Date') + ':'),
           span({ class: 'card-value' }, e.date)
         ) : null,
         e.location ? div({ class: 'card-field' },
           span({ class: 'card-label' }, (i18n.tribeEventLocation || 'Location') + ':'),
-          span({ class: 'card-value' }, ...renderUrl(e.location))
+          span({ class: 'card-value' }, ...renderStyledText(e.location))
         ) : null,
         div({ class: 'card-field' },
           span({ class: 'card-label' }, (i18n.tribeEventAttendees || 'Attendees') + ':'),
@@ -882,7 +882,7 @@ const renderTasksSection = (tribe, items, query) => {
     tasks.length === 0 ? p(i18n.tribeTasksEmpty) :
       tasks.map(t => div({ class: 'tribe-content-card' },
         h2(t.title),
-        t.description ? p(...renderUrl(t.description)) : null,
+        t.description ? p(...renderStyledText(t.description)) : null,
         div({ class: 'card-field' },
           span({ class: 'card-label' }, (i18n.tribeTaskPriority || 'Priority') + ':'),
           priorityLabel(t.priority)
@@ -1030,7 +1030,7 @@ const renderVotationsSection = (tribe, items, query) => {
 
         return div({ class: 'tribe-content-card' },
           h2(v.title),
-          v.description ? p(...renderUrl(v.description)) : null,
+          v.description ? p(...renderStyledText(v.description)) : null,
           statusBadge(v.status),
           v.deadline ? div({ class: 'card-field' },
             span({ class: 'card-label' }, (i18n.tribeVotationDeadline || 'Deadline') + ':'),
@@ -1119,7 +1119,7 @@ const renderForumSection = (tribe, items, query) => {
             span({ class: 'date-link' }, `${new Date(thread.createdAt).toLocaleString()} ${i18n.performed || ''}`),
             userLink(thread.author)
           ),
-          div({ class: 'forum-body' }, ...renderUrl(thread.description || '')),
+          div({ class: 'forum-body' }, ...renderStyledText(thread.description || '')),
           div({ class: 'forum-meta' },
             span({ class: 'forum-positive-votes' }, `▲: ${thread.refeeds || 0}`),
             span({ class: 'forum-messages' }, `${(i18n.forumMessages || i18n.tribeForumReplies || 'MESSAGES').toUpperCase()}: ${replyCount}`)
@@ -1153,7 +1153,7 @@ const renderForumSection = (tribe, items, query) => {
                   )
                 ),
                 div({ class: 'comment-text-col' },
-                  ...(r.description || '').split('\n').map(l => l.trim()).filter(l => l).map(l => p(...renderUrl(l)))
+                  ...(r.description || '').split('\n').map(l => l.trim()).filter(l => l).map(l => p(...renderStyledText(l)))
                 )
               ),
               r.author === userId ? div({ class: 'tribe-content-actions' },
@@ -1202,7 +1202,7 @@ const renderForumSection = (tribe, items, query) => {
                   button({ type: 'submit', class: 'forum-title' }, t.title)
                 )
               ),
-              t.description ? div({ class: 'forum-body' }, ...renderUrl((t.description || '').substring(0, 200))) : null,
+              t.description ? div({ class: 'forum-body' }, ...renderStyledText((t.description || '').substring(0, 200))) : null,
               div({ class: 'forum-meta' },
                 span({ class: 'forum-positive-votes' }, `▲: ${t.refeeds || 0}`),
                 span({ class: 'forum-messages' }, `${(i18n.forumMessages || i18n.tribeForumReplies || 'MESSAGES').toUpperCase()}: ${replyCount}`)
@@ -1293,7 +1293,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
         blobUrl ? a({ href: blobUrl, target: '_blank' }, img({ src: blobUrl, alt: m.title || '', class: 'tribe-media-thumb' })) : null,
         div({ class: 'tribe-media-item-info' },
           m.title ? h2(m.title) : null,
-          m.description ? p(...renderUrl(m.description)) : null,
+          m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
       );
@@ -1303,7 +1303,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
         blobUrl ? audio({ src: blobUrl, controls: true, class: 'tribe-media-audio' }) : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
           m.title ? h2(m.title) : null,
-          m.description ? p(...renderUrl(m.description)) : null,
+          m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
       );
@@ -1313,7 +1313,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
         blobUrl ? video({ src: blobUrl, controls: true, class: 'tribe-media-thumb' }) : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
           m.title ? h2(m.title) : null,
-          m.description ? p(...renderUrl(m.description)) : null,
+          m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
       );
@@ -1323,7 +1323,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
         blobUrl ? a({ href: blobUrl, target: '_blank', class: 'tribe-action-btn' }, i18n.readDocument || 'Read Document') : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
           m.title ? h2(m.title) : null,
-          m.description ? p(...renderUrl(m.description)) : null,
+          m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
       );
@@ -1335,9 +1335,9 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
           m.title ? h2(m.title) : null,
           url ? div({ class: 'card-field' },
             span({ class: 'card-label' }, 'URL:'),
-            a({ href: url, target: '_blank', class: 'card-value' }, url)
+            a({ href: safeExternalHref(url), target: '_blank', class: 'card-value' }, url)
           ) : null,
-          m.description && m.description !== url ? p(...renderUrl(m.description)) : null,
+          m.description && m.description !== url ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
       );
@@ -1347,7 +1347,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
         blobUrl ? a({ href: blobUrl, class: 'tribe-action-btn' }, i18n.torrentDownloadButton || 'DOWNLOAD IT!') : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
           m.title ? h2(m.title) : null,
-          m.description ? p(...renderUrl(m.description)) : null,
+          m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
       );
@@ -1684,7 +1684,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
         ),
         tribe.location ? tr(
           td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
-          td({ class: 'tribe-info-value', colspan: '3' }, ...renderUrl(tribe.location))
+          td({ class: 'tribe-info-value', colspan: '3' }, ...renderStyledText(tribe.location))
         ) : null
       ),
       h2({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${tribe.memberCount != null ? tribe.memberCount : tribe.members.length}`),
@@ -1740,7 +1740,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeRemoveInvitation)
         )
       ) : null,
-      tribe.description ? p({ class: 'tribe-side-description' }, ...renderUrl(tribe.description)) : null,
+      tribe.description ? p({ class: 'tribe-side-description' }, ...renderStyledText(tribe.description)) : null,
       renderMapLocationVisitLabel(tribe.mapUrl),
       (!tribe.parentTribeId && (canCreateSub || subTribes.length > 0 || showInviteTop)) ? div({ class: 'tribe-side-subtribes' },
         canCreateSub

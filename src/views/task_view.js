@@ -4,7 +4,7 @@ const moment = require("../server/node_modules/moment");
 const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 
 const renderTaskMediaBlob = (value, attrs = {}) => {
   if (!value) return null;
@@ -437,7 +437,7 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
     task.description
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.taskDescriptionLabel),
-          p({ class: "tribe-side-description" }, ...renderUrl(task.description))
+          p({ class: "tribe-side-description" }, ...renderStyledText(task.description))
         )
       : null,
     p({ class: "card-footer" },

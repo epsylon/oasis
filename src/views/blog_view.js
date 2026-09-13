@@ -3,8 +3,7 @@ const { renderCommentsSection: renderSharedCommentsSection } = require("./commen
 const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
-const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
+const { renderStyledHtml } = require("../backend/renderStyledText");
 const { sanitizeHtml } = require("../backend/sanitizeHtml");
 
 const userId = config.keys.id;
@@ -73,7 +72,7 @@ const renderBlogCard = (blog, filter, spreadInfo) => {
             h2({ class: "tribe-card-title" }, a({ href }, blog.subject))
           )
         : null,
-      div({ class: "blog-card-text", innerHTML: sanitizeHtml(renderTextWithStyles(excerpt(blog.text))) }),
+      div({ class: "blog-card-text", innerHTML: sanitizeHtml(renderStyledHtml(excerpt(blog.text))) }),
       p({ class: "card-footer" },
         span({ class: "date-link" }, moment(blog.createdAt).format("YYYY/MM/DD HH:mm")),
         span(" · "),
@@ -185,7 +184,7 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
 
   const blogMain = div({ class: "tribe-main" },
     div({ class: "job-section" },
-      div({ class: "blog-detail-text", innerHTML: sanitizeHtml(renderTextWithStyles(blog.text || "")) })
+      div({ class: "blog-detail-text", innerHTML: sanitizeHtml(renderStyledHtml(blog.text || "")) })
     ),
     renderEngagement(blog.id,
       renderOpinionsVoting('/blogs/opinions', blog.id, blog.opinions, href, blog.opinions_inhabitants),

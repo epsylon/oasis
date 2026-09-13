@@ -1,7 +1,7 @@
 const { form, button, div, h2, h3, p, section, ul, li, a, br, hr, input, label, span, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
 const path = require("path");
 const fs = require('fs');
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 const { template, i18n } = require('./main_views');
 
 const homedir = require('os').homedir();
@@ -118,7 +118,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
         snhInvite ? div({ class: 'snh-invite-box' },
           h3({ class: 'snh-invite-name' }, snhInvite.name),
           p({ class: 'snh-invite-name' }, snhInvite.description),
-          p({ class: 'snh-invite-name' }, renderUrl(snhInvite.url)),
+          p({ class: 'snh-invite-name' }, renderStyledText(snhInvite.url)),
           snhInvite.createdAt ? p({ class: 'snh-invite-date' }, `${i18n.statsCreatedAt || 'Created'}: ${new Date(snhInvite.createdAt).toLocaleDateString()}`) : null,
           form({ action: '/settings/invite/accept', method: 'post' },
             input({ type: 'hidden', name: 'invite', value: snhInvite.code }),

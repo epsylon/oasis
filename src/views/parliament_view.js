@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink} = require('./main_views');
-const { renderUrl } = require('../backend/renderUrl');
+const { renderStyledText } = require('../backend/renderStyledText');
 
 const campaignBlock = (pItem) => pItem && pItem.campaignId
   ? [
@@ -390,7 +390,7 @@ const ProposalsList = (proposals) => {
       ),
       div(
         h2(titleNode),
-        p(...renderUrl(pItem.description || ''))
+        p(...renderStyledText(pItem.description || ''))
       ),
       ...campaignBlock(pItem),
       pItem.deadline
@@ -453,7 +453,7 @@ const FutureLawsList = (rows) => {
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '), span({ class: 'card-value' }, fmt(pItem.createdAt))),
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, userLink(pItem.proposer))),
       h2(pItem.title || ''),
-      p(...renderUrl(pItem.description || '')),
+      p(...renderStyledText(pItem.description || '')),
       ...campaignBlock(pItem)
     )
   );

@@ -9,6 +9,27 @@ const read = (f) => fs.readFileSync(path.join(VIEWS_DIR, f), 'utf8');
 const renderers = (src) => src.split(/\n(?=const |exports\.)/);
 
 describe('conventions: one implementation per shared piece', (t) => {
+  t('a form never repeats the format bar', () => {
+    const offenders = [];
+    for (const f of fs.readdirSync(VIEWS_DIR).filter(x => x.endsWith('.js'))) {
+      for (const chunk of renderers(read(f))) {
+        const bars = (chunk.match(/richTextarea\(/g) || []).length;
+        const forms = (chunk.match(/(?<![A-Za-z0-9_])form\(/g) || []).length;
+        if (bars > Math.max(1, forms)) offenders.push(`${f}: ${chunk.split('\n')[0].slice(0, 60)}`);
+      }
+    }
+    eq(offenders.length, 0, `more format bars than forms in: ${offenders.join(' | ')}`);
+  });
+
+  t('nobody renders styled text with their own regexes', () => {
+    const offenders = [];
+    for (const f of fs.readdirSync(VIEWS_DIR).filter(x => x.endsWith('.js'))) {
+      const src = read(f);
+      if (/replace\(\/\\\*\\\*/.test(src)) offenders.push(f);
+    }
+    eq(offenders.length, 0, `these views format text on their own instead of using renderStyledText: ${offenders.join(', ')}`);
+  });
+
   t('nobody writes their own comments section', () => {
     const offenders = viewFiles().filter(f => {
       const src = read(f);

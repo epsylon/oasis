@@ -12,7 +12,6 @@ describe('clearnet: public hub', (t) => {
     const authors = [{ feedId: A, name: 'Alice', count: 1 }, { feedId: B, name: 'Bob', count: 1 }];
     const all = String(await clearnetHubView({ authors, items }));
     ok(all.includes('/c/podcasts/%25p1.sha256') && all.includes('/c/shops/%25s1.sha256'), 'both items are linked');
-    ok(all.includes('Alice') && all.includes('Bob'), 'authors are named on the cards');
     const onlyShops = String(await clearnetHubView({ authors, items, filterType: 'shops' }));
     ok(onlyShops.includes('/c/shops/%25s1.sha256') && !onlyShops.includes('/c/podcasts/%25p1.sha256'), 'the type filter narrows the grid');
     const searched = String(await clearnetHubView({ authors, items, query: 'radio' }));

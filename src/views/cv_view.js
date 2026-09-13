@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, textarea, label, input, br, img, a, select, option, span, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderVisibilityChip, renderDocumentActions } = require('./main_views');
-const { renderUrl } = require('../backend/renderUrl');
+const { renderStyledText } = require('../backend/renderStyledText');
 
 const generateCVBox = (label, content, className) => {
   return div({ class: `cv-box ${className}` }, 
@@ -161,7 +161,7 @@ exports.cvView = async (cv, certificates = []) => {
   const renderBlock = (heading, body, list) => (body || skills(list).length)
     ? div({ class: "cv-box" },
         h2({ class: "job-section-title" }, heading),
-        body ? p({ class: "tribe-side-description" }, ...renderUrl(String(body))) : null,
+        body ? p({ class: "tribe-side-description" }, ...renderStyledText(String(body))) : null,
         renderSkillTags(list)
       )
     : null;
@@ -230,7 +230,7 @@ exports.cvView = async (cv, certificates = []) => {
     cv.description
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.cvDescriptionLabel),
-          p({ class: "tribe-side-description" }, ...renderUrl(String(cv.description)))
+          p({ class: "tribe-side-description" }, ...renderStyledText(String(cv.description)))
         )
       : null,
     renderBlock(i18n.cvPersonal, cv.personalExperiences, cv.personalSkills),

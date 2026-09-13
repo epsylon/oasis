@@ -1,5 +1,6 @@
 const { form, button, div, h2, h3, p, section, input, label, br, a, span, textarea, select, option, img, strong, table, tr, td } =
   require("../server/node_modules/hyperaxe");
+const { renderStyledText } = require("../backend/renderStyledText");
 
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderInviteQrCard, renderModuleStats, moduleIsEmpty } = require("./main_views");
@@ -368,7 +369,7 @@ const renderMapCard = (mapObj, filter, params = {}) => {
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       p({ class: "job-meta-line" }, `📍 ${mapObj.lat.toFixed(4)}, ${mapObj.lng.toFixed(4)}`),
-      safeText(mapObj.description) ? p({ class: "tribe-card-description" }, mapObj.description) : null,
+      safeText(mapObj.description) ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(mapObj.description))) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.mapMarkersTitle || "Markers"}: ${markerCount}`)
       )
@@ -460,7 +461,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       renderEncryptedChip(i18n),
       renderLifespanChip(mapObj.lifetime, i18n)
     ),
-    safeText(mapObj.description) ? p({ class: "tribe-side-description" }, mapObj.description) : null,
+    safeText(mapObj.description) ? p({ class: "tribe-side-description" }, ...renderStyledText(safeText(mapObj.description))) : null,
     table({ class: "tribe-info-table jobs-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.mapLatLabel),

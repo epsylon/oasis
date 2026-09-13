@@ -14,7 +14,7 @@ const OPINION_ROUTES = {
   votes:       (id) => `/votes/opinions/${encodeURIComponent(id)}`
 };
 const moment = require("../server/node_modules/moment");
-const { renderUrl } = require('../backend/renderUrl');
+const { renderStyledText, escapeHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { letterOf } = require('./polls_view');
 const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
@@ -121,25 +121,7 @@ const decodeMaybe = (s) => {
     try { return decodeURIComponent(String(s || '')); } catch { return String(s || ''); }
 };
 
-const rewriteHashtagLinks = (html) => {
-    const s = String(html || '');
-    return s.replace(/href=(["'])(?:https?:\/\/[^"']+)?\/hashtag\/([^"'?#]+)([^"']*)\1/g, (m, q, tag, rest) => {
-        const t = decodeMaybe(tag).replace(/^#/, '').trim().toLowerCase();
-        const href = `/search?query=%23${encodeURIComponent(t)}`;
-        return `href=${q}${href}${q}`;
-    });
-};
 
-function renderUrlPreserveNewlines(text) {
-  const s = String(text || '');
-  const lines = s.split(/\r\n|\r|\n/);
-  const out = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (i) out.push(br());
-    out.push(...renderUrl(lines[i]));
-  }
-  return out;
-}
 
 function getThreadIdFromPost(action) {
   const c = action.value?.content || action.content || {};
@@ -570,7 +552,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             img({ src: `/assets/larp/images/${encodeURIComponent(String(house).toLowerCase())}.jpg`, alt: house, class: 'larp-house-mini' }),
             span(`L.A.R.P · ${String(house).toUpperCase()}`)
           ) : null,
-          text ? p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(String(text))) : null
+          text ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(String(text))) : null
         )
       );
     }
@@ -588,7 +570,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
-          p({ class: 'tribe-description' }, ...renderUrl(description || ''))
+          p({ class: 'tribe-description' }, ...renderStyledText(description || ''))
         )
       );
     }
@@ -624,7 +606,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               br()
             ]
             : "",
-          p(...renderUrl(description || "")),
+          p(...renderStyledText(description || "")),
           personalSkills && personalSkills.length
             ? div({ class: 'card-tags' }, personalSkills.map(skill =>
                 a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
@@ -754,7 +736,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const { url } = content;
       cardBody.push(
         div({ class: 'card-section bookmark' },
-          h2(url ? p(a({ href: url, target: '_blank', class: "bookmark-url" }, url)) : "")
+          h2(url ? p(a({ href: safeExternalHref(url), target: '_blank', class: "bookmark-url" }, url)) : "")
         )
       );
     }
@@ -816,11 +798,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'feed') {
-      const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
+      const { renderStyledHtml } = require('../backend/renderStyledText');
       const { text, refeeds } = content;
       if (!isValidFeedText(text)) return null;
       const safeText = cleanFeedText(text);
-      const htmlText = safeText ? rewriteHashtagLinks(renderTextWithStyles(safeText)) : '';
+      const htmlText = safeText ? renderStyledHtml(safeText) : '';
       const refeedsNum = Number(refeeds || 0) || 0;
       cardBody.push(
         div({ class: 'card-section feed' },
@@ -855,7 +837,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
        bodyNode = div({ class: 'feed-text post-text post-text-clamped', innerHTML: sanitizeHtml(linkified) });
       } else {
         bodyNode = div({ class: 'feed-text' },
-          p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderUrlPreserveNewlines(displayText))
+          p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderStyledText(displayText))
         );
       }
       const threadId = getThreadIdFromPost(action);
@@ -876,7 +858,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                   a({ href: ctxHref, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
                   parentAuthor ? span(' ', userLink(parentAuthor, parentName)) : ''
                 ),
-                parentText ? p({ class: 'post-text reply-context-text post-text-pre' }, ...renderUrlPreserveNewlines(parentText)) : ''
+                parentText ? p({ class: 'post-text reply-context-text post-text-pre' }, ...renderStyledText(parentText)) : ''
               )
             : '',
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
@@ -917,7 +899,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                     ),
                     latest && latest.text
                         ? div({ class: 'feed-text activity-update-msg' },
-                            p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(latest.text))
+                            p({ class: 'post-text post-text-pre' }, ...renderStyledText(latest.text))
                           )
                         : ''
                 )
@@ -976,7 +958,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                                       : renderZoomableImage(attSrc, { imgClass: 'post-image' }))
                             : renderMediaBlob(latest.image);
                         const textNode = latest.text
-                            ? p({ class: 'post-text post-text-pre' }, ...renderUrlPreserveNewlines(latest.text))
+                            ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(latest.text))
                             : null;
                         return (textNode || attNode)
                             ? div({ class: 'feed-text activity-update-msg' }, ...[textNode, attNode].filter(Boolean))
@@ -1024,7 +1006,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               parentTitle ? p({ class: 'post-text reply-context-text' }, parentTitle) : ''
             ),
             div({ class: 'card-field forum-reply-body' },
-              p({ class: 'forum-reply-text' }, ...renderUrl(text))
+              p({ class: 'forum-reply-text' }, ...renderStyledText(text))
             )
           )
         );
@@ -1067,7 +1049,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       spreadTitle ? h2({ class: 'post-title activity-spread-title' }, spreadTitle) : '',
       spreadContentWarning ? h2({ class: 'content-warning' }, spreadContentWarning) : '',
       spreadExcerpt
-        ? div({ class: 'post-text activity-spread-text post-text-pre activity-spread-clamped' }, ...renderUrlPreserveNewlines(spreadExcerpt))
+        ? div({ class: 'post-text activity-spread-text post-text-pre activity-spread-clamped' }, ...renderStyledText(spreadExcerpt))
         : div({ class: 'post-text activity-spread-text activity-spread-missing' }, i18n.spreadContentUnavailable || 'Content not yet available (pending replication)'),
       spreadOriginalAuthor
         ? div({ class: 'card-field' },
@@ -1114,7 +1096,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             div({ class: 'about-card-col-desc' },
               h2({ class: 'about-card-header' }, userLink(about, name)),
               description
-                ? p({ class: 'tribe-side-description' }, ...renderUrlPreserveNewlines(String(description)))
+                ? p({ class: 'tribe-side-description' }, ...renderStyledText(String(description)))
                 : null
             )
           )
@@ -1229,7 +1211,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
-          p({ class: 'tribe-description' }, ...renderUrl(description || '')),
+          p({ class: 'tribe-description' }, ...renderStyledText(description || '')),
           validTags.length
             ? div({ class: 'card-tags' }, validTags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
@@ -1258,7 +1240,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
-          notes ? p({ class: 'tribe-description' }, ...renderUrl(notes)) : ""
+          notes ? p({ class: 'tribe-description' }, ...renderStyledText(notes)) : ""
         )
       );
     }
@@ -1282,7 +1264,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
-          description ? p({ class: 'tribe-description' }, ...renderUrl(description)) : ""
+          description ? p({ class: 'tribe-description' }, ...renderStyledText(description)) : ""
         )
       );
     }
@@ -1334,7 +1316,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.statusLabel || 'Status') + ':'), span({ class: 'card-value' }, String(content.status).toUpperCase())) : '',
           content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.emergencyCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
           renderMediaBlob(content.text, null),
-          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderUrl(stripMediaMarkdown(content.text))) : ''
+          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : ''
         )
       );
     }
@@ -1360,7 +1342,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           content.kind ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.logisticsKindLabel || 'Type') + ':'), span({ class: 'card-value' }, `${String(content.kind).toUpperCase()} · ${String(content.mode || '').toUpperCase()}`)) : '',
           content.date ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.logisticsDateLabel || 'Date') + ':'), span({ class: 'card-value' }, moment(content.date).format('YYYY/MM/DD HH:mm'))) : '',
           renderMediaBlob(content.description, null),
-          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderUrl(stripMediaMarkdown(content.description))) : ''
+          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.description))) : ''
         )
       );
     }
@@ -1374,7 +1356,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           type === 'podcastEpisode' ? '' : div({ class: 'card-field' }, pKey ? a({ href: pHref, class: 'card-value user-link' }, pTitle || pKey) : span({ class: 'card-value' }, pTitle || '')),
           type === 'podcast' && content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.podcastCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
           renderMediaObject(type === 'podcast' ? content.cover : content.media, type === 'podcast' ? pHref : null),
-          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderUrl(stripMediaMarkdown(content.description).slice(0, 280))) : ''
+          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.description).slice(0, 280))) : ''
         )
       );
     }
@@ -1389,7 +1371,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.campaignCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.statusLabel || 'Status') + ':'), span({ class: 'card-value' }, String(content.status).toUpperCase())) : '',
           renderMediaBlob(content.text, null),
-          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderUrl(stripMediaMarkdown(content.text))) : ''
+          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : ''
         )
       );
     }
@@ -1408,7 +1390,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             )
           ),
           renderMediaBlob(content.text, null),
-          stripMediaMarkdown(content.text) ? div({ class: 'card-field' }, p({ class: 'forum-reply-text' }, ...renderUrl(stripMediaMarkdown(content.text)))) : ''
+          stripMediaMarkdown(content.text) ? div({ class: 'card-field' }, p({ class: 'forum-reply-text' }, ...renderStyledText(stripMediaMarkdown(content.text)))) : ''
         )
       );
     }
@@ -1427,7 +1409,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             )
           ),
           renderMediaBlob(content.text, null),
-          stripMediaMarkdown(content.text) ? div({ class: 'card-field' }, p({ class: 'forum-reply-text' }, ...renderUrl(stripMediaMarkdown(content.text)))) : ''
+          stripMediaMarkdown(content.text) ? div({ class: 'card-field' }, p({ class: 'forum-reply-text' }, ...renderStyledText(stripMediaMarkdown(content.text)))) : ''
         )
       );
     }
@@ -1533,10 +1515,12 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               : 'ACTION';
 
         const actorId = activity.activityActor || '';
+        const actorLink = `<a class="user-link" href="/author/${encodeURIComponent(actorId)}">${escapeHtml(userLinkLabel(actorId))}</a>`;
+        const projectLink = `<a class="user-link" href="/projects/${encodeURIComponent(action.tipId || action.id)}">${escapeHtml(title || '')}</a>`;
         const msgHtml = tmpl
-          .replace('%OASIS%', `<a class="user-link" href="/author/${encodeURIComponent(actorId)}">${userLinkLabel(actorId)}</a>`)
-          .replace('%PROJECT%', `<a class="user-link" href="/projects/${encodeURIComponent(action.tipId || action.id)}">${title || ''}</a>`)
-          .replace('%ACTION%', `<strong>${actionWord}</strong>`);
+          .replace('%OASIS%', () => actorLink)
+          .replace('%PROJECT%', () => projectLink)
+          .replace('%ACTION%', () => `<strong>${escapeHtml(actionWord)}</strong>`);
 
         return div({ class: 'card card-rpg' },
           div({ class: 'card-header' },
@@ -1812,7 +1796,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section parliament' },
           title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
           renderMediaBlob(description, null),
-          stripMediaMarkdown(description) ? p({ class: 'card-section-text' }, ...renderUrl(stripMediaMarkdown(description))) : '',
+          stripMediaMarkdown(description) ? p({ class: 'card-section-text' }, ...renderStyledText(stripMediaMarkdown(description))) : '',
           campaignId ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ':'), span({ class: 'card-value' }, `${signatures}${goal > 0 ? ` / ${goal}` : ''}`)) : '',
           campaignId ? div({ class: 'card-field' }, a({ href: `/campaigns/${encodeURIComponent(campaignId)}`, class: 'card-value user-link' }, title || campaignId)) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),

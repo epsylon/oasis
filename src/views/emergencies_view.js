@@ -2,7 +2,7 @@ const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, lab
 const { template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapLocationVisitLabel } = require("./maps_view");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
@@ -198,7 +198,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
       : null
   );
   const main = div({ class: "tribe-main" },
-    emergency.text ? div({ class: "emergency-body" }, ...renderUrl(emergency.text)) : null,
+    emergency.text ? div({ class: "emergency-body" }, ...renderStyledText(emergency.text)) : null,
     div({ class: "card-section emergency-updates" },
       h3(i18n.emergencyUpdatesTitle),
       updates.length
@@ -231,7 +231,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
                     input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
                     button({ type: "submit", class: "create-button" }, i18n.emergencyUpdate)
                   )
-                : div({ class: "emergency-update-text" }, ...renderUrl(u.text)),
+                : div({ class: "emergency-update-text" }, ...renderStyledText(u.text)),
               p({ class: "card-footer" }, span({ class: "date-link" }, moment(u.createdAt).format("YYYY/MM/DD HH:mm")), userLink(u.author))
             );
           }))

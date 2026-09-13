@@ -3,7 +3,7 @@ const { renderCommentsSection: renderSharedCommentsSection } = require("./commen
 const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
-const { renderUrl } = require("../backend/renderUrl")
+const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
 
 const renderMediaBlob = (value, attrs = {}) => {
@@ -260,7 +260,7 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
         { class: "milestone-head" },
         span({ class: "milestone-title" }, m.title),
         m.dueDate ? span({ class: "chip chip-due" }, `${i18n.projectMilestoneDue}: ${moment(m.dueDate).format("YYYY/MM/DD HH:mm")}`) : null,
-        safeText(m.description) ? p(...renderUrl(m.description)) : null,
+        safeText(m.description) ? p(...renderStyledText(m.description)) : null,
         editable && !m.done
           ? form(
               { method: "POST", action: `/projects/milestones/complete/${encodeURIComponent(project.id)}/${idx}` },
@@ -284,7 +284,7 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
                   span({ class: "bounty-title" }, b.title),
                   span({ class: "bounty-amount" }, `${b.amount} ECO`)
                 ),
-                safeText(b.description) ? p(...renderUrl(b.description)) : null,
+                safeText(b.description) ? p(...renderStyledText(b.description)) : null,
                 renderCardField(i18n.projectBountyStatus + ":", statusText),
                 b.claimedBy ? renderCardField(i18n.projectBountyClaimedBy + ":", userLink(b.claimedBy)) : null,
                 !editable && !b.done && !b.claimedBy && project.author !== userId
@@ -343,7 +343,7 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
                 span({ class: "bounty-title" }, b.title),
                 span({ class: "bounty-amount" }, `${b.amount} ECO`)
               ),
-              safeText(b.description) ? p(...renderUrl(b.description)) : null,
+              safeText(b.description) ? p(...renderStyledText(b.description)) : null,
               renderCardField(i18n.projectBountyStatus + ":", statusText),
               b.claimedBy ? renderCardField(i18n.projectBountyClaimedBy + ":", userLink(b.claimedBy)) : null,
               !editable && !b.done && !b.claimedBy && project.author !== userId
@@ -677,7 +677,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     safeText(pr.description)
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.projectDescription),
-          p({ class: "tribe-side-description" }, ...renderUrl(pr.description))
+          p({ class: "tribe-side-description" }, ...renderStyledText(pr.description))
         )
       : null,
     pr.mapUrl ? div({ class: "job-section" }, renderMapEmbedWithZoom(params.mapData, pr.mapUrl, `/projects/${encodeURIComponent(pr.id || pr.key)}`, params.zoom)) : null,

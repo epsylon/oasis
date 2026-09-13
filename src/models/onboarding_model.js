@@ -120,6 +120,18 @@ module.exports = ({ cooler, ssbPath } = {}) => {
       }
     },
 
+    adopt(feedId) {
+      const target = dir();
+      if (!target || !feedId) return false;
+      try {
+        fs.mkdirSync(target, { recursive: true });
+        fs.writeFileSync(flagPath(target), `${String(feedId)}\n${new Date().toISOString()}\n${DONE}\n`);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    },
+
     markStep(step) {
       if (!STEPS.includes(step)) return false;
       if (step !== 'language' && step !== 'backup' && step !== 'ux') return true;

@@ -3,7 +3,7 @@ const { template, i18n, userLink, renderContentActions, renderModuleStats } = re
 const { getViewDetailsAction } = require("./activity_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
+const { renderStyledText } = require("../backend/renderStyledText");
 
 const userId = config.keys.id;
 
@@ -30,7 +30,7 @@ const renderMentionCard = (item) => {
       item.title
         ? div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, item.title))
         : null,
-      item.text ? p({ class: "mention-text" }, ...renderUrl(excerpt(item.text))) : null,
+      item.text ? p({ class: "mention-text" }, ...renderStyledText(excerpt(item.text))) : null,
       p({ class: "card-footer" },
         span({ class: "date-link" }, moment(item.createdAt).format("YYYY/MM/DD HH:mm")),
         span(" · "),

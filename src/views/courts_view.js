@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
 const moment = require('../server/node_modules/moment');
 const { template, i18n, userLink, renderStateChip, renderModuleStatsBy } = require('./main_views');
-const { renderUrl } = require('../backend/renderUrl');
+const { renderStyledText, safeExternalHref } = require('../backend/renderStyledText');
 
 const CourtsE2EChip = () => renderStateChip('encrypted', '🔒', i18n.encryptedChipLabel || 'E2E');
 
@@ -362,9 +362,9 @@ const UserLinkCompact = (id) => id ? userLink(id) : span('');
 const UserLinkFull = (id) => id ? userLink(id) : span('');
 
 const renderRichTextNodes = (raw) => {
-  const text = String(raw || '');
+  const text = String(raw || '').trim();
   if (!text) return [];
-  return text.split('\n').map(l => l.trim()).filter(Boolean).map(l => p(...renderUrl(l)));
+  return [p(...renderStyledText(text))];
 };
 
 const RichTextBlock = (raw) => {
@@ -1195,7 +1195,7 @@ const CaseDetailsBlock = (c) => {
                 a(
                   {
                     class: 'evidence-link',
-                    href: e.link,
+                    href: safeExternalHref(e.link),
                     target: '_blank',
                     rel: 'noopener noreferrer'
                   },

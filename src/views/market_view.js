@@ -4,7 +4,7 @@ const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderL
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
-const { renderUrl } = require("../backend/renderUrl")
+const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
 
 const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
@@ -109,7 +109,7 @@ const renderStarRating = (opinions, voterCount) => {
 }
 
 const renderCardField = (labelText, value = "") =>
-  div({ class: "card-field" }, span({ class: "card-label" }, labelText), span({ class: "card-value" }, ...renderUrl(String(value))))
+  div({ class: "card-field" }, span({ class: "card-label" }, labelText), span({ class: "card-value" }, ...renderStyledText(String(value))))
 
 const renderCardFieldRich = (labelText, parts) =>
   div({ class: "card-field" }, span({ class: "card-label" }, labelText), span({ class: "card-value" }, ...(Array.isArray(parts) ? parts : [parts])))
@@ -651,7 +651,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           item.description
             ? div({ class: "job-section" },
                 h2({ class: "job-section-title" }, i18n.marketItemDescription),
-                p({ class: "tribe-side-description" }, ...renderUrl(item.description))
+                p({ class: "tribe-side-description" }, ...renderStyledText(item.description))
               )
             : null,
           renderCountdownField(item),

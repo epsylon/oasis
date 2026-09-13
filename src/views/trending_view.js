@@ -1,9 +1,9 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
-const { renderTextWithStyles } = require('../backend/renderTextWithStyles');
+const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
-const { renderUrl } = require('../backend/renderUrl');
+const { renderStyledText } = require('../backend/renderStyledText');
 const opinionCategories = require('../backend/opinion_categories');
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
@@ -31,7 +31,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { url, description, lastVisit } = c;
     contentHtml = div({ class: 'trending-bookmark' },
       div({ class: 'card-section bookmark' },
-        url ? h2(p(a({ href: url, target: '_blank', class: "bookmark-url" }, url))) : "",
+        url ? h2(p(a({ href: safeExternalHref(url), target: '_blank', class: "bookmark-url" }, url))) : "",
         lastVisit
           ? div(
               { class: 'card-field' },
@@ -39,7 +39,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
               span({ class: 'card-value' }, new Date(lastVisit).toLocaleString())
             )
           : "",
-        description ? [span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ":"), p(...renderUrl(description))] : null
+        description ? [span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ":"), p(...renderStyledText(description))] : null
       )
     );
   } else if (c.type === 'image') {
@@ -47,7 +47,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     contentHtml = div({ class: 'trending-image' },
       div({ class: 'card-section image' },
         title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.imageTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
-        description ? [span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"), p(...renderUrl(description))] : null,
+        description ? [span({ class: 'card-label' }, i18n.imageDescriptionLabel + ":"), p(...renderStyledText(description))] : null,
         div({ class: 'card-field image-container' }, renderZoomableImage(`/blob/${encodeURIComponent(url)}`, { imgClass: 'post-image' }))
       )
     );
@@ -56,7 +56,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     contentHtml = div({ class: 'trending-audio' },
       div({ class: 'card-section audio' },
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.audioTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
-        description ? [span({ class: 'card-label' }, i18n.audioDescriptionLabel + ":"), p(...renderUrl(description))] : null,
+        description ? [span({ class: 'card-label' }, i18n.audioDescriptionLabel + ":"), p(...renderStyledText(description))] : null,
         url
           ? div({ class: 'card-field audio-container' }, audioHyperaxe({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(url)}`, type: mimeType }))
           : div({ class: 'card-field' }, p(i18n.audioNoFile))
@@ -67,7 +67,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     contentHtml = div({ class: 'trending-video' },
       div({ class: 'card-section video' },
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.videoTitleLabel + ':'), span({ class: 'card-value' }, title)) : "",
-        description ? [span({ class: 'card-label' }, i18n.videoDescriptionLabel + ":"), p(...renderUrl(description))] : null,
+        description ? [span({ class: 'card-label' }, i18n.videoDescriptionLabel + ":"), p(...renderStyledText(description))] : null,
         br(),
         url
           ? div({ class: 'card-field video-container' }, videoHyperaxe({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(url)}`, type: mimeType, preload: 'metadata' }))
@@ -79,7 +79,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     contentHtml = div({ class: 'trending-torrent' },
       div({ class: 'card-section torrent' },
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, title)) : "",
-        description ? [span({ class: 'card-label' }, (i18n.torrentDescriptionLabel || 'Description') + ":"), p(...renderUrl(description))] : null,
+        description ? [span({ class: 'card-label' }, (i18n.torrentDescriptionLabel || 'Description') + ":"), p(...renderStyledText(description))] : null,
         url && url.startsWith("&")
           ? div({ class: 'card-field' }, a({ href: `/blob/${encodeURIComponent(url)}`, class: 'filter-btn' }, i18n.torrentDownload || 'Download'))
           : div({ class: 'card-field' }, p(i18n.torrentNoFile || 'No file'))
@@ -94,7 +94,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     contentHtml = div({ class: 'trending-document' },
       div({ class: 'card-section document' },
         t ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.documentTitleLabel + ':'), span({ class: 'card-value' }, t)) : "",
-        description ? [span({ class: 'card-label' }, i18n.documentDescriptionLabel + ":"), p(...renderUrl(description))] : null,
+        description ? [span({ class: 'card-label' }, i18n.documentDescriptionLabel + ":"), p(...renderStyledText(description))] : null,
         div({ id: `pdf-container-${item.key}`, class: 'pdf-viewer-container', 'data-pdf-url': `/blob/${encodeURIComponent(url)}` })
       )
     );
@@ -104,7 +104,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryName + ':'), span({ class: 'card-value' }, c.name || '')),
         c.sector ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industrySector + ':'), span({ class: 'card-value' }, String(c.sector).toUpperCase())) : "",
         c.membershipPolicy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryMembershipPolicy + ':'), span({ class: 'card-value' }, String(i18n['industryPolicy_' + c.membershipPolicy] || c.membershipPolicy).toUpperCase())) : "",
-        c.description ? p(...renderUrl(c.description)) : null,
+        c.description ? p(...renderStyledText(c.description)) : null,
         Array.isArray(c.tags) && c.tags.length
           ? div({ class: 'card-tags' }, c.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
           : null
@@ -116,7 +116,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryBlueprint + ':'), span({ class: 'card-value' }, c.name || '')),
         c.outKind ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryOutputKind + ':'), span({ class: 'card-value' }, String(i18n['industryKind_' + c.outKind] || c.outKind).toUpperCase())) : "",
         c.laborHours ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.industryLaborHours + ':'), span({ class: 'card-value' }, String(c.laborHours))) : "",
-        c.description ? p(...renderUrl(c.description)) : null
+        c.description ? p(...renderStyledText(c.description)) : null
       )
     );
   } else if (c.type === 'housing') {
@@ -130,7 +130,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         c.place ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingPlace + ':'), span({ class: 'card-value' }, c.place)) : "",
         Number(c.rooms) > 0 ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingRooms + ':'), span({ class: 'card-value' }, String(c.rooms))) : "",
         Number(c.size) > 0 ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.housingSize + ':'), span({ class: 'card-value' }, `${c.size} m²`)) : "",
-        c.description ? p(...renderUrl(c.description)) : null,
+        c.description ? p(...renderStyledText(c.description)) : null,
         Array.isArray(c.tags) && c.tags.length
           ? div({ class: 'card-tags' }, c.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
           : null
@@ -143,7 +143,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         c.item_type ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, String(c.item_type).toUpperCase())) : "",
         c.item_status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.marketItemCondition || i18n.status) + ':'), span({ class: 'card-value' }, String(c.item_status).toUpperCase())) : "",
         div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.marketItemPrice || i18n.price) + ':'), span({ class: 'card-value' }, `${c.price} ECO`)),
-        c.description ? p(...renderUrl(c.description)) : null,
+        c.description ? p(...renderStyledText(c.description)) : null,
         Array.isArray(c.tags) && c.tags.length
           ? div({ class: 'card-tags' }, c.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
           : null
@@ -153,7 +153,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { text, refeeds } = c;
     contentHtml = div({ class: 'trending-feed' },
       div({ class: 'card-section feed' },
-        div({ class: 'feed-text', innerHTML: sanitizeHtml(renderTextWithStyles(text)) }),
+        div({ class: 'feed-text', innerHTML: sanitizeHtml(renderStyledHtml(text)) }),
         refeeds
             ? h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-value' }, refeeds))
             : ""
@@ -193,7 +193,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       div({ class: 'card-section styled-text-content' },
         div(
           { class: 'card-field' },
-          span({ class: 'card-value', innerHTML: sanitizeHtml(renderTextWithStyles(c.title || c.name || c.text || c.description || '[no content]')) })
+          span({ class: 'card-value', innerHTML: sanitizeHtml(renderStyledHtml(c.title || c.name || c.text || c.description || '[no content]')) })
         )
       )
     );

@@ -2,11 +2,10 @@ const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, lab
 const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
-const { renderUrl } = require("../backend/renderUrl")
+const { renderStyledText, renderStyledHtml } = require("../backend/renderStyledText")
 const nameCache = require("../backend/nameCache")
-const markdown = require("./markdown")
 const { sanitizeHtml } = require("../backend/sanitizeHtml")
-const renderMd = (text) => div({ class: "styled-text", innerHTML: sanitizeHtml(markdown(String(text || ""))) })
+const renderMd = (text) => div({ class: "styled-text", innerHTML: sanitizeHtml(renderStyledHtml(String(text || ""))) })
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -88,7 +87,7 @@ const renderCourseCard = (course, filter, params = {}) => {
       h2({ class: "tribe-card-title" }, a({ href: url }, course.title)),
       renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
       renderCourseChips(course, params.subscriptions && (String(course.author) === String(userId) || safeArr(course.students).includes(userId)) ? { in: params.subscriptions.mine.has(course.rootId || course.id) || String(course.author) === String(userId) } : null),
-      course.description ? p({ class: "tribe-card-description" }, ...renderUrl(course.description)) : null,
+      course.description ? p({ class: "tribe-card-description" }, ...renderStyledText(course.description)) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.schoolStudents}: ${course.students.length}`)
       ),
@@ -374,7 +373,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
         : null
     ),
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    course.description ? p({ class: "tribe-side-description" }, ...renderUrl(course.description)) : null,
+    course.description ? p({ class: "tribe-side-description" }, ...renderStyledText(course.description)) : null,
     table({ class: "tribe-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.schoolCreatedAt),

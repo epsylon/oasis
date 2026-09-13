@@ -53,7 +53,7 @@ describe('wiki: pages, slugs and versions', (t) => {
 });
 
 describe('wiki: links between pages', (t) => {
-  t('wikilinks build backlinks, flag missing pages and reveal orphans', async () => {
+  t('wikilinks build backlinks, flag missing pages and mark linked ones', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     await A.use('wiki').createPage({ title: 'Hub', body: 'See [[Spoke]] and [[Ghost page|the ghost]] and [[Tribu:Spoke]]' });
     await A.use('wiki').createPage({ title: 'Spoke', body: 'plain' });
@@ -63,10 +63,14 @@ describe('wiki: links between pages', (t) => {
     eq(hub.missingLinks.join(','), 'ghost-page', 'the ghost is a missing link');
     eq(spoke.backlinks.length, 1, 'spoke is linked from hub');
     eq(spoke.backlinks[0].title, 'Hub');
-    ok(hub.isOrphan && !spoke.isOrphan, 'hub has no inbound links, spoke has');
-    const orphans = await A.use('wiki').listPages({ filter: 'orphans' });
-    eq(orphans.length, 1);
-    eq(orphans[0].title, 'Hub');
+    ok(!hub.isLinked && spoke.isLinked, 'hub has no inbound links, spoke has');
+    const linked = await A.use('wiki').listPages({ filter: 'linked' });
+    eq(linked.length, 1);
+    eq(linked[0].title, 'Spoke');
+    const hubPage = await A.use('wiki').getPage(hub.id);
+    const spokePage = await A.use('wiki').getPage(spoke.id);
+    eq(hubPage.linkedPages.map(p => p.title).join(','), 'Spoke', 'a page lists what it points at, even with nothing pointing back');
+    eq(spokePage.linkedPages.map(p => p.title).join(','), 'Hub', 'and what points at it');
   });
 
   t('aliases resolve to the page', async () => {
@@ -76,10 +80,37 @@ describe('wiki: links between pages', (t) => {
     ok(page && page.title === 'Solar panels', 'an alias opens the page');
   });
 
-  t('renderUrl turns [[wikilinks]] into links everywhere', async () => {
-    const { renderUrl } = require('../../../src/backend/renderUrl');
-    const html = renderUrl('read [[Solar panels|panels]] now').map(x => (x && x.outerHTML) || String(x)).join('');
+  t('a title already taken comes back to the form with your text and a notice', async () => {
+    const { wikiView } = require('../../../src/views/wiki_view');
+    const i18n = require('../../../src/views/main_views').i18n;
+    const draft = { title: 'Recipes', body: 'my long text', tags: 'food', status: 'OPEN', summary: '' };
+    const html = String(await wikiView([], 'create', { draft, censusList: [], notice: i18n.wikiDuplicateTitle }));
+    ok(html.includes(i18n.wikiDuplicateTitle), 'the form explains that the title is taken');
+    ok(html.includes('my long text'), 'what you wrote is still in the form');
+    ok(html.includes('value="Recipes"'), 'and so is the title, ready to be changed');
+  });
+
+  t('the text renderer turns [[wikilinks]] into links everywhere', async () => {
+    const { renderStyledText } = require('../../../src/backend/renderStyledText');
+    const html = renderStyledText('read [[Solar panels|panels]] now').map(x => (x && x.outerHTML) || String(x)).join('');
     ok(html.includes('href="/wiki/solar-panels"') && html.includes('>panels<'), 'a wikilink renders as a link to the slug');
+  });
+});
+
+describe('wiki: following a page', (t) => {
+  t('editing someone else\'s page subscribes you, and an explicit choice is never overridden', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const page = await A.use('wiki').createPage({ title: 'Shared notes', body: 'v1' });
+    B.setActor();
+    eq(await B.use('subscriptions').myState(page.key), null, 'nobody is subscribed before touching the page');
+    const edited = await B.use('wiki').updatePage(page.key, { body: 'v2' });
+    ok(edited.author && edited.author !== B.node.id, 'the update reports who owns the page, so the author is not subscribed to their own');
+    await B.use('subscriptions').setSubscription(page.key, 'wiki', true);
+    eq(await B.use('subscriptions').myState(page.key), 'on');
+    await B.use('subscriptions').setSubscription(page.key, 'wiki', false);
+    eq(await B.use('subscriptions').myState(page.key), 'off', 'unsubscribing is remembered as a decision, not as absence');
+    eq((await A.use('subscriptions').listSubscribers(page.key)).length, 0, 'and it takes you off the list');
   });
 });
 
@@ -123,6 +154,65 @@ describe('wiki: tribe pages stay inside the tribe', (t) => {
     const raw = await new Promise((res, rej) => B.node.get(created.key, (e, m) => e ? rej(e) : res(m)));
     eq(raw.content.type, 'tribe-msg', 'on the log it is an opaque tribe envelope');
     notOk(JSON.stringify(raw.content).includes('hidden text'), 'the body never travels in clear');
+  });
+});
+
+describe('wiki: long pages', (t) => {
+  t('a body beyond the message limit is stored as a blob and reads back whole, through edits and inside tribes', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const long = 'Acuíferos y nitratos. '.repeat(700).trim();
+    const longer = long + ' Segunda versión.';
+    A.setActor();
+    const created = await A.use('wiki').createPage({ title: 'Long page', body: long });
+    const raw = await new Promise((res, rej) => A.node.get(created.key, (e, m) => e ? rej(e) : res(m)));
+    ok(raw.content.bodyBlob && raw.content.bodyBlob.startsWith('&'), 'the message points at a blob');
+    eq(raw.content.body, '', 'and carries no inline body');
+    eq((await A.use('wiki').getPage(created.key)).body, long, 'the page reads back whole');
+    await A.use('wiki').updatePage(created.key, { body: longer, summary: 'more' });
+    const page = await A.use('wiki').getPage(created.key);
+    eq(page.body, longer); eq(page.versions.length, 2); eq(page.versions[0].body, long, 'earlier versions keep their own body');
+    const tribe = await A.use('tribes').createTribe('Secret', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const tribeId = tribe.key || tribe.id;
+    const secret = await A.use('wiki').createPage({ title: 'Tribe long', body: long, tribeId });
+    eq((await A.use('wiki').getPage(secret.key, { tribeId })).body, long, 'a member reads the long tribe page');
+    B.setActor();
+    notOk(await B.use('wiki').getPage(secret.key, { tribeId }), 'an outsider still cannot read it');
+    const blobRef = (await new Promise((res, rej) => A.node.get(secret.key, (e, m) => e ? rej(e) : res(m)))).content;
+    notOk(JSON.stringify(blobRef).includes('Acuíferos'), 'the envelope carries no clear text');
+  });
+});
+
+describe('wiki: links inside a tribe', (t) => {
+  t('pages link to each other within the tribe and stay apart from the global wiki', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const tribe = await A.use('tribes').createTribe('Guild', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const tribeId = tribe.key || tribe.id;
+    await A.use('wiki').createPage({ title: 'Target', body: 'inside', tribeId });
+    await A.use('wiki').createPage({ title: 'Source', body: 'see [[Target]]', tribeId });
+    await A.use('wiki').createPage({ title: 'Target', body: 'outside' });
+    const inside = await A.use('wiki').listPages({ tribeId, filter: 'all' });
+    const outside = await A.use('wiki').listPages({ filter: 'all' });
+    eq(inside.length, 2, 'the tribe sees only its own pages');
+    eq(outside.length, 1, 'and the global wiki only sees the global one');
+    const tribeTarget = inside.find(p => p.title === 'Target');
+    const globalTarget = outside.find(p => p.title === 'Target');
+    ok(tribeTarget.isLinked, 'the tribe page is marked as linked');
+    ok(!globalTarget.isLinked, 'a page with the same title outside the tribe is not');
+    const full = await A.use('wiki').getPage(tribeTarget.id, { tribeId });
+    eq(full.linkedPages.map(p => p.title).join(','), 'Source', 'and it lists the page that links to it');
+  });
+});
+
+describe('wiki: the editor is the same everywhere', (t) => {
+  t('the format help sits with the body field whether the page is global or inside a tribe', async () => {
+    const { wikiView } = require('../../../src/views/wiki_view');
+    const global = String(await wikiView([], 'create', { censusList: [] }));
+    const inTribe = String(await wikiView([], 'create', { censusList: [], tribeId: '%t.sha256', tribe: { id: '%t.sha256', title: 'Guild' } }));
+    for (const [name, html] of [['global', global], ['tribe', inTribe]]) {
+      eq((html.match(/class="rt-toolbar"/g) || []).length, 1, `${name}: exactly one format help`);
+      ok(html.indexOf('class="rt-toolbar"') < html.indexOf('name="body"'), `${name}: the help comes before the field it describes`);
+    }
+    ok(inTribe.includes('name="tribeId"'), 'the tribe form carries the tribe');
   });
 });
 

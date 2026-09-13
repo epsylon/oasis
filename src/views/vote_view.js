@@ -3,7 +3,6 @@ const { renderCommentsSection: renderSharedCommentsSection } = require("./commen
 const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderUrl } = require("../backend/renderUrl");
 
 const userId = config.keys.id;
 const VOTE_QUORUM = 2;

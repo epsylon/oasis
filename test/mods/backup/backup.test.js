@@ -2,7 +2,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { eq, ok, notOk } = require('../../helpers/assert');
-const { makeNetwork, makePeer } = require('../../helpers/setup');
+const { makeNetwork, makePeer, generateKeypair } = require('../../helpers/setup');
+const crypto = require('crypto');
 const pull = require('../../../src/server/node_modules/pull-stream');
 const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
 const validate = require('../../../src/server/node_modules/ssb-validate');
@@ -50,7 +51,8 @@ describe('backup: keys', (t) => {
       fs.writeFileSync(path.join(home, '.ssb', 'secret'), '{"id":"@other.ed25519"}');
       const enc = path.join(home, 'oasis.enc');
       fs.writeFileSync(enc, out.data);
-      await A.use('backup').importKeys({ filePath: enc, password: PASSWORD });
+      const imported = await A.use('backup').importKeys({ filePath: enc, password: PASSWORD });
+      eq(imported.id, '@aaa.ed25519', 'the imported identity is reported');
       eq(fs.readFileSync(path.join(home, '.ssb', 'secret'), 'utf8'), SECRET);
       ok(fs.readdirSync(path.join(home, '.ssb')).some(f => f.startsWith('secret.bak-')), 'previous secret kept as .bak');
       let bad = false;
@@ -96,6 +98,21 @@ describe('backup: full and selective copies', (t) => {
     ok(wrong, 'wrong password is refused');
   });
 
+  t('an EVERYTHING copy carries blobs that no message references', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const orphan = await addBlob(A, 'nobody references me');
+    A.node.publish({ type: 'post', text: 'no attachments here' }, () => {});
+    const est = await A.use('backup').estimate({ scope: 'all' });
+    eq(est.blobsReferenced, 1, 'the orphan blob is selected even with no message pointing at it');
+    const outPath = tmpFile('orphan');
+    const res = await A.use('backup').createBackup({ scope: 'all' }, PASSWORD, outPath);
+    eq(res.blobs, 1);
+    const net2 = makeNetwork(); const B = makePeer(net2); B.setActor();
+    const restored = await B.use('backup').restoreBackup({ filePath: outPath, password: PASSWORD });
+    eq(restored.blobs, 1);
+    ok(net2.blobs.has(orphan), 'the orphan blob reaches the other device');
+  });
+
   t('the "only mine" scope and the "since" date narrow the copy', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor(); A.node.publish({ type: 'post', text: 'old' }, () => {});
@@ -104,6 +121,82 @@ describe('backup: full and selective copies', (t) => {
     eq((await A.use('backup').estimate({ scope: 'mine' })).messages, 1);
     eq((await A.use('backup').estimate({ scope: 'all' })).messages, 2);
     eq((await A.use('backup').estimate({ since: new Date(Date.now() + 60000).toISOString() })).messages, 0);
+  });
+});
+
+describe('backup: restore robustness', (t) => {
+  t('a large blob survives the streamed restore intact', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const big = crypto.randomBytes(3 * 1024 * 1024 + 123);
+    const ref = await new Promise((resolve, reject) => pull(pull.values([big]), A.node.blobs.add((err, r) => err ? reject(err) : resolve(r))));
+    A.node.publish({ type: 'post', text: `big ![image:x](${ref})` }, () => {});
+    const outPath = tmpFile('big');
+    await A.use('backup').createBackup({ scope: 'mine' }, PASSWORD, outPath);
+    const net2 = makeNetwork(); const B = makePeer(net2); B.setActor();
+    const restored = await B.use('backup').restoreBackup({ filePath: outPath, password: PASSWORD });
+    eq(restored.messages, 1); eq(restored.blobs, 1); eq(restored.failed, 0);
+    ok(net2.blobs.get(ref) && net2.blobs.get(ref).equals(big), 'blob bytes are identical after restore');
+  });
+
+  t('messages stored out of order are restored in sequence order; unreachable ones are reported with a reason', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const { msgs } = craftFeed(net, 3);
+    net.log.splice(net.log.indexOf(msgs[0]), 1); net.log.splice(net.log.indexOf(msgs[1]), 1);
+    net.log.push(msgs[1], msgs[0]);
+    const outPath = tmpFile('ooo');
+    await A.use('backup').createBackup({ scope: 'all' }, PASSWORD, outPath);
+    const net2 = makeNetwork(); const B = makePeer(net2); B.setActor();
+    const restored = await B.use('backup').restoreBackup({ filePath: outPath, password: PASSWORD });
+    eq(restored.messages, 3); eq(restored.failed, 0);
+    eq(net2.log.map(m => m.value.sequence).join(','), '1,2,3');
+    const net3 = makeNetwork(); const C = makePeer(net3); C.setActor();
+    craftFeed(net3, 0);
+    const gap = craftFeed(net3, 4);
+    net3.log.splice(net3.log.indexOf(gap.msgs[1]), 1);
+    const gapPath = tmpFile('gap');
+    await C.use('backup').createBackup({ scope: 'all' }, PASSWORD, gapPath);
+    const net4 = makeNetwork(); const D = makePeer(net4); D.setActor();
+    const partial = await D.use('backup').restoreBackup({ filePath: gapPath, password: PASSWORD });
+    eq(partial.messages, 1); eq(partial.failed, 2);
+    ok(partial.errors.length >= 1 && partial.errors[0].count === 2, 'the failure reason is reported with its count');
+  });
+
+  t('a feed that diverged on the target device is reported as a fork, not as already present', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const kp = generateKeypair();
+    const B = makePeer(net, kp); B.setActor();
+    B.node.publish({ type: 'post', text: 'from the backup' }, () => {});
+    A.setActor();
+    const outPath = tmpFile('fork');
+    await A.use('backup').createBackup({ scope: 'all' }, PASSWORD, outPath);
+    const net2 = makeNetwork(); const B2 = makePeer(net2, kp); B2.setActor();
+    B2.node.publish({ type: 'post', text: 'published on the new device' }, () => {});
+    const restored = await B2.use('backup').restoreBackup({ filePath: outPath, password: PASSWORD });
+    eq(restored.messages, 0); eq(restored.skipped, 0); eq(restored.forked, 1);
+    eq(restored.forks.length, 1); eq(restored.forks[0].author, kp.id); eq(restored.forks[0].mine, true);
+  });
+
+  t('a restore runs in the background and exposes its progress until it finishes', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    A.node.publish({ type: 'post', text: 'a' }, () => {});
+    A.node.publish({ type: 'post', text: 'b' }, () => {});
+    const outPath = tmpFile('job');
+    await A.use('backup').createBackup({ scope: 'all' }, PASSWORD, outPath);
+    const net2 = makeNetwork(); const B = makePeer(net2); B.setActor();
+    const model = B.use('backup');
+    eq(model.restoreStatus(), null);
+    const job = model.startRestore({ filePath: outPath, password: PASSWORD });
+    ok(job.running); ok(model.restoreStatus().running);
+    eq(model.startRestore({ filePath: outPath, password: PASSWORD }), job, 'only one restore runs at a time');
+    await job.promise;
+    const status = model.restoreStatus();
+    notOk(status.running); ok(status.finishedAt); eq(status.error, null);
+    eq(status.result.messages, 2); eq(status.progress.messages, 2);
+    notOk(fs.existsSync(outPath), 'the uploaded file is removed afterwards');
+    fs.writeFileSync(outPath, 'garbage');
+    const bad = model.startRestore({ filePath: outPath, password: PASSWORD });
+    await bad.promise;
+    ok(model.restoreStatus().error, 'a corrupt file ends the job with an error instead of hanging');
   });
 });
 

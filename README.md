@@ -73,13 +73,13 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Blogs: Module to discover and manage blogs.
  + Bookmarks: Module to discover and manage bookmarks.	
  + Calendars: Module to discover and manage calendars.
- + Campaigns: Discover and manage campaigns in your network.
+ + Campaigns: Module to discover and manage campaigns.
  + Chats: Module to discover and manage chats.
  + Cipher: Module to encrypt and decrypt your text symmetrically (using a shared password).	
  + Courts: Module to resolve conflicts and emit veredicts.	
  + Developer: Module to manage the Oasis source code.
  + Documents: Module to discover and manage documents.	
- + Emergencies: Module to raise, confirm and follow emergencies in the network.
+ + Emergencies: Module to raise, confirm and follow emergencies.
  + Events: Module to discover and manage events.
  + Favorites: Module to manage your favorite content.
  + Feed: Module to discover and share short-texts (feeds).
@@ -93,9 +93,9 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Invites: Module to manage and apply invite codes.
  + Jobs: Module to discover and manage jobs.	
  + L.A.R.P.: Module for the live-action role-playing layer.
- + Logistics: Discover and manage logistic plans in your network.
+ + Logistics: Discover and manage logistic plans.
  + Logs: Module to record (via AI assistant) your experiences.
- + Mailing Lists: Discover and manage mailing lists in your network.
+ + Mailing Lists: Discover and manage mailing lists.
  + Maps: Module to manage and share offline maps.
  + Market: Module to exchange goods or services.
  + Matches: Module to explore and visualize the matches in the blockchain.

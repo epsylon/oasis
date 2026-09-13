@@ -3,7 +3,7 @@ const { renderCommentsSection: renderSharedCommentsSection } = require("./commen
 const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
-const { renderUrl } = require("../backend/renderUrl")
+const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const { resolvePhoto } = require("./inhabitants_view")
 
@@ -413,7 +413,7 @@ const renderCVList = (inhabitants) =>
             ),
             div(
               { class: "inhabitant-details" },
-              user.description ? p(...renderUrl(user.description)) : null,
+              user.description ? p(...renderStyledText(user.description)) : null,
               p(userLink(user.id)),
               user.skills && user.skills.length
                 ? div({ class: "card-tags" },
@@ -580,7 +580,7 @@ const renderCandidates = (candidates, jobId) => {
         ),
         div(
           { class: "inhabitant-details" },
-          c.description ? p(...renderUrl(c.description)) : null,
+          c.description ? p(...renderStyledText(c.description)) : null,
           p(userLink(c.id)),
           div({ class: "matchskills" },
             p(`${i18n.matchScore || 'Match score'}: ${Math.round(c.matchScore * 100)}%`),
@@ -673,7 +673,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     safeText(bodyText)
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, titleText),
-          p({ class: "tribe-side-description" }, ...renderUrl(bodyText))
+          p({ class: "tribe-side-description" }, ...renderStyledText(bodyText))
         )
       : null
 

@@ -8,7 +8,6 @@ const purify = DOMPurify(window);
 const stripDangerousTags = (input) => {
   if (typeof input !== 'string') return '';
   return purify.sanitize(input, {
-    USE_PROFILES: { html: true },
     ALLOWED_TAGS: [
       'p', 'br',
       'b', 'strong', 'i', 'em', 'u',
@@ -25,7 +24,6 @@ const stripDangerousTags = (input) => {
 const sanitizeHtml = (input) => {
   if (typeof input !== 'string') return '';
   return purify.sanitize(input, {
-    USE_PROFILES: { html: true },
     ALLOWED_TAGS: [
       'p', 'br', 'hr',
       'b', 'strong', 'i', 'em', 'u', 's', 'del',
@@ -36,7 +34,7 @@ const sanitizeHtml = (input) => {
       'img', 'video', 'audio',
       'table', 'thead', 'tbody', 'tr', 'th', 'td'
     ],
-    ALLOWED_ATTR: ['href', 'class', 'target', 'rel', 'src', 'alt', 'title', 'controls'],
+    ALLOWED_ATTR: ['href', 'class', 'rel', 'src', 'alt', 'title', 'controls'],
     FORBID_TAGS: ['svg', 'math', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button', 'script', 'style', 'link', 'meta'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onsubmit', 'onchange', 'style']
   });

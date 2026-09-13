@@ -4,7 +4,7 @@ const { template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderV
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderMediaThumb, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
-const { renderUrl } = require("../backend/renderUrl")
+const { renderStyledText } = require("../backend/renderStyledText")
 const opinionCategories = require("../backend/opinion_categories")
 const { renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 
@@ -473,7 +473,7 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     safeText(bodyText)
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, titleText),
-          p({ class: "tribe-side-description" }, ...renderUrl(bodyText))
+          p({ class: "tribe-side-description" }, ...renderStyledText(bodyText))
         )
       : null
 

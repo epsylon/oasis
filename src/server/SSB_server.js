@@ -119,6 +119,8 @@ const handleFatal = (err) => {
   if (isLockError(err)) {
     console.log('');
     console.log('Another Oasis instance is already running on this device. Close the other instance (or kill the process) and try again.');
+    console.log(`Detail: ${String((err && err.message) || err)}`);
+    console.log(String((err && err.stack) || '').split('\n').slice(1, 4).join('\n'));
     console.log('');
     process.exit(1);
   }

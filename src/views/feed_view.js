@@ -2,10 +2,9 @@ const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, lab
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderVotesSummary, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
-const { renderTextWithStyles } = require("../backend/renderTextWithStyles");
+const { renderStyledHtml } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
-const { renderUrl } = require("../backend/renderUrl");
 
 const FEED_TEXT_MIN = Number(config?.feed?.minLength ?? 1);
 const FEED_TEXT_MAX = Number(config?.feed?.maxLength ?? 280);
@@ -31,19 +30,6 @@ const extractTags = (text) => {
   return Array.from(new Set(list));
 };
 
-const rewriteHashtagLinks = (html) => {
-    return String(html || '').replace(
-        /href=(["'])\/hashtag\/([^"'?#\s<]+)\1/gi,
-        (m, q, rawTag) => {
-            let t = String(rawTag || '');
-            try { t = decodeURIComponent(t); } catch {}
-            t = t.replace(/[^A-Za-z0-9_]/g, '');
-            const tag = t.toLowerCase();
-            const query = encodeURIComponent(`#${tag}`);
-            return `href=${q}/search?query=${query}${q}`;
-        }
-    );
-};
 
 const generateFilterButtons = (filters, currentFilter, action, extra = {}) => {
   const cur = String(currentFilter || "").toUpperCase();
@@ -95,7 +81,7 @@ const renderFeedCard = (feed, spreadMap = null) => {
     const signerId = feed.value.author || "";
     const refeedsNum = Number(content.refeeds || 0) || 0;
     const commentCount = Number(content.commentCount || 0);
-    const styledHtml = rewriteHashtagLinks(renderTextWithStyles(safeText));
+    const styledHtml = renderStyledHtml(safeText);
 
     return div(
         { class: "trending-card feed-card" + (authorId && String(authorId) === String(me) ? " own-content" : "") },
@@ -299,7 +285,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
   const authorId = content.author || feed.value?.author || "";
   const signerId = feed.value?.author || "";
   const createdAt = formatDate(feed);
-  const styledHtml = rewriteHashtagLinks(renderTextWithStyles(safeText));
+  const styledHtml = renderStyledHtml(safeText);
   const me = config?.keys?.id;
   const alreadyRefeeded = Array.isArray(content.refeeds_inhabitants) && me ? content.refeeds_inhabitants.includes(me) : false;
   const refeedsNum = Number(content.refeeds || 0) || 0;

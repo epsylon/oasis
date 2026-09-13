@@ -9,7 +9,7 @@ const highlightJs = require("../server/node_modules/highlight.js");
 const prettyMs = require("../server/node_modules/pretty-ms");
 const moment = require('../server/node_modules/moment');
 const QRCode = require('../server/node_modules/qrcode');
-const { renderUrl } = require('../backend/renderUrl');
+const { renderStyledText, renderStyledHtml, plainText, safeExternalHref } = require('../backend/renderStyledText');
 const ssbClientGUI = require("../client/gui");
 const config = require("../server/ssb_config");
 const cooler = ssbClientGUI({ offline: config.offline });
@@ -27,7 +27,6 @@ exports.getUserId = getUserId;
 const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, table, td, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
 
 const lodash = require("../server/node_modules/lodash");
-const markdown = require("./markdown");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const nameCache = require('../backend/nameCache');
 
@@ -53,12 +52,13 @@ const renderInviteQrCard = ({ qrDataUrl }) =>
   qrDataUrl ? div({ class: 'invite-qr-card' }, img({ src: qrDataUrl, alt: 'QR', class: 'invite-qr-img' })) : null;
 exports.renderInviteQrCard = renderInviteQrCard;
 
-const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, returnTo, canWrite }) => {
+const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, returnTo, canWrite, inline }) => {
   if (!target) return null;
   if (isOwner && (Number(count) || 0) <= 1) return null;
   const showPm = canWrite !== undefined ? canWrite : (isOwner || subscribed);
-  return div({ class: 'tribe-side-actions shop-visibility-row stacked-action-row subscription-box-block' },
-    span({ class: 'card-label' }, `${i18n.subscriptionTitle} (${Number(count) || 0})${isOwner ? '' : ':'}`),
+  const total = Number(count) || 0;
+  const parts = [
+    total ? span({ class: 'card-label' }, `${i18n.subscriptionTitle} (${total})${isOwner ? '' : ':'}`) : null,
     span({ class: 'subscription-actions' },
       isOwner
         ? null
@@ -67,13 +67,15 @@ const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, retu
             input({ type: 'hidden', name: 'scope', value: String(scope || '') }),
             input({ type: 'hidden', name: 'on', value: subscribed ? '0' : '1' }),
             returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
-            button({ type: 'submit', class: subscribed ? 'tribe-action-btn danger-btn' : 'tribe-action-btn' }, String(subscribed ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe).toUpperCase())
+            button({ type: 'submit', class: subscribed ? 'tribe-action-btn danger-btn' : 'tribe-action-btn' }, `${subscribed ? '🔕' : '🔔'} ${String(subscribed ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe).toUpperCase()}`)
           ),
-      showPm
+      showPm && total
         ? a({ href: `/pm?list=${encodeURIComponent(target)}`, class: 'btn-singleview btn-pm', title: i18n.pmCreateButton || 'Write a PM' }, '✉')
         : null
     )
-  );
+  ];
+  const nodes = parts.filter(Boolean);
+  return inline ? nodes : div({ class: 'tribe-side-actions shop-visibility-row stacked-action-row subscription-box-block' }, ...nodes);
 };
 exports.renderSubscriptionBox = renderSubscriptionBox;
 
@@ -291,12 +293,12 @@ const errorView = ({ title, message, backHref }) => {
 };
 exports.errorView = errorView;
 
-exports.renderInlineError = (message, dismissHref) => String(section({ class: 'inline-error' },
+exports.renderInlineError = (message, dismissHref) => section({ class: 'inline-error' },
   div({ class: 'tags-header inline-error-box' },
     p({ class: 'error-page-message' }, String(message || '')),
     dismissHref ? a({ href: dismissHref, class: 'filter-btn' }, i18n.errorDismiss || 'OK') : null
   )
-));
+).outerHTML;
 
 const renderVotesSummary = (opinions = {}) => {
   const entries = Object.entries(opinions).filter(([, v]) => Number(v) > 0);
@@ -2185,7 +2187,7 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
             const u = safeStr(c.url);
             if (u) {
                 nodes.push(
-                    renderField((i18n.url || 'URL') + ':', a({ href: u, target: '_blank', rel: 'noopener noreferrer' }, u))
+                    renderField((i18n.url || 'URL') + ':', a({ href: safeExternalHref(u), target: '_blank', rel: 'noopener noreferrer' }, u))
                 );
             }
         } else if (t === 'image') {
@@ -2299,7 +2301,7 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
     } else {
         articleElement = article(
             { class: "content" },
-            p({ class: "post-text" }, ...renderUrl(rawText))
+            p({ class: "post-text" }, ...renderStyledText(rawText))
         );
     }
 
@@ -2600,8 +2602,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
 exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWarning, sentAt }) => {
   const { escapeHtml: esc, renderKindTag, renderClearnetPage } = require('./clearnet_view');
   const rawText = String(text || '');
-  const renderedHtml = sanitizeHtml(markdown(rawText))
-    .replace(/(["'])\/blob\//g, '$1/c/blob/');
+  const renderedHtml = sanitizeHtml(renderStyledHtml(rawText, { blobPrefix: '/c/blob/', internalLinks: false }));
   const plainPreview = rawText.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<[^>]+>/g, '').slice(0, 200);
   const authorEsc = esc(authorName || (author || '').slice(1, 9));
   const dateStr = sentAt ? esc(new Date(sentAt).toISOString().slice(0, 10)) : '';
@@ -2633,7 +2634,7 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
   <article class="cn-blog-body">${renderedHtml}</article>
 `;
   return renderClearnetPage({
-    title: `${esc(titleText)} — Oasis`,
+    title: `${titleText} — Oasis`,
     ogTitle: titleText,
     ogDescription: plainPreview,
     extraCss,
@@ -2667,6 +2668,11 @@ const CLEARNET_HUB_CSS = `
 .cn-hub-kind{color:var(--fg-dim);font-size:10px;text-transform:uppercase;letter-spacing:2px;font-weight:600}
 .cn-hub-card{display:flex;flex-direction:column;background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color .15s ease;color:var(--fg);text-decoration:none}
 .cn-hub-card:hover{border-color:var(--fg);text-decoration:none}
+.cn-hub-card a{color:var(--fg);text-decoration:none}
+.cn-hub-card a:hover{text-decoration:underline}
+.cn-hub-player{width:100%;display:block;margin:6px 0;border-radius:6px;background:#000}
+video.cn-hub-player{max-height:160px;object-fit:cover}
+audio.cn-hub-player{background:transparent;height:36px}
 .cn-hub-thumb{width:100%;height:140px;object-fit:cover;background:#000;border-bottom:1px solid var(--border)}
 .cn-hub-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cn-hub-title{color:var(--fg);font-weight:600;font-size:15px;word-break:break-word}
@@ -2681,24 +2687,30 @@ const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '
   const { blobUrl: cnBlob, escapeHtml: esc, renderRichText } = require('./clearnet_view');
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
+    const href = `/c/${modulePath}/${encodeURIComponent(it.id)}`;
     const title = esc(it.title || 'Untitled');
-    const snippet = renderRichText((it.snippet || '').slice(0, 160), { links: false });
+    const snippet = esc(plainText(String(it.snippet || '').slice(0, 400)).slice(0, 160));
     const meta = esc(it.meta || '');
     const kind = esc(it.kind || '');
-    const authorLine = showAuthor && it.author ? `<div class="cn-hub-author">${esc(it.authorName || it.author)}</div>` : '';
-    return `<a class="cn-hub-card" href="/c/${modulePath}/${encodeURIComponent(it.id)}">
-      ${blob ? `<img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/>` : ''}
+    const mediaSrc = it.media && it.media.blobId ? cnBlob(it.media.blobId) : null;
+    const player = mediaSrc
+      ? (it.media.kind === 'video'
+          ? `<video class="cn-hub-player" controls preload="metadata" src="${mediaSrc}"></video>`
+          : `<audio class="cn-hub-player" controls preload="metadata" src="${mediaSrc}"></audio>`)
+      : '';
+    return `<div class="cn-hub-card">
+      ${blob ? `<a href="${href}"><img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/></a>` : ''}
       <div class="cn-hub-body">
         ${kind ? `<div class="cn-hub-kind">${kind}</div>` : ''}
-        <div class="cn-hub-title">${title}</div>
+        <a class="cn-hub-title" href="${href}">${title}</a>
+        ${player}
         ${snippet ? `<div class="cn-hub-snippet">${snippet}${(it.snippet || '').length > 160 ? '…' : ''}</div>` : ''}
-        ${authorLine}
         ${meta ? `<div class="cn-hub-meta">${meta}</div>` : ''}
       </div>
-    </a>`;
+    </div>`;
   };
   const q = String(query || '').trim().toLowerCase();
-  const matches = (it) => !q || [it.title, it.snippet, it.meta, it.authorName].some(v => String(v || '').toLowerCase().includes(q));
+  const matches = (it) => !q || [it.title, it.snippet, it.meta].some(v => String(v || '').toLowerCase().includes(q));
   const allItems = [];
   for (const m of CLEARNET_MODULES) {
     if (prefs && !prefs[m.prefKey]) continue;
@@ -2745,13 +2757,13 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderClearnetPage } = require('./clearnet_view');
   const blobAvatarUrl = cnBlob(image);
   const avatarSrc = blobAvatarUrl || '/assets/images/default-avatar.png';
-  const qrSrc = feedId ? `/qr/${encodeURIComponent(feedId)}` : null;
-  const displayName = esc(name || 'Anonymous');
-  const desc = renderRichText(description || '');
+  const qrSrc = feedId ? `/c/qr/${encodeURIComponent(feedId)}` : null;
+  const displayName = esc(name && name !== 'Redacted' ? name : feedId);
+  const desc = renderRichText(description && description !== 'Redacted' ? description : '');
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
     const title = esc(it.title || 'Untitled');
-    const snippet = renderRichText((it.snippet || '').slice(0, 160), { links: false });
+    const snippet = esc(plainText(String(it.snippet || '').slice(0, 400)).slice(0, 160));
     const meta = esc(it.meta || '');
     const kind = esc(it.kind || '');
     return `<a class="cn-hub-card" href="/c/${modulePath}/${encodeURIComponent(it.id)}">
@@ -2820,6 +2832,11 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
 .cn-hub-kind{color:var(--fg-dim);font-size:10px;text-transform:uppercase;letter-spacing:2px;font-weight:600}
 .cn-hub-card{display:flex;flex-direction:column;background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border-color .15s ease;color:var(--fg);text-decoration:none}
 .cn-hub-card:hover{border-color:var(--fg);text-decoration:none}
+.cn-hub-card a{color:var(--fg);text-decoration:none}
+.cn-hub-card a:hover{text-decoration:underline}
+.cn-hub-player{width:100%;display:block;margin:6px 0;border-radius:6px;background:#000}
+video.cn-hub-player{max-height:160px;object-fit:cover}
+audio.cn-hub-player{background:transparent;height:36px}
 .cn-hub-thumb{width:100%;height:140px;object-fit:cover;background:#000;border-bottom:1px solid var(--border)}
 .cn-hub-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cn-hub-title{color:var(--fg);font-weight:600;font-size:15px;word-break:break-word}
@@ -2830,7 +2847,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
 `;
   const body = `
   <div class="cn-profile">
-    <img class="cn-avatar" src="${avatarSrc}" alt="${displayName}"/>
+    <a href="/c/inhabitant/${encodeURIComponent(feedId)}"><img class="cn-avatar" src="${avatarSrc}" alt="${displayName}"/></a>
     <div class="cn-profile-body">
       <h1 class="cn-name">${displayName}</h1>
       <div class="cn-id">${esc(feedId)}</div>
@@ -2914,8 +2931,7 @@ const renderUserSensors = (u, opts = {}) => {
         const path = `/c/inhabitant/${encodeURIComponent(u.id)}`;
         return div({ class: 'profile-reach' },
           renderReachChip(true, i18n, path),
-          renderInviteQrCard({ qrDataUrl: `/qr-clearnet/${encodeURIComponent(u.id)}` }),
-          isMe ? form({ method: 'POST', action: '/profile/clearnet-toggle', class: 'profile-reach-toggle' }, button({ type: 'submit', class: 'btn' }, i18n.profileSwitchToOasis || 'Return to Oasis')) : null
+          renderInviteQrCard({ qrDataUrl: `/qr-clearnet/${encodeURIComponent(u.id)}` })
         );
       })()
     : null;
@@ -3000,7 +3016,7 @@ exports.authorView = async ({
     ) : null,
     feedId ? renderInviteQrCard({ qrDataUrl: `/qr/${encodeURIComponent(feedId)}` }) : null,
     description !== ""
-      ? div({ class: "profile-side-description", innerHTML: sanitizeHtml(markdown(description)) })
+      ? div({ class: "profile-side-description", innerHTML: sanitizeHtml(renderStyledHtml(description)) })
       : null,
     ...userSensors,
     div({ class: "profile-side-actions" },
@@ -3265,7 +3281,7 @@ const renderMessage = (msg) => {
     div({ class: 'card-body' },
       div({ class: 'card-section' },
         badge,
-        p({ class: 'post-text' }, ...renderUrl(mentionsText || '[No content]'))
+        p({ class: 'post-text' }, ...renderStyledText(mentionsText || '[No content]'))
       )
     ),
     p({ class: 'card-footer' },
@@ -3476,7 +3492,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
         return `\u0000MD${idx}\u0000`
       })
     return masked
-      .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g, (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${userLinkLabel(id)}</a>`)
+      .replace(/(@[a-zA-Z0-9/+._=-]+\.ed25519)/g, (match, id) => `<a class="user-link" href="/author/${encodeURIComponent(id)}">${escapeHtml(userLinkLabel(id))}</a>`)
       .replace(/\/jobs\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="job-link" href="${hrefFor.job(id)}">${match}</a>`)
       .replace(/\/projects\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="project-link" href="${hrefFor.project(id)}">${match}</a>`)
       .replace(/\/market\/([%A-Za-z0-9/+._=-]+\.sha256)/g, (match, id) => `<a class="market-link" href="${hrefFor.market(id)}">${match}</a>`)
@@ -4177,51 +4193,6 @@ const injectResolvedMentions = (text, mentions) => {
   return out
 }
 
-const markdownMentionsToHtml = (markdownText) => {
-  const escaped = escapeHtml(String(markdownText || ""))
-  const withBr = escaped.replace(/\r\n|\r|\n/g, "<br>")
-
-  const unescapeBlob = (b) => b.replace(/&amp;/g, '&')
-
-  const escAttr = (s) => String(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-
-  const withImages = withBr.replace(
-    /!\[([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
-    (_m, alt, blob) => `<img src="/blob/${encodeURIComponent(unescapeBlob(blob))}" alt="${escAttr(alt)}" class="post-image">`
-  )
-
-  const withVideos = withImages.replace(
-    /\[video:([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
-    (_m, _name, blob) => `<video controls class="post-video" src="/blob/${encodeURIComponent(unescapeBlob(blob))}"></video>`
-  )
-
-  const withAudios = withVideos.replace(
-    /\[audio:([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
-    (_m, _name, blob) => `<audio controls class="post-audio" src="/blob/${encodeURIComponent(unescapeBlob(blob))}"></audio>`
-  )
-
-  const withPdfs = withAudios.replace(
-    /\[pdf:([^\]]*)\]\(\s*(&amp;[^)\s]+\.sha256)\s*\)/g,
-    (_m, name, blob) => `<a class="post-pdf" href="/blob/${encodeURIComponent(unescapeBlob(blob))}" target="_blank">${escapeHtml(name || i18n.pdfFallbackLabel || 'PDF')}</a>`
-  )
-
-  const withMentions = withPdfs.replace(
-    /\[@([^\]]+)\]\(\s*@?([^) \t\r\n]+\.ed25519)\s*\)/g,
-    (_m, label, feed) => {
-      const href = authorHref(feed)
-      const shown = `@${String(label || "").replace(/^@+/, "")}`
-      return `<a class="mention" href="${escAttr(href)}">${escapeHtml(shown)}</a>`
-    }
-  )
-
-  const withLinks = withMentions.replace(
-    /(https?:\/\/[^\s"'<>]+)/g,
-    (u) => `<a href="${escAttr(u)}" target="_blank" rel="noopener noreferrer">${escAttr(u)}</a>`
-  )
-
-  return withLinks
-}
-
 const generatePreview = ({ previewData, contentWarning, action }) => {
   const mentions =
     previewData && previewData.mentions && typeof previewData.mentions === "object"
@@ -4233,7 +4204,7 @@ const generatePreview = ({ previewData, contentWarning, action }) => {
   const injected = injectResolvedMentions(normalized, mentions)
   const publishText = normalizeMentionLinks(injected)
 
-  const previewHtml = markdownMentionsToHtml(publishText)
+  const previewHtml = renderStyledHtml(publishText)
 
   const mentionCards = Object.entries(mentions)
     .map(([_token, matches]) => {
