@@ -36,6 +36,7 @@ const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/g;
 const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/gi;
 const HASHTAG_RE = /#[\p{L}\p{N}_]{1,32}(?![\p{L}\p{N}_])/gu;
 const URL_TAIL_RE = /[.,;:!?»"')\]}>]+$/;
+const SELF_HOST_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?#]|$)/i;
 const MAX_DEPTH = 8;
 
 const headerLevel = (hashes) => Math.min(3, String(hashes || '#').length);
@@ -144,23 +145,26 @@ function renderStyledText(value, opts = {}) {
       result.push(audio({ controls: true, class: 'post-audio', src: blobHref(m.blob) }));
     } else if (m.type === 'blob-pdf') {
       const i18n = getI18n();
-      result.push(a({ href: blobHref(m.blob), class: 'post-pdf' }, m.name || i18n.pdfFallbackLabel || 'PDF'));
+      result.push(a({ href: blobHref(m.blob), class: 'post-pdf', target: '_blank', rel: 'noopener noreferrer' }, m.name || i18n.pdfFallbackLabel || 'PDF'));
     } else if (m.type === 'md-mention') {
       result.push(internalOn ? a({ href: `/author/${encodeURIComponent('@' + m.feedId)}`, class: 'mention' }, '@' + m.name) : '@' + m.name);
     } else if (m.type === 'raw-mention') {
       result.push(internalOn ? a({ href: `/author/${encodeURIComponent('@' + m.feedId)}`, class: 'mention' }, '@' + m.feedId.slice(0, 8) + '...') : '@' + m.feedId.slice(0, 8) + '...');
     } else if (m.type === 'md-link') {
-      const external = /^https?:\/\//.test(m.href);
+      const external = /^https?:\/\//.test(m.href) && !SELF_HOST_RE.test(m.href);
       result.push(external
-        ? (linksOn ? a({ href: m.href, class: 'styled-link', rel: 'noopener noreferrer' }, ...inner(m.label)) : plain(m.label))
+        ? (linksOn ? a({ href: m.href, class: 'styled-link', target: '_blank', rel: 'noopener noreferrer' }, ...inner(m.label)) : plain(m.label))
         : (internalOn ? a({ href: m.href, class: 'styled-link' }, ...inner(m.label)) : m.label));
     } else if (m.type === 'url') {
       const href = m.text.startsWith('http') ? m.text : `https://${m.text}`;
-      result.push(linksOn ? a({ href, rel: 'noopener noreferrer' }, m.text) : plain(m.text));
+      if (!linksOn) result.push(plain(m.text));
+      else if (SELF_HOST_RE.test(href)) result.push(a({ href }, m.text));
+      else result.push(a({ href, target: '_blank', rel: 'noopener noreferrer' }, m.text));
     } else if (m.type === 'email') {
       result.push(linksOn ? a({ href: `mailto:${m.text}` }, m.text) : plain(m.text));
     } else if (m.type === 'hashtag') {
-      result.push(internalOn ? a({ href: `/search?query=%23${encodeURIComponent(m.tag)}`, class: 'tag-link' }, `#${m.tag}`) : `#${m.tag}`);
+      const tagHref = typeof opts.hashtagHref === 'function' ? opts.hashtagHref(m.tag) : (internalOn ? `/search?query=%23${encodeURIComponent(m.tag)}` : null);
+      result.push(tagHref ? a({ href: tagHref, class: 'tag-link' }, `#${m.tag}`) : `#${m.tag}`);
     }
     cursor = m.index + m.length;
   }

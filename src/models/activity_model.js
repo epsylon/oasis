@@ -625,6 +625,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       let deduped = latest.filter(a => !a.tipId || a.tipId === a.id || (a.type === 'tribe' && !parentOf.has(a.id)));
 
       const mediaTypes = new Set(['image','video','audio','document','bookmark','map']);
+      const textTypes = new Set(['feed', 'post']);
+      const REPEAT_WINDOW_MS = 10 * 60 * 1000;
       const perAuthorUnique = new Set();
       const byKey = new Map();
       const norm = s => String(s || '').trim().toLowerCase();
@@ -663,6 +665,19 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
             byKey.set(key, { ...a, __effTs: effTs, __hasImage: newHasImage });
           } else if (prevHasImage === newHasImage && effTs > prev.__effTs) {
             byKey.set(key, { ...a, __effTs: effTs, __hasImage: newHasImage });
+          }
+        } else if (textTypes.has(a.type)) {
+          const t = norm(c.text);
+          const key = t ? `${a.type}:${a.author}:${t}` : null;
+          const prev = key ? byKey.get(key) : null;
+          if (!key) {
+            byKey.set(`id:${a.id}`, { ...a, __effTs: effTs });
+          } else if (!prev) {
+            byKey.set(key, { ...a, __effTs: effTs });
+          } else if (Math.abs(effTs - prev.__effTs) <= REPEAT_WINDOW_MS) {
+            if (effTs > prev.__effTs) byKey.set(key, { ...a, __effTs: effTs });
+          } else {
+            byKey.set(`id:${a.id}`, { ...a, __effTs: effTs });
           }
         } else if (a.type === 'tribe') {
           const t = norm(c.title);

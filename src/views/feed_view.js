@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderVotesSummary, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledHtml } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
@@ -112,7 +112,6 @@ const renderFeedCard = (feed, spreadMap = null) => {
             div(
                 { class: "feed-main" },
                 div({ class: "feed-text", innerHTML: sanitizeHtml(styledHtml) }),
-                renderVotesSummary(content.opinions),
                 p(
                     { class: "card-footer" },
                     span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),

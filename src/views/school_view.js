@@ -59,7 +59,7 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
 const renderPriceChip = (course) =>
   isFree(course)
     ? renderStateChip("mutuals", "✓", i18n.schoolFree)
-    : span({ class: "state-chip" }, `${Number(course.price).toFixed(2)} ECO`)
+    : span({ class: "price-chip" }, `${Number(course.price).toFixed(2)} ECO`)
 
 const renderCourseChips = (course, subscription = null) =>
   div({ class: "card-chips-row" },
@@ -745,7 +745,7 @@ exports.clearnetCourseView = async (course, lessons = []) => {
   </div>`).join("")}</div>` : ""}
 `
   return renderClearnetPage({
-    title: `${course.title || "Course"} — Oasis`,
+    title: `${course.title || "Course"} | Oasis`,
     ogTitle: course.title || "Course",
     ogDescription: course.description || "",
     ogImage: courseImg,

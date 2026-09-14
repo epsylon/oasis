@@ -1114,14 +1114,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStatus + ": " ), span({ class: 'card-value' }, status.toUpperCase())),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : "")),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
+          div({ class: "price-chip" }, `${price} ECO`),
           br(),
           image
             ? renderMediaBlob(image, '/assets/images/default-market.png')
             : img({ src: '/assets/images/default-market.png', alt: title, class: 'post-image' }),
-          br(),
-          div({ class: "market-card price" },
-            p(`${i18n.marketItemPrice}: ${price} ECO`)
-          ),
           item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? div({ class: "auction-info" },
                 auctions_poll && auctions_poll.length > 0
@@ -1176,10 +1173,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const prodImageNode = renderMediaBlob(prodImage);
       cardBody.push(
         div({ class: 'card-section shop' },
-          shopId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopTitle || 'Shop') + ':'), span({ class: 'card-value' }, a({ href: `/shops/${encodeURIComponent(shopId)}`, class: 'user-link' }, shopLabel))) : '',
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopProductTitle || 'Product') + ':'), span({ class: 'card-value' }, title || '')),
+          shopId ? div({ class: 'card-field' }, span({ class: 'card-value' }, a({ href: `/shops/${encodeURIComponent(shopId)}`, class: 'user-link' }, shopLabel))) : '',
+          div({ class: 'card-field' }, span({ class: 'card-value' }, title || '')),
+          div({ class: 'price-chip' }, `${Number(price || 0).toFixed(6)} ECO`),
           prodImageNode ? div({ class: 'card-field' }, prodImageNode) : '',
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopProductPrice || 'Price') + ':'), span({ class: 'card-value' }, `${Number(price || 0).toFixed(6)} ECO`)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopProductStock || 'Stock') + ':'), span({ class: 'card-value' }, String(stock || 0)))
         )
       );

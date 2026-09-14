@@ -292,7 +292,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           br(),
           content.seller ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemSeller + ':'), span({ class: 'card-value' }, userLink(content.seller))) : null,
           content.stock ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, content.stock || 'N/A')) : null,
-          content.price ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchPriceLabel + ':'), span({ class: 'card-value' }, `${content.price} ECO`)) : null,
+          content.price ? div({ class: 'price-chip' }, `${content.price} ECO`) : null,
           content.condition ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.condition)) : null,
           content.includesShipping ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemIncludesShipping + ':'), span({ class: 'card-value' }, `${content.includesShipping ? i18n.YESLabel : i18n.NOLabel}`)) : null,
           content.auctions_poll && content.auctions_poll.length > 0
@@ -518,7 +518,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, content.title)) : null,
           blobImg(content.image),
           content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null,
-          content.price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.searchPriceLabel || 'PRICE') + ':'), span({ class: 'card-value' }, `${content.price} ECO`)) : null,
+          content.price ? div({ class: 'price-chip' }, `${content.price} ECO`) : null,
           content.stock !== undefined ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, content.stock)) : null
         );
       case 'chat': {

@@ -150,12 +150,12 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      dateText ? p({ class: "card-date-highlight" }, dateText) : null,
+      dateText ? p({ class: "time-chip" }, dateText) : null,
       e.location && String(e.location).trim()
         ? p({ class: "job-meta-line" }, String(e.location))
         : null,
       price > 0
-        ? div({ class: "job-price-line card-salary" }, `${price.toFixed(6)} ECO`)
+        ? div({ class: "price-chip" }, `${price.toFixed(6)} ECO`)
         : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
@@ -583,7 +583,7 @@ exports.clearnetEventView = async (event) => {
   ${urlHref ? `<a class="cn-event-link" href="${esc(urlHref)}" target="_blank" rel="noopener noreferrer">More info →</a>` : ''}
 `;
   return renderClearnetPage({
-    title: `${event.title || 'Event'} — Oasis`,
+    title: `${event.title || 'Event'} | Oasis`,
     ogTitle: event.title || 'Event',
     ogDescription: event.description || '',
     extraCss,

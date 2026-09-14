@@ -2453,6 +2453,9 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     clearnetTorrents:  visibilityPrefs.clearnetTorrents  === true,
     clearnetBookmarks: visibilityPrefs.clearnetBookmarks === true,
     clearnetPodcasts:  visibilityPrefs.clearnetPodcasts  === true,
+    clearnetMarket:    visibilityPrefs.clearnetMarket    === true,
+    clearnetFeed:      visibilityPrefs.clearnetFeed      === true,
+    clearnetWiki:      visibilityPrefs.clearnetWiki      === true,
     profileShops:      visibilityPrefs.profileShops      === true,
     profileJobs:       visibilityPrefs.profileJobs       === true,
     profileEvents:     visibilityPrefs.profileEvents     === true,
@@ -2466,13 +2469,19 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     profileBookmarks:  visibilityPrefs.profileBookmarks  === true,
     profilePodcasts:   visibilityPrefs.profilePodcasts   === true,
     profileSchool:     visibilityPrefs.profileSchool     === true,
+    profileMarket:     visibilityPrefs.profileMarket     === true,
+    profileFeed:       visibilityPrefs.profileFeed       === true,
+    profileWiki:       visibilityPrefs.profileWiki       === true,
     ecoTax:            visibilityPrefs.ecoTax            !== false,
     larpSign:          visibilityPrefs.larpSign          === true,
     fediverse:         visibilityPrefs.fediverse         === true,
     gpg:               visibilityPrefs.gpg               === true
   };
   const fediverseHandleValue = typeof visibilityPrefs.fediverseHandle === 'string' ? visibilityPrefs.fediverseHandle : '';
-  prefs.clearnet = prefs.clearnetShops || prefs.clearnetSchool || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks || prefs.clearnetPodcasts;
+  prefs.clearnet = prefs.clearnetShops || prefs.clearnetSchool || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks || prefs.clearnetPodcasts || prefs.clearnetMarket || prefs.clearnetFeed || prefs.clearnetWiki;
+  const pillRows = (entries) => div({ class: "pref-pill-row" },
+    ...entries.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]))).map(([key, labelText]) => togglePill(key, labelText))
+  );
   const togglePill = (key, labelText, forced = false) => label(
     { class: forced ? "pref-pill pref-pill-forced" : "pref-pill", for: forced ? undefined : `vis_${key}`, title: forced ? (i18n.profileDeviceLockedHint || 'On mobile devices this sensor is mandatory and cannot be disabled.') : undefined },
     forced ? input({ type: "hidden", name: `vis_${key}`, value: "1" }) : null,
@@ -2531,21 +2540,24 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             h2(i18n.profileContentSectionTitle || 'Avatar Content'),
             p({ class: "prefs-help" }, i18n.profileContentHelp || 'Choose which of your modules will be displayed on your profile.')
           ),
-          div({ class: "pref-pill-row" },
-            togglePill('profileShops',     i18n.profileClearnetShopsLabel     || 'Shops'),
-            togglePill('profileSchool',    i18n.profileClearnetSchoolLabel    || 'School'),
-            togglePill('profileJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'),
-            togglePill('profileEvents',    i18n.profileClearnetEventsLabel    || 'Events'),
-            togglePill('profileProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'),
-            togglePill('profilePosts',     i18n.profileClearnetPostsLabel     || 'Blogs'),
-            togglePill('profileAudios',    i18n.profileClearnetAudiosLabel    || 'Audios'),
-            togglePill('profileVideos',    i18n.profileClearnetVideosLabel    || 'Videos'),
-            togglePill('profileImages',    i18n.profileClearnetImagesLabel    || 'Images'),
-            togglePill('profileDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'),
-            togglePill('profileTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'),
-            togglePill('profileBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks'),
-            togglePill('profilePodcasts',  i18n.profileClearnetPodcastsLabel  || 'Podcasts')
-          )
+          pillRows([
+              ['profileAudios',    i18n.profileClearnetAudiosLabel    || 'Audios'],
+              ['profilePosts',     i18n.profileClearnetPostsLabel     || 'Blogs'],
+              ['profileBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks'],
+              ['profileDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'],
+              ['profileEvents',    i18n.profileClearnetEventsLabel    || 'Events'],
+              ['profileFeed',      i18n.profileClearnetFeedLabel      || 'Feed'],
+              ['profileImages',    i18n.profileClearnetImagesLabel    || 'Images'],
+              ['profileJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'],
+              ['profileMarket',    i18n.profileClearnetMarketLabel    || 'Market'],
+              ['profilePodcasts',  i18n.profileClearnetPodcastsLabel  || 'Podcasts'],
+              ['profileProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'],
+              ['profileSchool',    i18n.profileClearnetSchoolLabel    || 'School'],
+              ['profileShops',     i18n.profileClearnetShopsLabel     || 'Shops'],
+              ['profileTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'],
+              ['profileVideos',    i18n.profileClearnetVideosLabel    || 'Videos'],
+              ['profileWiki',      i18n.profileClearnetWikiLabel      || 'Wikis']
+          ])
         ),
         br(),
         div({ class: "prefs-card" },
@@ -2553,16 +2565,16 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             h2(i18n.profileSensorsSectionTitle || 'Sensors'),
             p({ class: "prefs-help" }, i18n.profileSensorsHelp || 'Optional metrics shown on your profile.')
           ),
-          div({ class: "pref-pill-row" },
-            togglePill('karma',    i18n.profileVisibilityKarma    || 'KARMA Scoring'),
-            togglePill('activity', i18n.profileVisibilityActivity || 'Activity Level'),
-            togglePill('fediverse', i18n.profileVisibilityFediverse || 'Multiverse'),
-            togglePill('larpSign', i18n.profileVisibilityLarpSign || 'L.A.R.P. Sign'),
-            togglePill('gpg',      i18n.profileVisibilityGpg      || 'GPG Key'),
-            togglePill('wallet',   i18n.profileVisibilityWallet   || 'ECOIN Wallet'),
-            togglePill('ubi',      i18n.profileVisibilityUbi      || 'UBI'),
-            togglePill('ecoTax',   i18n.profileVisibilityEcoTax   || 'ECO Tax')
-          ),
+          pillRows([
+            ['activity',  i18n.profileVisibilityActivity  || 'Activity Level'],
+            ['ecoTax',    i18n.profileVisibilityEcoTax    || 'ECO Tax'],
+            ['wallet',    i18n.profileVisibilityWallet    || 'ECOIN Wallet'],
+            ['gpg',       i18n.profileVisibilityGpg       || 'GPG Key'],
+            ['karma',     i18n.profileVisibilityKarma     || 'KARMA Scoring'],
+            ['larpSign',  i18n.profileVisibilityLarpSign  || 'L.A.R.P. Sign'],
+            ['fediverse', i18n.profileVisibilityFediverse || 'Multiverse'],
+            ['ubi',       i18n.profileVisibilityUbi       || 'UBI']
+          ]),
           input({ type: "hidden", name: "fediverseHandle", value: fediverseHandleValue })
         ),
         br(),
@@ -2571,21 +2583,24 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             h2(i18n.clearnetSectionTitle || 'Clearnet'),
             p({ class: "prefs-help" }, i18n.profileClearnetHelp || 'Modules that can be accessed from outside Oasis.')
           ),
-          div({ class: "pref-pill-row" },
-            togglePill('clearnetShops',     i18n.profileClearnetShopsLabel     || 'Shops'),
-            togglePill('clearnetSchool',    i18n.profileClearnetSchoolLabel    || 'School'),
-            togglePill('clearnetJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'),
-            togglePill('clearnetEvents',    i18n.profileClearnetEventsLabel    || 'Events'),
-            togglePill('clearnetProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'),
-            togglePill('clearnetPosts',     i18n.profileClearnetPostsLabel     || 'Blogs'),
-            togglePill('clearnetAudios',    i18n.profileClearnetAudiosLabel    || 'Audios'),
-            togglePill('clearnetVideos',    i18n.profileClearnetVideosLabel    || 'Videos'),
-            togglePill('clearnetImages',    i18n.profileClearnetImagesLabel    || 'Images'),
-            togglePill('clearnetDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'),
-            togglePill('clearnetTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'),
-            togglePill('clearnetBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks'),
-            togglePill('clearnetPodcasts',  i18n.profileClearnetPodcastsLabel  || 'Podcasts')
-          )
+          pillRows([
+              ['clearnetAudios',    i18n.profileClearnetAudiosLabel    || 'Audios'],
+              ['clearnetPosts',     i18n.profileClearnetPostsLabel     || 'Blogs'],
+              ['clearnetBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks'],
+              ['clearnetDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'],
+              ['clearnetEvents',    i18n.profileClearnetEventsLabel    || 'Events'],
+              ['clearnetFeed',      i18n.profileClearnetFeedLabel      || 'Feed'],
+              ['clearnetImages',    i18n.profileClearnetImagesLabel    || 'Images'],
+              ['clearnetJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'],
+              ['clearnetMarket',    i18n.profileClearnetMarketLabel    || 'Market'],
+              ['clearnetPodcasts',  i18n.profileClearnetPodcastsLabel  || 'Podcasts'],
+              ['clearnetProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'],
+              ['clearnetSchool',    i18n.profileClearnetSchoolLabel    || 'School'],
+              ['clearnetShops',     i18n.profileClearnetShopsLabel     || 'Shops'],
+              ['clearnetTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'],
+              ['clearnetVideos',    i18n.profileClearnetVideosLabel    || 'Videos'],
+              ['clearnetWiki',      i18n.profileClearnetWikiLabel      || 'Wikis']
+          ])
         ),
         br(),
         button(
@@ -2600,9 +2615,9 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
 };
 
 exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWarning, sentAt }) => {
-  const { escapeHtml: esc, renderKindTag, renderClearnetPage } = require('./clearnet_view');
+  const { escapeHtml: esc, renderKindTag, renderClearnetPage, renderRichText } = require('./clearnet_view');
   const rawText = String(text || '');
-  const renderedHtml = sanitizeHtml(renderStyledHtml(rawText, { blobPrefix: '/c/blob/', internalLinks: false }));
+  const renderedHtml = sanitizeHtml(renderRichText(rawText));
   const plainPreview = rawText.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<[^>]+>/g, '').slice(0, 200);
   const authorEsc = esc(authorName || (author || '').slice(1, 9));
   const dateStr = sentAt ? esc(new Date(sentAt).toISOString().slice(0, 10)) : '';
@@ -2613,15 +2628,13 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
 .cn-blog-meta{color:var(--fg-dim);font-size:13px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap}
 .cn-blog-cw{background:#663d00;color:#ffd700;border:1px solid #ff7300;padding:8px 14px;border-radius:6px;margin-bottom:16px;font-weight:600}
 .cn-blog-body{color:var(--fg-soft);line-height:1.7;font-size:16px;margin:0;word-wrap:break-word}
-.cn-blog-body p{margin:0 0 14px 0}
 .cn-blog-body img{max-width:100%;height:auto;border-radius:6px;border:1px solid var(--border);display:block;margin:10px 0}
 .cn-blog-body a{color:var(--fg);text-decoration:underline}
 .cn-blog-body a:hover{color:var(--accent)}
-.cn-blog-body pre,.cn-blog-body code{background:var(--bg-sub);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-family:monospace;font-size:13px}
-.cn-blog-body pre{padding:10px 14px;overflow-x:auto;white-space:pre-wrap;word-break:break-word}
-.cn-blog-body blockquote{margin:10px 0;padding:6px 14px;border-left:3px solid var(--fg);color:var(--fg-soft);background:var(--bg-sub);border-radius:0 4px 4px 0}
-.cn-blog-body h1,.cn-blog-body h2,.cn-blog-body h3{color:var(--fg);margin:18px 0 10px 0}
-.cn-blog-body ul,.cn-blog-body ol{padding-left:24px;margin:8px 0}
+.cn-blog-body .rt-code{background:var(--bg-sub);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-family:monospace;font-size:13px}
+.cn-blog-body .rt-code-block{background:var(--bg-sub);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:10px 14px;font-family:monospace;font-size:13px}
+.cn-blog-body .rt-quote{padding:6px 14px;border-left:3px solid var(--fg);color:var(--fg-soft);background:var(--bg-sub);border-radius:0 4px 4px 0}
+.cn-blog-body .rt-header{color:var(--fg);margin:18px 0 10px 0}
 .cn-blog-body video,.cn-blog-body audio{max-width:100%;display:block;margin:10px 0}
 `;
   const body = `
@@ -2634,7 +2647,7 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
   <article class="cn-blog-body">${renderedHtml}</article>
 `;
   return renderClearnetPage({
-    title: `${titleText} — Oasis`,
+    title: `${titleText} | Oasis`,
     ogTitle: titleText,
     ogDescription: plainPreview,
     extraCss,
@@ -2644,20 +2657,25 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
 };
 
 const CLEARNET_MODULES = [
-  { key: 'shops',     label: 'Shops',     kind: 'Shop',     prefKey: 'clearnetShops' },
-  { key: 'school',    label: 'School',    kind: 'Course',   prefKey: 'clearnetSchool' },
-  { key: 'jobs',      label: 'Jobs',      kind: 'Job',      prefKey: 'clearnetJobs' },
-  { key: 'events',    label: 'Events',    kind: 'Event',    prefKey: 'clearnetEvents' },
-  { key: 'projects',  label: 'Projects',  kind: 'Project',  prefKey: 'clearnetProjects' },
-  { key: 'posts',     label: 'Blogs',     kind: 'Blog',     prefKey: 'clearnetPosts',     modulePath: 'blog' },
   { key: 'audios',    label: 'Audios',    kind: 'Audio',    prefKey: 'clearnetAudios' },
-  { key: 'videos',    label: 'Videos',    kind: 'Video',    prefKey: 'clearnetVideos' },
-  { key: 'images',    label: 'Images',    kind: 'Image',    prefKey: 'clearnetImages' },
-  { key: 'documents', label: 'Documents', kind: 'Document', prefKey: 'clearnetDocuments' },
-  { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' },
+  { key: 'posts',     label: 'Blogs',     kind: 'Blog',     prefKey: 'clearnetPosts',     modulePath: 'blog' },
   { key: 'bookmarks', label: 'Bookmarks', kind: 'Bookmark', prefKey: 'clearnetBookmarks' },
-  { key: 'podcasts',  label: 'Podcasts',  kind: 'Podcast',  prefKey: 'clearnetPodcasts' }
+  { key: 'documents', label: 'Documents', kind: 'Document', prefKey: 'clearnetDocuments' },
+  { key: 'events',    label: 'Events',    kind: 'Event',    prefKey: 'clearnetEvents' },
+  { key: 'feed',      label: 'Feed',      kind: 'Feed',     prefKey: 'clearnetFeed' },
+  { key: 'images',    label: 'Images',    kind: 'Image',    prefKey: 'clearnetImages' },
+  { key: 'jobs',      label: 'Jobs',      kind: 'Job',      prefKey: 'clearnetJobs' },
+  { key: 'market',    label: 'Market',    kind: 'Market',   prefKey: 'clearnetMarket' },
+  { key: 'podcasts',  label: 'Podcasts',  kind: 'Podcast',  prefKey: 'clearnetPodcasts' },
+  { key: 'projects',  label: 'Projects',  kind: 'Project',  prefKey: 'clearnetProjects' },
+  { key: 'school',    label: 'School',    kind: 'Course',   prefKey: 'clearnetSchool' },
+  { key: 'shops',     label: 'Shops',     kind: 'Shop',     prefKey: 'clearnetShops' },
+  { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' },
+  { key: 'videos',    label: 'Videos',    kind: 'Video',    prefKey: 'clearnetVideos' },
+  { key: 'wiki',      label: 'Wikis',     kind: 'Wiki',     prefKey: 'clearnetWiki' }
 ];
+
+exports.CLEARNET_MODULES = CLEARNET_MODULES;
 
 const CLEARNET_HUB_CSS = `
 .cn-filter-row{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 12px 0}
@@ -2672,45 +2690,59 @@ const CLEARNET_HUB_CSS = `
 .cn-hub-card a:hover{text-decoration:underline}
 .cn-hub-player{width:100%;display:block;margin:6px 0;border-radius:6px;background:#000}
 video.cn-hub-player{max-height:160px;object-fit:cover}
+img.cn-hub-player{max-height:200px;object-fit:cover}
 audio.cn-hub-player{background:transparent;height:36px}
 .cn-hub-thumb{width:100%;height:140px;object-fit:cover;background:#000;border-bottom:1px solid var(--border)}
 .cn-hub-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cn-hub-title{color:var(--fg);font-weight:600;font-size:15px;word-break:break-word}
 .cn-hub-snippet{color:var(--fg-soft);font-size:13px;line-height:1.4;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .cn-hub-snippet .cn-url{text-decoration:underline}
+.cn-hub-card{position:relative}
+.cn-hub-cover{position:absolute;inset:0;z-index:1}
+.cn-hub-player,.cn-hub-card a:not(.cn-hub-cover){position:relative;z-index:2}
 .cn-hub-meta{color:var(--fg-dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-top:auto}
 .cn-hub-author{color:var(--fg-dim);font-size:11px;word-break:break-all}
 .cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
 `;
 
 const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '', query = '', showAuthor = false }) => {
-  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText } = require('./clearnet_view');
+  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips } = require('./clearnet_view');
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
     const href = `/c/${modulePath}/${encodeURIComponent(it.id)}`;
     const title = esc(it.title || 'Untitled');
-    const snippet = esc(plainText(String(it.snippet || '').slice(0, 400)).slice(0, 160));
+    const raw = String(it.snippet || '');
+    const snippet = renderRichText(raw.slice(0, 300));
     const meta = esc(it.meta || '');
     const kind = esc(it.kind || '');
     const mediaSrc = it.media && it.media.blobId ? cnBlob(it.media.blobId) : null;
     const player = mediaSrc
       ? (it.media.kind === 'video'
           ? `<video class="cn-hub-player" controls preload="metadata" src="${mediaSrc}"></video>`
-          : `<audio class="cn-hub-player" controls preload="metadata" src="${mediaSrc}"></audio>`)
+          : it.media.kind === 'image'
+            ? `<a href="${href}"><img class="cn-hub-player" src="${mediaSrc}" alt="" loading="lazy"/></a>`
+            : `<audio class="cn-hub-player" controls preload="metadata" src="${mediaSrc}"></audio>`)
       : '';
+    const chipRow = [
+      meta ? `<span class="cn-detail">📅 ${meta}</span>` : '',
+      ...(Array.isArray(it.details) ? it.details : []).map(d => `<span class="cn-detail">${esc(String(d))}</span>`),
+      it.price ? `<span class="cn-price">${esc(String(it.price))} ECO</span>` : ''
+    ].filter(Boolean).join('');
     return `<div class="cn-hub-card">
-      ${blob ? `<a href="${href}"><img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/></a>` : ''}
+      <a class="cn-hub-cover" href="${href}" aria-label="${it.title ? title : kind}"></a>
+      ${blob ? `<img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/>` : ''}
       <div class="cn-hub-body">
         ${kind ? `<div class="cn-hub-kind">${kind}</div>` : ''}
-        <a class="cn-hub-title" href="${href}">${title}</a>
+        ${it.title ? `<div class="cn-hub-title">${title}</div>` : ''}
         ${player}
-        ${snippet ? `<div class="cn-hub-snippet">${snippet}${(it.snippet || '').length > 160 ? '…' : ''}</div>` : ''}
-        ${meta ? `<div class="cn-hub-meta">${meta}</div>` : ''}
+        ${snippet ? `<div class="cn-hub-snippet">${snippet}${raw.length > 300 ? '…' : ''}</div>` : ''}
+        ${chipRow ? `<div class="cn-hub-details">${chipRow}</div>` : ''}
+        ${renderTagChips(it.tags)}
       </div>
     </div>`;
   };
   const q = String(query || '').trim().toLowerCase();
-  const matches = (it) => !q || [it.title, it.snippet, it.meta].some(v => String(v || '').toLowerCase().includes(q));
+  const matches = (it) => !q || [it.title, it.snippet, it.meta, ...(Array.isArray(it.tags) ? it.tags.map(t => `#${t}`) : [])].some(v => String(v || '').toLowerCase().includes(q));
   const allItems = [];
   for (const m of CLEARNET_MODULES) {
     if (prefs && !prefs[m.prefKey]) continue;
@@ -2719,6 +2751,7 @@ const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '
       allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: m.kind, _moduleKey: m.key });
     }
   }
+  allItems.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
   const activeFilter = String(filterType || '').toLowerCase();
   const visibleItems = activeFilter ? allItems.filter(it => it._moduleKey === activeFilter) : allItems;
   const qs = q ? `&q=${encodeURIComponent(query)}` : '';
@@ -2744,8 +2777,8 @@ exports.clearnetHubView = async ({ authors = [], items = {}, filterType = '', qu
   ${hub.total ? hub.sections : '<div class="cn-empty-content">No public content has been shared to Clearnet yet.</div>'}
 `;
   return renderClearnetPage({
-    title: 'Oasis HUB',
-    ogTitle: 'Oasis HUB',
+    title: 'Clearnet HUB | Oasis',
+    ogTitle: 'Clearnet HUB | Oasis',
     ogDescription: 'Public content shared by the inhabitants of this Oasis network.',
     extraCss,
     body,
@@ -2754,7 +2787,7 @@ exports.clearnetHubView = async ({ authors = [], items = {}, filterType = '', qu
 };
 
 exports.clearnetInhabitantView = async ({ feedId, name, description, image, prefs, items = {}, query = '', filterType = '' }) => {
-  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderClearnetPage } = require('./clearnet_view');
+  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips, renderClearnetPage } = require('./clearnet_view');
   const blobAvatarUrl = cnBlob(image);
   const avatarSrc = blobAvatarUrl || '/assets/images/default-avatar.png';
   const qrSrc = feedId ? `/c/qr/${encodeURIComponent(feedId)}` : null;
@@ -2763,40 +2796,41 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
     const title = esc(it.title || 'Untitled');
-    const snippet = esc(plainText(String(it.snippet || '').slice(0, 400)).slice(0, 160));
+    const raw = String(it.snippet || '');
+    const snippet = renderRichText(raw.slice(0, 300));
     const meta = esc(it.meta || '');
     const kind = esc(it.kind || '');
-    return `<a class="cn-hub-card" href="/c/${modulePath}/${encodeURIComponent(it.id)}">
+    const mediaSrc = it.media && it.media.blobId ? cnBlob(it.media.blobId) : null;
+    const preview = mediaSrc && it.media.kind === 'image'
+      ? `<img class="cn-hub-player" src="${mediaSrc}" alt="" loading="lazy"/>`
+      : '';
+    const href = `/c/${modulePath}/${encodeURIComponent(it.id)}`;
+    const chipRow = [
+      meta ? `<span class="cn-detail">📅 ${meta}</span>` : '',
+      ...(Array.isArray(it.details) ? it.details : []).map(d => `<span class="cn-detail">${esc(String(d))}</span>`),
+      it.price ? `<span class="cn-price">${esc(String(it.price))} ECO</span>` : ''
+    ].filter(Boolean).join('');
+    return `<div class="cn-hub-card">
+      <a class="cn-hub-cover" href="${href}" aria-label="${it.title ? title : kind}"></a>
       ${blob ? `<img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/>` : ''}
       <div class="cn-hub-body">
         ${kind ? `<div class="cn-hub-kind">${kind}</div>` : ''}
-        <div class="cn-hub-title">${title}</div>
-        ${snippet ? `<div class="cn-hub-snippet">${snippet}${(it.snippet || '').length > 160 ? '…' : ''}</div>` : ''}
-        ${meta ? `<div class="cn-hub-meta">${meta}</div>` : ''}
+        ${it.title ? `<div class="cn-hub-title">${title}</div>` : ''}
+        ${preview}
+        ${snippet ? `<div class="cn-hub-snippet">${snippet}${raw.length > 300 ? '…' : ''}</div>` : ''}
+        ${chipRow ? `<div class="cn-hub-details">${chipRow}</div>` : ''}
+        ${renderTagChips(it.tags)}
       </div>
-    </a>`;
+    </div>`;
   };
-  const moduleDef = [
-    { key: 'shops',     label: 'Shops',     kind: 'Shop',     prefKey: 'clearnetShops' },
-    { key: 'school',    label: 'School',    kind: 'Course',   prefKey: 'clearnetSchool' },
-    { key: 'jobs',      label: 'Jobs',      kind: 'Job',      prefKey: 'clearnetJobs' },
-    { key: 'events',    label: 'Events',    kind: 'Event',    prefKey: 'clearnetEvents' },
-    { key: 'projects',  label: 'Projects',  kind: 'Project',  prefKey: 'clearnetProjects' },
-    { key: 'posts',     label: 'Blogs',     kind: 'Blog',     prefKey: 'clearnetPosts',     modulePath: 'blog' },
-    { key: 'audios',    label: 'Audios',    kind: 'Audio',    prefKey: 'clearnetAudios' },
-    { key: 'videos',    label: 'Videos',    kind: 'Video',    prefKey: 'clearnetVideos' },
-    { key: 'images',    label: 'Images',    kind: 'Image',    prefKey: 'clearnetImages' },
-    { key: 'documents', label: 'Documents', kind: 'Document', prefKey: 'clearnetDocuments' },
-    { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' },
-    { key: 'bookmarks', label: 'Bookmarks', kind: 'Bookmark', prefKey: 'clearnetBookmarks' },
-    { key: 'podcasts',  label: 'Podcasts',  kind: 'Podcast',  prefKey: 'clearnetPodcasts' }
-  ];
+  const moduleDef = CLEARNET_MODULES;
   const allItems = [];
   for (const m of moduleDef) {
     for (const it of (items[m.key] || [])) {
       allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: m.kind, _moduleKey: m.key });
     }
   }
+  allItems.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
   const activeFilter = (filterType || '').toLowerCase();
   const visibleItems = activeFilter
     ? allItems.filter(it => it._moduleKey === activeFilter)
@@ -2836,12 +2870,16 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
 .cn-hub-card a:hover{text-decoration:underline}
 .cn-hub-player{width:100%;display:block;margin:6px 0;border-radius:6px;background:#000}
 video.cn-hub-player{max-height:160px;object-fit:cover}
+img.cn-hub-player{max-height:200px;object-fit:cover}
 audio.cn-hub-player{background:transparent;height:36px}
 .cn-hub-thumb{width:100%;height:140px;object-fit:cover;background:#000;border-bottom:1px solid var(--border)}
 .cn-hub-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cn-hub-title{color:var(--fg);font-weight:600;font-size:15px;word-break:break-word}
 .cn-hub-snippet{color:var(--fg-soft);font-size:13px;line-height:1.4;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .cn-hub-snippet .cn-url{text-decoration:underline}
+.cn-hub-card{position:relative}
+.cn-hub-cover{position:absolute;inset:0;z-index:1}
+.cn-hub-player,.cn-hub-card a:not(.cn-hub-cover){position:relative;z-index:2}
 .cn-hub-meta{color:var(--fg-dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-top:auto}
 .cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
 `;
@@ -2858,7 +2896,7 @@ audio.cn-hub-player{background:transparent;height:36px}
   ${totalCount > 0 ? sections : noResults}
 `;
   return renderClearnetPage({
-    title: `${name || 'Inhabitant'} — Oasis`,
+    title: `${name || 'Inhabitant'} | Oasis`,
     ogTitle: name || 'Oasis',
     ogDescription: description || '',
     ogImage: blobAvatarUrl,
@@ -2985,7 +3023,7 @@ exports.authorView = async ({
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : '',
     gpg:      rawPrefs.gpg      === true
   };
-  const clearnetSubKeys = ['clearnetShops','clearnetSchool','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks','clearnetPodcasts'];
+  const clearnetSubKeys = CLEARNET_MODULES.map(m => m.prefKey);
   const anySubClearnet = clearnetSubKeys.some(k => rawPrefs[k] === true);
   prefs.clearnet = prefs.clearnet || anySubClearnet;
   const showField = (key) => prefs[key];
@@ -3040,22 +3078,30 @@ exports.authorView = async ({
       images:    new Set(['image']),
       documents: new Set(['document']),
       torrents:  new Set(['torrent']),
+      bookmarks: new Set(['bookmark']),
       podcasts:  new Set(['podcast']),
-      school:    new Set(['schoolCourse'])
+      school:    new Set(['schoolCourse']),
+      market:    new Set(['market']),
+      feed:      new Set(['feed']),
+      wiki:      new Set(['wikiPage'])
     };
     const moduleDef = [
-      { key: 'shops',     label: i18n.profileClearnetShopsLabel     || 'Shops' },
-      { key: 'school',    label: i18n.profileClearnetSchoolLabel    || 'School' },
-      { key: 'jobs',      label: i18n.profileClearnetJobsLabel      || 'Jobs' },
-      { key: 'events',    label: i18n.profileClearnetEventsLabel    || 'Events' },
-      { key: 'projects',  label: i18n.profileClearnetProjectsLabel  || 'Projects' },
-      { key: 'posts',     label: i18n.profileClearnetPostsLabel     || 'Blogs' },
       { key: 'audios',    label: i18n.profileClearnetAudiosLabel    || 'Audios' },
-      { key: 'videos',    label: i18n.profileClearnetVideosLabel    || 'Videos' },
-      { key: 'images',    label: i18n.profileClearnetImagesLabel    || 'Images' },
+      { key: 'posts',     label: i18n.profileClearnetPostsLabel     || 'Blogs' },
+      { key: 'bookmarks', label: i18n.profileClearnetBookmarksLabel || 'Bookmarks' },
       { key: 'documents', label: i18n.profileClearnetDocumentsLabel || 'Documents' },
+      { key: 'events',    label: i18n.profileClearnetEventsLabel    || 'Events' },
+      { key: 'feed',      label: i18n.profileClearnetFeedLabel      || 'Feed' },
+      { key: 'images',    label: i18n.profileClearnetImagesLabel    || 'Images' },
+      { key: 'jobs',      label: i18n.profileClearnetJobsLabel      || 'Jobs' },
+      { key: 'market',    label: i18n.profileClearnetMarketLabel    || 'Market' },
+      { key: 'podcasts',  label: i18n.profileClearnetPodcastsLabel  || 'Podcasts' },
+      { key: 'projects',  label: i18n.profileClearnetProjectsLabel  || 'Projects' },
+      { key: 'school',    label: i18n.profileClearnetSchoolLabel    || 'School' },
+      { key: 'shops',     label: i18n.profileClearnetShopsLabel     || 'Shops' },
       { key: 'torrents',  label: i18n.profileClearnetTorrentsLabel  || 'Torrents' },
-      { key: 'podcasts',  label: i18n.profileClearnetPodcastsLabel  || 'Podcasts' }
+      { key: 'videos',    label: i18n.profileClearnetVideosLabel    || 'Videos' },
+      { key: 'wiki',      label: i18n.profileClearnetWikiLabel      || 'Wikis' }
     ];
     const enabledKeys = moduleDef.filter(m => rawPrefs[`profile${m.key.charAt(0).toUpperCase() + m.key.slice(1)}`] === true).map(m => m.key);
     if (enabledKeys.length > 0) {

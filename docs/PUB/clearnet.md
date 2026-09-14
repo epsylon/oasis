@@ -8,14 +8,14 @@ A PUB launched with `sh oasis.sh server` does two things: it replicates the netw
 | --- | --- |
 | `/c` (alias `/clearnet`) | Global HUB: every public item of every inhabitant who enabled Clearnet, with type filters, search and a row of inhabitant links. |
 | `/c/inhabitant/<feedId>` | One inhabitant's HUB: avatar, description, QR and their public items. |
-| `/c/podcasts/<id>`, `/c/shops/<id>`, `/c/jobs/<id>`, `/c/events/<id>`, `/c/projects/<id>`, `/c/school/<id>`, `/c/blog/<key>`, `/c/audios/<id>`, `/c/videos/<id>`, `/c/images/<id>`, `/c/documents/<id>`, `/c/torrents/<id>` | Detail pages. |
+| `/c/audios/<id>`, `/c/blog/<key>`, `/c/documents/<id>`, `/c/events/<id>`, `/c/feed/<id>`, `/c/images/<id>`, `/c/jobs/<id>`, `/c/market/<id>`, `/c/podcasts/<id>`, `/c/projects/<id>`, `/c/school/<id>`, `/c/shops/<id>`, `/c/torrents/<id>`, `/c/videos/<id>`, `/c/wiki/<id>` | Detail pages, one per module. |
 | `/c/blob/<blobId>` | Media files referenced by the pages above. |
 
 Only content whose inhabitant opted in is ever listed or served. Nothing else of the replicated log is exposed.
 
 ## What an inhabitant has to do
 
-Nothing on the PUB side. In their own Oasis, under **Profile → Edit**, the inhabitant turns on **Clearnet** and then the modules they want to expose. 
+Nothing on the PUB side. In their own Oasis, under **Profile → Edit**, the inhabitant turns on the modules they want to expose in the **Clearnet** block. Turning on any of them is what makes that inhabitant public; turning them all off takes them off the HUB again.
 
 Those preferences travel with the feed, so every PUB that replicates the inhabitant applies them.
 

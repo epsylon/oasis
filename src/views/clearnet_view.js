@@ -24,14 +24,25 @@ const escapeHtml = (s) => String(s || '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
+const renderTagChips = (tags) => {
+  const list = (Array.isArray(tags) ? tags : [])
+    .map(t => String(t || '').trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  if (!list.length) return '';
+  const chips = list.map(t => `<a class="cn-tag" href="/c?q=%23${encodeURIComponent(t)}">#${escapeHtml(t)}</a>`).join('');
+  return `<div class="cn-tags">${chips}</div>`;
+};
+
 const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(String(kind || '').toUpperCase())}]</span>`;
 
 const renderRichText = (s, { links = true } = {}) => renderStyledHtml(s, {
   blobPrefix: '/c/blob/',
   internalLinks: false,
   links,
-  plainUrlClass: 'cn-url'
-});
+  plainUrlClass: 'cn-url',
+  hashtagHref: links ? (tag) => `/c?q=%23${encodeURIComponent(tag)}` : null
+}).replace(/\n/g, '<br/>');
 
 const blobIdOf = (v) => {
   if (!v) return null;
@@ -135,6 +146,33 @@ const renderClearnetUrlBlock = ({ baseUrl = '', path, i18nObj = {} }) => {
   );
 };
 
+const CLEARNET_TEXT_CSS = `
+.cn-tags{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.cn-hub-priceline{margin:10px 0 0 0}
+.cn-hub-details{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0 0}
+.cn-detail{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--fg-soft);background:var(--bg-sub);white-space:nowrap}
+.cn-tag{border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--fg-soft);background:var(--bg-sub);text-decoration:none;white-space:nowrap}
+.cn-tag:hover{color:var(--fg);border-color:var(--fg)}
+a.tag-link{color:var(--accent);text-decoration:none}
+.cn-price{display:inline-flex;align-items:center;color:var(--fg);background:var(--bg-sub);border:1px solid var(--fg);border-radius:4px;padding:4px 10px;font-weight:bold;font-size:14px}
+a.tag-link:hover{text-decoration:underline}
+.rt-header{display:block;font-weight:bold;margin:10px 0 4px;line-height:1.3}
+.rt-header-1{font-size:1.5em}
+.rt-header-2{font-size:1.3em}
+.rt-header-3{font-size:1.15em}
+.rt-item{display:block;padding-left:1.4em;text-indent:-0.7em}
+.rt-item::before{content:"\u2022 ";opacity:.7}
+.rt-item-2{padding-left:3em}
+.rt-item-3{padding-left:4.6em}
+.rt-item-4{padding-left:6.2em}
+.rt-item-number{text-indent:-1.2em}
+.rt-item-number::before{content:none}
+.rt-quote{display:block;border-left:3px solid currentColor;padding-left:10px;margin:6px 0;opacity:.85}
+.rt-rule{display:block;border-top:1px solid currentColor;opacity:.4;margin:10px 0}
+.rt-code{font-family:monospace;background:rgba(128,128,128,.18);padding:1px 4px;border-radius:3px;word-break:break-word}
+.rt-code-block{display:block;font-family:monospace;white-space:pre-wrap;background:rgba(128,128,128,.18);padding:10px;border-radius:5px;margin:8px 0;overflow-x:auto;word-break:break-word}
+`;
+
 const CLEARNET_SEARCH_CSS = `
 .cn-search{margin:0}
 .cn-search input[type=text]{width:240px;max-width:100%;background:var(--bg-sub);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:14px;font-family:inherit}
@@ -227,7 +265,8 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   ${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ''}
   <meta name="description" content="${safeOgDesc}"/>
   <meta name="robots" content="index, follow"/>
-  <style>${baseCss}${CLEARNET_SEARCH_CSS}${extraCss}
+  <link rel="icon" href="/c/assets/images/favicon.svg"/>
+  <style>${baseCss}${CLEARNET_SEARCH_CSS}${CLEARNET_TEXT_CSS}${extraCss}
 .cn-brand-link{display:block;text-decoration:none}
 
 .cn-brand-link:hover .cn-brand{color:var(--accent)}
@@ -274,6 +313,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
 .cn-media-frame .cn-media-doc{display:inline-block;background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:10px 18px;color:var(--fg);text-decoration:none}
 .cn-media-frame .cn-media-doc:hover{border-color:var(--fg)}
 `;
+  const fileKind = kind === 'document' || kind === 'torrent';
   let mediaHtml = '';
   if (blob) {
     if (kind === 'image') {
@@ -284,21 +324,27 @@ const renderClearnetMediaView = ({ kind, item }) => {
       mediaHtml = `<video controls preload="metadata" src="${blob}"></video>`;
     } else if (kind === 'document' || kind === 'torrent') {
       mediaHtml = `<a class="cn-media-doc" href="${blob}" target="_blank" rel="noopener">⇩ ${title}</a>`;
+    } else {
+      mediaHtml = `<img src="${blob}" alt="${title}"/>`;
     }
   }
   const body = `
   <div class="cn-media-meta">
     ${renderKindTag(kind)}
     ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
+    ${(Array.isArray(item.details) ? item.details : []).map(d => `<span class="cn-detail">${escapeHtml(String(d))}</span>`).join('')}
+    ${item.price ? `<span class="cn-price">${escapeHtml(String(item.price))} ECO</span>` : ''}
   </div>
-  <h1 class="cn-media-title">${title}</h1>
+  ${item.title ? `<h1 class="cn-media-title">${title}</h1>` : ''}
   <hr class="cn-sep"/>
-  ${mediaHtml ? `<div class="cn-media-frame">${mediaHtml}</div>` : ''}
+  ${mediaHtml && !fileKind ? `<div class="cn-media-frame">${mediaHtml}</div>` : ''}
   ${desc ? `<p class="cn-media-desc">${desc}</p>` : ''}
+  ${mediaHtml && fileKind ? `<div class="cn-media-frame">${mediaHtml}</div>` : ''}
+  ${renderTagChips(item.tags)}
 `;
   return renderClearnetPage({
-    title: `${item.title || 'Untitled'} — Oasis`,
-    ogTitle: item.title || 'Oasis',
+    title: `${item.title || String(kind || 'Oasis').replace(/^./, c => c.toUpperCase())} | Oasis`,
+    ogTitle: item.title || String(kind || 'Oasis').replace(/^./, c => c.toUpperCase()),
     ogDescription: item.description || '',
     ogImage: (kind === 'image') ? blob : null,
     extraCss,
@@ -341,7 +387,7 @@ const renderClearnetPodcastView = ({ channel }) => {
   ${epHtml ? `<hr class="cn-sep"/>${epHtml}` : ''}
 `;
   return renderClearnetPage({
-    title: `${channel.title || 'Untitled'} — Oasis`,
+    title: `${channel.title || 'Untitled'} | Oasis`,
     ogTitle: channel.title || 'Oasis',
     ogDescription: channel.description || '',
     ogImage: cover && !coverIsVideo ? cover : null,
@@ -352,6 +398,7 @@ const renderClearnetPodcastView = ({ channel }) => {
 };
 
 module.exports = {
+  renderTagChips,
   renderClearnetPodcastView,
   escapeHtml,
   renderRichText,

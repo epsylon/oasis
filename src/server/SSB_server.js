@@ -115,12 +115,16 @@ const isCorruptStoreError = (err) => {
     && /flumelog-offset|aligned-block-file|flumeview|flumedb/i.test(stack);
 };
 
+const isDebug = () => process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
+
 const handleFatal = (err) => {
   if (isLockError(err)) {
     console.log('');
     console.log('Another Oasis instance is already running on this device. Close the other instance (or kill the process) and try again.');
-    console.log(`Detail: ${String((err && err.message) || err)}`);
-    console.log(String((err && err.stack) || '').split('\n').slice(1, 4).join('\n'));
+    if (isDebug()) {
+      console.log(`Detail: ${String((err && err.message) || err)}`);
+      console.log(String((err && err.stack) || '').split('\n').slice(1, 4).join('\n'));
+    }
     console.log('');
     process.exit(1);
   }
@@ -135,7 +139,7 @@ const handleFatal = (err) => {
     console.log('  3. Rebuild the indexes from Settings once Oasis starts, or remove the flume view');
     console.log('     folders (NOT log.offset, NOT secret) so they are regenerated from the log.');
     console.log('');
-    console.log(`Technical detail: ${String((err && err.message) || err)}`);
+    if (isDebug()) console.log(`Technical detail: ${String((err && err.message) || err)}`);
     process.exit(1);
   }
   throw err;

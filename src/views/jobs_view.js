@@ -252,7 +252,7 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
               )
             ),
             chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-            div({ class: "card-date-highlight" }, compensationText),
+            div({ class: "price-chip" }, compensationText),
             div({ class: "tribe-card-members" },
               span({ class: "tribe-members-count" }, `${i18n.jobSubscribers}: ${subs.length}`)
             )
@@ -724,6 +724,8 @@ exports.clearnetJobView = async (job) => {
   const lang = esc(String(job.languages || '').toUpperCase());
   const loc = esc(String(job.location || '').toUpperCase());
   const jobType = String(job.job_type || '').toLowerCase();
+  const jobTime = String(job.job_time || '').toLowerCase();
+  const jobTimeLabel = jobTime === 'partial' ? 'Part time' : jobTime === 'complete' ? 'Full time' : '';
   const jobTypeLabel = jobType === 'exchange' ? 'Hour exchange' : jobType === 'employee' ? 'Employee' : 'Freelancer';
   let compensation = '';
   if (jobType === 'exchange') {
@@ -737,7 +739,6 @@ exports.clearnetJobView = async (job) => {
 .cn-job-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700}
 .cn-job-meta{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
 .cn-job-meta-item{background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;padding:8px 14px;font-size:14px;color:var(--fg-soft);display:inline-flex;align-items:center;gap:6px}
-.cn-job-comp{background:var(--bg-sub);border:1px solid var(--fg);color:var(--fg);padding:8px 16px;border-radius:6px;font-weight:600;display:inline-block;margin-bottom:20px}
 .cn-job-img{display:block;max-width:100%;border:1px solid var(--border);border-radius:8px;margin-bottom:20px}
 .cn-job-section h2{color:var(--fg);font-size:18px;text-transform:uppercase;letter-spacing:2px;margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .cn-job-section p{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;font-size:15px}
@@ -747,18 +748,19 @@ exports.clearnetJobView = async (job) => {
   <div class="cn-job-meta">
     <span class="cn-job-meta-item">${renderKindTag('job')}</span>
     <span class="cn-job-meta-item">💼 ${jobTypeLabel}</span>
+    ${jobTimeLabel ? `<span class="cn-job-meta-item">⏱ ${jobTimeLabel}</span>` : ''}
     ${job.createdAt ? `<span class="cn-job-meta-item">📅 ${esc(new Date(job.createdAt).toISOString().slice(0,10))}</span>` : ''}
     ${loc ? `<span class="cn-job-meta-item">📍 ${loc}</span>` : ''}
     ${lang ? `<span class="cn-job-meta-item">🗣 ${lang}</span>` : ''}
+    ${compensation ? `<span class="cn-price">${compensation}</span>` : ''}
   </div>
-  <div class="cn-job-comp">${compensation}</div>
   <hr class="cn-sep"/>
   ${jobImg ? `<img class="cn-job-img" src="${jobImg}" alt="${title}"/>` : ''}
   ${desc ? `<div class="cn-job-section"><h2>Description</h2><p>${desc}</p></div>` : ''}
   ${req ? `<div class="cn-job-section"><h2>Requirements</h2><p>${req}</p></div>` : ''}
 `;
   return renderClearnetPage({
-    title: `${job.title || 'Job'} — Oasis`,
+    title: `${job.title || 'Job'} | Oasis`,
     ogTitle: job.title || 'Job',
     ogDescription: job.description || '',
     ogImage: jobImg,

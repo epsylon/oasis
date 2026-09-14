@@ -366,75 +366,141 @@ const resolveExternalBaseUrl = (ctx) => {
   }
   return `${protocol}://${rawHost}`;
 };
+const tsOf = (...values) => {
+  for (const v of values) {
+    const t = typeof v === 'number' ? v : Date.parse(v || '');
+    if (Number.isFinite(t) && t > 0) return t;
+  }
+  return 0;
+};
+const dayOf = (ts) => ts ? new Date(ts).toISOString().slice(0, 10) : '';
+const sizeOf = (bytes) => {
+  let value = Number(bytes) || 0;
+  if (value <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
+  return `${unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+};
+const hostOf = (url) => {
+  try {
+    const u = new URL(String(url || ''));
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return u.hostname.replace(/^www\./, '');
+  } catch (_) { return ''; }
+};
+const blobSizeOf = async (value) => {
+  const { blobIdOf } = require('../views/clearnet_view');
+  const id = blobIdOf(value);
+  if (!id) return '';
+  try {
+    const ssbSize = await cooler.open();
+    return await new Promise((resolve) => {
+      try {
+        ssbSize.blobs.size(id, (err, bytes) => resolve(err ? '' : sizeOf(bytes)));
+      } catch (_) { resolve(''); }
+    });
+  } catch (_) { return ''; }
+};
+const detailsOf = (...parts) => parts.map(p => String(p == null ? '' : p).trim()).filter(Boolean).slice(0, 4);
+const clearnetDetails = (kind, x) => {
+  if (!x) return [];
+  if (kind === 'market') {
+    const type = String(x.item_type || '').toLowerCase();
+    return detailsOf(type === 'auction' ? '🔨 AUCTION' : type === 'exchange' ? '🔁 EXCHANGE' : type.toUpperCase());
+  }
+  if (kind === 'events') return detailsOf(x.location ? `📍 ${x.location}` : '');
+  if (kind === 'jobs') {
+    const time = String(x.job_time || '').toLowerCase();
+    return detailsOf(
+      x.job_type ? `💼 ${String(x.job_type).toUpperCase()}` : '',
+      time === 'partial' ? '⏱ PART TIME' : time === 'complete' ? '⏱ FULL TIME' : ''
+    );
+  }
+  if (kind === 'podcasts') return detailsOf(Number(x.episodeCount) > 0 ? `🎙 ${Number(x.episodeCount)} EPISODES` : '');
+  if (kind === 'projects') {
+    const progress = Number(x.progress);
+    return detailsOf(Number.isFinite(progress) ? `📈 ${Math.max(0, Math.min(100, Math.round(progress)))}%` : '');
+  }
+  return [];
+};
 const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
     const MAX_PER_SECTION = max;
-  const items = { shops: [], jobs: [], events: [], projects: [], posts: [], audios: [], videos: [], images: [], documents: [], torrents: [], podcasts: [], school: [] };
-  const mediaItemMapper = (m, { withImage = false, mediaKind = null } = {}) => ({
+  const items = { shops: [], jobs: [], events: [], projects: [], posts: [], audios: [], videos: [], images: [], documents: [], torrents: [], podcasts: [], school: [], market: [], feed: [], wiki: [], bookmarks: [] };
+  const tagsOf = (x) => (Array.isArray(x && x.tags) ? x.tags : []).map(t => String(t || '').trim()).filter(Boolean).slice(0, 12);
+  const dated = (item, ts) => ({ ...item, ts, meta: item.meta || dayOf(ts) });
+  const mediaItemMapper = (m, { withImage = false, mediaKind = null } = {}) => dated({
     id: m.key,
     title: m.title || 'Untitled',
     image: withImage ? (m.url || null) : null,
     media: mediaKind && m.url ? { kind: mediaKind, blobId: m.url } : null,
     snippet: m.description || '',
-    meta: m.createdAt ? new Date(m.createdAt).toISOString().slice(0, 10) : ''
-  });
+    tags: tagsOf(m)
+  }, tsOf(m.createdAt, m.ts));
   if (prefs.clearnetSchool) {
     try {
       const courses = await schoolModel.listCourses('ALL', feedId, {}).catch(() => []);
-      items.school = (courses || []).filter(c => c.author === feedId && c.visibility === 'PUBLIC' && !(Number(c.price) > 0)).slice(0, MAX_PER_SECTION).map(c => ({
+      items.school = (courses || []).filter(c => c.author === feedId && c.visibility === 'PUBLIC' && !(Number(c.price) > 0)).slice(0, MAX_PER_SECTION).map(c => dated({
         id: c.id,
         title: c.title || 'Untitled',
         image: c.image || null,
         snippet: c.description || '',
-        meta: c.startDate ? new Date(c.startDate).toISOString().slice(0, 10) : ''
-      }));
+        tags: tagsOf(c),
+        meta: c.startDate ? dayOf(tsOf(c.startDate)) : undefined
+      }, tsOf(c.createdAt, c.ts, c.startDate)));
     } catch (_) {}
   }
   if (prefs.clearnetShops) {
     try {
       const shops = await shopsModel.listAll({ filter: 'all' }).catch(() => []);
-      items.shops = (shops || []).filter(s => s.author === feedId && String(s.visibility || '').toUpperCase() !== 'CLOSED').slice(0, MAX_PER_SECTION).map(s => ({
+      items.shops = (shops || []).filter(s => s.author === feedId && String(s.visibility || '').toUpperCase() !== 'CLOSED').slice(0, MAX_PER_SECTION).map(s => dated({
         id: s.key,
         title: s.title || 'Untitled',
         image: s.image || null,
         snippet: s.shortDescription || s.description || '',
-        meta: s.location || ''
-      }));
+        tags: tagsOf(s)
+      }, tsOf(s.createdAt, s.ts)));
     } catch (_) {}
   }
   if (prefs.clearnetJobs) {
     try {
       const jobs = await jobsModel.listJobs('ALL', feedId).catch(() => []);
-      items.jobs = (jobs || []).filter(j => j.author === feedId && String(j.status || '').toUpperCase() !== 'CLOSED' && String(j.visibility || 'PUBLIC').toUpperCase() !== 'HIDDEN').slice(0, MAX_PER_SECTION).map(j => ({
+      items.jobs = (jobs || []).filter(j => j.author === feedId && String(j.status || '').toUpperCase() !== 'CLOSED' && String(j.visibility || 'PUBLIC').toUpperCase() !== 'HIDDEN').slice(0, MAX_PER_SECTION).map(j => dated({
         id: j.id,
         title: j.title || 'Untitled',
         image: j.image || null,
         snippet: j.description || '',
-        meta: j.location ? String(j.location).toUpperCase() : ''
-      }));
+        details: clearnetDetails('jobs', j),
+        tags: tagsOf(j)
+      }, tsOf(j.createdAt, j.ts)));
     } catch (_) {}
   }
   if (prefs.clearnetEvents) {
     try {
       const events = await eventsModel.listAll(feedId, 'all').catch(() => []);
-      items.events = (events || []).filter(e => e.organizer === feedId && String(e.status || '').toUpperCase() !== 'CLOSED' && e.isPublic !== 'private').slice(0, MAX_PER_SECTION).map(e => ({
+      items.events = (events || []).filter(e => e.organizer === feedId && String(e.status || '').toUpperCase() !== 'CLOSED' && e.isPublic !== 'private').slice(0, MAX_PER_SECTION).map(e => dated({
         id: e.id,
         title: e.title || 'Untitled',
         image: null,
         snippet: e.description || '',
-        meta: e.date ? new Date(e.date).toISOString().slice(0, 10) : (e.location || '')
-      }));
+        details: clearnetDetails('events', e),
+        tags: tagsOf(e),
+        meta: e.date ? dayOf(tsOf(e.date)) : undefined
+      }, tsOf(e.createdAt, e.ts, e.date)));
     } catch (_) {}
   }
   if (prefs.clearnetProjects) {
     try {
       const projects = await projectsModel.listProjects('ALL').catch(() => []);
-      items.projects = (projects || []).filter(p => p.author === feedId && String(p.status || '').toUpperCase() !== 'CANCELLED').slice(0, MAX_PER_SECTION).map(p => ({
+      items.projects = (projects || []).filter(p => p.author === feedId && String(p.status || '').toUpperCase() !== 'CANCELLED').slice(0, MAX_PER_SECTION).map(p => dated({
         id: p.id || p.key,
         title: p.title || 'Untitled',
         image: p.image || null,
         snippet: p.description || '',
-        meta: p.status ? String(p.status).toUpperCase() : ''
-      }));
+        details: clearnetDetails('projects', p),
+        price: Number(p.goal) > 0 ? `${(Number(p.pledged) || 0).toFixed(2)} / ${Number(p.goal).toFixed(2)}` : null,
+        tags: tagsOf(p)
+      }, tsOf(p.createdAt, p.ts)));
     } catch (_) {}
   }
   if (prefs.clearnetPosts) {
@@ -451,14 +517,13 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
                 const c = m.value.content;
                 const cleanText = String(c.text || '').replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '');
                 const firstLine = cleanText.split('\n').find(l => l.trim()) || '';
-                const dateIso = m.value.timestamp ? new Date(m.value.timestamp).toISOString().slice(0, 10) : '';
-                return {
+                const postTs = tsOf(m.value.timestamp, c.createdAt);
+                return dated({
                   id: m.key,
                   title: c.contentWarning || firstLine.slice(0, 80) || 'Blog',
                   image: null,
-                  snippet: c.contentWarning ? firstLine.slice(0, 200) : cleanText.slice(0, 200),
-                  meta: dateIso
-                };
+                  snippet: c.contentWarning ? firstLine.slice(0, 200) : cleanText.slice(0, 200)
+                }, postTs);
               }));
             })
           );
@@ -481,32 +546,87 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
   if (prefs.clearnetImages) {
     try {
       const images = await imagesModel.listAll('all').catch(() => []);
-      items.images = (images || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m, { withImage: true }));
+      items.images = (images || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m, { mediaKind: 'image' }));
     } catch (_) {}
   }
   if (prefs.clearnetDocuments) {
     try {
       const documents = await documentsModel.listAll('all').catch(() => []);
-      items.documents = (documents || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m));
+      items.documents = await Promise.all((documents || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(async (m) => ({ ...mediaItemMapper(m), details: detailsOf(await blobSizeOf(m.url)).map(v => `⇩ ${v}`) })));
     } catch (_) {}
   }
   if (prefs.clearnetTorrents) {
     try {
       const torrents = await torrentsModel.listAll('all').catch(() => []);
-      items.torrents = (torrents || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m));
+      items.torrents = await Promise.all((torrents || []).filter(m => m.author === feedId).slice(0, MAX_PER_SECTION).map(async (m) => ({ ...mediaItemMapper(m), details: detailsOf(await blobSizeOf(m.url)).map(v => `⇩ ${v}`) })));
+    } catch (_) {}
+  }
+  if (prefs.clearnetMarket) {
+    try {
+      const marketItems = await marketModel.listAllItems('all').catch(() => []);
+      items.market = (marketItems || []).filter(i => (i.seller || i.author) === feedId && String(i.status || '').toUpperCase() === 'FOR SALE' && String(i.visibility || '').toUpperCase() !== 'HIDDEN').slice(0, MAX_PER_SECTION).map(i => dated({
+        id: i.id || i.key,
+        title: i.title || 'Untitled',
+        image: i.image || null,
+        snippet: i.description || '',
+        price: i.price || null,
+        details: clearnetDetails('market', i),
+        tags: tagsOf(i)
+      }, tsOf(i.createdAt, i.ts)));
+    } catch (_) {}
+  }
+  if (prefs.clearnetFeed) {
+    try {
+      const feeds = await feedModel.listFeeds('ALL').catch(() => []);
+      items.feed = (feeds || []).filter(f => (f.author || (f.value && f.value.author)) === feedId).slice(0, MAX_PER_SECTION).map(f => {
+        const c = (f.value && f.value.content) || f.content || f;
+        const text = String(c.text || '').replace(/<[^>]+>/g, '');
+        return dated({
+          id: f.key || f.id,
+          title: '',
+          image: null,
+          snippet: text,
+          tags: []
+        }, tsOf(c.createdAt, f.ts, f.value && f.value.timestamp));
+      });
+    } catch (_) {}
+  }
+  if (prefs.clearnetWiki) {
+    try {
+      const pages = await wikiModel.listPages({ filter: 'all' }).catch(() => []);
+      items.wiki = (pages || []).filter(w => w.author === feedId && !w.tribeId).slice(0, MAX_PER_SECTION).map(w => dated({
+        id: w.id,
+        title: w.title || 'Untitled',
+        image: w.image || null,
+        snippet: w.body || '',
+        tags: tagsOf(w)
+      }, tsOf(w.updatedAt, w.createdAt, w.ts)));
     } catch (_) {}
   }
   if (prefs.clearnetPodcasts) {
     try {
       const channels = await podcastsModel.listAll({ filter: 'all' }).catch(() => []);
-      items.podcasts = (channels || []).filter(c => c.author === feedId && (c.episodeCount || 0) > 0).slice(0, MAX_PER_SECTION).map(c => ({
+      items.podcasts = (channels || []).filter(c => c.author === feedId && (c.episodeCount || 0) > 0).slice(0, MAX_PER_SECTION).map(c => dated({
         id: c.id,
         title: c.title || 'Untitled',
         image: c.cover && c.cover.kind === 'image' ? c.cover.blobId : null,
         media: (() => { const eps = Array.isArray(c.episodes) ? c.episodes : []; const last = eps[eps.length - 1]; return last && last.media && last.media.blobId ? { kind: last.media.kind === 'video' ? 'video' : 'audio', blobId: last.media.blobId } : null; })(),
         snippet: c.description || '',
-        meta: c.createdAt ? new Date(c.createdAt).toISOString().slice(0, 10) : ''
-      }));
+        details: clearnetDetails('podcasts', c),
+        tags: tagsOf(c)
+      }, tsOf(c.lastActivityTs, c.createdAt, c.ts)));
+    } catch (_) {}
+  }
+  if (prefs.clearnetBookmarks) {
+    try {
+      const bookmarks = await bookmarksModel.listAll('all').catch(() => []);
+      items.bookmarks = (bookmarks || []).filter(b => b.author === feedId && b.url).slice(0, MAX_PER_SECTION).map(b => dated({
+        id: b.id,
+        title: hostOf(b.url) || 'Bookmark',
+        image: null,
+        snippet: [b.url, b.description].filter(Boolean).join('\n\n'),
+        tags: tagsOf(b)
+      }, tsOf(b.createdAt, b.ts)));
     } catch (_) {}
   }
   try {
@@ -4442,6 +4562,12 @@ router
     const flag = (v) => v === '1' || v === 'on' || v === true;
     const clearnetShops     = flag(body.vis_clearnetShops);
     const clearnetSchool    = flag(body.vis_clearnetSchool);
+    const clearnetMarket    = flag(body.vis_clearnetMarket);
+    const clearnetFeed      = flag(body.vis_clearnetFeed);
+    const clearnetWiki      = flag(body.vis_clearnetWiki);
+    const profileMarket     = flag(body.vis_profileMarket);
+    const profileFeed       = flag(body.vis_profileFeed);
+    const profileWiki       = flag(body.vis_profileWiki);
     const clearnetJobs      = flag(body.vis_clearnetJobs);
     const clearnetEvents    = flag(body.vis_clearnetEvents);
     const clearnetProjects  = flag(body.vis_clearnetProjects);
@@ -4477,7 +4603,13 @@ router
       gpg:      flag(body.vis_gpg),
       fediverse: flag(body.vis_fediverse),
       fediverseHandle: typeof body.fediverseHandle === 'string' ? body.fediverseHandle : '',
-      clearnet: clearnetShops || clearnetSchool || clearnetJobs || clearnetEvents || clearnetProjects || clearnetPosts || clearnetAudios || clearnetVideos || clearnetImages || clearnetDocuments || clearnetTorrents || clearnetBookmarks || clearnetPodcasts,
+      clearnet: clearnetShops || clearnetSchool || clearnetJobs || clearnetEvents || clearnetProjects || clearnetPosts || clearnetAudios || clearnetVideos || clearnetImages || clearnetDocuments || clearnetTorrents || clearnetBookmarks || clearnetPodcasts || clearnetMarket || clearnetFeed || clearnetWiki,
+      clearnetMarket,
+      clearnetFeed,
+      clearnetWiki,
+      profileMarket,
+      profileFeed,
+      profileWiki,
       clearnetShops,
       clearnetSchool,
       clearnetJobs,
@@ -6167,6 +6299,63 @@ router
     ctx.type = 'text/html';
     ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'audio', item });
   })
+  .get("/c/market/:id", async (ctx) => {
+    let item; try { item = await marketModel.getItemById(ctx.params.id); } catch (_) {}
+    const seller = item && (item.seller || item.author);
+    const p = seller ? await about.visibilityPrefs(seller).catch(() => null) : null;
+    if (!item || !p || p.clearnetMarket !== true || String(item.visibility || '').toUpperCase() === 'HIDDEN') {
+      ctx.type = 'text/html';
+      ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
+      return;
+    }
+    ctx.type = 'text/html';
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'market', item: { ...item, author: seller, url: item.image || null, details: clearnetDetails('market', item) } });
+  })
+  .get("/c/feed/:id", async (ctx) => {
+    let entry; try { entry = await feedModel.getFeedById(ctx.params.id); } catch (_) {}
+    const author = entry && (entry.author || (entry.value && entry.value.author));
+    const p = author ? await about.visibilityPrefs(author).catch(() => null) : null;
+    if (!entry || !p || p.clearnetFeed !== true) {
+      ctx.type = 'text/html';
+      ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
+      return;
+    }
+    const c = (entry.value && entry.value.content) || entry.content || entry;
+    const text = String(c.text || '');
+    ctx.type = 'text/html';
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({
+      kind: 'feed',
+      item: { title: '', description: text, createdAt: c.createdAt || (entry.value && entry.value.timestamp) || null, author, tags: [] }
+    });
+  })
+  .get("/c/wiki/:id", async (ctx) => {
+    let page; try { page = await wikiModel.getPage(ctx.params.id); } catch (_) {}
+    const p = page && page.author ? await about.visibilityPrefs(page.author).catch(() => null) : null;
+    if (!page || page.tribeId || !p || p.clearnetWiki !== true) {
+      ctx.type = 'text/html';
+      ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
+      return;
+    }
+    ctx.type = 'text/html';
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({
+      kind: 'wiki',
+      item: { title: page.title, description: page.body || '', createdAt: page.updatedAt || page.createdAt, author: page.author, tags: page.tags || [] }
+    });
+  })
+  .get("/c/bookmarks/:id", async (ctx) => {
+    let item; try { item = await bookmarksModel.getBookmarkById(ctx.params.id); } catch (_) {}
+    const p = item && item.author ? await about.visibilityPrefs(item.author).catch(() => null) : null;
+    if (!item || !item.url || !p || p.clearnetBookmarks !== true) {
+      ctx.type = 'text/html';
+      ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
+      return;
+    }
+    ctx.type = 'text/html';
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({
+      kind: 'bookmark',
+      item: { title: hostOf(item.url) || 'Bookmark', description: [item.url, item.description].filter(Boolean).join('\n\n'), createdAt: item.createdAt || null, author: item.author, tags: item.tags || [] }
+    });
+  })
   .get("/c/podcasts/:id", async (ctx) => {
     let channel; try { channel = await podcastsModel.getChannelById(ctx.params.id); } catch (_) {}
     const p = channel && channel.author ? await about.visibilityPrefs(channel.author).catch(() => null) : null;
@@ -6209,7 +6398,7 @@ router
       return;
     }
     ctx.type = 'text/html';
-    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'document', item });
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'document', item: { ...item, details: detailsOf(await blobSizeOf(item.url)).map(v => `⇩ ${v}`) } });
   })
   .get("/c/torrents/:id", async (ctx) => {
     let item; try { item = await torrentsModel.getTorrentById(ctx.params.id); } catch (_) {}
@@ -6220,7 +6409,7 @@ router
       return;
     }
     ctx.type = 'text/html';
-    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'torrent', item });
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'torrent', item: { ...item, details: detailsOf(await blobSizeOf(item.url)).map(v => `⇩ ${v}`) } });
   })
   .get("/c/blog/:msgKey", async (ctx) => {
     const msgKey = String(ctx.params.msgKey || '');
@@ -11705,21 +11894,8 @@ async function logClearnetStatus() {
     const ssbClient = await cooler.open();
     if (!ssbClient || !ssbClient.id) return;
     const prefs = await about.visibilityPrefs(ssbClient.id).catch(() => null);
-    const modules = [
-      ['Shops',     'clearnetShops'],
-      ['School',    'clearnetSchool'],
-      ['Jobs',      'clearnetJobs'],
-      ['Events',    'clearnetEvents'],
-      ['Projects',  'clearnetProjects'],
-      ['Blogs',     'clearnetPosts'],
-      ['Audios',    'clearnetAudios'],
-      ['Videos',    'clearnetVideos'],
-      ['Images',    'clearnetImages'],
-      ['Documents', 'clearnetDocuments'],
-      ['Torrents',  'clearnetTorrents'],
-      ['Podcasts',  'clearnetPodcasts']
-    ];
-    const active = prefs ? modules.filter(([_, k]) => prefs[k] === true).map(([label]) => label) : [];
+    const { CLEARNET_MODULES } = require('../views/main_views');
+    const active = prefs ? CLEARNET_MODULES.filter(m => prefs[m.prefKey] === true).map(m => m.label) : [];
     try {
       const { setClearnetModules } = require('../server/ssb_metadata');
       setClearnetModules(active);

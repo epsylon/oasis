@@ -119,7 +119,7 @@ const renderVoteListItem = (v, voteOptionsDefault, activeFilter, spreadInfo) => 
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      v.deadline ? p({ class: "card-date-highlight" }, moment(v.deadline).format("YYYY/MM/DD HH:mm")) : null,
+      v.deadline ? p({ class: "time-chip" }, moment(v.deadline).format("YYYY/MM/DD HH:mm")) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
       ),

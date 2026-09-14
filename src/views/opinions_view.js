@@ -136,10 +136,7 @@ const renderContentHtml = (content, key) => {
             span({ class: 'card-label' }, (i18n.marketItemCondition || i18n.status) + ':'),
             span({ class: 'card-value' }, String(content.item_status).toUpperCase())
           ) : null,
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.marketItemPrice || i18n.price) + ':'),
-            span({ class: 'card-value' }, `${content.price} ECO`)
-          ),
+          div({ class: 'price-chip' }, `${content.price} ECO`),
           content.description ? p(...renderStyledText(content.description)) : null,
           Array.isArray(content.tags) && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>

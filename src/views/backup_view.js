@@ -96,14 +96,10 @@ const renderRestoreStatus = (job) => {
   }
   if (job.error) return div({ class: "backup-restored" }, p({ class: "backup-warning" }, `✗ ${i18n.backupRestoreFailedLine} ${job.error}`));
   const r = job.result || {};
-  const forks = r.forks || [];
-  const mine = forks.some(f => f.mine);
-  const errors = r.errors || [];
+  const mine = (r.forks || []).some(f => f.mine);
   return div({ class: "backup-restored" },
     p(`✓ ${i18n.backupRestoredLine} ${restoreSummary(r)}`),
-    mine ? p({ class: "backup-warning" }, `⚠ ${i18n.backupRestoreForkMine}`) : null,
-    !mine && forks.length ? p({ class: "backup-hint" }, i18n.backupRestoreForkOthers) : null,
-    errors.length ? p({ class: "backup-hint" }, `${i18n.backupRestoreErrors}: ${errors.map(e => `${e.reason} (×${e.count})`).join(" · ")}`) : null
+    mine ? p({ class: "backup-warning" }, `⚠ ${i18n.backupRestoreForkMine}`) : null
   );
 };
 

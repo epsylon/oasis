@@ -171,7 +171,7 @@ const renderTaskItem = (task, filter, spreadInfo) => {
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      (start || end) ? p({ class: "card-date-highlight" }, start && end ? `${start} → ${end}` : (start || end)) : null,
+      (start || end) ? p({ class: "time-chip" }, start && end ? `${start} → ${end}` : (start || end)) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
       )

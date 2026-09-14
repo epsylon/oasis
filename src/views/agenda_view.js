@@ -64,7 +64,7 @@ const renderAgendaItem = (item, userId, filter) => {
       renderCardField(i18n.marketItemType + ":", String(item.item_type || '').toUpperCase()),
       renderCardField(i18n.marketItemStatus + ":", item.status),
       renderCardField(i18n.marketItemStock + ":", item.stock),
-      renderCardField(i18n.marketItemPrice + ":", `${item.price} ECO`),
+      div({ class: "price-chip" }, `${item.price} ECO`),
       renderCardField(i18n.marketItemIncludesShipping + ":", item.includesShipping ? i18n.agendaYes : i18n.agendaNo),
       renderCardField(i18n.deadline + ":", item.deadline ? new Date(item.deadline).toLocaleString() : '')
     ];

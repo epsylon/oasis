@@ -201,7 +201,7 @@ const renderHousingList = (items, filter, params = {}) => {
             ),
             chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
             renderStarRating(item.opinions, safeArr(item.opinions_inhabitants).length),
-            div({ class: "card-date-highlight" }, priceLabel(item)),
+            div({ class: "price-chip" }, priceLabel(item)),
             safeText(item.place)
               ? div({ class: "card-field" },
                   span({ class: "card-label" }, `${i18n.housingPlace}: `),

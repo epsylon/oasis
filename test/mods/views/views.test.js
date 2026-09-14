@@ -199,7 +199,12 @@ describe('views: the shared text renderer', (t) => {
   t('labelled links point where they say and refuse anything but http and internal paths', () => {
     ok(html('[a label](https://example.org)').includes('href="https://example.org"'), 'external link');
     ok(html('[my profile](/profile)').includes('href="/profile"'), 'internal path');
-    notOk(html('[a label](https://example.org)').includes('target='), 'a link written by someone else never steals a new tab');
+    ok(html('[a label](https://example.org)').includes('target="_blank"'), 'an external link opens beside Oasis, not over it');
+    ok(html('[a label](https://example.org)').includes('rel="noopener noreferrer"'), 'and the page it opens cannot reach back');
+    notOk(html('[my profile](/profile)').includes('target='), 'moving inside Oasis stays in the same tab');
+    notOk(html('http://localhost:3000/wiki').includes('target='), 'a link back to this Oasis is not a foreign site');
+    notOk(html('[here](http://127.0.0.1:3000/peers)').includes('target='), 'nor is one written with the loopback address');
+    ok(html('http://localhost.evil.example/x').includes('target="_blank"'), 'a domain that merely starts with localhost is still foreign');
     eq(html('[x](javascript:alert(1))'), '[x](javascript:alert(1))', 'a script target is left as plain text');
     ok(html('![pic](https://x.org/a.png)').includes('<a href="https://x.org/a.png"'), 'a remote image becomes a link, never a request to a third party');
     ok(html('![x](&' + 'b'.repeat(43) + '=.sha256)').includes('<img'), 'a blob image is still an image');
@@ -249,9 +254,8 @@ describe('views: the shared text renderer', (t) => {
   });
 
   t('links stop where the sentence does and never steal the tab', () => {
-    eq(html('Visit https://example.org. Thanks'), 'Visit <a href="https://example.org" rel="noopener noreferrer">https://example.org</a>. Thanks');
-    eq(html('(https://example.org)'), '(<a href="https://example.org" rel="noopener noreferrer">https://example.org</a>)');
-    notOk(html('see https://example.org').includes('target='), 'nothing a peer writes opens a new tab');
+    eq(html('Visit https://example.org. Thanks'), 'Visit <a href="https://example.org" target="_blank" rel="noopener noreferrer">https://example.org</a>. Thanks');
+    eq(html('(https://example.org)'), '(<a href="https://example.org" target="_blank" rel="noopener noreferrer">https://example.org</a>)');
   });
 
   t('a hashtag keeps accents and a wikilink cannot swallow the page', () => {

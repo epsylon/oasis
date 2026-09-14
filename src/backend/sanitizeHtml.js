@@ -34,7 +34,7 @@ const sanitizeHtml = (input) => {
       'img', 'video', 'audio',
       'table', 'thead', 'tbody', 'tr', 'th', 'td'
     ],
-    ALLOWED_ATTR: ['href', 'class', 'rel', 'src', 'alt', 'title', 'controls'],
+    ALLOWED_ATTR: ['href', 'class', 'target', 'rel', 'src', 'alt', 'title', 'controls'],
     FORBID_TAGS: ['svg', 'math', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button', 'script', 'style', 'link', 'meta'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur', 'onsubmit', 'onchange', 'style']
   });

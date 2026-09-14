@@ -142,7 +142,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, c.title || '')),
         c.item_type ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, String(c.item_type).toUpperCase())) : "",
         c.item_status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.marketItemCondition || i18n.status) + ':'), span({ class: 'card-value' }, String(c.item_status).toUpperCase())) : "",
-        div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.marketItemPrice || i18n.price) + ':'), span({ class: 'card-value' }, `${c.price} ECO`)),
+        div({ class: 'price-chip' }, `${c.price} ECO`),
         c.description ? p(...renderStyledText(c.description)) : null,
         Array.isArray(c.tags) && c.tags.length
           ? div({ class: 'card-tags' }, c.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))

@@ -288,9 +288,12 @@ exports.wikiPageView = async (page, params = {}) => {
   const shownTitle = version ? version.title : page.title;
   const shownBody = version ? version.body : page.body;
   const census = Array.isArray(params.censusList) ? params.censusList : [];
+  const subscriptionNodes = params.subscription
+    ? renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base, inline: true })
+    : null;
   const actions = div({ class: "tribe-side-actions wiki-actions-top" },
-    params.subscription
-      ? span({ class: "wiki-actions-subscription" }, ...(renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base, inline: true }) || []))
+    subscriptionNodes && subscriptionNodes.length
+      ? span({ class: "wiki-actions-subscription" }, ...subscriptionNodes)
       : null,
     page.canEdit && !version
       ? form({ method: "GET", action: "/wiki" },

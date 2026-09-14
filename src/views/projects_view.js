@@ -423,7 +423,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
           ),
           chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
           goal > 0
-            ? div({ class: "card-date-highlight" }, `${pr.goal} ECO`)
+            ? div({ class: "price-chip" }, `${pr.goal} ECO`)
             : null,
           goal > 0
             ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100)
@@ -654,7 +654,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     pr.image ? renderMediaBlob(pr.image, { class: "tribe-detail-image" }) : null,
-    div({ class: "job-price-line card-salary" }, `${pr.goal || 0} ECO`),
+    div({ class: "price-chip" }, `${pr.goal || 0} ECO`),
     div({ class: "job-price-line card-salary" }, `${i18n.projectFollowers}: ${followersCount(pr)}`),
     renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
     goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null,
@@ -734,7 +734,7 @@ exports.clearnetProjectView = async (project) => {
     : '';
   const extraCss = `
 .cn-prj-title{color:var(--fg);margin:0 0 12px 0;font-size:32px;font-weight:700}
-.cn-prj-status{display:inline-block;background:var(--bg-sub);border:1px solid var(--fg);color:var(--fg);padding:6px 12px;border-radius:6px;font-weight:600;text-transform:uppercase;letter-spacing:1px;font-size:12px;margin-bottom:16px}
+.cn-prj-status{display:inline-flex;align-items:center;background:var(--bg-sub);border:1px solid var(--fg);color:var(--fg);padding:6px 12px;border-radius:6px;font-weight:600;text-transform:uppercase;letter-spacing:1px;font-size:12px;margin:0}
 .cn-prj-img{display:block;max-width:100%;border:1px solid var(--border);border-radius:8px;margin-bottom:20px}
 .cn-prj-funding{background:var(--bg-sub);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:20px}
 .cn-prj-funding-label{color:var(--fg-dim);font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
@@ -772,7 +772,7 @@ ${Array.from({ length: 21 }, (_, i) => `.cn-prj-bar-fill-${i * 5}{width:${i * 5}
   ${milestonesBlock}
 `;
   return renderClearnetPage({
-    title: `${pr.title || 'Project'} — Oasis`,
+    title: `${pr.title || 'Project'} | Oasis`,
     ogTitle: pr.title || 'Project',
     ogDescription: pr.description || '',
     ogImage: projectImg,

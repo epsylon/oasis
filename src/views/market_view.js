@@ -158,7 +158,7 @@ const auctionCountdownParts = (deadline) => {
 const renderCountdownField = (item) => {
   const cd = item && (item.item_type === "auction" || item.item_type === "exchange") ? auctionCountdownParts(item.deadline) : null
   if (!cd) return null
-  return renderCardFieldRich(`${cd.label}:`, [span({ class: "countdown-strong" }, cd.rel)])
+  return renderCardFieldRich(`${cd.label}:`, [span({ class: "time-chip" }, cd.rel)])
 }
 
 const normStatus = (s) => String(s || "").toUpperCase().replace(/_/g, " ").replace(/\s+/g, " ").trim()
@@ -525,7 +525,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                         item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
                         renderLifespanChip(item.lifetime, i18n)
                       ),
-                      div({ class: "market-card-price card-date-highlight" }, `${item.price} ECO`)
+                      div({ class: "price-chip" }, `${item.price} ECO`)
                     )
                   )
                 })
@@ -639,7 +639,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
           chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
           renderMediaBlob(item.image, "/assets/images/default-market.png"),
-          div({ class: "card-date-highlight" }, `${item.price} ECO`),
+          div({ class: "price-chip" }, `${item.price} ECO`),
           renderStockBar(item.stock, maxStock),
           table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
           tagsNode,

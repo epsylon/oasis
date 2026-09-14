@@ -1625,17 +1625,18 @@ button.create-button:hover {
 }
 
 .opinions-voting-collapse { margin: 8px 0; }
-.card-meta-row{display:flex;flex-wrap:wrap;align-items:stretch;gap:4px 12px;margin:8px 0;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;overflow:visible}
+.card-meta-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;overflow:visible}
 .card-meta-row .opinions-voting-collapse:not([open]){display:flex}
 .card-meta-row .opinions-voting-collapse:not([open]) summary{display:inline-flex;align-items:center}
-.card-meta-row .card-footer{display:flex;flex-wrap:wrap;align-items:stretch;gap:4px}
-.card-meta-row .card-footer .date-link,
-.card-meta-row .card-footer .user-link{display:inline-flex;align-items:center;margin:0}
+.card-meta-row .card-footer{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.card-footer .date-link,
+.card-footer .user-link{display:inline-flex;align-items:center;box-sizing:border-box;height:34px;margin:0;padding:0 14px;border:1px solid transparent;border-radius:5px;font-size:13px;line-height:1}
 .card-meta-row .opinions-voting-collapse{margin:0;width:auto;flex:0 1 auto;background:transparent;border:0;padding:0}
 .card-meta-row .opinions-voting-collapse[open]{flex:1 1 100%;width:100%;margin-bottom:8px}
 .card-meta-row .voting-buttons{margin:10px 0 0 0;padding:0}
 .card-meta-row .voting-buttons form{margin:0;padding:0;background:transparent;border:0}
-.card-meta-row .card-footer{margin:0 !important;padding:0 !important;border:0 !important}
+.card-meta-row .card-footer{margin:0 !important;padding:0 !important;border:0 !important;flex:1 1 auto;min-width:0}
+.card-meta-row .opinions-summary{display:inline-flex !important;align-items:center;box-sizing:border-box;height:34px;padding:0 14px !important;border-radius:5px;font-size:13px;line-height:1;flex:0 0 auto}
 .opinions-summary {
   display: inline-block !important;
   width: auto !important;
@@ -2591,7 +2592,6 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 
 .market-tribe-card .market-card-kind{display:inline-block;font-size:10px;letter-spacing:2px;color:#888;text-transform:uppercase;font-weight:600;margin-bottom:4px}
-.market-tribe-card .market-card-price{font-size:16px;color:#FFD700;font-weight:600;margin-top:6px}
 .market-tribe-card .market-card-seller{font-size:13px;color:#bbb;margin-top:4px;word-break:break-all;border:none;background:transparent;padding:0}
 .market-tribe-card .market-card-seller-label{color:#ff9800;font-weight:600}
 
@@ -4007,7 +4007,8 @@ a.pm-btn:hover { text-decoration: none }
 .shop-product-media{max-height:180px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#111}
 .shop-product-media img{width:100%;max-height:180px;object-fit:cover}
 .shop-product-body{padding:10px;display:flex;flex-direction:column;gap:6px}
-.shop-product-price{font-size:18px;font-weight:bold;color:#FFA500}
+.price-chip{display:inline-flex;align-items:center;width:auto;max-width:max-content;box-sizing:border-box;border-radius:10px;font-size:14px;font-weight:700;border:1px solid #a39134;background:#3a2300;color:#ffd700;padding:4px 12px;margin:6px 0 0 0;box-shadow:none;white-space:nowrap}
+.time-chip{display:inline-flex;align-items:center;width:auto;max-width:max-content;box-sizing:border-box;border-radius:10px;font-size:14px;font-weight:700;border:1px solid #5a5a5a;background:#3a3a3a;color:#ffd740;padding:4px 12px;margin:6px 0 0 0;box-shadow:none;white-space:nowrap}
 .shop-product-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .shop-add-product{border:1px dashed #555;border-radius:8px;padding:16px;margin:12px 0}
 .shop-featured-products{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
@@ -4692,7 +4693,7 @@ a.pm-btn:hover { text-decoration: none }
 
 .tribe-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
 }
 
@@ -4755,7 +4756,7 @@ a.pm-btn:hover { text-decoration: none }
 
 .tribe-content-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 16px;
 }
 
@@ -6193,7 +6194,9 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .prefs-card .tags-header{margin:0 0 10px 0}
 .prefs-card .tags-header h2{font-size:16px;color:#FFA500;margin:0 0 4px 0}
 .prefs-help{color:#FFD700;font-size:12px;margin:0}
-.pref-pill-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.pref-pill-row{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;margin-top:8px}
+@media (max-width:1100px){.pref-pill-row{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:640px){.pref-pill-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .pref-pill{display:inline-flex;align-items:center;border:1px solid #333;padding:6px 12px;cursor:pointer;background:#161616;color:#888;font-size:13px;user-select:none}
 .pref-pill:hover{border-color:#555;color:#bbb}
 .pref-pill-input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
@@ -6326,7 +6329,7 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .inhabitant-left .gpg-line a{color:#FFDD44;text-decoration:none}
 a.chip-link{text-decoration:none;display:inline-block}
 a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
-.gpg-edit-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.gpg-edit-row{display:flex;flex-direction:column;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-top:4px}
 .gpg-edit-row .gpg-remove-btn{background:transparent;border:1px solid #FF6B6B;color:#FF6B6B;cursor:pointer;padding:4px 10px;border-radius:4px;font-family:inherit;font-size:0.9rem}
 .gpg-edit-row .gpg-remove-btn:hover{background:#FF6B6B;color:#000}
 .profile-sensors-box .inhabitant-last-activity a:hover,
@@ -6403,7 +6406,7 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .pm-exposition-lifespan-green{background:#0e2a16;color:#9aff9a;border-color:#3a7f4c}
 .pm-exposition-lifespan-orange{background:#2a1f10;color:#ffb84d;border-color:#a37a34}
 .pm-exposition-lifespan-red{background:#2a0e0e;color:#ff7f7f;border-color:#b04040}
-.jobs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:20px}
+.jobs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
 .jobs-grid .tribe-card,.tribe-grid .tribe-card{margin-bottom:0}
 .tribe-card .card-comments-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
 .tribe-card .card-comments-summary .inline-form{margin:0}
@@ -6412,7 +6415,6 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .jobs-info-table .tribe-info-value{white-space:normal;word-break:normal;overflow-wrap:anywhere}
 .job-section{margin-bottom:12px;padding:0}
 .job-section-title{margin:0 0 8px 0;color:#ffa500;font-size:1.05em}
-.job-card .tribe-card-members{background:transparent;padding:4px 0;text-align:left}
 .job-card .card-field{border-bottom:none}
 .job-card .confirmations-block{margin:6px 0}
 .job-meta-line{margin:0;color:#9aa3b2;font-size:12px;letter-spacing:1px;text-transform:uppercase}
