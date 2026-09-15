@@ -13,7 +13,7 @@ const humanBytes = (n) => {
   return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 };
 
-const BACKUP_TYPES = ["RECOVERY", "KEYS", "FULL", "RESTORE"];
+const BACKUP_TYPES = ["RECOVERY", "KEYS", "FULL", "INSTANT", "RESTORE"];
 const typeLabel = (t) => String(i18n[`backupType${t.charAt(0) + t.slice(1).toLowerCase()}`] || t).toUpperCase();
 const normalizeType = (t) => (BACKUP_TYPES.includes(String(t || "").toUpperCase()) ? String(t).toUpperCase() : "RECOVERY");
 
@@ -122,11 +122,21 @@ const renderRestore = (job) =>
     )
   );
 
+const renderInstantBackup = () =>
+  div({ class: "backup-form" },
+    p({ class: "backup-warning" }, `⚠ ${i18n.backupInstantWarning}`),
+    p({ class: "backup-hint" }, i18n.backupInstantDescription),
+    form({ action: "/export/create", method: "POST" },
+      button({ type: "submit" }, i18n.exportDataButton)
+    )
+  );
+
 exports.backupView = async ({ type = "RECOVERY", options = null, restoreJob = null, kit = null } = {}) => {
   const t = normalizeType(type);
   const body = t === "RECOVERY" ? renderRecovery(kit)
     : t === "KEYS" ? renderKeysExport()
     : t === "FULL" ? renderFullBackup(options)
+    : t === "INSTANT" ? renderInstantBackup()
     : renderRestore(restoreJob);
   const html = template(
     i18n.backupTitle,
@@ -142,6 +152,21 @@ exports.backupView = async ({ type = "RECOVERY", options = null, restoreJob = nu
 };
 
 exports.recoveryKitView = async (kit) => exports.backupView({ type: "RECOVERY", kit });
+
+exports.renderRebuildReport = (report) => {
+  if (!report) return null;
+  const idx = report.indexes || {};
+  const line = (ok, text) => li({ class: ok ? "backup-check-ok" : "backup-check-bad" }, `${ok ? "✓" : "✗"} ${text}`);
+  return div({ class: "backup-verification" },
+    p({ class: "backup-hint" }, `${fmt(report.checkedAt)} · ${report.tookMs} ms · ${i18n.verificationTotalMessages}: ${report.totalMessages}`),
+    ul(
+      report.ok
+        ? line(true, `${i18n.indexesRebuilt}`)
+        : line(false, `${i18n.indexesRebuildFailed}: ${report.error || ''}`),
+      li({ class: "backup-check-ok" }, `· ${i18n.indexesFiles}: ${idx.files || 0} (${humanBytes(idx.bytes || 0)})`)
+    )
+  );
+};
 
 exports.renderVerificationReport = (report) => {
   if (!report) return null;

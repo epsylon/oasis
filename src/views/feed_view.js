@@ -183,7 +183,7 @@ exports.feedView = (feeds, opts = "ALL") => {
                 ? `${i18n.searchTitle || "Search"}: “${q}”`
                 : i18n.feedTitle;
 
-  const header = div({ class: "tags-header module-header-line" }, h2(title), p(i18n.FeedshareYourOpinions));
+  const header = div({ class: "tags-header module-header-line" }, h2(title), p(i18n.FeedshareYourOpinions), (() => { const { renderReachChip } = require('./clearnet_view'); const o = (opts && typeof opts === 'object') ? opts : {}; return o.viewerPrefs ? renderReachChip(o.viewerPrefs.clearnetFeed === true, i18n, `/c/inhabitant/${encodeURIComponent(o.viewerId || '')}`) : null; })());
   const successBanner = msg === 'feedPublished'
     ? div({ class: 'feed-success-msg' }, p('✓ ' + (i18n.feedPublishedSuccess || 'Feed published successfully!')))
     : null;

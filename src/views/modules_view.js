@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, table, tr, td, input, a, br, ul, li, span, strong } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require('./main_views');
 const { getConfig } = require('../configs/config-manager.js');
-const { MOBILE_MODULES, ALL_MODULES } = require('../models/workflows_model');
+const { PRESETS: PRESET_LIST } = require('../models/workflows_model');
 
 const modulesView = () => {
   const config = getConfig().modules;
@@ -92,13 +92,7 @@ const modulesView = () => {
       )
     );
 
-  const PRESETS = {
-    minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'blogs', 'polls', 'opinions', 'cipher', 'backup'],
-    social: ['agenda', 'emergencies', 'audios', 'bookmarks', 'calendars', 'campaigns', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'backup', 'logs', 'mailing', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'wiki', 'parliament', 'pixelia', 'podcasts', 'melody', 'projects', 'reports', 'school', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes'],
-    economy: ['agenda', 'emergencies', 'audios', 'bookmarks', 'calendars', 'campaigns', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'backup', 'logs', 'mailing', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'wiki', 'parliament', 'pixelia', 'podcasts', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry', 'school', 'logistics', 'podcasts', 'campaigns'],
-    mobile: MOBILE_MODULES,
-    full: ALL_MODULES
-  };
+  const PRESETS = PRESET_LIST;
 
   const presetButtons = div({ class: 'preset-group' },
     Object.entries(PRESETS).map(([key, mods]) => {

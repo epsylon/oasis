@@ -308,7 +308,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
   return template(
     title,
     section(
-      div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription)),
+      div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription), (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetMarket === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })()),
       div(
         { class: "filters" },
         form(

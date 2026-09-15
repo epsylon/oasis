@@ -36,12 +36,15 @@ const renderTagChips = (tags) => {
 
 const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(String(kind || '').toUpperCase())}]</span>`;
 
-const renderRichText = (s, { links = true } = {}) => renderStyledHtml(s, {
+const renderRichText = (s, { links = true, wikiLinks = null } = {}) => renderStyledHtml(s, {
   blobPrefix: '/c/blob/',
   internalLinks: false,
   links,
   plainUrlClass: 'cn-url',
-  hashtagHref: links ? (tag) => `/c?q=%23${encodeURIComponent(tag)}` : null
+  hashtagHref: links ? (tag) => `/c?q=%23${encodeURIComponent(tag)}` : null,
+  wikiLink: wikiLinks ? (target, slug, label) => wikiLinks.has(slug)
+    ? a({ href: `/c/wiki/${encodeURIComponent(slug)}`, class: 'cn-wiki-link' }, label)
+    : label : null
 }).replace(/\n/g, '<br/>');
 
 const blobIdOf = (v) => {
@@ -113,17 +116,7 @@ const renderDoubleEncryptionChip = (i18nObj = {}) => {
   );
 };
 
-const INTERNAL_OASIS_PATHS = [
-  'author','thread','hashtag','inbox','pm','profile','settings','banking','wallet',
-  'jobs','events','projects','shops','audios','videos','images','documents','torrents',
-  'tribes','tribe','forum','votes','votations','reports','tasks','maps','chats','pads',
-  'calendars','trending','opinions','feed','pixelia','cv','invites','peers','stats',
-  'blockexplorer','modules','publish','search','tags','mentions','popular','threads',
-  'topics','latest','summaries','multiverse','backup','cipher','graphos','agenda',
-  'podcasts','mailing','logistics','campaigns','emergencies','wiki','school',
-  'favorites','logs','games','parliament','courts','market','ai','public','spread',
-  'follow','unfollow','block','like','unlike'
-];
+const { INTERNAL_PATHS: INTERNAL_OASIS_PATHS } = require('../backend/renderStyledText');
 
 const stripInternalAnchors = (html) => {
   if (typeof html !== 'string' || !html) return html;
@@ -154,6 +147,8 @@ const CLEARNET_TEXT_CSS = `
 .cn-tag{border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--fg-soft);background:var(--bg-sub);text-decoration:none;white-space:nowrap}
 .cn-tag:hover{color:var(--fg);border-color:var(--fg)}
 a.tag-link{color:var(--accent);text-decoration:none}
+a.cn-wiki-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+a.cn-wiki-link:hover{color:var(--fg)}
 .cn-price{display:inline-flex;align-items:center;color:var(--fg);background:var(--bg-sub);border:1px solid var(--fg);border-radius:4px;padding:4px 10px;font-weight:bold;font-size:14px}
 a.tag-link:hover{text-decoration:underline}
 .rt-header{display:block;font-weight:bold;margin:10px 0 4px;line-height:1.3}
@@ -171,6 +166,10 @@ a.tag-link:hover{text-decoration:underline}
 .rt-rule{display:block;border-top:1px solid currentColor;opacity:.4;margin:10px 0}
 .rt-code{font-family:monospace;background:rgba(128,128,128,.18);padding:1px 4px;border-radius:3px;word-break:break-word}
 .rt-code-block{display:block;font-family:monospace;white-space:pre-wrap;background:rgba(128,128,128,.18);padding:10px;border-radius:5px;margin:8px 0;overflow-x:auto;word-break:break-word}
+.post-image{display:block;max-width:100%;height:auto;margin:12px 0;border:1px solid var(--border);border-radius:6px}
+.post-video,.post-audio{display:block;width:100%;max-width:100%;margin:12px 0;border-radius:6px;background:#000}
+.post-pdf{display:inline-block;margin:8px 0;padding:8px 14px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;color:var(--fg);text-decoration:none}
+.post-pdf:hover{border-color:var(--fg)}
 `;
 
 const CLEARNET_SEARCH_CSS = `
@@ -300,7 +299,7 @@ const renderClearnetNotFound = () => {
 const renderClearnetMediaView = ({ kind, item }) => {
   const blob = blobUrl(item.url);
   const title = escapeHtml(item.title || 'Untitled');
-  const desc = renderRichText(item.description || '');
+  const desc = renderRichText(item.description || '', { wikiLinks: item.wikiLinks instanceof Set ? item.wikiLinks : null });
   const dateStr = item.createdAt ? escapeHtml(new Date(item.createdAt).toISOString().slice(0, 10)) : '';
   const extraCss = `
 .cn-media-meta{color:var(--fg-dim);font-size:13px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}

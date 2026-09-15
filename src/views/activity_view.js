@@ -915,6 +915,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         const c = action.content || {};
         const chatRoot = c.chatRoot;
         const href = `/chats/${encodeURIComponent(chatRoot)}`;
+        const latestHref = `${href}#chat-latest`;
         const chatTitle = c.title || chatRoot;
         const replies = Array.isArray(c.replies) ? c.replies : [];
         const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -937,7 +938,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             div({ class: 'card-body' },
                 div({ class: 'card-section chat' },
                     div({ class: 'card-field activity-update-title' },
-                        a({ href, class: 'card-value user-link' }, chatTitle),
+                        a({ href: latestHref, class: 'card-value user-link' }, chatTitle),
                         span({ class: 'card-label activity-update-counts' }, `👥: ${c.members || 0} · 💬 ${c.messageCount || show.length}`)
                     ),
                     (() => {
@@ -960,8 +961,18 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                         const textNode = latest.text
                             ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(latest.text))
                             : null;
-                        return (textNode || attNode)
-                            ? div({ class: 'feed-text activity-update-msg' }, ...[textNode, attNode].filter(Boolean))
+                        const quoted = latest.reply || null;
+                        const replyNode = quoted
+                            ? div({ class: 'reply-context' },
+                                span({ class: 'reply-context-meta' },
+                                  a({ href: `${href}#msg-${String(quoted.id || '').replace(/[^a-zA-Z0-9]/g, '')}`, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
+                                  quoted.author ? span(' ', userLink(quoted.author, action.authorNames && action.authorNames[quoted.author])) : ''
+                                ),
+                                quoted.text ? p({ class: 'post-text reply-context-text' }, quoted.text) : ''
+                              )
+                            : null;
+                        return (textNode || attNode || replyNode)
+                            ? div({ class: 'feed-text activity-update-msg' }, ...[replyNode, textNode, attNode].filter(Boolean))
                             : '';
                     })()
                 )
@@ -1285,7 +1296,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section chat' },
           div({ class: 'card-field' },
             chatKey
-              ? a({ href: `/chats/${encodeURIComponent(chatKey)}`, class: 'card-value user-link' }, title || chatKey)
+              ? a({ href: `/chats/${encodeURIComponent(chatKey)}#chat-latest`, class: 'card-value user-link' }, title || chatKey)
               : span({ class: 'card-value' }, title || '')),
           displayDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, displayDesc)) : '',
           category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, category)) : ''
@@ -1926,8 +1937,22 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           span({ class: 'date-link' }, `${date} ${i18n.performed} `),
           userLink(footerAuthorId, (action.authorNames && action.authorNames[footerAuthorId]) || getProfile(footerAuthorId).name)
         );
+        const commentTotal = Number(action.commentCount) || 0;
+        const commentsHref = detailHref
+          ? `${detailHref}${detailHref.includes('?') ? '&' : '?'}comments=open${commentTotal ? '#comments-latest' : ''}`
+          : '';
+        const commentsNode = detailHref
+          ? a({
+              href: commentsHref,
+              class: commentTotal ? 'comments-summary-link engage-on' : 'comments-summary-link',
+              title: i18n.commentsGoToLast || i18n.voteNewCommentLabel || 'Comments'
+            },
+              span({ class: 'comments-summary-icon' }, '✑'),
+              span({ class: 'comments-summary-count' }, `(${commentTotal})`)
+            )
+          : null;
         const routeFn = OPINION_TYPES.has(type) ? OPINION_ROUTES[type] : null;
-        if (!routeFn) return footerNode;
+        if (!routeFn) return commentsNode ? [renderCardMetaRow(commentsNode, footerNode)] : footerNode;
         const ops = (action.value?.content?.opinions) || (action.content?.opinions) || {};
         const opsTotal = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
         const votingNode = details({ class: 'opinions-voting-collapse' },
@@ -1942,7 +1967,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             )
           )
         );
-        return [renderVotesSummary(ops), renderCardMetaRow(votingNode, footerNode)];
+        return [renderVotesSummary(ops), renderCardMetaRow(votingNode, commentsNode, footerNode)];
       })()
     );
   });

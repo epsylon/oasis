@@ -272,7 +272,7 @@ const renderBooking = (route, b) =>
           button({ type: "submit", class: "tribe-action-btn" }, String(i18n.logisticsDeliver).toUpperCase())
         )
       : null,
-    p({ class: "card-footer" }, span({ class: "date-link" }, fmt(b.createdAt)), userLink(b.booker))
+    p({ class: "card-footer" }, span({ class: "date-link" }, `${fmt(b.createdAt)} ${i18n.performed} `), userLink(b.booker))
   );
 
 const renderBookForm = (route) =>
@@ -293,7 +293,7 @@ const renderRatings = (route) =>
       ? div({ class: "logistics-ratings-list" }, ...route.ratings.map(r => div({ class: "logistics-rating" },
           div({ class: "emergency-update-head logistics-rating-head" }, div({ class: "card-chips-row" }, renderStateChip("neutral", "", stars(r.score)))),
           r.text ? p(r.text) : null,
-          p({ class: "card-footer" }, span({ class: "date-link" }, fmt(r.createdAt)), userLink(r.author))
+          p({ class: "card-footer" }, span({ class: "date-link" }, `${fmt(r.createdAt)} ${i18n.performed} `), userLink(r.author))
         )))
       : p(route.closed ? i18n.logisticsNoRatings : i18n.logisticsRatingsWhenClosed),
     route.canRate

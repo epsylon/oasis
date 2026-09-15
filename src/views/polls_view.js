@@ -311,8 +311,7 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
           ? div({ class: "card-assigned-list" }, ...poll.voters.map(v => userLink(v)))
           : null),
     p({ class: "card-footer" },
-      span({ class: "date-link" }, moment(poll.createdAt).format("YYYY/MM/DD HH:mm")),
-      span(" · "),
+      span({ class: "date-link" }, `${moment(poll.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
       userLink(poll.author)
     ),
     renderEngagement(poll.id,

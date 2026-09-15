@@ -12,6 +12,17 @@ const OFFICE = ['agenda', 'calendars', 'campaigns', 'events', 'tasks', 'reports'
 const GOVERNANCE = ['tribes', 'larp', 'votes', 'polls', 'school', 'parliament', 'courts', 'emergencies', 'logs'];
 const ECONOMY = ['banking', 'wallet', 'transfers', 'market', 'logistics', 'housing', 'jobs', 'shops', 'industry', 'projects'];
 
+const PRESET_BASE = ['backup', 'invites', 'favorites', 'tags', 'trending', 'cipher'];
+const PRESETS = {
+  minimal: ['feed', 'forum', 'games', 'images', 'videos', 'audios', 'bookmarks', 'tags', 'trending', 'blogs', 'polls', 'opinions', 'cipher', 'backup'],
+  social: ['agenda', 'emergencies', 'audios', 'bookmarks', 'calendars', 'campaigns', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'backup', 'logs', 'mailing', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'wiki', 'parliament', 'pixelia', 'podcasts', 'melody', 'projects', 'reports', 'school', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes'],
+  economy: ['agenda', 'emergencies', 'audios', 'bookmarks', 'calendars', 'campaigns', 'chats', 'cipher', 'courts', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'images', 'invites', 'larp', 'backup', 'logs', 'mailing', 'maps', 'blogs', 'polls', 'opinions', 'pads', 'wiki', 'parliament', 'pixelia', 'podcasts', 'melody', 'projects', 'reports', 'tags', 'tasks', 'trending', 'tribes', 'videos', 'votes', 'banking', 'wallet', 'transfers', 'market', 'housing', 'jobs', 'shops', 'industry', 'school', 'logistics'],
+  office: [...new Set([...OFFICE, 'votes', 'polls', 'projects', 'docs', 'pads', 'wiki', 'tribes', 'chats', 'feed', ...PRESET_BASE])],
+  library: [...new Set([...MEDIA, 'feed', ...PRESET_BASE])],
+  mobile: null,
+  full: null
+};
+
 const MOBILE_MODULES = [
   'agenda', 'favorites', 'wallet', 'tribes', 'larp', 'votes', 'polls', 'events', 'calendars', 'tasks',
   'reports', 'banking', 'market', 'housing', 'jobs', 'shops', 'school', 'transfers', 'cipher', 'invites',
@@ -101,9 +112,13 @@ const currentWorkflow = (config) => {
   }) || null;
 };
 
+PRESETS.mobile = MOBILE_MODULES;
+PRESETS.full = ALL_MODULES;
+
 module.exports = {
   ALL_MODULES,
   MOBILE_MODULES,
+  PRESETS,
   WORKFLOWS,
   WORKFLOW_KEYS,
   getWorkflow,

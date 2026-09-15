@@ -178,7 +178,7 @@ const renderMessage = (list, m, opts = {}) =>
         : null
     ),
     div({ class: "mailing-message-text" }, ...renderStyledText(m.text || "")),
-    p({ class: "card-footer" }, span({ class: "date-link" }, fmt(m.sentAt)), userLink(m.author))
+    p({ class: "card-footer" }, span({ class: "date-link" }, `${fmt(m.sentAt)} ${i18n.performed} `), userLink(m.author))
   );
 
 const renderHistory = (list, history, mode) => {

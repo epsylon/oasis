@@ -74,8 +74,7 @@ const renderBlogCard = (blog, filter, spreadInfo) => {
         : null,
       div({ class: "blog-card-text", innerHTML: sanitizeHtml(renderStyledHtml(excerpt(blog.text))) }),
       p({ class: "card-footer" },
-        span({ class: "date-link" }, moment(blog.createdAt).format("YYYY/MM/DD HH:mm")),
-        span(" · "),
+        span({ class: "date-link" }, `${moment(blog.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
         userLink(blog.author)
       )
     )
@@ -133,7 +132,8 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
     section(
       div({ class: "tags-header module-header-line" },
         h2(i18n.blogTitle),
-        p(i18n.blogDescription)
+        p(i18n.blogDescription),
+        (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetPosts === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })()
       )
     ),
     renderFilterBar(showForm ? "CREATE" : filter, params.q, !showForm, Array.isArray(blogs) ? blogs.length : 0, params.censusList),
@@ -141,7 +141,7 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
       ? renderCreateForm()
       : section(
           blogs.length
-            ? div({ class: "jobs-grid" }, ...blogs.map(b => renderBlogCard(b, filter, spreadMap.get(b.id))))
+            ? div({ class: "blogs-grid" }, ...blogs.map(b => renderBlogCard(b, filter, spreadMap.get(b.id))))
             : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.blogNoItems))
         )
   );

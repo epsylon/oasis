@@ -1630,13 +1630,15 @@ button.create-button:hover {
 .card-meta-row .opinions-voting-collapse:not([open]) summary{display:inline-flex;align-items:center}
 .card-meta-row .card-footer{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .card-footer .date-link,
-.card-footer .user-link{display:inline-flex;align-items:center;box-sizing:border-box;height:34px;margin:0;padding:0 14px;border:1px solid transparent;border-radius:5px;font-size:13px;line-height:1}
+.card-footer .user-link{display:inline-flex;align-items:center;box-sizing:border-box;height:34px;margin:0;padding:0 14px;border:1px solid transparent;border-radius:5px;font-size:13px;line-height:32px}
 .card-meta-row .opinions-voting-collapse{margin:0;width:auto;flex:0 1 auto;background:transparent;border:0;padding:0}
 .card-meta-row .opinions-voting-collapse[open]{flex:1 1 100%;width:100%;margin-bottom:8px}
 .card-meta-row .voting-buttons{margin:10px 0 0 0;padding:0}
 .card-meta-row .voting-buttons form{margin:0;padding:0;background:transparent;border:0}
 .card-meta-row .card-footer{margin:0 !important;padding:0 !important;border:0 !important;flex:1 1 auto;min-width:0}
-.card-meta-row .opinions-summary{display:inline-flex !important;align-items:center;box-sizing:border-box;height:34px;padding:0 14px !important;border-radius:5px;font-size:13px;line-height:1;flex:0 0 auto}
+.card-meta-row .opinions-summary{display:inline-flex !important;align-items:center;box-sizing:border-box;height:34px;padding:0 14px !important;border-radius:5px;font-size:13px;line-height:32px;flex:0 0 auto}
+.card-meta-row .comments-summary-link{display:inline-flex;align-items:center;gap:4px;box-sizing:border-box;height:34px;padding:0 14px;border:1px solid rgba(128,128,128,.5);border-radius:5px;background:rgba(128,128,128,.12);font-size:13px;line-height:32px;text-decoration:none;flex:0 0 auto}
+.card-meta-row .comments-summary-link:hover{background:rgba(128,128,128,.25);text-decoration:none}
 .opinions-summary {
   display: inline-block !important;
   width: auto !important;
@@ -2079,6 +2081,10 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 
 .zoom-link{display:inline-block;border:none !important;background:transparent !important;padding:0 !important}
+.internal-link{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border:1px solid rgba(128,128,128,.5);border-radius:10px;background:rgba(128,128,128,.12);text-decoration:none;vertical-align:baseline}
+.internal-link:hover{background:rgba(128,128,128,.25);text-decoration:none}
+.internal-link-kind{font-weight:700;letter-spacing:1px;font-size:.8em}
+.internal-link-id{font-family:monospace;opacity:.75;font-size:.8em}
 .zoom-link img{cursor:zoom-in}
 
 .lightbox-close {
@@ -6407,6 +6413,7 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .pm-exposition-lifespan-orange{background:#2a1f10;color:#ffb84d;border-color:#a37a34}
 .pm-exposition-lifespan-red{background:#2a0e0e;color:#ff7f7f;border-color:#b04040}
 .jobs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+.blogs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(300px,calc((100% - 40px)/3)),1fr));gap:20px}
 .jobs-grid .tribe-card,.tribe-grid .tribe-card{margin-bottom:0}
 .tribe-card .card-comments-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
 .tribe-card .card-comments-summary .inline-form{margin:0}
@@ -8041,7 +8048,7 @@ details[open] > .school-unit-summary::after{content:" \25B4"}
 @media print{nav,.sidebar-left,.sidebar-right,.filters,.report-form,.module-header-line p{display:none !important}.backup-kit{max-width:none}.backup-kit-secret{color:#000;border-color:#000}body{background:#fff;color:#000}}
 .wiki-card-cover{width:100%;max-height:220px;object-fit:cover;border-radius:6px;display:block;margin:0 0 8px 0}
 .wiki-actions-top{justify-content:flex-end;margin:0 0 10px 0}
-.wiki-actions-top .wiki-actions-subscription{display:flex;align-items:center;gap:8px;margin-right:auto}
+.wiki-actions-top .wiki-actions-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-right:auto}
 .wiki-version-actions{justify-content:flex-start;margin:6px 0}
 .wiki-preview{margin:0 0 14px 0}
 .stats-kpi{margin:0 !important;padding:0 !important;box-shadow:none !important;overflow:visible}

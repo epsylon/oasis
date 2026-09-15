@@ -232,7 +232,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
                     button({ type: "submit", class: "create-button" }, i18n.emergencyUpdate)
                   )
                 : div({ class: "emergency-update-text" }, ...renderStyledText(u.text)),
-              p({ class: "card-footer" }, span({ class: "date-link" }, moment(u.createdAt).format("YYYY/MM/DD HH:mm")), userLink(u.author))
+              p({ class: "card-footer" }, span({ class: "date-link" }, `${moment(u.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `), userLink(u.author))
             );
           }))
         : p(i18n.emergencyNoUpdates),

@@ -2,6 +2,8 @@ const { a, img, video, audio, span, strong, em, u, s: strike, code, div, textare
 const i18nBase = require("../client/assets/translations/i18n");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
 
+let zoomSeq = 0;
+
 function getI18n() {
   try {
     const { i18n } = require("../views/main_views");
@@ -37,6 +39,37 @@ const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/gi;
 const HASHTAG_RE = /#[\p{L}\p{N}_]{1,32}(?![\p{L}\p{N}_])/gu;
 const URL_TAIL_RE = /[.,;:!?»"')\]}>]+$/;
 const SELF_HOST_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?#]|$)/i;
+const INTERNAL_PATHS = [
+  'agenda','ai','audios','author','backup','banking','blockexplorer','blogs','bookmarks','calendars','campaigns',
+  'chats','cipher','courts','cv','dev','docs','emergencies','events','favorites','feed','forum','games','graphos',
+  'hashtag','housing','images','industry','inbox','inhabitants','invites','jobs','larp','logistics','logs','mailing',
+  'maps','market','melody','mentions','modules','multiverse','opinions','pads','parliament','peers','pixelia','pm',
+  'podcasts','polls','popular','profile','projects','publish','reports','school','search','settings','shops','spread',
+  'stats','tags','tasks','thread','torrents','transfers','trending','tribes','tribe','videos','votes','votations','wallet','wiki'
+];
+const INTERNAL_PATH_SET = new Set(INTERNAL_PATHS);
+const SSB_ID_RE = /^(?:%[A-Za-z0-9+/=]{20,}\.sha256|@[A-Za-z0-9+/=]{20,}\.ed25519|&[A-Za-z0-9+/=]{20,}\.sha256)$/;
+
+const internalTargetOf = (url) => {
+  let parsed = null;
+  try { parsed = new URL(url); } catch (_) { return null; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  const segments = parsed.pathname.split('/').filter(Boolean).map(seg => { try { return decodeURIComponent(seg); } catch (_) { return seg; } });
+  if (!segments.length || !INTERNAL_PATH_SET.has(segments[0].toLowerCase())) return null;
+  const sameHost = SELF_HOST_RE.test(url);
+  const hasSsbId = segments.slice(1).some(seg => SSB_ID_RE.test(seg));
+  if (!sameHost && !hasSsbId) return null;
+  const id = segments.slice(1).find(seg => SSB_ID_RE.test(seg)) || segments[1] || '';
+  return { href: `${parsed.pathname}${parsed.search}${parsed.hash}`, kind: segments[0].toLowerCase(), id };
+};
+
+const shortInternalId = (id) => {
+  const value = String(id || '');
+  if (!value) return '';
+  const sigil = /^[%@&]/.test(value) ? value[0] : '';
+  const body = sigil ? value.slice(1) : value;
+  return body.length > 8 ? `${sigil}${body.slice(0, 8)}…` : `${sigil}${body}`;
+};
 const MAX_DEPTH = 8;
 
 const headerLevel = (hashes) => Math.min(3, String(hashes || '#').length);
@@ -138,7 +171,18 @@ function renderStyledText(value, opts = {}) {
     } else if (m.type === 'inline-code') {
       result.push(code({ class: 'rt-code' }, m.body));
     } else if (m.type === 'blob-image') {
-      result.push(img({ src: blobHref(m.blob), alt: m.name || '', class: 'post-image' }));
+      const imageSrc = blobHref(m.blob);
+      if (opts.zoomImages) {
+        zoomSeq = (zoomSeq + 1) % 1000000;
+        const zoomId = `rtzoom-${zoomSeq}-${String(m.blob).replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;
+        result.push(a({ href: `#${zoomId}`, id: `${zoomId}-src`, class: 'zoom-link' }, img({ src: imageSrc, alt: m.name || '', class: 'post-image' })));
+        result.push(span({ id: zoomId, class: 'lightbox' },
+          a({ href: `#${zoomId}-src`, class: 'lightbox-close' }, '\u00d7'),
+          img({ src: imageSrc, alt: m.name || '', class: 'lightbox-image' })
+        ));
+      } else {
+        result.push(img({ src: imageSrc, alt: m.name || '', class: 'post-image' }));
+      }
     } else if (m.type === 'blob-video') {
       result.push(video({ controls: true, class: 'post-video', src: blobHref(m.blob) }));
     } else if (m.type === 'blob-audio') {
@@ -157,7 +201,16 @@ function renderStyledText(value, opts = {}) {
         : (internalOn ? a({ href: m.href, class: 'styled-link' }, ...inner(m.label)) : m.label));
     } else if (m.type === 'url') {
       const href = m.text.startsWith('http') ? m.text : `https://${m.text}`;
+      const internalTarget = internalTargetOf(href);
       if (!linksOn) result.push(plain(m.text));
+      else if (internalTarget) {
+        result.push(internalOn
+          ? a({ href: internalTarget.href, class: 'internal-link' },
+              span({ class: 'internal-link-kind' }, internalTarget.kind.toUpperCase()),
+              internalTarget.id ? span({ class: 'internal-link-id' }, shortInternalId(internalTarget.id)) : null
+            )
+          : plain(internalTarget.href));
+      }
       else if (SELF_HOST_RE.test(href)) result.push(a({ href }, m.text));
       else result.push(a({ href, target: '_blank', rel: 'noopener noreferrer' }, m.text));
     } else if (m.type === 'email') {
@@ -250,4 +303,4 @@ function richTextarea(attrs, ...children) {
   return [renderFormatBar(), textarea(attrs, ...children)];
 }
 
-module.exports = { renderStyledText, renderStyledHtml, renderTextPreview, plainText, escapeHtml, safeExternalHref, renderFormatBar, richTextarea };
+module.exports = { renderStyledText, renderStyledHtml, renderTextPreview, plainText, escapeHtml, safeExternalHref, renderFormatBar, richTextarea, INTERNAL_PATHS };

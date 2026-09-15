@@ -32,8 +32,7 @@ const renderMentionCard = (item) => {
         : null,
       item.text ? p({ class: "mention-text" }, ...renderStyledText(excerpt(item.text))) : null,
       p({ class: "card-footer" },
-        span({ class: "date-link" }, moment(item.createdAt).format("YYYY/MM/DD HH:mm")),
-        span(" · "),
+        span({ class: "date-link" }, `${moment(item.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
         userLink(item.author)
       )
     )

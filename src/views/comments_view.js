@@ -5,6 +5,9 @@ const { renderStyledText } = require("../backend/renderStyledText");
 
 const COMMENT_ICON = "✑";
 
+let commentsOpenByDefault = false;
+exports.setCommentsOpen = (value) => { commentsOpenByDefault = !!value; };
+
 const visibleComments = (comments) => (Array.isArray(comments) ? comments : []).filter(c => {
   const t = c && c.value && c.value.content && c.value.content.text;
   return t && String(t).trim();
@@ -34,7 +37,7 @@ const renderCommentCard = (c, extra = null) => {
 
 const renderCommentsSection = ({ action, comments = [], returnTo = null, closedNote = null, extraClass = "", open = false, commentExtra = null } = {}) => {
   const list = visibleComments(comments);
-  return details({ class: "comments-collapse" + (extraClass ? ` ${extraClass}` : ""), ...(open ? { open: true } : {}) },
+  return details({ class: "comments-collapse" + (extraClass ? ` ${extraClass}` : ""), ...((open || commentsOpenByDefault) ? { open: true } : {}) },
     summary({ class: list.length > 0 ? "comments-summary engage-on" : "comments-summary" },
       span({ class: "comments-summary-icon" }, COMMENT_ICON),
       span({ class: "comments-summary-count" }, `(${list.length})`)
@@ -53,7 +56,10 @@ const renderCommentsSection = ({ action, comments = [], returnTo = null, closedN
             )
           ),
       list.length
-        ? div({ class: "comments-list" }, ...list.map(c => renderCommentCard(c, typeof commentExtra === "function" ? commentExtra(c) : null)))
+        ? div({ class: "comments-list" }, ...list.map((c, i) => {
+            const card = renderCommentCard(c, typeof commentExtra === "function" ? commentExtra(c) : null);
+            return i === list.length - 1 ? div({ id: "comments-latest", class: "comments-latest-anchor" }, card) : card;
+          }))
         : (closedNote ? null : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet))
     )
   );

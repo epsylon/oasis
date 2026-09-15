@@ -5,7 +5,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { template, selectedLanguage, i18n, setLanguage } = require('./main_views');
 const i18nBase = require("../client/assets/translations/i18n");
 const { WORKFLOWS, currentWorkflow } = require('../models/workflows_model');
-const { renderVerificationReport } = require('./backup_view');
+const { renderVerificationReport, renderRebuildReport } = require('./backup_view');
 
 const snhUrl = "https://wiki.solarnethub.com/socialnet/overview";
 
@@ -20,7 +20,7 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "", verification = null }) => {
+const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "", verification = null, rebuild = null }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -44,7 +44,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
   const activeWorkflow = currentWorkflow(currentConfig) || '';
   const modOn = (name) => (currentConfig.modules || {})[`${name}Mod`] === 'on';
 
-  const workflowSection = section(
+  const workflowSection = section({ id: "workflows" },
     div({ class: "tags-header" },
       h2(i18n.workflowsTitle),
       p(i18n.workflowsDescription),
@@ -90,7 +90,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         updateButton
       )
     ),
-    section(
+    section({ id: "language" },
       div({ class: "tags-header" },
         h2(i18n.language),
         p(i18n.languageDescription),
@@ -115,7 +115,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    section(
+    section({ id: "ux" },
       div({ class: "tags-header" },
         h2(i18n.uxModeTitle || "UX"),
         p(i18n.uxModeDescription || "Select which UX navigation mode you want for your GUI."),
@@ -142,7 +142,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
       )
     ),
     workflowSection,
-    section(
+    section({ id: "theme" },
       div({ class: "tags-header" },
         h2(i18n.theme),
         p(i18n.themeIntro),
@@ -155,7 +155,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    section(
+    section({ id: "home-page" },
       div({ class: "tags-header" },
         h2(i18n.homePageTitle),
         p(i18n.homePageDescription),
@@ -183,7 +183,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    modOn('ai') ? section(
+    modOn('ai') ? section({ id: "ai" },
       div({ class: "tags-header" },
         h2(i18n.aiTitle),
         p(i18n.aiSettingsDescription),
@@ -214,7 +214,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ) : null,
-    section(
+    section({ id: "logstream" },
       div({ class: "tags-header" },
       h2(i18n.ssbLogStream),
       p(i18n.ssbLogStreamDescription),
@@ -232,7 +232,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
       )
      )
     ),
-    section(
+    section({ id: "replication" },
       div({ class: "tags-header" },
         h2(i18n.settingsReplicationTitle || 'Replication'),
         p(i18n.settingsReplicationDesc || 'Configure the number of hops your peer follows out from your own feed when replicating content.'),
@@ -253,7 +253,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    section(
+    section({ id: "lan" },
       div({ class: "tags-header" },
         h2(i18n.settingsLanTitle || 'LAN Broadcasting'),
         p(i18n.settingsLanDesc || 'Periodically announce this peer to other Oasis instances on the same local network. Disable to stop UDP broadcasts.'),
@@ -275,7 +275,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    section(
+    section({ id: "wish" },
       div({ class: "tags-header" },
         h2(i18n.settingsWishTitle),
         p(i18n.settingsWishDesc),
@@ -290,7 +290,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    section(
+    section({ id: "pm-visibility" },
       div({ class: "tags-header" },
         h2(i18n.settingsPmVisibilityTitle),
         p(i18n.settingsPmVisibilityDesc),
@@ -399,7 +399,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ) : null,
-    section(
+    section({ id: "verification" },
       div({ class: "tags-header" },
         h2(i18n.verificationTitle),
         p(i18n.verificationDescription),
@@ -407,14 +407,15 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         verification && verification.error ? p({ class: "backup-check-bad" }, verification.error) : renderVerificationReport(verification)
       )
     ),
-    section(
+    section({ id: "indexes" },
       div({ class: "tags-header" },
         h2(i18n.indexes),
         p(i18n.indexesDescription),
-        rebuildButton
+        rebuildButton,
+        renderRebuildReport(rebuild)
       )
     ),
-    section(
+    section({ id: "export" },
       div({ class: "tags-header" },
         h2(i18n.exportDataTitle),
         p(i18n.exportDataDescription),
@@ -424,7 +425,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    section(
+    section({ id: "panic" },
       div({ class: "tags-header" },
         h2(i18n.panicMode),
         p(i18n.removeDataDescription),

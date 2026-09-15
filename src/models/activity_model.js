@@ -200,7 +200,23 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
           description: info.description || '',
           members: Math.max(info.members || 0, new Set(asc.map(m => m.author)).size),
           messageCount: asc.length,
-          replies: asc.slice(-CHAT_THREAD_LIMIT).map(m => ({ id: m.id, author: m.author, ts: m.ts || 0, text: (m.content && m.content.text) || '', image: (m.content && m.content.image) || null, mimeType: (m.content && m.content.mimeType) || '' }))
+          replies: (() => {
+            const byId = new Map(asc.map(m => [m.id, m]));
+            return asc.slice(-CHAT_THREAD_LIMIT).map(m => {
+              const quotedId = (m.content && typeof m.content.replyTo === 'string') ? m.content.replyTo : null;
+              const quoted = quotedId ? byId.get(quotedId) : null;
+              return {
+                id: m.id,
+                author: m.author,
+                ts: m.ts || 0,
+                text: (m.content && m.content.text) || '',
+                image: (m.content && m.content.image) || null,
+                mimeType: (m.content && m.content.mimeType) || '',
+                replyTo: quotedId,
+                reply: quoted ? { id: quoted.id, author: quoted.author, text: String((quoted.content && quoted.content.text) || '').slice(0, 140) } : null
+              };
+            });
+          })()
         }
       });
     }

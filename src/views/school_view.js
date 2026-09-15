@@ -149,7 +149,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
 
   return template(
     title,
-    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.schoolDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.schoolDescription), (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetSchool === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })())),
     section(renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null)),
     !isForm && !emptyMod
       ? section(

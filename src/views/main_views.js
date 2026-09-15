@@ -1642,12 +1642,12 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "ꖘ",
                   text: i18n.inhabitantsLabel
                 }),
-                renderTribesLink(),
-                renderLarpLink(),
+                renderEmergenciesLink(),
                 renderSchoolLink(),
                 renderParliamentLink(),
                 renderCourtsLink(),
-                renderEmergenciesLink()
+                renderLarpLink(),
+                renderTribesLink()
               ),
               navGroup(
                 {
@@ -1655,15 +1655,15 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "¤",
                   title: i18n.menuEconomy
                 },
-                renderBankingLink(),
                 renderWalletLink(),
+                renderBankingLink(),
                 renderMarketLink(),
-                renderLogisticsLink(),
-                renderHousingLink(),
-                renderProjectsLink(),
-                renderIndustryLink(),
-                renderJobsLink(),
                 renderShopsLink(),
+                renderIndustryLink(),
+                renderLogisticsLink(),
+                renderProjectsLink(),
+                renderJobsLink(),
+                renderHousingLink(),
                 renderTransfersLink()
               ),
               navGroup(

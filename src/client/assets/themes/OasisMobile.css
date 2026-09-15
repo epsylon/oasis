@@ -1338,3 +1338,37 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   margin: 0 !important;
   padding: 0 10px !important;
 }
+
+.feed-card .card-footer {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 4px !important;
+  width: 100% !important;
+}
+.feed-card .card-footer .date-link,
+.feed-card .card-footer .user-link {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  min-height: 40px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+  line-height: 24px !important;
+  text-align: center !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.feed-card .card-footer .user-link > * {
+  display: inline !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.feed-card .card-footer .user-link {
+  font-weight: bold !important;
+}

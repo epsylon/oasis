@@ -480,6 +480,43 @@ module.exports = ({ cooler }) => {
 
     markBackup() { return markBackup(); },
 
+    async rebuildIndexes() {
+      const started = Date.now();
+      const ssbClient = await openSsb();
+      const indexDir = path.join(os.homedir(), '.ssb', 'flume');
+      const measure = (dir) => {
+        let files = 0, bytes = 0;
+        const walk = (d) => {
+          let entries = [];
+          try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { return; }
+          for (const entry of entries) {
+            const full = path.join(d, entry.name);
+            if (entry.isDirectory()) { walk(full); continue; }
+            try { bytes += fs.statSync(full).size; files += 1; } catch (_) {}
+          }
+        };
+        walk(dir);
+        return { files, bytes };
+      };
+      const before = measure(indexDir);
+      let error = null;
+      try {
+        await new Promise((resolve, reject) => {
+          try { ssbClient.rebuild((err) => err ? reject(err) : resolve()); } catch (e) { reject(e); }
+        });
+      } catch (e) { error = e && e.message ? e.message : String(e); }
+      const after = measure(indexDir);
+      let totalMessages = 0;
+      try { totalMessages = (await readLog(ssbClient)).length; } catch (_) {}
+      return {
+        checkedAt: new Date().toISOString(),
+        tookMs: Date.now() - started,
+        ok: !error,
+        error,
+        totalMessages,
+        indexes: { path: indexDir, files: after.files, bytes: after.bytes, deltaBytes: after.bytes - before.bytes }
+      };
+    },
     async verify({ author = null } = {}) {
       const started = Date.now();
       const ssbClient = await openSsb();
