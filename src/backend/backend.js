@@ -1920,6 +1920,30 @@ const isMissingContentError = (err) => {
     msg.includes('undecodable');
 };
 
+const isBlankText = (value) => !String(value == null ? '' : value)
+  .replace(/<[^>]*>/g, '')
+  .replace(/[\u200B-\u200D\uFEFF\u2060\u00A0]/g, '')
+  .trim();
+const isPastDate = (raw, { dayOnly = false } = {}) => {
+  const value = String(raw == null ? '' : raw).trim();
+  if (!value) return false;
+  const t = Date.parse(value);
+  if (!Number.isFinite(t)) return false;
+  if (dayOnly) { const today = new Date(); today.setHours(0, 0, 0, 0); return t < today.getTime(); }
+  return t < Date.now() - 60 * 1000;
+};
+const rejectPastDates = (ctx, fields, fallback) => {
+  if (!fields.some(([value, opts]) => isPastDate(value, opts || {}))) return false;
+  const { i18n } = require('../views/main_views');
+  const message = encodeURIComponent(i18n.dateInPastError || 'The date cannot be in the past');
+  let back = fallback;
+  try {
+    const u = new URL(ctx.request.header.referer || '');
+    if ((u.protocol === 'http:' || u.protocol === 'https:') && u.host === ctx.host) back = u.pathname + u.search;
+  } catch (_) {}
+  ctx.redirect(`${back}${back.includes('?') ? '&' : '?'}error=${message}`);
+  return true;
+};
 const commentAction = async (ctx, kind, idParam) => {
   const modKey = contentModCheck[kind];
   if (modKey && !checkMod(ctx, modKey)) { ctx.redirect('/modules'); return; }
@@ -1928,7 +1952,7 @@ const commentAction = async (ctx, kind, idParam) => {
   const rt = safeReturnTo(ctx, `/${kind}/${encodeURIComponent(itemId)}`, [`/${kind}`]);
   const blobMarkdown = await handleBlobUpload(ctx, 'blob');
   if (blobMarkdown) text += blobMarkdown;
-  if (!text) { ctx.redirect(rt); return; }
+  if (isBlankText(text)) { ctx.redirect(rt); return; }
   await post.publish({ text, root: itemId, dest: itemId });
   ctx.redirect(rt);
 };
@@ -2665,6 +2689,7 @@ router
     const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
     const courseType = String(b.courseType || 'OPEN').toUpperCase();
     if (courseType === 'PAID' && !(parseFloat(String(b.price || '').replace(',', '.')) > 0)) throw new Error('Invalid price');
+    if (rejectPastDates(ctx, [[b.startDate]], '/school?filter=create')) return;
     await schoolModel.createCourse({ title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), tags: b.tags, price: courseType === 'OPEN' ? '0' : b.price, visibility: courseType === 'INVITE' ? 'INVITE' : 'PUBLIC', startDate: b.startDate, image: imageBlob });
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect('/school?filter=mine');
@@ -2722,6 +2747,7 @@ router
   .post('/school/lesson/add/:id', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
+    if (rejectPastDates(ctx, [[b.sessionDate]], '/school')) return;
     await schoolModel.addLesson(ctx.params.id, { title: stripDangerousTags(b.title), text: stripDangerousTags(b.text), unit: stripDangerousTags(b.unit || ''), order: b.order, sessionDate: b.sessionDate });
     try {
       const course = await schoolModel.getCourseById(ctx.params.id, getViewerId());
@@ -4470,8 +4496,14 @@ router
     const spreadMap = new Map();
     const SPREADABLE = new Set(['post','audio','video','image','document','torrent','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse']);
     const targets = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && SPREADABLE.has(a.type));
-    const results = await Promise.all(targets.map(a => spreads.forMessage(a.id).catch(() => null)));
-    targets.forEach((a, i) => { if (results[i]) spreadMap.set(a.id, results[i]); });
+    const spreadKeysOf = (a) => Array.from(new Set([a.id, a.rootId, a.tipId].filter(k => typeof k === 'string' && k.startsWith('%'))));
+    const results = await Promise.all(targets.map(a => Promise.all(spreadKeysOf(a).map(k => spreads.forMessage(k).catch(() => null)))));
+    targets.forEach((a, i) => {
+      const parts = (results[i] || []).filter(Boolean);
+      if (!parts.length) return;
+      const voters = Array.from(new Set(parts.flatMap(pt => Array.isArray(pt.voters) ? pt.voters : [])));
+      spreadMap.set(a.id, { ...parts[0], voters, count: voters.length || Math.max(...parts.map(pt => Number(pt.count) || 0)), alreadySpread: parts.some(pt => pt.alreadySpread) });
+    });
     try {
       const uniqAuthors = new Set();
       const collect = (v) => { if (v && /^@.+\.ed25519$/.test(String(v))) uniqAuthors.add(String(v)); };
@@ -5607,6 +5639,7 @@ router
     if (!checkMod(ctx, 'pollsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
     try {
+      if (rejectPastDates(ctx, [[b.deadline]], '/polls')) return;
       await pollsModel.createPoll({
         question: stripDangerousTags(b.question),
         options: stripDangerousTags(String(b.options || '')).split('\n'),
@@ -7170,6 +7203,7 @@ router
     if (!checkMod(ctx, 'industryMod')) { ctx.redirect('/modules'); return; }
     try {
       const image = ctx.request.files?.image ? await handleBlobUpload(ctx, "image") : null
+      if (rejectPastDates(ctx, [[ctx.request.body && ctx.request.body.startDate, { dayOnly: true }], [ctx.request.body && ctx.request.body.endDate, { dayOnly: true }]], '/industry')) return;
       const res = await industryModel.createBuild(ctx.params.fid, { ...(ctx.request.body || {}), image })
       ctx.redirect(`/industry/build/${encodeURIComponent(res.key)}`)
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }) }
@@ -8513,6 +8547,7 @@ router
     const text = ctx.request.body?.text != null ? stripDangerousTags(String(ctx.request.body.text)) : "";
     const imageMarkdown = ctx.request.files?.blob ? await handleBlobUpload(ctx, 'blob') : null;
     const fullText = imageMarkdown ? (text ? text + '\n' : '') + imageMarkdown : text;
+    if (isBlankText(fullText)) { ctx.redirect(`/feed/${encodeURIComponent(ctx.params.feedId)}`); return; }
     await feedModel.addComment(ctx.params.feedId, fullText);
     ctx.redirect(`/feed/${encodeURIComponent(ctx.params.feedId)}`);
   })
@@ -9036,6 +9071,7 @@ router
       ctx.body = await taskView([], 'create', null, b.returnTo, { draft: { ...b, images: draftImages } });
       return;
     }
+    if (rejectPastDates(ctx, [[b.startTime], [b.endTime]], '/tasks?filter=create')) return;
     await tasksModel.createTask(stripDangerousTags(b.title), stripDangerousTags(b.description), b.startTime, b.endTime, b.priority, stripDangerousTags(b.location), b.tags, b.isPublic, { images: draftImages, video: media.clip || '' });
     ctx.redirect(safeReturnTo(ctx, '/tasks?filter=mine', ['/tasks']));
   })
@@ -9205,6 +9241,7 @@ router
     const b = ctx.request.body || {};
     try {
       const blobMarkdown = await handleBlobUpload(ctx, 'blob');
+      if (rejectPastDates(ctx, [[b.date]], '/logistics?filter=create')) return;
       const res = await logisticsModel.createRoute({ kind: b.kind, mode: b.mode, title: stripDangerousTags(String(b.title || '')), description: stripDangerousTags(String(b.description || '')) + (blobMarkdown || ''), origin: stripDangerousTags(String(b.origin || '')), destination: stripDangerousTags(String(b.destination || '')), mapUrl: stripDangerousTags(String(b.mapUrl || '')), date: b.date, recurrence: b.recurrence, seats: b.seats, size: stripDangerousTags(String(b.size || '')), weight: stripDangerousTags(String(b.weight || '')), priceType: b.priceType, price: b.price, orderRef: stripDangerousTags(String(b.orderRef || '')), tags: b.tags || '' });
       ctx.redirect(`/logistics/${encodeURIComponent(res.key)}`);
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }); }
@@ -9333,6 +9370,7 @@ router
       let text = stripDangerousTags(String(b.text || ''));
       const blobMarkdown = await handleBlobUpload(ctx, 'blob');
       if (blobMarkdown) text += blobMarkdown;
+      if (rejectPastDates(ctx, [[b.deadline]], '/campaigns?filter=create')) return;
       const res = await campaignsModel.createCampaign({ title: stripDangerousTags(String(b.title || '')), text, category: b.category, goal: b.goal, deadline: b.deadline, tags: b.tags || '', mapUrl: stripDangerousTags(String(b.mapUrl || '')) });
       ctx.redirect(`/campaigns/${encodeURIComponent(res.key)}`);
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }); }
@@ -9494,6 +9532,7 @@ router
       until: b.intervalDeadline || b.recurrenceUntil || ''
     };
     const eventAttachment = await handleBlobUpload(ctx, 'blob');
+    if (rejectPastDates(ctx, [[b.date]], '/events?filter=create')) return;
     const evResult = await eventsModel.createEvent(stripDangerousTags(b.title), stripDangerousTags(b.description) + (eventAttachment || ''), b.date, stripDangerousTags(b.location), b.price, b.url, b.attendees || [], b.tags, b.isPublic, stripDangerousTags(b.mapUrl), b.clearnetPublic, { images: draftImages, video: media.clip || '' }, recurrence);
     if ([].concat(b.addToCalendar).includes("1") && evResult && evResult.key) {
       try {
@@ -9562,6 +9601,7 @@ router
     const b = ctx.request.body, defaultOptions = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'];
     const parsedOptions = b.options ? b.options.split(',').map(o => o.trim()).filter(Boolean) : defaultOptions;
     try {
+      if (rejectPastDates(ctx, [[b.deadline]], '/votes?filter=create')) return;
       await votesModel.createVote(stripDangerousTags(b.question), b.deadline, parsedOptions, String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean));
     } catch (err) {
       ctx.redirect(voteFormRedirect('create', null, err, b));
@@ -9831,6 +9871,7 @@ router
     const b = ctx.request.body, image = await handleBlobUpload(ctx, "image"), parsedStock = parseInt(String(b.stock || "0"), 10);
     if (!parsedStock || parsedStock <= 0) ctx.throw(400, "Stock must be a positive number.");
     const pickLast = v => Array.isArray(v) ? v[v.length - 1] : v, shpVal = pickLast(b.includesShipping);
+    if (rejectPastDates(ctx, [[b.deadline]], '/market?filter=create')) return;
     await marketModel.createItem(b.item_type, stripDangerousTags(b.title), stripDangerousTags(b.description), image, b.price, b.tags, b.item_status, b.deadline, shpVal === "1" || shpVal === "on" || shpVal === true || shpVal === "true", parsedStock, stripDangerousTags(b.mapUrl), { industry: stripDangerousTags(b.industry || "") }, b.visibility);
     ctx.redirect(safeReturnTo(ctx, "/market", ["/market"]));
   })
@@ -9921,6 +9962,7 @@ router
     }
     let created = null
     try {
+      if (rejectPastDates(ctx, [[b.availableFrom, { dayOnly: true }], [b.availableTo, { dayOnly: true }]], '/housing?filter=create')) return;
       created = await housingModel.createHousing({
         housing_type: stripDangerousTags(b.housing_type),
         property_type: stripDangerousTags(b.property_type),
@@ -10369,7 +10411,7 @@ router
     let uploadMime = imageBlob && uploadFile ? String(uploadFile.mimetype || '') : null;
     if (uploadMime === 'application/octet-stream' && /\.torrent$/i.test(String(uploadFile?.originalFilename || ''))) uploadMime = 'application/x-bittorrent';
     const replyTo = String(ctx.request.body.replyTo || '').trim() || null;
-    if (!text && !imageBlob) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
+    if (isBlankText(text) && !imageBlob) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
     try {
       await chatsModel.sendMessage(ctx.params.chatId, text, imageBlob, replyTo, uploadMime);
     } catch (err) {
@@ -10492,6 +10534,7 @@ router
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
       await tribesModel.ensureTribeKeyDistribution(tribeId).catch(() => {});
     }
+    if (rejectPastDates(ctx, [[b.deadline]], '/pads?filter=create')) return;
     const msg = await padsModel.createPad(
       stripDangerousTags(b.title || ""),
       b.status || "OPEN",
@@ -10613,6 +10656,7 @@ router
     }
     const { intervalWeekly, intervalMonthly, intervalYearly } = readInterval(b);
     try {
+      if (rejectPastDates(ctx, [[b.deadline], [b.firstDate], [b.intervalDeadline]], '/calendars?filter=create')) return;
       const msg = await calendarsModel.createCalendar({
         title: stripDangerousTags(b.title || ""),
         status: b.status || "OPEN",
@@ -10724,6 +10768,7 @@ router
     const b = ctx.request.body || {};
     const { intervalWeekly, intervalMonthly, intervalYearly } = readInterval(b);
     try {
+      if (rejectPastDates(ctx, [[b.date], [b.intervalDeadline]], '/calendars')) return;
       const dateMsgs = await calendarsModel.addDate(ctx.params.id, b.date || "", stripDangerousTags(b.label || ""), intervalWeekly, intervalMonthly, intervalYearly, b.intervalDeadline || "");
       const noteText = stripDangerousTags(String(b.text || "").trim());
       if (noteText && Array.isArray(dateMsgs)) {
@@ -10789,6 +10834,7 @@ router
     const projectAttachment = await handleBlobUpload(ctx, 'blob');
     if (projectAttachment) b.description = String(b.description || '') + projectAttachment;
     const bounties = b.bountiesInput ? String(b.bountiesInput).split("\n").filter(Boolean).map(l => { const [t,a,d] = String(l).split("|"); return { title: String(t||"").trim(), amount: parseFloat(a||0)||0, description: String(d||"").trim(), milestoneIndex: null }; }) : [];
+    if (rejectPastDates(ctx, [[b.deadline], [b.milestoneDueDate]], '/projects?filter=create')) return;
     await projectsModel.createProject({ title: b.title, description: b.description, goal: b.goal != null && b.goal !== "" ? parseFloat(b.goal) : 0, deadline: b.deadline ? new Date(b.deadline).toISOString() : null, progress: b.progress != null && b.progress !== "" ? parseInt(b.progress,10) : 0, bounties, image, milestoneTitle: b.milestoneTitle, milestoneDescription: b.milestoneDescription, milestoneTargetPercent: b.milestoneTargetPercent, milestoneDueDate: b.milestoneDueDate, mapUrl: stripDangerousTags(b.mapUrl), clearnetPublic: b.clearnetPublic });
     ctx.redirect(safeReturnTo(ctx, "/projects?filter=MINE", ["/projects"]));
   })
@@ -10829,6 +10875,7 @@ router
     let milestoneIndex = null, bountyIndex = null, mob = b.milestoneOrBounty || "";
     if (String(mob).startsWith("milestone:")) milestoneIndex = parseInt(String(mob).split(":")[1], 10);
     else if (String(mob).startsWith("bounty:")) bountyIndex = parseInt(String(mob).split(":")[1], 10);
+    if (rejectPastDates(ctx, [[b.deadline]], '/transfers?filter=create')) return;
     const transfer = await transfersModel.createTransfer(project.author, "Project Pledge", pledgeAmount, moment().add(14, "days").toISOString(), ["backer-pledge", `project:${latestId}`]);
     await projectsModel.pledgeToProject(latestId, uid, pledgeAmount, { transferId: transfer.key || transfer.id, milestoneIndex, bountyIndex });
     await pmModel.sendMessage([project.author], "PROJECT_PLEDGE", `${await actorLink(getViewerId())} has pledged ${pledgeAmount} ECO to your project: [${project.title || 'a project'}](/projects/${encodeURIComponent(latestId)})`);

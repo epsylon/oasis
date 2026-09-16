@@ -1080,3 +1080,8 @@ a.create-button {
 }
 .card-field.image-container,.card-field.video-container,.card-field.audio-container { justify-content: center !important; }
 .card-field.media-left { justify-content: flex-start !important; }
+
+.card-footer .date-link,
+.card-footer .user-link { padding: 0 10px !important; font-size: 12px !important; }
+.card-meta-row .opinions-summary,
+.card-meta-row .comments-summary-link { padding: 0 10px !important; font-size: 12px !important; }

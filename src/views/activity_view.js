@@ -324,7 +324,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
   }
 
   const cards = items.map(action => {
-    const date = action.ts ? new Date(action.ts).toLocaleString() : "";
+    const date = action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : "";
     const type = action.type || 'unknown';
     let skip = false;
     let headerText;
@@ -399,7 +399,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           div(
             { class: 'card-field' },
             span({ class: 'card-label' }, i18n.deadline + ':'),
-            span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')
+            span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : '')
           ),
           div(
             { class: 'card-field' },
@@ -430,7 +430,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section transfer' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.concept + ':'), span({ class: 'card-value' }, concept)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : '')),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status))
         )
       );
@@ -736,7 +736,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const { url } = content;
       cardBody.push(
         div({ class: 'card-section bookmark' },
-          h2(url ? p(a({ href: safeExternalHref(url), target: '_blank', class: "bookmark-url" }, url)) : "")
+          url ? div({ class: 'card-field' }, a({ href: safeExternalHref(url), target: '_blank', rel: 'noreferrer noopener', class: 'bookmark-url' }, url)) : ''
         )
       );
     }
@@ -746,7 +746,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section event' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
-          date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.date + ':'), span({ class: 'card-value' }, new Date(date).toLocaleString())) : "",
+          date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.date + ':'), span({ class: 'card-value' }, moment(date).format("YYYY/MM/DD HH:mm"))) : "",
           location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.location || 'Location') + ':'), span({ class: 'card-value' }, location)) : "",
           typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
           price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
@@ -762,8 +762,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section task' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
           priority ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.priority || 'Priority') + ':'), span({ class: 'card-value' }, priority)) : "",
-          startTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskStartTimeLabel || 'Start') + ':'), span({ class: 'card-value' }, new Date(startTime).toLocaleString())) : "",
-          endTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskEndTimeLabel || 'End') + ':'), span({ class: 'card-value' }, new Date(endTime).toLocaleString())) : "",
+          startTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskStartTimeLabel || 'Start') + ':'), span({ class: 'card-value' }, moment(startTime).format("YYYY/MM/DD HH:mm"))) : "",
+          endTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskEndTimeLabel || 'End') + ':'), span({ class: 'card-value' }, moment(endTime).format("YYYY/MM/DD HH:mm"))) : "",
           status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : ""
         )
       );
@@ -905,7 +905,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 )
             ),
             p({ class: 'card-footer' },
-                span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
+                span({ class: 'date-link' }, `${action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : ''}`),
                 userLink(action.author, action.authorNames && action.authorNames[action.author])
             )
         );
@@ -978,7 +978,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 )
             ),
             p({ class: 'card-footer' },
-                span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
+                span({ class: 'date-link' }, `${action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : ''}`),
                 userLink(action.author, action.authorNames && action.authorNames[action.author])
             )
         );
@@ -1123,7 +1123,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemTitle + ':'), span({ class: 'card-value' }, title)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, item_type.toUpperCase())),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStatus + ": " ), span({ class: 'card-value' }, status.toUpperCase())),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : "")),
+          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : "")),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
           div({ class: "price-chip" }, `${price} ECO`),
           br(),
@@ -1239,7 +1239,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ),
           (buildStatus || startDate || endDate) ? div({ class: 'card-field-row' },
             buildStatus ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryStatusLabel || 'Status').toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['industryBuildStatus_' + buildStatus] || buildStatus).toUpperCase())) : "",
-            startDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildStart || 'Start date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(startDate).format('YYYY-MM-DD'))) : "",
+            startDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildStart || 'Start date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(startDate).format("YYYY/MM/DD"))) : "",
             endDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildEnd || 'End date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(endDate).format('YYYY-MM-DD'))) : "",
             daysLeft != null ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryTimeLeft || 'Time left').toUpperCase() + ':'), span({ class: 'card-value' }, `${daysLeft}d`)) : ""
           ) : null,
@@ -1541,7 +1541,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             p({ innerHTML: sanitizeHtml(msgHtml) })
           ),
           p({ class: 'card-footer' },
-            span({ class: 'date-link' }, `${action.ts ? new Date(action.ts).toLocaleString() : ''} ${i18n.performed} `),
+            span({ class: 'date-link' }, `${action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : ''}`),
             userLink(action.author, action.authorNames && action.authorNames[action.author])
           )
         );
@@ -1704,7 +1704,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ) : null,
           startDate ? div({ class: 'card-field' },
             span({ class: 'card-label' }, (i18n.schoolStartDate || 'Start date') + ':'),
-            span({ class: 'card-value' }, new Date(startDate).toLocaleDateString())
+            span({ class: 'card-value' }, moment(startDate).format("YYYY/MM/DD HH:mm"))
           ) : null
         )
       );
@@ -1780,8 +1780,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
 
       cardBody.push(
         div({ class: 'card-section parliament' },
-          startAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsStart.toUpperCase() || 'Elections start') + ':'), span({ class: 'card-value' }, new Date(startAt).toLocaleString())) : '',
-          endAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsEnd.toUpperCase() || 'Elections end') + ':'), span({ class: 'card-value' }, new Date(endAt).toLocaleString())) : '',
+          startAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsStart.toUpperCase() || 'Elections start') + ':'), span({ class: 'card-value' }, moment(startAt).format("YYYY/MM/DD HH:mm"))) : '',
+          endAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsEnd.toUpperCase() || 'Elections end') + ':'), span({ class: 'card-value' }, moment(endAt).format("YYYY/MM/DD HH:mm"))) : '',
           div({ class: 'card-field' }, span({ class: 'card-value' }, winnerLink))
         )
       );
@@ -1808,7 +1808,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           campaignId ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ':'), span({ class: 'card-value' }, `${signatures}${goal > 0 ? ` / ${goal}` : ''}`)) : '',
           campaignId ? div({ class: 'card-field' }, a({ href: `/campaigns/${encodeURIComponent(campaignId)}`, class: 'card-value user-link' }, title || campaignId)) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
-          createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, new Date(createdAt).toLocaleString())) : '',
+          createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, moment(createdAt).format("YYYY/MM/DD HH:mm"))) : '',
           voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
           status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentStatus.toUpperCase() || 'Status') + ':'), span({ class: 'card-value' }, status)) : ''
         )
@@ -1826,7 +1826,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
           reasons ? p({ class: 'card-section-text' }, reasons) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
-          createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, new Date(createdAt).toLocaleString())) : '',
+          createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, moment(createdAt).format("YYYY/MM/DD HH:mm"))) : '',
           voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
           status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentStatus.toUpperCase() || 'Status') + ':'), span({ class: 'card-value' }, status)) : ''
         )
@@ -1848,7 +1848,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           description ? p({ class: 'card-section-text' }, description) : '',
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
           proposer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawProposer || 'Proposer') + ':'), span({ class: 'card-value' }, userLink(proposer))) : '',
-          enactedAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawEnacted || 'Enacted at') + ':'), span({ class: 'card-value' }, new Date(enactedAt).toLocaleString())) : '',
+          enactedAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawEnacted || 'Enacted at') + ':'), span({ class: 'card-value' }, moment(enactedAt).format("YYYY/MM/DD HH:mm"))) : '',
           (total || yes) ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawVotes || 'Votes') + ':'), span({ class: 'card-value' }, `${yes}/${total}`)) : ''
         )
       );
@@ -1862,9 +1862,9 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsCaseTitle.toUpperCase() + ':'), span({ class: 'card-value' }, title)) : '',
             status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThStatus.toUpperCase() + ':'), span({ class: 'card-value' }, status)) : '',
             method ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsMethod.toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['courtsMethod' + String(method).toUpperCase()] || method).toUpperCase())) : '',
-            answerBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThAnswerBy + ':'), span({ class: 'card-value' }, new Date(answerBy).toLocaleString())) : '',
-            evidenceBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThEvidenceBy + ':'), span({ class: 'card-value' }, new Date(evidenceBy).toLocaleString())) : '',
-            decisionBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThDecisionBy + ':'), span({ class: 'card-value' }, new Date(decisionBy).toLocaleString())) : '',
+            answerBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThAnswerBy + ':'), span({ class: 'card-value' }, moment(answerBy).format("YYYY/MM/DD HH:mm"))) : '',
+            evidenceBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThEvidenceBy + ':'), span({ class: 'card-value' }, moment(evidenceBy).format("YYYY/MM/DD HH:mm"))) : '',
+            decisionBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThDecisionBy + ':'), span({ class: 'card-value' }, moment(decisionBy).format("YYYY/MM/DD HH:mm"))) : '',
             accuser ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsAccuser + ':'), span({ class: 'card-value' }, userLink(accuser))) : '',
             typeof needed !== 'undefined' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsVotesNeeded + ':'), span({ class: 'card-value' }, String(needed))) : '',
             (typeof yes !== 'undefined' || typeof total !== 'undefined') ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsVotesSlashTotal + ':'), span({ class: 'card-value' }, `${Number(yes || 0)}/${Number(total || 0)}`)) : '',
@@ -1934,14 +1934,14 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       (() => {
         const footerAuthorId = action.author || (content && content.proposer) || '';
         const footerNode = p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${date} ${i18n.performed} `),
+          span({ class: 'date-link' }, `${date}`),
           userLink(footerAuthorId, (action.authorNames && action.authorNames[footerAuthorId]) || getProfile(footerAuthorId).name)
         );
         const commentTotal = Number(action.commentCount) || 0;
         const commentsHref = detailHref
           ? `${detailHref}${detailHref.includes('?') ? '&' : '?'}comments=open${commentTotal ? '#comments-latest' : ''}`
           : '';
-        const commentsNode = detailHref
+        const commentsNode = detailHref && type !== 'about'
           ? a({
               href: commentsHref,
               class: commentTotal ? 'comments-summary-link engage-on' : 'comments-summary-link',

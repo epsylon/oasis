@@ -1,4 +1,5 @@
 const { form, button, div, h2, p, section, input, span, table, thead, tbody, tr, td, th, ul, li, a, br, label, img } = require("../server/node_modules/hyperaxe");
+const moment = require("../server/node_modules/moment");
 const QRCode = require('../server/node_modules/qrcode');
 const { template, i18n } = require('./main_views');
 
@@ -56,7 +57,7 @@ exports.walletHistoryView = async (balance, transactions, address) => {
                     const totalAmount = amount + fee;
                     return tr(
                         td({ class: "full-center" }, String(tx.confirmations || 0)),
-                        td(date.toLocaleDateString(), br(), date.toLocaleTimeString()),
+                        td(moment(date).format("YYYY/MM/DD"), br(), moment(date).format("HH:mm")),
                         td(tx.category || "-"),
                         td(totalAmount.toFixed(6)),
                         td({ width: "30%", class: "tcell-ellipsis" },

@@ -388,7 +388,7 @@ const renderFeedTribeView = async (feedItems, tribe, query = {}, filter) => {
 		    : null
 		),
               div({ class: 'feed-main' },
-                p(`${new Date(m.createdAt).toLocaleString()} — `, userLink(m.author)),
+                p(`${moment(m.createdAt).format("YYYY/MM/DD HH:mm")} — `, userLink(m.author)),
                 br,
                 p(...renderStyledText(m.description))
               )
@@ -520,7 +520,7 @@ const renderTribeActivitySection = (tribe, sectionData) => {
       if (item.encrypted) return div({ class: 'card card-rpg' }, div({ class: 'tribe-card-body' }, p({ class: 'tribe-meta-label' }, i18n.tribeContentEncrypted || 'Encrypted content')));
       if (item.contentType === 'chatThread') {
         const replies = Array.isArray(item.replies) ? item.replies : [];
-        const tDate = item.timestamp ? new Date(item.timestamp).toLocaleString() : '';
+        const tDate = item.timestamp ? moment(item.timestamp).format("YYYY/MM/DD HH:mm") : '';
         const headerText = item.tribeName
           ? `[${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD · ${item.tribeName}]`
           : `[${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD]`;
@@ -535,18 +535,18 @@ const renderTribeActivitySection = (tribe, sectionData) => {
             replies.map(r => div({ class: 'thread-reply-item' },
               r.text ? p({ class: 'post-text post-text-pre' }, String(r.text)) : null,
               div({ class: 'card-footer thread-reply-footer' },
-                span({ class: 'date-link' }, r.createdAt ? new Date(r.createdAt).toLocaleString() : ''),
+                span({ class: 'date-link' }, r.createdAt ? moment(r.createdAt).format("YYYY/MM/DD HH:mm") : ''),
                 userLink(r.author, '')
               )
             ))
           ),
           p({ class: 'card-footer' },
-            span({ class: 'date-link' }, `${tDate} ${i18n.performed || ''} `),
+            span({ class: 'date-link' }, `${tDate}`),
             userLink(item.author, item.authorName)
           )
         );
       }
-      const date = item.timestamp ? new Date(item.timestamp).toLocaleString() : '';
+      const date = item.timestamp ? moment(item.timestamp).format("YYYY/MM/DD HH:mm") : '';
       const typeLabel = item.contentType === 'media' && item.mediaType
         ? activityMediaTypeName(item.mediaType)
         : contentTypeName(item.contentType);
@@ -585,7 +585,7 @@ const renderTribeActivitySection = (tribe, sectionData) => {
           item.description && !(item.contentType === 'media' && item.mediaType === 'bookmark' && item.description === item.url) ? p(item.description.substring(0, 200)) : null
         ),
         p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${date} ${i18n.performed || ''} `),
+          span({ class: 'date-link' }, `${date}`),
           userLink(item.author, item.authorName)
         )
       );
@@ -659,7 +659,7 @@ const renderTribeTagsSection = (tribe, sectionData, query) => {
             item.description ? p(item.description.substring(0, 200)) : null
           ),
           p({ class: 'card-footer' },
-            span({ class: 'date-link' }, new Date(item.createdAt).toLocaleString()),
+            span({ class: 'date-link' }, moment(item.createdAt).format("YYYY/MM/DD HH:mm")),
             userLink(item.author)
           )
         ))
@@ -694,7 +694,7 @@ const renderTribeSearchSection = (tribe, sectionData, query) => {
             item.description ? p(item.description.substring(0, 200)) : null
           ),
           p({ class: 'card-footer' },
-            span({ class: 'date-link' }, new Date(item.createdAt).toLocaleDateString()),
+            span({ class: 'date-link' }, moment(item.createdAt).format("YYYY/MM/DD HH:mm")),
             userLink(item.author)
           )
         ))
@@ -716,7 +716,7 @@ const renderOverviewSection = (tribe, query, sectionData) => {
       recentFeed.length === 0 ? p(i18n.tribeFeedEmpty) :
         recentFeed.map(m =>
           div({ class: 'feed-item' },
-            p(`${new Date(m.createdAt).toLocaleString()} — `, userLink(m.author)),
+            p(`${moment(m.createdAt).format("YYYY/MM/DD HH:mm")} — `, userLink(m.author)),
             p(...renderStyledText(m.description))
           )
         )
@@ -1116,7 +1116,7 @@ const renderForumSection = (tribe, items, query) => {
             span({ class: 'forum-title' }, thread.title)
           ),
           div({ class: 'forum-footer' },
-            span({ class: 'date-link' }, `${new Date(thread.createdAt).toLocaleString()} ${i18n.performed || ''}`),
+            span({ class: 'date-link' }, `${moment(thread.createdAt).format("YYYY/MM/DD HH:mm")}`),
             userLink(thread.author)
           ),
           div({ class: 'forum-body' }, ...renderStyledText(thread.description || '')),
@@ -1137,7 +1137,7 @@ const renderForumSection = (tribe, items, query) => {
         ? replies.map((r, idx) =>
             div({ class: `forum-comment${idx === 0 ? ' highlighted-reply' : ''}` },
               div({ class: 'comment-header' },
-                span({ class: 'date-link' }, `${new Date(r.createdAt).toLocaleString()} ${i18n.performed || ''}`),
+                span({ class: 'date-link' }, `${moment(r.createdAt).format("YYYY/MM/DD HH:mm")}`),
                 userLink(r.author),
                 div({ class: 'comment-votes' },
                   span({ class: 'forum-positive-votes' }, `▲: ${r.refeeds || 0}`)
@@ -1208,7 +1208,7 @@ const renderForumSection = (tribe, items, query) => {
                 span({ class: 'forum-messages' }, `${(i18n.forumMessages || i18n.tribeForumReplies || 'MESSAGES').toUpperCase()}: ${replyCount}`)
               ),
               div({ class: 'forum-footer' },
-                span({ class: 'date-link' }, `${new Date(t.createdAt).toLocaleString()} ${i18n.performed || ''}`),
+                span({ class: 'date-link' }, `${moment(t.createdAt).format("YYYY/MM/DD HH:mm")}`),
                 userLink(t.author)
               ),
               t.author === userId ? div({ class: 'forum-owner-actions' },
@@ -1279,7 +1279,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
   }
 
   const mediaFooter = (m) => [
-    p({ class: 'tribe-media-date' }, span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString())),
+    p({ class: 'tribe-media-date' }, span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm"))),
     p({ class: 'tribe-media-author' }, userLink(m.author)),
     m.author === userId ? form({ method: 'POST', action: `${tribeUrl}/content/delete/${encodeURIComponent(m.id)}` },
       button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeContentDelete)
@@ -1438,7 +1438,7 @@ const renderTribeMapsSection = (tribe, maps) => {
           m.lat && m.lng ? span({ class: 'map-coords' }, `📍 ${m.lat.toFixed(4)}, ${m.lng.toFixed(4)}`) : null
         ),
         p({ class: 'card-footer' },
-          span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
+          span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm")),
           userLink(m.author)
         )
       )
@@ -1477,7 +1477,7 @@ const renderTribeTorrentsSection = (tribe, torrents) => {
           blobUrl && !m._isMedia ? div({ class: 'card-field' }, a({ href: blobUrl, class: 'filter-btn' }, i18n.torrentDownload || 'Download')) : null
         ),
         p({ class: 'card-footer' },
-          span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
+          span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm")),
           userLink(m.author)
         )
       );
@@ -1508,7 +1508,7 @@ const renderTribePadsSection = (tribe, pads) => {
           ) : null
         ),
         p({ class: 'card-footer' },
-          span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
+          span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm")),
           userLink(m.author)
         )
       )
@@ -1540,7 +1540,7 @@ const renderTribeChatsSection = (tribe, chats) => {
           m.description ? p(m.description.substring(0, 200)) : null
         ),
         p({ class: 'card-footer' },
-          span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
+          span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm")),
           userLink(m.author)
         )
       )
@@ -1571,11 +1571,11 @@ const renderTribeCalendarsSection = (tribe, calendars) => {
           ) : null,
           m.deadline ? div({ class: 'card-field' },
             span({ class: 'card-label' }, (i18n.calendarDeadlineLabel || 'Deadline') + ':'),
-            span({ class: 'card-value' }, new Date(m.deadline).toLocaleDateString())
+            span({ class: 'card-value' }, moment(m.deadline).format("YYYY/MM/DD HH:mm"))
           ) : null
         ),
         p({ class: 'card-footer' },
-          span({ class: 'date-link' }, new Date(m.createdAt).toLocaleString()),
+          span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm")),
           userLink(m.author)
         )
       )
@@ -1677,7 +1677,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
       table({ class: 'tribe-info-table' },
         tr(
           td({ class: 'tribe-info-label' }, i18n.tribeCreatedAt || 'CREATED'),
-          td({ class: 'tribe-info-value', colspan: '3' }, new Date(tribe.createdAt).toLocaleString())
+          td({ class: 'tribe-info-value', colspan: '3' }, moment(tribe.createdAt).format("YYYY/MM/DD HH:mm"))
         ),
         tr(
           td({ class: 'tribe-info-value tribe-author-cell', colspan: '4' }, userLink(tribe.author))

@@ -1,4 +1,5 @@
 const { form, button, div, h2, p, section, textarea, label, input, br, img, a, select, option, span, table, tr, td } = require("../server/node_modules/hyperaxe");
+const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderVisibilityChip, renderDocumentActions } = require('./main_views');
 const { renderStyledText } = require('../backend/renderStyledText');
 
@@ -132,7 +133,7 @@ exports.cvView = async (cv, certificates = []) => {
                   a({ href: `/school/course/${encodeURIComponent(cert.courseId)}` }, cert.courseTitle || cert.courseId),
                   span(" — "),
                   userLink(cert.author),
-                  span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`),
+                  span({ class: "school-certificate-date" }, ` (${moment(cert.createdAt).format("YYYY/MM/DD")})`),
                   a({ href: `/school/certificate/pdf/${encodeURIComponent(cert.courseId)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
                 )
               )
@@ -180,8 +181,8 @@ exports.cvView = async (cv, certificates = []) => {
   if (cv.preferences) pushRow(i18n.cvPreferencesLabel, cv.preferences);
   if (cv.languages) pushRow(i18n.cvLanguagesLabel, String(cv.languages).toUpperCase());
   pushRow(i18n.cvAiManaged, cv.aiManaged === false ? i18n.switchOff : `${i18n.switchOn} · ${cv.matchThreshold != null ? cv.matchThreshold : 80}%`);
-  pushRow(i18n.cvCreatedAt, new Date(cv.createdAt).toLocaleString());
-  if (cv.updatedAt) pushRow(i18n.cvUpdatedAt, new Date(cv.updatedAt).toLocaleString());
+  pushRow(i18n.cvCreatedAt, moment(cv.createdAt).format("YYYY/MM/DD HH:mm"));
+  if (cv.updatedAt) pushRow(i18n.cvUpdatedAt, moment(cv.updatedAt).format("YYYY/MM/DD HH:mm"));
 
   const cvSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
@@ -246,7 +247,7 @@ exports.cvView = async (cv, certificates = []) => {
               a({ href: `/school/course/${encodeURIComponent(cert.courseId)}` }, cert.courseTitle || cert.courseId),
               span(" — "),
               userLink(cert.author),
-              span({ class: "school-certificate-date" }, ` (${new Date(cert.createdAt).toLocaleDateString()})`),
+              span({ class: "school-certificate-date" }, ` (${moment(cert.createdAt).format("YYYY/MM/DD")})`),
               a({ href: `/school/certificate/pdf/${encodeURIComponent(cert.courseId)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
             )
           )

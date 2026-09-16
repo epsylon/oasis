@@ -289,7 +289,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
     table({ class: "tribe-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.shopCreatedAt || "CREATED"),
-        td({ class: "tribe-info-value", colspan: "3" }, new Date(shop.createdAt).toLocaleString())
+        td({ class: "tribe-info-value", colspan: "3" }, moment(shop.createdAt).format("YYYY/MM/DD HH:mm"))
       ),
       shop.location ? tr(
         td({ class: "tribe-info-label" }, i18n.shopLocation),

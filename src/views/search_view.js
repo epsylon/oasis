@@ -152,7 +152,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
           cleanEvDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, cleanEvDesc)) : null,
           blobImg(content.image || blobInEvDesc),
-          content.date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventDate + ':'), span({ class: 'card-value' }, new Date(content.date).toLocaleString())) : null,
+          content.date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventDate + ':'), span({ class: 'card-value' }, moment(content.date).format("YYYY/MM/DD HH:mm"))) : null,
           content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventLocation + ':'), span({ class: 'card-value' }, content.location)) : null,
           content.isPublic ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventPrivacyLabel + ':'), span({ class: 'card-value' }, content.isPublic)) : null,
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.eventStatus + ':'), span({ class: 'card-value' }, content.status)) : null,
@@ -181,7 +181,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           ) : null,
           content.deadline ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.voteDeadline + ':' ),
-            span({ class: 'card-value' }, content.deadline ? new Date(content.deadline).toLocaleString() : '')
+            span({ class: 'card-value' }, content.deadline ? moment(content.deadline).format("YYYY/MM/DD HH:mm") : '')
           ) : null,
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.voteTotalVotes + ':' ),
@@ -286,7 +286,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null,
           content.item_type ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, content.item_type.toUpperCase())) : null,
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemCondition + ':'), span({ class: 'card-value' }, content.status)) : null,
-          content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemDeadline + ':'), span({ class: 'card-value' }, new Date(content.deadline).toLocaleString())) : null,
+          content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemDeadline + ':'), span({ class: 'card-value' }, moment(content.deadline).format("YYYY/MM/DD HH:mm"))) : null,
           br(),
           blobImg(content.image),
           br(),
@@ -325,7 +325,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         return div({ class: 'search-bookmark' },
           content.url ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkUrlLabel + ':'), span({ class: 'card-value' }, a({ href: safeExternalHref(content.url), target: '_blank' }, content.url))) : null,
           content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null,
-          content.lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, new Date(content.lastVisit).toLocaleString())) : null,
+          content.lastVisit ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.bookmarkLastVisit + ':'), span({ class: 'card-value' }, moment(content.lastVisit).format("YYYY/MM/DD HH:mm"))) : null,
           content.tags && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
@@ -340,8 +340,8 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchStatusLabel + ':'), span({ class: 'card-value' }, content.status)) : null,
           content.priority ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchPriorityLabel + ':'), span({ class: 'card-value' }, content.priority)) : null,
           typeof content.isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.searchIsPublicLabel + ':'), span({ class: 'card-value' }, content.isPublic ? i18n.YESLabel : i18n.NOLabel)) : null,
-          content.startTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskStartTimeLabel + ':'), span({ class: 'card-value' }, new Date(content.startTime).toLocaleString())) : null,
-          content.endTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskEndTimeLabel + ':'), span({ class: 'card-value' }, new Date(content.endTime).toLocaleString())) : null,
+          content.startTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskStartTimeLabel + ':'), span({ class: 'card-value' }, moment(content.startTime).format("YYYY/MM/DD HH:mm"))) : null,
+          content.endTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskEndTimeLabel + ':'), span({ class: 'card-value' }, moment(content.endTime).format("YYYY/MM/DD HH:mm"))) : null,
           Array.isArray(content.assignees) ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.taskAssignees + ':'), span({ class: 'card-value' }, content.assignees.length)) : null,
           content.tags && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
@@ -447,7 +447,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, content.title)) : null,
           div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.schoolCourseType || 'Course type') + ':'), span({ class: 'card-value' }, String(content.visibility || '').toUpperCase() === 'INVITE' ? 'INVITE-ONLY' : (Number(content.price) > 0 ? 'PAID' : 'OPEN'))),
           Number(content.price) > 0 ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.schoolPrice || 'Price (ECO)') + ':'), span({ class: 'card-value' }, `${Number(content.price).toFixed(2)} ECO`)) : null,
-          content.startDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.schoolStartDate || 'Start date') + ':'), span({ class: 'card-value' }, new Date(content.startDate).toLocaleDateString())) : null,
+          content.startDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.schoolStartDate || 'Start date') + ':'), span({ class: 'card-value' }, moment(content.startDate).format("YYYY/MM/DD HH:mm"))) : null,
           content.description ? div({ class: 'card-field card-field-stacked' }, span({ class: 'card-value' }, String(content.description).length > 220 ? String(content.description).slice(0, 220) + '…' : content.description)) : null,
           Array.isArray(content.tags) && content.tags.length ? div({ class: 'card-tags' },
             content.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`))
@@ -580,7 +580,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         { class: "search-result-group" },
         ...msgs.map((msg) => {
           const content = msg.value.content || {};
-          const created = new Date(msg.timestamp).toLocaleString();
+          const created = moment(msg.timestamp).format("YYYY/MM/DD HH:mm");
           if (content.type === 'document') hasDocument = true;
           const contentHtml = renderContentHtml(content);
           let author;
@@ -627,7 +627,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
               contentHtml,
               author
                 ? p({ class: 'card-footer' },
-                 span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+                 span({ class: 'date-link' }, `${created}`),
                  (authorUrl && authorUrl !== '#' && authorUrl.startsWith('/author/'))
                    ? userLink(decodeURIComponent(authorUrl.replace(/^\/author\//, '')))
                    : a({ href: authorUrl, class: 'user-link' }, `${author}`)

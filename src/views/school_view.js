@@ -1,4 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress } = require("../server/node_modules/hyperaxe")
+const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
@@ -92,7 +93,7 @@ const renderCourseCard = (course, filter, params = {}) => {
         span({ class: "tribe-members-count" }, `${i18n.schoolStudents}: ${course.students.length}`)
       ),
       course.startDate ? div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.schoolStartDate}: ${new Date(course.startDate).toLocaleDateString()}`)
+        span({ class: "tribe-members-count" }, `${i18n.schoolStartDate}: ${moment(course.startDate).format("YYYY/MM/DD HH:mm")}`)
       ) : null
     )
   )
@@ -123,7 +124,7 @@ const renderCourseForm = (filter, course = {}) => {
       label(i18n.schoolPrice), br,
       input({ type: "number", name: "price", step: "0.000001", min: "0", value: course.price && Number(course.price) > 0 ? course.price : "0" }), br(), br(),
       label(i18n.schoolStartDate), br,
-      input({ type: "date", name: "startDate", min: new Date().toISOString().slice(0, 10), value: course.startDate ? String(course.startDate).slice(0, 10) : "" }), br(),
+      input({ type: "datetime-local", name: "startDate", min: moment().format("YYYY-MM-DDTHH:mm"), value: course.startDate ? moment(course.startDate).format("YYYY-MM-DDTHH:mm") : "" }), br(),
       isEdit
         ? div(
             label(i18n.schoolStatus), br,
@@ -187,15 +188,15 @@ const renderLesson = (lesson, course, isTeacher, returnTo, isStudent = false, is
     ? div({ class: "school-lesson school-lesson-locked" },
         h3("🔒"),
         p(i18n.schoolLessonLocked),
-        div({ class: "school-lesson-meta" }, span(new Date(lesson.createdAt).toLocaleDateString()))
+        div({ class: "school-lesson-meta" }, span(moment(lesson.createdAt).format("YYYY/MM/DD")))
       )
     : div({ class: isNext ? "school-lesson school-lesson-next" : "school-lesson" },
     details({ class: "school-lesson-details", ...(isNext ? { open: true } : {}) },
       summary({ class: "school-lesson-summary" },
         span({ class: "school-lesson-summary-title" }, (lesson.completed ? "✓ " : isNext ? "▶ " : "") + lesson.title),
         span({ class: "school-lesson-summary-meta" },
-          lesson.sessionDate ? `${new Date(lesson.sessionDate).toLocaleDateString()} · ` : "",
-          new Date(lesson.createdAt).toLocaleDateString()
+          lesson.sessionDate ? `${moment(lesson.sessionDate).format("YYYY/MM/DD HH:mm")} · ` : "",
+          moment(lesson.createdAt).format("YYYY/MM/DD")
         )
       ),
       div({ class: "school-lesson-body" },
@@ -231,7 +232,7 @@ const renderTeacherPanel = (course, certificates, returnTo, lessons = [], exams 
         label(i18n.schoolLessonOrder), br,
         input({ type: "number", name: "order", min: "0", step: "1" }), br(), br(),
         label(i18n.schoolSessionDate), br,
-        input({ type: "date", name: "sessionDate", min: new Date().toISOString().slice(0, 10) }), br(), br(),
+        input({ type: "datetime-local", name: "sessionDate", min: moment().format("YYYY-MM-DDTHH:mm") }), br(), br(),
         button({ type: "submit" }, i18n.schoolAddLesson)
       )
     ),
@@ -377,11 +378,11 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     table({ class: "tribe-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.schoolCreatedAt),
-        td({ class: "tribe-info-value", colspan: "3" }, new Date(course.createdAt).toLocaleString())
+        td({ class: "tribe-info-value", colspan: "3" }, moment(course.createdAt).format("YYYY/MM/DD HH:mm"))
       ),
       course.startDate ? tr(
         td({ class: "tribe-info-label" }, i18n.schoolStartDate),
-        td({ class: "tribe-info-value", colspan: "3" }, new Date(course.startDate).toLocaleDateString())
+        td({ class: "tribe-info-value", colspan: "3" }, moment(course.startDate).format("YYYY/MM/DD HH:mm"))
       ) : null,
       tr(
         td({ class: "tribe-info-label" }, i18n.schoolTeacher),
@@ -805,7 +806,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
       ) : null,
       lesson.sessionDate ? tr(
         td({ class: "tribe-info-label" }, i18n.schoolSessionDate),
-        td({ class: "tribe-info-value", colspan: "3" }, new Date(lesson.sessionDate).toLocaleDateString())
+        td({ class: "tribe-info-value", colspan: "3" }, moment(lesson.sessionDate).format("YYYY/MM/DD HH:mm"))
       ) : null,
       tr(
         td({ class: "tribe-info-label" }, i18n.schoolTeacher),
@@ -848,7 +849,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
             label(i18n.schoolLessonOrder), br,
             input({ type: "number", name: "order", min: "0", step: "1", value: lesson.order != null ? String(lesson.order) : "" }), br(), br(),
             label(i18n.schoolSessionDate), br,
-            input({ type: "date", name: "sessionDate", min: new Date().toISOString().slice(0, 10), value: lesson.sessionDate ? String(lesson.sessionDate).slice(0, 10) : "" }), br(), br(),
+            input({ type: "datetime-local", name: "sessionDate", min: moment().format("YYYY-MM-DDTHH:mm"), value: lesson.sessionDate ? moment(lesson.sessionDate).format("YYYY-MM-DDTHH:mm") : "" }), br(), br(),
             button({ type: "submit" }, i18n.chatUpdate)
           )
         )

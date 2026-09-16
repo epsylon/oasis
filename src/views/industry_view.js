@@ -579,7 +579,7 @@ const renderBlueprintForm = (fc, bp, mode, spreadWarning = null) => {
 const renderBuildForm = (fc, blueprints, build, mode, spreadWarning = null) => {
   const b = build || {}
   const isEdit = mode === "edit"
-  const today = new Date().toISOString().slice(0, 10)
+  const today = moment().format("YYYY-MM-DD")
   return div({ class: "industry-form industry-build-form" },
     h2(isEdit ? (i18n.industryEditBuild || "Edit build") : (i18n.industryNewBuild || "Propose a build")),
     isEdit ? spreadWarning : null,

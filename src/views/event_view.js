@@ -537,7 +537,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       : null,
     event.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, event.mapUrl)) : null,
     p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(event.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(event.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(event.organizer)
     ),
     renderEngagement(event.id, opinionsBar, renderEventCommentsSection(event.id, comments, currentFilter))

@@ -2957,7 +2957,7 @@ const renderUserSensors = (u, opts = {}) => {
   }
   if (show('ubi')) {
     items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(u.estimatedUBI || 0).toFixed(6)} ECO`)));
-    items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed || 'Last claimed'}: `, u.lastClaimedDate ? a({ href: '/transfers?filter=ubi', class: 'user-link' }, new Date(u.lastClaimedDate).toLocaleDateString()) : strong(i18n.bankUbiNeverClaimed || 'Never claimed')));
+    items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed || 'Last claimed'}: `, u.lastClaimedDate ? a({ href: '/transfers?filter=ubi', class: 'user-link' }, moment(u.lastClaimedDate).format("YYYY/MM/DD")) : strong(i18n.bankUbiNeverClaimed || 'Never claimed')));
     items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed || 'Total claimed'}: `, strong(`${Number(u.totalClaimed || 0).toFixed(6)} ECO`)));
   }
   const sensorsBox = items.length ? div({ class: 'profile-sensors-box' }, ...items) : null;
@@ -3300,7 +3300,7 @@ exports.commentView = async (
 const renderMessage = (msg) => {
   const content = lodash.get(msg, "value.content", {});
   const authorId = msg.value.author || "Anonymous";
-  const createdAt = new Date(msg.value.timestamp).toLocaleString();
+  const createdAt = moment(msg.value.timestamp).format("YYYY/MM/DD HH:mm");
   const mentionsText = content.text || '';
   const isTribe = content.type === 'tribe-content';
   const visitUrl = isTribe
@@ -3331,7 +3331,7 @@ const renderMessage = (msg) => {
       )
     ),
     p({ class: 'card-footer' },
-      span({ class: 'date-link' }, `${createdAt} ${i18n.performed || ''} `),
+      span({ class: 'date-link' }, `${createdAt}`),
       userLink(authorId)
     )
   );

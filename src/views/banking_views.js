@@ -386,7 +386,7 @@ const allocationsTable = (rows = [], userId) =>
         tbody(
           ...rows.map(r =>
             tr(
-              td(new Date(r.createdAt).toLocaleString()),
+              td(moment(r.createdAt).format("YYYY/MM/DD HH:mm")),
               td(r.concept || ""),
               td(userLink(r.from)),
               td(userLink(r.to)),

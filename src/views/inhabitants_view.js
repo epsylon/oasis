@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, span, strong } = require("../server/node_modules/hyperaxe");
+const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock, renderModuleStats } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { renderContentStats } = require('./clearnet_view');
@@ -130,7 +131,7 @@ const renderCvFields = (user) => {
     cvField(i18n.skillsLabel, skills.length ? skills.join(', ') : ''),
     cvField(i18n.statusLabel || 'Status', user.status),
     cvField(i18n.preferencesLabel || 'Preferences', user.preferences),
-    cvField(i18n.createdAtLabel || 'Created at', user.createdAt ? new Date(user.createdAt).toLocaleString() : ''),
+    cvField(i18n.createdAtLabel || 'Created at', user.createdAt ? moment(user.createdAt).format("YYYY/MM/DD HH:mm") : ''),
     user.pdf
       ? div({ class: 'card-field' }, a({ href: `/blob/${encodeURIComponent(user.pdf)}`, target: '_blank', rel: 'noopener', class: 'filter-btn' }, '📄 ' + i18n.cvPdfLabel))
       : null
@@ -354,7 +355,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
   ];
   const status = (cv && cv.status) || '';
   const preferences = (cv && cv.preferences) || '';
-  const createdAt = (cv && cv.createdAt) ? new Date(cv.createdAt).toLocaleString() : '';
+  const createdAt = (cv && cv.createdAt) ? moment(cv.createdAt).format("YYYY/MM/DD HH:mm") : '';
   const isMe = id && id === currentUserId;
   const title = i18n.inhabitantProfileTitle || i18n.inhabitantviewDetails;
   const karmaScore = typeof safe.karmaScore === 'number' ? safe.karmaScore : 0;

@@ -203,7 +203,7 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
       )
     ),
     p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(v.createdBy)
     ),
     renderEngagement(v.id, renderOpinionsBar(v, returnTo),

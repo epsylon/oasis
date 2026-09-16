@@ -74,7 +74,7 @@ const renderBlogCard = (blog, filter, spreadInfo) => {
         : null,
       div({ class: "blog-card-text", innerHTML: sanitizeHtml(renderStyledHtml(excerpt(blog.text))) }),
       p({ class: "card-footer" },
-        span({ class: "date-link" }, `${moment(blog.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(blog.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(blog.author)
       )
     )

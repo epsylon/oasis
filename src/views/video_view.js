@@ -130,7 +130,7 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
 
               return p(
                 { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+                span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
                 userLink(videoObj.author),
                 showUpdated
                   ? span(
@@ -339,7 +339,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
 
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(videoObj.author),
         showUpdated
           ? span(

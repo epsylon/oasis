@@ -41,7 +41,7 @@ const renderAgendaItem = (item, userId, filter) => {
 
   const commonFields = [
     p({ class: 'card-footer' },
-      span({ class: 'date-link' }, `${item.createdAt ? moment(item.createdAt).format('YYYY/MM/DD HH:mm:ss') : ''} ${i18n.performed} `),
+      span({ class: 'date-link' }, `${item.createdAt ? moment(item.createdAt).format('YYYY/MM/DD HH:mm') : ''}`),
       author ? userLink(author) : ''
     )
   ];
@@ -66,7 +66,7 @@ const renderAgendaItem = (item, userId, filter) => {
       renderCardField(i18n.marketItemStock + ":", item.stock),
       div({ class: "price-chip" }, `${item.price} ECO`),
       renderCardField(i18n.marketItemIncludesShipping + ":", item.includesShipping ? i18n.agendaYes : i18n.agendaNo),
-      renderCardField(i18n.deadline + ":", item.deadline ? new Date(item.deadline).toLocaleString() : '')
+      renderCardField(i18n.deadline + ":", item.deadline ? moment(item.deadline).format("YYYY/MM/DD HH:mm") : '')
     ];
     if (String(item.item_type || '').toLowerCase() === 'auction') {
       const bids = Array.isArray(item.auctions_poll) ? item.auctions_poll.map(bid => parseFloat(String(bid).split(':')[1])).filter(n => !isNaN(n)) : [];
@@ -116,8 +116,8 @@ const renderAgendaItem = (item, userId, filter) => {
     details = [
       renderCardField(i18n.taskStatus + ":", item.status),
       renderCardField(i18n.taskPriorityLabel + ":", item.priority),
-      renderCardField(i18n.taskStartTimeLabel + ":", item.startTime ? new Date(item.startTime).toLocaleString() : ''),
-      renderCardField(i18n.taskEndTimeLabel + ":", item.endTime ? new Date(item.endTime).toLocaleString() : ''),
+      renderCardField(i18n.taskStartTimeLabel + ":", item.startTime ? moment(item.startTime).format("YYYY/MM/DD HH:mm") : ''),
+      renderCardField(i18n.taskEndTimeLabel + ":", item.endTime ? moment(item.endTime).format("YYYY/MM/DD HH:mm") : ''),
       renderCardField(i18n.taskLocationLabel + ":", item.location || '')
     ];
     const assigned = Array.isArray(item.assignees) && item.assignees.includes(userId);
@@ -143,7 +143,7 @@ const renderAgendaItem = (item, userId, filter) => {
       renderCardField(i18n.projectProgress + ":", `${item.progress || 0}%`),
       renderCardField(i18n.projectGoal + ":", `${item.goal} ECO`),
       renderCardField(i18n.projectPledged + ":", `${item.pledged || 0} ECO`),
-      renderCardField(i18n.projectDeadline + ":", item.deadline ? new Date(item.deadline).toLocaleString() : i18n.noDeadline)
+      renderCardField(i18n.projectDeadline + ":", item.deadline ? moment(item.deadline).format("YYYY/MM/DD HH:mm") : i18n.noDeadline)
     ];
   }
 

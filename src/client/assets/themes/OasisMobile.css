@@ -1372,3 +1372,47 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .feed-card .card-footer .user-link {
   font-weight: bold !important;
 }
+.update-download-link {
+  flex: 1 1 100% !important;
+  width: auto !important;
+  max-width: fit-content !important;
+  margin: 14px 0 12px 0 !important;
+  padding: 11px 18px !important;
+  background: #FFA500 !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  color: #000000 !important;
+  font-size: 14px !important;
+  font-weight: bold !important;
+  text-align: left !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+}
+.update-banner {
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  padding: 8px 12px !important;
+  text-align: left !important;
+}
+.update-banner:not(.welcome-banner) {
+  padding-right: 44px !important;
+}
+.update-banner .update-banner-icon {
+  flex: 0 0 24px !important;
+  width: 24px !important;
+  text-align: center !important;
+}
+.update-banner .update-banner-text {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+.update-banner .update-banner-link {
+  flex: 0 0 auto !important;
+  margin-left: auto !important;
+  text-align: right !important;
+  white-space: nowrap !important;
+}
+.update-banner .welcome-banner-close {
+  flex: 0 0 auto !important;
+  margin-left: 0 !important;
+}

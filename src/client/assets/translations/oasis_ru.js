@@ -379,6 +379,7 @@ module.exports = {
     contentWarningPlaceholder: "Добавьте тему к записи (необязательно)",
     publishWarningPlaceholder: "Текст ограничен 7000 символами.",
     publishTooLong: "Ваш пост слишком длинный. Пожалуйста, сократите его.",
+    dateInPastError: "Дата не может быть в прошлом",
     publishCustomDescription: [
       "ПОМНИТЕ: Благодаря технологии блокчейн, после публикации запись невозможно отредактировать или удалить.",
     ],
@@ -3509,6 +3510,8 @@ module.exports = {
     verificationBlobsReferenced: "упомянуто",
     verificationBlobsOrphan: "осиротевших",
     verificationBlobsMissing: "отсутствует",
+    verificationBlobsMissingOwn: "Ваши файлы, отсутствующие на этом устройстве",
+    verificationBlobsMissingOthers: "Файлы других жителей ещё не загружены",
     verificationBlobsUnavailable: "Не удалось получить список файлов на этом устройстве.",
     wikiTitle: "Вики",
     modulesWikiLabel: "Вики",

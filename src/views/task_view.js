@@ -155,8 +155,6 @@ const renderTaskItem = (task, filter, spreadInfo) => {
     renderLifespanChip(task.lifetime, i18n)
   ].filter(Boolean);
 
-  const start = task.startTime ? moment(task.startTime).format("YYYY/MM/DD HH:mm") : "";
-  const end = task.endTime ? moment(task.endTime).format("YYYY/MM/DD HH:mm") : "";
 
   return div({ class: "tribe-card task-card" },
     div({ class: "card-header activity-card-header" },
@@ -171,7 +169,6 @@ const renderTaskItem = (task, filter, spreadInfo) => {
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      (start || end) ? p({ class: "time-chip" }, start && end ? `${start} → ${end}` : (start || end)) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
       )
@@ -441,7 +438,7 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
         )
       : null,
     p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(task.author)
     ),
     renderEngagement(task.id, opinionsBar, renderTaskCommentsSection(task.id, comments, currentFilter))

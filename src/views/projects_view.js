@@ -687,7 +687,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     renderFollowers(pr),
     renderPledgeBox(pr, f, isAuthor),
     div({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(pr.author)
     ),
     renderEngagement(pr.id || pr.key,

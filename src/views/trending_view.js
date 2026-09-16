@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
+const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
@@ -23,7 +24,7 @@ const voteLabelFor = (cat) =>
 
 const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new Map()) => {
   const c = item.value.content;
-  const created = new Date(item.value.timestamp).toLocaleString();
+  const created = moment(item.value.timestamp).format("YYYY/MM/DD HH:mm");
 
   let contentHtml;
 
@@ -36,7 +37,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
           ? div(
               { class: 'card-field' },
               span({ class: 'card-label' }, i18n.bookmarkLastVisitLabel + ':'),
-              span({ class: 'card-value' }, new Date(lastVisit).toLocaleString())
+              span({ class: 'card-value' }, moment(lastVisit).format("YYYY/MM/DD HH:mm"))
             )
           : "",
         description ? [span({ class: 'card-label' }, i18n.bookmarkDescriptionLabel + ":"), p(...renderStyledText(description))] : null
@@ -167,7 +168,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     contentHtml = div({ class: 'trending-votes' },
       div({ class: 'card-section votes' },
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteQuestionLabel + ':'), span({ class: 'card-value' }, question)),
-        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteDeadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteDeadline + ':'), span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : '')),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.voteTotalVotes + ':'), span({ class: 'card-value' }, totalVotes)),
         table(
           tr(...votesList.map(v => th(i18n[v.option] || v.option))),
@@ -180,7 +181,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     contentHtml = div({ class: 'trending-transfer' },
       div({ class: 'card-section transfer' },
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.concept + ':'), span({ class: 'card-value' }, concept)),
-        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? new Date(deadline).toLocaleString() : '')),
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : '')),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.from + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(from)}`, target: '_blank' }, from))),
@@ -260,7 +261,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       ),
       p(
         { class: 'card-footer' },
-        span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+        span({ class: 'date-link' }, `${created}`),
         userLink(item.value.author)
       )
     )

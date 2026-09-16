@@ -504,7 +504,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       button({ type: "submit", class: "filter-btn" }, i18n.mapApplyZoom || "Apply Zoom")),
     renderMarkersList(mapObj.markers, mapObj),
     p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(mapObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(mapObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(mapObj.author),
       mapObj.updatedAt && mapObj.updatedAt !== mapObj.createdAt
         ? span({ class: "votations-comment-date" }, ` · ${i18n.mapUpdatedAt}: ${moment(mapObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)

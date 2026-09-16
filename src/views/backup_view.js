@@ -13,7 +13,7 @@ const humanBytes = (n) => {
   return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 };
 
-const BACKUP_TYPES = ["RECOVERY", "KEYS", "FULL", "INSTANT", "RESTORE"];
+const BACKUP_TYPES = ["RECOVERY", "KEYS", "INSTANT", "FULL", "RESTORE"];
 const typeLabel = (t) => String(i18n[`backupType${t.charAt(0) + t.slice(1).toLowerCase()}`] || t).toUpperCase();
 const normalizeType = (t) => (BACKUP_TYPES.includes(String(t || "").toUpperCase()) ? String(t).toUpperCase() : "RECOVERY");
 
@@ -185,8 +185,14 @@ exports.renderVerificationReport = (report) => {
       line(!report.forkCount, `${i18n.verificationForks}: ${report.forkCount}`),
       ...(report.forks || []).map(f => li({ class: "backup-check-bad backup-fork" }, `${f.mine ? "⚠ " : ""}${f.author} · ${f.points.map(pt => `#${pt.sequence} (${pt.keys.length})`).join(", ")}`)),
       blobs.listed
-        ? line(!blobs.missing, `${i18n.verificationBlobs}: ${blobs.present} ${i18n.verificationBlobsPresent}, ${blobs.referenced} ${i18n.verificationBlobsReferenced}, ${blobs.orphan} ${i18n.verificationBlobsOrphan} (${humanBytes(blobs.orphanBytes)}), ${blobs.missing} ${i18n.verificationBlobsMissing}`)
-        : li(`· ${i18n.verificationBlobsUnavailable}`)
+        ? line(!blobs.missingOwn, `${i18n.verificationBlobs}: ${blobs.present} ${i18n.verificationBlobsPresent}, ${blobs.referenced} ${i18n.verificationBlobsReferenced}, ${blobs.orphan} ${i18n.verificationBlobsOrphan} (${humanBytes(blobs.orphanBytes)})`)
+        : li(`· ${i18n.verificationBlobsUnavailable}`),
+      blobs.listed && blobs.missingOwn
+        ? li({ class: "backup-check-bad" }, `✗ ${i18n.verificationBlobsMissingOwn}: ${blobs.missingOwn}`)
+        : null,
+      blobs.listed && (blobs.missing - (blobs.missingOwn || 0)) > 0
+        ? li({ class: "backup-check-warn" }, `⚠ ${i18n.verificationBlobsMissingOthers}: ${blobs.missing - (blobs.missingOwn || 0)}`)
+        : null
     )
   );
 };

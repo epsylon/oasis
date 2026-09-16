@@ -559,17 +559,29 @@ module.exports = ({ cooler }) => {
       }
       const forks = Array.from(forkMap.entries()).map(([feedId, points]) => ({ author: feedId, mine: feedId === me, points: points.sort((a, b) => a.sequence - b.sequence) }));
       const referenced = new Set();
-      for (const m of all) if (m && m.value) for (const ref of blobRefsOf(m.value.content)) referenced.add(ref);
+      const referencedOwn = new Set();
+      for (const m of all) {
+        if (!m || !m.value) continue;
+        for (const ref of blobRefsOf(m.value.content)) {
+          referenced.add(ref);
+          if (m.value.author === me) referencedOwn.add(ref);
+        }
+      }
       const present = await listBlobs(ssbClient);
       const orphan = [];
       let orphanBytes = 0;
       for (const [id, size] of present) if (!referenced.has(id)) { orphan.push(id); orphanBytes += size || 0; }
       const missing = [];
-      for (const id of referenced) if (present.size && !present.has(id)) missing.push(id);
+      const missingOwn = [];
+      for (const id of referenced) {
+        if (!present.size || present.has(id)) continue;
+        missing.push(id);
+        if (referencedOwn.has(id)) missingOwn.push(id);
+      }
       return {
         author: me, checkedAt: new Date().toISOString(), tookMs: Date.now() - started, totalMessages: all.length,
         feed, forks, forkCount: forks.length,
-        blobs: { present: present.size, referenced: referenced.size, orphan: orphan.length, orphanBytes, missing: missing.length, orphanIds: orphan.slice(0, 50), missingIds: missing.slice(0, 50), listed: present.size > 0 || referenced.size === 0 }
+        blobs: { present: present.size, referenced: referenced.size, orphan: orphan.length, orphanBytes, missing: missing.length, missingOwn: missingOwn.length, orphanIds: orphan.slice(0, 50), missingIds: missing.slice(0, 50), missingOwnIds: missingOwn.slice(0, 50), listed: present.size > 0 || referenced.size === 0 }
       };
     }
   };

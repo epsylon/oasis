@@ -328,7 +328,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
 
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(torrentObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(torrentObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(torrentObj.author),
         showUpdated
           ? span(

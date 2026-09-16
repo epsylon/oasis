@@ -522,7 +522,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
         : null
     ),
     p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(transfer.from),
       renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
     ),

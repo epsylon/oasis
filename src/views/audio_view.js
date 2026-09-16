@@ -135,7 +135,7 @@ const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) 
 
               return p(
                 { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+                span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
                 userLink(audioObj.author),
                 showUpdated
                   ? span(
@@ -350,7 +350,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
 
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(audioObj.author),
         showUpdated
           ? span(

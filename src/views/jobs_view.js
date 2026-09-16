@@ -685,7 +685,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     renderJobSection(i18n.jobTasks, job.tasks),
     job.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, job.mapUrl)) : null,
     p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(job.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(job.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(job.author),
       renderUpdatedLabel(job.createdAt, job.updatedAt)
     ),

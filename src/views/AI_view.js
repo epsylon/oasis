@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, textarea, br, span, input, label, select, option } = require("../server/node_modules/hyperaxe");
+const moment = require("../server/node_modules/moment");
 const { template, i18n } = require('./main_views');
 const { renderStyledText } = require('../backend/renderStyledText');
 
@@ -26,7 +27,7 @@ exports.aiView = (history = [], userPrompt = '') => {
         ...history.map(entry =>
           div({ class: 'chat-entry' },
             entry.timestamp
-              ? span({ class: 'chat-entry-timestamp' }, new Date(entry.timestamp).toLocaleString())
+              ? span({ class: 'chat-entry-timestamp' }, moment(entry.timestamp).format("YYYY/MM/DD HH:mm"))
               : null,
             br(), br(),
             div({ class: 'user-question' },

@@ -172,7 +172,7 @@ const renderUpdate = (cp, u, href, editing) =>
           button({ type: "submit", class: "create-button" }, i18n.campaignUpdate)
         )
       : div({ class: "campaign-update-text" }, ...renderStyledText(u.text)),
-    p({ class: "card-footer" }, span({ class: "date-link" }, `${fmt(u.createdAt)} ${i18n.performed} `), userLink(u.author))
+    p({ class: "card-footer" }, span({ class: "date-link" }, `${fmt(u.createdAt)}`), userLink(u.author))
   );
 
 const renderUpdates = (cp, href, editUpdate) =>

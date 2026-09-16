@@ -592,7 +592,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
     details ? div({ class: "job-section" }, details) : null,
     renderPhotoGallery(report, 'report'),
     p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(report.author)
     ),
     renderEngagement(report.id, opinionsBar, renderReportCommentsSection(report.id, comments))

@@ -483,7 +483,7 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     renderSection(i18n.housingRules, item.rules),
     item.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, item.mapUrl)) : null,
     p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(item.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+      span({ class: "date-link" }, `${moment(item.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(item.author)
     ),
     renderEngagement(item.id,

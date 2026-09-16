@@ -102,7 +102,7 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
 
               return p(
                 { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+                span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm")}`),
                 userLink(doc.author),
                 showUpdated
                   ? span(
@@ -312,7 +312,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
 
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(doc.author),
         showUpdated
           ? span(

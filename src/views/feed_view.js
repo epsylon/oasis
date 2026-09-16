@@ -22,7 +22,7 @@ const normalizeOptions = (opts) => {
 
 const formatDate = (feed) => {
   const ts = feed?.value?.timestamp || Date.parse(feed?.value?.content?.createdAt || "") || 0;
-  return ts ? new Date(ts).toLocaleString() : "";
+  return ts ? moment(ts).format("YYYY/MM/DD HH:mm") : "";
 };
 
 const extractTags = (text) => {
@@ -114,7 +114,7 @@ const renderFeedCard = (feed, spreadMap = null) => {
                 div({ class: "feed-text", innerHTML: sanitizeHtml(styledHtml) }),
                 p(
                     { class: "card-footer" },
-                    span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),
+                    span({ class: "date-link" }, `${createdAt}`),
                     userLink(authorId),
                     content._textEdited ? span({ class: "edited-badge" }, ` · ${i18n.edited || "edited"}`) : null
                 )
@@ -341,7 +341,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
             br,
             p(
               { class: "card-footer" },
-              span({ class: "date-link" }, `${createdAt} ${i18n.performed} `),
+              span({ class: "date-link" }, `${createdAt}`),
               userLink(authorId),
               content._textEdited ? span({ class: "edited-badge" }, ` · ${i18n.edited || "edited"}`) : null
             )

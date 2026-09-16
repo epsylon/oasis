@@ -34,7 +34,7 @@ const MD_MENTION_RE = /\[@([^\]]+)\]\(@?([A-Za-z0-9+/=.\-]+\.ed25519)\)/g;
 const RAW_MENTION_RE = /@([A-Za-z0-9+/=.\-]+\.ed25519)/g;
 const MSG_REF_RE = /%[A-Za-z0-9+/=]{44}\.sha256/g;
 const MD_LINK_RE = /!?\[([^\]\n]{1,160})\]\((https?:\/\/[^)\s]+|\/(?![\/\\])[^)\s]*)\)/g;
-const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/g;
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
 const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z]{2,}\b/gi;
 const HASHTAG_RE = /#[\p{L}\p{N}_]{1,32}(?![\p{L}\p{N}_])/gu;
 const URL_TAIL_RE = /[.,;:!?»"')\]}>]+$/;
@@ -200,7 +200,8 @@ function renderStyledText(value, opts = {}) {
         ? (linksOn ? a({ href: m.href, class: 'styled-link', target: '_blank', rel: 'noopener noreferrer' }, ...inner(m.label)) : plain(m.label))
         : (internalOn ? a({ href: m.href, class: 'styled-link' }, ...inner(m.label)) : m.label));
     } else if (m.type === 'url') {
-      const href = m.text.startsWith('http') ? m.text : `https://${m.text}`;
+      const schemeMatch = m.text.match(/^(https?):\/\//i);
+      const href = schemeMatch ? `${schemeMatch[1].toLowerCase()}://${m.text.slice(schemeMatch[0].length)}` : `https://${m.text}`;
       const internalTarget = internalTargetOf(href);
       if (!linksOn) result.push(plain(m.text));
       else if (internalTarget) {

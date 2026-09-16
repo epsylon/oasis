@@ -108,7 +108,7 @@ const renderImageList = exports.renderImageList = (images, filter, params = {}) 
 
               return p(
                 { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(imgObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+                span({ class: "date-link" }, `${moment(imgObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
                 userLink(imgObj.author),
                 showUpdated
                   ? span(
@@ -366,7 +366,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
 
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(imageObj.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(imageObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(imageObj.author),
         showUpdated
           ? span(

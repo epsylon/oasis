@@ -164,7 +164,7 @@ const renderFavoriteCard = (item, filter) => {
       renderTags(item.tags),
       p(
         { class: "card-footer" },
-        absDate ? span({ class: "date-link" }, `${absDate} ${i18n.performed} `) : "",
+        absDate ? span({ class: "date-link" }, `${absDate}`) : "",
         item.author ? userLink(item.author) : ""
       )
     )

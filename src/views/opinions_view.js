@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
+const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
@@ -152,7 +153,7 @@ const renderContentHtml = (content, key) => {
           ) : ""),
           content.lastVisit ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bookmarkLastVisitLabel + ':'),
-            span({ class: 'card-value' }, new Date(content.lastVisit).toLocaleString())
+            span({ class: 'card-value' }, moment(content.lastVisit).format("YYYY/MM/DD HH:mm"))
           ) : "",
           content.description
             ? [
@@ -278,7 +279,7 @@ const renderContentHtml = (content, key) => {
           ),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.voteDeadline + ':'),
-            span({ class: 'card-value' }, content.deadline ? new Date(content.deadline).toLocaleString() : '')
+            span({ class: 'card-value' }, content.deadline ? moment(content.deadline).format("YYYY/MM/DD HH:mm") : '')
           ),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.voteTotalVotes + ':'),
@@ -300,7 +301,7 @@ const renderContentHtml = (content, key) => {
           ),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.deadline + ':'),
-            span({ class: 'card-value' }, content.deadline ? new Date(content.deadline).toLocaleString() : '')
+            span({ class: 'card-value' }, content.deadline ? moment(content.deadline).format("YYYY/MM/DD HH:mm") : '')
           ),
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.status + ':'),
@@ -369,7 +370,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
       const voteEntries = Object.entries(c.opinions || {});
       const total = voteEntries.reduce((sum, [, v]) => sum + v, 0);
       const voted = c.opinions_inhabitants?.includes(config.keys.id);
-      const created = new Date(item.value.timestamp).toLocaleString();
+      const created = moment(item.value.timestamp).format("YYYY/MM/DD HH:mm");
       const allCats = opinionCategories;
 
       const isOwn = item.value.author && String(item.value.author) === String(config.keys.id);
@@ -404,7 +405,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
             )
           ),
           p({ class: 'card-footer' },
-            span({ class: 'date-link' }, `${created} ${i18n.performed} `),
+            span({ class: 'date-link' }, `${created}`),
             userLink(item.value.author)
           )
         )

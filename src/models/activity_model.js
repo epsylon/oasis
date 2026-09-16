@@ -552,7 +552,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         const v = msg && msg.value;
         const c = v && v.content;
         if (!c || typeof c !== 'object') continue;
-        const isOpinion = c.type === 'feedOpinion' && typeof c.target === 'string';
+        const isOpinion = typeof c.type === 'string' && /Opinion$/.test(c.type) && c.type !== 'pollOpinion' && typeof c.target === 'string';
         const isVoteAction = c.type === 'feed-action' && c.action === 'vote' && (typeof c.root === 'string' || typeof c.target === 'string');
         if (!isOpinion && !isVoteAction) continue;
         const target = isOpinion ? c.target : String(c.root || c.target);
@@ -612,6 +612,19 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
           a.pollVoters = tally ? tally.voters.size : 0;
         }
         let content = voteAgg ? { ...c, ...voteAgg } : a.content;
+        if (a.type !== 'feed' && a.type !== 'votes' && (feedOpinionsByRoot.get(actionRoot) || []).length) {
+          const base = a.content || {};
+          const opinions = { ...(base.opinions || {}) };
+          const voters = Array.isArray(base.opinions_inhabitants) ? base.opinions_inhabitants.slice() : [];
+          const voterSet = new Set(voters);
+          for (const op of feedOpinionsByRoot.get(actionRoot)) {
+            if (!op.author || voterSet.has(op.author)) continue;
+            voterSet.add(op.author);
+            voters.push(op.author);
+            if (op.category) opinions[op.category] = (Number(opinions[op.category]) || 0) + 1;
+          }
+          content = { ...content, opinions, opinions_inhabitants: voters };
+        }
         if (a.type === 'feed') {
           const base = a.content || {};
           const opinions = { ...(base.opinions || {}) };

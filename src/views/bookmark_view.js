@@ -114,7 +114,7 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
 
               return p(
                 { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+                span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm")}`),
                 userLink(bookmark.author),
                 showUpdated
                   ? span(
@@ -350,7 +350,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
       const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
       return p(
         { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+        span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(bookmark.author),
         showUpdated
           ? span(

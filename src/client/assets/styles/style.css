@@ -1149,6 +1149,7 @@ button.create-button:hover {
 .bookmark-url:hover {
   text-decoration: underline;
 }
+.card-section.bookmark .bookmark-url{font-size:.95em;font-weight:600;margin:0;overflow-wrap:anywhere}
 
 .filter-box {
   display: flex;
@@ -1630,7 +1631,8 @@ button.create-button:hover {
 .card-meta-row .opinions-voting-collapse:not([open]) summary{display:inline-flex;align-items:center}
 .card-meta-row .card-footer{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .card-footer .date-link,
-.card-footer .user-link{display:inline-flex;align-items:center;box-sizing:border-box;height:34px;margin:0;padding:0 14px;border:1px solid transparent;border-radius:5px;font-size:13px;line-height:32px}
+.card-footer .user-link{display:inline-flex;align-items:center;box-sizing:border-box;height:34px;max-width:100%;min-width:0;margin:0;padding:0 14px;border:1px solid transparent;border-radius:5px;font-size:13px;line-height:32px;white-space:nowrap;flex:0 1 auto}
+.card-footer .user-link{overflow:hidden;text-overflow:ellipsis}
 .card-meta-row .opinions-voting-collapse{margin:0;width:auto;flex:0 1 auto;background:transparent;border:0;padding:0}
 .card-meta-row .opinions-voting-collapse[open]{flex:1 1 100%;width:100%;margin-bottom:8px}
 .card-meta-row .voting-buttons{margin:10px 0 0 0;padding:0}
@@ -4014,7 +4016,7 @@ a.pm-btn:hover { text-decoration: none }
 .shop-product-media img{width:100%;max-height:180px;object-fit:cover}
 .shop-product-body{padding:10px;display:flex;flex-direction:column;gap:6px}
 .price-chip{display:inline-flex;align-items:center;width:auto;max-width:max-content;box-sizing:border-box;border-radius:10px;font-size:14px;font-weight:700;border:1px solid #a39134;background:#3a2300;color:#ffd700;padding:4px 12px;margin:6px 0 0 0;box-shadow:none;white-space:nowrap}
-.time-chip{display:inline-flex;align-items:center;width:auto;max-width:max-content;box-sizing:border-box;border-radius:10px;font-size:14px;font-weight:700;border:1px solid #5a5a5a;background:#3a3a3a;color:#ffd740;padding:4px 12px;margin:6px 0 0 0;box-shadow:none;white-space:nowrap}
+.time-chip{display:inline-flex;align-items:center;width:auto;max-width:100%;box-sizing:border-box;border-radius:10px;font-size:14px;font-weight:700;line-height:1.4;border:1px solid #5a5a5a;background:#3a3a3a;color:#ffd740;padding:4px 12px;margin:6px 0 0 0;box-shadow:none;white-space:normal;overflow-wrap:anywhere}
 .shop-product-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .shop-add-product{border:1px dashed #555;border-radius:8px;padding:16px;margin:12px 0}
 .shop-featured-products{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
@@ -6748,7 +6750,7 @@ div .header-content{width:100%}
 .card-section{border:none;padding:10px 0 0 16px}
 .card-header{display:flex;justify-content:space-between;align-items:center;padding-bottom:0;margin-top:8px;padding-top:0;border:none}
 .card-label{font-weight:bold;letter-spacing:1.5px;line-height:1.2;margin-bottom:0}
-.card-footer{margin-top:6px;font-weight:500;font-size:1.07em;display:flex;align-items:center;gap:8px;background:none;border:none;padding-top:0}
+.card-footer{margin-top:6px;font-weight:500;font-size:1.07em;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:none;border:none;padding-top:0}
 .card-body{margin-top:0;padding:0}
 .card-field{display:flex;align-items:baseline;padding:0;margin-bottom:0;border:none;background:none}
 .card-tags{margin:5px 0 3px 0;display:flex;flex-wrap:wrap;gap:9px}
@@ -8044,6 +8046,7 @@ details[open] > .school-unit-summary::after{content:" \25B4"}
 .backup-verification{margin-top:10px}
 .backup-check-ok{color:#27ae60}
 .backup-check-bad{color:#e74c3c}
+.backup-check-warn{color:#f1c40f}
 .backup-fork{overflow-wrap:anywhere;font-size:.9em}
 @media print{nav,.sidebar-left,.sidebar-right,.filters,.report-form,.module-header-line p{display:none !important}.backup-kit{max-width:none}.backup-kit-secret{color:#000;border-color:#000}body{background:#fff;color:#000}}
 .wiki-card-cover{width:100%;max-height:220px;object-fit:cover;border-radius:6px;display:block;margin:0 0 8px 0}

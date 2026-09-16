@@ -234,7 +234,7 @@ exports.wikiChangesView = async (changes, params = {}) => {
                 span({ class: "card-value" }, a({ href: `${pageHref(c.pageId, c.tribeId)}${c.tribeId ? "&" : "?"}version=${encodeURIComponent(c.versionKey)}` }, c.title || c.slug))
               ),
               c.summary ? p({ class: "wiki-change-summary" }, c.summary.startsWith("restore:") ? i18n.wikiRestoredSummary : c.summary) : null,
-              p({ class: "card-footer" }, span({ class: "date-link" }, `${moment(c.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `), userLink(c.author))
+              p({ class: "card-footer" }, span({ class: "date-link" }, `${moment(c.createdAt).format("YYYY/MM/DD HH:mm")}`), userLink(c.author))
             )
           ))
         : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.wikiNoChanges))
@@ -270,7 +270,7 @@ const versionRow = (page, v, idx, current, tribeId) => {
             button({ type: "submit", class: "update-btn" }, i18n.wikiRestore))
         : null
     ),
-    p({ class: "card-footer" }, span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `), userLink(v.author))
+    p({ class: "card-footer" }, span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm")}`), userLink(v.author))
   );
 };
 
@@ -348,7 +348,7 @@ exports.wikiPageView = async (page, params = {}) => {
           diffBlock || renderWikiBody(shownBody, { missing: page.missingLinks, tribeId }),
           renderTags(page.tags),
           renderCardMetaRow(p({ class: "card-footer" },
-            span({ class: "date-link" }, `${moment(page.createdAt).format("YYYY/MM/DD HH:mm")} ${i18n.performed} `),
+            span({ class: "date-link" }, `${moment(page.createdAt).format("YYYY/MM/DD HH:mm")}`),
             userLink(page.author)
           ))
         ),
