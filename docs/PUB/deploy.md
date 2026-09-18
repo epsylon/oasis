@@ -223,3 +223,34 @@ The default seed PUB at `solarnethub.com` is included in `autofollow.feeds` abov
 ## 15) Clearnet HUB
 
 The PUB also serves a read-only web HUB with the public content of the inhabitants it replicates. See [`clearnet.md`](./clearnet.md) for the URLs and the reverse proxy setup.
+
+## 16) UBI: paying inhabitants from the PUB (ecoind)
+
+A PUB pays the Universal Basic Income (UBI) in ECOin when it runs `ecoind` next to Oasis. There is no switch: Oasis turns the UBI engine on by itself when both conditions hold on the same node:
+
+- `server-config.json` has `"pub": true` (the PUB shape from step 3);
+- `oasis-config.json` has a reachable ECOin RPC in `wallet` (`url`, `user`, `pass`), i.e. the same block a regular inhabitant fills in Settings → Wallet.
+
+```json
+"wallet": { "url": "http://localhost:7474", "user": "<rpcuser>", "pass": "<rpcpassword>", "fee": "5" }
+```
+
+Fund that wallet with the ECO to be distributed. On boot the PUB logs `[UBI] PUB engine on`, and then every 30 minutes it:
+
+1. computes the monthly epoch (pool, weights, allocations) from the network activity;
+2. pays the pending `ubiClaim` messages with `sendtoaddress` to the ECOin address each claimant published (Profile → Edit → Sensors → ECOIN Wallet), publishing a `ubiClaimResult` per payment;
+3. announces `pubAvailability` (available when the wallet balance covers at least one floor payment). The announcement is only republished when the state changes or every 12 hours, so the PUB feed is not flooded.
+
+Inhabitants configure nothing: their Oasis reads the `pubAvailability` announcements it replicates, picks the available PUB with the newest announcement (announcements older than 3 days are ignored) and Banking → Overview shows which PUB it is connected to, when it was last seen, whether their ECOin address is published and whether this month's UBI has been claimed. The claim is a `ubiClaim` message addressed to that PUB; the payment lands in their wallet on the PUB's next tick.
+
+### Funding the pool
+
+The pool is whatever the PUB wallet holds: 20 % of the balance above a 500 ECO reserve, at most 2000 ECO per month. It fills in three ways:
+
+- **A transfer from you** to the PUB wallet address (Banking → Addresses on the PUB, or `getaccountaddress` on ecoind).
+- **Contributions from inhabitants**: Banking → UBI lists every PUB announcing UBI with its pool, its last announcement and its last UBI payment; *DONATE ECO!* opens their wallet with that PUB's address and the concept "OASIS UBI Fund"; the payment lands in Transfers under the UBI tab and the PUB confirms it automatically once ecoind sees the transaction.
+- **Rebalancing between PUBs**, automatic. A PUB whose available balance exceeds one month of pool sends part of the surplus to PUBs that announce *unavailable*. A PUB only receives when all of these hold: the donor PUB follows it (`sh oasis.sh follow <feedId>` on the donor, the explicit trust list), it has published its ECOin address, at least 3 eligible inhabitants have claimed UBI from it this month, and, if it received before, it has paid out at least half of that in UBI transfers confirmed by their recipients. The amount is capped at 200 ECO per PUB and month and sized to the pending claims. So a PUB that is set up and left idle never earns anything.
+
+Eligible claimants are feeds older than 30 days, with a published ECOin address and activity in the network. Claiming or publishing a wallet gives no karma. Taxes (ECO and ARCH) are not paid anywhere: they are deducted from the part of the UBI above the 1 ECO floor, and the floor itself is always paid.
+
+Diagnostics on the PUB console: `[ECOin RPC] pub … failed: …` when ecoind is unreachable or refuses a call, `[UBI] claim … skipped: …` when a claimant has no published address, the PUB wallet is empty or `sendtoaddress` fails, and `[UBI] paid …` for each payment. If ecoind is stopped the engine simply idles and announces *unavailable*; it resumes on the next tick once RPC answers again.

@@ -12,4 +12,6 @@ src/configs/*
 !src/configs/shared-state.js
 !src/configs/server-config.json
 !src/configs/content_favorites.json
+!src/configs/snh-invite-code.json
+!src/configs/banking-ubi-notice.json
 test/results/

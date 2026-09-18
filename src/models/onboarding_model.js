@@ -56,7 +56,7 @@ module.exports = ({ cooler, ssbPath } = {}) => {
     const ssb = await cooler.open();
     const mine = ssb.id;
     const all = await new Promise((resolve, reject) =>
-      pull(ssb.createLogStream({ reverse: true, limit: 2000 }), pull.collect((err, msgs) => err ? reject(err) : resolve(msgs || [])))
+      pull(ssb.createUserStream({ id: mine, reverse: true, limit: 2000 }), pull.collect((err, msgs) => err ? reject(err) : resolve(msgs || [])))
     );
     return { mine, messages: all.filter(m => m && m.value && m.value.author === mine) };
   };

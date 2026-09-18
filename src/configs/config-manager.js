@@ -74,9 +74,6 @@ if (!fs.existsSync(configFilePath)) {
       "pass": "",
       "fee": "5"
     },
-    "walletPub": {
-      "pubId": ""
-    },
     "ai": {
       "prompt": "Provide an informative and precise response."
     },

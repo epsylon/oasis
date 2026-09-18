@@ -1,5 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
-const { readTyped } = require('./typed_log');
+const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const { isContentVisibleTo } = require('./content_visibility');
 const ssbClientGUI = require("../client/gui");
 const coolerInstance = ssbClientGUI({ offline: require('../server/ssb_config').offline });
@@ -88,7 +88,7 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
   };
 
   async function listAllBase(ssbClient) {
-    const authorsMsgs = (await readTyped(ssbClient, [], { limit: logLimit, withWindow: true })).filter(msg => !!msg.value?.author && msg.value?.content?.type !== 'tombstone').reverse();
+    const authorsMsgs = (await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true })).filter(msg => !!msg.value?.author && msg.value?.content?.type !== 'tombstone').reverse();
     const uniqueFeedIds = Array.from(new Set(authorsMsgs.map(r => r.value.author).filter(Boolean)));
     const users = await Promise.all(
       uniqueFeedIds.map(async (feedId) => {
@@ -142,7 +142,7 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
             (u.id || '').toLowerCase().includes(q)
           );
         }
-        const bytesByAuthor = await readTyped(ssbClient, [], { limit: logLimit, withWindow: true }).then((msgs) => {
+        const bytesByAuthor = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true }).then((msgs) => {
           const acc = {};
           for (const m of msgs) {
             const author = m && m.value && m.value.author;

@@ -80,13 +80,24 @@ const readTyped = async (ssbClient, types, opts = {}) => {
     return collectStream(ssbClient.createLogStream(limit ? { limit } : {}));
   }
   const cache = cacheFor(ssbClient);
+  if (!cache.seen) cache.seen = new Set();
   const wanted = new Set(types);
-  const entries = await Promise.all(types.map((type) => syncType(ssbClient, cache, type, limit)));
-  const windowEntry = opts.withWindow ? await syncWindow(ssbClient, cache, limit) : null;
 
   const logTail = (await collectStream(ssbClient.createLogStream({ reverse: true, limit: LOG_TAIL_PROBE }))).reverse();
+  const tailChanged = logTail.some((m) => m && m.key && !cache.seen.has(m.key));
+  const allWarm = types.every((type) => { const e = cache.types.get(type); return e && e.warm; })
+    && (!opts.withWindow || (cache.window && cache.window.warm));
+
+  const entries = (tailChanged || !allWarm)
+    ? await Promise.all(types.map((type) => syncType(ssbClient, cache, type, limit)))
+    : types.map((type) => cache.types.get(type));
+  const windowEntry = opts.withWindow
+    ? ((tailChanged || !allWarm) ? await syncWindow(ssbClient, cache, limit) : cache.window)
+    : null;
+
   for (const m of logTail) {
     if (!m || !m.key || !m.value) continue;
+    cache.seen.add(m.key);
     const t = m.value.content && m.value.content.type;
     if (typeof t === 'string' && wanted.has(t)) {
       const entry = cache.types.get(t);
@@ -115,4 +126,31 @@ const readTyped = async (ssbClient, types, opts = {}) => {
   });
 };
 
-module.exports = { readTyped, collectStream };
+const NON_MESSAGE_LITERALS = new Set([
+  'hidden', 'submit', 'text', 'file', 'number', 'checkbox', 'radio', 'password', 'date', 'datetime-local', 'time', 'url', 'email', 'search', 'button', 'reset',
+  'png', 'jpeg', 'jpg', 'gif', 'svg', 'webp', 'pdf', 'zip', 'json', 'html', 'error', 'meta', 'msg', 'blob', 'peer', 'inhabitant', 'chatThread', 'taskAssignment'
+]);
+const CORE_TYPES = ['post', 'about', 'contact', 'vote', 'pub', 'tombstone'];
+
+const discoverContentTypes = () => {
+  const fs = require('fs');
+  const path = require('path');
+  const found = new Set(CORE_TYPES);
+  const sources = [];
+  try {
+    for (const f of fs.readdirSync(__dirname)) if (f.endsWith('.js') && f !== 'typed_log.js') sources.push(path.join(__dirname, f));
+    sources.push(path.join(__dirname, '..', 'backend', 'backend.js'));
+  } catch (_) {}
+  for (const file of sources) {
+    let src = '';
+    try { src = fs.readFileSync(file, 'utf8'); } catch (_) { continue; }
+    for (const m of src.matchAll(/\btype:\s*['"]([A-Za-z][\w-]*)['"]/g)) {
+      if (!NON_MESSAGE_LITERALS.has(m[1])) found.add(m[1]);
+    }
+  }
+  return Array.from(found).sort();
+};
+
+const CONTENT_TYPES = discoverContentTypes();
+
+module.exports = { readTyped, collectStream, CONTENT_TYPES, discoverContentTypes };

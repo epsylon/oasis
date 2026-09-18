@@ -750,7 +750,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       }
 
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
-      const hiddenTypes = new Set(['padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'logPublic', 'gameScore', 'pollVote', 'pollClose', 'pollOpinion', 'curriculum', 'schoolLesson', 'schoolEnroll', 'schoolCertificate', 'schoolProgress', 'schoolExam', 'schoolExamResult', 'school-invite', 'schoolExamQuestion', 'schoolLessonMedia']);
+      const hiddenTypes = new Set(['wallet', 'bankWallet', 'padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'logPublic', 'gameScore', 'pollVote', 'pollClose', 'pollOpinion', 'curriculum', 'schoolLesson', 'schoolEnroll', 'schoolCertificate', 'schoolProgress', 'schoolExam', 'schoolExamResult', 'school-invite', 'schoolExamQuestion', 'schoolLessonMedia']);
       const chatThreadItems = await buildChatThreads(ssbClient, idToAction, rootOf, deduped);
       deduped = deduped.concat(chatThreadItems);
       const isAllowedTribeActivity = (a) => {
@@ -816,7 +816,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
           .map(a => ({ ...a, authorActions: perAuthor.get(a.author) || 0 }))
           .sort((x, y) => (y.authorActions - x.authorActions) || ((y.ts || 0) - (x.ts || 0)));
       }
-      else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankWallet' || a.type === 'bankClaim' || a.type === 'ubiClaim');
+      else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankClaim' || a.type === 'ubiClaim');
       else if (filter === 'tribe') out = deduped.filter(a => a.type === 'tribe' || String(a.type || '').startsWith('tribe'));
       else if (filter === 'spread') out = deduped.filter(a => a.type === 'spread');
       else if (filter === 'parliament')

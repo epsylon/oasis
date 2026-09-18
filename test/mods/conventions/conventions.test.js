@@ -139,3 +139,42 @@ describe('conventions: every detail view offers the content actions', (t) => {
     eq(offenders.join(' | '), '', 'these detail views render no content actions');
   });
 });
+
+describe('conventions: the log is read by type, never by "the last N messages"', (t) => {
+  const MODELS_DIR = path.join(__dirname, '..', '..', '..', 'src', 'models');
+  const BACKEND = path.join(__dirname, '..', '..', '..', 'src', 'backend', 'backend.js');
+  const sources = () => [...fs.readdirSync(MODELS_DIR).filter(f => f.endsWith('.js')).map(f => path.join(MODELS_DIR, f)), BACKEND];
+  const base = (f) => path.basename(f);
+
+  t('no reader asks for the raw window instead of naming its types', () => {
+    const offenders = [];
+    for (const f of sources()) {
+      const src = fs.readFileSync(f, 'utf8');
+      if (base(f) === 'main_models.js') continue;
+      if (/readTyped\([^,]+,\s*\[\]\s*,/.test(src)) offenders.push(base(f));
+    }
+    eq(offenders.length, 0, `these read only the log window (readTyped with []): ${offenders.join(', ')}`);
+  });
+
+  t('no reader takes "the last N messages" of the log, except the documented ones', () => {
+    const ALLOWED = new Set(['typed_log.js', 'blockchain_model.js', 'larp_model.js', 'logs_model.js']);
+    const offenders = [];
+    for (const f of sources()) {
+      if (ALLOWED.has(base(f))) continue;
+      const src = fs.readFileSync(f, 'utf8');
+      for (const m of src.matchAll(/createLogStream\(\{[^}]*\blimit\b[^}]*\}/g)) offenders.push(`${base(f)}: ${m[0].slice(0, 60)}`);
+    }
+    eq(offenders.length, 0, `these scan the log by count instead of by type: ${offenders.join(' | ')}`);
+  });
+
+  t('every message type a model publishes is discoverable by the aggregators', () => {
+    const { CONTENT_TYPES } = require('../../../src/models/typed_log');
+    const catalogue = new Set(CONTENT_TYPES);
+    const missing = new Set();
+    for (const f of sources()) {
+      const src = fs.readFileSync(f, 'utf8');
+      for (const m of src.matchAll(/publish\(\s*\{[^}]*?\btype:\s*['"]([A-Za-z][\w-]*)['"]/g)) if (!catalogue.has(m[1])) missing.add(m[1]);
+    }
+    eq(missing.size, 0, `published but unknown to the aggregators: ${[...missing].join(', ')}`);
+  });
+});

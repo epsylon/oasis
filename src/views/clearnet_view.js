@@ -1,5 +1,7 @@
 const { a, br, div, input, span, strong } = require("../server/node_modules/hyperaxe");
 const { renderStyledHtml } = require('../backend/renderStyledText');
+const sharedState = require('../configs/shared-state');
+const cnPkg = (() => { try { return require('../server/package.json'); } catch (_) { return {}; } })();
 
 const STAT_TYPE_KEYS = { post:'statsPost', event:'statsEvent', task:'statsTask', forum:'statsForum', tribe:'statsTribe', market:'statsMarket', job:'statsJob', project:'statsProject', shop:'statsShop', image:'statsImage', video:'statsVideo', audio:'statsAudio', document:'statsDocument', bookmark:'statsBookmark', transfer:'statsTransfer', map:'statsMap' };
 const STAT_ORDER = ['post','event','task','forum','tribe','market','job','project','shop','image','video','audio','document','bookmark','transfer','map'];
@@ -30,7 +32,7 @@ const renderTagChips = (tags) => {
     .filter(Boolean)
     .slice(0, 12);
   if (!list.length) return '';
-  const chips = list.map(t => `<a class="cn-tag" href="/c?q=%23${encodeURIComponent(t)}">#${escapeHtml(t)}</a>`).join('');
+  const chips = list.map(raw => String(raw).replace(/^#+/, '')).filter(Boolean).map(t => `<a class="cn-tag" href="/c?q=%23${encodeURIComponent(t)}">#${escapeHtml(t)}</a>`).join('');
   return `<div class="cn-tags">${chips}</div>`;
 };
 
@@ -243,6 +245,7 @@ h2.cn-section{color:var(--fg);font-size:18px;text-transform:uppercase;letter-spa
 footer.cn-footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:12px;color:var(--fg-dim);text-align:center;letter-spacing:0.5px}
 footer.cn-footer a{color:var(--fg-soft)}
 footer.cn-footer .cn-footer-logo{width:56px;height:auto;display:block;margin:0 auto 10px auto;border-radius:6px}
+footer.cn-footer .cn-footer-line{margin:3px 0}
 `;
 
 const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null, extraCss = '', body, headerExtra = '', hubFeedId = null }) => {
@@ -280,7 +283,9 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   ${stripInternalAnchors(body)}
   <footer class="cn-footer">
     <a href="https://wiki.solarnethub.com" target="_blank" rel="noopener"><img class="cn-footer-logo" src="/c/assets/images/snh-oasis.jpg" alt="Oasis"/></a>
-    Powered by <a href="https://code.03c8.net/krakenslab/oasis" target="_blank" rel="noopener">Oasis</a>
+    <div class="cn-footer-line">Synced-peers: [ <strong>${Number(sharedState.getSyncedPeerCount ? sharedState.getSyncedPeerCount() : 0) || 0}</strong> ]</div>
+    <div class="cn-footer-line"><a href="https://code.03c8.net/krakenslab/oasis" target="_blank" rel="noopener">${escapeHtml(cnPkg.name || '@krakenslab/oasis')}</a> [ ${escapeHtml(cnPkg.version || '?')} ]</div>
+    <div class="cn-footer-line">License: <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">GPLv3</a> - ${new Date().getFullYear()}</div>
   </footer>
 </body>
 </html>`;

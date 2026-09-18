@@ -96,9 +96,19 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   console.log("=========================");
   console.log(`Running mode: ${modeColor}${mode}${colors.reset}`);
   console.log("=========================");
+  const walletId = (() => {
+    try {
+      const dir = process.env.OASIS_BANKING_DIR || path.join(__dirname, '..', 'configs');
+      const map = JSON.parse(fs.readFileSync(path.join(dir, 'wallet-addresses.json'), 'utf8'));
+      const v = map[`@${publicKey}`];
+      const addr = typeof v === 'string' ? v : (v && v.address) || '';
+      return /^E[1-9A-HJ-NP-Za-km-z]{32,34}$/.test(addr) ? addr : '';
+    } catch (_) { return ''; }
+  })();
+  console.log(`- OASIS ID: [ ${colors.orange}@${publicKey}${colors.reset} ]`);
   console.log(`- Package: ${colors.blue}${name} ${colors.yellow}[Version: ${version}]${colors.reset}`);
   if (hasHttp) console.log(`- URL: ${colors.cyan}${oscLink}${colors.reset}`);
-  console.log(`- Oasis ID: [ ${colors.orange}@${publicKey}${colors.reset} ]`);
+  console.log(walletId ? `- ECOin ID: [ ${colors.orange}${walletId}${colors.reset} ]` : `- ECOin ID: disabled`);
   console.log("- Logging Level:", logLevel);
   const ifaces = os.networkInterfaces();
   const isOnline = Object.values(ifaces).some(list =>

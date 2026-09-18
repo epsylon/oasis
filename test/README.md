@@ -11,16 +11,11 @@ to find).
 Some suites under `test/mods/` do not exercise a module — they guard rules that
 must hold across the whole codebase:
 
-- `conventions/` reads the views and fails when a shared rule is broken: a module
-  writing its own comments section instead of reusing the shared one, a card
-  rendering the spread button twice, a listing offering owner-only actions, a
-  view using a `render*` helper it never imported, or a detail view that offers
-  no content actions (spread / pin / report).
+- `conventions/` reads the views and fails when a shared UI rule is broken.
 - `i18n/` keeps the translation files in sync (see below).
-- `favorites/` also checks, for every `favKind` offered in the views, that the
-  kind is wired end to end: resolver, module check, add/remove routes, store
-  key, `kindConfig` and `kindOrder`. A kind that can be pinned but never listed
-  back fails here.
+- `banking/` also covers the rules of the ECOin economy (UBI, karma, taxes, PUB
+  discovery, address book), not only the API.
+- `favorites/` checks that every `favKind` offered in the views is wired end to end.
 - `gallery/` checks the image fields keep working across form round-trips.
 
 ## Quick start
@@ -47,6 +42,10 @@ bash test/mods/forum/run.sh
 bash test/mods/media/audios/run.sh
 
 # Run all + seed dummy content (so you can boot oasis after and inspect):
+# The seeder covers every content module (school, games, banking/UBI included):
+# it also fakes a neighbour that publishes an ECOin address, announces itself
+# as a UBI PUB and pays one UBI transfer, so Banking → UBI and Transfers → UBI
+# have something to show.
 bash test/run.sh --seed
 
 # Show stack traces on failure:
@@ -297,21 +296,6 @@ These models are deliberately not tested as unit tests:
 - **`panicmode`** / **`exportmode`** — destructive operations.
 - **`wallet`** — requires external `localhost:7474` RPC; tested via `banking` mock.
 - **`tribes_content`** — covered by `tribes` and `sub-tribes` test suites.
-
-## Bugs caught by these tests
-
-During development, these tests caught real bugs that have been fixed:
-
-1. `events_model.js` captured `userId` at module load (broke multi-user tests). Now reads per-call.
-2. `stats_model.getFolderSize` had no try/catch (crashed on clean `~/.ssb`). Wrapped.
-3. `activity_model.isAllowedTribeActivity` excluded `isAnonymous=true` even for members. Now allows when `_decrypted=true`.
-4. `blockchain_model` eagerly required `SSB_server.js` (started ssb-server on every test). Switched to `ssb_config`.
-5. Public tribes wrapped same as private (invisible to non-members). Fixed with dual format (plaintext public, wrapped private).
-6. `joinByInvite` returned tip ID instead of root ID. Fixed.
-7. Invite tombstone only respected if authored by invite-author (couldn't be invalidated by joiner). Now any author's tombstone invalidates.
-8. `backend.js` reference-before-init on `blockchainModelInit` (regression from refactor). Fixed.
-
-The recommended workflow for any future model change is: write a test that reproduces the issue first, fix the model until it passes, keep both. The test becomes a regression net.
 
 ## CI
 

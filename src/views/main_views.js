@@ -135,10 +135,63 @@ exports.DATE_FORMAT = DATE_FORMAT;
 exports.fmtDateTime = fmtDateTime;
 exports.fmtDay = fmtDay;
 
+const clearnetShortId = (id) => String(id || '').replace(/^[%&@]/, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toLowerCase();
+const clearnetSlugFor = (title, id) => {
+  const base = String(title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
+  const short = clearnetShortId(id);
+  return base ? `${base}-${short}` : short;
+};
+exports.clearnetShortId = clearnetShortId;
+exports.clearnetSlugFor = clearnetSlugFor;
+const CLEARNET_PATHS = { blogs: 'blog', wiki: 'wiki', market: 'market', audios: 'audios', videos: 'videos', images: 'images', documents: 'documents', bookmarks: 'bookmarks', events: 'events', feed: 'feed', jobs: 'jobs', podcasts: 'podcasts', projects: 'projects', torrents: 'torrents', shops: 'shops' };
+let clearnetBaseCache = null;
+const clearnetBase = () => {
+  if (clearnetBaseCache !== null) return clearnetBaseCache;
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'configs', 'snh-invite-code.json'), 'utf8'));
+    clearnetBaseCache = String(raw.url || '').replace(/\/+$/, '');
+  } catch (_) { clearnetBaseCache = ''; }
+  return clearnetBaseCache;
+};
+const clearnetHrefFor = (viewHref, blockId, title) => {
+  const m = String(viewHref || '').match(/^\/(school\/course|[a-z]+)\/([^/?#]+)/);
+  if (!m) return null;
+  const seg = m[1] === 'school/course' ? 'school' : CLEARNET_PATHS[m[1]];
+  if (!seg) return null;
+  const base = clearnetBase();
+  const id = seg === 'wiki' || !blockId ? m[2] : encodeURIComponent(clearnetSlugFor(title, blockId));
+  return base ? `${base}/c/${seg}/${id}` : null;
+};
+let linkBoxSeq = 0;
+const renderLinkBox = (blockId, viewHref, title) => {
+  linkBoxSeq = (linkBoxSeq + 1) % 1000000;
+  const id = `linkbox-${linkBoxSeq}-${String(blockId).replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;
+  const clearnetHref = clearnetHrefFor(viewHref, blockId, title);
+  return [
+    a({ href: `#${id}`, id: `${id}-src`, class: 'btn-singleview btn-link', title: i18n.copyLinkTitle }, '⚯'),
+    span({ id, class: 'lightbox link-lightbox' },
+      a({ href: `#${id}-src`, class: 'lightbox-close' }, '\u00d7'),
+      span({ class: 'link-box' },
+        span({ class: 'link-box-row' }, span({ class: 'link-box-label' }, i18n.linkBoxOasis), input({ type: 'text', readonly: true, class: 'link-box-input', value: viewHref })),
+        clearnetHref ? span({ class: 'link-box-row' }, span({ class: 'link-box-label' }, i18n.linkBoxClearnet), input({ type: 'text', readonly: true, class: 'link-box-input', value: clearnetHref })) : null
+      )
+    )
+  ];
+};
+
+const renderWalletChip = () => {
+  try { if (getConfig().modules.walletMod !== 'on') return null; } catch (_) { return null; }
+  const ready = sharedState.getWalletReady ? sharedState.getWalletReady() : false;
+  const chip = renderStateChip(ready ? 'mutuals' : 'closed', '❄', ready ? i18n.bankWalletReady : i18n.bankWalletNotConfigured);
+  return ready ? chip : a({ href: '/wallet', class: 'wallet-chip-link' }, chip);
+};
+exports.renderWalletChip = renderWalletChip;
+
 const renderContentActions = (msgId, viewHref, opts = {}) => {
   const o = (opts && typeof opts === 'object') ? opts : {};
   const blockId = (typeof msgId === 'string' && msgId.startsWith('%')) ? msgId : null;
   const myId = (config.keys && config.keys.id) ? config.keys.id : '';
+  const linkBtn = blockId && viewHref ? renderLinkBox(blockId, viewHref, o.reportTitle) : null;
 
   const pinBtn = o.favKind && blockId
     ? form({ method: 'POST', action: `/${o.favKind}/favorites/${o.isFavorite ? 'remove' : 'add'}/${encodeURIComponent(blockId)}`, class: 'content-action-form' },
@@ -176,7 +229,7 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     : null;
 
   if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !deleteBtn) return null;
-  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, pmBtn, chainBtn, contentBtn);
+  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, pmBtn, linkBtn, chainBtn, contentBtn);
 };
 exports.renderContentActions = renderContentActions;
 
@@ -402,7 +455,7 @@ const renderModuleStats = (total, segments = [], totalLabel = null, opts = {}) =
     inh > 0 ? { label: i18n.inhabitants, count: inh } : null,
     trb > 0 ? { label: i18n.tribesTitle, count: trb } : null
   ];
-  const toNode = s => span(`${s.label}: `, strong(String(s.count)));
+  const toNode = s => span(s.labelClass ? span({ class: s.labelClass }, `${s.label}: `) : `${s.label}: `, strong(String(s.count)));
   return div({ class: 'module-stats-line' },
     ...network.filter(Boolean).map(toNode),
     span(`${totalLabel || i18n.statsTotalLabel}: `, strong(String(total))),
@@ -1414,7 +1467,6 @@ const template = (titlePrefix, ...elements) => {
     return div(
       { class: compact ? "ai-suggestion-banner ai-suggestion-inline" : "update-banner ai-suggestion-banner" },
       span({ class: "update-banner-icon" }, "🤖"),
-      compact ? null : span({ class: "update-banner-text" }, i18n.aiSuggestionBanner),
       a({ href: suggestion.href, class: "update-banner-link" }, label),
       form(
         { method: "POST", action: "/ai/suggestion/dismiss", class: "welcome-banner-close" },
@@ -2572,8 +2624,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
             ['gpg',       i18n.profileVisibilityGpg       || 'GPG Key'],
             ['karma',     i18n.profileVisibilityKarma     || 'KARMA Scoring'],
             ['larpSign',  i18n.profileVisibilityLarpSign  || 'L.A.R.P. Sign'],
-            ['fediverse', i18n.profileVisibilityFediverse || 'Multiverse'],
-            ['ubi',       i18n.profileVisibilityUbi       || 'UBI']
+            ['fediverse', i18n.profileVisibilityFediverse || 'Multiverse']
           ]),
           input({ type: "hidden", name: "fediverseHandle", value: fediverseHandleValue })
         ),
@@ -2709,7 +2760,7 @@ const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '
   const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips } = require('./clearnet_view');
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
-    const href = `/c/${modulePath}/${encodeURIComponent(it.id)}`;
+    const href = `/c/${modulePath}/${encodeURIComponent(it.slug || clearnetSlugFor(it.title, it.id))}`;
     const title = esc(it.title || 'Untitled');
     const raw = String(it.snippet || '');
     const snippet = renderRichText(raw.slice(0, 300));
@@ -2804,7 +2855,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
     const preview = mediaSrc && it.media.kind === 'image'
       ? `<img class="cn-hub-player" src="${mediaSrc}" alt="" loading="lazy"/>`
       : '';
-    const href = `/c/${modulePath}/${encodeURIComponent(it.id)}`;
+    const href = `/c/${modulePath}/${encodeURIComponent(it.slug || clearnetSlugFor(it.title, it.id))}`;
     const chipRow = [
       meta ? `<span class="cn-detail">📅 ${meta}</span>` : '',
       ...(Array.isArray(it.details) ? it.details : []).map(d => `<span class="cn-detail">${esc(String(d))}</span>`),
@@ -2951,14 +3002,13 @@ const renderUserSensors = (u, opts = {}) => {
     items.push(span({ class: 'gpg-line' }, `${i18n.profileGpgChip || 'GPG'}: `, gpgNode));
   }
   if (show('wallet') && (u.ecoAddress || isMe)) {
-    const wt = u.ecoAddress || (i18n.statsEcoWalletNotConfigured || 'Not configured!');
-    const wn = isMe ? a({ href: '/wallet' }, strong(wt)) : strong(wt);
-    items.push(span({ class: 'ubi-line' }, `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}: `, wn));
-  }
-  if (show('ubi')) {
-    items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiThisMonth || 'UBI'}: `, strong(`${Number(u.estimatedUBI || 0).toFixed(6)} ECO`)));
-    items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiLastClaimed || 'Last claimed'}: `, u.lastClaimedDate ? a({ href: '/transfers?filter=ubi', class: 'user-link' }, moment(u.lastClaimedDate).format("YYYY/MM/DD")) : strong(i18n.bankUbiNeverClaimed || 'Never claimed')));
-    items.push(span({ class: 'ubi-line' }, `${i18n.bankUbiTotalClaimed || 'Total claimed'}: `, strong(`${Number(u.totalClaimed || 0).toFixed(6)} ECO`)));
+    const addressNode = u.ecoAddress
+      ? span({ class: 'wallet-address', title: i18n.walletAddressCopyHint || 'Click to select, then copy' }, u.ecoAddress)
+      : (isMe ? a({ href: '/wallet' }, strong(i18n.statsEcoWalletNotConfigured || 'Not configured!')) : strong(i18n.statsEcoWalletNotConfigured || 'Not configured!'));
+    items.push(div({ class: 'wallet-line' },
+      span({ class: 'wallet-line-head' }, span({ class: 'wallet-icon' }, '❄'), `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}`),
+      isMe && u.ecoAddress ? a({ href: '/wallet', class: 'wallet-line-link' }, addressNode) : addressNode
+    ));
   }
   const sensorsBox = items.length ? div({ class: 'profile-sensors-box' }, ...items) : null;
   const larpNode = (show('larpSign') && u.larpHouse && u.larpHouse.key)
@@ -3341,7 +3391,7 @@ const renderMessage = (msg) => {
 
 const INBOX_BOT_SUBJECTS = new Set([
   'JOB_MATCH', 'JOB_SUBSCRIBED', 'JOB_UNSUBSCRIBED', 'PROJECT_FOLLOWED', 'PROJECT_UNFOLLOWED', 'PROJECT_PLEDGE',
-  'MARKET_SOLD', 'SHOP_SOLD', 'LARP_RULING', 'PARLIAMENT_GOV', 'TRIBE_GOV',
+  'MARKET_SOLD', 'SHOP_SOLD', 'LARP_RULING', 'PARLIAMENT_GOV', 'TRIBE_GOV', 'BANKING_UBI_PAID', 'BANKING_UBI_AVAILABLE', 'WALLET_PAYMENT',
   'SCHOOL_ENROLLED', 'SCHOOL_INVITED', 'SCHOOL_ADMITTED', 'SCHOOL_CERTIFICATE', 'SCHOOL_PASSED', 'SCHOOL_LESSON_NEW',
   'INDUSTRY_ADMITTED', 'INDUSTRY_APPLICATION', 'INDUSTRY_INVITED', 'INDUSTRY_DISSOLVED', 'INDUSTRY_BUILD_APPROVED', 'INDUSTRY_DISTRIBUTED',
   'HOUSING_REQUESTED', 'HOUSING_CANCELLED', 'HOUSING_UNAVAILABLE', 'WIKI_EDITED', 'WIKI_RESTORED', 'EMERGENCY_UPDATED', 'EMERGENCY_RESOLVED', 'PODCAST_EPISODE', 'CAMPAIGN_UPDATED', 'CAMPAIGN_ACHIEVED', 'CAMPAIGN_RAISED',
@@ -3734,6 +3784,21 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
+  function BankingBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
+    const title = subjectU === 'BANKING_UBI_PAID'
+      ? (i18n.bankingBotUbiPaidTitle || 'You have received your UBI.')
+      : subjectU === 'BANKING_UBI_AVAILABLE'
+      ? (i18n.bankingBotUbiAvailableTitle || 'You can claim your UBI.')
+      : (i18n.bankingBotPaymentTitle || 'You have received a payment.')
+    return div(
+      { class: 'pm-card banking-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `💰 ${i18n.pmBotBanking || 'BankingBot'} · ${title}`),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
   function SchoolBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
     const titleMap = {
       SCHOOL_ENROLLED: i18n.schoolBotEnrolledTitle || 'A new student has enrolled in your course.',
@@ -4034,6 +4099,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             }
             if (subjectU === 'SCHOOL_ENROLLED' || subjectU === 'SCHOOL_INVITED' || subjectU === 'SCHOOL_ADMITTED' || subjectU === 'SCHOOL_CERTIFICATE' || subjectU === 'SCHOOL_PASSED' || subjectU === 'SCHOOL_LESSON_NEW') {
               return SchoolBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU === 'BANKING_UBI_PAID' || subjectU === 'BANKING_UBI_AVAILABLE' || subjectU === 'WALLET_PAYMENT') {
+              return BankingBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'INDUSTRY_ADMITTED' || subjectU === 'INDUSTRY_APPLICATION' || subjectU === 'INDUSTRY_INVITED' || subjectU === 'INDUSTRY_DISSOLVED' || subjectU === 'INDUSTRY_BUILD_APPROVED' || subjectU === 'INDUSTRY_DISTRIBUTED') {
               return IndustryBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })

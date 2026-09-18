@@ -131,7 +131,7 @@ module.exports = ({ cooler }) => {
     const ssbClient = await openSsb();
     const msgs = await new Promise((resolve, reject) =>
       pull(
-        ssbClient.createLogStream({ reverse: true, limit: logLimit }),
+        ssbClient.createUserStream({ id: ssbClient.id, reverse: true, limit: logLimit }),
         pull.collect((err, arr) => err ? reject(err) : resolve(arr))
       )
     );

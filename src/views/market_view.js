@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderWalletChip } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -308,7 +308,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
   return template(
     title,
     section(
-      div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription), (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetMarket === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })()),
+      div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription), renderWalletChip(), (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetMarket === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })()),
       div(
         { class: "filters" },
         form(
@@ -551,7 +551,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
 
   return template(
     item.title,
-    section(div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription), renderWalletChip())),
     section(
       div(
         { class: "filters" },

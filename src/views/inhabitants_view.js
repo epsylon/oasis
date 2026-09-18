@@ -283,9 +283,9 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
         : null,
       div({ class: 'filters activity-filter-chips activity-toolbar-row' },
         renderModuleStats(inhabitants.length, [
-          { label: '<2w', count: bucketCounts.green },
-          { label: '2w–6m', count: bucketCounts.orange },
-          { label: '>6m', count: bucketCounts.red }
+          { label: '<2w', count: bucketCounts.green, labelClass: 'stat-label-green' },
+          { label: '2w–6m', count: bucketCounts.orange, labelClass: 'stat-label-orange' },
+          { label: '>6m', count: bucketCounts.red, labelClass: 'stat-label-red' }
         ]),
         form({ method: 'GET', action: '/inhabitants', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),

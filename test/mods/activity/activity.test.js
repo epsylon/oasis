@@ -344,7 +344,7 @@ describe('activity: the TOP filter', (t) => {
 describe('activity: filter layout', (t) => {
   t('chips follow the order of their menu group, and no filter is lost', () => {
     const { activityView } = require('../../../src/views/activity_view');
-    const TYPES = ['bankWallet', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
+    const TYPES = ['bankClaim', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
       'votes', 'event', 'calendar', 'task', 'report', 'post', 'feed', 'chat', 'pad', 'forum', 'map',
       'audio', 'bookmark', 'document', 'image', 'torrent', 'video', 'courtsCase'];
     const actions = TYPES.map((type, i) => ({ type, id: 'a' + i, author: '@x.ed25519', ts: 1, content: {} }));

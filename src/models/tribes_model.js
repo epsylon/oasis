@@ -4,6 +4,8 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const tribeLogLimit = Math.max(logLimit, 100000);
+const { readTyped } = require('./typed_log');
+const TRIBE_LOG_TYPES = ['tribe', 'tribe-msg', 'tribe-keys-distrib', 'tribe-invite-msg', 'tribe-invite-tombstone', 'tribe-open-invite-tombstone', 'tombstone', 'contact'];
 
 const INVITE_CODE_BYTES = 16;
 const VALID_INVITE_MODES = ['strict', 'open'];
@@ -56,12 +58,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
   const streamLog = async () => {
     const client = await openSsb();
-    return new Promise((resolve, reject) => {
-      pull(
-        client.createLogStream({ limit: tribeLogLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-      );
-    });
+    return readTyped(client, TRIBE_LOG_TYPES, { limit: tribeLogLimit });
   };
 
   const buildTribeIndex = async () => {

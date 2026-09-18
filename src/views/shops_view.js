@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderWalletChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -219,7 +219,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
 
   return template(
     title,
-    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.shopDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.shopDescription), renderWalletChip())),
     section(renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null)),
     !isForm && !emptyMod
       ? section(
@@ -395,7 +395,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
 
   return template(
     shop.title || i18n.shopTitle,
-    section(div({ class: "tags-header module-header-line" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.shopsTitle), p(i18n.shopDescription), renderWalletChip())),
     section(renderModeButtons(filter, false, (params && params.modesAvail) || null)),
     section(
       div({ class: "tribe-details" },
@@ -498,7 +498,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
 
   return template(
     product.title || i18n.shopProductTitle,
-    section(div({ class: "tags-header module-header-line" }, h2(i18n.shopsTitle), p(i18n.shopDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.shopsTitle), p(i18n.shopDescription), renderWalletChip())),
     section(renderModeButtons("products", false, (params && params.modesAvail) || null)),
     section(div({ class: "tribe-details" }, productSide, productMain))
   )

@@ -30,7 +30,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
   const walletUrl = currentConfig.wallet.url;
   const walletUser = currentConfig.wallet.user;
   const walletFee = currentConfig.wallet.fee;
-  const currentWish = currentConfig.wish === 'mutuals' ? 'mutuals' : 'whole';
+  const currentWish = ['mutuals', 'only-lan'].includes(currentConfig.wish) ? currentConfig.wish : 'whole';
   const currentPmVisibility = currentConfig.pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
 
   const themeElements = [
@@ -141,7 +141,6 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    workflowSection,
     section({ id: "theme" },
       div({ class: "tags-header" },
         h2(i18n.theme),
@@ -155,6 +154,22 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
+    section({ id: "wish" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsWishTitle),
+        p(i18n.settingsWishDesc),
+        form(
+          { action: "/settings/wish", method: "POST" },
+          select({ name: "wish" },
+            option({ value: "whole", ...(currentWish === "whole" ? { selected: true } : {})}, i18n.settingsWishWhole),
+            option({ value: "mutuals", ...(currentWish === "mutuals" ? { selected: true } : {})}, i18n.settingsWishMutuals),
+            option({ value: "only-lan", ...(currentWish === "only-lan" ? { selected: true } : {})}, i18n.settingsWishOnlyLan || "Only LAN")
+          ), br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    workflowSection,
     section({ id: "home-page" },
       div({ class: "tags-header" },
         h2(i18n.homePageTitle),
@@ -275,21 +290,6 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
-    section({ id: "wish" },
-      div({ class: "tags-header" },
-        h2(i18n.settingsWishTitle),
-        p(i18n.settingsWishDesc),
-        form(
-          { action: "/settings/wish", method: "POST" },
-          select({ name: "wish" },
-            option({ value: "whole", ...(currentWish === "whole" ? true : undefined ? { selected: true } : {})}, i18n.settingsWishWhole),
-            option({ value: "mutuals", ...(currentWish === "mutuals" ? true : undefined ? { selected: true } : {})}, i18n.settingsWishMutuals),
-            option({ value: "only-lan", ...(currentWish === "only-lan" ? true : undefined ? { selected: true } : {})}, i18n.settingsWishOnlyLan || "Only LAN")
-          ), br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
-        )
-      )
-    ),
     section({ id: "pm-visibility" },
       div({ class: "tags-header" },
         h2(i18n.settingsPmVisibilityTitle),
@@ -309,8 +309,7 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
       div({ class: "tags-header" },
         h2(i18n.wallet),
 	p(
-	  i18n.walletSettingsDescription, " ",
-	  a({ href: "docs/ecoin.md", target: "_blank", rel: "noopener" }, `[${i18n.walletSettingsDocLink}]`)
+	  i18n.walletSettingsDescription
 	),
         form(
           { action: "/settings/wallet", method: "POST" },

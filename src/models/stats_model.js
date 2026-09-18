@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped } = require('./typed_log');
+const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const STORAGE_DIR = path.join(__dirname, "..", "configs");
@@ -331,7 +331,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
 
-    const messages = (await readTyped(ssbClient, [], { limit: logLimit, withWindow: true })).reverse();
+    const messages = (await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true })).reverse();
 
     const allMsgs = messages.filter(m => {
       const c = m.value && m.value.content;

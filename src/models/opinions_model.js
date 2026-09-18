@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const categories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped } = require('./typed_log');
+const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const { buildVoteTally } = require('../backend/vote_tally');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -79,7 +79,7 @@ module.exports = ({ cooler }) => {
   const listOpinions = async (filter = 'ALL', category = '') => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
-    const messages = await readTyped(ssbClient, [], { limit: logLimit, withWindow: true });
+    const messages = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true });
     const tombstoned = buildValidatedTombstoneSet(messages);
     const replaces = new Map();
     const byId = new Map();

@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress } = require("../server/node_modules/hyperaxe")
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderWalletChip } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, renderStyledHtml } = require("../backend/renderStyledText")
@@ -150,7 +150,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
 
   return template(
     title,
-    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.schoolDescription), (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetSchool === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })())),
+    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.schoolDescription), renderWalletChip(), (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetSchool === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })())),
     section(renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null)),
     !isForm && !emptyMod
       ? section(
@@ -686,7 +686,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
 
   return template(
     course.title,
-    section(div({ class: "tags-header module-header-line" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.schoolTitle), p(i18n.schoolDescription), renderWalletChip())),
     section(renderModeButtons("all", false, (params && params.modesAvail) || null)),
     section(
       div({ class: "tribe-details" },
@@ -881,7 +881,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
 
   const tpl = template(
     lesson.title,
-    section(div({ class: "tags-header module-header-line" }, h2(i18n.schoolTitle), p(i18n.schoolDescription))),
+    section(div({ class: "tags-header module-header-line" }, h2(i18n.schoolTitle), p(i18n.schoolDescription), renderWalletChip())),
     section(renderModeButtons("all", false, (params && params.modesAvail) || null)),
     section(div({ class: "tribe-details" }, lessonSide, lessonMain))
   )

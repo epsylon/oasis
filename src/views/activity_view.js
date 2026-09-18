@@ -193,6 +193,8 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
       .slice()
       .sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
+    if (!rootAction) continue;
+    const rootType = rootAction.type || 'post';
     out.push({
       id: `thread:${threadId}`,
       type: 'postThread',
@@ -200,10 +202,13 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
       ts: latest.ts,
       content: {
         threadId,
+        rootType,
+        rootHref: rootType === 'post' ? `/blogs/${encodeURIComponent(threadId)}` : getViewDetailsAction(rootType, rootAction),
         root: rootAction
           ? {
               id: safeMsgId(rootAction),
               author: rootAction.author,
+              subject: String((rootAction.value?.content || rootAction.content || {}).contentWarning || '').trim(),
               text: excerptPostText(rootAction.value?.content || rootAction.content || {}, 600)
             }
           : null,
@@ -430,7 +435,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section transfer' },
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.concept + ':'), span({ class: 'card-value' }, concept)),
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : '')),
+          deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, moment(deadline).format("YYYY/MM/DD HH:mm"))) : null,
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status))
         )
       );
@@ -479,14 +484,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const inhabitantId = action.author || '';
       cardBody.push(
         div({ class: 'card-section banking-ubi' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankUbiInhabitant + ':'),
-            span({ class: 'card-value' }, userLink(inhabitantId))
-          ),
-          pubId ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankUbiPub + ':'),
-            span({ class: 'card-value' }, userLink(pubId))
-          ) : "",
           div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankUbiClaimedAmount + ':'),
             span({ class: 'card-value' }, `${amt.toFixed(6)} ECO`)
@@ -870,25 +867,32 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     if (type === 'postThread') {
         const c = action.content || {};
         const threadId = c.threadId;
-        const href = `/blogs/${encodeURIComponent(threadId)}`;
+        const rootType = c.rootType || 'post';
+        const isBlogThread = rootType === 'post';
+        const baseHref = c.rootHref || `/blogs/${encodeURIComponent(threadId)}`;
+        const href = isBlogThread ? baseHref : `${baseHref}${baseHref.includes('?') ? '&' : '?'}comments=open#comments-latest`;
+        const rootTypeLabel = isBlogThread
+          ? (i18n.typePost || 'BLOG')
+          : (i18n[`type${rootType.charAt(0).toUpperCase()}${rootType.slice(1)}`] || rootType);
         const root = c.root;
         const replies = Array.isArray(c.replies) ? c.replies : [];
         const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
         const latest = repliesAsc.length ? repliesAsc[repliesAsc.length - 1] : null;
-        const titleText = root && root.text
-          ? (root.text.length > 90 ? `${root.text.slice(0, 90)}…` : root.text)
+        const titleSource = root ? (root.subject || root.text || '') : '';
+        const titleText = titleSource
+          ? (titleSource.length > 90 ? `${titleSource.slice(0, 90)}…` : titleSource)
           : threadId;
         return div({ class: 'trending-card post-thread' + (String(action.author) === String(userId) ? ' own-content' : '') },
             div({ class: 'card-header activity-card-header' },
                 div({ class: 'card-chips-row' },
                     span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                        span({ class: 'pm-exposition-text' }, `${String(i18n.typePost || 'BLOG').toUpperCase()} · ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
+                        span({ class: 'pm-exposition-text' }, `${String(rootTypeLabel).toUpperCase()} · ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
                     )
                 ),
-                renderContentActions(threadId, href, {
+                renderContentActions(threadId, baseHref, {
                   author: action.author,
                   spread: spreadMap.get(threadId) || null,
-                  ...favOptsFor('post', threadId, extras)
+                  ...favOptsFor(rootType, threadId, extras)
                 })
             ),
             div({ class: 'card-body' },
@@ -1127,9 +1131,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
           div({ class: "price-chip" }, `${price} ECO`),
           br(),
-          image
-            ? renderMediaBlob(image, '/assets/images/default-market.png')
-            : img({ src: '/assets/images/default-market.png', alt: title, class: 'post-image' }),
+          image ? renderMediaBlob(image, '/assets/images/default-market.png') : null,
           item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? div({ class: "auction-info" },
                 auctions_poll && auctions_poll.length > 0
@@ -1375,11 +1377,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section' },
           div({ class: 'card-field' }, cpKey ? a({ href: `/campaigns/${encodeURIComponent(cpKey)}`, class: 'card-value user-link' }, cpTitle || cpKey) : span({ class: 'card-value' }, cpTitle || '')),
-          content.goal ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ':'), span({ class: 'card-value' }, `${new Set(all.filter(x => x && x.type === 'campaignSignature' && x.content && (x.content.target === cpKey || x.content.target === (action.rootId || cpKey))).map(x => x.author)).size} / ${content.goal}`)) : '',
           content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.campaignCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
           content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.statusLabel || 'Status') + ':'), span({ class: 'card-value' }, String(content.status).toUpperCase())) : '',
           renderMediaBlob(content.text, null),
-          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : ''
+          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : '',
+          content.goal ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ':'), span({ class: 'card-value' }, `${new Set(all.filter(x => x && x.type === 'campaignSignature' && x.content && (x.content.target === cpKey || x.content.target === (action.rootId || cpKey))).map(x => x.author)).size} / ${content.goal}`)) : ''
         )
       );
     }
@@ -2137,7 +2139,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const GROUP_SUBTYPES = {
     parliament: ['parliamentCandidature', 'parliamentTerm', 'parliamentProposal', 'parliamentRevocation', 'parliamentLaw'],
     courts:     ['courtsCase', 'courtsNomination', 'courtsNominationVote'],
-    banking:    ['bankWallet', 'bankClaim', 'ubiClaim'],
+    banking:    ['bankClaim', 'ubiClaim'],
     task:       ['task', 'taskAssignment'],
     votes:      ['votes', 'poll'],
     shop:       ['shop', 'shopProduct'],
@@ -2168,7 +2170,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     const now = Date.now();
     filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
   } else if (filter === 'banking') {
-    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankWallet' || action.type === 'bankClaim' || action.type === 'ubiClaim'));
+    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankClaim' || action.type === 'ubiClaim'));
   } else if (filter === 'tribe') {
     filteredActions = actions.filter(action => action.type === 'tribe');
   } else if (filter === 'larp') {

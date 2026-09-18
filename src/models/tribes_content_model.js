@@ -2,6 +2,8 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const tribeLogLimit = Math.max(logLimit, 100000);
+const { readTyped } = require('./typed_log');
+const TRIBE_LOG_TYPES = ['tribe', 'tribe-msg', 'tribe-keys-distrib', 'tribe-invite-msg', 'tribe-invite-tombstone', 'tribe-open-invite-tombstone', 'tombstone', 'contact'];
 
 const VALID_CONTENT_TYPES = ['event', 'task', 'report', 'votation', 'forum', 'forum-reply', 'market', 'job', 'project', 'media', 'feed', 'pixelia'];
 const categories = require('../backend/opinion_categories');
@@ -14,12 +16,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
   const readLog = async () => {
     const client = await openSsb();
-    return new Promise((resolve, reject) =>
-      pull(
-        client.createLogStream({ limit: tribeLogLimit }),
-        pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-      )
-    );
+    return readTyped(client, TRIBE_LOG_TYPES, { limit: tribeLogLimit });
   };
 
   const fingerprintsForRoot = (rootId) => {

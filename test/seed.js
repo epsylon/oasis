@@ -43,6 +43,7 @@ async function step(name, fn) {
   const padCrypto      = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'pads');
   const mapCrypto      = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'maps');
   const calendarCrypto = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'calendars');
+  const schoolCrypto   = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'school');
   const sCooler = require(path.join(__dirname, '..', 'src', 'client', 'gui'))({ offline: ssbConfig.offline });
 
   const models = {
@@ -335,6 +336,28 @@ async function step(name, fn) {
   if (seedChat && seedChat.key) {
     await step('mention in a comment', () => publishAsNeighbour({ type: 'post', text: `Replying here and pinging [@you](${meId})`, root: seedChat.key, branch: seedChat.key, mentions: [mentionOfMe] }));
   }
+
+  console.log('\nSEED: school');
+  const schoolModel = require(path.join(__dirname, '..', 'src', 'models', 'school_model'))({ cooler: sCooler, transfersModel: models.transfers, schoolCrypto, chatsModel: models.chats });
+  const seedCourse = await step('course (public, free)', () => schoolModel.createCourse({ title: `P2P basics ${hash(2)}`, description: 'How Oasis replicates without servers. #oasis', tags: pickTags(2), visibility: 'PUBLIC', startDate: futureISO(7) }));
+  await step('course (paid)', () => schoolModel.createCourse({ title: `ECOin workshop ${hash(2)}`, description: 'Wallet, payments and the UBI, hands on.', tags: pickTags(1), visibility: 'PUBLIC', price: 2.5, startDate: futureISO(14) }));
+  if (seedCourse && seedCourse.key) {
+    await step('lesson', () => schoolModel.addLesson(seedCourse.key, { title: `Lesson 1 ${hash(2)}`, text: `Feeds, follows and hops. ${longHash()}`, unit: 'Unit 1', order: 1 }));
+    await step('lesson (second)', () => schoolModel.addLesson(seedCourse.key, { title: `Lesson 2 ${hash(2)}`, text: `Invites and PUBs. ${longHash()}`, unit: 'Unit 1', order: 2 }));
+  }
+
+  console.log('\nSEED: games');
+  const gamesModel = require(path.join(__dirname, '..', 'src', 'models', 'games_model'))({ cooler: sCooler });
+  await step('game score', () => gamesModel.submitScore('tetris', 120 + Math.floor(Math.random() * 500)));
+
+  console.log('\nSEED: banking (ECOin address, a UBI PUB announcing itself and a UBI payment)');
+  const bankingModel = require(path.join(__dirname, '..', 'src', 'models', 'banking_model'))({ services: { cooler: sCooler } });
+  await step('own ECOin address (published as type wallet)', () => bankingModel.addAddress({ userId: meId, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A' }));
+  await step('address book entry', () => bankingModel.addAddressBookEntry({ label: `Neighbour's wallet ${hash(2)}`, address: 'EMnb2ZbYMKD2N6gSPNxuUvbhYibmhiQuoV', userId: neighbour.id }));
+  await step('neighbour ECOin address', () => publishAsNeighbour({ type: 'wallet', coin: 'ECO', address: 'EMnb2ZbYMKD2N6gSPNxuUvbhYibmhiQuoV', updatedAt: new Date().toISOString() }));
+  await step('neighbour announces itself as UBI PUB', () => publishAsNeighbour({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 250, address: 'EMnb2ZbYMKD2N6gSPNxuUvbhYibmhiQuoV', timestamp: Date.now() }));
+  await step('UBI payment transfer from that PUB', () => publishAsNeighbour({ type: 'transfer', from: neighbour.id, to: meId, concept: `OASIS UBI Payment · ${new Date().toISOString().slice(0, 7)}`, amount: '1.500000', category: 'ECONOMIC', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), deadline: null, confirmedBy: [neighbour.id], status: 'UNCONFIRMED', tags: ['UBI'], opinions: {}, opinions_inhabitants: [], txid: hash(32) }));
+  await step('UBI claim to that PUB', () => new Promise((res, rej) => ssbAdd.publish({ type: 'ubiClaim', pubId: neighbour.id, epochId: new Date().toISOString().slice(0, 7), claimedAt: new Date().toISOString() }, (e, m) => e ? rej(e) : res(m))));
 
   console.log('\nSEED: spreads (publish type:spread referencing existing content)');
   const pull = require(path.join(__dirname, '..', 'src', 'server', 'node_modules', 'pull-stream'));

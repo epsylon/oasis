@@ -1458,6 +1458,10 @@ button.create-button:hover {
   color: #e74c3c;
 }
 
+.module-stats-line .stat-label-green{color:#2ecc71}
+.module-stats-line .stat-label-orange{color:#f39c12}
+.module-stats-line .stat-label-red{color:#e74c3c}
+
 .profile-last-seen,
 .profile-device {
   display: block;
@@ -2088,6 +2092,10 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .internal-link-kind{font-weight:700;letter-spacing:1px;font-size:.8em}
 .internal-link-id{font-family:monospace;opacity:.75;font-size:.8em}
 .zoom-link img{cursor:zoom-in}
+.link-lightbox .link-box{display:flex;flex-direction:column;gap:10px;width:min(92vw,640px);background:#1e1f23;border:1px solid #333;border-radius:10px;padding:18px;box-sizing:border-box}
+.link-box-row{display:flex;flex-direction:column;gap:4px}
+.link-box-label{font-weight:700;font-size:.8em;letter-spacing:.5px;text-transform:uppercase}
+.link-box-input{width:100%;box-sizing:border-box;font-family:monospace;margin:0}
 
 .lightbox-close {
   position: absolute;
@@ -3802,68 +3810,9 @@ a.pm-btn:hover { text-decoration: none }
 }
 
 /*banking*/
-.addr-form-card, .addr-list-card {
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
-  background: rgba(255,255,255,0.03);
-  padding: 20px;
-}
-
-.addr-form-card.wide { 
-  padding: 22px; 
-}
-
-.addr-form .form-row {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.addr-form .form-input {
-  padding: 0 14px;
-}
-
-.addr-form .form-input.xl { 
-  height: 50px;
-  font-size: 16px; 
-}
-
-.addr-form .form-actions {
-  display: flex;
-  margin-top: 8px;
-}
-
-.addr-list-card .form-row {
-  display: grid;
-  grid-template-columns: 150px 1fr;
-  gap: 10px;
-  align-items: center;
-}
-
-.addr-list-card .form-input {
-  padding: 0 14px;
-}
-
-.addr-search input[type="text"]:focus,
-.addr-form .form-input:focus {
-  outline: none;
-  border-color: #ffa300;
-}
-
-.addr-form .form-actions .mini-btn {
-  background: #ffa300;
-  border: none;
-  color: #fff;
-  padding: 9px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.addr-form .form-actions .mini-btn:hover {
-  background: #ff7f00;
-}
+.bank-form{max-width:560px}
+.bank-form input[type="text"]{width:100%;box-sizing:border-box}
+.no-content-box{border:1px solid #333;border-radius:10px;padding:18px;margin:12px 0;opacity:.85}
 
 .bank-summary .bank-info-table tbody tr .synced {
   color: green;
@@ -3876,11 +3825,21 @@ a.pm-btn:hover { text-decoration: none }
 }
 
 .bank-claim-ubi{margin:16px 0}
-.bank-claim-card{border:1px solid #FFA500;border-radius:8px;padding:16px;margin:8px 0}
+.bank-claim-card{background:transparent;border:0;box-shadow:none;padding:0;margin:0 0 14px}
 .bank-claim-card p{margin:4px 0}
 .bank-claim-btn{font-size:16px;padding:10px 24px;margin-top:8px}
+.bank-claim-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
+.bank-claim-actions form{margin:0;padding:0;background:transparent !important;border:0 !important;box-shadow:none}
 
 .bank-eco-chart-block{margin:24px 0;border:1px solid #2a2a2a;border-radius:8px;padding:16px;background:#111}
+.bank-eco-chart-zoom-link{display:block;cursor:zoom-in;text-decoration:none;border:0 !important;background:transparent !important;padding:0 !important}
+.bank-range-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px;background:transparent !important;border:0 !important;padding:0 !important}
+.bank-chart-empty-note{margin:6px 0 0;font-size:.9em;opacity:.75}
+.bank-rules-list{margin:6px 0 14px 18px;padding:0}
+.bank-rules-list li{margin:4px 0}
+.bank-eco-chart-lightbox .bank-eco-chart-canvas-zoom{width:92vw;max-width:1400px;background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:16px;box-sizing:border-box}
+.bank-eco-chart-lightbox .bank-eco-chart-svg{width:100%;height:auto;display:block}
+.addr-card-head .content-actions{margin:0;padding:0 !important}
 .bank-eco-chart-title{font-size:16px;margin:0 0 12px 0;color:#FFA500}
 .bank-eco-chart-canvas{width:100%;overflow:hidden}
 .bank-eco-chart-svg{width:100%;height:auto;display:block}
@@ -6082,6 +6041,47 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .lan-checkbox-text{line-height:1}
 .larp-sign-block{display:block;line-height:0;margin:0 auto;background:transparent !important;border:0 !important;padding:0 !important;width:180px}
 .profile-sensors-box .larp-sign-block{margin-top:14px}
+.wallet-line{display:flex;flex-direction:column;gap:6px;background:rgba(0,123,159,.12) !important;border:1px solid #007B9F !important;border-radius:8px;padding:8px 10px !important;margin:4px 0;box-shadow:none;overflow:visible}
+.wallet-line-head{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:.85em;letter-spacing:.5px;text-transform:uppercase}
+.wallet-icon{color:#4fc3f7;font-size:1.1em}
+.wallet-address{display:block;font-family:monospace;font-size:.85em;word-break:break-all;background:rgba(0,0,0,.25);border-radius:5px;padding:6px 8px;cursor:copy;-webkit-user-select:all;user-select:all}
+.wallet-line-link{text-decoration:none;color:inherit}
+.wallet-transfer-ctx{display:flex;flex-direction:column;gap:6px;background:#1e1f23 !important;border:1px solid #333 !important;border-radius:8px;padding:10px 12px !important;margin:10px 0}
+.wallet-transfer-ctx-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
+.wallet-transfer-ctx-label{font-weight:700;font-size:.85em;letter-spacing:.5px;text-transform:uppercase}
+.ubi-status{display:flex;flex-direction:column;gap:8px;background:#1e1f23 !important;border:1px solid #333 !important;border-radius:10px;padding:12px 14px !important;margin:0 0 14px}
+.ubi-status-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
+.ubi-status-note{font-size:.85em;opacity:.75}
+.ubi-status a{text-decoration:none}
+.wallet-chip-link{text-decoration:none}
+.module-header-line .wallet-chip-link{display:inline-flex}
+.addr-cards.ubi-pub-cards{grid-template-columns:repeat(3,1fr)}
+.ubi-pub-summary{margin:0;padding:0 !important;background:transparent !important;border:0 !important;box-shadow:none}
+.ubi-pub-summary .bank-info-table{width:100%;margin:0}
+.ubi-pub-summary .bank-info-table td{padding:6px 8px;font-size:.9em;letter-spacing:0;white-space:nowrap}
+.ubi-pub-summary .bank-info-table td.card-value{width:1%}
+.ubi-tick-ok{color:#7fff7f;font-weight:700}
+.ubi-tick-bad{color:#ff8a8a;font-weight:700}
+.bank-addr-search{margin-bottom:14px}
+.bank-addresses{width:100%;border-collapse:collapse}
+.bank-addresses th,.bank-addresses td{text-align:left;padding:8px 10px;border-bottom:1px solid #333;vertical-align:middle}
+.bank-addresses th{font-size:.85em;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.bank-addresses .delete-btn{white-space:nowrap}
+.bank-addresses td:last-child,.bank-addresses td:nth-child(4){white-space:nowrap}
+.bank-addresses td:nth-child(3){min-width:290px}
+.bank-address-code{font-family:monospace;font-size:1em;word-break:break-all}
+.bank-summary .module-stats-line{margin:0 0 10px;padding:0 !important;background:transparent !important;border:0 !important;box-shadow:none;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:.72em;white-space:nowrap;text-transform:uppercase}
+.bank-addresses .addr-del{margin:0;padding:0;background:transparent !important;border:0 !important;box-shadow:none}
+.ubi-pub-card form{margin:0;padding:0;background:transparent !important;border:0 !important;box-shadow:none}
+@media (max-width:900px){.addr-cards.ubi-pub-cards{grid-template-columns:1fr}}
+.ubi-pub-card .ubi-status-line{gap:6px}
+.wallet-line-link:hover .wallet-address{background:rgba(0,0,0,.4)}
+.addr-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.addr-card{display:flex;flex-direction:column;gap:10px;background:#1e1f23 !important;border:1px solid #333 !important;border-radius:10px;padding:14px !important;margin:0;box-shadow:none;overflow:visible}
+.addr-card-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
+.addr-card .wallet-line{margin:0}
+.addr-card-owner{margin:0}
+.addr-card .addr-del{margin:0;padding:0;background:transparent;border:0;box-shadow:none;display:flex;justify-content:flex-end}
 .larp-sign-large{width:180px;height:180px;object-fit:cover;border-radius:8px;border:2px solid #FFA500;display:block}
 .larp-sign-mini-block{display:inline-block;line-height:0;margin:6px 0;background:transparent !important;border:0 !important;padding:0 !important;width:64px}
 .larp-sign-mini{width:64px;height:64px;object-fit:cover;border-radius:50%;border:2px solid #FFA500;display:block}
@@ -6414,7 +6414,7 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .pm-exposition-lifespan-green{background:#0e2a16;color:#9aff9a;border-color:#3a7f4c}
 .pm-exposition-lifespan-orange{background:#2a1f10;color:#ffb84d;border-color:#a37a34}
 .pm-exposition-lifespan-red{background:#2a0e0e;color:#ff7f7f;border-color:#b04040}
-.jobs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+.jobs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(300px,calc((100% - 40px)/3)),1fr));gap:20px}
 .blogs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(300px,calc((100% - 40px)/3)),1fr));gap:20px}
 .jobs-grid .tribe-card,.tribe-grid .tribe-card{margin-bottom:0}
 .tribe-card .card-comments-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
@@ -6479,8 +6479,6 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .post-card,
 .mention-card,
 .trending-card,
-.bank-claim-card,
-.addr-list-card,
 .shop-product-card,
 .cv-item,
 .transfer-item,
@@ -6793,7 +6791,7 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .industry-hero-image,.tribe-card-hero-image{max-width:100%;height:auto;border-radius:6px}
 .industry-search{margin:8px 0}
 .industry-card-noimage{display:flex;align-items:center;justify-content:center;min-height:120px;font-size:48px;opacity:.5}
-.industry-bot-notification .pm-title,.housing-bot-notification .pm-title{margin-top:4px}
+.industry-bot-notification .pm-title,.housing-bot-notification .pm-title,.banking-bot-notification .pm-title{margin-top:4px}
 .industry-table{width:100%;border-collapse:collapse;margin:8px 0}
 .industry-table th,.industry-table td{text-align:left;padding:6px 8px;border-bottom:1px solid rgba(128,128,128,.3)}
 .industry-contrib-form{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}

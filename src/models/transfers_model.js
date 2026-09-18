@@ -31,6 +31,13 @@ const normalizeCategory = (raw) => {
 module.exports = ({ cooler }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
+  const ubiEpochOf = (c) => {
+    const tags = Array.isArray(c.tags) ? c.tags.map(t => String(t)) : []
+    const fromTag = tags.find(t => /^epoch:\d{4}-\d{2}$/i.test(t))
+    if (fromTag) return fromTag.slice(6)
+    const m = String(c.concept || "").match(/(\d{4}-\d{2})/)
+    return m ? m[1] : ""
+  }
 
   const getAllMessages = async (ssbClient) =>
     readTyped(ssbClient, TRANSFER_TYPES, { limit: logLimit })
@@ -72,8 +79,8 @@ module.exports = ({ cooler }) => {
           child.set(c.replaces, k)
         }
         const tags = Array.isArray(c.tags) ? c.tags.map(t => String(t).toUpperCase()) : []
-        if (tags.includes("UBI") && c.to && c.concept) {
-          const key = `${c.to}::${c.concept}`
+        if (tags.includes("UBI") && !tags.includes("REBALANCE") && c.to && c.concept) {
+          const key = `${c.to}::${ubiEpochOf(c) || c.concept}`
           if (v.author === c.from) ubiByPub.set(key, k)
           else ubiByUser.set(key, k)
         }
@@ -92,8 +99,8 @@ module.exports = ({ cooler }) => {
       if (tomb.has(k)) continue
       const claimantId = v.author
       const epochId = c.epochId || ""
-      const concept = `UBI ${epochId} ${claimantId}`.trim()
-      const key = `${claimantId}::${concept}`
+      const concept = `UBI - ${epochId}`.trim()
+      const key = `${claimantId}::${epochId || concept}`
       if (ubiByPub.has(key) || ubiByUser.has(key)) continue
       const synthetic = {
         type: "transfer",

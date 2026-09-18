@@ -43,6 +43,16 @@ describe('banking: a restored identity is not disturbed', (t) => {
     await A.use('banking').getUserEngagementScore(A.keypair.id);
     ok(net.log.length >= before, 'and once there is a history the score may be published');
   });
+
+  t('own volume has diminishing returns: 40 posts in a day score far below 40 times one post', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    A.node.publish({ type: 'post', text: 'one' }, () => {});
+    const one = await A.use('banking').getUserEngagementScore(A.keypair.id);
+    for (let i = 0; i < 39; i++) A.node.publish({ type: 'post', text: `spam ${i}` }, () => {});
+    const many = await A.use('banking').getUserEngagementScore(A.keypair.id);
+    ok(many >= one, 'more activity never lowers the score');
+    ok(many < one * 40, `40 posts scored ${many}, one post scored ${one}`);
+  });
 });
 
 describe('banking: claims and epochs (no RPC)', (t) => {
@@ -79,10 +89,24 @@ describe('banking: pub state', (t) => {
     eq(typeof isPub, 'boolean');
   });
 
-  t('getConfiguredPubId returns string or null', async () => {
+  t('discoverUbiPub returns the announced PUB shape', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const pid = A.use('banking').getConfiguredPubId();
-    ok(typeof pid === 'string' || pid === null || pid === undefined);
+    const found = await A.use('banking').discoverUbiPub();
+    ok(typeof found.pubId === 'string');
+    eq(typeof found.available, 'boolean');
+  });
+
+  t('listUbiPubs returns an array of announcements', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const pubs = await A.use('banking').listUbiPubs();
+    ok(Array.isArray(pubs));
+  });
+
+  t('rebalance and incoming confirmation are no-ops outside PUB mode', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const b = A.use('banking');
+    eq((await b.rebalanceUbiPools()).length, 0);
+    eq((await b.confirmIncomingTransfers()).length, 0);
   });
 
   t('DEFAULT_RULES exported', async () => {
@@ -145,3 +169,95 @@ describe('banking: industry share belongs to members', (t) => {
     eq((await A.use('banking').listBanking('overview', A.keypair.id)).summary.industryBalance, 40, 'the member keeps 4h x 10 ECO/h');
   });
 });
+
+describe('banking: address book (no RPC)', (t) => {
+  t('an entry with a label is stored locally and listed with it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const b = A.use('banking');
+    const label = `Bob ${Date.now()}`;
+    eq(b.addAddressBookEntry({ label, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42E' }).status, 'added');
+    const entry = b.listAddressBook().find(e => e.label === label);
+    ok(entry, 'the entry is listed');
+    eq(entry.source, 'book');
+    eq(entry.address, 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42E');
+    eq(await b.getUserAddress(A.keypair.id), null, 'the book never becomes the payment address of the viewer');
+    eq(b.removeAddressBookEntry(entry.entryId).status, 'deleted');
+    ok(!b.listAddressBook().some(e => e.entryId === entry.entryId));
+  });
+
+  t('the same label + address is not stored twice and a bad address is rejected', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const b = A.use('banking');
+    const label = `Alice ${Date.now()}`;
+    eq(b.addAddressBookEntry({ label, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42F' }).status, 'added');
+    eq(b.addAddressBookEntry({ label, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42F' }).status, 'exists');
+    eq(b.addAddressBookEntry({ label, address: 'not-an-address' }).status, 'invalid');
+    const entry = b.listAddressBook().find(e => e.label === label);
+    b.removeAddressBookEntry(entry.entryId);
+  });
+});
+
+describe('banking: UBI rules (no RPC)', (t) => {
+  t('the floor is always paid and taxes only eat the surplus', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const { ubiAmountFor, DEFAULT_RULES } = A.use('banking');
+    const floor = DEFAULT_RULES.caps.floor_user;
+    eq(ubiAmountFor({ pool: 0, userW: 1, totalW: 1, score: 0, ecoTax: 5, archTax: 5 }), floor, 'no pool: the floor, taxes cannot push it below');
+    eq(ubiAmountFor({ pool: 10, userW: 1, totalW: 1, score: 0, ecoTax: 2, archTax: 1 }), 7, 'gross 10 = floor 1 + surplus 9; taxes 3 leave 6 + floor');
+    eq(ubiAmountFor({ pool: 10, userW: 1, totalW: 1, score: 0, ecoTax: 50, archTax: 50 }), floor, 'taxes above the surplus stop at the floor');
+    eq(ubiAmountFor({ pool: 100000, userW: 6, totalW: 1, score: 0, ecoTax: 0, archTax: 0 }), DEFAULT_RULES.caps.cap_user_epoch, 'the per-user cap holds');
+  });
+
+  t('a feed younger than 30 days is not eligible to be paid, even with a published address', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    await A.use('banking').addAddress({ userId: A.keypair.id, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42G' });
+    A.node.publish({ type: 'post', text: 'hello' }, () => {});
+    const el = await A.use('banking').isEligibleClaimant(A.keypair.id);
+    eq(el.ok, false);
+    ok(/30 days/.test(el.reason), el.reason);
+  });
+
+  t('interactions from a fresh feed do not raise anyone\'s karma', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    let postKey = null;
+    A.node.publish({ type: 'post', text: 'content by A' }, (err, msg) => { postKey = msg && msg.key; });
+    const before = await A.use('banking').getUserEngagementScore(A.keypair.id);
+    for (let i = 0; i < 5; i++) B.node.publish({ type: 'vote', vote: { link: postKey, value: 1 } }, () => {});
+    B.node.publish({ type: 'contact', contact: A.keypair.id, following: true }, () => {});
+    const after = await A.use('banking').getUserEngagementScore(A.keypair.id);
+    eq(after, before, 'votes and follows from a feed younger than 30 days are ignored');
+  });
+
+  t('PUB discovery prefers an available PUB over a fresher unavailable one', async () => {
+    const net = makeNetwork(); const P1 = makePeer(net); const P2 = makePeer(net); const A = makePeer(net); A.setActor();
+    P2.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, timestamp: Date.now() - 60000 }, () => {});
+    P1.node.publish({ type: 'pubAvailability', coin: 'ECO', available: false, timestamp: Date.now() }, () => {});
+    const found = await A.use('banking').discoverUbiPub();
+    eq(found.pubId, P2.keypair.id);
+    eq(found.available, true);
+  });
+
+  t('with nobody announcing, the default PUB from the invite file is used, marked unavailable', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const raw = require('../../../src/configs/snh-invite-code.json');
+    const snh = (String(raw.code).match(/(@[A-Za-z0-9+/]+={0,2}\.ed25519)/) || [])[1];
+    const found = await A.use('banking').discoverUbiPub();
+    eq(found.pubId, snh);
+    eq(found.available, false);
+  });
+
+  t('the UBI tab reports each PUB\'s last payment from its UBI transfers', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const A = makePeer(net); A.setActor();
+    P.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 300, timestamp: Date.now() }, () => {});
+    const now = new Date().toISOString();
+    P.node.publish({ type: 'transfer', from: P.keypair.id, to: A.keypair.id, concept: 'OASIS UBI Payment · 2026-09', amount: '2.500000', createdAt: now, updatedAt: now, deadline: null, confirmedBy: [P.keypair.id], status: 'UNCONFIRMED', tags: ['UBI'], opinions: {}, opinions_inhabitants: [], txid: 'a'.repeat(64) }, () => {});
+    const pubs = await A.use('banking').listUbiPubsDetailed();
+    const row = pubs.find(p => p.pubId === P.keypair.id);
+    ok(row, 'the announcing PUB is listed');
+    eq(row.balance, 300);
+    eq(row.payouts, 1);
+    eq(row.paidOut, 2.5);
+    ok(row.lastPayoutAt > 0);
+  });
+});
+

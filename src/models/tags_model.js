@@ -1,7 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped } = require('./typed_log');
+const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, padsModel, tribesModel }) => {
@@ -109,7 +109,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
     async listTags(filter = 'all', search = '') {
       const ssbClient = await openSsb();
 
-      const messages = await readTyped(ssbClient, [], { limit: logLimit, withWindow: true });
+      const messages = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true });
 
       const tombstoned = buildValidatedTombstoneSet(messages);
 

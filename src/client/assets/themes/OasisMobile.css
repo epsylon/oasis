@@ -1373,6 +1373,7 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   font-weight: bold !important;
 }
 .update-download-link {
+  display: inline-block !important;
   flex: 1 1 100% !important;
   width: auto !important;
   max-width: fit-content !important;
@@ -1415,4 +1416,238 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .update-banner .welcome-banner-close {
   flex: 0 0 auto !important;
   margin-left: 0 !important;
+}
+.wallet-error-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+  margin: 4px 0 !important;
+  padding: 2px !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+.wallet-error-actions .update-download-link {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+}
+.update-download-link.wallet-settings-link {
+  background: transparent !important;
+  border: 1px solid #FFA500 !important;
+  color: #FFA500 !important;
+  padding: 10px 17px !important;
+}
+.wallet-history,
+.bank-info-table {
+  display: table !important;
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+}
+.wallet-history th,
+.wallet-history td,
+.bank-info-table th,
+.bank-info-table td {
+  padding: 8px 6px !important;
+  font-size: 13px !important;
+  letter-spacing: normal !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  vertical-align: middle !important;
+}
+.wallet-history th:nth-child(1), .wallet-history td:nth-child(1) { width: 14% !important; }
+.wallet-history th:nth-child(2), .wallet-history td:nth-child(2) { width: 24% !important; }
+.wallet-history th:nth-child(3), .wallet-history td:nth-child(3) { width: 20% !important; }
+.wallet-history th:nth-child(4), .wallet-history td:nth-child(4) { width: 25% !important; }
+.wallet-history th:nth-child(5), .wallet-history td:nth-child(5) { width: 17% !important; }
+.wallet-history td.tcell-ellipsis {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.bank-summary {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+.bank-info-table th:first-child,
+.bank-info-table td:first-child {
+  width: 54% !important;
+  font-weight: bold !important;
+}
+.bank-info-table td:last-child {
+  text-align: right !important;
+}
+.bank-allocs,
+.bank-epochs {
+  display: block !important;
+  width: 100% !important;
+  overflow-x: auto !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
+}
+.bank-allocs th, .bank-allocs td,
+.bank-epochs th, .bank-epochs td {
+  padding: 6px 8px !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  white-space: nowrap !important;
+}
+.wallet-qr-img {
+  display: block !important;
+  width: 100% !important;
+  max-width: 280px !important;
+  height: auto !important;
+  margin: 0 auto !important;
+}
+.wallet-section {
+  padding: 12px !important;
+}
+.wallet-section > h2 {
+  margin: 14px 0 6px 0 !important;
+  color: #FFA300 !important;
+  font-size: 15px !important;
+}
+.wallet-section > h2:first-child {
+  margin-top: 0 !important;
+}
+.wallet-section .wallet-address,
+.wallet-section .div-center {
+  margin: 0 !important;
+  padding: 12px !important;
+}
+.wallet-section .wallet-address h2.element {
+  margin: 0 !important;
+  font-family: monospace !important;
+  font-size: 15px !important;
+  line-height: 1.4 !important;
+  word-break: break-all !important;
+}
+.wallet-section .div-center > h2 {
+  margin: 0 !important;
+  font-size: 22px !important;
+  text-align: center !important;
+}
+.wallet-section .div-center + .div-center {
+  margin-top: 12px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+}
+.wallet-form-button-group-center {
+  display: flex !important;
+  gap: 8px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+}
+.wallet-form-button-group-center form {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+.wallet-form-button-group-center button {
+  width: 100% !important;
+}
+.bank-eco-chart-zoom-link {
+  display: block !important;
+  width: 100% !important;
+}
+.bank-eco-chart-lightbox .bank-eco-chart-canvas-zoom {
+  flex: 0 0 auto !important;
+  width: 96vh !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  transform: rotate(90deg) !important;
+}
+.bank-eco-chart-lightbox .bank-eco-chart-svg {
+  display: block !important;
+  width: 96vh !important;
+  height: auto !important;
+  max-height: 96vw !important;
+}
+.bank-eco-chart-lightbox .lightbox-close {
+  top: 40px !important;
+  right: 12px !important;
+  z-index: 2 !important;
+}
+.bank-eco-chart-lightbox .bank-eco-chart-canvas-zoom {
+  position: relative !important;
+  z-index: 1 !important;
+}
+.subscription-actions .tribe-action-btn {
+  white-space: nowrap !important;
+  font-size: .8em !important;
+  padding: 4px 10px !important;
+  width: auto !important;
+}
+.bank-addresses .delete-btn {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+.bank-addresses,
+.bank-addresses tbody,
+.bank-addresses tr,
+.bank-addresses td {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.bank-addresses thead {
+  display: none !important;
+}
+.bank-addresses tr {
+  margin: 0 0 8px 0 !important;
+  padding: 10px !important;
+  border: 1px solid #444444 !important;
+  border-radius: 6px !important;
+  background: #222222 !important;
+}
+.bank-addresses td {
+  padding: 3px 0 !important;
+  border: 0 !important;
+  background: none !important;
+  font-size: 13px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.bank-addresses td:nth-child(2) {
+  font-family: monospace !important;
+}
+.bank-addresses td:last-child {
+  padding: 8px 1px 1px 1px !important;
+  overflow: visible !important;
+  white-space: normal !important;
+}
+.bank-addresses td a,
+.bank-addresses td .user-link {
+  display: inline !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  color: #FFA300 !important;
+  font-size: 13px !important;
+}
+.bank-addresses {
+  border: 0 !important;
+  background: none !important;
+}
+.bank-addresses .row-actions,
+.bank-addresses .addr-del {
+  overflow: visible !important;
+  padding: 1px !important;
 }
