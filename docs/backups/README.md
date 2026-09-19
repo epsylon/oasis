@@ -37,6 +37,8 @@ Importing a key marks that identity as already known on the device: no welcome m
 - **Scope ONLY MY CONTENT**: only messages you authored and the blobs they reference.
 - **Since**: optional date; only messages published after it.
 
+Either scope also carries everything Oasis keeps for you outside the log: the whole of `~/.ssb/oasis/` — the keyrings that open your tribes, chats and pads, your favourites, your agenda, the banking state, the linked Multiverse accounts. [What each of those files is](../devs/inventory.md). A restore writes them back in place, keeping any current one as `.before-restore`. Your identity is **not** in the file: `secret` travels on its own, through RECOVERY or EXPORT KEYS.
+
 The file is compressed and then encrypted with AES-256-GCM. Nothing inside is readable without the password. "Everything" copies can be large on a long-lived device; "only my content" is usually a few megabytes and is the right choice to carry your own feed to another device.
 
 ## 4. Restore

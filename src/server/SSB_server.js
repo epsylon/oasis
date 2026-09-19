@@ -117,7 +117,16 @@ const isCorruptStoreError = (err) => {
 
 const isDebug = () => process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
 
+const isPortInUseError = (err) => String((err && err.code) || '') === 'EADDRINUSE';
+
 const handleFatal = (err) => {
+  if (isPortInUseError(err)) {
+    console.log('');
+    console.log('Another Oasis instance is already running on this device. Close the other instance (or kill the process) and try again.');
+    if (isDebug()) console.log(`Detail: ${String((err && err.message) || err)}`);
+    console.log('');
+    process.exit(1);
+  }
   if (isLockError(err)) {
     console.log('');
     console.log('Another Oasis instance is already running on this device. Close the other instance (or kill the process) and try again.');

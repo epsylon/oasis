@@ -350,10 +350,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       headerText = `[SHOP · PRODUCT]`;
     } else if (type === 'pad') {
       headerText = `[PAD · ${String(i18n.padNew || 'NEW').toUpperCase()}]`;
-    } else if (type === 'ubiClaim') {
-      headerText = `[UBI · CLAIM]`;
-    } else if (type === 'ubiclaimresult') {
-      headerText = `[UBI · RESULT]`;
     } else if (type === 'wikiPage') {
       headerText = `[${String(i18n.typeWiki || 'WIKI').toUpperCase()}]`;
     } else if (type === 'emergencyUpdate') {
@@ -453,82 +449,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       );
     }
 
-    if (type === 'bankClaim') {
-      const { amount, epochId, allocationId, txid } = content;
-      const amt = Number(amount || 0);
-      cardBody.push(
-        div({ class: 'card-section banking-claim' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankUbiReceived + ':' ),
-            span({ class: 'card-value' }, `${amt.toFixed(6)} ECO`)
-          ),
-          epochId ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankEpochShort + ':' ),
-            span({ class: 'card-value' }, epochId)
-          ) : "",
-          allocationId ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankAllocId + ':' ),
-            span({ class: 'card-value' }, allocationId)
-          ) : "",
-          txid ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankTx + ':' ),
-            a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${txid}`, target: '_blank' }, txid)
-          ) : ""
-        )
-      );
-    }
 
-    if (type === 'ubiClaim') {
-      const { pubId, amount, epochId, claimedAt } = content;
-      const amt = Number(amount || 0);
-      const inhabitantId = action.author || '';
-      cardBody.push(
-        div({ class: 'card-section banking-ubi' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankUbiClaimedAmount + ':'),
-            span({ class: 'card-value' }, `${amt.toFixed(6)} ECO`)
-          ),
-          epochId ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankEpochShort + ':'),
-            span({ class: 'card-value' }, epochId)
-          ) : "",
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.status + ':'),
-            span({ class: 'card-value' }, 'UNCONFIRMED')
-          ),
-          claimedAt ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.date + ':'),
-            span({ class: 'card-value' }, moment(claimedAt).format('YYYY-MM-DD HH:mm:ss'))
-          ) : ""
-        )
-      );
-    }
 
-    if (type === 'ubiclaimresult') {
-      const { txid, userId: inhabitantId, amount, epochId } = content;
-      const pubAuthor = action.author || action.value?.author || '';
-      const amt = Number(amount || 0);
-      cardBody.push(
-        div({ class: 'card-section banking-ubi' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankUbiPub + ':'),
-            span({ class: 'card-value' }, pubAuthor)
-          ),
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankUbiInhabitant + ':'),
-            span({ class: 'card-value' }, inhabitantId || '')
-          ),
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankUbiClaimedAmount + ':'),
-            span({ class: 'card-value' }, `${amt.toFixed(6)} ECO`)
-          ),
-          txid ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankTx + ':'),
-            a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${txid}`, target: '_blank' }, txid)
-          ) : ""
-        )
-      );
-    }
 
     if (type === 'pixelia') {
       const { author } = content;
@@ -2078,8 +2000,6 @@ function getViewDetailsAction(type, action) {
     case 'industryAllocation': return action.content?.target ? `/industry/build/${encodeURIComponent(action.content.target)}` : '/industry?filter=BUILDS';
     case 'report':     return `/reports/${id}`;
     case 'bankWallet': return `/wallet`;
-    case 'bankClaim':  return `/banking${action.content?.epochId ? `/epoch/${encodeURIComponent(action.content.epochId)}` : ''}`;
-    case 'ubiClaim':   return action.content?.transferId ? `/transfers/${encodeURIComponent(action.content.transferId)}` : `/transfers?filter=ubi`;
     default:           return `/activity`;
   }
 }
@@ -2118,7 +2038,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'campaign',  label: i18n.typeCampaign },
     { type: 'forum',     label: i18n.typeForum },
     { type: 'map',       label: i18n.typeMap },
-    { type: 'banking',   label: i18n.typeBanking },
     { type: 'market',    label: i18n.typeMarket },
     { type: 'schoolCourse', label: i18n.typeSchool },
     { type: 'project',   label: i18n.typeProject },
@@ -2139,7 +2058,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const GROUP_SUBTYPES = {
     parliament: ['parliamentCandidature', 'parliamentTerm', 'parliamentProposal', 'parliamentRevocation', 'parliamentLaw'],
     courts:     ['courtsCase', 'courtsNomination', 'courtsNominationVote'],
-    banking:    ['bankClaim', 'ubiClaim'],
     task:       ['task', 'taskAssignment'],
     votes:      ['votes', 'poll'],
     shop:       ['shop', 'shopProduct'],
@@ -2170,7 +2088,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     const now = Date.now();
     filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
   } else if (filter === 'banking') {
-    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'bankClaim' || action.type === 'ubiClaim'));
+    filteredActions = [];
   } else if (filter === 'tribe') {
     filteredActions = actions.filter(action => action.type === 'tribe');
   } else if (filter === 'larp') {

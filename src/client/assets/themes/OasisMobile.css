@@ -523,6 +523,7 @@ h3 { font-size: 1em !important; }
 .filter-group,
 .activity-filter-grid,
 .activity-sub-filter,
+.bank-range-tabs,
 .filters .ui-toolbar {
   display: flex !important;
   flex-direction: row !important;
@@ -904,6 +905,7 @@ h3 { font-size: 1em !important; }
 .activity-filter-grid,
 .activity-filters,
 .activity-sub-filter,
+.bank-range-tabs,
 .filters .ui-toolbar {
   display: flex !important;
   flex-direction: row !important;
@@ -1269,6 +1271,7 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .card-section-action { padding: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; justify-content: center !important; }
 .card-section-action .keep-reading-link { margin: 6px auto !important; }
 
+.bank-range-tabs .filter-btn,
 .tribe-mode-buttons .filter-btn, .ui-toolbar--filters .filter-btn, .mode-buttons .filter-btn, .mode-buttons-row .filter-btn, .mode-buttons-cols .filter-btn, .filters .filter-btn, .inhabitant-action .filter-btn, .activity-filter-grid .filter-btn, .activity-filter-col .filter-btn, .activity-sub-filter .filter-btn {
   min-height: 0 !important;
   height: auto !important;
@@ -1281,6 +1284,7 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   line-height: 1.5 !important;
   font-weight: normal !important;
 }
+.bank-range-tabs .filter-btn.active,
 .tribe-mode-buttons .filter-btn.active, .ui-toolbar--filters .filter-btn.active, .mode-buttons .filter-btn.active, .mode-buttons-row .filter-btn.active, .mode-buttons-cols .filter-btn.active, .filters .filter-btn.active, .inhabitant-action .filter-btn.active, .activity-filter-grid .filter-btn.active, .activity-filter-col .filter-btn.active, .activity-sub-filter .filter-btn.active {
   background: #ffa300 !important;
   border-color: #ffa300 !important;
@@ -1417,6 +1421,21 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   flex: 0 0 auto !important;
   margin-left: 0 !important;
 }
+.update-banner.ai-suggestion-banner {
+  gap: 6px !important;
+}
+.update-banner.ai-suggestion-banner .update-banner-icon {
+  flex: 0 0 auto !important;
+  width: auto !important;
+}
+.update-banner.ai-suggestion-banner .update-banner-link {
+  flex: 1 1 auto !important;
+  margin-left: 0 !important;
+  min-width: 0 !important;
+  text-align: left !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
 .wallet-error-actions {
   display: flex !important;
   flex-wrap: wrap !important;
@@ -1519,11 +1538,24 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   padding: 12px !important;
 }
 .wallet-section .wallet-address h2.element {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
   margin: 0 !important;
+  padding: 0 !important;
   font-family: monospace !important;
-  font-size: 15px !important;
+  font-size: 13px !important;
+  letter-spacing: 0 !important;
   line-height: 1.4 !important;
+  text-align: center !important;
+  white-space: normal !important;
   word-break: break-all !important;
+  overflow-wrap: anywhere !important;
+  overflow: visible !important;
+}
+.wallet-section .wallet-address {
+  overflow: visible !important;
 }
 .wallet-section .div-center > h2 {
   margin: 0 !important;
@@ -1592,6 +1624,15 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   font-size: .8em !important;
   padding: 4px 10px !important;
   width: auto !important;
+  min-height: 0 !important;
+  height: 32px !important;
+}
+.subscription-actions .btn-pm {
+  min-height: 0 !important;
+  height: 32px !important;
+  width: 32px !important;
+  padding: 0 !important;
+  font-size: 14px !important;
 }
 .bank-addresses .delete-btn {
   display: block !important;
@@ -1650,4 +1691,17 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .bank-addresses .addr-del {
   overflow: visible !important;
   padding: 1px !important;
+}
+.bank-range-tabs {
+  gap: 6px !important;
+  justify-content: flex-start !important;
+  margin: 0 0 10px 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+}
+.bank-range-tabs .filter-btn {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  text-decoration: none !important;
 }

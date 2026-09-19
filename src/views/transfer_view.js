@@ -212,6 +212,8 @@ const trChipFor = (normalizedFilter, censusT) => (mode) => {
   if (!Array.isArray(censusT)) return true;
   const stT = (t) => String(t.status || "").toUpperCase()
   if (mode === "mine") return censusT.some(t => t.from === userId || t.to === userId)
+  if (mode === "mine-pending") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "UNCONFIRMED")
+  if (mode === "mine-confirmed") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "CLOSED")
   if (mode === "ubi") return censusT.some(t => safeArr(t.tags).some(tag => String(tag).toUpperCase() === "UBI"))
   if (mode === "economic") return censusT.some(t => categoryOf(t) === "ECONOMIC")
   if (mode === "time") return censusT.some(t => categoryOf(t) === "TIME")
@@ -240,6 +242,8 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
 
   let filtered =
     normalizedFilter === "mine"        ? list.filter(t => t.from === userId || t.to === userId) :
+    normalizedFilter === "mine-pending" ? list.filter(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "UNCONFIRMED") :
+    normalizedFilter === "mine-confirmed" ? list.filter(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "CLOSED") :
     normalizedFilter === "ubi"         ? list.filter(t => safeArr(t.tags).some(tag => String(tag).toUpperCase() === "UBI")) :
     normalizedFilter === "pending"     ? list.filter(t => String(t.status || "").toUpperCase() === "UNCONFIRMED" && t.to === userId && !safeArr(t.confirmedBy).includes(userId)) :
     normalizedFilter === "top"         ? list.filter(t => String(t.status || "").toUpperCase() === "CLOSED") :
@@ -319,7 +323,14 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
           ...(trChip("top") ? [button({ type: "submit", name: "filter", value: "top", class: normalizedFilter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterTop).toUpperCase())] : []),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.transfersCreateButton)
-        )
+        ),
+        ["mine", "mine-pending", "mine-confirmed"].includes(normalizedFilter)
+          ? div({ class: "transfers-subfilters" },
+              span({ class: "activity-subchip-label" }, "\u21b3"),
+              ...[["mine", i18n.transfersFilterAll], ["mine-pending", i18n.transfersFilterMinePending], ["mine-confirmed", i18n.transfersFilterMineConfirmed]]
+                .map(([mode, label]) => a({ href: `/transfers?filter=${mode}`, class: normalizedFilter === mode ? "activity-chip active" : "activity-chip" }, String(label).toUpperCase()))
+            )
+          : null
       )
     ),
     section(
@@ -436,7 +447,8 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
   const isExpired = dl && dl.isValid() ? dl.isBefore(moment()) : false
   const tags = Array.isArray(transfer.tags) ? transfer.tags.map(t => String(t).toUpperCase()) : []
   const isUbi = tags.includes("UBI")
-  const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired && !tags.includes("PENDING")
+  const settledUbi = isUbi && /^[0-9a-f]{64}$/i.test(String(transfer.txid || ""))
+  const showConfirm = isUnconfirmed && transfer.to === userId && !confirmedBy.includes(userId) && !isExpired && !tags.includes("PENDING") && !settledUbi
 
   const tagsNode = renderTags(transfer.tags)
   const cat = categoryOf(transfer)

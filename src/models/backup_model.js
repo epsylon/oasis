@@ -14,6 +14,23 @@ const TAG_LEN = 16;
 const REC_META = 1;
 const REC_MSG = 2;
 const REC_BLOB = 3;
+const REC_FILE = 4;
+
+const stateRoot = () => {
+  try { return path.join(require('../configs/state-manager').ssbDir(), 'oasis'); } catch (_) { return null; }
+};
+
+const listStateFiles = (dir, base = dir) => {
+  const out = [];
+  let entries = [];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return out; }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listStateFiles(full, base));
+    else if (entry.isFile() && !entry.name.endsWith('.migrated')) out.push({ rel: path.relative(base, full), full });
+  }
+  return out;
+};
 const BLOB_RE = /&[A-Za-z0-9+/=]{44}\.sha256/g;
 const DEFAULT_REMINDER_DAYS = 30;
 const REMINDER_OPTIONS = [7, 30, 90, 0];
@@ -90,13 +107,7 @@ const decryptBuffer = (data, password) => {
 
 const secretPathOf = () => path.join(os.homedir(), '.ssb', 'secret');
 
-const stateFile = () => {
-  try {
-    const p = require('../server/ssb_config').statePath('backup.json');
-    if (p) return p;
-  } catch (_) {}
-  return path.join(os.homedir(), '.ssb', 'oasis-backup.json');
-};
+const stateFile = () => require('../configs/state-manager').statePath('oasis-backup.json');
 const readState = () => {
   try { return JSON.parse(fs.readFileSync(stateFile(), 'utf8')) || {}; } catch (_) { return {}; }
 };
@@ -287,6 +298,19 @@ module.exports = ({ cooler }) => {
       for (const m of picked) {
         await writeChunk(gzip, record(REC_MSG, Buffer.from(JSON.stringify({ key: m.key, value: m.value, timestamp: m.timestamp }), 'utf8')));
       }
+      let files = 0;
+      const root = stateRoot();
+      if (root) {
+        for (const f of listStateFiles(root)) {
+          let data = null;
+          try { data = fs.readFileSync(f.full); } catch (_) { continue; }
+          const head = Buffer.from(JSON.stringify({ rel: f.rel.split(path.sep).join('/'), size: data.length }), 'utf8');
+          const lenBuf = Buffer.alloc(4);
+          lenBuf.writeUInt32BE(head.length, 0);
+          await writeChunk(gzip, record(REC_FILE, Buffer.concat([lenBuf, head, data])));
+          files += 1;
+        }
+      }
       let blobs = 0;
       if (options.withBlobs) {
         for (const id of blobIds) {
@@ -358,6 +382,11 @@ module.exports = ({ cooler }) => {
           const header = JSON.parse(payload.slice(4, 4 + hl).toString('utf8'));
           await onRecord({ type: 'blob', id: header.id, data: payload.slice(4 + hl), read, total });
         }
+        else if (type === REC_FILE) {
+          const hl = payload.readUInt32BE(0);
+          const header = JSON.parse(payload.slice(4, 4 + hl).toString('utf8'));
+          await onRecord({ type: 'file', rel: header.rel, data: payload.slice(4 + hl), read, total });
+        }
       };
       try {
         for await (const chunk of gunzip) {
@@ -382,7 +411,7 @@ module.exports = ({ cooler }) => {
       const seqKey = (v) => `${v.author}::${v.sequence}`;
       const existing = new Map();
       for (const m of await readLog(ssbClient)) if (m && m.value) existing.set(seqKey(m.value), m.key);
-      const stats = { messages: 0, skipped: 0, failed: 0, forked: 0, blobs: 0, blobsSkipped: 0, percent: 0, forks: [], errors: [], meta: null };
+      const stats = { messages: 0, skipped: 0, failed: 0, forked: 0, blobs: 0, blobsSkipped: 0, files: 0, percent: 0, forks: [], errors: [], meta: null };
       const forkAuthors = new Map();
       const errorCounts = new Map();
       const noteError = (err) => {
@@ -426,6 +455,19 @@ module.exports = ({ cooler }) => {
           if (!rec.msg || !rec.msg.value || !rec.msg.value.author) { stats.failed += 1; noteError('malformed message'); report(); return; }
           const res = await tryAdd(rec.msg);
           if (res !== true) deferred.push({ msg: rec.msg, err: res });
+          report();
+          return;
+        }
+        if (rec.type === 'file') {
+          const root = stateRoot();
+          if (!root || !rec.rel || rec.rel.includes('..')) { stats.failed += 1; noteError('state file rejected'); report(); return; }
+          try {
+            const target = path.join(root, ...String(rec.rel).split('/'));
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            if (fs.existsSync(target)) { try { fs.copyFileSync(target, `${target}.before-restore`); } catch (_) {} }
+            fs.writeFileSync(target, rec.data);
+            stats.files += 1;
+          } catch (_) { stats.failed += 1; noteError('state file could not be written'); }
           report();
           return;
         }
@@ -483,7 +525,7 @@ module.exports = ({ cooler }) => {
     async rebuildIndexes() {
       const started = Date.now();
       const ssbClient = await openSsb();
-      const indexDir = path.join(os.homedir(), '.ssb', 'flume');
+      const indexDir = path.join(require('../configs/state-manager').ssbDir(), 'flume');
       const measure = (dir) => {
         let files = 0, bytes = 0;
         const walk = (d) => {

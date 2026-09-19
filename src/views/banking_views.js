@@ -77,10 +77,23 @@ const legendLayout = (labels, x0, maxX) => {
   return rows;
 };
 
-const buildSeriesChartSvg = ({ series = [], xLabels = [], empty = "", yDecimals = 4 }) => {
+const axisDecimals = (max, fallback) => {
+  const m = Math.abs(Number(max) || 0);
+  if (m >= 10000) return 0;
+  if (m >= 100) return 2;
+  return fallback;
+};
+
+const buildSeriesChartSvg = ({ series = [], xLabels = [], empty = "", yDecimals = 4, yDomain = null }) => {
   const valid = series.filter(s => Array.isArray(s.points) && s.points.length >= 2);
   const W = 720;
-  const padL = 56, padR = 16, padT = 16;
+  const padR = 16, padT = 16;
+  const first = valid[0] ? valid[0].points.map(v => Number(v) || 0) : [0];
+  const yMax = yDomain ? Number(yDomain.max) : Math.max(...first);
+  const yMin = yDomain ? Number(yDomain.min) : Math.min(...first);
+  const decimals = axisDecimals(Math.max(Math.abs(yMax), Math.abs(yMin)), yDecimals);
+  const widestLabel = Math.max(...[yMax, yMin].map(v => v.toFixed(decimals).length));
+  const padL = Math.max(56, Math.round(widestLabel * 6.2) + 14);
   const legendRows = legendLayout(valid.map(s => s.label || ""), padL, W - padR);
   const padB = 54 + 16 * Math.max(1, legendRows.length);
   const H = 250 + padB;
@@ -94,7 +107,9 @@ const buildSeriesChartSvg = ({ series = [], xLabels = [], empty = "", yDecimals 
   }
   const lines = valid.map((s, idx) => {
     const vals = s.points.map(v => Number(v) || 0);
-    const min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1;
+    const min = yDomain ? yMin : Math.min(...vals);
+    const max = yDomain ? yMax : Math.max(...vals);
+    const range = max - min || 1;
     const stepX = plotW / (vals.length - 1);
     const pts = vals.map((v, i) => `${(padL + i * stepX).toFixed(2)},${(padT + plotH - ((v - min) / range) * plotH).toFixed(2)}`).join(" ");
     return { cls: CHART_LINE_CLASSES[idx % CHART_LINE_CLASSES.length], label: s.label || "", pts, min, max, range };
@@ -105,7 +120,7 @@ const buildSeriesChartSvg = ({ series = [], xLabels = [], empty = "", yDecimals 
     const y = padT + (plotH / yTicks) * i;
     grid.push(`<line x1="${padL}" x2="${W - padR}" y1="${y.toFixed(2)}" y2="${y.toFixed(2)}" class="bank-eco-chart-grid" />`);
     const val = lines[0].max - (lines[0].range / yTicks) * i;
-    grid.push(`<text x="${padL - 6}" y="${(y + 4).toFixed(2)}" text-anchor="end" class="bank-eco-chart-axis">${val.toFixed(yDecimals)}</text>`);
+    grid.push(`<text x="${padL - 6}" y="${(y + 4).toFixed(2)}" text-anchor="end" class="bank-eco-chart-axis">${val.toFixed(decimals)}</text>`);
   }
   const xLabelY = padT + plotH + 16;
   const [xs = "", xm = "", xe = ""] = xLabels;
@@ -160,26 +175,66 @@ const renderChartBlock = (id, title, svg) =>
     )
   );
 
+const renderRangedChart = (id, title, filterName, range, hasAnyData, svg) => {
+  if (!hasAnyData) return null;
+  return div({ class: "bank-eco-chart-block", id: `${id}-block` },
+    h2({ class: "bank-eco-chart-title" }, title),
+    renderRangeTabs(filterName, range, `${id}-block`),
+    svg ? a({ href: `#${id}`, id: `${id}-src`, class: "bank-eco-chart-zoom-link", title: i18n.bankChartZoomHint }, div({ class: "bank-eco-chart-canvas", innerHTML: svg })) : p({ class: "bank-chart-empty-note" }, i18n.bankChartNoDataYet),
+    svg ? div({ id, class: "lightbox bank-eco-chart-lightbox" }, a({ href: `#${id}-src`, class: "lightbox-close" }, "\u00d7"), div({ class: "bank-eco-chart-canvas-zoom", innerHTML: svg })) : null
+  );
+};
+
+const bucketLabel = (bucket) => bucket === "month" ? i18n.bankChartPerMonth : bucket === "day" ? i18n.bankChartPerDay : i18n.bankChartPerHour;
+const bucketXLabels = (pts, bucket) => {
+  const fmt = (x) => bucket === "month" ? moment(x.ts).format("YYYY-MM") : bucket === "day" ? moment(x.ts).format("YYYY-MM-DD") : moment(x.ts).format("YYYY-MM-DD HH:mm");
+  return pts.length ? [fmt(pts[0]), fmt(pts[Math.floor(pts.length / 2)]), fmt(pts[pts.length - 1])] : ["", "", ""];
+};
+
+const renderBucketChart = (id, title, filterName, data, field, label, decimals = 2) => {
+  const pts = Array.isArray(data && data.points) ? data.points : [];
+  const svg = pts.length >= 2 ? buildSeriesChartSvg({
+    series: [{ label: `${label} ${bucketLabel(data.bucket)}`, points: pts.map(p => Number(p[field]) || 0) }],
+    xLabels: bucketXLabels(pts, data.bucket),
+    empty: i18n.bankExchangeChartEmpty, yDecimals: decimals
+  }) : null;
+  return renderRangedChart(id, title, filterName, (data && data.range) || "today", !!(data && data.hasAnyData), svg);
+};
+
+const renderSupplyChart = (history, range, hasAnyData, totalSupply = 0) => {
+  const arr = Array.isArray(history) ? history.slice(-240) : [];
+  const total = Number(totalSupply) || 0;
+  const svg = arr.length >= 2 ? buildSeriesChartSvg({
+    series: [{ label: i18n.bankCurrentSupply, points: arr.map(s => Number(s.currentSupply) || 0) }],
+    xLabels: tsLabels(arr, "ts"),
+    empty: i18n.bankExchangeChartEmpty, yDecimals: 0,
+    yDomain: total > 0 ? { min: 0, max: total } : null
+  }) : null;
+  return renderRangedChart("eco-supply-chart", i18n.bankChartSupplyTitle, "exchange", range, !!hasAnyData, svg);
+};
+
+const renderInflationChart = (history, range, hasAnyData) => {
+  const arr = Array.isArray(history) ? history.slice(-240) : [];
+  const svg = arr.length >= 2 ? buildSeriesChartSvg({
+    series: [{ label: i18n.bankChartInflationSeries, points: arr.map(s => Number(s.inflationFactor) || 0) }],
+    xLabels: tsLabels(arr, "ts"),
+    empty: i18n.bankExchangeChartEmpty, yDecimals: 2
+  }) : null;
+  return renderRangedChart("eco-inflation-chart", i18n.bankChartInflationTitle, "exchange", range, !!hasAnyData, svg);
+};
+
 const renderUbiCharts = (charts) => {
-  const monthly = Array.isArray(charts && charts.monthly) ? charts.monthly : [];
   const pool = Array.isArray(charts && charts.pool) ? charts.pool : [];
   const empty = i18n.bankExchangeChartEmpty;
-  const out = [];
-  if (monthly.length >= 2) {
-    const m = (i) => monthly[i].month;
-    out.push(renderChartBlock("ubi-chart-monthly", i18n.bankChartUbiMonthlyTitle, buildSeriesChartSvg({
-      series: [{ label: `${i18n.bankChartUbiAmount} ${i18n.bankChartPerMonth}`, points: monthly.map(x => x.amount) }],
-      xLabels: [m(0), m(Math.floor(monthly.length / 2)), m(monthly.length - 1)],
-      empty, yDecimals: 2
-    })));
-  }
-  if (pool.length >= 2) {
-    out.push(renderChartBlock("ubi-chart-pool", i18n.bankChartPoolTitle, buildSeriesChartSvg({
-      series: [{ label: i18n.bankChartPool, points: pool.map(x => x.balance) }],
-      xLabels: tsLabels(pool, "ts"),
-      empty, yDecimals: 2
-    })));
-  }
+  const poolSvg = pool.length >= 2 ? buildSeriesChartSvg({
+    series: [{ label: i18n.bankChartPool, points: pool.map(x => x.balance) }],
+    xLabels: tsLabels(pool, "ts"),
+    empty, yDecimals: 2
+  }) : null;
+  const out = [
+    renderBucketChart("ubi-chart-network", i18n.bankChartNetworkUbiTitle, "ubi", charts && charts.payments, "distributed", i18n.bankChartDistributed, 6),
+    renderRangedChart("ubi-chart-pool", i18n.bankChartPoolTitle, "ubi", (charts && charts.poolRange) || "today", !!(charts && charts.hasPool), poolSvg)
+  ].filter(Boolean);
   return out.length ? div(...out) : null;
 };
 
@@ -187,28 +242,34 @@ const RANGES = ["today", "week", "month", "year", "5y", "all"];
 const rangeLabel = (r) => ({ today: i18n.bankRangeToday, week: i18n.bankRangeWeek, month: i18n.bankRangeMonth, year: i18n.bankRangeYear, "5y": i18n.bankRangeFiveYears, all: i18n.bankRangeAll })[r] || r;
 const renderRangeTabs = (filter, current, anchor) =>
   div({ class: "bank-range-tabs" },
-    ...RANGES.map(r => a({ href: `/banking?filter=${filter}&range=${r}#${anchor}`, class: r === current ? "filter-btn active" : "filter-btn" }, String(rangeLabel(r)).toUpperCase()))
+    ...RANGES.map(r => a({ href: `/banking?filter=${filter}&range=${r}#${anchor}`, class: r === current ? "activity-chip active" : "activity-chip" }, String(rangeLabel(r)).toUpperCase()))
   );
 
 const renderValueChart = (history, range, hasAnyData) => {
   const arr = Array.isArray(history) ? history.slice(-240) : [];
-  if (arr.length < 2) return null;
+  if (!hasAnyData) return null;
+  const hasTime = arr.some(s => Number(s.ecoTimeMs) > 0);
+  const hasInflation = arr.some(s => Number(s.inflationFactor) > 0);
   const svg = arr.length >= 2 ? buildSeriesChartSvg({
-    series: [{ label: i18n.bankExchangeChartValue || "Value (ECO/h)", points: arr.map(s => Number(s.ecoValue || 0)) }],
+    series: [
+      { label: i18n.bankExchangeChartValue || "Value (ECO/h)", points: arr.map(s => Number(s.ecoValue || 0)) },
+      ...(hasTime ? [{ label: i18n.bankChartValueHours, points: arr.map(s => Number(s.ecoTimeMs || 0) / 3600000) }] : []),
+      ...(hasInflation ? [{ label: i18n.bankExchangeChartInflation || "Inflation %", points: arr.map(s => Number(s.inflationFactor || 0)) }] : [])
+    ],
     xLabels: tsLabels(arr, "ts"),
     empty: i18n.bankExchangeChartEmpty
   }) : null;
-  return div({ class: "bank-eco-chart-block", id: "eco-value-chart-block" },
-    h2({ class: "bank-eco-chart-title" }, i18n.bankChartValueTitle),
-    renderRangeTabs("overview", range, "eco-value-chart-block"),
-    svg ? a({ href: "#eco-value-chart", id: "eco-value-chart-src", class: "bank-eco-chart-zoom-link", title: i18n.bankChartZoomHint }, div({ class: "bank-eco-chart-canvas", innerHTML: svg })) : p({ class: "bank-chart-empty-note" }, i18n.bankChartNoDataRange),
-    svg ? div({ id: "eco-value-chart", class: "lightbox bank-eco-chart-lightbox" }, a({ href: "#eco-value-chart-src", class: "lightbox-close" }, "\u00d7"), div({ class: "bank-eco-chart-canvas-zoom", innerHTML: svg })) : null
-  );
+  return renderRangedChart("eco-value-chart", i18n.bankChartValueTitle, "overview", range, !!hasAnyData, svg);
 };
 
 const renderWealthChart = (wealth, range) => {
   const pts = Array.isArray(wealth && wealth.points) ? wealth.points : [];
-  if (pts.length < 2) return null;
+  if (!(wealth && wealth.hasAnyData)) return null;
+  if (pts.length < 2) return div({ class: "bank-eco-chart-block", id: "wealth-chart-block" },
+    h2({ class: "bank-eco-chart-title" }, i18n.bankChartWealthTitle),
+    renderRangeTabs("exchange", range, "wealth-chart-block"),
+    p({ class: "bank-chart-empty-note" }, i18n.bankChartNoDataYet)
+  );
   const fmtBucket = (x) => wealth.bucket === "month" ? moment(x.ts).format("YYYY-MM") : wealth.bucket === "day" ? moment(x.ts).format("YYYY-MM-DD") : moment(x.ts).format("YYYY-MM-DD HH:mm");
   const per = wealth.bucket === "month" ? i18n.bankChartPerMonth : wealth.bucket === "day" ? i18n.bankChartPerDay : i18n.bankChartPerHour;
   const svg = buildSeriesChartSvg({
@@ -229,13 +290,13 @@ const renderWealthChart = (wealth, range) => {
 };
 
 const renderKarmaChart = (history) => {
-  const arr = Array.isArray(history) ? history : [];
-  if (arr.length < 2) return null;
-  return renderChartBlock("karma-chart", i18n.bankChartKarmaTitle, buildSeriesChartSvg({
+  const arr = Array.isArray(history && history.points) ? history.points : [];
+  const svg = arr.length >= 2 ? buildSeriesChartSvg({
     series: [{ label: i18n.bankChartKarma, points: arr.map(x => x.score) }],
     xLabels: tsLabels(arr, "ts"),
     empty: i18n.bankExchangeChartEmpty, yDecimals: 0
-  }));
+  }) : null;
+  return renderRangedChart("karma-chart", i18n.bankChartKarmaTitle, "overview", (history && history.range) || "today", !!(history && history.hasAny), svg);
 };
 
 const renderExchange = (ex, history, taxStats, wealth, range) => {
@@ -262,20 +323,22 @@ const renderExchange = (ex, history, taxStats, wealth, range) => {
           kvRow(i18n.bankingSyncStatus,
             span({ class: syncStatusClass }, syncStatus)
           ),
-          kvRow(i18n.bankExchangeCurrentValue, `${fmtIndex(ex.ecoValue)} ECO`),
-          kvRow(i18n.bankCurrentSupply, `${Number(ex.currentSupply || 0).toFixed(6)} ECO`),
-          kvRow(i18n.bankTotalSupply, `${Number(ex.totalSupply || 0).toFixed(6)} ECO`),
+          kvRow(strong(i18n.bankExchangeCurrentValue), strong(`${fmtIndex(ex.ecoValue)} ECO`)),
+          kvRow(strong(i18n.bankCurrentSupply), strong(`${Number(ex.currentSupply || 0).toFixed(6)} ECO`)),
+          kvRow(strong(i18n.bankTotalSupply), strong(`${Number(ex.totalSupply || 0).toFixed(6)} ECO`)),
           kvRow(i18n.bankEcoinHours, ecoTimeLabel),
-          kvRow(i18n.bankInflation, `${Number(ex.inflationFactor || 0).toFixed(2)}%`),
+          kvRow(strong(i18n.bankInflation), strong(`${Number(ex.inflationFactor || 0).toFixed(2)}%`)),
           kvRow(i18n.bankInflationMonthly, `${Number(ex.inflationMonthly || 0).toFixed(2)}%`),
           kvRow(i18n.bankInflationIssuance, `${Number(ex.inflationIssuance || 0).toFixed(2)}%`),
-          kvRow(i18n.bankTotalUbiDistributed, `${Number((wealth && wealth.totals && wealth.totals.distributed) || 0).toFixed(6)} ECO`),
-          kvRow(i18n.bankTotalTaxesWithheld, `${Number((wealth && wealth.totals && wealth.totals.taxes) || 0).toFixed(6)} ECO`),
+          kvRow(strong(i18n.bankTotalUbiDistributed), strong(`${Number((wealth && wealth.totals && wealth.totals.distributed) || 0).toFixed(6)} ECO`)),
+          kvRow(strong(i18n.bankTotalTaxesWithheld), strong(`${Number((wealth && wealth.totals && wealth.totals.taxes) || 0).toFixed(6)} ECO`)),
           ...taxRows
         )
       )
     ),
-    renderWealthChart(wealth, (wealth && wealth.range) || range)
+    renderWealthChart(wealth, (wealth && wealth.range) || range),
+    renderSupplyChart(history, range, Array.isArray(history) && history.length >= 2, ex.totalSupply),
+    renderInflationChart(history, range, Array.isArray(history) && history.length >= 2)
   );
 };
 
@@ -409,7 +472,7 @@ const renderUbiPubs = (pubs, hasValidWallet) => {
       div({ class: "addr-card-head" },
         userLink(p.pubId),
         hasValidWallet && p.address
-          ? div({ class: "content-actions" }, form({ method: "GET", action: "/banking/fund", class: "content-action-form" }, input({ type: "hidden", name: "pub", value: p.pubId }), button({ type: "submit", class: "btn-singleview", title: i18n.bankDonateEco }, "⇪")))
+          ? div({ class: "content-actions" }, form({ method: "GET", action: "/banking/fund", class: "content-action-form" }, input({ type: "hidden", name: "pub", value: p.pubId }), button({ type: "submit", class: "btn-singleview btn-donate", title: i18n.bankDonateEco }, "\u2744")))
           : null
       ),
       div({ class: "bank-summary ubi-pub-summary" },
@@ -443,18 +506,18 @@ const renderOverviewSummaryTable = (s, rules, userEcoinTax, isPub = false) => {
   return div({ class: "bank-summary" },
     table({ class: "bank-info-table" },
       tbody(
-        kvRow(i18n.bankUserBalance, `${Number(s.userBalance || 0).toFixed(6)} ECO`),
-        kvRow(i18n.bankIndustryBalance || "Industry Production", a({ href: '/industry' }, `${Number(s.industryNetworkTotal || 0).toFixed(6)} ECO`)),
+        kvRow(strong(i18n.bankUserBalance), strong(`${Number(s.userBalance || 0).toFixed(6)} ECO`)),
+        kvRow(strong(i18n.bankIndustryBalance || "Industry Production"), a({ href: '/industry' }, strong(`${Number(s.industryNetworkTotal || 0).toFixed(6)} ECO`))),
         kvRow(i18n.bankEpoch, String(s.epochId || "-")),
         kvRow(i18n.bankPool, `${pool.toFixed(6)} ECO`),
         kvRow(i18n.bankWeightsSum, String(W.toFixed(6))),
-        kvRow(i18n.bankingUserEngagementScore, String(score)),
+        kvRow(strong(i18n.bankingUserEngagementScore), strong(String(score))),
         ubiWired ? kvRow(i18n.bankYourUbiMonth || 'Your UBI (this month)', `${future.toFixed(6)} ECO`) : null,
         kvRow(i18n.bankYourIndustryBalance || 'Your Industry Share', a({ href: '/industry?filter=MEMBER' }, `${Number(s.industryBalance || 0).toFixed(6)} ECO`)),
         kvRow(i18n.bankYourSchoolBalance || 'Your School Earnings', a({ href: '/school?filter=mine' }, `${Number(s.schoolBalance || 0).toFixed(6)} ECO`)),
         kvRow(i18n.bankTotalUbiDistributed, `${Number((s.wealthTotals && s.wealthTotals.distributed) || 0).toFixed(6)} ECO`),
         kvRow(i18n.bankTotalTaxesWithheld, `${Number((s.wealthTotals && s.wealthTotals.taxes) || 0).toFixed(6)} ECO`),
-        kvRow(i18n.bankOverviewYourTaxes || 'Total Taxes', a({ href: '/banking?filter=taxes' }, `${tax.toFixed(6)} ECO`)),
+        kvRow(strong(i18n.bankOverviewYourTaxes || 'Total Taxes'), a({ href: '/banking?filter=taxes' }, strong(`${tax.toFixed(6)} ECO`))),
         kvRow(strong(i18n.bankYourFundsMonth || 'Total Funds'), strong(`${((ubiWired ? future : 0) + Number(s.industryBalance || 0) + Number(s.schoolBalance || 0)).toFixed(6)} ECO`))
       )
     )
@@ -533,9 +596,7 @@ const allocationsTable = (rows = [], userId) =>
                   ? form({ method: "POST", action: `/banking/claim/${encodeURIComponent(r.id)}` },
                       button({ type: "submit", class: "filter-btn" }, i18n.bankClaimNow)
                     )
-                  : r.status === "CLOSED" && r.txid
-                    ? a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${encodeURIComponent(r.txid)}`, target: "_blank", class: "btn-singleview" }, i18n.bankViewTx)
-                    : null
+                  : null
               )
             )
           )
@@ -547,7 +608,7 @@ const renderEpochList = (epochs = []) =>
     ? div(p(i18n.bankNoEpochs))
     : table(
         { class: "bank-epochs" },
-        thead(tr(th(i18n.bankEpochId), th(i18n.bankPool), th(i18n.bankWeightsSum), th(i18n.bankRuleHash), th(""))),
+        thead(tr(th(i18n.bankEpochId), th(i18n.bankPool), th(i18n.bankEpochAllocations), th(""))),
         tbody(
           ...epochs
             .sort((a, b) => String(b.id).localeCompare(String(a.id)))
@@ -555,8 +616,7 @@ const renderEpochList = (epochs = []) =>
               tr(
                 td(e.id),
                 td(String(Number(e.pool || 0).toFixed(6))),
-                td(String(Number(e.weightsSum || 0).toFixed(6))),
-                td(e.hash || "-"),
+                td(String(Number(e.recipients || 0))),
                 td(
                   form({ method: "GET", action: `/banking/epoch/${encodeURIComponent(e.id)}` },
                     button({ type: "submit", class: "filter-btn" }, i18n.bankViewEpoch)
@@ -722,34 +782,38 @@ const renderAddresses = (data, userId) => {
   );
 };
 
+const bankingFilters = (data, filter, userId) => {
+  const allocs = data.allocations || [];
+  const subsets = ["mine", "pending", "closed", "claimed", "expired"].filter(f => filterAllocations(allocs, f, userId).length > 0 || filter === f);
+  return [
+    "overview", "exchange", "ubi", "taxes",
+    ...subsets,
+    ...((data.epochs || []).length || filter === "epochs" || String(filter || "").startsWith("epoch:") ? ["epochs"] : []),
+    "addresses", "rules"
+  ];
+};
+
 const renderBankingView = (data, filter, userId, isPub) =>
   template(
     i18n.banking,
     section(
       div({ class: "tags-header module-header-line" }, h2(i18n.banking), p(i18n.bankingDescription), renderWalletChip()),
       data.flash ? div({ class: "flash-banner" }, p(flashText(data.flash) || data.flash)) : null,
-      generateFilterButtons(
-        ["overview","exchange","ubi","taxes",
-         ...((data.allocations || []).length || ["mine","pending","closed","claimed","expired"].includes(filter) ? ["mine","pending","closed","claimed","expired"] : []),
-         ...((data.epochs || []).length || filter === "epochs" ? ["epochs"] : []),
-         "addresses","rules"], filter, "/banking"),
+      generateFilterButtons(bankingFilters(data, filter, userId), filter, "/banking"),
       filter === "overview"
         ? div(
             renderOverviewSummaryTable(data.summary || {}, data.rules, data.userTotalTax || data.userEcoinTax, isPub),
-            isPub || (data.allocations || []).length ? allocationsTable((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), userId) : null,
             renderValueChart(data.exchangeHistory, data.valueRange || data.range, !!data.valueHasAnyData),
             renderKarmaChart(data.karmaHistory)
           )
         : filter === "ubi"
         ? div(
+            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId, (data.summary || {}).hasValidWallet, (data.summary || {}).ubiAvailability, (data.summary || {}).alreadyRefused, (data.summary || {}).addressPublished, !!(data.exchange && data.exchange.isSynced)),
             renderUbiPubs(data.ubiPubs || [], !!(data.summary || {}).hasValidWallet),
-            renderUbiCharts(data.ubiCharts)
+            renderUbiCharts({ ...(data.ubiCharts || {}), payments: data.ubiPayments })
           )
         : filter === "exchange"
-        ? [
-            renderExchange(data.exchange, data.exchangeHistory, data.taxStats, data.wealth, data.range),
-            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId, (data.summary || {}).hasValidWallet, (data.summary || {}).ubiAvailability, (data.summary || {}).alreadyRefused, (data.summary || {}).addressPublished, !!(data.exchange && data.exchange.isSynced))
-          ]
+        ? renderExchange(data.exchange, data.exchangeHistory, data.taxStats, data.wealth, data.range)
         : filter === "taxes"
         ? renderTaxes(data, data.lookup || null)
         : filter === "epochs"
@@ -781,7 +845,7 @@ const renderSingleAllocationView = (alloc, userId) => {
             kvRow(i18n.bankAllocAmount, `${Number(alloc.amount || 0).toFixed(6)} ECO`),
             kvRow(i18n.bankAllocStatus, alloc.status || "-"),
             kvRow(i18n.bankAllocDate, alloc.createdAt ? fmtDate(alloc.createdAt) : "-"),
-            alloc.txid ? kvRow("TxID", a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${encodeURIComponent(alloc.txid)}`, target: "_blank" }, alloc.txid)) : null
+            alloc.txid ? kvRow(i18n.bankTx, span({ class: "bank-address-code" }, alloc.txid)) : null
           )
         )
       ),
@@ -795,24 +859,34 @@ const renderSingleAllocationView = (alloc, userId) => {
   );
 };
 
-const renderEpochView = (epoch, allocations) => {
-  if (!epoch) return template(i18n.banking, section(div(p(i18n.bankNoEpochs))));
+const bankingHeader = () =>
+  div({ class: "tags-header module-header-line" }, h2(i18n.banking), p(i18n.bankingDescription), renderWalletChip());
+
+const renderEpochView = (epoch, allocations, userId = "", data = {}) => {
+  const rows = allocations || [];
   return template(
     i18n.banking,
     section(
-      div({ class: "tags-header" }, h2(`${i18n.bankEpoch}: ${epoch.id}`)),
-      div({ class: "bank-summary" },
-        table({ class: "bank-info-table" },
-          tbody(
-            kvRow(i18n.bankEpochId, epoch.id || "-"),
-            kvRow(i18n.bankPool, `${Number(epoch.pool || 0).toFixed(6)} ECO`),
-            kvRow(i18n.bankWeightsSum, String(Number(epoch.weightsSum || 0).toFixed(6))),
-            kvRow(i18n.bankRuleHash, epoch.hash || "-")
+      bankingHeader(),
+      generateFilterButtons(bankingFilters({ ...data, allocations: rows, epochs: data.epochs || [{}] }, "epochs", userId), "epochs", "/banking"),
+      !epoch
+        ? div({ class: "no-content-box" }, p(i18n.bankNoEpochs))
+        : div(
+            h2(`${i18n.bankEpoch}: ${epoch.id}`),
+            div({ class: "bank-summary" },
+              table({ class: "bank-info-table" },
+                tbody(
+                  kvRow(i18n.bankEpochId, epoch.id || "-"),
+                  kvRow(i18n.bankPool, `${Number(epoch.pool || 0).toFixed(6)} ECO`),
+                  Number.isFinite(Number(epoch.weightsSum)) && Number(epoch.weightsSum) > 0 ? kvRow(i18n.bankWeightsSum, String(Number(epoch.weightsSum).toFixed(6))) : null,
+                  kvRow(i18n.bankEpochAllocations, String(rows.length)),
+                  epoch.hash && epoch.hash !== "-" ? kvRow(i18n.bankRuleHash, epoch.hash) : null
+                )
+              )
+            ),
+            h2(i18n.bankEpochAllocations),
+            allocationsTable(rows, userId)
           )
-        )
-      ),
-      h2(i18n.bankEpochAllocations),
-      allocationsTable(allocations || [], "")
     )
   );
 };

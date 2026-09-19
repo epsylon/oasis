@@ -5,7 +5,7 @@ const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const SEEN_FILE = 'oasis-mentions-seen';
 
 const seenPath = () => {
-  try { return require('../server/ssb_config').statePath(SEEN_FILE); } catch (_) { return null; }
+  try { return require('../configs/state-manager').statePath(SEEN_FILE); } catch (_) { return null; }
 };
 
 const MAX_SEEN_KEYS = 500;

@@ -1,8 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 
-const STORAGE_DIR = path.join(__dirname, "..", "configs");
-const ADDR_PATH = path.join(STORAGE_DIR, "wallet-addresses.json");
+const { statePath, stateDir } = require("../configs/state-manager");
+const ADDR_PATH = statePath("wallet-addresses.json");
+const STORAGE_DIR = path.dirname(ADDR_PATH);
 
 function ensure() {
   if (!fs.existsSync(STORAGE_DIR)) fs.mkdirSync(STORAGE_DIR, { recursive: true });

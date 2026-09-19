@@ -192,7 +192,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
       return tags.includes(tag) && members.includes(me);
     });
     if (!candidates.length) return null;
-    candidates.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    candidates.sort((a, b) => (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()) || String(a.id || '').localeCompare(String(b.id || '')));
     return candidates[0];
   }
 
@@ -206,7 +206,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
       return tags.includes(tag);
     });
     if (!candidates.length) return null;
-    candidates.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    candidates.sort((a, b) => (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()) || String(a.id || '').localeCompare(String(b.id || '')));
     return candidates[0];
   }
 
@@ -332,7 +332,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
       const canonical = await findAnyHouseTribe(houseKey).catch(() => null);
       const canonRoot = canonical ? await tribesModel.getRootId(canonical.id).catch(() => canonical.id) : null;
       const myTribes = await listMyHouseTribes(houseKey);
-      myTribes.sort((a, b) => a.createdAtTs - b.createdAtTs);
+      myTribes.sort((a, b) => (a.createdAtTs - b.createdAtTs) || String(a.rootId || '').localeCompare(String(b.rootId || '')));
       const keepRoot = canonRoot || (myTribes[0] && myTribes[0].rootId);
       for (const t of myTribes) {
         if (t.rootId === keepRoot) continue;

@@ -68,7 +68,7 @@ const configure = (...customOptions) =>
   Object.assign({}, defaultOptions, ...customOptions);
  
 const ebtDir = path.join(os.homedir(), '.ssb', 'ebt');
-const unfollowedPath = path.join(os.homedir(), '.ssb', 'gossip_unfollowed.json');
+const unfollowedPath = require('../configs/state-manager').statePath('gossip_unfollowed.json');
 
 async function loadPeersFromEbt() {
   let result = [];

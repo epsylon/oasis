@@ -1,13 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const TEMPLATE = path.join(__dirname, "../configs/content_favorites.json");
-
-const storePath = () => {
-  try {
-    return require("../server/ssb_config").statePath("content_favorites.json") || TEMPLATE;
-  } catch (_) { return TEMPLATE; }
-};
+const storePath = () => require("../configs/state-manager").statePath("content_favorites.json");
 
 const DEFAULT = {
   emergencies: [],

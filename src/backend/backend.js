@@ -45,7 +45,9 @@ function startAI() {
     aiProcess.unref();
   } catch (e) {}
 }
-const ADDR_PATH = path.join(__dirname, '..', 'configs', 'wallet-addresses.json');
+const { statePath: stateFilePath, keysDir: stateKeysDir } = require('../configs/state-manager');
+require('../configs/state-manager').migrateAll();
+const ADDR_PATH = stateFilePath('wallet-addresses.json');
 const readAddrMap = () => { try { return JSON.parse(fs.readFileSync(ADDR_PATH, 'utf8')); } catch { return {}; } };
 const writeAddrMap = (map) => { fs.mkdirSync(path.dirname(ADDR_PATH), { recursive: true }); fs.writeFileSync(ADDR_PATH, JSON.stringify(map, null, 2)); };
 
@@ -180,6 +182,36 @@ const isLoopbackRequest = (ctx) => {
   const ip = raw.replace(/^::ffff:/, '');
   return ip === '127.0.0.1' || ip === '::1' || ip === 'localhost';
 };
+const WALLET_CHIP_PATHS = ['/wallet', '/banking', '/shops', '/school', '/market', '/transfers'];
+const refreshDonatableAuthors = async () => {
+  try {
+    const wallets = await bankingModel.scanAllWalletsSSB().catch(() => ({}));
+    const me = getViewerId();
+    const out = new Set(Object.keys(wallets || {}).filter(id => id !== me && ECO_ADDRESS_RE.test(String(wallets[id] || ''))));
+    sharedState.setDonatableAuthors(out);
+  } catch (_) {}
+};
+let lastWalletReadyCheck = 0;
+const refreshWalletReady = async (force = false) => {
+  const ready = sharedState.getWalletReady ? sharedState.getWalletReady() : false;
+  if (!force && ready && Date.now() - lastWalletReadyCheck < 60000) return ready;
+  if (!force && !ready && Date.now() - lastWalletReadyCheck < 5000) return ready;
+  lastWalletReadyCheck = Date.now();
+  try {
+    const me = getViewerId();
+    const walletUrl = !!(getConfig().wallet && getConfig().wallet.url);
+    let addr = await bankingModel.getUserAddress(me).catch(() => null);
+    if (!addr && walletUrl) {
+      try { const res = await bankingModel.ensureSelfAddressPublished(); if (res && res.address) addr = res.address; } catch (_) {}
+      if (!addr) addr = await bankingModel.getUserAddress(me).catch(() => null);
+    }
+    const published = addr ? await bankingModel.hasPublishedAddress(me).catch(() => false) : false;
+    const next = !!(addr && published && walletUrl);
+    sharedState.setWalletReady(next);
+    return next;
+  } catch (_) { return ready; }
+};
+
 const checkMod = (ctx, mod) => {
   const cfg = getConfig();
   const serverValue = cfg.modules?.[mod];
@@ -862,15 +894,12 @@ process.on("uncaughtException", function (err) {
           }
           process.exit(0);
         } else {
-          throw new Error(`Another server is already running at ${url}.
-It might be another copy of Oasis or another program on your computer.
-You can run Oasis on a different port number with this option:
-    oasis --port ${config.port + 1}
-Alternatively, you can set the default port in ${defaultConfigFile} with:
-    {
-      "port": ${config.port + 1}
-    }
-`);
+          console.log("");
+          console.log(`Another server is already running at ${url}. It might be another copy of Oasis or another program on your computer.`);
+          console.log(`You can run Oasis on a different port number: sh oasis.sh --port ${config.port + 1}`);
+          console.log(`Or set the default port in ${defaultConfigFile}.`);
+          console.log("");
+          process.exit(1);
         }
       });
     });
@@ -2456,7 +2485,7 @@ const publishFediverseTempMedia = async (names) => {
   return ids;
 };
 const gossipPath = path.join(homeDir, '.ssb', 'gossip.json');
-const unfollowedPath = path.join(homeDir, '.ssb', 'gossip_unfollowed.json');
+const unfollowedPath = stateFilePath('gossip_unfollowed.json');
 const ensureJSONFile = (p, init = []) => { fs.mkdirSync(path.dirname(p), { recursive: true }); if (!fs.existsSync(p)) fs.writeFileSync(p, JSON.stringify(init, null, 2), 'utf8'); };
 const readJSON = p => { ensureJSONFile(p, []); try { return JSON.parse(fs.readFileSync(p, 'utf8') || '[]'); } catch { return []; } };
 const writeJSON = (p, d) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(d, null, 2), 'utf8'); };
@@ -2725,7 +2754,7 @@ router
   .get('/ai', async (ctx) => {
     if (!checkMod(ctx, 'aiMod')) return ctx.redirect('/modules');
     startAI();
-    const lang = ctx.cookies.get('language') || getConfig().language || 'en', historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    const lang = ctx.cookies.get('language') || getConfig().language || 'en', historyPath = stateFilePath('AI-history.json');
     require('../views/main_views').setLanguage(lang);
     let chatHistory = []; try { chatHistory = JSON.parse(fs.readFileSync(historyPath, 'utf-8')); } catch {}
     ctx.body = aiView(chatHistory, getConfig().ai?.prompt?.trim() || '');
@@ -4727,7 +4756,7 @@ router
         gpgKeyFingerprint = String(parsed.getFingerprint() || '').toUpperCase();
         gpgKeyBlob = Buffer.from(armored, 'utf8');
         const myFeedId = await meta.myFeedId();
-        const keysDir = path.join(ssbConfig.path, 'keys');
+        const keysDir = stateKeysDir();
         await promisesFs.mkdir(keysDir, { recursive: true }).catch(() => {});
         const safeName = encodeURIComponent(myFeedId) + '.asc';
         await promisesFs.writeFile(path.join(keysDir, safeName), armored, 'utf8');
@@ -4832,7 +4861,7 @@ router
   })
   .post("/profile/gpg/remove", koaBody(), async (ctx) => {
     const myFeedId = await meta.myFeedId();
-    const keyPath = path.join(ssbConfig.path, 'keys', encodeURIComponent(myFeedId) + '.asc');
+    const keyPath = path.join(stateKeysDir(), encodeURIComponent(myFeedId) + '.asc');
     await promisesFs.unlink(keyPath).catch(() => {});
     await post.publishProfileEdit({ gpgFingerprint: '', gpgBlobId: '' });
     ctx.redirect("/profile");
@@ -4856,7 +4885,7 @@ router
       });
     }
     if (!armored) {
-      const keyPath = path.join(ssbConfig.path, 'keys', encodeURIComponent(feedId) + '.asc');
+      const keyPath = path.join(stateKeysDir(), encodeURIComponent(feedId) + '.asc');
       armored = await promisesFs.readFile(keyPath, 'utf8').catch(() => '');
     }
     if (!armored) { ctx.status = 404; ctx.body = ''; return; }
@@ -7506,7 +7535,7 @@ router
   .get("/banking/epoch/:id", async (ctx) => {
     const epoch = await bankingModel.getEpochById(ctx.params.id);
     const allocations = await bankingModel.listEpochAllocations(ctx.params.id);
-    ctx.body = renderEpochView(epoch, allocations);
+    ctx.body = renderEpochView(epoch, allocations, getViewerId());
   })
   .get("/favorites", async (ctx) => {
     const filter = qf(ctx), q = String(ctx.query.q || '').trim();
@@ -7692,6 +7721,18 @@ router
       ctx.body = await walletErrorView(error);
     }
   })
+  .get("/wallet/qr/:address", async (ctx) => {
+    if (!checkMod(ctx, 'walletMod')) { ctx.status = 404; ctx.body = ''; return; }
+    const address = decodeURIComponent(ctx.params.address || '');
+    if (!ECO_ADDRESS_RE.test(address)) { ctx.status = 404; ctx.body = ''; return; }
+    try {
+      const QRCode = require('../server/node_modules/qrcode');
+      const buf = await QRCode.toBuffer(address, { type: 'png', width: 320, margin: 1, errorCorrectionLevel: 'M' });
+      ctx.set('Content-Type', 'image/png');
+      ctx.set('Cache-Control', 'no-store');
+      ctx.body = buf;
+    } catch (_) { ctx.status = 500; ctx.body = ''; }
+  })
   .get("/wallet/send", async (ctx) => {
     const { url, user, pass, fee } = getConfig().wallet;
     try {
@@ -7844,7 +7885,7 @@ router
     const translations = i18nAll[lang] || i18nAll['en'];
     const { setLanguage } = require('../views/main_views');
     setLanguage(lang);
-    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    const historyPath = stateFilePath('AI-history.json');
     let chatHistory = [];
     try {
       const fileData = fs.readFileSync(historyPath, 'utf-8');
@@ -7899,7 +7940,7 @@ router
     const rating = Number.isFinite(ratingRaw) ? Math.max(0, Math.min(5, ratingRaw)) : 0;
     const cfg = getConfig();
     const lang = ctx.cookies.get('language') || cfg.language || '';
-    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    const historyPath = stateFilePath('AI-history.json');
     let chatHistory = [];
     try {
       const fileData = fs.readFileSync(historyPath, 'utf-8');
@@ -7957,7 +7998,7 @@ router
     const { setLanguage } = require('../views/main_views');
     setLanguage(lang);
     const ts = String(ctx.request.body.ts || '');
-    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    const historyPath = stateFilePath('AI-history.json');
     let chatHistory = [];
     try {
         const fileData = fs.readFileSync(historyPath, 'utf-8');
@@ -7979,7 +8020,7 @@ router
     const lang = ctx.cookies.get('language') || getConfig().language || 'en';
     const { setLanguage } = require('../views/main_views');
     setLanguage(lang);
-    const historyPath = path.join(__dirname, '..', '..', 'src', 'configs', 'AI-history.json');
+    const historyPath = stateFilePath('AI-history.json');
     fs.writeFileSync(historyPath, '[]', 'utf-8');
     const config = getConfig();
     const userPrompt = config.ai?.prompt?.trim() || '';
@@ -11088,6 +11129,21 @@ router
     ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(id)}`, ["/projects"]));
   })
   .post("/projects/:projectId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'projects', 'projectId'))
+  .get("/wallet/donate/:feedId", async (ctx) => {
+    const backTo = safeReturnTo(ctx, '/activity', ['/']);
+    if (!checkMod(ctx, 'walletMod')) { ctx.redirect(backTo); return; }
+    try {
+      const feedId = decodeURIComponent(ctx.params.feedId || '');
+      if (!ssbRef.isFeedId(feedId) || String(feedId) === String(getViewerId())) { ctx.redirect(backTo); return; }
+      const { i18n: i18nD } = require('../views/main_views');
+      const mine = await bankingModel.getUserAddress(getViewerId()).catch(() => null);
+      if (!mine) { ctx.redirect('/wallet'); return; }
+      const address = await bankingModel.getUserAddress(feedId).catch(() => null);
+      if (!address || !ECO_ADDRESS_RE.test(String(address))) { ctx.redirect(`${backTo}${backTo.includes('?') ? '&' : '?'}error=${encodeURIComponent(i18nD.bankNoUserAddress)}`); return; }
+      const q = new URLSearchParams({ to: address, payee: feedId, ref: backTo });
+      ctx.redirect(`/wallet/send?${q.toString()}`);
+    } catch (_) { ctx.redirect(backTo); }
+  })
   .get("/banking/fund", async (ctx) => {
     if (!checkMod(ctx, 'walletMod')) { ctx.redirect('/banking?filter=overview'); return; }
     try {
@@ -11222,7 +11278,7 @@ router
         const os = require('os'), fsx = require('fs'), px = require('path');
         const gossip = JSON.parse(fsx.readFileSync(px.join(os.homedir(), '.ssb', 'gossip.json'), 'utf8') || '[]');
         let unfollowed = [];
-        try { unfollowed = JSON.parse(fsx.readFileSync(px.join(os.homedir(), '.ssb', 'gossip_unfollowed.json'), 'utf8') || '[]'); } catch (_) {}
+        try { unfollowed = JSON.parse(fsx.readFileSync(stateFilePath('gossip_unfollowed.json'), 'utf8') || '[]'); } catch (_) {}
         const activePub = Array.isArray(gossip) && gossip.some(p => p && p.key === pubKey) && !unfollowed.some(u => u && u.key === pubKey);
         if (activePub) { ctx.redirect('/invites?flash=alreadyFederated'); return; }
       } catch (_) {}
@@ -11809,6 +11865,14 @@ const middleware = [
     await next();
   },
   async (ctx, next) => {
+    if (ctx.method === 'GET' && WALLET_CHIP_PATHS.some(p => ctx.path === p || ctx.path.startsWith(`${p}/`))) {
+      try { await refreshWalletReady(); } catch (_) {}
+      if (ctx.path === '/transfers' || ctx.path.startsWith('/transfers/')) { try { await runWalletWork('transfers'); } catch (_) {} }
+      else if (ctx.path === '/banking' || ctx.path.startsWith('/banking/')) { try { await runWalletWork('banking'); } catch (_) {} }
+    }
+    await next();
+  },
+  async (ctx, next) => {
     await next();
     const flash = ctx.method === 'GET' ? String(ctx.query.error || '').trim() : '';
     if (!flash || typeof ctx.body !== 'string' || !/html/.test(String(ctx.type || ''))) return;
@@ -11820,7 +11884,7 @@ const middleware = [
     ctx.body = ctx.body.slice(0, at + marker.length) + renderInlineError(flash, cleanUrl) + ctx.body.slice(at + marker.length);
   },
   async (ctx, next) => {
-    const isBinary = ctx.path.startsWith('/qr') || ctx.path.startsWith('/image/') || ctx.path.startsWith('/blob/') || ctx.path.startsWith('/assets/');
+    const isBinary = ctx.path.startsWith('/qr') || ctx.path.startsWith('/wallet/qr/') || ctx.path.startsWith('/image/') || ctx.path.startsWith('/blob/') || ctx.path.startsWith('/assets/');
     if (isBinary) {
       try { await next(); } catch (err) {
         ctx.status = err.status || 500;
@@ -11878,13 +11942,7 @@ const middleware = [
           const top = (dataRes.matches || [])[0] || null;
           sharedState.setBestMatch(top ? { href: top.href, title: top.title || top.id, kind: top.kind, score: top.score } : null);
         } catch (_) {}
-        try {
-          const me = getViewerId();
-          const addr = await bankingModel.getUserAddress(me).catch(() => null);
-          const published = addr ? await bankingModel.hasPublishedAddress(me).catch(() => false) : false;
-          const walletUrl = !!(getConfig().wallet && getConfig().wallet.url);
-          sharedState.setWalletReady(!!(addr && published && walletUrl));
-        } catch (_) {}
+        try { await refreshDonatableAuthors(); } catch (_) {}
         try { sharedState.setFeaturedEmergency(await emergenciesModel.featured()); } catch (_) {}
         try { await refreshInboxCount(); } catch (_) {}
         try { await refreshMentionsCount(); } catch (_) {}
@@ -11961,10 +12019,41 @@ async function runPubEngineTick() {
   try { await bankingModel.rebalanceUbiPools(); } catch (_) {}
   try { await bankingModel.publishPubAvailability(); } catch (_) {}
 }
-const ubiNoticePath = path.join(process.env.OASIS_BANKING_DIR || path.join(__dirname, '..', 'configs'), 'banking-ubi-notice.json');
-async function runWalletTick() {
+const ubiNoticePath = process.env.OASIS_BANKING_DIR ? path.join(process.env.OASIS_BANKING_DIR, 'banking-ubi-notice.json') : stateFilePath('banking-ubi-notice.json');
+const confirmNoticePath = process.env.OASIS_BANKING_DIR ? path.join(process.env.OASIS_BANKING_DIR, 'banking-confirm-notice.json') : stateFilePath('banking-confirm-notice.json');
+async function notifyPendingConfirmations() {
+  if (getConfig().modules?.transfersMod === 'off') return;
+  try {
+    const me = getViewerId();
+    const list = await transfersModel.listAll('all', me).catch(() => []);
+    const pending = (list || []).filter(t => {
+      const tags = Array.isArray(t.tags) ? t.tags.map(x => String(x).toUpperCase()) : [];
+      const settledUbi = tags.includes('UBI') && /^[0-9a-f]{64}$/i.test(String(t.txid || ''));
+      return String(t.status || '').toUpperCase() === 'UNCONFIRMED'
+        && String(t.to) === String(me)
+        && !(Array.isArray(t.confirmedBy) ? t.confirmedBy : []).includes(me)
+        && !tags.includes('PENDING')
+        && !settledUbi;
+    });
+    if (!pending.length) return;
+    let notified = [];
+    try { notified = JSON.parse(fs.readFileSync(confirmNoticePath, 'utf8')) || []; } catch (_) {}
+    const fresh = pending.filter(t => !notified.includes(t.id));
+    if (!fresh.length) return;
+    const { i18n: i18nB } = require('../views/main_views');
+    const lines = fresh.slice(0, 5).map(t => `· [${t.concept || t.id}](/transfers/${encodeURIComponent(t.id)}) — ${Number(t.amount || 0).toFixed(6)} ECO`).join('\n');
+    await pmModel.sendMessage([me], 'BANKING_CONFIRM_PENDING', `${i18nB.bankingBotConfirmText} (${fresh.length}):\n${lines}\n\n[${i18nB.transfersFilterPending}](/transfers?filter=pending)`);
+    fs.writeFileSync(confirmNoticePath, JSON.stringify([...notified, ...fresh.map(t => t.id)].slice(-500)));
+  } catch (_) {}
+}
+
+const lastWalletWork = { transfers: 0, banking: 0 };
+async function runWalletWork(kind) {
   if (bankingModel.isPubNode()) return;
+  if (Date.now() - (lastWalletWork[kind] || 0) < 60000) return;
+  lastWalletWork[kind] = Date.now();
   try { await bankingModel.confirmIncomingTransfers(); } catch (_) {}
+  if (kind === 'transfers') { try { await notifyPendingConfirmations(); } catch (_) {} return; }
   try {
     const avail = await bankingModel.claimAvailability(getViewerId());
     if (!avail.available) return;
@@ -11976,11 +12065,11 @@ async function runWalletTick() {
     fs.writeFileSync(ubiNoticePath, JSON.stringify({ epochId: avail.epochId, at: new Date().toISOString() }));
   } catch (_) {}
 }
-setTimeout(() => { runWalletTick(); }, 25000);
-setInterval(runWalletTick, 30 * 60 * 1000);
-if (bankingModel.isPubNode()) console.log(`[UBI] PUB engine on: paying UBI through ecoind at ${getConfig().wallet.url}`);
-setTimeout(() => { runPubEngineTick(); }, 15000);
-pubEngineTimer = setInterval(runPubEngineTick, 30 * 60 * 1000);
+if (bankingModel.isPubNode()) {
+  console.log(`[UBI] PUB engine on: paying UBI through ecoind at ${getConfig().wallet.url}`);
+  setTimeout(() => { runPubEngineTick(); }, 15000);
+  pubEngineTimer = setInterval(runPubEngineTick, 30 * 60 * 1000);
+}
 
 setTimeout(() => { larpModel.init().catch(() => {}); }, 10000);
 
@@ -11988,7 +12077,7 @@ let welcomePmAttempted = false;
 async function sendWelcomePmIfFirstLaunch() {
   if (welcomePmAttempted) return;
   welcomePmAttempted = true;
-  const flagPath = path.join(ssbConfig.path, 'oasis-first-contact');
+  const flagPath = stateFilePath('oasis-first-contact');
   try {
     const ssbClient = await cooler.open();
     if (!ssbClient || !ssbClient.id) { welcomePmAttempted = false; return; }

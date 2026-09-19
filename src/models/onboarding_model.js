@@ -13,7 +13,13 @@ const ssbPathOf = (given) => {
   try { return require('../server/ssb_config').path; } catch (_) { return null; }
 };
 
-const flagPath = (dir) => path.join(dir, FLAG);
+const flagPath = (dir) => {
+  try {
+    const state = require('../configs/state-manager');
+    if (!dir || path.resolve(dir) === state.ssbDir()) return state.statePath(FLAG);
+  } catch (_) {}
+  return path.join(dir, FLAG);
+};
 
 function readFlag(dir) {
   if (!dir) return { exists: false, id: '', markers: new Set() };

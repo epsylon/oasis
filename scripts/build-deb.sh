@@ -26,6 +26,8 @@ mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/models"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/client"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/configs"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/AI"
+mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/games"
+mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/maps"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/scripts"
 mkdir -p "${DEB_ROOT}${INSTALL_DIR}/docs"
 mkdir -p "${DEB_ROOT}/usr/bin"
@@ -50,9 +52,11 @@ cp -r "${SRC_DIR}/src/models/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/models/"
 cp -r "${SRC_DIR}/src/client" "${DEB_ROOT}${INSTALL_DIR}/src/"
 find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name "*.py" -delete 2>/dev/null
 find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name ".ruff_cache" -type d -exec rm -rf {} + 2>/dev/null || true
-for f in oasis-config.json server-config.json snh-invite-code.json config-manager.js shared-state.js; do
+for f in server-config.json snh-invite-code.json config-manager.js shared-state.js state-manager.js; do
     cp "${SRC_DIR}/src/configs/${f}" "${DEB_ROOT}${INSTALL_DIR}/src/configs/"
 done
+cp -r "${SRC_DIR}/src/games/." "${DEB_ROOT}${INSTALL_DIR}/src/games/" 2>/dev/null || true
+cp -r "${SRC_DIR}/src/maps/." "${DEB_ROOT}${INSTALL_DIR}/src/maps/" 2>/dev/null || true
 cp "${SRC_DIR}/src/AI/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/AI/" 2>/dev/null || true
 cp "${SRC_DIR}/src/AI/"*.mjs "${DEB_ROOT}${INSTALL_DIR}/src/AI/" 2>/dev/null || true
 if [ -d "${SRC_DIR}/src/AI/embeddings" ]; then
@@ -73,7 +77,7 @@ Package: ${PKG_NAME}
 Version: ${VERSION}
 Architecture: ${ARCH}
 Maintainer: SolarNET.HuB <solarnethub@riseup.net>
-Depends: nodejs (>= 18)
+Depends: nodejs (>= 22)
 Recommends: npm
 Installed-Size: $(du -sk "${DEB_ROOT}${INSTALL_DIR}" | cut -f1)
 Section: net

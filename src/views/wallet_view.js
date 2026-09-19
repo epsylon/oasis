@@ -1,6 +1,5 @@
 const { form, button, div, h2, p, section, input, span, table, thead, tbody, tr, td, th, ul, li, a, br, label, img } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const QRCode = require('../server/node_modules/qrcode');
 const { template, i18n, userLink, renderWalletChip } = require('./main_views');
 
 const walletViewRender = (balance, address, ...elements) => {
@@ -61,7 +60,7 @@ exports.walletHistoryView = async (balance, transactions, address) => {
                         td(tx.category || "-"),
                         td(totalAmount.toFixed(6)),
                         td({ width: "30%", class: "tcell-ellipsis" },
-                            a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${encodeURIComponent(tx.txid || '')}`, target: "_blank" }, tx.txid || "-")
+                            span({ class: "bank-address-code" }, tx.txid || "-")
                         )
                     );
                 })
@@ -71,12 +70,13 @@ exports.walletHistoryView = async (balance, transactions, address) => {
 };
 
 exports.walletReceiveView = async (balance, address) => {
-    const qrDataUrl = await QRCode.toDataURL(address || '', { type: 'image/png', width: 320, margin: 1 });
     return walletViewRender(
         balance,
         address,
         h2(i18n.walletReceiveTitle),
-        div({ class: 'div-center qr-code' }, img({ src: qrDataUrl, alt: 'QR', class: 'wallet-qr-img' }))
+        address
+            ? div({ class: 'div-center qr-code' }, img({ src: `/wallet/qr/${encodeURIComponent(address)}`, alt: 'QR', class: 'wallet-qr-img' }))
+            : null
     );
 };
 
@@ -185,7 +185,7 @@ exports.walletSendResultView = async (balance, destination, amount, txId, note =
         p(
             i18n.walletSentToLine({ destination: destination || '-', amount: Number(amount || 0).toFixed(6) }), br(),
             `${i18n.walletTransactionId}: `,
-            a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${encodeURIComponent(txId || '')}`, target: "_blank" }, txId || '-')
+            span({ class: "bank-address-code" }, txId || '-')
         ),
         note ? p({ class: 'wallet-transfer-ctx' }, note) : null
     );

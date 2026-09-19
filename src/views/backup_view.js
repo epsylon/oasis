@@ -78,7 +78,7 @@ const renderFullBackup = (options) => {
 };
 
 const restoreSummary = (r) =>
-  `${i18n.backupRestoredMessages}: ${r.messages} · ${i18n.backupRestoredSkipped}: ${r.skipped} · ${i18n.backupRestoredBlobs}: ${r.blobs}${r.forked ? ` · ${i18n.backupRestoredForked}: ${r.forked}` : ""}${r.failed ? ` · ${i18n.backupRestoredFailed}: ${r.failed}` : ""}`;
+  `${i18n.backupRestoredMessages}: ${r.messages} · ${i18n.backupRestoredSkipped}: ${r.skipped} · ${i18n.backupRestoredBlobs}: ${r.blobs}${r.files ? ` · ${i18n.backupRestoredState}: ${r.files}` : ""}${r.forked ? ` · ${i18n.backupRestoredForked}: ${r.forked}` : ""}${r.failed ? ` · ${i18n.backupRestoredFailed}: ${r.failed}` : ""}`;
 
 const renderRestoreStatus = (job) => {
   if (!job) return null;

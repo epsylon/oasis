@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { getConfig, saveConfig } = require('../configs/config-manager.js');
 
-const ACCOUNTS_PATH = path.join(__dirname, '..', 'configs', 'fediverse-accounts.json');
+const ACCOUNTS_PATH = require('../configs/state-manager').statePath('fediverse-accounts.json');
 const FETCH_TIMEOUT_MS = 8000;
 const TIMELINE_CACHE_MS = 60 * 1000;
 const TIMELINE_LIMIT = 40;

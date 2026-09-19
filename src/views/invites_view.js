@@ -7,7 +7,7 @@ const { template, i18n } = require('./main_views');
 
 const homedir = require('os').homedir();
 const gossipPath = path.join(homedir, ".ssb", "gossip.json");
-const unfollowedPath = path.join(homedir, ".ssb", "gossip_unfollowed.json");
+const unfollowedPath = require("../configs/state-manager").statePath("gossip_unfollowed.json");
 
 const encodePubLink = (key) => {
   let core = String(key).replace(/^@/, '').replace(/\.ed25519$/, '').replace(/-/g, '+').replace(/_/g, '/');

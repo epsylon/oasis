@@ -3,7 +3,7 @@ const path = require('path');
 const pull = require('../server/node_modules/pull-stream');
 const moment = require('../server/node_modules/moment');
 
-const agendaConfigPath = path.join(__dirname, '../configs/agenda-config.json');
+const agendaConfigPath = require('../configs/state-manager').statePath('agenda-config.json');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');

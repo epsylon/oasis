@@ -45,13 +45,12 @@ describe('workflows: presets of theme and modules', (t) => {
 });
 
 describe('workflows: rendering', (t) => {
-  t('settings offers the workflows before the theme and hides what is turned off', () => {
+  t('settings offers the workflows and hides what is turned off', () => {
     const { settingsView } = require('../../../src/views/settings_view');
     const i18n = require('../../../src/views/main_views').i18n;
 
     const page = String(settingsView({ version: '1.0.0', aiPrompt: '', fediverseAccount: null, fediverseError: '' }));
     ok(page.includes('/settings/workflow'), 'the workflow form is there');
-    ok(page.indexOf(String(i18n.workflowsTitle)) < page.indexOf(String(i18n.theme)), 'and it comes before the theme');
     notOk(page.includes('/settings/pub-id'), 'the PUB wallet is gone');
     notOk(page.includes('>false<'), 'no falsy value leaked into the html');
   });

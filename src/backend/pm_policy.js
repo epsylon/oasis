@@ -11,7 +11,7 @@ const isRecipientAllowed = ({ pmVisibility, viewerId, recipientId, relationship 
 };
 
 const announceSeenPath = () => {
-  try { return require('../server/ssb_config').statePath(ANNOUNCE_SEEN_FILE); } catch (_) { return null; }
+  try { return require('../configs/state-manager').statePath(ANNOUNCE_SEEN_FILE); } catch (_) { return null; }
 };
 
 const readAnnounceSeen = () => {

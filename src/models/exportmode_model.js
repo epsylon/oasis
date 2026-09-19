@@ -6,8 +6,7 @@ const archiver = require('../server/node_modules/archiver');
 module.exports = {
   exportSSB: async (outputPath) => {
     try {
-      const homeDir = os.homedir();
-      const ssbPath = path.join(homeDir, '.ssb');
+      const ssbPath = require('../configs/state-manager').ssbDir();
       const output = fs.createWriteStream(outputPath);
       const archive = archiver('zip', {
         zlib: { level: 9 }

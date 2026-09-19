@@ -210,6 +210,15 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     ? a({ href: viewHref, class: 'btn-singleview btn-content', title: i18n.visitContent }, '↗')
     : null;
 
+  const donateBtn = (() => {
+    try { if (getConfig().modules.walletMod !== 'on') return null; } catch (_) { return null; }
+    if (!o.author || String(o.author) === String(myId)) return null;
+    const donatable = sharedState.getDonatableAuthors ? sharedState.getDonatableAuthors() : null;
+    if (!donatable || !donatable.has(String(o.author))) return null;
+    const ref = viewHref ? `?returnTo=${encodeURIComponent(viewHref)}` : '';
+    return a({ href: `/wallet/donate/${encodeURIComponent(o.author)}${ref}`, class: 'btn-singleview btn-donate', title: i18n.donateTooltip }, '\u2744');
+  })();
+
   const reportHref = blockId
     ? `/reports?filter=create&category=CONTENT&title=${encodeURIComponent(String(o.reportTitle || blockId).slice(0, 120))}&description=${encodeURIComponent(`${viewHref || blockId}`)}`
     : null;
@@ -228,8 +237,8 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
       )
     : null;
 
-  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !deleteBtn) return null;
-  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, pmBtn, linkBtn, chainBtn, contentBtn);
+  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !deleteBtn && !donateBtn) return null;
+  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, donateBtn, reportBtn, pmBtn, linkBtn, chainBtn, contentBtn);
 };
 exports.renderContentActions = renderContentActions;
 
@@ -942,7 +951,7 @@ const renderTagsLink = () => {
 
 const hasMultiverseAccount = () => {
   try {
-    const store = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'configs', 'fediverse-accounts.json'), 'utf8'));
+    const store = JSON.parse(fs.readFileSync(require('../configs/state-manager').statePath('fediverse-accounts.json'), 'utf8'));
     return !!(store && ((store.mastodon && store.mastodon.token) || (store.telegram && store.telegram.session)));
   } catch (_) {
     return false;
@@ -3391,7 +3400,7 @@ const renderMessage = (msg) => {
 
 const INBOX_BOT_SUBJECTS = new Set([
   'JOB_MATCH', 'JOB_SUBSCRIBED', 'JOB_UNSUBSCRIBED', 'PROJECT_FOLLOWED', 'PROJECT_UNFOLLOWED', 'PROJECT_PLEDGE',
-  'MARKET_SOLD', 'SHOP_SOLD', 'LARP_RULING', 'PARLIAMENT_GOV', 'TRIBE_GOV', 'BANKING_UBI_PAID', 'BANKING_UBI_AVAILABLE', 'WALLET_PAYMENT',
+  'MARKET_SOLD', 'SHOP_SOLD', 'LARP_RULING', 'PARLIAMENT_GOV', 'TRIBE_GOV', 'BANKING_UBI_PAID', 'BANKING_UBI_AVAILABLE', 'BANKING_CONFIRM_PENDING', 'WALLET_PAYMENT',
   'SCHOOL_ENROLLED', 'SCHOOL_INVITED', 'SCHOOL_ADMITTED', 'SCHOOL_CERTIFICATE', 'SCHOOL_PASSED', 'SCHOOL_LESSON_NEW',
   'INDUSTRY_ADMITTED', 'INDUSTRY_APPLICATION', 'INDUSTRY_INVITED', 'INDUSTRY_DISSOLVED', 'INDUSTRY_BUILD_APPROVED', 'INDUSTRY_DISTRIBUTED',
   'HOUSING_REQUESTED', 'HOUSING_CANCELLED', 'HOUSING_UNAVAILABLE', 'WIKI_EDITED', 'WIKI_RESTORED', 'EMERGENCY_UPDATED', 'EMERGENCY_RESOLVED', 'PODCAST_EPISODE', 'CAMPAIGN_UPDATED', 'CAMPAIGN_ACHIEVED', 'CAMPAIGN_RAISED',
@@ -3789,6 +3798,8 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       ? (i18n.bankingBotUbiPaidTitle || 'You have received your UBI.')
       : subjectU === 'BANKING_UBI_AVAILABLE'
       ? (i18n.bankingBotUbiAvailableTitle || 'You can claim your UBI.')
+      : subjectU === 'BANKING_CONFIRM_PENDING'
+      ? (i18n.bankingBotConfirmTitle || 'You have transfers awaiting your confirmation.')
       : (i18n.bankingBotPaymentTitle || 'You have received a payment.')
     return div(
       { class: 'pm-card banking-bot-notification thread-level-0' },
@@ -4100,7 +4111,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             if (subjectU === 'SCHOOL_ENROLLED' || subjectU === 'SCHOOL_INVITED' || subjectU === 'SCHOOL_ADMITTED' || subjectU === 'SCHOOL_CERTIFICATE' || subjectU === 'SCHOOL_PASSED' || subjectU === 'SCHOOL_LESSON_NEW') {
               return SchoolBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
-            if (subjectU === 'BANKING_UBI_PAID' || subjectU === 'BANKING_UBI_AVAILABLE' || subjectU === 'WALLET_PAYMENT') {
+            if (subjectU === 'BANKING_UBI_PAID' || subjectU === 'BANKING_UBI_AVAILABLE' || subjectU === 'BANKING_CONFIRM_PENDING' || subjectU === 'WALLET_PAYMENT') {
               return BankingBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'INDUSTRY_ADMITTED' || subjectU === 'INDUSTRY_APPLICATION' || subjectU === 'INDUSTRY_INVITED' || subjectU === 'INDUSTRY_DISSOLVED' || subjectU === 'INDUSTRY_BUILD_APPROVED' || subjectU === 'INDUSTRY_DISTRIBUTED') {

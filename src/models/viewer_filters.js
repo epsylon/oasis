@@ -3,7 +3,7 @@ const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
 
 const COOLDOWN_MS = 5 * 60 * 1000;
-const statePath = path.join(__dirname, '../configs/follow_state.json');
+const statePath = require('../configs/state-manager').statePath('follow_state.json');
 
 const readJson = (p, fallback) => {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return fallback; }

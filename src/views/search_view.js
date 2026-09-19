@@ -439,7 +439,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           ) : null,
           content.txid ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bankTx + ':' ),
-            a({ href: `https://ecoin.03c8.net/blockexplorer/search?q=${content.txid}`, target: '_blank' }, content.txid)
+            span({ class: 'card-value bank-address-code' }, content.txid)
           ) : null
         );
       case 'schoolCourse':

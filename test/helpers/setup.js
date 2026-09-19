@@ -6,6 +6,7 @@ const { makeNetwork, makeNode, makeCooler, generateKeypair } = require('./mock-s
 const tmpRoot = path.join(os.tmpdir(), 'oasis-tests-' + process.pid);
 const bankingStoreDir = path.join(tmpRoot, 'banking-store');
 fs.mkdirSync(bankingStoreDir, { recursive: true });
+process.env.OASIS_TEST = '1';
 process.env.OASIS_BANKING_DIR = bankingStoreDir;
 const stateDir = path.join(tmpRoot, 'state');
 fs.mkdirSync(stateDir, { recursive: true });

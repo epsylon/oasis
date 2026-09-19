@@ -179,12 +179,18 @@ module.exports = ({ cooler }) => {
     return { tomb, nodes, parent, child, rootOf, tipByRoot, resolveGroup }
   }
 
+  const isSettledUbi = (t) => {
+    const tags = Array.isArray(t.tags) ? t.tags.map(x => String(x).toUpperCase()) : []
+    return tags.includes("UBI") && !tags.includes("PENDING") && /^[0-9a-f]{64}$/i.test(String(t.txid || ""))
+  }
+
   const deriveStatus = (t) => {
     const status = String(t.status || "").toUpperCase()
     const required = t.from === t.to ? 1 : 2
     const confirmedCount = Array.isArray(t.confirmedBy) ? t.confirmedBy.length : 0
 
     if (status === "DISCARDED") return "DISCARDED"
+    if (isSettledUbi(t)) return "CLOSED"
     if (confirmedCount >= required) return "CLOSED"
     const dl = t.deadline ? moment(t.deadline) : null
     if (dl && dl.isValid() && dl.isBefore(moment())) return "DISCARDED"

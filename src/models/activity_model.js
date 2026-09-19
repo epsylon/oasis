@@ -77,8 +77,11 @@ const HIDDEN_ENVELOPE_TYPES = new Set([
   'pubAvailability',
   'calendarReminderSent',
   'taskReminderSent',
+  'ubiClaim',
   'ubiClaimResult',
+  'ubiRefuse',
   'ubiAllocation',
+  'bankClaim',
   'courts-key'
 ]);
 
@@ -782,6 +785,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         if (a.type === 'schoolCourse' && String(c.visibility || '').toUpperCase() === 'INVITE' && a.author !== userId && !(Array.isArray(c.invited) && c.invited.includes(userId))) return false;
         if (a.type === 'housing' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId) return false;
         if (a.type === 'market' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && c.seller !== userId) return false;
+        if (a.type === 'market' && c.shopProductId) return false;
         if (a.type === 'shop' && String(c.visibility || '').toUpperCase() === 'CLOSED' && a.author !== userId) return false;
         if (a.type === 'curriculum' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && a.author !== userId) return false;
         if (a.type === 'shopProduct' && c.shopVisibility && String(c.shopVisibility).toUpperCase() === 'CLOSED' && a.author !== userId) return false;
@@ -816,7 +820,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
           .map(a => ({ ...a, authorActions: perAuthor.get(a.author) || 0 }))
           .sort((x, y) => (y.authorActions - x.authorActions) || ((y.ts || 0) - (x.ts || 0)));
       }
-      else if (filter === 'banking') out = deduped.filter(a => a.type === 'bankClaim' || a.type === 'ubiClaim');
       else if (filter === 'tribe') out = deduped.filter(a => a.type === 'tribe' || String(a.type || '').startsWith('tribe'));
       else if (filter === 'spread') out = deduped.filter(a => a.type === 'spread');
       else if (filter === 'parliament')

@@ -344,14 +344,14 @@ describe('activity: the TOP filter', (t) => {
 describe('activity: filter layout', (t) => {
   t('chips follow the order of their menu group, and no filter is lost', () => {
     const { activityView } = require('../../../src/views/activity_view');
-    const TYPES = ['bankClaim', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
+    const TYPES = ['market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
       'votes', 'event', 'calendar', 'task', 'report', 'post', 'feed', 'chat', 'pad', 'forum', 'map',
       'audio', 'bookmark', 'document', 'image', 'torrent', 'video', 'courtsCase'];
     const actions = TYPES.map((type, i) => ({ type, id: 'a' + i, author: '@x.ed25519', ts: 1, content: {} }));
     const html = String(activityView(actions, 'recent', '@me.ed25519'));
     const at = (type) => html.indexOf(`/activity?filter=${type}"`);
 
-    const economy = ['banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'];
+    const economy = ['market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'];
     for (const type of economy) ok(at(type) > 0, `${type} is rendered`);
     for (let i = 1; i < economy.length; i++) {
       ok(at(economy[i]) > at(economy[i - 1]),
@@ -363,9 +363,9 @@ describe('activity: filter layout', (t) => {
       ok(at(office[i]) > at(office[i - 1]), `${office[i]} comes after ${office[i - 1]}`);
     }
 
-    ok(at('banking') < at('post'), 'the economy group comes before the network one');
+    ok(at('market') < at('post'), 'the economy group comes before the network one');
 
-    for (const type of ['all', 'mine', 'recent', 'top', 'video', 'banking', 'courts']) {
+    for (const type of ['all', 'mine', 'recent', 'top', 'video', 'market', 'courts']) {
       ok(at(type) > 0, `${type} survived the regrouping`);
     }
 

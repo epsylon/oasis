@@ -114,3 +114,26 @@ describe('transfers: ECONOMIC / TIME / TRUST categories', (t) => {
     ok(tr.confirmedBy.includes(B.keypair.id));
   });
 });
+
+describe('transfers: UBI payments need no manual confirmation', (t) => {
+  t('a UBI transfer carrying its ECOin txid is already closed', async () => {
+    const net = makeNetwork(); const pub = makePeer(net); const me = makePeer(net); me.setActor();
+    const txid = 'a'.repeat(64);
+    const now = new Date().toISOString();
+    pub.node.publish({ type: 'transfer', from: pub.keypair.id, to: me.keypair.id, concept: 'UBI - 2026-09', amount: '2.500000', category: 'ECONOMIC', createdAt: now, updatedAt: now, deadline: null, confirmedBy: [pub.keypair.id, me.keypair.id], status: 'CLOSED', tags: ['UBI', 'epoch:2026-09'], opinions: {}, opinions_inhabitants: [], txid }, () => {});
+    const list = await me.use('transfers').listAll('all', me.keypair.id);
+    const paid = list.find(x => String(x.concept || '').startsWith('UBI - '));
+    ok(paid, 'the payment is listed');
+    eq(paid.status, 'CLOSED', 'no confirmation is pending');
+  });
+
+  t('a claim with no payment yet stays unconfirmed', async () => {
+    const net = makeNetwork(); const pub = makePeer(net); const me = makePeer(net); me.setActor();
+    const now = new Date().toISOString();
+    pub.node.publish({ type: 'transfer', from: pub.keypair.id, to: me.keypair.id, concept: 'UBI - 2026-08', amount: '1.000000', category: 'ECONOMIC', createdAt: now, updatedAt: now, deadline: null, confirmedBy: [pub.keypair.id], status: 'UNCONFIRMED', tags: ['UBI', 'epoch:2026-08'], opinions: {}, opinions_inhabitants: [] }, () => {});
+    const list = await me.use('transfers').listAll('all', me.keypair.id);
+    const pending = list.find(x => String(x.concept || '') === 'UBI - 2026-08');
+    ok(pending, 'the allocation is listed');
+    eq(pending.status, 'UNCONFIRMED', 'without a txid it is not settled');
+  });
+});

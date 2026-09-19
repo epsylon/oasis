@@ -122,7 +122,7 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   const clearnetStatus = (clearnetModules && clearnetModules.length > 0) ? clearnetModules.join(', ') : 'disabled';
   let fediverseConnected = false;
   try {
-    const acc = JSON.parse(fs.readFileSync(path.join(__dirname, '../configs/fediverse-accounts.json'), 'utf8'));
+    const acc = JSON.parse(fs.readFileSync(require('../configs/state-manager').statePath('fediverse-accounts.json'), 'utf8'));
     fediverseConnected = !!(acc && acc.mastodon);
   } catch (_) {}
   console.log(`- Internet Broadcasting:`);

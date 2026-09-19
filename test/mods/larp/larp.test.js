@@ -341,6 +341,7 @@ describe('larp: tribe integration', (t) => {
     const tag = 'larp-ACADEMIA';
     A.setActor();
     await A.use('tribes').createTribe('ACADEMIA', '', null, '', [tag], false, 'open', null, 'PUBLIC', '');
+    await new Promise(r => setTimeout(r, 5));
     B.setActor();
     await B.use('tribes').createTribe('ACADEMIA', '', null, '', [tag], false, 'open', null, 'PUBLIC', '');
     ok((await B.use('tribes').listAll()).filter(t => (t.tags || []).includes(tag)).length >= 2);

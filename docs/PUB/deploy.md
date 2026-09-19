@@ -137,7 +137,7 @@ sudo systemctl enable --now oasis-pub
 sudo journalctl -u oasis-pub -f
 ```
 
-Data is written to `~/.ssb/`.
+Data is written to `~/.ssb/` ([what each file in there is for](../devs/inventory.md)).
 
 ## 6) PUB admin: `sh oasis.sh <command>`
 

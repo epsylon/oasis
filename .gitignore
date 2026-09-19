@@ -10,8 +10,7 @@ cache/
 src/configs/*
 !src/configs/config-manager.js
 !src/configs/shared-state.js
+!src/configs/state-manager.js
 !src/configs/server-config.json
-!src/configs/content_favorites.json
 !src/configs/snh-invite-code.json
-!src/configs/banking-ubi-notice.json
 test/results/

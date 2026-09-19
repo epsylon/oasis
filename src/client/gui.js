@@ -10,10 +10,12 @@ const { printMetadata } = require('../server/ssb_metadata');
 const updateFlagPath = path.join(__dirname, "../server/.update_required");
 
 let internalSSB = null;
-try {
-  const { server } = require('../server/SSB_server');
-  internalSSB = server;
-} catch {}
+if (!process.env.OASIS_TEST) {
+  try {
+    const { server } = require('../server/SSB_server');
+    internalSSB = server;
+  } catch {}
+}
 
 if (process.env.OASIS_TEST) {
   ssbConfig.path = fs.mkdtempSync(path.join(os.tmpdir(), "oasis-"));

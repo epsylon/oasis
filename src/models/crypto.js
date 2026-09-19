@@ -28,7 +28,7 @@ const KEY_DISTRIB_TYPE = 'tribe-keys-distrib';
 const KEY_DISTRIB_BATCH = 7;
 
 module.exports = (configPath, namespace = 'tribes') => {
-  const keysDir = path.join(configPath, 'keys');
+  const keysDir = require('../configs/state-manager').keysDir(configPath);
   try { fs.mkdirSync(keysDir, { recursive: true, mode: 0o700 }); } catch (_) {}
   const keyringPath = path.join(keysDir, `${namespace}-keys.json`);
 

@@ -1,4 +1,4 @@
-const { eq, ok } = require('../../helpers/assert');
+const { eq, ok, notOk } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
 describe('banking: address management (no RPC)', (t) => {
@@ -261,3 +261,110 @@ describe('banking: UBI rules (no RPC)', (t) => {
   });
 });
 
+
+describe('banking: the UBI is claimed once per epoch', (t) => {
+  const countClaims = (peer) => new Promise((resolve) => {
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    let n = 0;
+    pull(peer.node.messagesByType({ type: 'ubiClaim' }),
+      pull.drain(msg => { if (msg.value?.content?.type === 'ubiClaim') n += 1; }, () => resolve(n)));
+  });
+
+  t('two claims sent at the same time leave a single claim in the feed', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const banking = A.use('banking');
+    const results = await Promise.allSettled([banking.claimUBI(A.keypair.id), banking.claimUBI(A.keypair.id)]);
+    eq(results.filter(r => r.status === 'fulfilled').length, 1, 'only one of the two goes through');
+    eq(await countClaims(A), 1, 'and only one claim reaches the feed');
+  });
+
+  t('claiming again after the first one is refused', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const banking = A.use('banking');
+    await banking.claimUBI(A.keypair.id);
+    let failed = false;
+    try { await banking.claimUBI(A.keypair.id); } catch (_) { failed = true; }
+    ok(failed, 'the second claim is rejected');
+    eq(await countClaims(A), 1, 'the feed still holds a single claim');
+  });
+});
+
+describe('banking: only a PUB can say that the UBI was paid', (t) => {
+  const epochNow = () => new Date().toISOString().slice(0, 7);
+  const publish = (peer, content) => new Promise((res, rej) => peer.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+
+  t('a payment result published by an ordinary inhabitant is ignored', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const X = makePeer(net);
+    X.setActor();
+    await publish(X, { type: 'ubiClaimResult', allocationId: 'x', epochId: epochNow(), txid: 'f'.repeat(64), userId: A.keypair.id, amount: 50, processedAt: new Date().toISOString() });
+    A.setActor();
+    notOk(await A.use('banking').hasClaimedThisMonth(A.keypair.id), 'a forged result cannot block the claim');
+    eq((await A.use('banking').getUbiClaimHistory(A.keypair.id)).claimCount, 0, 'nor count as income');
+  });
+
+  t('a payment result published by an announcing PUB is honoured', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const P = makePeer(net);
+    P.setActor();
+    await publish(P, { type: 'pubAvailability', coin: 'ECO', available: true, balance: 100, timestamp: Date.now() });
+    await publish(P, { type: 'ubiClaimResult', allocationId: 'a', epochId: epochNow(), txid: 'a'.repeat(64), userId: A.keypair.id, amount: 50, processedAt: new Date().toISOString() });
+    A.setActor();
+    ok(await A.use('banking').hasClaimedThisMonth(A.keypair.id), 'the PUB result counts');
+    eq((await A.use('banking').getUbiClaimHistory(A.keypair.id)).claimCount, 1, 'and shows up as income');
+  });
+});
+
+describe('banking: the UBI can only be answered once per epoch', (t) => {
+  const { renderBankingView } = require('../../../src/views/banking_views');
+  const baseData = (summary) => ({
+    summary: {
+      userBalance: 0, epochId: '2026-09', pool: 100, userEngagementScore: 10, futureUBI: 1,
+      pubId: '@pub.ed25519', hasValidWallet: true, addressPublished: true, ubiAvailability: 'OK',
+      alreadyClaimed: false, alreadyRefused: false, wealthTotals: { distributed: 0, taxes: 0 },
+      pubLastSeen: Date.now(), pubBalance: null, ...summary
+    },
+    exchange: { isSynced: true }, allocations: [], epochs: [], charts: {}, rules: {}, taxRules: {},
+    alreadyClaimed: !!(summary || {}).alreadyClaimed, pendingUBI: null, isPub: false
+  });
+  const render = (summary, filter = 'ubi') => String(renderBankingView(baseData(summary), filter, '@me.ed25519', false));
+
+  t('both buttons are offered in the UBI tab while the month is untouched', () => {
+    const html = render({});
+    ok(html.includes('/banking/claim-ubi'), 'claim is offered');
+    ok(html.includes('/banking/refuse-ubi'), 'refuse is offered');
+    const exchange = render({}, 'exchange');
+    notOk(exchange.includes('/banking/claim-ubi'), 'and they do not show up anywhere else');
+  });
+
+  t('after claiming, neither button is offered again', () => {
+    const html = render({ alreadyClaimed: true });
+    notOk(html.includes('/banking/claim-ubi'), 'claim is gone');
+    notOk(html.includes('/banking/refuse-ubi'), 'refuse is gone');
+  });
+
+  t('after refusing, neither button is offered again', () => {
+    const html = render({ alreadyRefused: true });
+    notOk(html.includes('/banking/claim-ubi'), 'claim is gone');
+    notOk(html.includes('/banking/refuse-ubi'), 'refuse is gone');
+  });
+});
+
+describe('banking: the epoch answer is remembered', (t) => {
+  t('after claiming, the UBI is no longer offered', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const banking = A.use('banking');
+    await banking.claimUBI(A.keypair.id);
+    ok(await banking.hasClaimedThisMonth(A.keypair.id), 'the month is marked as claimed');
+    eq((await banking.claimAvailability(A.keypair.id)).available, false, 'and nothing else is offered');
+  });
+
+  t('after refusing, claiming is refused too', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const banking = A.use('banking');
+    await banking.refuseUBI(A.keypair.id);
+    let failed = false;
+    try { await banking.claimUBI(A.keypair.id); } catch (_) { failed = true; }
+    ok(failed, 'claiming after refusing is rejected');
+    ok(await banking.hasRefusedThisMonth(A.keypair.id), 'the refusal is remembered');
+    eq((await banking.claimAvailability(A.keypair.id)).available, false, 'and nothing is offered');
+  });
+});
