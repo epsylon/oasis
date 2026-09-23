@@ -4002,6 +4002,8 @@ a.pm-btn:hover { text-decoration: none }
 /* carbon footprint chart */
 .carbon-section-title{font-size:18px;color:#555;margin:8px 0;font-weight:600}
 #carbon{scroll-margin-top:16px}
+#wallet,#language,#ux,#theme,#wish,#workflows,#home-page,#ai,#logstream,#replication,#lan,#pm-visibility,#multiverse,#verification,#indexes,#export,#panic{scroll-margin-top:16px}
+.settings-anchor-space{min-height:70vh;margin:0;padding:0;background:none;border:0;box-shadow:none}
 .carbon-chart{margin:12px 0;background:transparent !important;border:none !important}
 .carbon-bar-label{display:flex;justify-content:space-between;font-size:14px;margin:4px 0 2px;background:transparent !important;border:none !important}
 .carbon-bar-track{background:#3a3a3a !important;border-radius:6px;height:22px;overflow:hidden;border:none !important}
@@ -4665,8 +4667,11 @@ a.pm-btn:hover { text-decoration: none }
 
 .tribe-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
+}
+@media (max-width: 900px) {
+  .tribe-grid { grid-template-columns: 1fr; }
 }
 
 .tribe-section-nav {
@@ -5865,8 +5870,7 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .torrent-table td:has(.filter-btn){width:1%;white-space:nowrap}
 .torrent-table td .filter-btn{margin:0}
 .torrent-table th{background:#1a1a1a;color:#FFA500;font-weight:bold}
-.torrent-download{margin:12px 0}
-.torrent-download .filter-btn{border:none}
+.torrent-download{margin:12px 0;background:transparent;border:0;padding:0;box-shadow:none}
 
 .logs-table{width:100%;border-collapse:collapse;margin-top:12px}
 .logs-table th,.logs-table td{padding:8px 12px;text-align:left;vertical-align:middle;border-bottom:1px solid #222}
@@ -6051,14 +6055,14 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .wallet-icon{color:#4fc3f7;font-size:1.1em}
 .wallet-address{display:block;font-family:monospace;font-size:.85em;word-break:break-all;background:rgba(0,0,0,.25);border-radius:5px;padding:6px 8px;cursor:copy;-webkit-user-select:all;user-select:all}
 .wallet-line-link{text-decoration:none;color:inherit}
-.wallet-transfer-ctx{display:flex;flex-direction:column;gap:6px;background:#1e1f23 !important;border:1px solid #333 !important;border-radius:8px;padding:10px 12px !important;margin:10px 0}
+.wallet-transfer-ctx{display:flex;flex-direction:column;gap:6px;background:transparent !important;border:0 !important;border-radius:0;padding:0 !important;margin:10px 0;box-shadow:none}
 .wallet-transfer-ctx-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
 .wallet-transfer-ctx-label{font-weight:700;font-size:.85em;letter-spacing:.5px;text-transform:uppercase}
 .ubi-status{display:flex;flex-direction:column;gap:8px;background:#1e1f23 !important;border:1px solid #333 !important;border-radius:10px;padding:12px 14px !important;margin:0 0 14px}
 .ubi-status-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
 .ubi-status-note{font-size:.85em;opacity:.75}
 .ubi-status a{text-decoration:none}
-.wallet-chip-link{text-decoration:none}
+.wallet-chip-link,.wallet-chip-link:hover{text-decoration:none}
 .module-header-line .wallet-chip-link{display:inline-flex}
 .addr-cards.ubi-pub-cards{grid-template-columns:repeat(3,1fr)}
 .ubi-pub-summary{margin:0;padding:0 !important;background:transparent !important;border:0 !important;box-shadow:none}
@@ -8059,7 +8063,7 @@ details[open] > .school-unit-summary::after{content:" \25B4"}
 .wiki-actions-top{justify-content:flex-end;margin:0 0 10px 0}
 .wiki-actions-top .wiki-actions-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-right:auto}
 .wiki-version-actions{justify-content:flex-start;margin:6px 0}
-.wiki-preview{margin:0 0 14px 0}
+.wiki-preview,.blog-preview{margin:0 0 14px 0}
 .stats-kpi{margin:0 !important;padding:0 !important;box-shadow:none !important;overflow:visible}
 .stats-kpi-label,.stats-kpi-value{margin:0 !important;padding:10px 14px !important;box-shadow:none !important;overflow:visible}
 .stats-kpi-label{white-space:nowrap}
@@ -8106,3 +8110,12 @@ details[open] > .school-unit-summary::after{content:" \25B4"}
 .rt-mark-italic{font-style:italic}
 .rt-mark-underline{text-decoration:underline}
 .rt-mark-strike{text-decoration:line-through}
+
+.qr-code{display:flex;justify-content:center;align-items:center;width:100%}
+.wallet-qr-img{max-width:320px;width:100%;height:auto}
+label.wallet-create-transfer{display:flex !important;flex-direction:row !important;align-items:center !important;justify-content:flex-start !important;gap:8px;text-align:left !important;width:100% !important;margin:8px 0}
+label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0 0 auto !important;margin:0 !important}
+.wallet-status{margin:0 0 12px 0}
+.wallet-history .wallet-col-confirmations{width:10%}
+.wallet-history .wallet-col-date{width:34%;white-space:nowrap}
+.torrent-file-info{margin:0 0 10px 0}

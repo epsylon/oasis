@@ -14,6 +14,7 @@ const FOLDERS = {
   'banking-ubi-notice.json': 'banking',
   'banking-confirm-notice.json': 'banking',
   'banking-ubi-paid.json': 'banking',
+  'banking-funds-history.json': 'banking',
   'content_favorites.json': 'content',
   'follow_state.json': 'content',
   'agenda-config.json': 'content',

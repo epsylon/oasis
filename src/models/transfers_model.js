@@ -216,6 +216,7 @@ module.exports = ({ cooler }) => {
       confirmedBy,
       status: deriveStatus({ ...c, confirmedBy }),
       tags: Array.isArray(c.tags) ? c.tags : [],
+      txid: typeof c.txid === "string" ? c.txid : null,
       opinions,
       opinions_inhabitants
     }

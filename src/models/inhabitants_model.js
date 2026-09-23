@@ -1,13 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const { isContentVisibleTo } = require('./content_visibility');
-const ssbClientGUI = require("../client/gui");
-const coolerInstance = ssbClientGUI({ offline: require('../server/ssb_config').offline });
 const models = require("../models/main_models");
-const { about, friend } = models({
-  cooler: coolerInstance,
-  isPublic: require('../server/ssb_config').public,
-});
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -21,6 +15,7 @@ const MIN_SUGGESTION_AFFINITY = 0.1;
 const MAX_SUGGESTED = 12;
 
 module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
+  const { about, friend } = models({ cooler, isPublic: require('../server/ssb_config').public });
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 

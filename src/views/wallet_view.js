@@ -1,33 +1,56 @@
 const { form, button, div, h2, p, section, input, span, table, thead, tbody, tr, td, th, ul, li, a, br, label, img } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderWalletChip } = require('./main_views');
+const { template, i18n, userLink, renderWalletChip, renderStateChip } = require('./main_views');
 
-const walletViewRender = (balance, address, ...elements) => {
+const TX_CATEGORY_CHIPS = {
+    receive: ["mutuals", "\u2B07"],
+    send: ["whole", "\u2B06"],
+    generate: ["mutuals", "\u2713"],
+    stake: ["mutuals", "\u2713"],
+    immature: ["lifespan", "\u23F3"],
+    orphan: ["closed", "\u2717"]
+};
+const renderTxCategory = (category) => {
+    const key = String(category || "").toLowerCase();
+    const [variant, icon] = TX_CATEGORY_CHIPS[key] || ["encrypted", ""];
+    return renderStateChip(variant, icon, (key || "-").toUpperCase());
+};
+
+const WALLET_MODES = [
+    { key: "send", href: "/wallet/send", label: () => i18n.walletSend },
+    { key: "receive", href: "/wallet/receive", label: () => i18n.walletReceive },
+    { key: "history", href: "/wallet/history", label: () => i18n.walletHistory }
+];
+
+const walletModeButtons = (current) =>
+    div({ class: "mode-buttons-row" },
+        ...WALLET_MODES.map(mode =>
+            form({ method: "GET", action: mode.href },
+                button({ type: "submit", class: current === mode.key ? "filter-btn active" : "filter-btn" }, String(mode.label()).toUpperCase())
+            )
+        )
+    );
+
+const walletViewRender = (balance, address, current, ...elements) => {
     const header = div({ class: 'tags-header module-header-line' }, h2(i18n.walletTitle), p(i18n.walletDescription), renderWalletChip());
     return template(
         i18n.walletTitle,
         section(
             header,
+            walletModeButtons(current),
             div({ class: "wallet-section" },
                 h2(i18n.walletAddress),
                 div({ class: "wallet-address" }, h2({ class: "element" }, address || "-")),
                 h2(i18n.walletBalanceTitle),
-                div({ class: "div-center" }, h2(i18n.walletBalanceLine({ balance: Number(balance || 0).toFixed(6) }))),
-                div({ class: "div-center" },
-                    span({ class: "wallet-form-button-group-center" },
-                        form({ action: "/wallet/send", method: "get" }, button({ type: 'submit' }, i18n.walletSend)),
-                        form({ action: "/wallet/receive", method: "get" }, button({ type: 'submit' }, i18n.walletReceive)),
-                        form({ action: "/wallet/history", method: "get" }, button({ type: 'submit' }, i18n.walletHistory))
-                    )
-                )
+                div({ class: "div-center" }, h2(i18n.walletBalanceLine({ balance: Number(balance || 0).toFixed(6) })))
             )
         ),
-        elements.length > 0 ? section(...elements) : null
+        elements.length > 0 ? section({ id: `wallet-${current || 'main'}` }, ...elements) : null
     );
 };
 
 exports.walletView = async (balance, address) => {
-    return walletViewRender(balance, address);
+    return walletViewRender(balance, address, null);
 };
 
 exports.walletHistoryView = async (balance, transactions, address) => {
@@ -35,17 +58,16 @@ exports.walletHistoryView = async (balance, transactions, address) => {
     return walletViewRender(
         balance,
         address,
-        h2(i18n.walletHistoryTitle),
+        "history",
         table(
             { class: "wallet-history" },
             thead(
                 tr(
                     { class: "full-center" },
-                    th({ class: "col-10" }, i18n.walletCnfrs),
-                    th(i18n.walletDate),
+                    th({ class: "wallet-col-confirmations" }, i18n.walletCnfrs),
+                    th({ class: "wallet-col-date" }, i18n.walletDate),
                     th(i18n.walletType),
-                    th(i18n.walletAmount),
-                    th({ class: "col-30" }, i18n.walletTxId)
+                    th(i18n.walletAmount)
                 )
             ),
             tbody(
@@ -56,12 +78,9 @@ exports.walletHistoryView = async (balance, transactions, address) => {
                     const totalAmount = amount + fee;
                     return tr(
                         td({ class: "full-center" }, String(tx.confirmations || 0)),
-                        td(moment(date).format("YYYY/MM/DD"), br(), moment(date).format("HH:mm")),
-                        td(tx.category || "-"),
-                        td(totalAmount.toFixed(6)),
-                        td({ width: "30%", class: "tcell-ellipsis" },
-                            span({ class: "bank-address-code" }, tx.txid || "-")
-                        )
+                        td({ class: "wallet-col-date" }, moment(date).format("YYYY/MM/DD HH:mm")),
+                        td(renderTxCategory(tx.category)),
+                        td(totalAmount.toFixed(6))
                     );
                 })
             )
@@ -73,7 +92,7 @@ exports.walletReceiveView = async (balance, address) => {
     return walletViewRender(
         balance,
         address,
-        h2(i18n.walletReceiveTitle),
+        "receive",
         address
             ? div({ class: 'div-center qr-code' }, img({ src: `/wallet/qr/${encodeURIComponent(address)}`, alt: 'QR', class: 'wallet-qr-img' }))
             : null
@@ -86,33 +105,37 @@ exports.walletSendFormView = async (balance, destination, amount, fee, statusMes
     const type = statusMessages?.type || 'info';
     const titleKey = statusMessages?.title || '';
     const messages = statusMessages?.messages || [];
+    const statusText = [i18n.walletStatusMessages[titleKey] || titleKey || '', ...messages.map(error => i18n.walletStatusMessages[error] || error)].filter(Boolean).join(': ');
     const statusBlock = messages.length > 0
-        ? div(
-            { class: `wallet-status-${type}` },
-            span(i18n.walletStatusMessages[titleKey] || titleKey || ''),
-            ul(...messages.map(error => li(i18n.walletStatusMessages[error] || error)))
-        )
+        ? (type === 'error'
+            ? section({ class: 'inline-error' },
+                div({ class: 'tags-header inline-error-box' },
+                    p({ class: 'error-page-message' }, statusText),
+                    a({ href: '/wallet/send', class: 'filter-btn' }, i18n.errorDismiss || 'OK')
+                )
+              )
+            : div({ class: 'flash-banner wallet-status' }, p(statusText)))
         : null;
 
     return walletViewRender(
         balance,
         address,
-        h2(i18n.walletWalletSendTitle),
+        "send",
         div(
             { class: "div-center" },
             statusBlock,
             form(
                 { action: '/wallet/send', method: 'POST' },
                 label({ for: 'destination' }, i18n.walletAddress), br(),
-                input({ type: 'text', id: 'destination', name: 'destination', placeholder: 'ETQ17sBv8QFoiCPGKDQzNcDJeXmB2317HX', value: destination || '' }), br(),
+                input({ type: 'text', id: 'destination', name: 'destination', placeholder: 'ETQ17sBv8QFoiCPGKDQzNcDJeXmB2317HX', value: destination || '', required: true, pattern: 'E[1-9A-HJ-NP-Za-km-z]{32,34}', maxlength: '35' }), br(),
                 label({ for: 'amount' }, i18n.walletAmount), br(),
-                input({ type: 'text', id: 'amount', name: 'amount', placeholder: '0.25', value: amount || '' }), br(),
+                input({ type: 'number', id: 'amount', name: 'amount', placeholder: '0.25', value: amount || '', required: true, min: '0.000001', step: '0.000001', inputmode: 'decimal' }), br(), br(),
                 label({ for: 'fee' }, i18n.walletFee), br(),
-                input({ type: 'text', id: 'fee', name: 'fee', placeholder: '0.01', value: fee || '' }), br(),
+                input({ type: 'number', id: 'fee', name: 'fee', placeholder: '5', value: fee || '', required: true, min: '0', step: '0.000001', inputmode: 'decimal' }), br(), br(),
                 paymentRef
                     ? div({ class: 'wallet-transfer-ctx' },
                         div({ class: 'wallet-transfer-ctx-line' }, span({ class: 'wallet-transfer-ctx-label' }, `${i18n.walletPayeeLabel}: `), userLink(paymentRef.payeeId)),
-                        div({ class: 'wallet-transfer-ctx-line' }, span({ class: 'wallet-transfer-ctx-label' }, `${i18n.walletConceptLabel}: `), paymentRef.href ? a({ href: paymentRef.href }, paymentRef.concept || paymentRef.href) : span(paymentRef.concept)),
+                        paymentRef.concept ? div({ class: 'wallet-transfer-ctx-line' }, span({ class: 'wallet-transfer-ctx-label' }, `${i18n.walletConceptLabel}: `), span(paymentRef.concept)) : null,
                         input({ type: 'hidden', name: 'payeeId', value: paymentRef.payeeId }),
                         input({ type: 'hidden', name: 'concept', value: paymentRef.concept || '' }),
                         input({ type: 'hidden', name: 'refHref', value: paymentRef.href || '' }),
@@ -147,6 +170,7 @@ exports.walletSendConfirmView = async (balance, destination, amount, fee, option
     return walletViewRender(
         balance,
         destination,
+        "send",
         p(
             i18n.walletAddressLine({ address: destination || '-' }), br(),
             i18n.walletAmountLine({ amount: amountNum.toFixed(6) }), br(),
@@ -182,6 +206,7 @@ exports.walletSendResultView = async (balance, destination, amount, txId, note =
     return walletViewRender(
         balance,
         destination,
+        "send",
         p(
             i18n.walletSentToLine({ destination: destination || '-', amount: Number(amount || 0).toFixed(6) }), br(),
             `${i18n.walletTransactionId}: `,

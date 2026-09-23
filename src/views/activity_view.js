@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, torrentDownloadHref } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 
 const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent']);
@@ -621,13 +621,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'torrent') {
-      const { title } = content;
+      const { title, url } = content;
       cardBody.push(
         div({ class: 'card-section' },
-          title ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'),
-            span({ class: 'card-value' }, title)
-          ) : null
+          title?.trim() ? h2({ class: 'torrent-title' }, title) : "",
+          url ? renderTorrentDownload(torrentDownloadHref(url, title)) : null
         )
       );
     }
@@ -881,7 +879,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                                   : mime === 'application/pdf'
                                     ? a({ href: attSrc, target: '_blank', rel: 'noopener', class: 'filter-btn' }, '📄 PDF')
                                     : mime.includes('bittorrent') || mime === 'application/x-torrent'
-                                      ? a({ href: attSrc, class: 'filter-btn' }, `🧲 ${i18n.torrentDownload}`)
+                                      ? renderTorrentDownload(attSrc)
                                       : renderZoomableImage(attSrc, { imgClass: 'post-image' }))
                             : renderMediaBlob(latest.image);
                         const textNode = latest.text
@@ -2045,7 +2043,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'housing',   label: i18n.typeHousing },
     { type: 'job',       label: i18n.typeJob },
     { type: 'shop',      label: i18n.typeShop },
-    { type: 'transfer',  label: i18n.typeTransfer },
     { type: 'audio',     label: i18n.typeAudio },
     { type: 'bookmark',  label: i18n.typeBookmark },
     { type: 'document',  label: i18n.typeDocument },
@@ -2232,7 +2229,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
             'all', 'mine', 'recent', 'top',
             'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts', 'emergency',
             'votes', 'event', 'calendar', 'task', 'report', 'campaign',
-            'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer', 'logistics',
+            'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'logistics',
             'post', 'feed', 'chat', 'pad', 'wiki', 'mailing', 'forum', 'map',
             'audio', 'bookmark', 'document', 'image', 'torrent', 'video', 'podcast'
           ];

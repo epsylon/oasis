@@ -368,3 +368,67 @@ describe('banking: the epoch answer is remembered', (t) => {
     eq((await banking.claimAvailability(A.keypair.id)).available, false, 'and nothing is offered');
   });
 });
+
+describe('banking: a wallet counts as configured only with its credentials', (t) => {
+  t('url alone is not enough, url + user + password is', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const banking = A.use('banking');
+    notOk(banking.hasWalletCredentials({ wallet: { url: 'http://localhost:7474', user: '', pass: '' } }), 'the default url is not a configured wallet');
+    notOk(banking.hasWalletCredentials({ wallet: { url: '', user: 'u', pass: 'p' } }), 'credentials without a url are not either');
+    ok(banking.hasWalletCredentials({ wallet: { url: 'http://localhost:7474', user: 'u', pass: 'p' } }), 'all three together are');
+  });
+
+  t('a published address without credentials does not offer the UBI', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const P = makePeer(net);
+    P.setActor();
+    await new Promise((res, rej) => P.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 100, timestamp: Date.now() }, (e) => e ? rej(e) : res()));
+    A.setActor();
+    await A.use('banking').setUserAddress(A.keypair.id, 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42E', true);
+    const avail = await A.use('banking').claimAvailability(A.keypair.id);
+    eq(avail.available, false);
+    eq(avail.reason, 'no_wallet');
+  });
+});
+
+describe('banking: exchange charts need a synced ECOin node', (t) => {
+  const { renderBankingView } = require('../../../src/views/banking_views');
+  const history = [{ ts: Date.now() - 3600000, currentSupply: 100, inflationFactor: 1 }, { ts: Date.now(), currentSupply: 101, inflationFactor: 1 }];
+  const data = (isSynced) => ({
+    summary: { userBalance: 0, epochId: '2026-09', pool: 0, userEngagementScore: 0, futureUBI: 0, pubId: '', hasValidWallet: false, addressPublished: false, ubiAvailability: 'OK', alreadyClaimed: false, alreadyRefused: false, wealthTotals: { distributed: 0, taxes: 0 }, pubLastSeen: 0, pubBalance: null },
+    exchange: { isSynced, ecoValue: 1, currentSupply: 101, totalSupply: 25500000, ecoTimeMs: 0, inflationFactor: 1, inflationMonthly: 0, inflationIssuance: 0 },
+    exchangeHistory: history, allocations: [], epochs: [], charts: {}, rules: {}, taxRules: {}, alreadyClaimed: false, pendingUBI: null, isPub: false
+  });
+
+  t('when the node is out of sync, the supply and inflation charts are not drawn', () => {
+    const html = String(renderBankingView(data(false), 'exchange', '@me.ed25519', false));
+    notOk(html.includes('eco-supply-chart-block'), 'no supply chart');
+    notOk(html.includes('eco-inflation-chart-block'), 'no inflation chart');
+  });
+
+  t('when it is synced and there are samples, they are', () => {
+    const html = String(renderBankingView(data(true), 'exchange', '@me.ed25519', false));
+    ok(html.includes('eco-supply-chart-block'), 'supply chart present');
+    ok(html.includes('eco-inflation-chart-block'), 'inflation chart present');
+  });
+});
+
+describe('banking: an inhabitant can withdraw a published address', (t) => {
+  t('after removing it, neither they nor the network resolve it any more, and it can be published again', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('banking').setUserAddress(A.keypair.id, 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A', true);
+    B.setActor();
+    eq(await B.use('banking').getUserAddress(A.keypair.id), 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A', 'a peer sees the published address');
+    A.setActor();
+    await A.use('banking').removeAddress({ userId: A.keypair.id });
+    eq(await A.use('banking').getUserAddress(A.keypair.id), null, 'the owner no longer has it');
+    notOk(await A.use('banking').hasPublishedAddress(A.keypair.id), 'and it is no longer published');
+    B.setActor();
+    eq(await B.use('banking').getUserAddress(A.keypair.id), null, 'nor does the peer');
+    notOk(Object.keys(await B.use('banking').scanAllWalletsSSB()).includes(A.keypair.id), 'so nobody would donate to it');
+    A.setActor();
+    await A.use('banking').setUserAddress(A.keypair.id, 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42B', true);
+    B.setActor();
+    eq(await B.use('banking').getUserAddress(A.keypair.id), 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42B', 'a fresh address is picked up again');
+  });
+});

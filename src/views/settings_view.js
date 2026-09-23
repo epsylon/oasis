@@ -313,15 +313,17 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
 	),
         form(
           { action: "/settings/wallet", method: "POST" },
-          label({ for: "wallet_url" }, i18n.walletAddress), br(),
-          input({ type: "text", id: "wallet_url", name: "wallet_url", placeholder: walletUrl, value: walletUrl }), br(),
+          label({ for: "wallet_url" }, i18n.walletRpcUrl), br(),
+          input({ type: "text", id: "wallet_url", name: "wallet_url", placeholder: "http://localhost:7474", value: walletUrl || "http://localhost:7474" }), br(),
           label({ for: "wallet_user" }, i18n.walletUser), br(),
-          input({ type: "text", id: "wallet_user", name: "wallet_user", placeholder: walletUser, value: walletUser }), br(),
+          input({ type: "text", id: "wallet_user", name: "wallet_user", placeholder: "ecoinrpc", value: walletUser }), br(),
           label({ for: "wallet_pass" }, i18n.walletPass), br(),
           input({ type: "password", id: "wallet_pass", name: "wallet_pass" }), br(),
           label({ for: "wallet_fee" }, i18n.walletFee), br(),
-          input({ type: "text", id: "wallet_fee", name: "wallet_fee", placeholder: walletFee, value: walletFee }), br(),
-          button({ type: "submit" }, i18n.walletConfiguration)
+          input({ type: "text", id: "wallet_fee", name: "wallet_fee", placeholder: "5", value: walletFee || "5" }), br(),
+          button({ type: "submit" }, i18n.walletConfiguration),
+          walletUser ? " " : null,
+          walletUser ? button({ type: "submit", class: "delete-btn", formaction: "/settings/wallet/disconnect", formmethod: "POST" }, i18n.walletDisconnectButton) : null
         )
       )
     ) : null,
@@ -433,7 +435,8 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
           button({ type: "submit" }, i18n.removePanicButton)
         )
       )
-    )
+    ),
+    section({ class: "settings-anchor-space" })
   );
 };
 

@@ -5,6 +5,9 @@ const { renderStyledText } = require("../backend/renderStyledText");
 const { renderReachChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
+const { getConfig } = require("../configs/config-manager.js");
+
+const isMobileTheme = () => { try { return getConfig().themes.current === "OasisMobile"; } catch (_) { return false; } };
 
 const userId = config.keys.id;
 const BASE_FILTERS = ["ALL", "MINE", "RECENT", "TOP", "VIEWERS"];
@@ -112,7 +115,7 @@ const renderEpisodeForm = (ch, ep) =>
       label(i18n.podcastEpisodeDescriptionLabel), br(),
       textarea({ name: "description", rows: 6, maxlength: "5000", placeholder: i18n.podcastEpisodeDescriptionPlaceholder }, ep ? ep.description : ""), br(),
       label(i18n.uploadMedia), br(),
-      input({ type: "file", name: "media", accept: "audio/*,video/*", ...(ep ? {} : { required: true }) }), br(), br(),
+      input({ type: "file", name: "media", accept: isMobileTheme() ? "audio/*" : "audio/*,video/*", ...(ep ? {} : { required: true }) }), br(), br(),
       label(i18n.podcastTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.podcastTagsPlaceholder, value: ep ? ep.tags.join(", ") : "" }), br(), br(),
       button({ type: "submit", class: "create-button" }, ep ? i18n.podcastUpdate : i18n.podcastEpisodePublish)

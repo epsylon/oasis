@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -235,7 +235,7 @@ const renderMessage = (msg, chat, opts = {}) => {
           : mime === "application/pdf"
             ? a({ href: imageSrc, target: "_blank", rel: "noopener", class: "filter-btn chat-message-file" }, "📄 PDF")
             : mime.includes("bittorrent") || mime === "application/x-torrent"
-              ? a({ href: imageSrc, class: "filter-btn chat-message-file" }, `🧲 ${i18n.torrentDownload}`)
+              ? renderTorrentDownload(imageSrc, { class: "filter-btn chat-message-file" })
               : renderZoomableImage(imageSrc, { imgClass: "chat-message-image" }))
     : (msg.image ? renderMediaBlob(msg.image, null, { class: "chat-message-image" }) : null)
 

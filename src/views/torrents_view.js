@@ -20,7 +20,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -86,6 +86,12 @@ const renderTorrentCommentsSection = (torrentId, comments = [], returnTo = null)
   });
 };
 
+const blobSha256Hex = (blobId) => {
+  const m = /^&([A-Za-z0-9+/=]+)\.sha256$/.exec(String(blobId || ""));
+  if (!m) return "";
+  try { return Buffer.from(m[1], "base64").toString("hex"); } catch (_) { return ""; }
+};
+
 const formatSize = (bytes) => {
   const n = Number(bytes) || 0;
   if (n === 0) return "—";
@@ -122,12 +128,12 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
             input({ type: "hidden", name: "filter", value: filter || "all" }),
             params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
             params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-            button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
+            button({ type: "submit", class: "filter-btn" }, i18n.torrentDetailsButton)
           )
         ),
         td(
           t.url && t.url.startsWith("&")
-            ? a({ href: `/blob/${encodeURIComponent(t.url)}`, class: "filter-btn" }, i18n.torrentDownloadButton || "DOWNLOAD IT!")
+            ? renderTorrentDownload(torrentDownloadHref(t.url, t.title))
             : ""
         )
       )
@@ -318,7 +324,12 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
     detailActions,
     torrentObj.url && torrentObj.url.startsWith("&")
       ? div({ class: "torrent-download" },
-          a({ href: `/blob/${encodeURIComponent(torrentObj.url)}?name=${encodeURIComponent((torrentObj.title || 'download').replace(/\.torrent$/i, '') + '.torrent')}` , class: "filter-btn" }, i18n.torrentDownloadButton || "DOWNLOAD IT!")
+          table({ class: "tribe-info-table torrent-file-info" },
+            tr(td({ class: "tribe-info-label" }, i18n.fileShareFileLabel), td({ class: "tribe-info-value" }, `${String(torrentObj.title || "download").replace(/\.torrent$/i, "")}.torrent`)),
+            tr(td({ class: "tribe-info-label" }, i18n.torrentSizeLabel), td({ class: "tribe-info-value" }, formatSize(torrentObj.size))),
+            tr(td({ class: "tribe-info-label" }, "SHA-256"), td({ class: "tribe-info-value" }, span({ class: "bank-address-code" }, blobSha256Hex(torrentObj.url))))
+          ),
+          renderTorrentDownload(torrentDownloadHref(torrentObj.url, torrentObj.title))
         )
       : p(i18n.torrentNoFile),
     (() => {

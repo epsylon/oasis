@@ -161,3 +161,23 @@ describe('blogs: where a post link points', (t) => {
     eq(await blogs.blogHrefFor(priv.key), null, 'a private post is not a blog');
   });
 });
+
+describe('blogs: preview before publishing', (t) => {
+  t('the form offers a preview that does not publish, and a separate publish', async () => {
+    const { blogView } = require('../../../src/views/blog_view');
+    const form = String(await blogView([], 'CREATE', {}));
+    ok(form.includes('formaction="/blogs/preview"'), 'preview goes to its own route');
+    ok(form.includes('action="/blogs/create"'), 'publishing goes to create');
+  });
+
+  t('a preview shows the draft rendered and keeps it in the form', async () => {
+    const { blogView } = require('../../../src/views/blog_view');
+    const draft = { subject: 'my subject', text: 'a **bold** body', allowComments: false };
+    const html = String(await blogView([], 'CREATE', { draft }));
+    ok(html.includes('my subject'), 'the subject is shown');
+    ok(html.includes('<strong>bold</strong>'), 'the body is rendered, not raw markdown');
+    ok(html.includes('value="my subject"'), 'and the subject stays in the field');
+    ok(html.includes('a **bold** body'), 'and the body stays in the textarea');
+    notOk(html.includes('checked'), 'the comment choice is kept as well');
+  });
+});

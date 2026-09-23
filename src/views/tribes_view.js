@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref } = require('./main_views');
 const { renderTribeWikiSection } = require('./wiki_view');
 const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
 const { renderResults: renderPollResults, renderBallot: renderPollBallot } = require('./polls_view');
@@ -301,15 +301,11 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
           ),
           t.description ? p({ class: 'tribe-card-description' }, ...renderStyledText(t.description)) : null,
           renderMapLocationVisitLabel(t.mapUrl),
-          (parentTribe || t.location) ? table({ class: 'tribe-info-table' },
-            parentTribe ? tr(
+          parentTribe ? table({ class: 'tribe-info-table' },
+            tr(
               td({ class: 'tribe-info-label' }, i18n.tribeRootLabel || 'ROOT'),
               td({ class: 'tribe-info-value', colspan: '3' }, a({ href: `/tribe/${encodeURIComponent(parentTribe.id)}` }, parentTribe.title))
-            ) : null,
-            t.location ? tr(
-              td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
-              td({ class: 'tribe-info-value', colspan: '3' }, ...renderStyledText(t.location))
-            ) : null
+            )
           ) : null,
           div({ class: 'tribe-card-members' },
             span({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${t.memberCount != null ? t.memberCount : t.members.length}`)
@@ -1344,7 +1340,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
     }
     if (mediaType === 'torrent') {
       return div({ class: 'tribe-media-item' },
-        blobUrl ? a({ href: blobUrl, class: 'tribe-action-btn' }, i18n.torrentDownloadButton || 'DOWNLOAD IT!') : p(i18n.tribeMediaEmpty),
+        blobUrl ? renderTorrentDownload(blobUrl, { class: 'tribe-action-btn' }) : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
           m.title ? h2(m.title) : null,
           m.description ? p(...renderStyledText(m.description)) : null,
@@ -1462,7 +1458,7 @@ const renderTribeTorrentsSection = (tribe, torrents) => {
         div({ class: 'card-header' },
           h2({ class: 'card-label' }, `[${(i18n.typeTorrent || 'TORRENT').toUpperCase()}]`),
           m._isMedia
-            ? (blobUrl ? a({ href: blobUrl, class: 'filter-btn' }, i18n.torrentDownload || 'Download') : null)
+            ? (blobUrl ? renderTorrentDownload(blobUrl) : null)
             : form({ method: 'GET', action: `/torrents/${encodeURIComponent(m.rootId || m.key)}` },
                 button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails || 'View Details'))
         ),
@@ -1474,7 +1470,7 @@ const renderTribeTorrentsSection = (tribe, torrents) => {
               : a({ href: `/torrents/${encodeURIComponent(m.rootId || m.key)}` }, m.title))
           ) : null,
           m.description ? p(String(m.description).substring(0, 200)) : null,
-          blobUrl && !m._isMedia ? div({ class: 'card-field' }, a({ href: blobUrl, class: 'filter-btn' }, i18n.torrentDownload || 'Download')) : null
+          blobUrl && !m._isMedia ? div({ class: 'card-field' }, renderTorrentDownload(blobUrl)) : null
         ),
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm")),

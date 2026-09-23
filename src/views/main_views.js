@@ -18,8 +18,10 @@ const sharedState = require('../configs/shared-state');
 let ssb, userId;
 
 const getUserId = async () => {
+  if (userId) return userId;
+  if (config && config.keys && config.keys.id) { userId = config.keys.id; return userId; }
   if (!ssb) ssb = await cooler.open();
-  if (!userId) userId = ssb.id;
+  userId = ssb.id;
   return userId;
 };
 exports.getUserId = getUserId;
@@ -186,6 +188,13 @@ const renderWalletChip = () => {
   return ready ? chip : a({ href: '/wallet', class: 'wallet-chip-link' }, chip);
 };
 exports.renderWalletChip = renderWalletChip;
+
+const torrentFileName = (title) => `${String(title || 'download').replace(/\.torrent$/i, '')}.torrent`;
+const torrentDownloadHref = (blobId, title) => `/blob/${encodeURIComponent(blobId)}?name=${encodeURIComponent(torrentFileName(title))}`;
+const renderTorrentDownload = (href, opts = {}) =>
+  a({ href, class: opts.class || 'filter-btn' }, '\u2B07 TORRENT');
+exports.torrentDownloadHref = torrentDownloadHref;
+exports.renderTorrentDownload = renderTorrentDownload;
 
 const renderContentActions = (msgId, viewHref, opts = {}) => {
   const o = (opts && typeof opts === 'object') ? opts : {};

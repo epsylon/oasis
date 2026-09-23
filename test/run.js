@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+process.env.OASIS_TEST = '1';
 const fs = require('fs');
 const path = require('path');
 

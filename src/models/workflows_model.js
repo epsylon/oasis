@@ -26,7 +26,7 @@ const PRESETS = {
 const MOBILE_MODULES = [
   'agenda', 'favorites', 'wallet', 'tribes', 'larp', 'votes', 'polls', 'events', 'calendars', 'tasks',
   'reports', 'banking', 'market', 'housing', 'jobs', 'shops', 'school', 'transfers', 'cipher', 'invites',
-  'games', 'audios', 'bookmarks', 'docs', 'images', 'emergencies', 'mailing', 'logistics', 'podcasts', 'campaigns', ...NETWORK
+  'games', 'audios', 'bookmarks', 'docs', 'images', 'torrents', 'emergencies', 'mailing', 'logistics', 'podcasts', 'campaigns', ...NETWORK
 ];
 
 const WORKFLOWS = [

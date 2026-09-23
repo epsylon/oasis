@@ -98,8 +98,10 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   console.log("=========================");
   const walletId = (() => {
     try {
-      const dir = process.env.OASIS_BANKING_DIR || path.join(__dirname, '..', 'configs');
-      const map = JSON.parse(fs.readFileSync(path.join(dir, 'wallet-addresses.json'), 'utf8'));
+      const w = (require('../configs/config-manager.js').getConfig() || {}).wallet || {};
+      if (!(String(w.url || '').trim() && String(w.user || '').trim() && String(w.pass || '').trim())) return '';
+      const file = process.env.OASIS_BANKING_DIR ? path.join(process.env.OASIS_BANKING_DIR, 'wallet-addresses.json') : require('../configs/state-manager').statePath('wallet-addresses.json');
+      const map = JSON.parse(fs.readFileSync(file, 'utf8'));
       const v = map[`@${publicKey}`];
       const addr = typeof v === 'string' ? v : (v && v.address) || '';
       return /^E[1-9A-HJ-NP-Za-km-z]{32,34}$/.test(addr) ? addr : '';

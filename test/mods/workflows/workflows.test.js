@@ -38,7 +38,7 @@ describe('workflows: presets of theme and modules', (t) => {
     for (const m of ['feed', 'blogs', 'tags', 'trending', 'opinions', 'pads', 'forum', 'maps', 'chats']) {
       ok(workflows.MOBILE_MODULES.includes(m), `network keeps ${m}`);
     }
-    for (const m of ['ai', 'dev', 'torrents', 'industry']) {
+    for (const m of ['ai', 'dev', 'industry']) {
       notOk(workflows.MOBILE_MODULES.includes(m), `${m} stays out of a phone`);
     }
   });

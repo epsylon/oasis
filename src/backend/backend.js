@@ -199,15 +199,20 @@ const refreshWalletReady = async (force = false) => {
   lastWalletReadyCheck = Date.now();
   try {
     const me = getViewerId();
-    const walletUrl = !!(getConfig().wallet && getConfig().wallet.url);
+    const walletUrl = bankingModel.hasWalletCredentials();
+    if (!walletUrl) { sharedState.setWalletReady(false); return false; }
     let addr = await bankingModel.getUserAddress(me).catch(() => null);
     if (!addr && walletUrl) {
       try { const res = await bankingModel.ensureSelfAddressPublished(); if (res && res.address) addr = res.address; } catch (_) {}
       if (!addr) addr = await bankingModel.getUserAddress(me).catch(() => null);
     }
-    const published = addr ? await bankingModel.hasPublishedAddress(me).catch(() => false) : false;
+    let published = addr ? await bankingModel.hasPublishedAddress(me).catch(() => false) : false;
+    if (addr && !published && walletUrl) {
+      try { await bankingModel.setUserAddress(me, addr, true); published = await bankingModel.hasPublishedAddress(me).catch(() => false); } catch (_) {}
+    }
     const next = !!(addr && published && walletUrl);
     sharedState.setWalletReady(next);
+    if (next) { try { await bankingModel.sampleUserFunds(); } catch (_) {} }
     return next;
   } catch (_) { return ready; }
 };
@@ -1361,7 +1366,7 @@ const notifyUbiPaid = async ({ to, amount, epochId, txid, transferKey }) => {
   const links = transferKey
     ? ` → [${concept}](/transfers/${encodeURIComponent(transferKey)}) · [PDF](/transfers/contract/${encodeURIComponent(transferKey)})`
     : ` → ${concept}`;
-  await pmModel.sendMessage([to], 'BANKING_UBI_PAID', `${i18nB.bankingBotUbiPaidText}: ${amount} ECO${links} · tx ${txid}`);
+  await pmModel.sendMessage([to], 'BANKING_UBI_PAID', `${i18nB.bankingBotUbiPaidText}: ${amount} ECO${links}`);
 };
 const bankingModel = require("../models/banking_model")({ services: { cooler, notifyUbiPaid, transfers: transfersModel }, isPublic: config.public });
 const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel: blogModel, pollsModel, schoolModel, wikiModel, emergenciesModel, mailingModel, logisticsModel, podcastsModel, campaignsModel });
@@ -2028,7 +2033,7 @@ const redirectToPayment = async (ctx, { sellerId, amount, fallback, transferId =
     const q = new URLSearchParams({ to: sellerAddress, amount: Number(amount).toFixed(6) });
     if (transferId) q.set('transfer', transferId);
     else { q.set('payee', sellerId); if (concept) q.set('concept', String(concept).slice(0, 120)); if (href && String(href).startsWith('/')) q.set('ref', href); }
-    ctx.redirect(`/wallet/send?${q.toString()}`);
+    ctx.redirect(`/wallet/send?${q.toString()}#wallet-send`);
   } catch (_) { ctx.redirect(fallback); }
 };
 const loadTransferForWallet = async (ctx, transferId) => {
@@ -5875,6 +5880,16 @@ router
       { subscription: await subscriptionStateFor(blog.author, blog.author), spreads: await spreads.forMessage(blog.id).catch(() => null), censusList: await blogModel.listAll('ALL', { q: '', favorites: [...fav] }).catch(() => []) }
     );
   })
+  .post('/blogs/preview', koaBody({ multipart: true, urlencoded: true, formidable: { multiples: true, maxFileSize: maxSize } }), async ctx => {
+    if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    let text = stripDangerousTags((b.text || '').toString().trim());
+    const subject = stripDangerousTags((b.subject || '').toString().trim());
+    const blobMarkdown = await handleBlobUploads(ctx, 'blob', 9);
+    if (blobMarkdown.length) text += blobMarkdown.join('');
+    const allowComments = [].concat(b.allowComments).includes('1');
+    ctx.body = await blogView([], 'CREATE', { draft: { text, subject, allowComments } });
+  })
   .post('/blogs/create', koaBody({ multipart: true, urlencoded: true, formidable: { multiples: true, maxFileSize: maxSize } }), async ctx => {
     if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
@@ -7441,16 +7456,6 @@ router
       }
     }
     data.flash = msg || '';
-    const { ecoValue, inflationFactor, inflationMonthly, ecoTimeMs, currentSupply, isSynced } = await bankingModel.calculateEcoinValue();
-    data.exchange = {
-      ecoValue,
-      inflationFactor,
-      inflationMonthly,
-      ecoTimeMs,
-      currentSupply,
-      totalSupply: 25500000,
-      isSynced
-    };
     if (filter === 'taxes') {
       const inspectBlock = async (blockId) => {
         if (!blockId) return null;
@@ -7869,7 +7874,7 @@ router
     await enrichItemLifetime(transfer, { author: transfer.from });
     const comments = await getVoteComments(transfer.id);
     const fav = await contentFavorites.getFavoriteSet('transfers');
-    await warmAuthorNames([transfer], comments);
+    await warmAuthorNames([transfer, { author: transfer.from }, { author: transfer.to }], comments);
     const singleCensus = await transfersModel.listAll('all', getViewerId()).catch(() => []);
     ctx.body = await singleTransferView({ ...transfer, isFavorite: fav.has(String(transfer.id)) }, filter, { censusList: singleCensus, q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', returnTo: safeReturnTo(ctx, `/transfers?filter=${encodeURIComponent(filter)}`, ['/transfers']), block, comments, spreads: await spreads.forMessage(transfer.id).catch(() => null) });
   })
@@ -11141,7 +11146,7 @@ router
       const address = await bankingModel.getUserAddress(feedId).catch(() => null);
       if (!address || !ECO_ADDRESS_RE.test(String(address))) { ctx.redirect(`${backTo}${backTo.includes('?') ? '&' : '?'}error=${encodeURIComponent(i18nD.bankNoUserAddress)}`); return; }
       const q = new URLSearchParams({ to: address, payee: feedId, ref: backTo });
-      ctx.redirect(`/wallet/send?${q.toString()}`);
+      ctx.redirect(`/wallet/send?${q.toString()}#wallet-send`);
     } catch (_) { ctx.redirect(backTo); }
   })
   .get("/banking/fund", async (ctx) => {
@@ -11154,7 +11159,7 @@ router
       const address = pub ? (pub.address || await bankingModel.getUserAddress(pub.pubId).catch(() => null)) : null;
       if (!address || !ECO_ADDRESS_RE.test(String(address))) { ctx.redirect('/banking?filter=ubi&msg=no_pub_address'); return; }
       const q = new URLSearchParams({ to: address, payee: pub.pubId, concept: 'OASIS UBI Fund', ref: '/banking?filter=ubi', tag: 'UBI' });
-      ctx.redirect(`/wallet/send?${q.toString()}`);
+      ctx.redirect(`/wallet/send?${q.toString()}#wallet-send`);
     } catch (_) { ctx.redirect('/banking?filter=overview'); }
   })
   .post("/banking/claim-ubi", koaBody(), async (ctx) => {
@@ -11787,13 +11792,25 @@ router
   .post("/settings/wallet", koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
     const b = ctx.request.body, cfg = getConfig();
-    if (b.wallet_url) cfg.wallet.url = String(b.wallet_url);
-    if (b.wallet_user) cfg.wallet.user = String(b.wallet_user);
+    if (b.wallet_url) cfg.wallet.url = String(b.wallet_url).trim();
+    if (b.wallet_user) cfg.wallet.user = String(b.wallet_user).trim();
     if (b.wallet_pass) cfg.wallet.pass = String(b.wallet_pass);
     if (b.wallet_fee) cfg.wallet.fee = String(b.wallet_fee);
     saveConfig(cfg);
-    const res = await bankingModel.ensureSelfAddressPublished();
-    ctx.redirect(`/banking?filter=addresses&msg=${encodeURIComponent(res.status)}`);
+    if (bankingModel.hasWalletCredentials()) { try { await bankingModel.ensureSelfAddressPublished(); } catch (_) {} }
+    try { await refreshWalletReady(true); } catch (_) {}
+    ctx.redirect('/banking?filter=overview');
+  })
+  .post("/settings/wallet/disconnect", koaBody(), async (ctx) => {
+    if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
+    const cfg = getConfig();
+    cfg.wallet.url = '';
+    cfg.wallet.user = '';
+    cfg.wallet.pass = '';
+    saveConfig(cfg);
+    try { await bankingModel.removeAddress({ userId: getViewerId() }); } catch (_) {}
+    try { await refreshWalletReady(true); } catch (_) {}
+    ctx.redirect('/banking?filter=overview');
   })
   .post("/wallet/send", koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, torrentDownloadHref } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
@@ -82,7 +82,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, (i18n.torrentDescriptionLabel || 'Description') + ":"), p(...renderStyledText(description))] : null,
         url && url.startsWith("&")
-          ? div({ class: 'card-field' }, a({ href: `/blob/${encodeURIComponent(url)}`, class: 'filter-btn' }, i18n.torrentDownload || 'Download'))
+          ? div({ class: 'card-field' }, renderTorrentDownload(torrentDownloadHref(url, title)))
           : div({ class: 'card-field' }, p(i18n.torrentNoFile || 'No file'))
       )
     );

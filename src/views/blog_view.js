@@ -81,18 +81,30 @@ const renderBlogCard = (blog, filter, spreadInfo) => {
   );
 };
 
-const renderCreateForm = () =>
-  section(
+const renderCreateForm = (draft = null) => {
+  const subjectValue = draft ? safeText(draft.subject) : "";
+  const textValue = draft ? String(draft.text || "") : "";
+  const allowComments = draft ? draft.allowComments !== false : true;
+  return section(
+    draft
+      ? section({ class: "post-preview blog-preview" },
+          div({ class: "preview-content" },
+            h2(i18n.messagePreview),
+            subjectValue ? h2({ class: "tribe-card-title" }, subjectValue) : null,
+            div({ class: "blog-detail-text", innerHTML: sanitizeHtml(renderStyledHtml(textValue)) })
+          )
+        )
+      : null,
     div({ class: "publish-form" },
       form({ action: "/blogs/create", method: "POST", enctype: "multipart/form-data" },
         label({ for: "subject" }, i18n.blogSubject),
         br(),
-        input({ type: "text", name: "subject", id: "subject", maxlength: "150", placeholder: i18n.contentWarningPlaceholder }),
+        input({ type: "text", name: "subject", id: "subject", maxlength: "150", placeholder: i18n.contentWarningPlaceholder, value: subjectValue }),
         br(),
         br(),
         label({ for: "text" }, i18n.blogMessage),
         br(),
-        textarea({ required: true, name: "text", id: "text", rows: "8", class: "publish-textarea", maxlength: "7000", placeholder: i18n.publishWarningPlaceholder }),
+        textarea({ required: true, name: "text", id: "text", rows: "8", class: "publish-textarea", maxlength: "7000", placeholder: i18n.publishWarningPlaceholder }, textValue),
         br(),
         br(),
         label({ for: "blob" }, i18n.blogMedia),
@@ -103,16 +115,19 @@ const renderCreateForm = () =>
         div({ class: "blog-allow-comments" },
           input({ type: "hidden", name: "allowComments", value: "0" }),
           label(
-            input({ type: "checkbox", name: "allowComments", value: "1", checked: true }),
+            input({ type: "checkbox", name: "allowComments", value: "1", ...(allowComments ? { checked: true } : {}) }),
             " ",
             i18n.blogAllowComments
           )
         ),
         br(),
-        button({ type: "submit" }, i18n.blogPublish)
+        button({ type: "submit", class: "filter-btn", formaction: "/blogs/preview", formmethod: "POST" }, i18n.preview),
+        " ",
+        button({ type: "submit", class: "create-button" }, i18n.blogPublish)
       )
     )
   );
+};
 
 const renderCommentsSection = (blog, comments = []) => {
   const href = `/blogs/${encodeURIComponent(blog.id)}`;
@@ -138,7 +153,7 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
     ),
     renderFilterBar(showForm ? "CREATE" : filter, params.q, !showForm, Array.isArray(blogs) ? blogs.length : 0, params.censusList),
     showForm
-      ? renderCreateForm()
+      ? renderCreateForm(params.draft || null)
       : section(
           blogs.length
             ? div({ class: "blogs-grid" }, ...blogs.map(b => renderBlogCard(b, filter, spreadMap.get(b.id))))

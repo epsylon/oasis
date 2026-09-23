@@ -254,7 +254,7 @@ describe('activity: general OPEN chat replies surface in activity as a thread', 
       { name: 'VideoRoom', mime: 'video/mp4', marker: '<video' },
       { name: 'AudioRoom', mime: 'audio/mpeg', marker: '<audio' },
       { name: 'PdfRoom', mime: 'application/pdf', marker: '📄 PDF' },
-      { name: 'TorrentRoom', mime: 'application/x-bittorrent', marker: '🧲' }
+      { name: 'TorrentRoom', mime: 'application/x-bittorrent', marker: 'TORRENT' }
     ];
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     for (const f of FORMATS) {
@@ -344,14 +344,14 @@ describe('activity: the TOP filter', (t) => {
 describe('activity: filter layout', (t) => {
   t('chips follow the order of their menu group, and no filter is lost', () => {
     const { activityView } = require('../../../src/views/activity_view');
-    const TYPES = ['market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer',
+    const TYPES = ['market', 'housing', 'project', 'industry', 'job', 'shop',
       'votes', 'event', 'calendar', 'task', 'report', 'post', 'feed', 'chat', 'pad', 'forum', 'map',
       'audio', 'bookmark', 'document', 'image', 'torrent', 'video', 'courtsCase'];
     const actions = TYPES.map((type, i) => ({ type, id: 'a' + i, author: '@x.ed25519', ts: 1, content: {} }));
     const html = String(activityView(actions, 'recent', '@me.ed25519'));
     const at = (type) => html.indexOf(`/activity?filter=${type}"`);
 
-    const economy = ['market', 'housing', 'project', 'industry', 'job', 'shop', 'transfer'];
+    const economy = ['market', 'housing', 'project', 'industry', 'job', 'shop'];
     for (const type of economy) ok(at(type) > 0, `${type} is rendered`);
     for (let i = 1; i < economy.length; i++) {
       ok(at(economy[i]) > at(economy[i - 1]),

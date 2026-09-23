@@ -207,8 +207,7 @@ const renderSupplyChart = (history, range, hasAnyData, totalSupply = 0) => {
   const svg = arr.length >= 2 ? buildSeriesChartSvg({
     series: [{ label: i18n.bankCurrentSupply, points: arr.map(s => Number(s.currentSupply) || 0) }],
     xLabels: tsLabels(arr, "ts"),
-    empty: i18n.bankExchangeChartEmpty, yDecimals: 0,
-    yDomain: total > 0 ? { min: 0, max: total } : null
+    empty: i18n.bankExchangeChartEmpty, yDecimals: 0
   }) : null;
   return renderRangedChart("eco-supply-chart", i18n.bankChartSupplyTitle, "exchange", range, !!hasAnyData, svg);
 };
@@ -259,7 +258,7 @@ const renderValueChart = (history, range, hasAnyData) => {
     xLabels: tsLabels(arr, "ts"),
     empty: i18n.bankExchangeChartEmpty
   }) : null;
-  return renderRangedChart("eco-value-chart", i18n.bankChartValueTitle, "overview", range, !!hasAnyData, svg);
+  return renderRangedChart("eco-value-chart", i18n.bankChartValueTitle, "exchange", range, !!hasAnyData, svg);
 };
 
 const renderWealthChart = (wealth, range) => {
@@ -289,6 +288,16 @@ const renderWealthChart = (wealth, range) => {
   );
 };
 
+const renderFundsChart = (history) => {
+  const arr = Array.isArray(history && history.points) ? history.points : [];
+  const svg = arr.length >= 2 ? buildSeriesChartSvg({
+    series: [{ label: "ECO", points: arr.map(x => x.balance) }],
+    xLabels: tsLabels(arr, "ts"),
+    empty: i18n.bankExchangeChartEmpty, yDecimals: 2
+  }) : null;
+  return renderRangedChart("funds-chart", i18n.bankChartFundsTitle, "overview", (history && history.range) || "today", !!(history && history.hasAny), svg);
+};
+
 const renderKarmaChart = (history) => {
   const arr = Array.isArray(history && history.points) ? history.points : [];
   const svg = arr.length >= 2 ? buildSeriesChartSvg({
@@ -299,10 +308,9 @@ const renderKarmaChart = (history) => {
   return renderRangedChart("karma-chart", i18n.bankChartKarmaTitle, "overview", (history && history.range) || "today", !!(history && history.hasAny), svg);
 };
 
-const renderExchange = (ex, history, taxStats, wealth, range) => {
+const renderExchange = (ex, history, taxStats, wealth, range, valueRange = range, valueHasAnyData = false) => {
   if (!ex) return div(p(i18n.bankExchangeNoData));
   const syncStatus = ex.isSynced ? i18n.bankingSyncStatusSynced : i18n.bankingSyncStatusOutdated;
-  const syncStatusClass = ex.isSynced ? 'synced' : 'outdated';
   const ecoTimeLabel = ex.isSynced ? fmtEcoTime(ex.ecoTimeMs) : fmtEcoTime(0);
   const chartLabels = {
     value: i18n.bankExchangeChartValue || 'Value (ECO/h)',
@@ -321,24 +329,30 @@ const renderExchange = (ex, history, taxStats, wealth, range) => {
       table({ class: "bank-info-table" },
         tbody(
           kvRow(i18n.bankingSyncStatus,
-            span({ class: syncStatusClass }, syncStatus)
+            span({ class: ex.isSynced ? "ubi-tick-ok" : "ubi-tick-bad", title: syncStatus }, ex.isSynced ? "✓" : "✗")
           ),
-          kvRow(strong(i18n.bankExchangeCurrentValue), strong(`${fmtIndex(ex.ecoValue)} ECO`)),
-          kvRow(strong(i18n.bankCurrentSupply), strong(`${Number(ex.currentSupply || 0).toFixed(6)} ECO`)),
           kvRow(strong(i18n.bankTotalSupply), strong(`${Number(ex.totalSupply || 0).toFixed(6)} ECO`)),
-          kvRow(i18n.bankEcoinHours, ecoTimeLabel),
-          kvRow(strong(i18n.bankInflation), strong(`${Number(ex.inflationFactor || 0).toFixed(2)}%`)),
-          kvRow(i18n.bankInflationMonthly, `${Number(ex.inflationMonthly || 0).toFixed(2)}%`),
-          kvRow(i18n.bankInflationIssuance, `${Number(ex.inflationIssuance || 0).toFixed(2)}%`),
+          ...(ex.isSynced ? [kvRow(strong(i18n.bankCurrentSupply), strong(`${Number(ex.currentSupply || 0).toFixed(6)} ECO`))] : []),
+          ...(ex.holdingSupply != null ? [kvRow(strong(i18n.bankHoldingSupply), strong(`${Number(ex.holdingSupply).toFixed(6)} ECO`))] : []),
+          kvRow(strong(i18n.bankPubsSupply), strong(`${Number(ex.pubsSupply || 0).toFixed(6)} ECO`)),
+          ...(ex.isSynced ? [
+            kvRow(strong(i18n.bankInflation), strong(`${Number(ex.inflationFactor || 0).toFixed(2)}%`)),
+            kvRow(i18n.bankInflationMonthly, `${Number(ex.inflationMonthly || 0).toFixed(2)}%`)
+          ] : []),
           kvRow(strong(i18n.bankTotalUbiDistributed), strong(`${Number((wealth && wealth.totals && wealth.totals.distributed) || 0).toFixed(6)} ECO`)),
           kvRow(strong(i18n.bankTotalTaxesWithheld), strong(`${Number((wealth && wealth.totals && wealth.totals.taxes) || 0).toFixed(6)} ECO`)),
-          ...taxRows
+          ...taxRows,
+          ...(ex.isSynced ? [
+            kvRow(strong(i18n.bankExchangeCurrentValue), strong(`${fmtIndex(ex.ecoValue)} ECO`)),
+            kvRow(strong(i18n.bankEcoinHours), strong(ecoTimeLabel))
+          ] : [])
         )
       )
     ),
-    renderWealthChart(wealth, (wealth && wealth.range) || range),
-    renderSupplyChart(history, range, Array.isArray(history) && history.length >= 2, ex.totalSupply),
-    renderInflationChart(history, range, Array.isArray(history) && history.length >= 2)
+    ex.isSynced ? renderValueChart(history, valueRange, !!valueHasAnyData) : null,
+    ex.isSynced ? renderWealthChart(wealth, (wealth && wealth.range) || range) : null,
+    renderSupplyChart(history, range, hasEnoughSamples, ex.totalSupply),
+    renderInflationChart(history, range, hasEnoughSamples)
   );
 };
 
@@ -507,14 +521,14 @@ const renderOverviewSummaryTable = (s, rules, userEcoinTax, isPub = false) => {
     table({ class: "bank-info-table" },
       tbody(
         kvRow(strong(i18n.bankUserBalance), strong(`${Number(s.userBalance || 0).toFixed(6)} ECO`)),
-        kvRow(strong(i18n.bankIndustryBalance || "Industry Production"), a({ href: '/industry' }, strong(`${Number(s.industryNetworkTotal || 0).toFixed(6)} ECO`))),
+        Number(s.industryNetworkTotal || 0) > 0 ? kvRow(strong(i18n.bankIndustryBalance || "Industry Production"), a({ href: '/industry' }, strong(`${Number(s.industryNetworkTotal || 0).toFixed(6)} ECO`))) : null,
         kvRow(i18n.bankEpoch, String(s.epochId || "-")),
         kvRow(i18n.bankPool, `${pool.toFixed(6)} ECO`),
         kvRow(i18n.bankWeightsSum, String(W.toFixed(6))),
         kvRow(strong(i18n.bankingUserEngagementScore), strong(String(score))),
         ubiWired ? kvRow(i18n.bankYourUbiMonth || 'Your UBI (this month)', `${future.toFixed(6)} ECO`) : null,
-        kvRow(i18n.bankYourIndustryBalance || 'Your Industry Share', a({ href: '/industry?filter=MEMBER' }, `${Number(s.industryBalance || 0).toFixed(6)} ECO`)),
-        kvRow(i18n.bankYourSchoolBalance || 'Your School Earnings', a({ href: '/school?filter=mine' }, `${Number(s.schoolBalance || 0).toFixed(6)} ECO`)),
+        Number(s.industryBalance || 0) > 0 ? kvRow(i18n.bankYourIndustryBalance || 'Your Industry Share', a({ href: '/industry?filter=MEMBER' }, `${Number(s.industryBalance || 0).toFixed(6)} ECO`)) : null,
+        Number(s.schoolBalance || 0) > 0 ? kvRow(i18n.bankYourSchoolBalance || 'Your School Earnings', a({ href: '/school?filter=mine' }, `${Number(s.schoolBalance || 0).toFixed(6)} ECO`)) : null,
         kvRow(i18n.bankTotalUbiDistributed, `${Number((s.wealthTotals && s.wealthTotals.distributed) || 0).toFixed(6)} ECO`),
         kvRow(i18n.bankTotalTaxesWithheld, `${Number((s.wealthTotals && s.wealthTotals.taxes) || 0).toFixed(6)} ECO`),
         kvRow(strong(i18n.bankOverviewYourTaxes || 'Total Taxes'), a({ href: '/banking?filter=taxes' }, strong(`${tax.toFixed(6)} ECO`))),
@@ -559,7 +573,7 @@ const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId, ha
 
 const filterAllocations = (allocs, filter, userId) => {
   if (filter === "mine") return allocs.filter(a => a.to === userId && (a.status === "UNCLAIMED" || a.status === "UNCONFIRMED"));
-  if (filter === "pending") return allocs.filter(a => a.status === "UNCLAIMED" || a.status === "UNCONFIRMED");
+  if (filter === "pending") return allocs.filter(a => a.status !== "EXPIRED");
   if (filter === "closed") return allocs.filter(a => a.status === "CLOSED");
   if (filter === "claimed") return allocs.filter(a => a.status === "CLAIMED");
   if (filter === "expired") return allocs.filter(a => a.status === "EXPIRED");
@@ -578,8 +592,7 @@ const allocationsTable = (rows = [], userId) =>
             th(i18n.bankAllocFrom),
             th(i18n.bankAllocTo),
             th(i18n.bankAllocAmount),
-            th(i18n.bankAllocStatus),
-            th("")
+            th(i18n.bankAllocStatus)
           )
         ),
         tbody(
@@ -590,13 +603,12 @@ const allocationsTable = (rows = [], userId) =>
               td(userLink(r.from)),
               td(userLink(r.to)),
               td(String(Number(r.amount || 0).toFixed(6))),
-              td(r.status),
               td(
-                (r.status === "UNCLAIMED" || r.status === "UNCONFIRMED") && r.to === userId
-                  ? form({ method: "POST", action: `/banking/claim/${encodeURIComponent(r.id)}` },
-                      button({ type: "submit", class: "filter-btn" }, i18n.bankClaimNow)
-                    )
-                  : null
+                r.status === "CLOSED" || r.status === "CLAIMED"
+                  ? span({ class: "ubi-tick-ok", title: r.status }, "✓")
+                  : r.status === "UNCLAIMED" || r.status === "UNCONFIRMED"
+                    ? span({ class: "ubi-tick-bad", title: r.status }, "✗")
+                    : r.status
               )
             )
           )
@@ -803,8 +815,8 @@ const renderBankingView = (data, filter, userId, isPub) =>
       filter === "overview"
         ? div(
             renderOverviewSummaryTable(data.summary || {}, data.rules, data.userTotalTax || data.userEcoinTax, isPub),
-            renderValueChart(data.exchangeHistory, data.valueRange || data.range, !!data.valueHasAnyData),
-            renderKarmaChart(data.karmaHistory)
+            renderKarmaChart(data.karmaHistory),
+            renderFundsChart(data.fundsHistory)
           )
         : filter === "ubi"
         ? div(
@@ -813,7 +825,7 @@ const renderBankingView = (data, filter, userId, isPub) =>
             renderUbiCharts({ ...(data.ubiCharts || {}), payments: data.ubiPayments })
           )
         : filter === "exchange"
-        ? renderExchange(data.exchange, data.exchangeHistory, data.taxStats, data.wealth, data.range)
+        ? renderExchange(data.exchange, data.exchangeHistory, data.taxStats, data.wealth, data.range, data.valueRange || data.range, !!data.valueHasAnyData)
         : filter === "taxes"
         ? renderTaxes(data, data.lookup || null)
         : filter === "epochs"
@@ -845,7 +857,6 @@ const renderSingleAllocationView = (alloc, userId) => {
             kvRow(i18n.bankAllocAmount, `${Number(alloc.amount || 0).toFixed(6)} ECO`),
             kvRow(i18n.bankAllocStatus, alloc.status || "-"),
             kvRow(i18n.bankAllocDate, alloc.createdAt ? fmtDate(alloc.createdAt) : "-"),
-            alloc.txid ? kvRow(i18n.bankTx, span({ class: "bank-address-code" }, alloc.txid)) : null
           )
         )
       ),

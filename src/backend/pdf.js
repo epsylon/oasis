@@ -794,7 +794,8 @@ function buildSmartContractPdf({ transfer, block, viewerId }) {
   };
   const fmtDate = v => v ? new Date(v).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : '';
   const confirmedBy = Array.isArray(t.confirmedBy) ? t.confirmedBy : [];
-  const required = t.from === t.to ? 1 : 2;
+  const settledUbi = (Array.isArray(t.tags) ? t.tags : []).some(x => String(x).toUpperCase() === 'UBI') && /^[0-9a-f]{64}$/i.test(String(t.txid || ''));
+  const required = (t.from === t.to || settledUbi) ? 1 : 2;
   const confirmedCount = confirmedBy.length;
   const tags = Array.isArray(t.tags) ? t.tags.join(', ') : '';
 

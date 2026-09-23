@@ -29,6 +29,7 @@ const ADDR_PATH = stateFile("wallet-addresses.json");
 const BOOK_PATH = stateFile("banking-address-book.json");
 const ECO_HISTORY_PATH = stateFile("banking-eco-history.json");
 const UBI_PAID_PATH = stateFile("banking-ubi-paid.json");
+const FUNDS_HISTORY_PATH = stateFile("banking-funds-history.json");
 const ECO_HISTORY_MIN_GAP_MS = 5 * 60 * 1000;
 
 const ECOIN_PER_GRAM_CO2 = 0.1;
@@ -47,6 +48,7 @@ function ensureStoreFiles() {
   if (!fs.existsSync(ADDR_PATH)) fs.writeFileSync(ADDR_PATH, "{}");
   if (!fs.existsSync(ECO_HISTORY_PATH)) fs.writeFileSync(ECO_HISTORY_PATH, "[]");
   if (!fs.existsSync(UBI_PAID_PATH)) fs.writeFileSync(UBI_PAID_PATH, "{}");
+  if (!fs.existsSync(FUNDS_HISTORY_PATH)) fs.writeFileSync(FUNDS_HISTORY_PATH, "[]");
 }
 
 function readEcoHistory() {
@@ -59,6 +61,22 @@ const ECO_HISTORY_TIERS = [
   { olderThanMs: 60 * ONE_DAY_MS, keepEveryMs: ONE_DAY_MS }
 ];
 const ECO_HISTORY_HARD_MAX = 20000;
+
+function readFundsHistory() {
+  try { return JSON.parse(fs.readFileSync(FUNDS_HISTORY_PATH, "utf8")) || []; } catch (_) { return []; }
+}
+
+function appendFundsHistory(sample) {
+  ensureStoreFiles();
+  let arr = readFundsHistory();
+  if (!Array.isArray(arr)) arr = [];
+  const last = arr[arr.length - 1];
+  if (last && Number(sample.ts) - Number(last.ts) < ECO_HISTORY_MIN_GAP_MS) return arr;
+  arr.push(sample);
+  arr = compactEcoHistory(arr);
+  writeJson(FUNDS_HISTORY_PATH, arr);
+  return arr;
+}
 
 function compactEcoHistory(arr) {
   const now = Date.now();
@@ -306,6 +324,11 @@ function isValidEcoinAddress(addr) {
   return typeof addr === "string" && /^E[1-9A-HJ-NP-Za-km-z]{32,34}$/.test(addr);
 }
 
+function hasWalletCredentials(cfg = null) {
+  const w = (cfg || getConfig() || {}).wallet || {};
+  return !!(String(w.url || "").trim() && String(w.user || "").trim() && String(w.pass || "").trim());
+}
+
 function getWalletCfg(kind) {
   const cfg = getConfig() || {};
   if (kind === "pub") {
@@ -396,19 +419,23 @@ module.exports = ({ services } = {}) => {
 
   const isWalletMessage = (c) => !!c && typeof c.address === "string" && isValidEcoinAddress(c.address) &&
     ((c.type === "wallet" && c.coin === "ECO") || c.type === "bankWallet");
+  const isWalletUnset = (c) => !!c && typeof c.address === "string" && c.address === "" &&
+    ((c.type === "wallet" && c.coin === "ECO") || c.type === "bankWallet");
 
   async function scanWalletMessages() {
     const ssb = await openSsb();
     if (!ssb) return [];
     const msgs = await readTyped(ssb, ["wallet", "bankWallet"], { limit: Math.max(getLogLimit(), 20000) });
-    return msgs.slice().sort((a, b) => ((b.value && b.value.timestamp) || 0) - ((a.value && a.value.timestamp) || 0));
+    return msgs.slice().sort((a, b) => (((b.value && b.value.timestamp) || 0) - ((a.value && a.value.timestamp) || 0)) || (((b.value && b.value.sequence) || 0) - ((a.value && a.value.sequence) || 0)));
   }
 
   async function getWalletFromSSB(userId) {
     const msgs = await scanWalletMessages();
     for (const m of msgs) {
       const v = m.value || {};
-      if (v.author === userId && isWalletMessage(v.content)) return v.content.address;
+      if (v.author !== userId) continue;
+      if (isWalletMessage(v.content)) return v.content.address;
+      if (isWalletUnset(v.content)) return null;
     }
     return null;
   }
@@ -419,11 +446,14 @@ module.exports = ({ services } = {}) => {
 
   async function scanAllWalletsSSB() {
     const latest = {};
+    const decided = new Set();
     const msgs = await scanWalletMessages();
     for (const m of msgs) {
       const v = m.value || {};
       const c = v.content || {};
-      if (isWalletMessage(c) && !latest[v.author]) latest[v.author] = c.address;
+      if (!v.author || decided.has(v.author)) continue;
+      if (isWalletMessage(c)) { latest[v.author] = c.address; decided.add(v.author); }
+      else if (isWalletUnset(c)) decided.add(v.author);
     }
     return latest;
   }
@@ -479,6 +509,7 @@ module.exports = ({ services } = {}) => {
     if (ssbAll[userId]) {
       m[userId] = "__removed__";
       writeAddrMap(m);
+      if (idsEqual(userId, config.keys.id)) { try { await publishSelfAddress(""); } catch (_) {} }
       return { status: "deleted" };
     }
     if (hadLocal) {
@@ -1118,7 +1149,8 @@ async function getLastPublishedTimestamp(userId) {
     const pubBal = await safeGetBalance("pub");
     const pv = computePoolVars(pubBal, rules);
     const addresses = await listAddressesMerged();
-    const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address));
+    const pubIds = await knownPubIds();
+    const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address) && a.id !== config.keys.id && !pubIds.has(a.id));
     const capUser = rules.caps?.cap_user_epoch ?? DEFAULT_RULES.caps.cap_user_epoch;
     const wMin = rules.caps?.w_min ?? DEFAULT_RULES.caps.w_min;
     const wMax = rules.caps?.w_max ?? DEFAULT_RULES.caps.w_max;
@@ -1243,6 +1275,7 @@ async function getLastPublishedTimestamp(userId) {
     const uid = resolveUserId(userId);
     const epochId = epochIdNow();
     const lockKey = ubiPaidKey(epochId, uid);
+    if (isPubNode()) throw new Error("pub");
     if (claimsInFlight.has(lockKey)) throw new Error("already_claimed");
     claimsInFlight.add(lockKey);
     try {
@@ -1303,7 +1336,7 @@ async function getLastPublishedTimestamp(userId) {
     if (!pub.pubId || !pub.available) return { available: false, reason: "no_pub" };
     const address = await getUserAddress(uid);
     const cfg = getWalletCfg("user") || {};
-    if (!address || !isValidEcoinAddress(address) || !cfg.url) return { available: false, reason: "no_wallet" };
+    if (!address || !isValidEcoinAddress(address) || !hasWalletCredentials()) return { available: false, reason: "no_wallet" };
     if (await hasClaimedThisMonth(uid)) return { available: false, reason: "claimed" };
     if (await hasRefusedThisMonth(uid)) return { available: false, reason: "refused" };
     return { available: true, epochId: epochIdNow(), pubId: pub.pubId };
@@ -1364,21 +1397,38 @@ async function getLastPublishedTimestamp(userId) {
     const pubId = isPubNode() ? config.keys.id : await resolvePubId();
     if (!pubId) return [];
     const msgs = await scanLogStream();
+    const pubIds = pubIdsFrom(msgs);
+    const paid = new Map();
+    for (const m of msgs) {
+      const v = m.value || {};
+      const c = v.content || {};
+      if (c.type === "ubiClaimResult" && c.txid && c.epochId && c.userId && pubIds.has(v.author)) paid.set(ubiPaidKey(c.epochId, c.userId), c.txid);
+    }
     const out = [];
+    const seen = new Map();
     for (const m of msgs) {
       const v = m.value || {};
       const c = v.content || {};
       if (v.author === pubId && c && c.type === "ubiAllocation") {
-        out.push({
+        if (!c.to || c.to === pubId || pubIds.has(c.to)) continue;
+        const dupKey = ubiPaidKey(c.epochId, c.to);
+        const prev = seen.get(dupKey);
+        if (prev && String(prev.createdAt || "") >= String(c.createdAt || "")) continue;
+        const txid = paid.get(dupKey) || null;
+        if (prev) out.splice(out.indexOf(prev), 1);
+        const entry = {
           id: c.allocationId,
           from: pubId,
           to: c.to,
           amount: c.amount,
           concept: c.concept,
           epochId: c.epochId,
-          status: c.status || "UNCLAIMED",
+          status: txid ? "CLOSED" : (c.status || "UNCLAIMED"),
+          txid,
           createdAt: c.createdAt || new Date().toISOString()
-        });
+        };
+        seen.set(dupKey, entry);
+        out.push(entry);
       }
     }
     return out;
@@ -1553,12 +1603,8 @@ async function getLastPublishedTimestamp(userId) {
       if (to) cur.recipients.add(to);
       byEpoch.set(id, cur);
     };
-    const allocs = await readTyped(ssb, ["ubiAllocation"], { limit: Math.max(getLogLimit(), 20000) });
-    for (const m of allocs) {
-      const c = m.value && m.value.content;
-      if (!c || c.type !== "ubiAllocation") continue;
-      bump(String(c.epochId || ""), c.amount, c.to);
-    }
+    const allocs = await getUbiAllocationsFromSSB().catch(() => []);
+    for (const a of allocs) bump(String(a.epochId || ""), a.amount, a.to);
     if (!byEpoch.size) {
       const { transfers } = await readUbiLedger(ssb);
       for (const t of transfers) {
@@ -1571,6 +1617,28 @@ async function getLastPublishedTimestamp(userId) {
     return Array.from(byEpoch.values())
       .map(e => ({ id: e.id, pool: Number(e.pool.toFixed(6)), recipients: e.recipients.size }))
       .sort((a, b) => String(b.id).localeCompare(String(a.id)));
+  }
+
+  async function sampleUserFunds() {
+    if (!hasWalletCredentials()) return false;
+    const hist = readFundsHistory();
+    const last = Array.isArray(hist) && hist.length ? hist[hist.length - 1] : null;
+    if (last && Date.now() - Number(last.ts) < ECO_HISTORY_MIN_GAP_MS) return false;
+    try {
+      const balance = Number(await rpcCall("getbalance", [], "user"));
+      if (!Number.isFinite(balance)) return false;
+      appendFundsHistory({ ts: Date.now(), balance });
+      return true;
+    } catch (_) { return false; }
+  }
+
+  function listFundsHistory(range = "all", explicit = true) {
+    const all = readFundsHistory()
+      .map(s => ({ ts: Number(s.ts) || 0, balance: Number(s.balance) || 0 }))
+      .filter(x => x.ts > 0)
+      .sort((a, b) => a.ts - b.ts);
+    const effective = explicit ? normalizeRange(range) : widenRange(all, range);
+    return { points: filterByRange(all, effective).slice(-240), hasAny: all.length >= 2, range: effective };
   }
 
   async function listKarmaHistory(userId, range = "all", explicit = true) {
@@ -1669,7 +1737,13 @@ async function getLastPublishedTimestamp(userId) {
       ubiAvailable = await getPubAvailabilityFromSSB();
       allocations = await getUbiAllocationsFromSSB();
     }
-    const userBalance = await safeGetBalance("user");
+    let userBalance = 0;
+    if (hasWalletCredentials()) {
+      try {
+        userBalance = Number(await rpcCall("getbalance", [], "user")) || 0;
+        appendFundsHistory({ ts: Date.now(), balance: userBalance });
+      } catch (_) { userBalance = 0; }
+    }
     const industryBal = await getIndustryBalance(uid).catch(() => ({ received: 0, sent: 0, net: 0, networkTotal: 0 }));
     const schoolBal = await getSchoolBalance(uid).catch(() => ({ received: 0, lifetime: 0, net: 0 }));
     let epochs = await epochsRepo.list();
@@ -1693,7 +1767,7 @@ async function getLastPublishedTimestamp(userId) {
     const pubLastSeen = isPubNode() ? (lastAnnounce ? lastAnnounce.timestamp : 0) : (await discoverUbiPub()).timestamp;
     const userAddress = await getUserAddress(uid);
     const userWalletCfg = getWalletCfg("user") || {};
-    const hasValidWallet = !!(userAddress && isValidEcoinAddress(userAddress) && userWalletCfg.url);
+    const hasValidWallet = !!(userAddress && isValidEcoinAddress(userAddress) && hasWalletCredentials());
     const addressPublished = await hasPublishedAddress(uid).catch(() => false);
     const summary = {
       userBalance,
@@ -1719,6 +1793,14 @@ async function getLastPublishedTimestamp(userId) {
       ubiAvailability: ubiAvailable ? "OK" : "NO_FUNDS"
     };
     const exchange = await calculateEcoinValue();
+    if (filter === 'exchange') {
+      const pubs = await listUbiPubs().catch(() => []);
+      exchange.pubsSupply = Number(pubs.reduce((acc, p) => acc + (Number(p.balance) || 0), 0).toFixed(6));
+      const lastSample = readEcoHistory().filter(x => Number(x.currentSupply) > 0).pop();
+      const generated = Number(exchange.currentSupply) > 0 ? Number(exchange.currentSupply) : (lastSample ? Number(lastSample.currentSupply) : 0);
+      exchange.existingSupply = generated > 0 ? Number(generated.toFixed(6)) : null;
+      exchange.holdingSupply = generated > 0 ? Number(Math.max(0, generated - exchange.pubsSupply).toFixed(6)) : null;
+    }
     const fullHistory = readEcoHistory();
     const valueRange = explicitRange ? range : widenRange(fullHistory, range);
     let exchangeHistory = filterByRange(fullHistory, valueRange);
@@ -1744,10 +1826,11 @@ async function getLastPublishedTimestamp(userId) {
     const ubiPubs = filter === 'ubi' ? await listUbiPubsDetailed().catch(() => []) : [];
     const ubiCharts = filter === 'ubi' ? await listUbiCharts(range, explicitRange).catch(() => null) : null;
     const karmaHistory = filter === 'overview' ? await listKarmaHistory(uid, range, explicitRange).catch(() => ({ points: [], hasAny: false, range })) : { points: [], hasAny: false, range };
+    const fundsHistory = filter === 'overview' ? listFundsHistory(range, explicitRange) : { points: [], hasAny: false, range };
     const wealth = filter === 'exchange' || filter === 'overview' ? await listWealthSeries(range, explicitRange).catch(() => ({ points: [], totals: { distributed: 0, taxes: 0 } })) : { points: [], totals: { distributed: 0, taxes: 0 } };
     const ubiPayments = filter === 'ubi' || filter === 'overview' ? await listUbiPaymentsSeries(range, explicitRange).catch(() => ({ points: [], hasAnyData: false })) : { points: [], hasAnyData: false };
     return {
-      summary, allocations, epochs, rules: DEFAULT_RULES, taxRules, addresses, exchange, exchangeHistory, taxStats, ubiPubs, ubiCharts, karmaHistory, wealth, ubiPayments, range, valueRange, valueHasAnyData,
+      summary, allocations, epochs, rules: DEFAULT_RULES, taxRules, addresses, exchange, exchangeHistory, taxStats, ubiPubs, ubiCharts, karmaHistory, fundsHistory, wealth, ubiPayments, range, valueRange, valueHasAnyData,
       userEcoinTax: Number((userEcoinTax || 0).toFixed(6)),
       userArchTax: Number((userArchTax || 0).toFixed(6)),
       userTotalTax: Number(userTotalTax.toFixed(6))
@@ -1821,7 +1904,7 @@ async function getLastPublishedTimestamp(userId) {
     } catch (_) { return 0; }
   }
 
-  function observedInflationFromHistory(currentSupply) {
+  function observedIssuancePerHour(currentSupply) {
     const hist = readEcoHistory();
     if (!Array.isArray(hist) || hist.length < 2 || !(currentSupply > 0)) return null;
     const now = Date.now();
@@ -1830,8 +1913,39 @@ async function getLastPublishedTimestamp(userId) {
     if (!base) return null;
     const spanMs = now - Number(base.ts);
     if (spanMs < 6 * 60 * 60 * 1000) return null;
+    const minted = currentSupply - Number(base.currentSupply);
+    if (!Number.isFinite(minted) || minted < 0) return null;
+    return minted / (spanMs / (3600 * 1000));
+  }
+
+  function observedInflationFromHistory(currentSupply) {
+    const hist = readEcoHistory();
+    if (!Array.isArray(hist) || hist.length < 2 || !(currentSupply > 0)) return null;
+    const now = Date.now();
+    const minSpanMs = 6 * 60 * 60 * 1000;
+    const oldEnough = (s) => Number(s.currentSupply) > 0 && now - Number(s.ts) >= minSpanMs;
+    const base = hist.find(s => Number(s.ts) >= now - 7 * ONE_DAY_MS && oldEnough(s))
+      || hist.find(s => Number(s.ts) >= now - 30 * ONE_DAY_MS && oldEnough(s))
+      || hist.find(oldEnough);
+    if (!base) return null;
+    const spanMs = now - Number(base.ts);
     const growth = (currentSupply - Number(base.currentSupply)) / Number(base.currentSupply);
     return growth * (365 * ONE_DAY_MS / spanMs) * 100;
+  }
+
+  async function ubiPerHourPerInhabitant() {
+    const pool = isPubNode()
+      ? computePoolVars(await safeGetBalance("pub"), DEFAULT_RULES).pool
+      : (Number((await discoverUbiPub()).pool) || 0);
+    const pubIds = await knownPubIds();
+    const addresses = await listAddressesMerged().catch(() => []);
+    const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address) && !pubIds.has(a.id) && !(isPubNode() && a.id === config.keys.id)).length;
+    const cap = DEFAULT_RULES.caps.cap_user_epoch;
+    const floor = DEFAULT_RULES.caps.floor_user ?? 1;
+    const perInhabitant = pool > 0 && eligible > 0 ? Math.max(floor, Math.min(cap, pool / eligible)) : 0;
+    const now = new Date();
+    const hoursInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() * 24;
+    return perInhabitant / hoursInMonth;
   }
 
   async function calculateEcoinValue() {
@@ -1850,10 +1964,13 @@ async function getLastPublishedTimestamp(userId) {
     } catch (_) {}
     const recentSec = await getRecentBlockSeconds(blocks);
     const avgSec = recentSec > 0 ? recentSec : await getAvgBlockSeconds(blocks);
-    const ecoValuePerHour = avgSec > 0 ? (3600 / avgSec) * blockValueEco : 0;
+    const nominalPerHour = avgSec > 0 ? (3600 / avgSec) * blockValueEco : 0;
+    const observedPerHour = isSynced ? observedIssuancePerHour(circulatingSupply) : null;
+    const issuancePerHour = observedPerHour !== null ? observedPerHour : nominalPerHour;
+    const ecoValuePerHour = await ubiPerHourPerInhabitant().catch(() => 0);
     const maturity = totalSupply > 0 ? circulatingSupply / totalSupply : 0;
     const ecoTimeMs = maturity * 3600 * 1000;
-    const annualIssuance = ecoValuePerHour * 24 * 365;
+    const annualIssuance = issuancePerHour * 24 * 365;
     const inflationIssuance = circulatingSupply > 0 ? (annualIssuance / circulatingSupply) * 100 : 0;
     const inflationObserved = isSynced ? observedInflationFromHistory(circulatingSupply) : null;
     const inflationFactor = inflationObserved !== null && Number.isFinite(inflationObserved) ? inflationObserved : inflationIssuance;
@@ -1974,6 +2091,7 @@ async function getLastPublishedTimestamp(userId) {
   }
 
   async function isEligibleClaimant(userId) {
+    if ((isPubNode() && userId === config.keys.id) || (await knownPubIds()).has(userId)) return { ok: false, reason: "a PUB cannot claim the UBI" };
     const addr = await getUserAddress(userId);
     if (!addr || !isValidEcoinAddress(addr)) return { ok: false, reason: "no published ECOin address" };
     const firstTs = await getUserFirstBlockTs(userId).catch(() => 0);
@@ -2027,7 +2145,7 @@ async function getLastPublishedTimestamp(userId) {
     const epochId = epochIdNow();
     for (const claim of claims) {
       const claimantId = claim._author;
-      if (!claimantId) continue;
+      if (!claimantId || claimantId === config.keys.id || pubIds.has(claimantId)) continue;
       const claimEpoch = claim.epochId || epochId;
       const paidKey = ubiPaidKey(claimEpoch, claimantId);
       if (processedEpochUser.has(paidKey)) continue;
@@ -2045,7 +2163,7 @@ async function getLastPublishedTimestamp(userId) {
         if (pubBal <= 0) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… skipped: PUB wallet balance is 0`); continue; }
         const pv = computePoolVars(pubBal, DEFAULT_RULES);
         const addresses = await listAddressesMerged();
-        const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address));
+        const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address) && a.id !== config.keys.id && !pubIds.has(a.id));
         const karmaScore = eligibility.score;
         const wMin = DEFAULT_RULES.caps.w_min;
         const wMax = DEFAULT_RULES.caps.w_max;
@@ -2070,6 +2188,10 @@ async function getLastPublishedTimestamp(userId) {
           continue;
         }
         settleUbiPayment(paidKey, { txid, amount, paidAt: new Date().toISOString() });
+        try {
+          const open = (await transfersRepo.listByTag(`epoch:${claimEpoch}`)).find(a => a.to === claimantId && (a.status === "UNCLAIMED" || a.status === "UNCONFIRMED"));
+          if (open) await transfersRepo.markClosed(open.id, txid);
+        } catch (_) {}
         console.log(`[UBI] paid ${amount} ECO to ${claimantId.slice(0, 12)}… (${claimEpoch}) tx ${txid}`);
         await publishUbiClaimResult(claim.allocationId || `claim:${claimEpoch}:${claimantId}`, claimEpoch, txid, claimantId, amount);
         await publishBankClaim({ amount, epochId: claimEpoch, allocationId: claim.allocationId || `claim:${claimEpoch}:${claimantId}`, txid });
@@ -2196,6 +2318,8 @@ async function getLastPublishedTimestamp(userId) {
     publishPubAvailability,
     getPubAvailabilityFromSSB,
     hasClaimedThisMonth,
+    hasWalletCredentials,
+    sampleUserFunds,
     getUbiClaimHistory,
     claimUBI,
     processPendingClaims,
