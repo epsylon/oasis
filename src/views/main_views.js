@@ -121,9 +121,10 @@ const renderModeChip = (mode, i18nObj) => {
 const renderLifespanChip = (lifetime, i18nObj) => {
   const lt = lifetime || null;
   if (!lt || !lt.bucket) return null;
-  const range = lt.range || "";
+  const range = lt.contentRange || lt.range || "";
+  const bucket = lt.contentBucket || lt.bucket;
   if (range) {
-    return span({ class: `pm-exposition-chip pm-exposition-lifespan-${lt.bucket}` },
+    return span({ class: `pm-exposition-chip pm-exposition-lifespan-${bucket}` },
       span({ class: "pm-exposition-text" }, range)
     );
   }
@@ -1621,6 +1622,8 @@ const template = (titlePrefix, ...elements) => {
           if (!aiNavOn && uxMode !== 'ainav') return null;
           return div(
             { class: uxMode === 'ainav' ? "top-bar-center top-bar-center-ainav" : "top-bar-center" },
+            div({ class: 'ai-ask-row' },
+            nav({ class: 'ai-ask-nav' }, ul(...(renderAILink() || []))),
             form(
               { method: 'POST', action: '/ai/ask', class: 'ai-ask-form' },
               input({
@@ -1634,7 +1637,8 @@ const template = (titlePrefix, ...elements) => {
               }),
               button({ type: 'submit', class: 'ai-ask-btn' }, '➤')
             ),
-            buildAiSuggestion(true),
+            buildAiSuggestion(true)
+            ),
             buildEmergencyBanner(true)
           );
         })(),
@@ -1660,7 +1664,7 @@ const template = (titlePrefix, ...elements) => {
           { class: "top-bar-right" },
           nav(
             ul(
-              ...(renderAILink() || []),
+              ...((getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? [] : (renderAILink() || [])),
               navLink({ href: "/data", emoji: "⚯", text: i18n.dataTitle }),
               renderTagsLink(),
               navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
@@ -3054,10 +3058,10 @@ const renderUserSensors = (u, opts = {}) => {
   }
   if (show('wallet') && (u.ecoAddress || isMe)) {
     const addressNode = u.ecoAddress
-      ? span({ class: 'wallet-address', title: i18n.walletAddressCopyHint || 'Click to select, then copy' }, u.ecoAddress)
+      ? span({ class: 'wallet-address', title: i18n.statsEcoWalletLabel }, u.ecoAddress)
       : (isMe ? a({ href: '/wallet' }, strong(i18n.statsEcoWalletNotConfigured || 'Not configured!')) : strong(i18n.statsEcoWalletNotConfigured || 'Not configured!'));
     items.push(div({ class: 'wallet-line' },
-      span({ class: 'wallet-line-head' }, span({ class: 'wallet-icon' }, '❄'), `${i18n.statsEcoWalletLabel || 'ECOin Wallet'}`),
+      span({ class: 'wallet-line-head', title: i18n.statsEcoWalletLabel }, span({ class: 'wallet-icon' }, '❄')),
       isMe && u.ecoAddress ? a({ href: '/wallet', class: 'wallet-line-link' }, addressNode) : addressNode
     ));
   }

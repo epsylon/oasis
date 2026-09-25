@@ -217,16 +217,6 @@ const renderPostsBlock = (posts, house, canPost) => {
   );
 };
 
-const renderHouseSearch = (q) => div({ class: 'filters activity-filter-chips activity-toolbar-row' },
-  form({ method: 'GET', action: '/larp', class: 'filter-box' },
-    input({ type: 'hidden', name: 'filter', value: 'houses' }),
-    input({ type: 'text', name: 'q', value: q || '', placeholder: i18n.larpSearchPlaceholder, class: 'filter-box__input' }),
-    div({ class: 'filter-box__controls' },
-      button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
-    )
-  )
-);
-
 const matchesHouse = (house, q) => {
   const needle = String(q || '').trim().toLowerCase();
   if (!needle) return true;
@@ -323,7 +313,6 @@ exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, gover
         p(description)
       ),
       renderModeButtons(mode),
-      renderHouseSearch(search),
       renderCycleBanner(cycle),
       renderHouseBadges({ myHouse, governingHouse, houses }),
       mode === 'houses'

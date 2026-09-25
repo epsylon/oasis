@@ -3,6 +3,109 @@ const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink} = require('./main_views');
 const { renderStyledText } = require('../backend/renderStyledText');
 
+const { seatPositions } = require('../models/parliament_model').hemicycle;
+
+const HEMI_W = 720;
+const HEMI_H = 380;
+
+const hemiEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const blocClass = (key) => {
+  const m = /^opp(\d+)$/.exec(String(key || ''));
+  return m ? `hemi-bloc-opp${Number(m[1]) % 8}` : `hemi-bloc-${key}`;
+};
+
+const seatClass = (seat, mode) => {
+  const cls = ['hemi-seat'];
+  if (mode === 'houses') cls.push(seat.house ? `hemi-house-${seat.house}` : 'hemi-bloc-none');
+  else cls.push(blocClass(seat.bloc));
+  if (seat.leader) cls.push('hemi-leader');
+  if (seat.inPower) cls.push('hemi-power');
+  return cls.join(' ');
+};
+
+const thresholdMarker = (positions, count, cls, label) => {
+  if (!count || count <= 0 || count > positions.length) return '';
+  const p = positions[count - 1];
+  const q = positions[Math.min(positions.length - 1, count)];
+  const angle = (p.angle + q.angle) / 2;
+  const cx = HEMI_W / 2;
+  const cy = HEMI_H - 20;
+  const inner = 40;
+  const outer = Math.min(HEMI_W / 2 - 16, HEMI_H - 60) + 14;
+  const x1 = cx + inner * Math.cos(angle), y1 = cy - inner * Math.sin(angle);
+  const x2 = cx + outer * Math.cos(angle), y2 = cy - outer * Math.sin(angle);
+  const tx = cx + (outer + 12) * Math.cos(angle), ty = cy - (outer + 12) * Math.sin(angle);
+  const anchor = angle > Math.PI / 2 + 0.2 ? 'end' : (angle < Math.PI / 2 - 0.2 ? 'start' : 'middle');
+  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" class="hemi-threshold ${cls}" /><text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}" class="hemi-threshold-label ${cls}">${hemiEsc(label)}: ${count}</text>`;
+};
+
+const hemicycleSvg = (data, mode) => {
+  const seats = Array.isArray(data.seats) ? data.seats : [];
+  const unit = Math.max(1, Number(data.seatUnit) || 1);
+  const shown = unit > 1 ? seats.filter((_, i) => i % unit === 0) : seats;
+  const positions = seatPositions(shown.length, { width: HEMI_W, height: HEMI_H });
+  const circles = shown.map((seat, i) => {
+    const pos = positions[i];
+    if (!pos) return '';
+    const title = hemiEsc(seat.name ? `${seat.name} (${seat.id})` : seat.id);
+    const circle = `<circle cx="${pos.x}" cy="${pos.y}" r="${pos.r}" class="${seatClass(seat, mode)}"><title>${title}</title></circle>`;
+    return unit > 1 ? circle : `<a href="/author/${encodeURIComponent(seat.id)}">${circle}</a>`;
+  }).join('');
+  const t = data.thresholds || {};
+  const scale = (n) => Math.ceil(Number(n || 0) / unit);
+  const markers = mode === 'houses' ? '' : thresholdMarker(positions, scale(t.quorum), 'hemi-threshold-quorum', i18n.parliamentSeatsQuorum) + thresholdMarker(positions, scale(t.pass), 'hemi-threshold-pass', i18n.parliamentSeatsPass);
+  return `<svg viewBox="0 0 ${HEMI_W} ${HEMI_H}" xmlns="http://www.w3.org/2000/svg" class="hemicycle-svg" preserveAspectRatio="xMidYMid meet" role="img">${circles}${markers}</svg>`;
+};
+
+const pct = (n, total) => total > 0 ? `${((n / total) * 100).toFixed(1)}%` : '0%';
+
+const blocLabel = (b) => {
+  if (b.kind === 'government') return `${i18n.parliamentSeatsGovernment} · ${b.label}`;
+  if (b.kind === 'opposition') return `${i18n.parliamentSeatsOpposition} · ${i18n.parliamentSeatsVotesFor} ${b.label}`;
+  return i18n.parliamentSeatsAbstention;
+};
+
+const legendElection = (data) => ul({ class: 'hemi-legend' },
+  ...(data.blocs || []).map(b => li({ class: 'hemi-legend-item' },
+    span({ class: `hemi-swatch ${blocClass(b.key)}` }),
+    b.href ? a({ href: b.href, class: 'hemi-legend-link' }, blocLabel(b)) : span(blocLabel(b)),
+    span({ class: 'hemi-legend-count' }, `${b.count} ${i18n.parliamentSeatsSeats} · ${pct(b.count, data.population)}`)
+  ))
+);
+
+const legendHouses = (data, houseNames = {}) => {
+  const entries = Object.entries(data.houses || {}).sort((a, b) => b[1] - a[1]);
+  const noHouse = data.population - entries.reduce((s, [, n]) => s + n, 0);
+  return ul({ class: 'hemi-legend' },
+    ...entries.map(([key, n]) => li({ class: 'hemi-legend-item' },
+      span({ class: `hemi-swatch hemi-house-${key}` }),
+      a({ href: `/larp/${encodeURIComponent(key)}`, class: 'hemi-legend-link' }, houseNames[key] || key),
+      span({ class: 'hemi-legend-count' }, `${n} ${i18n.parliamentSeatsSeats} · ${pct(n, data.population)}`)
+    )),
+    noHouse > 0 ? li({ class: 'hemi-legend-item' }, span({ class: 'hemi-swatch hemi-bloc-none' }), span(i18n.parliamentSeatsNoHouse), span({ class: 'hemi-legend-count' }, `${noHouse} ${i18n.parliamentSeatsSeats} · ${pct(noHouse, data.population)}`)) : null
+  );
+};
+
+const renderHemicycle = (data, { mode = 'election', baseHref = '/parliament?filter=government', houseNames = {}, showHouses = true } = {}) => {
+  if (!data || !Array.isArray(data.seats) || !data.seats.length) return null;
+  const seatsMode = mode === 'houses' ? 'houses' : 'election';
+  const join = baseHref.includes('?') ? '&' : '?';
+  const toggle = showHouses ? div({ class: 'filters hemi-modes' },
+    a({ href: baseHref, class: seatsMode === 'election' ? 'filter-btn active' : 'filter-btn' }, i18n.parliamentSeatsByElection),
+    a({ href: `${baseHref}${join}seats=houses`, class: seatsMode === 'houses' ? 'filter-btn active' : 'filter-btn' }, i18n.parliamentSeatsByHouses)
+  ) : null;
+  const unit = Math.max(1, Number(data.seatUnit) || 1);
+  return div({ class: 'hemicycle' },
+    toggle,
+    div({ class: 'hemicycle-canvas', innerHTML: hemicycleSvg(data, seatsMode) }),
+    unit > 1 ? p({ class: 'hemi-note' }, `1 ${i18n.parliamentSeatsSeat} = ${unit}`) : null,
+    seatsMode === 'houses' ? legendHouses(data, houseNames) : legendElection(data),
+    data.leaderId ? p({ class: 'hemi-note' }, `${i18n.parliamentSeatsLeader}: `, a({ href: `/author/${encodeURIComponent(data.leaderId)}`, class: 'hemi-legend-link' }, (data.seats.find(s => s.id === data.leaderId) || {}).name || data.leaderId)) : null
+  );
+};
+
+
 const campaignBlock = (pItem) => pItem && pItem.campaignId
   ? [
       div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ': '), span({ class: 'card-value' }, `${Number(pItem.signatures) || 0}${Number(pItem.goal) > 0 ? ` / ${Number(pItem.goal)}` : ''}`)),
@@ -37,26 +140,6 @@ const showVoteMetrics = (method) => {
 };
 const applyEl = (fn, attrs, kids) => fn.apply(null, [attrs || {}].concat(kids || []));
 const methodImageSrc = (method) => `assets/images/${String(method || '').toUpperCase().toLowerCase()}.png`;
-const MethodBadge = (method) => {
-  const m = String(method || '').toUpperCase();
-  const labelTxt = String(i18n[`parliamentMethod${m}`] || m).toUpperCase();
-  return span(
-    { class: 'method-badge' },
-    labelTxt,
-    br(),br(),
-    img({ src: methodImageSrc(m), alt: labelTxt, class: 'method-badge__icon' })
-  );
-};
-const MethodHero = (method) => {
-  const m = String(method || '').toUpperCase();
-  const labelTxt = String(i18n[`parliamentMethod${m}`] || m).toUpperCase();
-  return span(
-    { class: 'method-hero' },
-    labelTxt,
-    br(),br(),
-    img({ src: methodImageSrc(m), alt: labelTxt, class: 'method-hero__icon' })
-  );
-};
 const KPI = (labelTxt, value) =>
   div({ class: 'kpi' },
     span({ class: 'kpi__label' }, labelTxt),
@@ -128,7 +211,7 @@ const GovHeader = (g) => {
   );
 };
 
-const GovernmentCard = (g, meta) => {
+const GovernmentCard = (g, meta, hemicycle = null, seatsMode = 'election', houseNames = {}) => {
   const termStart = g && g.since ? g.since : null;
   const termEnd = g && g.end ? g.end : null;
   const actorLabel =
@@ -164,7 +247,9 @@ const GovernmentCard = (g, meta) => {
     { class: 'card' },
     h2(i18n.parliamentGovernmentCard),
     GovHeader(g),
-    div({ class: 'method-image-centered' }, img({ src: methodImageSrc(methodKey), alt: methodLabel })),
+    hemicycle
+      ? renderHemicycle(hemicycle, { mode: seatsMode, baseHref: '/parliament?filter=government', houseNames })
+      : div({ class: 'method-image-centered' }, img({ src: methodImageSrc(methodKey), alt: methodLabel })),
     div(
       { class: 'table-wrap' },
       applyEl(table, { class: 'table table--centered gov-overview' }, [
@@ -317,16 +402,12 @@ const CandidaturesTable = (candidatures) => {
       c.targetType === 'inhabitant'
         ? p(userLink(c.targetId))
         : p(a({ class: 'tag-link', href: `/tribe/${encodeURIComponent(c.targetId)}?` }, c.targetTitle || c.targetId));
-    const voters = Array.isArray(c.voters) ? c.voters : [];
     return tr(
       td(idLink),
       td(fmt(c.createdAt)),
       td({ class: 'nowrap' }, c.method),
       td(c.targetType === 'inhabitant' ? String(c.karma || 0) : '-'),
-      td(
-        span({ class: 'candidature-votes-count' }, String(c.votes || 0)),
-        voters.length ? div({ class: 'candidature-voters' }, ...voters.map(v => div({ class: 'candidature-voter' }, userLink(v)))) : null
-      ),
+      td(span({ class: 'candidature-votes-count' }, String(c.votes || 0))),
       td(form({ method: 'POST', action: `/parliament/candidatures/${encodeURIComponent(c.id)}/vote` }, button({ class: 'vote-btn' }, i18n.parliamentVoteBtn)))
     );
   });
@@ -867,6 +948,7 @@ const RulesContent = () => {
   const points = [
     i18n.parliamentRulesIntro,
     i18n.parliamentRulesTerm,
+    i18n.parliamentRulesHemicycle,
     i18n.parliamentRulesMethods,
     i18n.parliamentRulesAnarchy,
     i18n.parliamentRulesCandidates,
@@ -941,6 +1023,9 @@ const parliamentView = async (state) => {
     leaders,
     leaderMeta,
     powerMeta,
+    hemicycle,
+    seatsMode,
+    houseNames,
     revocations,
     futureRevocations,
     revocationsEnactedCount,
@@ -989,7 +1074,7 @@ const parliamentView = async (state) => {
       leaders: (leaders || []).length > 0
     })),
     section(
-      filter === 'government' ? GovernmentCard(gov, powerMeta) : null,
+      filter === 'government' ? GovernmentCard(gov, powerMeta, hemicycle || null, seatsMode || 'election', houseNames || {}) : null,
       filter === 'candidatures' ? CandidaturesSection(gov, candidatures, leaderMeta, electionQuorum) : null,
       filter === 'proposals' ? ProposalsSection(gov, proposals, futureLaws, canPropose) : null,
       filter === 'laws' ? LawsSectionWrap() : null,
@@ -1001,5 +1086,4 @@ const parliamentView = async (state) => {
   );
 };
 
-module.exports = { parliamentView, pickLeader };
-
+module.exports = { parliamentView, pickLeader, renderHemicycle };

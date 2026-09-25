@@ -4387,10 +4387,27 @@ router
       return m;
     };
     const [historicalMetas, leadersMetas] = await Promise.all([buildMetas(historical, 12), buildMetas(leaders, 20)]);
+    let hemicycle = null;
+    if (filter === 'government') {
+      try {
+        const termForSeats = await parliamentModel.getCurrentTerm().catch(() => null);
+        hemicycle = await parliamentModel.getHemicycle(termForSeats);
+        if (hemicycle && Array.isArray(hemicycle.seats)) {
+          const memberships = await larpModel.listAllMemberships().catch(() => new Map());
+          const houseOf = (id) => { const v = memberships && memberships.get ? memberships.get(id) : null; return typeof v === 'string' ? v : (v && v.house) || null; };
+          hemicycle.houses = {};
+          for (const seat of hemicycle.seats) { seat.house = houseOf(seat.id); if (seat.house) hemicycle.houses[seat.house] = (hemicycle.houses[seat.house] || 0) + 1; }
+        }
+      } catch (_) { hemicycle = null; }
+    }
+    const houseNames = Object.fromEntries(Object.entries(larpModel.HOUSES || {}).map(([k, h]) => [k, (h && h.name) || k]));
     ctx.body = await parliamentView({
       filter,
       inhabitantsTotal,
       governmentCard,
+      hemicycle,
+      seatsMode: String(ctx.query.seats || '') === 'houses' ? 'houses' : 'election',
+      houseNames,
       candidatures,
       proposals: proposalsLive,
       futureLaws: futureLawsLive,

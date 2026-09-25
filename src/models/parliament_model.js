@@ -37,6 +37,124 @@ const termWindowFor = (at = Date.now()) => {
   };
 };
 
+const HEMICYCLE_MAX_SEATS = 400;
+
+const hemicycleQuorum = (n) => Math.max(PROPOSAL_QUORUM, Math.ceil(Number(n || 0) * QUORUM_RATIO));
+
+const passThreshold = (method, n) => {
+  const m = String(method || '').toUpperCase();
+  const total = Number(n || 0);
+  if (m === 'DEMOCRACY' || m === 'ANARCHY') return Math.floor(total / 2) + 1;
+  if (m === 'MAJORITY') return Math.ceil(total * 0.8);
+  if (m === 'MINORITY') return Math.ceil(total * 0.2);
+  return null;
+};
+
+const buildHemicycle = ({ census = [], candidatures = [], powerType = 'none', powerId = null, leaderId = null, method = 'ANARCHY', powerMembers = [], houses = {} } = {}) => {
+  const people = [];
+  const seen = new Set();
+  for (const p of census) {
+    const id = typeof p === 'string' ? p : (p && p.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    people.push({ id, name: (p && typeof p === 'object' && p.name) ? String(p.name) : '' });
+  }
+  const n = people.length;
+  const m = String(method || 'ANARCHY').toUpperCase();
+  const power = new Set((Array.isArray(powerMembers) ? powerMembers : []).map(String));
+  const leader = leaderId || (powerType === 'inhabitant' ? powerId : null);
+
+  const cands = (Array.isArray(candidatures) ? candidatures : []).map(c => ({
+    id: String(c.id || ''),
+    label: String(c.label || c.targetTitle || c.targetId || c.candidateId || ''),
+    href: c.href || null,
+    targetType: c.targetType || (c.candidateId ? 'inhabitant' : 'inhabitant'),
+    targetId: String(c.targetId || c.candidateId || ''),
+    method: String(c.method || '').toUpperCase(),
+    voters: Array.from(new Set((Array.isArray(c.voters) ? c.voters : []).map(String))).filter(v => v !== String(c.targetId || c.candidateId || ''))
+  }));
+  const isGovernment = (c) => powerType !== 'none' && powerId && c.targetId === String(powerId);
+  const government = cands.find(isGovernment) || null;
+  const opposition = cands.filter(c => c !== government && c.voters.some(v => seen.has(v)));
+  opposition.sort((a, b) => b.voters.length - a.voters.length || a.label.localeCompare(b.label));
+
+  const blocOf = new Map();
+  if (leader && seen.has(String(leader)) && powerType !== 'none') blocOf.set(String(leader), 'gov');
+  if (powerType === 'tribe') for (const id of power) if (seen.has(id)) blocOf.set(id, 'gov');
+  if (government) for (const v of government.voters) if (seen.has(v) && !blocOf.has(v)) blocOf.set(v, 'gov');
+  opposition.forEach((c, i) => { for (const v of c.voters) if (seen.has(v) && !blocOf.has(v)) blocOf.set(v, `opp${i}`); });
+
+  const seats = people.map(p => ({
+    id: p.id,
+    name: p.name,
+    bloc: blocOf.get(p.id) || 'none',
+    leader: !!leader && p.id === String(leader),
+    inPower: power.has(p.id),
+    house: houses && houses[p.id] ? String(houses[p.id]) : null
+  }));
+  const order = { gov: 0 };
+  opposition.forEach((c, i) => { order[`opp${i}`] = i + 1; });
+  order.none = opposition.length + 1;
+  seats.sort((a, b) => (order[a.bloc] - order[b.bloc]) || (b.leader - a.leader) || a.id.localeCompare(b.id));
+
+  const count = (key) => seats.filter(s => s.bloc === key).length;
+  const blocs = [];
+  if (government) blocs.push({ key: 'gov', kind: 'government', label: government.label, href: government.href, targetId: government.targetId, method: government.method, count: count('gov') });
+  opposition.forEach((c, i) => blocs.push({ key: `opp${i}`, kind: 'opposition', label: c.label, href: c.href, targetId: c.targetId, method: c.method, count: count(`opp${i}`) }));
+  blocs.push({ key: 'none', kind: 'abstention', label: '', href: null, count: count('none') });
+
+  const houseCounts = {};
+  for (const s of seats) if (s.house) houseCounts[s.house] = (houseCounts[s.house] || 0) + 1;
+
+  return {
+    population: n,
+    method: m,
+    powerType,
+    powerId: powerId || null,
+    leaderId: leader || null,
+    seats,
+    blocs: blocs.filter(b => b.count > 0 || b.kind === 'government'),
+    houses: houseCounts,
+    thresholds: { quorum: hemicycleQuorum(n), pass: passThreshold(m, n) },
+    seatUnit: n > HEMICYCLE_MAX_SEATS ? Math.ceil(n / HEMICYCLE_MAX_SEATS) : 1
+  };
+};
+
+const seatPositions = (n, { width = 720, height = 380 } = {}) => {
+  if (n <= 0) return [];
+  const cx = width / 2;
+  const cy = height - 20;
+  const outer = Math.min(width / 2 - 16, height - 60);
+  let rows = 1;
+  const rowGap = () => outer / (rows + 1.5);
+  const capacity = (r) => {
+    let total = 0;
+    for (let i = 0; i < r; i++) { const radius = outer - i * rowGap(); total += Math.max(1, Math.floor((Math.PI * radius) / (rowGap() * 0.95))); }
+    return total;
+  };
+  while (capacity(rows) < n && rows < 30) rows += 1;
+  const gap = rowGap();
+  const radii = [];
+  for (let i = 0; i < rows; i++) radii.push(outer - i * gap);
+  const per = radii.map(r => Math.max(1, Math.floor((Math.PI * r) / (gap * 0.95))));
+  const totalCap = per.reduce((a, b) => a + b, 0);
+  const alloc = per.map(c => Math.floor((c / totalCap) * n));
+  let left = n - alloc.reduce((a, b) => a + b, 0);
+  for (let i = 0; left > 0; i = (i + 1) % rows) { if (alloc[i] < per[i]) { alloc[i] += 1; left -= 1; } }
+  const pts = [];
+  radii.forEach((r, row) => {
+    const k = alloc[row];
+    for (let j = 0; j < k; j++) {
+      const angle = k === 1 ? Math.PI / 2 : Math.PI - (Math.PI * (j + 0.5)) / k;
+      pts.push({ angle, x: cx + r * Math.cos(angle), y: cy - r * Math.sin(angle), row });
+    }
+  });
+  pts.sort((a, b) => b.angle - a.angle || a.row - b.row);
+  const radius = Math.max(3, Math.min(11, gap * 0.4));
+  return pts.map(p => ({ x: Number(p.x.toFixed(1)), y: Number(p.y.toFixed(1)), angle: p.angle, r: Number(radius.toFixed(1)) }));
+};
+
+
 module.exports = ({ cooler, services = {} }) => {
   let ssb;
   let userId;
@@ -891,6 +1009,59 @@ if (c.type === type) {
     return await listTermsBase(filter);
   }
 
+  async function getHemicycle(termInput = null) {
+    const term = termInput || await getCurrentTerm().catch(() => null);
+    const window = term && term.startAt ? { startAt: term.startAt, endAt: term.endAt } : termWindowFor(Date.now());
+    const from = new Date(window.startAt).getTime();
+    const to = window.endAt ? new Date(window.endAt).getTime() : Number.MAX_SAFE_INTEGER;
+    const msgs = await readLog();
+    const rootOf = new Map();
+    const cands = new Map();
+    for (const m of msgs || []) {
+      const c = m.value && m.value.content;
+      if (!c || c.type !== 'parliamentCandidature') continue;
+      const root = c.replaces ? (rootOf.get(c.replaces) || c.replaces) : m.key;
+      rootOf.set(m.key, root);
+      if (!cands.has(root)) {
+        cands.set(root, { id: root, targetType: c.targetType, targetId: c.targetId, targetTitle: c.targetTitle, method: c.method, createdAt: c.createdAt || new Date(normMs(m.value.timestamp || m.timestamp)).toISOString(), voters: new Set() });
+      }
+    }
+    for (const m of msgs || []) {
+      const c = m.value && m.value.content;
+      if (!c || c.type !== 'parliamentCandidatureVote' || !c.target) continue;
+      const root = rootOf.get(c.target) || c.target;
+      const cand = cands.get(root);
+      if (cand) cand.voters.add(m.value.author);
+    }
+    const inWindow = [...cands.values()].filter(c => { const t = new Date(c.createdAt).getTime(); return Number.isFinite(t) ? (t >= from && t <= to) : false; });
+    let census = [];
+    try {
+      if (services.inhabitants?.listInhabitants) census = await services.inhabitants.listInhabitants({ filter: 'all', includeInactive: true });
+    } catch {}
+    let powerMembers = [];
+    if (term && term.powerType === 'tribe' && term.powerId && services.tribes?.getTribeById) {
+      try { const t = await services.tribes.getTribeById(term.powerId); powerMembers = Array.isArray(t && t.members) ? t.members : []; } catch {}
+    }
+    const candidatures = inWindow.map(c => ({
+      id: c.id,
+      label: c.targetTitle || c.targetId,
+      href: c.targetType === 'tribe' ? `/tribe/${encodeURIComponent(c.targetId)}` : `/author/${encodeURIComponent(c.targetId)}`,
+      targetType: c.targetType,
+      targetId: c.targetId,
+      method: c.method,
+      voters: [...c.voters]
+    }));
+    return buildHemicycle({
+      census: (census || []).map(u => ({ id: u.id, name: u.name || '' })),
+      candidatures,
+      powerType: term ? term.powerType : 'none',
+      powerId: term ? term.powerId : null,
+      leaderId: term && term.powerType === 'inhabitant' ? term.powerId : null,
+      method: term ? term.method : 'ANARCHY',
+      powerMembers
+    });
+  }
+
   async function getCurrentTerm() {
     const published = await getCurrentTermBase();
     return published || virtualAnarchyTerm();
@@ -1546,6 +1717,7 @@ if (c.type === type) {
     getPublishedTerm,
     getLatestTerm,
     getLatestGovernmentCard,
+    getHemicycle,
     listLeaders,
     sweepProposals,
     getActorMeta,
@@ -1627,3 +1799,5 @@ module.exports.termWindowFor = termWindowFor;
 module.exports.compareTermsForWindow = compareTermsForWindow;
 module.exports.collapseOverlappingTerms = collapseOverlappingTerms;
 module.exports.TERM_DAYS = TERM_DAYS;
+
+module.exports.hemicycle = { build: buildHemicycle, seatPositions, passThreshold };

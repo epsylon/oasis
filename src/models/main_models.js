@@ -2264,7 +2264,9 @@ models.lifetime = (() => {
       const candidates = [authorTs, interactionTs, createdTs].filter(x => typeof x === 'number' && x > 0);
       const lastTs = candidates.length ? Math.max(...candidates) : null;
       const { bucket, range } = bucketOf(lastTs);
-      return { bucket, range, lastTs, authorTs, interactionTs, createdTs };
+      const own = [interactionTs, createdTs].filter(x => typeof x === 'number' && x > 0);
+      const content = bucketOf(own.length ? Math.max(...own) : null);
+      return { bucket, range, contentBucket: content.bucket, contentRange: content.range, lastTs, authorTs, interactionTs, createdTs };
     },
     async enrichAndFilter(items, opts = {}) {
       const { includeDead = false, getKey = (x) => x.id || x.key, getAuthor = (x) => x.author, getCreatedAt = (x) => x.createdAt } = opts;
@@ -2287,7 +2289,9 @@ models.lifetime = (() => {
         const lastTs = candidates.length ? Math.max(...candidates) : null;
         const { bucket, range } = bucketOf(lastTs);
         if (!includeDead && bucket === 'red') continue;
-        out.push({ ...item, lifetime: { bucket, range, lastTs, authorTs, interactionTs, createdTs } });
+        const own = [interactionTs, createdTs].filter(x => typeof x === 'number' && x > 0);
+        const content = bucketOf(own.length ? Math.max(...own) : null);
+        out.push({ ...item, lifetime: { bucket, range, contentBucket: content.bucket, contentRange: content.range, lastTs, authorTs, interactionTs, createdTs } });
       }
       return out;
     }

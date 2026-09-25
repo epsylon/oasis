@@ -931,6 +931,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     publishJoin,
     publishLeaveLarp,
     getUserHouse,
+    listAllMemberships,
     listHousesWithCounts,
     getMembersOfHouse,
     publishHousePost,

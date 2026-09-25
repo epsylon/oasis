@@ -293,16 +293,28 @@ exports.statsView = (stats, filter) => {
   const totalInhabitants = stats.usersKPIs?.totalInhabitants || stats.inhabitants || 0;
   const networkKPIs = stats.networkKPIs || {};
 
+  const kvTable = (rows) => {
+    const shown = rows.filter(([, v]) => !isZero(v));
+    if (!shown.length) return p({ class: 'no-content' }, i18n.no_results || 'No data');
+    return table({ class: 'tag-table' },
+      thead(tr(
+        th(i18n.statsContentTypeColumn || 'Type'),
+        th(i18n.statsContentCountColumn || 'Count')
+      )),
+      tbody(...shown.map(([label, value]) => tr(td(label), td(String(value)))))
+    );
+  };
+
   const networkStrip = div({ class: 'stats-block' },
     h3({ class: 'stats-section-h' }, i18n.statsNetworkTitle || 'Network'),
-    kpiGrid(
-      kpi(i18n.statsUsersTitle, totalInhabitants),
-      kpi(i18n.statsTotalMsgs || 'Total messages', networkKPIs.totalMsgs || 0),
-      kpi(i18n.statsLogsTitle || 'Logs', stats?.logsCount || 0),
-      kpi(i18n.statsAITraining, C(stats, 'aiExchange') || 0),
-      kpi(i18n.statsPUBs, stats.pubsCount || 0),
-      kpi(i18n.statsSyncedPeers, sharedState.getSyncedPeerCount() || 0)
-    )
+    kvTable([
+      [i18n.statsUsersTitle, totalInhabitants],
+      [i18n.statsTotalMsgs || 'Total messages', networkKPIs.totalMsgs || 0],
+      [i18n.statsLogsTitle || 'Logs', stats?.logsCount || 0],
+      [i18n.statsAITraining, C(stats, 'aiExchange') || 0],
+      [i18n.statsPUBs, stats.pubsCount || 0],
+      [i18n.statsSyncedPeers, sharedState.getSyncedPeerCount() || 0]
+    ])
   );
 
   const carbonCard = div({ id: 'carbon', class: 'stats-card' },
@@ -310,7 +322,7 @@ exports.statsView = (stats, filter) => {
     carbonChart
   );
 
-  const networkBlock = div({ class: 'stats-block' },
+  const networkBlock = div({ class: 'stats-block stats-block-boxed' },
     h3({ class: 'stats-section-h' }, i18n.statsAveragesTitle || 'Averages'),
     kpiGrid(
       filter === 'MINE'
@@ -422,8 +434,17 @@ exports.statsView = (stats, filter) => {
     );
   };
 
-  const buildOpinionTiles = () =>
-    types.map(t => O(stats, t) > 0 ? kpi(labels[t], O(stats, t)) : null).filter(Boolean);
+  const buildOpinionTable = () => {
+    const rows = types.map(t => [labels[t], O(stats, t)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+    if (!rows.length) return p({ class: 'no-content' }, i18n.no_results || 'No data');
+    return table({ class: 'tag-table' },
+      thead(tr(
+        th(i18n.statsContentTypeColumn || 'Type'),
+        th(i18n.statsContentCountColumn || 'Count')
+      )),
+      tbody(...rows.map(([label, count]) => tr(td(label), td(String(count)))))
+    );
+  };
 
   const tribeListBlock = (label, list) => div({ class: 'stats-block' },
     h2(`${label}: ${list.length}`),
@@ -437,15 +458,14 @@ exports.statsView = (stats, filter) => {
   const allMode = filter === 'ALL'
     ? div({ class: 'stats-container' }, [
         activityBlock,
-        networkBlock,
         totalOpinions > 0
-          ? div({ class: 'stats-block' },
+          ? div({ class: 'stats-block stats-block-boxed' },
               h2(`${i18n.statsNetworkOpinions}: ${totalOpinions}`),
-              kpiGrid(...buildOpinionTiles())
+              buildOpinionTable()
             )
           : null,
         totalContent > 0
-          ? div({ class: 'stats-block' },
+          ? div({ class: 'stats-block stats-block-boxed' },
               h2(`${i18n.statsNetworkContent}: ${totalContent}`),
               buildContentTable()
             )
@@ -456,15 +476,14 @@ exports.statsView = (stats, filter) => {
   const mineMode = filter === 'MINE'
     ? div({ class: 'stats-container' }, [
         activityBlock,
-        networkBlock,
         totalOpinions > 0
-          ? div({ class: 'stats-block' },
+          ? div({ class: 'stats-block stats-block-boxed' },
               h2(`${i18n.statsYourOpinions}: ${totalOpinions}`),
-              kpiGrid(...buildOpinionTiles())
+              buildOpinionTable()
             )
           : null,
         totalContent > 0
-          ? div({ class: 'stats-block' },
+          ? div({ class: 'stats-block stats-block-boxed' },
               h2(`${i18n.statsYourContent}: ${totalContent}`),
               buildContentTable()
             )
@@ -477,21 +496,16 @@ exports.statsView = (stats, filter) => {
         const userTomb = Number(stats.userTombstoneCount || 0);
         const netTomb = Number(stats.tombstoneKPIs?.networkTombstoneCount || 0);
         if (userTomb === 0 && netTomb === 0) {
-          return div({ class: 'stats-container' },
-            div({ class: 'stats-block' },
-              p({ class: 'no-content' }, i18n.statsTombstoneEmpty || 'No tombstones in the network yet.')
-            )
+          return div({ class: 'stats-block' },
+            p({ class: 'no-content' }, i18n.statsTombstoneEmpty || 'No tombstones in the network yet.')
           );
         }
-        return div({ class: 'stats-container' }, [
-          div({ class: 'stats-block' },
-            h3({ class: 'stats-section-h' }, i18n.TOMBSTONEButton),
-            kpiGrid(
-              kpi(i18n.TOMBSTONEButton, userTomb),
-              kpi(i18n.statsTombstoneRatio, `${(stats.tombstoneKPIs?.ratio || 0).toFixed(2)}%`)
-            )
+        return div({ class: 'stats-block stats-block-boxed' },
+          kpiGrid(
+            kpi(i18n.TOMBSTONEButton, userTomb),
+            kpi(i18n.statsTombstoneRatio, `${(stats.tombstoneKPIs?.ratio || 0).toFixed(2)}%`)
           )
-        ]);
+        );
       })()
     : null;
 
@@ -531,6 +545,7 @@ exports.statsView = (stats, filter) => {
         filter === 'ALL' ? storageCard : null,
         filter === 'ALL' ? networkStrip : null,
         tombMode,
+        filter === 'TOMBSTONE' ? null : networkBlock,
         filter === 'TOMBSTONE' && !(Number(stats.userTombstoneCount || 0) || Number(stats.tombstoneKPIs?.networkTombstoneCount || 0)) ? null : carbonCard,
         filter !== 'TOMBSTONE' ? ecoTaxBlock : null,
         allMode,

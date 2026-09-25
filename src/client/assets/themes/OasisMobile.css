@@ -1474,11 +1474,10 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   overflow-wrap: normal !important;
   vertical-align: middle !important;
 }
-.wallet-history th:nth-child(1), .wallet-history td:nth-child(1) { width: 14% !important; }
-.wallet-history th:nth-child(2), .wallet-history td:nth-child(2) { width: 24% !important; }
-.wallet-history th:nth-child(3), .wallet-history td:nth-child(3) { width: 20% !important; }
-.wallet-history th:nth-child(4), .wallet-history td:nth-child(4) { width: 25% !important; }
-.wallet-history th:nth-child(5), .wallet-history td:nth-child(5) { width: 17% !important; }
+.wallet-history th:nth-child(1), .wallet-history td:nth-child(1) { display: none !important; }
+.wallet-history th:nth-child(2), .wallet-history td:nth-child(2) { width: 33% !important; }
+.wallet-history th:nth-child(3), .wallet-history td:nth-child(3) { width: 39% !important; }
+.wallet-history th:nth-child(4), .wallet-history td:nth-child(4) { width: 28% !important; text-align: right !important; }
 .wallet-history td.tcell-ellipsis {
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -1543,6 +1542,9 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 }
 .wallet-history .pm-exposition-chip {
   white-space: nowrap !important;
+  font-size: .78em !important;
+  padding: 2px 7px !important;
+  gap: 3px !important;
 }
 .wallet-qr-img {
   display: block !important;
@@ -1844,4 +1846,8 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   font-size: 0.9rem !important;
   text-decoration: none !important;
   box-shadow: 0 2px 6px rgba(0,0,0,.4) !important;
+}
+
+.activity-toolbar-row .inbox-exposition {
+  margin: 0 0 12px 0 !important;
 }
