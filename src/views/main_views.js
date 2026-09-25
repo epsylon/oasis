@@ -48,6 +48,11 @@ const userLink = (feedId, knownName) => {
 };
 
 exports.userLink = userLink;
+
+const inboxBadges = () => {
+  const inboxCount = Number(sharedState.getInboxCount()) || 0;
+  return [inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : ''];
+};
 exports.userLinkLabel = userLinkLabel;
 
 const renderInviteQrCard = ({ qrDataUrl }) =>
@@ -347,6 +352,42 @@ const renderEcoTax = (sizeBytes, blockId) => {
 
 exports.formatCarbon = formatCarbon;
 exports.renderEcoTax = renderEcoTax;
+
+const renderEcoValueChip = () => {
+  const v = Number(sharedState.getEcoValue ? sharedState.getEcoValue() : NaN);
+  if (!Number.isFinite(v) || v <= 0) return null;
+  const title = (i18n && i18n.bankExchangeCurrentValue) ? i18n.bankExchangeCurrentValue : 'ECOin Value (1h)';
+  return a({ href: '/banking?filter=exchange', class: 'eco-tax-chip eco-tax-chip-mid eco-value-chip', title },
+    span({ class: 'eco-tax-chip-label' }, 'ECO/h: '),
+    span({ class: 'eco-tax-chip-value' }, v.toFixed(4))
+  );
+};
+exports.renderEcoValueChip = renderEcoValueChip;
+
+const renderMobileCounters = () => {
+  try {
+    const theme = (getConfig().themes || {}).current;
+    if (theme !== 'OasisMobile' && process.env.OASIS_MOBILE !== '1') return null;
+  } catch (_) { return null; }
+  const inbox = Number(sharedState.getInboxCount()) || 0;
+  const mentions = Number(sharedState.getMentionsCount()) || 0;
+  if (inbox <= 0 && mentions <= 0) return null;
+  return div({ class: 'mobile-counters' },
+    inbox > 0 ? a({ href: '/inbox', class: 'mobile-counter', title: i18n.inbox }, '☂ ', String(inbox)) : null,
+    mentions > 0 ? a({ href: '/mentions', class: 'mobile-counter', title: i18n.mentions }, '✺ ', String(mentions)) : null
+  );
+};
+
+const renderLogWindowNote = () => {
+  let store = null;
+  try { store = require('../models/typed_log').requestScope.getStore(); } catch (_) { store = null; }
+  if (!store || !store.capped || !(store.limit > 0)) return null;
+  return div({ class: 'log-window-note' },
+    a({ href: '/settings#logstream', class: 'eco-tax-chip eco-tax-chip-low log-window-chip', title: i18n.ssbLogStreamDescription },
+      span({ class: 'eco-tax-chip-value' }, String(i18n.logWindowChip).replace('{n}', String(store.limit)))
+    )
+  );
+};
 
 const errorView = ({ title, message, backHref }) => {
   const heading = title || i18n.errorPageTitle || 'Error';
@@ -1479,9 +1520,9 @@ const template = (titlePrefix, ...elements) => {
     const suggestion = sharedState.getBestMatch ? sharedState.getBestMatch() : null;
     if (!suggestion || !suggestion.href) return null;
     if (sharedState.getDismissedSuggestion && sharedState.getDismissedSuggestion() === suggestion.href) return null;
-    const cap = compact ? 42 : 80;
+    const cap = compact ? 52 : 96;
     const t = String(suggestion.title || '').trim();
-    const label = `${t.length > cap ? t.slice(0, cap) + '…' : t} (${(((Number(suggestion.score) || 0) * 100).toFixed(1)).replace(/\.0$/, '')}%)`;
+    const label = t.length > cap ? t.slice(0, cap) + '…' : t;
     return div(
       { class: compact ? "ai-suggestion-banner ai-suggestion-inline" : "update-banner ai-suggestion-banner" },
       span({ class: "update-banner-icon" }, "🤖"),
@@ -1540,11 +1581,9 @@ const template = (titlePrefix, ...elements) => {
           uxMode === "ainav" ? nav(
             ul(
               (() => {
-                const inboxCount = sharedState.getInboxCount();
-                const badge = inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : '';
                 return li(
                   a({ href: "/inbox" },
-                    span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, badge
+                    span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, ...inboxBadges()
                   )
                 );
               })(),
@@ -1554,6 +1593,8 @@ const template = (titlePrefix, ...elements) => {
           ) : nav(
             ul(
               (() => {
+                const mentionsTotal = sharedState.getMentionsTotal ? sharedState.getMentionsTotal() : 0;
+                if (!(mentionsTotal > 0)) return null;
                 const mentionsCount = sharedState.getMentionsCount();
                 const badge = mentionsCount > 0 ? span({ class: 'inbox-badge' }, String(mentionsCount)) : '';
                 return li(
@@ -1563,21 +1604,15 @@ const template = (titlePrefix, ...elements) => {
                 );
               })(),
               (() => {
-                const inboxCount = sharedState.getInboxCount();
-                const badge = inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : '';
                 return li(
                   a({ href: "/inbox" },
-                    span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, badge
+                    span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, ...inboxBadges()
                   )
                 );
               })(),
               (uxMode === "chats" || uxMode === "feed")
                 ? navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
-                : navLink({
-                    href: "/pm",
-                    emoji: "ꕕ",
-                    text: i18n.privateMessage
-                  })
+                : null
             )
           )
         ),
@@ -1625,6 +1660,7 @@ const template = (titlePrefix, ...elements) => {
           { class: "top-bar-right" },
           nav(
             ul(
+              ...(renderAILink() || []),
               navLink({ href: "/data", emoji: "⚯", text: i18n.dataTitle }),
               renderTagsLink(),
               navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
@@ -1757,7 +1793,6 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "⚒",
                   title: i18n.menuTools
                 },
-                renderAILink(),
                 navLink({
                   href: "/blockexplorer",
                   emoji: "ꖸ",
@@ -1777,7 +1812,6 @@ const template = (titlePrefix, ...elements) => {
             )
           )
         ),
-        main({ id: "content", class: "main-column" }, elements),
         uxMode !== "blocks" ? null : div(
           { class: "sidebar-right" },
           nav(
@@ -1837,7 +1871,8 @@ const template = (titlePrefix, ...elements) => {
               )
             )
           )
-        )
+        ),
+        main({ id: "content", class: "main-column" }, elements, renderLogWindowNote(), renderMobileCounters())
       ),
     renderFooter()
     )
@@ -1870,11 +1905,9 @@ exports.ainavHomeView = ({ recentTags = [] } = {}) => {
             nav(
               ul(
                 (() => {
-                  const inboxCount = sharedState.getInboxCount();
-                  const badge = inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : '';
                   return li(
                     a({ href: "/inbox" },
-                      span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, badge
+                      span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, ...inboxBadges()
                     )
                   );
                 })(),
@@ -3407,14 +3440,16 @@ const renderMessage = (msg) => {
 
 
 
-const INBOX_BOT_SUBJECTS = new Set([
-  'JOB_MATCH', 'JOB_SUBSCRIBED', 'JOB_UNSUBSCRIBED', 'PROJECT_FOLLOWED', 'PROJECT_UNFOLLOWED', 'PROJECT_PLEDGE',
-  'MARKET_SOLD', 'SHOP_SOLD', 'LARP_RULING', 'PARLIAMENT_GOV', 'TRIBE_GOV', 'BANKING_UBI_PAID', 'BANKING_UBI_AVAILABLE', 'BANKING_CONFIRM_PENDING', 'WALLET_PAYMENT',
-  'SCHOOL_ENROLLED', 'SCHOOL_INVITED', 'SCHOOL_ADMITTED', 'SCHOOL_CERTIFICATE', 'SCHOOL_PASSED', 'SCHOOL_LESSON_NEW',
-  'INDUSTRY_ADMITTED', 'INDUSTRY_APPLICATION', 'INDUSTRY_INVITED', 'INDUSTRY_DISSOLVED', 'INDUSTRY_BUILD_APPROVED', 'INDUSTRY_DISTRIBUTED',
-  'HOUSING_REQUESTED', 'HOUSING_CANCELLED', 'HOUSING_UNAVAILABLE', 'WIKI_EDITED', 'WIKI_RESTORED', 'EMERGENCY_UPDATED', 'EMERGENCY_RESOLVED', 'PODCAST_EPISODE', 'CAMPAIGN_UPDATED', 'CAMPAIGN_ACHIEVED', 'CAMPAIGN_RAISED',
-  'LOGISTICS_UPDATED', 'LOGISTICS_CLOSED', 'LOGISTICS_BOOKED', 'LOGISTICS_CANCELLED', 'LOGISTICS_CONFIRMED', 'LOGISTICS_REJECTED', 'LOGISTICS_DELIVERED'
-]);
+const { botOf: inboxBotOf, INBOX_BOTS } = require('../models/pm_model');
+const INBOX_BOT_ORDER = Object.keys(INBOX_BOTS).concat(['reminders']);
+const inboxBotLabel = (bot) => ({
+  blogs: i18n.pmBotBlogs, jobs: i18n.pmBotJobs, projects: i18n.pmBotProjects, market: i18n.pmBotMarket, shops: i18n.pmBotShops,
+  political: i18n.pmBotPolitical, banking: i18n.pmBotBanking, school: i18n.pmBotSchool, industry: i18n.pmBotIndustry,
+  housing: i18n.pmBotHousing, wiki: i18n.pmBotWiki, emergencies: i18n.pmBotEmergencies, podcasts: i18n.pmBotPodcasts,
+  campaigns: i18n.pmBotCampaigns, logistics: i18n.pmBotLogistics, reminders: i18n.privateReminders
+})[bot] || bot;
+exports.INBOX_BOT_ORDER = INBOX_BOT_ORDER;
+exports.inboxBotLabel = inboxBotLabel;
 
 exports.privateView = async (messagesInput, filter, decrypted = null, notice = '', q = '') => {
   const noticeText = notice === 'unavailable'
@@ -3424,12 +3459,19 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       : ''
   const messagesRaw = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages
   const listTitles = (!Array.isArray(messagesInput) && messagesInput.listTitles && typeof messagesInput.listTitles === 'object') ? messagesInput.listTitles : {}
-  const messages = (messagesRaw || []).filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true)
+  const readKeys = new Set((!Array.isArray(messagesInput) && Array.isArray(messagesInput.readKeys)) ? messagesInput.readKeys.map(String) : [])
+  const archivedKeys = new Set((!Array.isArray(messagesInput) && Array.isArray(messagesInput.archivedKeys)) ? messagesInput.archivedKeys.map(String) : [])
+  const mutedBots = new Set((!Array.isArray(messagesInput) && Array.isArray(messagesInput.mutedBots)) ? messagesInput.mutedBots.map(String) : [])
+  const botFilter = (!Array.isArray(messagesInput) && typeof messagesInput.bot === 'string' && INBOX_BOT_ORDER.includes(messagesInput.bot)) ? messagesInput.bot : ''
+  const sortMode = (!Array.isArray(messagesInput) && messagesInput.sort === 'recent') ? 'recent' : 'thread'
+  const isMutedMsg = m => { const b = inboxBotOf(m?.value?.content); return !!(b && mutedBots.has(b)) }
+  const messages = (messagesRaw || []).filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true).filter(m => !isMutedMsg(m))
   const qNorm = String(q || '').trim().toLowerCase()
   const qMatch = (m) => {
     if (!qNorm) return true
     const c = m.value.content || {}
-    return [c.subject, c.text, c.from, m.value.author, ...(Array.isArray(c.to) ? c.to : [])]
+    const ids = [c.from, m.value.author, ...(Array.isArray(c.to) ? c.to : [])].filter(Boolean)
+    return [c.subject, c.text, ...ids, ...ids.map(id => userLinkLabel(id))]
       .some(v => String(v || '').toLowerCase().includes(qNorm))
   }
   const userId = await getUserId()
@@ -3437,6 +3479,16 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   const isSent = m => (m?.value?.author === userId) || (m?.value?.content?.from === userId)
   const isList = m => !!(m?.value?.content?.list)
   const isToUser = m => Array.isArray(m?.value?.content?.to) && m.value.content.to.includes(userId)
+  const isReminder = m => {
+    const s = String(m?.value?.content?.subject || '')
+    return /^(Task Reminder:|Calendar Reminder:)/i.test(s)
+  }
+  const isNotification = m => !!inboxBotOf(m?.value?.content)
+  const isSelfNotice = m => isSent(m) && isToUser(m) && isNotification(m)
+  const isArchived = m => archivedKeys.has(String(m?.key))
+  const toUserKeys = new Set(messages.filter(isToUser).map(m => String(m.key)))
+  const isUnreadKey = (key) => toUserKeys.has(String(key)) && !readKeys.has(String(key)) && !archivedKeys.has(String(key))
+  const firstHref = (str) => { const m = String(str || '').match(/\]\((\/[^)\s]+)\)/); return m ? m[1] : null }
 
   const linkAuthor = (id) => userLink(id)
 
@@ -3447,15 +3499,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     shopProduct: (id) => `/shops/product/${encodeURIComponent(id)}`
   }
 
-  const clickableCardProps = (href, extraClass = '') => {
-    const props = { class: `pm-card ${extraClass}` }
-    if (href) {
-      props.onclick = `window.location='${href}'`
-      props.tabindex = 0
-      props.onkeypress = `if(event.key==='Enter') window.location='${href}'`
-    }
-    return props
-  }
+  const titleLink = (href, text) => href ? a({ href, class: 'pm-title-link' }, text) : text
 
   const chip = (txt) => span({ class: 'chip' }, txt)
 
@@ -3494,7 +3538,10 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       ),
       tr(
         td({ class: 'card-label' }, i18n.pmSubjectLabel || 'Subject:'),
-        td({ class: 'card-value' }, subject || i18n.pmNoSubject || '(no subject)')
+        td({ class: 'card-value pm-subject-cell' },
+          span(subject || i18n.pmNoSubject || '(no subject)'),
+          isUnreadKey(msgKey) ? span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip)) : null
+        )
       ),
       ecoChip
         ? tr(
@@ -3525,6 +3572,12 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
         button({ type: 'submit', class: 'pm-btn reply-btn' }, i18n.pmReply.toUpperCase())
       ),
       extra || null,
+      toUserKeys.has(String(key)) && !archivedKeys.has(String(key)) ? form({ method: 'POST', action: `/inbox/${readKeys.has(String(key)) ? 'unread' : 'read'}/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
+        button({ type: 'submit', class: 'pm-btn read-btn' }, String(readKeys.has(String(key)) ? i18n.inboxMarkUnread : i18n.inboxMarkRead).toUpperCase())
+      ) : null,
+      toUserKeys.has(String(key)) ? form({ method: 'POST', action: `/inbox/${archivedKeys.has(String(key)) ? 'unarchive' : 'archive'}/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
+        button({ type: 'submit', class: 'pm-btn archive-btn' }, String(archivedKeys.has(String(key)) ? i18n.inboxUnarchive : i18n.inboxArchive).toUpperCase())
+      ) : null,
       form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
         button({ type: 'submit', class: 'pm-btn delete-btn danger-btn' }, i18n.privateDelete.toUpperCase())
       )
@@ -3629,38 +3682,39 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   const inboxSet = new Set()
   for (const arr of Object.values(threads)) {
     for (const m of arr) {
-      if (!isSent(m) && isToUser(m)) inboxSet.add(m)
+      if ((!isSent(m) || isSelfNotice(m)) && isToUser(m) && !isArchived(m)) inboxSet.add(m)
     }
   }
 
-  const isReminder = m => {
-    const s = String(m?.value?.content?.subject || '')
-    return /^(Task Reminder:|Calendar Reminder:)/i.test(s)
-  }
-  const isNotification = m => {
-    const c = m?.value?.content || {}
-    return INBOX_BOT_SUBJECTS.has(String(c.subject || '').toUpperCase()) || (c.meta && c.meta.type === 'project-pledge') || isReminder(m)
-  }
   const received = Array.from(inboxSet)
-  const notifications = messages.filter(m => isNotification(m) && (!isSent(m) || isReminder(m)))
-  const mailing = messages.filter(isList)
+  const archivedMsgs = messages.filter(isArchived)
+  const notifications = messages.filter(m => isNotification(m) && !isArchived(m) && (!isSent(m) || isReminder(m) || isSelfNotice(m)))
+  const mailing = messages.filter(m => isList(m) && !isArchived(m))
+  const botCounts = {}
+  for (const m of notifications) { const b = inboxBotOf(m.value.content); if (b) botCounts[b] = (botCounts[b] || 0) + 1 }
+  const botsPresent = INBOX_BOT_ORDER.filter(b => botCounts[b] > 0)
 
   const data = (
-    filter === 'sent' ? messages.filter(m => isSent(m) && !isReminder(m)) :
-    filter === 'reminders' ? messages.filter(isReminder) :
+    filter === 'sent' ? messages.filter(m => isSent(m) && !isReminder(m) && !isSelfNotice(m) && !isArchived(m)) :
+    filter === 'reminders' ? messages.filter(m => isReminder(m) && !isArchived(m)) :
     filter === 'pms' ? received.filter(m => !isNotification(m) && !isList(m)) :
-    filter === 'notifications' ? notifications :
+    filter === 'notifications' ? (botFilter ? notifications.filter(m => inboxBotOf(m.value.content) === botFilter) : notifications) :
     filter === 'mailing' ? mailing :
+    filter === 'archived' ? archivedMsgs :
     filter === 'inbox' ? received.filter(m => !isReminder(m)) :
-    messages
+    messages.filter(m => !isArchived(m))
   ).filter(qMatch)
 
   const inboxCount = received.filter(m => !isReminder(m)).length
-  const sentCount = messages.filter(m => isSent(m) && !isReminder(m)).length
+  const sentCount = messages.filter(m => isSent(m) && !isReminder(m) && !isSelfNotice(m) && !isArchived(m)).length
   const pmCount = received.filter(m => !isNotification(m) && !isList(m)).length
   const notifCount = notifications.length
   const mailingCount = mailing.length
+  const archivedCount = archivedMsgs.length
   const emptyInbox = messages.length === 0 && !qNorm
+  const shownKeys = data.map(m => String(m.key))
+  const unreadShown = shownKeys.filter(k => isUnreadKey(k))
+  const bulkDeletable = filter === 'notifications' || filter === 'reminders' || filter === 'archived'
 
   const sorted = [...data].sort((a, b) => {
     const ta = threadId(a)
@@ -3680,9 +3734,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const jobId = pickLink(text, 'job')
     const href = jobId ? hrefFor.job(jobId) : null
     return div(
-      clickableCardProps(href, `job-notification thread-level-0`),
+      { class: 'pm-card job-notification thread-level-0' },
       headerLine({ sentAt, from, toLinks, subject: titleH, msgKey: key, msgSize }),
-      h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotJobs} · ${titleH}`),
+      h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotJobs} · `, titleLink(href, titleH)),
       p(
         i18n.pmInhabitantWithId, ' ',
         linkAuthor(from), ' ',
@@ -3704,9 +3758,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const projectId = pickLink(text, 'project')
     const href = projectId ? hrefFor.project(projectId) : null
     return div(
-      clickableCardProps(href, `project-${isFollow ? 'follow' : 'unfollow'}-notification thread-level-0`),
+      { class: `pm-card project-${isFollow ? 'follow' : 'unfollow'}-notification thread-level-0` },
       headerLine({ sentAt, from, toLinks, subject: titleH, msgKey: key, msgSize }),
-      h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotProjects} · ${titleH}`),
+      h2({ class: 'pm-title' }, `${icon} ${i18n.pmBotProjects} · `, titleLink(href, titleH)),
       p(
         i18n.pmInhabitantWithId, ' ',
         userLink(from),
@@ -3731,9 +3785,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const botLabel = isShop ? i18n.pmBotShops : i18n.pmBotMarket
     const soldTitle = isShop ? (i18n.inboxShopSoldTitle || 'Product Sold') : i18n.inboxMarketItemSoldTitle
     return div(
-      clickableCardProps(href, (isShop ? 'shop-sold-notification' : 'market-sold-notification') + ' thread-level-0'),
+      { class: `pm-card ${isShop ? 'shop-sold-notification' : 'market-sold-notification'} thread-level-0` },
       headerLine({ sentAt, from, toLinks, subject: soldTitle, msgKey: key, msgSize }),
-      h2({ class: 'pm-title' }, `${icon} ${botLabel} · ${soldTitle}`),
+      h2({ class: 'pm-title' }, `${icon} ${botLabel} · `, titleLink(href, soldTitle)),
       p(
         i18n.pmYourItem, ' ',
         href ? a({ class: isShop ? 'shop-link' : 'market-link', href }, `"${itemTitle}"`) : `"${itemTitle}"`,
@@ -3752,9 +3806,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const projectId = content.meta?.projectId ?? pickLink(text, 'project')
     const href = projectId ? hrefFor.project(projectId) : null
     return div(
-      clickableCardProps(href, 'project-pledge-notification thread-level-0'),
+      { class: 'pm-card project-pledge-notification thread-level-0' },
       headerLine({ sentAt, from, toLinks, subject: i18n.inboxProjectPledgedTitle, msgKey: key, msgSize }),
-      h2({ class: 'pm-title' }, `💚 ${i18n.pmBotProjects} · ${i18n.inboxProjectPledgedTitle}`),
+      h2({ class: 'pm-title' }, `💚 ${i18n.pmBotProjects} · `, titleLink(href, i18n.inboxProjectPledgedTitle)),
       p(
         i18n.pmInhabitantWithId, ' ',
         linkAuthor(from), ' ',
@@ -3774,10 +3828,11 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       TRIBE_GOV: i18n.politicalBotTribeTitle || 'A new government cycle has begun in one of your Tribes.'
     }
     const title = titleMap[subjectU] || (i18n.pmBotPolitical || 'PoliticalBot')
+    const href = firstHref(text)
     return div(
       { class: 'pm-card political-bot-notification thread-level-0' },
       headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
-      h2({ class: 'pm-title' }, `🏛️ ${i18n.pmBotPolitical} · ${title}`),
+      h2({ class: 'pm-title' }, `🏛️ ${i18n.pmBotPolitical} · `, href ? a({ href, class: 'pm-title-link' }, title) : title),
       div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
       actions({ key, replyId: from, subjectRaw: title, text })
     )
@@ -3810,10 +3865,11 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       : subjectU === 'BANKING_CONFIRM_PENDING'
       ? (i18n.bankingBotConfirmTitle || 'You have transfers awaiting your confirmation.')
       : (i18n.bankingBotPaymentTitle || 'You have received a payment.')
+    const href = firstHref(text)
     return div(
       { class: 'pm-card banking-bot-notification thread-level-0' },
       headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
-      h2({ class: 'pm-title' }, `💰 ${i18n.pmBotBanking || 'BankingBot'} · ${title}`),
+      h2({ class: 'pm-title' }, `💰 ${i18n.pmBotBanking || 'BankingBot'} · `, href ? a({ href, class: 'pm-title-link' }, title) : title),
       div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
       actions({ key, replyId: from, subjectRaw: title, text })
     )
@@ -3914,6 +3970,17 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
+  function BlogBotCard({ sentAt, from, toLinks, text, key, msgSize }) {
+    const title = i18n.blogBotNewTitle
+    return div(
+      { class: 'pm-card blog-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `📝 ${i18n.pmBotBlogs} · `, titleLink(firstHref(text), title)),
+      div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
   function PodcastBotCard({ sentAt, from, toLinks, text, key, msgSize }) {
     const title = i18n.podcastBotEpisodeTitle || 'A podcast you follow has a new episode.'
     return div(
@@ -4000,12 +4067,6 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             value: 'pms',
             class: filter === 'pms' ? 'filter-btn active' : 'filter-btn'
           }, `${String(i18n.inboxFilterPms || 'PMs').toUpperCase()} (${pmCount})`) : null,
-          (notifCount > 0 || filter === 'notifications' || filter === 'reminders') ? button({
-            type: 'submit',
-            name: 'filter',
-            value: 'notifications',
-            class: (filter === 'notifications' || filter === 'reminders') ? 'filter-btn active' : 'filter-btn'
-          }, `${String(i18n.inboxFilterNotifications || 'Notifications').toUpperCase()} (${notifCount})`) : null,
           (mailingCount > 0 || filter === 'mailing') ? button({
             type: 'submit',
             name: 'filter',
@@ -4018,6 +4079,18 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             value: 'sent',
             class: filter === 'sent' ? 'filter-btn active' : 'filter-btn'
           }, `${String(i18n.privateSent || 'SENT').toUpperCase()} (${sentCount})`) : null,
+          (notifCount > 0 || filter === 'notifications' || filter === 'reminders') ? button({
+            type: 'submit',
+            name: 'filter',
+            value: 'notifications',
+            class: (filter === 'notifications' || filter === 'reminders') ? 'filter-btn active' : 'filter-btn'
+          }, `${String(i18n.inboxFilterNotifications || 'Notifications').toUpperCase()} (${notifCount})`) : null,
+          (archivedCount > 0 || filter === 'archived') ? button({
+            type: 'submit',
+            name: 'filter',
+            value: 'archived',
+            class: filter === 'archived' ? 'filter-btn active' : 'filter-btn'
+          }, `${String(i18n.inboxFilterArchived).toUpperCase()} (${archivedCount})`) : null,
           ]),
           button({
             type: 'submit',
@@ -4029,29 +4102,39 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
           }, i18n.pmCreateButton)
         ])
       ),
-      div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+      (filter === 'notifications' && botsPresent.length) ? div({ class: 'filters inbox-bot-filters' },
+        form({ method: 'GET', action: '/inbox' },
+          input({ type: 'hidden', name: 'filter', value: 'notifications' }),
+          sortMode === 'recent' ? input({ type: 'hidden', name: 'sort', value: 'recent' }) : null,
+          button({ type: 'submit', name: 'bot', value: '', class: botFilter ? 'filter-btn' : 'filter-btn active' }, `${String(i18n.inboxAllBots).toUpperCase()} (${notifCount})`),
+          ...botsPresent.map(b => button({ type: 'submit', name: 'bot', value: b, class: botFilter === b ? 'filter-btn active' : 'filter-btn' }, `${String(inboxBotLabel(b)).toUpperCase()} (${botCounts[b]})`))
+        )
+      ) : null,
+      emptyInbox ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
       (() => {
-        const pmVis = getConfig().pmVisibility === 'mutuals' ? 'mutuals' : 'whole'
-        const pmVisLabel = pmVis === 'mutuals' ? i18n.settingsPmVisibilityMutuals : i18n.settingsPmVisibilityWhole
-        const pmVisIcon = pmVis === 'mutuals' ? '🤝' : '🌐'
-        const nextVis = pmVis === 'mutuals' ? 'whole' : 'mutuals'
-        const nextLabel = nextVis === 'mutuals'
-          ? (i18n.inboxToggleToMutuals || 'Switch to mutuals')
-          : (i18n.inboxToggleToWhole || 'Switch to whole')
         return div({ class: 'pm-exposition inbox-exposition' },
           span({ class: 'inbox-filters-label' }, i18n.inboxFiltersLabel || 'Filters:'),
-          span({ class: `pm-exposition-chip pm-exposition-${pmVis}` },
-            span({ class: 'pm-exposition-icon' }, pmVisIcon),
-            span({ class: 'pm-exposition-text' }, pmVisLabel)
+          form({ method: 'GET', action: '/inbox', class: 'inbox-vis-toggle' },
+            input({ type: 'hidden', name: 'filter', value: filter || 'inbox' }),
+            botFilter ? input({ type: 'hidden', name: 'bot', value: botFilter }) : null,
+            qNorm ? input({ type: 'hidden', name: 'q', value: String(q || '') }) : null,
+            sortMode === 'recent' ? null : input({ type: 'hidden', name: 'sort', value: 'recent' }),
+            button({ type: 'submit', class: 'btn' }, sortMode === 'recent' ? i18n.inboxSortThread : i18n.inboxSortRecent)
           ),
-          form({ method: 'POST', action: '/settings/pm-visibility?returnTo=/inbox', class: 'inbox-vis-toggle' },
-            input({ type: 'hidden', name: 'pmVisibility', value: nextVis }),
-            button({ type: 'submit', class: 'btn' }, nextLabel)
-          )
+          unreadShown.length ? form({ method: 'POST', action: '/inbox/read-all', class: 'inbox-vis-toggle' },
+            ...unreadShown.map(k => input({ type: 'hidden', name: 'keys', value: k })),
+            button({ type: 'submit', class: 'btn' }, `${i18n.inboxMarkAllRead} (${unreadShown.length})`)
+          ) : null,
+          (bulkDeletable && shownKeys.length) ? form({ method: 'POST', action: '/inbox/delete-many', class: 'inbox-vis-toggle inbox-bulk-delete' },
+            ...shownKeys.map(k => input({ type: 'hidden', name: 'keys', value: k })),
+            button({ type: 'submit', class: 'btn delete-btn' }, `${String(i18n.inboxDeleteShown).toUpperCase()} (${shownKeys.length})`)
+          ) : null
         )
       })(),
-        emptyInbox ? null : form({ method: 'GET', action: '/inbox', class: 'filter-box' },
+        form({ method: 'GET', action: '/inbox', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter || 'inbox' }),
+          botFilter ? input({ type: 'hidden', name: 'bot', value: botFilter }) : null,
+          sortMode === 'recent' ? input({ type: 'hidden', name: 'sort', value: 'recent' }) : null,
           input({ type: 'text', name: 'q', value: String(q || ''), placeholder: i18n.inboxSearchPlaceholder || 'Search in Inbox...', class: 'filter-box__input' }),
           button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
         )
@@ -4135,6 +4218,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             if (subjectU === 'EMERGENCY_UPDATED' || subjectU === 'EMERGENCY_RESOLVED') {
               return EmergencyBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
+            if (subjectU === 'BLOG_NEW') {
+              return BlogBotCard({ sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
             if (subjectU === 'PODCAST_EPISODE') {
               return PodcastBotCard({ sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
@@ -4182,6 +4268,12 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             )
           }
 
+          const msgTs = (m) => new Date(m?.value?.content?.sentAt || m.timestamp || 0).getTime()
+          if (sortMode === 'recent') {
+            if (!sorted.length) return p({ class: 'empty' }, i18n.noPrivateMessages)
+            return [...sorted].sort((a, b) => msgTs(b) - msgTs(a)).map(renderMsg)
+          }
+
           const threadGroups = {}
           const threadOrder = []
           for (const msg of sorted) {
@@ -4203,24 +4295,24 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
 
           return threadOrder.map(tid => {
             const msgs = threadGroups[tid]
-            const original = msgs[0]
-            const replies = msgs.slice(1)
+            const latest = msgs[msgs.length - 1]
+            const earlier = msgs.slice(0, -1)
 
-            if (!replies.length) {
-              return renderMsg(original)
+            if (!earlier.length) {
+              return renderMsg(latest)
             }
 
-            const replyLabel = `${replies.length} ${replies.length === 1 ? (i18n.pmReply || 'reply') : (i18n.pmReplies || 'replies')}`
+            const earlierLabel = `${earlier.length} ${i18n.inboxEarlierMessages}`
 
             return div({ class: 'pm-thread' },
-              renderMsg(original),
+              renderMsg(latest),
               details({ class: 'pm-thread-details' },
                 summary({ class: 'pm-thread-toggle' },
                   span({ class: 'pm-thread-icon' }, '▶'),
-                  span(replyLabel)
+                  span(earlierLabel)
                 ),
                 div({ class: 'pm-thread-replies' },
-                  ...replies.map(renderMsg)
+                  ...earlier.map(renderMsg)
                 )
               )
             )

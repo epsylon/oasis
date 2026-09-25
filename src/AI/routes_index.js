@@ -95,6 +95,8 @@ const ROUTES = [
   { path: '/inbox',         mod: null,         description: 'inbox, notifications, mentions, emergencies, messages addressed to me, received PM' },
   { path: '/inbox?filter=sent', mod: null,     description: 'sent messages, outgoing PM, my sent private messages, what I wrote' },
   { path: '/inbox?filter=reminders', mod: null, description: 'reminders, task reminders, calendar reminders, automatic notifications' },
+  { path: '/inbox?filter=notifications', mod: null, description: 'bot notifications, BankingBot, PoliticalBot, MarketBot, notices per bot, unread notices' },
+  { path: '/inbox?filter=archived', mod: null, description: 'archived messages, archived PMs, put away conversations' },
   { path: '/pm',            mod: null, description: 'private messages, direct messages, DMs, encrypted PM, compose new PM' },
   { path: '/mentions',      mod: null,         description: 'mentions, who mentioned me, tagged me, my mentions, posts mentioning me, tribe mentions' },
   { path: '/games',         mod: 'gamesMod',    description: 'games, play, mini-games, scoring, fun' },

@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress } = require("../server/node_modules/hyperaxe")
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderWalletChip } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, renderStyledHtml } = require("../backend/renderStyledText")
@@ -122,7 +122,7 @@ const renderCourseForm = (filter, course = {}) => {
         )
       })(), br(), br(),
       label(i18n.schoolPrice), br,
-      input({ type: "number", name: "price", step: "0.000001", min: "0", value: course.price && Number(course.price) > 0 ? course.price : "0" }), br(), br(),
+      input({ type: "number", name: "price", step: "0.000001", min: "0", value: course.price && Number(course.price) > 0 ? course.price : "0" }), renderEcoValueChip(), br(), br(),
       label(i18n.schoolStartDate), br,
       input({ type: "datetime-local", name: "startDate", min: moment().format("YYYY-MM-DDTHH:mm"), value: course.startDate ? moment(course.startDate).format("YYYY-MM-DDTHH:mm") : "" }), br(),
       isEdit

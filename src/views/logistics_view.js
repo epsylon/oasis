@@ -1,5 +1,5 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapLocationVisitLabel } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -192,7 +192,7 @@ const renderForm = (route, params = {}) => {
           ],
       label(i18n.logisticsPriceLabel), br(),
       input({ type: "number", name: "price", min: "0", step: "0.01", placeholder: "0", class: "logistics-short", value: route && route.price ? String(route.price) : "" }),
-      select({ name: "priceType", class: "logistics-price-unit" }, ...["ECO", "TIME"].map(t => option({ value: t, ...((route && route.priceType === "TIME" ? "TIME" : "ECO") === t ? { selected: true } : {}) }, priceLabel(t)))), br(), br(),
+      select({ name: "priceType", class: "logistics-price-unit" }, ...["ECO", "TIME"].map(t => option({ value: t, ...((route && route.priceType === "TIME" ? "TIME" : "ECO") === t ? { selected: true } : {}) }, priceLabel(t)))), renderEcoValueChip(), br(), br(),
       label(i18n.logisticsOrderRefLabel), br(),
       input({ type: "text", name: "orderRef", maxlength: "200", placeholder: i18n.logisticsOrderRefPlaceholder, value: route ? route.orderRef : "" }), br(),
       label(i18n.logisticsTagsLabel), br(),

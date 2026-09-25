@@ -74,10 +74,14 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `content/follow_state.json` | Follow requests pending and accepted, with the moment of the last one. |
 | `content/agenda-config.json` | How you arranged your Agenda. |
 | `ai/AI-history.json` | Your conversation with the AI. It stays here; it is never published. |
+| `ai/AI-vectors.json` | Embeddings of the approved AI exchanges of the network, so 42 can pick the ones related to a question without recomputing them. Rebuilt on demand. |
+| `ai/AI-search-vectors.json` | Embeddings of public content titles and descriptions, used by the semantic part of Search. Rebuilt on demand. |
 | `multiverse/fediverse-accounts.json` | The Mastodon and Telegram accounts linked to Multiverse, including their session tokens. Treat it like a password file. |
 | `backup/oasis-backup.json` | The state of the last backup or restore, so the page can report progress after a reload. |
 | `flags/oasis-first-contact` | The identity that opened Oasis on this device for the first time, when, and which steps of the welcome guide are done. Its presence is what stops the guide from greeting you again. |
-| `flags/oasis-mentions-seen` | When you last looked at your mentions, so only the new ones are highlighted. |
+| `flags/oasis-inbox-read` | Which inbox messages you marked as read, so the inbox counter only counts the rest. |
+| `flags/oasis-inbox-archived` | Which inbox messages you archived. They leave the inbox lists and the counter, and come back with Unarchive. |
+| `flags/oasis-mentions-seen` | Which mentions you marked as read (their ids only), so the mentions counter only counts the rest. |
 | `flags/oasis-political-seen` | Which governance announcements have already been sent to you, so none is sent twice. |
 | `peers/gossip_unfollowed.json` | The pubs you stopped following, so they are not offered again. |
 

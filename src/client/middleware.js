@@ -47,37 +47,8 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   const app = new Koa();
   const validHosts = [];
 
-  const isClearnetPath = (request) => {
-    const url = String(request.url || '');
-    return url === '/c' || url.startsWith('/c/') || url.startsWith('/c?');
-  };
-
-  const isValidRequest = (request) => {
-    if (isClearnetPath(request)) return request.method === 'GET';
-    if (validHosts.includes(request.hostname) !== true) {
-      return false;
-    }
-    if (request.method !== "GET") {
-      if (request.header.referer == null) {
-        return false;
-      }
-
-      try {
-        const refererUrl = new URL(request.header.referer);
-        if (validHosts.includes(refererUrl.hostname) !== true) {
-          return false;
-        }
-
-        if (refererUrl.pathname.startsWith("/blob/")) {
-          return false;
-        }
-      } catch (e) {
-        return false;
-      }
-    }
-
-    return true;
-  };
+  const { isClearnetPath, isTrustedRequest, buildCsp } = require(path.join(__dirname, "..", "backend", "request_guards"));
+  const isValidRequest = (request) => isTrustedRequest(request, validHosts);
 
   const httpDebug = process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
 
@@ -121,34 +92,7 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     if (httpDebug) console.log(`[http] ${ctx.method} ${ctx.path}`);
     
     const isClearnet = isClearnetPath(ctx.request);
-    const csp = isClearnet
-      ? [
-          "default-src 'self'",
-          "script-src 'none'",
-          "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data:",
-          "media-src 'self' blob:",
-          "connect-src 'self'",
-          "form-action 'self'",
-          "object-src 'none'",
-          "base-uri 'none'",
-          "frame-ancestors 'none'"
-        ].join("; ")
-      : [
-          "default-src 'self'",
-          "script-src 'self' http://localhost:3000/js",
-          "style-src 'self'",
-          "img-src 'self'",
-          "media-src 'self' blob:",
-          "worker-src 'self' blob:",
-          "frame-src 'self'",
-          "form-action 'self'",
-          "object-src 'none'",
-          "base-uri 'none'",
-          "frame-ancestors 'none'"
-        ].join("; ");
-
-    ctx.set("Content-Security-Policy", csp);
+    ctx.set("Content-Security-Policy", buildCsp(isClearnet));
     ctx.set("X-Frame-Options", "SAMEORIGIN");
 
     ctx.set("X-Content-Type-Options", "nosniff");

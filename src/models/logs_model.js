@@ -1,6 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
 const util = require('../server/node_modules/util');
-const axios = require('../server/node_modules/axios');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
@@ -152,10 +151,11 @@ module.exports = ({ cooler }) => {
 
   async function callAI(prompt) {
     if (!prompt) return '';
+    try { if ((require('../configs/config-manager.js').getConfig().modules || {}).aiMod !== 'on') return ''; } catch (_) { return ''; }
     const tryOnce = async () => {
       try {
-        const res = await axios.post('http://localhost:4001/ai', { input: prompt, raw: true }, { timeout: 90000 });
-        return String(res?.data?.answer || '').trim();
+        const answer = await require('../AI/ai_client').ask({ system: 'You write one short first-person diary sentence. No IDs, hashes, quotes, lists or markdown.', input: prompt, maxTokens: 80 });
+        return String(answer || '').trim();
       } catch { return ''; }
     };
     let out = await tryOnce();

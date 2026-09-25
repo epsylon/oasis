@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -215,6 +215,7 @@ const renderPledgeBox = (project, filter, isAuthor) => {
       { method: "POST", action: `/projects/pledge/${encodeURIComponent(project.id)}` },
       input({ type: "hidden", name: "returnTo", value: rt }),
       input({ type: "number", name: "amount", min: "0.01", step: "0.01", required: true, placeholder: i18n.projectPledgePlaceholder }),
+      renderEcoValueChip(),
       select(
         { name: "milestoneOrBounty" },
         option({ value: "" }, i18n.projectSelectMilestoneOrBounty),
@@ -475,6 +476,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       label(i18n.projectGoal),
       br(),
       input({ type: "number", step: "0.01", min: "0.01", name: "goal", required: true, placeholder: i18n.projectGoalPlaceholder, value: pr.goal || "" }),
+      renderEcoValueChip(),
       br(),
       br(),
       label(i18n.mapLocationTitle || "Map Location"),

@@ -75,6 +75,8 @@ module.exports = ({ cooler }) => {
     return '';
   };
 
+  const scanCache = { fingerprint: '', fresh: null };
+
   const titleOf = (content) => {
     for (const field of ['title', 'concept', 'question', 'subject']) {
       const v = content[field];
@@ -88,6 +90,11 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const myFeedId = ssbClient.id;
       const messages = await getAllMessages(ssbClient);
+      const last = messages.length ? messages[messages.length - 1] : null;
+      const fingerprint = `${myFeedId}|${messages.length}|${last && last.key}`;
+      const fresh = (scanCache.fingerprint === fingerprint && scanCache.fresh)
+        ? scanCache.fresh
+        : (() => {
       const tomb = buildValidatedTombstoneSet(messages);
 
       const out = [];
@@ -120,7 +127,11 @@ module.exports = ({ cooler }) => {
         });
       }
 
-      const fresh = out.filter(x => !replaced.has(x.key));
+      const result = out.filter(x => !replaced.has(x.key));
+      scanCache.fingerprint = fingerprint;
+      scanCache.fresh = result;
+      return result;
+        })();
       const q = String(opts.q || '').trim().toLowerCase();
       let list = q
         ? fresh.filter(x => x.text.toLowerCase().includes(q) || x.title.toLowerCase().includes(q) || x.type.toLowerCase().includes(q))
@@ -134,6 +145,28 @@ module.exports = ({ cooler }) => {
     },
 
     seenAt: () => readSeen().ts,
+
+    readKeys: () => new Set(readSeen().keys.map(String)),
+
+    markRead(key) {
+      if (!key) return false;
+      const seen = readSeen();
+      const keys = [String(key)].concat(seen.keys.filter(k => String(k) !== String(key)));
+      return writeSeen(keys, seen.ts || Date.now());
+    },
+
+    markReadMany(list) {
+      const seen = readSeen();
+      const add = (Array.isArray(list) ? list : []).filter(Boolean).map(String);
+      const rest = seen.keys.filter(k => !add.includes(String(k)));
+      return writeSeen(add.concat(rest), seen.ts || Date.now());
+    },
+
+    markUnread(key) {
+      if (!key) return false;
+      const seen = readSeen();
+      return writeSeen(seen.keys.filter(k => String(k) !== String(key)), seen.ts);
+    },
 
     markSeen(list) {
       const items = Array.isArray(list) ? list : [];

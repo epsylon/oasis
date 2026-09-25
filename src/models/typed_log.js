@@ -1,4 +1,12 @@
 const pull = require('../server/node_modules/pull-stream');
+const { AsyncLocalStorage } = require('async_hooks');
+
+const requestScope = new AsyncLocalStorage();
+const noteCapped = (limit, size) => {
+  if (!limit || !(size >= limit)) return;
+  const store = requestScope.getStore();
+  if (store) { store.capped = true; store.limit = limit; }
+};
 
 const TAIL_PROBE = 50;
 const LOG_TAIL_PROBE = 20;
@@ -32,7 +40,7 @@ const syncType = async (ssb, cache, type, limit) => {
     entry = { byKey: new Map(), warming: null, warm: false };
     cache.types.set(type, entry);
     entry.warming = collectStream(ssb.messagesByType(limit ? { type, reverse: true, limit } : { type, reverse: true }))
-      .then((msgs) => { insert(entry, msgs); entry.warm = true; })
+      .then((msgs) => { insert(entry, msgs); entry.warm = true; entry.capped = !!(limit && msgs.length >= limit); })
       .catch(() => { cache.types.delete(type); });
     await entry.warming;
     return entry;
@@ -44,6 +52,7 @@ const syncType = async (ssb, cache, type, limit) => {
   if (fresh.length === tail.length && tail.length === TAIL_PROBE) {
     const all = await collectStream(ssb.messagesByType(limit ? { type, reverse: true, limit } : { type, reverse: true }));
     insert(entry, all);
+    entry.capped = !!(limit && all.length >= limit);
   } else {
     insert(entry, fresh);
   }
@@ -77,7 +86,9 @@ const syncWindow = async (ssb, cache, limit) => {
 const readTyped = async (ssbClient, types, opts = {}) => {
   const limit = opts.limit;
   if (typeof ssbClient.messagesByType !== 'function') {
-    return collectStream(ssbClient.createLogStream(limit ? { limit } : {}));
+    const all = await collectStream(ssbClient.createLogStream(limit ? { limit } : {}));
+    noteCapped(limit, all.length);
+    return all;
   }
   const cache = cacheFor(ssbClient);
   if (!cache.seen) cache.seen = new Set();
@@ -109,6 +120,7 @@ const readTyped = async (ssbClient, types, opts = {}) => {
   const union = new Map();
   for (const entry of entries) {
     if (!entry) continue;
+    if (entry.capped) noteCapped(limit, limit);
     for (const [k, m] of entry.byKey) if (!union.has(k)) union.set(k, m);
   }
   if (windowEntry) {
@@ -153,4 +165,4 @@ const discoverContentTypes = () => {
 
 const CONTENT_TYPES = discoverContentTypes();
 
-module.exports = { readTyped, collectStream, CONTENT_TYPES, discoverContentTypes };
+module.exports = { readTyped, collectStream, CONTENT_TYPES, discoverContentTypes, requestScope };

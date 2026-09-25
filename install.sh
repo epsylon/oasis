@@ -55,7 +55,7 @@ if [ -z "$CHOICE" ] && [ -t 0 ]; then
     echo ""
     echo "Do you want to enable AI features in Oasis?"
     echo ""
-    echo "  [1] Full AI: chat assistant (42) + smart navigation prompt (~3.9 GB)"
+    echo "  [1] Full AI: chat assistant (42) + smart navigation prompt (~2.2 GB)"
     echo "  [2] Smart navigation only (~150 MB)"
     echo "  [3] No AI features (no downloads, AI tabs hidden)"
     echo ""

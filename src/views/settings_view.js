@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, select, option, input, br, a, lab
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
-const { template, selectedLanguage, i18n, setLanguage } = require('./main_views');
+const { template, selectedLanguage, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel } = require('./main_views');
 const i18nBase = require("../client/assets/translations/i18n");
 const { WORKFLOWS, currentWorkflow } = require('../models/workflows_model');
 const { renderVerificationReport, renderRebuildReport } = require('./backup_view');
@@ -20,7 +20,7 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "", verification = null, rebuild = null }) => {
+const settingsView = ({ version, aiPrompt, aiExportCount = 0, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "", verification = null, rebuild = null }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -225,7 +225,8 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
             span({ class: "lan-checkbox-text" }, i18n.aiSuggestionsEnable)
           ),
           br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.saveSettings),
+          Number(aiExportCount) > 0 ? button({ type: "submit", formaction: "/ai/export", formmethod: "GET", class: "ai-export-btn" }, `${i18n.aiExportFineTuning} (${aiExportCount})`) : null
         )
       )
     ) : null,
@@ -304,6 +305,30 @@ const settingsView = ({ version, aiPrompt, fediverseAccount, fediverseError, tel
         )
       )
     ),
+    modOn('inbox') ? section({ id: "inbox-bots" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsInboxBotsTitle),
+        p(i18n.settingsInboxBotsDesc),
+        form(
+          { action: "/settings/inbox-bots", method: "POST" },
+          ...INBOX_BOT_ORDER.map(bot =>
+            label({ for: `inbox-bot-${bot}`, class: "lan-checkbox-label inbox-bot-label" },
+              input({
+                type: "checkbox",
+                id: `inbox-bot-${bot}`,
+                name: "bots",
+                value: bot,
+                class: "lan-checkbox-input",
+                checked: (Array.isArray(currentConfig.inboxMutedBots) && currentConfig.inboxMutedBots.includes(bot)) ? undefined : true
+              }),
+              span({ class: "lan-checkbox-text" }, inboxBotLabel(bot))
+            )
+          ),
+          br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ) : null,
     modOn('wallet') ? section(
       { id: "wallet" },
       div({ class: "tags-header" },

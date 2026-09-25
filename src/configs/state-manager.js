@@ -19,10 +19,14 @@ const FOLDERS = {
   'follow_state.json': 'content',
   'agenda-config.json': 'content',
   'AI-history.json': 'ai',
+  'AI-vectors.json': 'ai',
+  'AI-search-vectors.json': 'ai',
   'fediverse-accounts.json': 'multiverse',
   'oasis-backup.json': 'backup',
   'oasis-first-contact': 'flags',
   'oasis-mentions-seen': 'flags',
+  'oasis-inbox-read': 'flags',
+  'oasis-inbox-archived': 'flags',
   'oasis-political-seen': 'flags',
   'gossip_unfollowed.json': 'peers'
 };

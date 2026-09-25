@@ -57,6 +57,7 @@ function inferType(c = {}) {
 }
 
 const HIDDEN_ENVELOPE_TYPES = new Set([
+  'aiExchange',
   'tribe-keys-distrib',
   'tribe-keys',
   'tribe-invite-msg',

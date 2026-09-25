@@ -162,6 +162,29 @@ describe('mentions: the notification counter', (t) => {
     const late = [{ key: '%late.sha256', ts: 1, type: 'post', text: 'old but new to me' }];
     eq(mentions.unseenOf(known.concat(late)).length, 1, 'the late arrival is counted');
   });
+
+  t('a mention can be marked read and unread one by one, and the counter follows', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await publishAs(A, { type: 'post', text: `first ${B.keypair.id}` });
+    await publishAs(A, { type: 'post', text: `second ${B.keypair.id}` });
+    B.setActor();
+    const mentions = B.use('mentions');
+    const list = await mentions.listMentions('ALL');
+    eq(list.length, 2, 'two mentions');
+    eq(mentions.unseenOf(list).length, 2, 'both unread at first');
+
+    mentions.markRead(list[0].key);
+    ok(mentions.readKeys().has(list[0].key), 'the key is stored as read');
+    eq(mentions.unseenOf(list).length, 1, 'one left unread');
+
+    mentions.markUnread(list[0].key);
+    ok(!mentions.readKeys().has(list[0].key), 'unread removes the key');
+    eq(mentions.unseenOf(list).length, 2, 'back to two unread');
+
+    mentions.markReadMany(list.map(x => x.key));
+    eq(mentions.unseenOf(list).length, 0, 'mark all leaves nothing unread');
+  });
 });
 
 describe('mentions: a feed post from somebody else', (t) => {

@@ -54,7 +54,7 @@ exports.walletView = async (balance, address) => {
 };
 
 exports.walletHistoryView = async (balance, transactions, address) => {
-    const rows = Array.isArray(transactions) ? transactions : [];
+    const rows = (Array.isArray(transactions) ? transactions.slice() : []).sort((a, b) => ((b.time || b.timereceived || 0) - (a.time || a.timereceived || 0)));
     return walletViewRender(
         balance,
         address,

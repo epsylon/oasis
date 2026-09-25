@@ -72,3 +72,36 @@ describe('pm: optional Crypter layer', (t) => {
     ok(threw, 'a wrong shared key fails to decrypt');
   });
 });
+
+describe('pm: inbox read, archive and bot classification', (t) => {
+  const pm = require('../../../src/models/pm_model');
+
+  t('bot notices are classified by subject, reminders and pledges included', () => {
+    eq(pm.botOf({ subject: 'PARLIAMENT_GOV' }), 'political');
+    eq(pm.botOf({ subject: 'banking_ubi_paid' }), 'banking');
+    eq(pm.botOf({ subject: 'Task Reminder: water plants' }), 'reminders');
+    eq(pm.botOf({ subject: 'x', meta: { type: 'project-pledge' } }), 'projects');
+    eq(pm.botOf({ subject: 'Hello there' }), null);
+  });
+
+  t('muted bots come from the config and default to none', () => {
+    eq(pm.mutedBots({}).size, 0);
+    ok(pm.mutedBots({ inboxMutedBots: ['political'] }).has('political'));
+  });
+
+  t('read and archived flags store only message keys and survive a round trip', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const m = A.use('pm');
+    const k1 = '%' + 'a'.repeat(44) + '.sha256';
+    const k2 = '%' + 'b'.repeat(44) + '.sha256';
+    m.markRead(k1);
+    m.markReadMany([k2]);
+    ok(m.readKeys().has(k1) && m.readKeys().has(k2));
+    m.markUnread(k1);
+    ok(!m.readKeys().has(k1));
+    m.archive(k2);
+    ok(m.archivedKeys().has(k2));
+    m.unarchive(k2);
+    ok(!m.archivedKeys().has(k2));
+  });
+});

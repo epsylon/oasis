@@ -63,7 +63,7 @@ const ensureWorker = () => {
   worker = child
 }
 
-const embed = async (text) => {
+const embed = async (text, { timeoutMs = EMBED_TIMEOUT_MS } = {}) => {
   if (!isInstalled() || permanentFail) return null
   ensureWorker()
   const child = worker
@@ -76,7 +76,7 @@ const embed = async (text) => {
         try { child.kill() } catch (_) {}
         resolve(null)
       }
-    }, EMBED_TIMEOUT_MS)
+    }, Math.max(1000, Number(timeoutMs) || EMBED_TIMEOUT_MS))
     pending.set(id, { resolve: (v) => { clearTimeout(timer); resolve(v) } })
     try {
       child.send({ id, text: String(text || '').trim() })

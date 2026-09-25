@@ -1500,18 +1500,48 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   text-align: right !important;
 }
 .bank-allocs,
-.bank-epochs {
+.bank-allocs tbody,
+.bank-allocs tr,
+.bank-allocs td,
+.bank-epochs,
+.bank-epochs tbody,
+.bank-epochs tr,
+.bank-epochs td {
   display: block !important;
   width: 100% !important;
-  overflow-x: auto !important;
-  white-space: nowrap !important;
-  font-size: 12px !important;
+  box-sizing: border-box !important;
 }
-.bank-allocs th, .bank-allocs td,
-.bank-epochs th, .bank-epochs td {
-  padding: 6px 8px !important;
-  word-break: normal !important;
-  overflow-wrap: normal !important;
+.bank-allocs thead,
+.bank-epochs thead {
+  display: none !important;
+}
+.bank-allocs tr,
+.bank-epochs tr {
+  margin: 0 0 8px 0 !important;
+  padding: 10px !important;
+  border: 1px solid #444444 !important;
+  border-radius: 6px !important;
+  background: #222222 !important;
+}
+.bank-allocs td,
+.bank-epochs td {
+  padding: 3px 0 !important;
+  border: 0 !important;
+  background: none !important;
+  font-size: 13px !important;
+  white-space: normal !important;
+  text-align: left !important;
+}
+.bank-allocs td:last-child,
+.bank-epochs td:last-child {
+  padding: 8px 1px 1px 1px !important;
+  overflow: visible !important;
+}
+.bank-allocs td form,
+.bank-epochs td form {
+  display: inline-block !important;
+}
+.wallet-history .pm-exposition-chip {
   white-space: nowrap !important;
 }
 .wallet-qr-img {
@@ -1704,4 +1734,114 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   width: auto !important;
   flex: 0 0 auto !important;
   text-decoration: none !important;
+}
+.ubi-pub-summary .bank-info-table td {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+}
+.ubi-pub-summary .bank-info-table td.card-value {
+  width: auto !important;
+  text-align: right !important;
+}
+.ubi-pub-card,
+.ubi-pub-summary,
+.addr-card {
+  overflow: visible !important;
+  max-width: 100% !important;
+}
+.addr-cards {
+  display: block !important;
+}
+.addr-cards .addr-card {
+  margin: 0 0 12px 0 !important;
+}
+.pm-info-table,
+.pm-info-table tbody,
+.pm-info-table tr,
+.pm-info-table td {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.pm-info-table tr {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  border-bottom: 1px solid #333 !important;
+}
+.pm-info-table td {
+  border: 0 !important;
+  padding: 4px 6px !important;
+  font-size: 13px !important;
+  width: auto !important;
+}
+.pm-info-table td.card-label {
+  flex: 0 0 auto !important;
+  opacity: .8 !important;
+}
+.pm-info-table td.card-value {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+}
+.pm-card .pm-title {
+  font-size: 15px !important;
+  margin: 8px 0 !important;
+}
+.pm-actions {
+  gap: 6px !important;
+}
+.pm-actions .pm-btn {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+}
+.bank-info-table td,
+.tribe-info-table td,
+.larp-info-table td,
+.block-info-table td,
+.pm-info-table td {
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+.bank-info-table td.card-value,
+.tribe-info-table td.card-value,
+.block-info-table td.card-value {
+  width: auto !important;
+}
+.main-column > *,
+.main-column section,
+.main-column .tags-header,
+.main-column .filters {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.main-column img,
+.main-column svg,
+.main-column video,
+.main-column canvas {
+  max-width: 100% !important;
+  height: auto !important;
+}
+.mobile-counters {
+  position: fixed !important;
+  right: 10px !important;
+  bottom: 10px !important;
+  display: flex !important;
+  gap: 6px !important;
+  z-index: 60 !important;
+}
+.mobile-counter {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  background: #e74c3c !important;
+  color: #fff !important;
+  border-radius: 14px !important;
+  padding: 5px 10px !important;
+  font-weight: 700 !important;
+  font-size: 0.9rem !important;
+  text-decoration: none !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,.4) !important;
 }

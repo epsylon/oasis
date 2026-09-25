@@ -2,7 +2,7 @@
 
 Per-module unit/integration tests covering all publishing actions across the network.
 
-**Current status:** 89 test files / 1208 tests passing.
+**Current status:** 91 test files / 1266 tests passing.
 
 Module tests live under `test/mods/` to keep them grouped and the top-level
 `test/` directory clean (so `results/`, the runner, and the README are easy
@@ -17,6 +17,9 @@ must hold across the whole codebase:
   discovery, address book), not only the API.
 - `favorites/` checks that every `favKind` offered in the views is wired end to end.
 - `gallery/` checks the image fields keep working across form round-trips.
+- `security/` guards content spoofing across modules (`security.test.js`) and
+  the HTTP layer (`request-guards.test.js`): message ids from forms, local-only
+  redirects, CSRF referer checks, read-only HUB, public mode and the CSP.
 
 ## Quick start
 
@@ -106,7 +109,7 @@ test/
   mods/actions             actions.test.js
   mods/activity            activity.test.js
   mods/agenda              agenda.test.js
-  mods/ai                  ai_nav.test.js
+  mods/ai                  ai_nav.test.js ai_assistant.test.js
   mods/backup              backup.test.js
   mods/banking             banking.test.js
   mods/blockchain          blockchain.test.js
@@ -165,7 +168,7 @@ test/
   mods/reports             reports.test.js
   mods/school              school.test.js
   mods/search              search.test.js
-  mods/security            security.test.js
+  mods/security            security.test.js request-guards.test.js
   mods/shops               shops.test.js
   mods/spread              spread.test.js
   mods/stats               stats.test.js

@@ -1,4 +1,6 @@
 let _inboxCount = 0;
+let _inboxPmCount = 0;
+let _inboxNotifCount = 0;
 let _carbonHcT = 0;
 let _walletReady = false;
 let _donatableAuthors = new Set();
@@ -14,6 +16,7 @@ let _maxBlockBytes = 0;
 let _inhabitantCount = 0;
 let _tribesCount = 0;
 let _mentionsCount = 0;
+let _mentionsTotal = 0;
 let _bestMatch = null;
 let _dismissedSuggestion = null;
 let _featuredEmergency = null;
@@ -22,6 +25,10 @@ let _dismissedEmergency = null;
 module.exports = {
   getInboxCount: () => _inboxCount,
   setInboxCount: (n) => { _inboxCount = n; },
+  getInboxPmCount: () => _inboxPmCount,
+  setInboxPmCount: (n) => { _inboxPmCount = n; },
+  getInboxNotifCount: () => _inboxNotifCount,
+  setInboxNotifCount: (n) => { _inboxNotifCount = n; },
   getCarbonHcT: () => _carbonHcT,
   setCarbonHcT: (n) => { _carbonHcT = n; },
   getDonatableAuthors: () => _donatableAuthors,
@@ -46,6 +53,8 @@ module.exports = {
   setLastActivity: (a) => { _lastActivity = a; },
   getMaxBlockBytes: () => _maxBlockBytes,
   setMaxBlockBytes: (n) => { if (Number(n) > _maxBlockBytes) _maxBlockBytes = Number(n); },
+  getMentionsTotal: () => _mentionsTotal,
+  setMentionsTotal: (n) => { _mentionsTotal = Math.max(0, Number(n) || 0); },
   getMentionsCount: () => _mentionsCount,
   setMentionsCount: (n) => { _mentionsCount = Math.max(0, Number(n) || 0); },
   getInhabitantCount: () => _inhabitantCount,

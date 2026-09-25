@@ -1519,38 +1519,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       );
     }
       
-    if (type === 'aiExchange') {
-      const { ctx, lang, tags, rating } = content;
-      const helpful = Number(action.helpfulVotes || 0);
-      cardBody.push(
-        div({ class: 'card-section ai-exchange' },
-          Array.isArray(ctx) && ctx.length
-            ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.aiSnippetsLearned || 'Snippets learned') + ':'), span({ class: 'card-value' }, String(ctx.length)))
-            : null,
-          lang
-            ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.aiExchangeLang || 'Language') + ':'), span({ class: 'card-value' }, String(lang).toUpperCase()))
-            : null,
-          Array.isArray(tags) && tags.length
-            ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.aiExchangeTags || 'Tags') + ':'),
-                span({ class: 'card-value' }, tags.map(t => span({ class: 'ai-exchange-tag' }, '#' + t))))
-            : null,
-          rating > 0
-            ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.aiExchangeRating || 'Rating') + ':'), span({ class: 'card-value' }, '★'.repeat(rating) + '☆'.repeat(Math.max(0, 5 - rating))))
-            : null,
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.aiExchangeHelpful || 'Helpful') + ':'),
-            span({ class: 'card-value' }, String(helpful)),
-            form({ method: 'POST', action: '/ai/exchange/vote', class: 'ai-exchange-vote-form' },
-              input({ type: 'hidden', name: 'target', value: action.id }),
-              input({ type: 'hidden', name: 'helpful', value: 'yes' }),
-              input({ type: 'hidden', name: 'returnTo', value: '/activity' }),
-              button({ type: 'submit', class: 'filter-btn' }, i18n.aiExchangeMarkHelpful || '+1 helpful')
-            )
-          )
-        )
-      );
-    }
-
     if (type === 'karmaScore') {
       const { karmaScore } = content;
       cardBody.push(
@@ -1829,7 +1797,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       return null;
     }
 
-    const detailHref = (type !== 'aiExchange' && type !== 'bankWallet')
+    const detailHref = (type !== 'bankWallet')
       ? (isParliamentTarget
           ? `/parliament?filter=${encodeURIComponent(parliamentFilter)}`
           : isCourtsTarget

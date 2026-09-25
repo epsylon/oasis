@@ -14,15 +14,17 @@ const excerpt = (text, max = 320) => {
 
 const typeLabel = (type) => i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)] || String(type || '').toUpperCase();
 
-const renderMentionCard = (item) => {
+const renderMentionCard = (item, readKeys) => {
   const href = getViewDetailsAction(item.type, { id: item.id, key: item.id, author: item.author, content: item.content });
   const isOwn = String(item.author) === String(userId);
+  const read = readKeys.has(String(item.key));
   return div({ class: "trending-card mention-card" + (isOwn ? " own-content" : "") },
     div({ class: "card-header activity-card-header" },
       div({ class: 'card-chips-row' },
         span({ class: 'pm-exposition-chip pm-exposition-whole' },
           span({ class: 'pm-exposition-text' }, typeLabel(item.type))
-        )
+        ),
+        read ? null : span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip))
       ),
       renderContentActions(item.id, href, { author: item.author, reportTitle: item.title || item.text })
     ),
@@ -34,6 +36,11 @@ const renderMentionCard = (item) => {
       p({ class: "card-footer" },
         span({ class: "date-link" }, `${moment(item.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(item.author)
+      ),
+      div({ class: "pm-actions mention-actions" },
+        form({ method: "POST", action: `/mentions/${read ? 'unread' : 'read'}/${encodeURIComponent(item.key)}`, class: "pm-action-form" },
+          button({ type: "submit", class: "pm-btn read-btn" }, String(read ? i18n.inboxMarkUnread : i18n.inboxMarkRead).toUpperCase())
+        )
       )
     )
   );
@@ -43,6 +50,8 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
   const counts = params.counts || {};
   const types = Object.keys(counts).sort((a, b) => (counts[b] - counts[a]) || a.localeCompare(b));
   const q = params.q || '';
+  const readKeys = new Set(Array.isArray(params.readKeys) ? params.readKeys.map(String) : []);
+  const unreadShown = items.filter(x => x && x.key && !readKeys.has(String(x.key))).map(x => String(x.key));
   const emptyMentions = (!Array.isArray(items) || items.length === 0) && String(filter || 'ALL').toUpperCase() === 'ALL' && !q.trim();
 
   return template(
@@ -64,6 +73,10 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
         : null,
       emptyMentions ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
         renderModuleStats(items.length),
+        unreadShown.length ? form({ method: "POST", action: "/mentions/read-all", class: "inbox-vis-toggle" },
+          ...unreadShown.map(k => input({ type: "hidden", name: "keys", value: k })),
+          button({ type: "submit", class: "btn" }, `${i18n.inboxMarkAllRead} (${unreadShown.length})`)
+        ) : null,
         form({ method: "GET", action: "/mentions", class: "filter-box" },
           input({ type: "hidden", name: "filter", value: filter }),
           input({ type: "text", name: "q", value: q, placeholder: i18n.mentionsSearchPlaceholder, class: "filter-box__input" }),
@@ -75,7 +88,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
     ),
     section(
       items.length
-        ? div({ class: "mentions-list" }, ...items.map(renderMentionCard))
+        ? div({ class: "mentions-list" }, ...items.map(item => renderMentionCard(item, readKeys)))
         : div({ class: "no-content-box" }, p({ class: "empty" }, i18n.noMentions))
     )
   );

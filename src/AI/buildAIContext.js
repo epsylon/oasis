@@ -1,4 +1,3 @@
-const pull = require('../server/node_modules/pull-stream')
 const { readTyped } = require('../models/typed_log')
 const { getConfig } = require('../configs/config-manager.js')
 
@@ -21,11 +20,23 @@ function getCooler() {
   return null
 }
 
+function useCooler(c) {
+  cooler = c || null
+  ssb = null
+  opening = null
+}
+
+const DEBUG = process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true'
+const debug = (msg) => { if (DEBUG) console.error(`[ai] ${msg}`) }
+
 async function openSsb() {
-  const c = getCooler()
+  const c = cooler || getCooler()
   if (!c) return null
   if (ssb && ssb.closed === false) return ssb
-  if (!opening) opening = c.open().then(x => (ssb = x)).finally(() => { opening = null })
+  if (!opening) {
+    debug('opening the SSB connection for the network knowledge')
+    opening = c.open().then(x => { debug('SSB connection open'); return (ssb = x) }).finally(() => { opening = null })
+  }
   await opening
   return ssb
 }
@@ -95,19 +106,109 @@ async function buildContext(maxItems = 100) {
   return `## AIEXCHANGE\n\n${lines.join('\n')}`
 }
 
-async function getBestTrainedAnswer(question) {
+const fs = require('fs')
+const VECTORS_FILE = 'AI-vectors.json'
+const VECTORS_MAX = 4000
+const RATING_WEIGHT = 0.03
+const VOTE_WEIGHT = 0.02
+const CONTEXT_MIN_SCORE = 0.35
+const DIRECT_ANSWER_MIN = 0.92
+
+const vectorsPath = () => { try { return require('../configs/state-manager').statePath(VECTORS_FILE) } catch (_) { return null } }
+const readVectors = () => { try { const j = JSON.parse(fs.readFileSync(vectorsPath(), 'utf8')); return j && typeof j === 'object' ? j : {} } catch (_) { return {} } }
+const writeVectors = (map) => { try { const p = vectorsPath(); if (p) fs.writeFileSync(p, JSON.stringify(map)) } catch (_) {} }
+
+const exchangeText = (c) => clip(squash(c.question), 300)
+
+async function listExchanges() {
   const s = await openSsb()
-  if (!s) return null
-  const want = normalize(question)
-  const msgs = (await readTyped(s, ['aiExchange'], { limit: logLimit }).catch(() => null) || []).reverse()
-  for (const { value } of msgs) {
-    const c = value && value.content || {}
-    if (c.type !== 'aiExchange') continue
-    if (normalize(c.question) === want) {
-      return { answer: String(c.answer || '').trim(), ctx: Array.isArray(c.ctx) ? c.ctx : [] }
+  if (!s) return { exchanges: [], votes: new Map() }
+  const msgs = await readTyped(s, ['aiExchange', 'aiExchangeVote'], { limit: logLimit }).catch(() => null) || []
+  const exchanges = []
+  const votes = new Map()
+  for (const m of msgs) {
+    const c = m && m.value && m.value.content || {}
+    if (c.type === 'aiExchange' && c.question && c.answer) {
+      exchanges.push({ key: m.key, author: m.value.author, ts: m.value.timestamp || m.timestamp || 0, question: String(c.question), answer: String(c.answer), rating: Number(c.rating) || 0, tags: Array.isArray(c.tags) ? c.tags : [], lang: c.lang || '' })
+    } else if (c.type === 'aiExchangeVote' && c.target) {
+      const k = String(c.target)
+      const per = votes.get(k) || new Map()
+      per.set(m.value.author, c.helpful !== false ? 1 : -1)
+      votes.set(k, per)
     }
   }
-  return null
+  return { exchanges, votes }
 }
 
-module.exports = { fieldsForSnippet, buildContext, clip, publishExchange, publishExchangeVote, getBestTrainedAnswer }
+const netVotes = (votes, key) => { const per = votes.get(key); if (!per) return 0; let n = 0; for (const v of per.values()) n += v; return n }
+
+async function rankExchanges(question, { embed, cosine, k = 5 } = {}) {
+  const { exchanges, votes } = await listExchanges()
+  if (!exchanges.length) return []
+  const scored = []
+  if (typeof embed === 'function' && typeof cosine === 'function') {
+    const qv = await embed(question).catch(() => null)
+    if (qv) {
+      const cache = readVectors()
+      let dirty = false
+      const newest = exchanges.slice().sort((a, b) => b.ts - a.ts).slice(0, VECTORS_MAX)
+      for (const ex of newest) {
+        let v = cache[ex.key]
+        if (!Array.isArray(v)) {
+          v = await embed(exchangeText(ex)).catch(() => null)
+          if (!v) continue
+          cache[ex.key] = v
+          dirty = true
+        }
+        const sim = cosine(qv, v)
+        scored.push({ ...ex, similarity: sim, votes: netVotes(votes, ex.key), score: sim + RATING_WEIGHT * ex.rating + VOTE_WEIGHT * Math.max(-5, Math.min(5, netVotes(votes, ex.key))) })
+      }
+      if (dirty) {
+        const keep = new Set(newest.map(x => x.key))
+        for (const key of Object.keys(cache)) if (!keep.has(key)) delete cache[key]
+        writeVectors(cache)
+      }
+    }
+  }
+  if (!scored.length) {
+    const want = normalize(question)
+    const terms = want.split(' ').filter(t => t.length > 2)
+    for (const ex of exchanges) {
+      const text = normalize(ex.question + ' ' + ex.answer)
+      const hits = terms.filter(t => text.includes(t)).length
+      if (!hits) continue
+      const sim = normalize(ex.question) === want ? 1 : hits / Math.max(1, terms.length)
+      scored.push({ ...ex, similarity: sim, votes: netVotes(votes, ex.key), score: sim + RATING_WEIGHT * ex.rating + VOTE_WEIGHT * Math.max(-5, Math.min(5, netVotes(votes, ex.key))) })
+    }
+  }
+  scored.sort((a, b) => b.score - a.score)
+  return scored.filter(x => x.similarity >= CONTEXT_MIN_SCORE).slice(0, k)
+}
+
+async function rankContext(question, opts = {}) {
+  const top = await rankExchanges(question, opts)
+  return top.map(ex => `Q: ${compact(ex.question)} | A: ${clip(squash(ex.answer), 400)}`)
+}
+
+async function getBestTrainedAnswer(question, opts = {}) {
+  const top = await rankExchanges(question, { ...opts, k: 1 })
+  const best = top[0]
+  if (!best || best.similarity < DIRECT_ANSWER_MIN || best.votes < 0) return null
+  return { answer: String(best.answer || '').trim(), ctx: [`Q: ${compact(best.question)}`], key: best.key }
+}
+
+async function exportFineTuning({ system = '' } = {}) {
+  const { exchanges, votes } = await listExchanges()
+  const lines = []
+  for (const ex of exchanges.sort((a, b) => a.ts - b.ts)) {
+    if (netVotes(votes, ex.key) < 0) continue
+    const messages = []
+    if (system) messages.push({ role: 'system', content: system })
+    messages.push({ role: 'user', content: ex.question })
+    messages.push({ role: 'assistant', content: ex.answer })
+    lines.push(JSON.stringify({ messages, meta: { key: ex.key, author: ex.author, lang: ex.lang, tags: ex.tags, rating: ex.rating, helpful: netVotes(votes, ex.key), ts: ex.ts } }))
+  }
+  return lines.join('\n') + (lines.length ? '\n' : '')
+}
+
+module.exports = { fieldsForSnippet, buildContext, clip, publishExchange, publishExchangeVote, getBestTrainedAnswer, rankContext, rankExchanges, listExchanges, exportFineTuning, useCooler, DIRECT_ANSWER_MIN, CONTEXT_MIN_SCORE }
