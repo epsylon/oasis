@@ -859,6 +859,7 @@ a.create-button {
 
 .peers-list .block-info-table,
 .peers-technical-block .block-info-table,
+.parliament-rows-table,
 .gov-overview {
   display: block !important;
   width: 100% !important;
@@ -869,17 +870,20 @@ a.create-button {
 }
 .peers-list .block-info-table tbody,
 .peers-technical-block .block-info-table tbody,
+.parliament-rows-table tbody,
 .gov-overview tbody {
   display: block !important;
   width: 100% !important;
 }
-.gov-overview thead { display: none !important; }
+.gov-overview thead,
+.parliament-rows-table thead { display: none !important; }
 .peers-list .block-info-table tr:first-child,
 .peers-technical-block .block-info-table tr:first-child {
   display: none !important;
 }
 .peers-list .block-info-table tr,
 .peers-technical-block .block-info-table tr,
+.parliament-rows-table tbody tr,
 .gov-overview tbody tr {
   display: block !important;
   width: 100% !important;
@@ -892,6 +896,7 @@ a.create-button {
 }
 .peers-list .block-info-table td,
 .peers-technical-block .block-info-table td,
+.parliament-rows-table tbody td,
 .gov-overview tbody td {
   display: flex !important;
   justify-content: space-between !important;
@@ -907,6 +912,7 @@ a.create-button {
 }
 .peers-list .block-info-table td::before,
 .peers-technical-block .block-info-table td::before,
+.parliament-rows-table tbody td::before,
 .gov-overview tbody td::before {
   content: attr(data-label);
   flex: 0 0 auto !important;
@@ -1085,3 +1091,29 @@ a.create-button {
 .card-footer .user-link { padding: 0 10px !important; font-size: 12px !important; }
 .card-meta-row .opinions-summary,
 .card-meta-row .comments-summary-link { padding: 0 10px !important; font-size: 12px !important; }
+
+.parliament-rows-table tbody td[data-label=""] { justify-content: center !important; }
+.parliament-rows-table tbody td[data-label=""]::before { content: none !important; }
+.parliament-rows-table tbody td .parliament-avatar-cell {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  justify-content: flex-end !important;
+}
+.parliament-rows-table tbody td .parliament-leader-avatar { width: 32px !important; height: 32px !important; }
+.parliament-rows-table tbody td .parliament-method-img { max-height: 28px !important; width: auto !important; }
+.parliament-rows-table tbody td form { margin: 0 !important; }
+
+.hemi-legend {
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 6px !important;
+  justify-content: flex-start !important;
+}
+.hemi-legend-item {
+  width: 100% !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+}
+.hemi-legend-count { margin-left: auto !important; }
+.hemi-modes { flex-wrap: wrap !important; }

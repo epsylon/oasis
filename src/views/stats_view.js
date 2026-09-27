@@ -305,39 +305,46 @@ exports.statsView = (stats, filter) => {
     );
   };
 
-  const networkStrip = div({ class: 'stats-block' },
-    h3({ class: 'stats-section-h' }, i18n.statsNetworkTitle || 'Network'),
-    kvTable([
+  const blockWithTiles = (cls, title, tiles) => {
+    const shown = (Array.isArray(tiles) ? tiles : []).filter(Boolean);
+    if (!shown.length) return null;
+    return div({ class: cls }, h3({ class: 'stats-section-h' }, title), kpiGrid(...shown));
+  };
+
+  const networkRows = [
       [i18n.statsUsersTitle, totalInhabitants],
       [i18n.statsTotalMsgs || 'Total messages', networkKPIs.totalMsgs || 0],
       [i18n.statsLogsTitle || 'Logs', stats?.logsCount || 0],
       [i18n.statsAITraining, C(stats, 'aiExchange') || 0],
       [i18n.statsPUBs, stats.pubsCount || 0],
       [i18n.statsSyncedPeers, sharedState.getSyncedPeerCount() || 0]
-    ])
-  );
+  ];
+  const networkStrip = networkRows.some(([, v]) => !isZero(v))
+    ? div({ class: 'stats-block' },
+        h3({ class: 'stats-section-h' }, i18n.statsNetworkTitle || 'Network'),
+        kvTable(networkRows)
+      )
+    : null;
 
   const carbonCard = div({ id: 'carbon', class: 'stats-card' },
     h3({ class: 'stats-section-h' }, i18n.statsCarbonFootprintTitle || 'Carbon Footprint'),
     carbonChart
   );
 
-  const networkBlock = div({ class: 'stats-block stats-block-boxed' },
-    h3({ class: 'stats-section-h' }, i18n.statsAveragesTitle || 'Averages'),
-    kpiGrid(
-      filter === 'MINE'
-        ? kpi(i18n.statsMyShare || 'Your share of the network', `${fmtNum(networkKPIs.myShare || 0)}%`)
-        : null,
-      kpi(i18n.statsAvgPerInhabitant || 'Avg per inhabitant', fmtNum(networkKPIs.avgMsgsPerInhabitant || 0)),
-      kpi(i18n.statsMsgsPerDay || 'Messages/day (lifetime)', fmtNum(networkKPIs.networkMsgsPerDay || 0)),
-      kpi(i18n.statsNetworkSpan || 'Network span', `${fmtNum(networkKPIs.networkSpanDays || 0)} d`),
-      kpi(i18n.statsTombstoneRatioLabel || 'Tombstone ratio', `${fmtNum(stats.tombstoneKPIs?.ratio || 0)}%`)
-    )
-  );
+  const networkBlock = blockWithTiles('stats-block stats-block-boxed', i18n.statsAveragesTitle || 'Averages', [
+    filter === 'MINE'
+      ? kpi(i18n.statsMyShare || 'Your share of the network', `${fmtNum(networkKPIs.myShare || 0)}%`)
+      : null,
+    kpi(i18n.statsAvgPerInhabitant || 'Avg per inhabitant', fmtNum(networkKPIs.avgMsgsPerInhabitant || 0)),
+    kpi(i18n.statsMsgsPerDay || 'Messages/day (lifetime)', fmtNum(networkKPIs.networkMsgsPerDay || 0)),
+    kpi(i18n.statsNetworkSpan || 'Network span', `${fmtNum(networkKPIs.networkSpanDays || 0)} d`),
+    kpi(i18n.statsTombstoneRatioLabel || 'Tombstone ratio', `${fmtNum(stats.tombstoneKPIs?.ratio || 0)}%`)
+  ]);
 
   const activityBlock = (() => {
     const rows = Array.isArray(stats.activity?.daily7) ? stats.activity.daily7 : [];
     const max = Math.max(1, ...rows.map(r => Number(r.count) || 0));
+    if (!rows.length && isZero(stats.activity?.daily7Total || 0) && isZero(stats.activity?.daily30Total || 0)) return null;
     return div({ class: 'stats-block' },
       h2(i18n.statsActivity7d),
       kpiGrid(

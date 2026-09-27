@@ -370,14 +370,14 @@ const CandidatureStats = (cands, govCard, leaderMeta, electionQuorum = 2) => {
     hasQuorum
       ? div(
           { class: 'table-wrap mt-2' },
-          applyEl(table, { class: 'parliament-gov-table' }, [
+          applyEl(table, { class: 'parliament-gov-table parliament-rows-table' }, [
             thead(tr(
               th(i18n.parliamentThLeader),
               th({ class: 'parliament-method-col' }, i18n.parliamentGovMethod),
               th({ class: 'parliament-votes-col'  }, i18n.parliamentVotesReceived)
             )),
             tbody(tr(
-              td(
+              td({ 'data-label': i18n.parliamentThLeader },
                 div({ class: 'parliament-avatar-cell' },
                   avatarHref
                     ? a({ href: avatarHref }, img({ src: avatarSrc, class: 'parliament-leader-avatar' }))
@@ -385,10 +385,10 @@ const CandidatureStats = (cands, govCard, leaderMeta, electionQuorum = 2) => {
                   idLink ? div({ class: 'parliament-avatar-name' }, idLink) : null
                 )
               ),
-              td({ class: 'parliament-method-col' },
+              td({ class: 'parliament-method-col', 'data-label': i18n.parliamentGovMethod },
                 img({ src: methodImageSrc(methodKey), alt: methodLabel, class: 'parliament-method-img' })
               ),
-              td({ class: 'parliament-votes-col'  }, span({ class: 'votes-value' }, votes))
+              td({ class: 'parliament-votes-col', 'data-label': i18n.parliamentVotesReceived }, span({ class: 'votes-value' }, votes))
             ))
           ])
         )
@@ -403,18 +403,18 @@ const CandidaturesTable = (candidatures) => {
         ? p(userLink(c.targetId))
         : p(a({ class: 'tag-link', href: `/tribe/${encodeURIComponent(c.targetId)}?` }, c.targetTitle || c.targetId));
     return tr(
-      td(idLink),
-      td(fmt(c.createdAt)),
-      td({ class: 'nowrap' }, c.method),
-      td(c.targetType === 'inhabitant' ? String(c.karma || 0) : '-'),
-      td(span({ class: 'candidature-votes-count' }, String(c.votes || 0))),
-      td(form({ method: 'POST', action: `/parliament/candidatures/${encodeURIComponent(c.id)}/vote` }, button({ class: 'vote-btn' }, i18n.parliamentVoteBtn)))
+      td({ 'data-label': i18n.parliamentThId }, idLink),
+      td({ 'data-label': i18n.parliamentThProposalDate }, fmt(c.createdAt)),
+      td({ class: 'nowrap', 'data-label': i18n.parliamentThMethod }, c.method),
+      td({ 'data-label': i18n.parliamentThKarma }, c.targetType === 'inhabitant' ? String(c.karma || 0) : '-'),
+      td({ 'data-label': i18n.parliamentThSupports }, span({ class: 'candidature-votes-count' }, String(c.votes || 0))),
+      td({ 'data-label': '' }, form({ method: 'POST', action: `/parliament/candidatures/${encodeURIComponent(c.id)}/vote` }, button({ class: 'vote-btn' }, i18n.parliamentVoteBtn)))
     );
   });
   return div(
     { class: 'table-wrap' },
     h2(i18n.parliamentCandidaturesListTitle),
-    applyEl(table, { class: 'table table--centered' }, [
+    applyEl(table, { class: 'table table--centered parliament-rows-table' }, [
       thead(tr(
         th(i18n.parliamentThId),
         th(i18n.parliamentThProposalDate),
@@ -749,19 +749,19 @@ const HistoricalGovsSummary = (rows = []) => {
   const entries = Array.from(byMethod.entries()).sort((a,b) => String(a[0]).localeCompare(String(b[0])));
   const lines = entries.map(([method, rec]) =>
     tr(
-      td(method),
-      td(String(rec.proposed)),
-      td(String(rec.approved)),
-      td(String(rec.declined)),
-      td(String(rec.discarded)),
-      td(String(rec.revocated)),
-      td(String(rec.cycles))
+      td({ 'data-label': String(i18n.parliamentGovMethod).toUpperCase() }, method),
+      td({ 'data-label': i18n.parliamentPoliciesProposal }, String(rec.proposed)),
+      td({ 'data-label': i18n.parliamentPoliciesApproved }, String(rec.approved)),
+      td({ 'data-label': i18n.parliamentPoliciesDeclined }, String(rec.declined)),
+      td({ 'data-label': i18n.parliamentPoliciesDiscarded }, String(rec.discarded)),
+      td({ 'data-label': i18n.parliamentPoliciesRevocated }, String(rec.revocated)),
+      td({ 'data-label': i18n.parliamentThCycles }, String(rec.cycles))
     )
   );
   return div(
     { class: 'table-wrap' },
     h2(i18n.parliamentHistoricalGovernmentsTitle || 'Governments'),
-    applyEl(table, { class: 'table table--centered' }, [
+    applyEl(table, { class: 'table table--centered parliament-rows-table' }, [
       thead(tr(
         th(String(i18n.parliamentGovMethod).toUpperCase()),
         th(i18n.parliamentPoliciesProposal),
