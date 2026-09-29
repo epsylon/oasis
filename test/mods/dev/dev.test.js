@@ -5,6 +5,9 @@ const { eq, ok, notOk } = require('../../helpers/assert');
 
 const dev = require('../../../src/models/dev_model');
 
+const TRANSLATIONS_DIR = path.join(__dirname, '..', '..', '..', 'src', 'client', 'assets', 'translations');
+const languageFiles = () => fs.readdirSync(TRANSLATIONS_DIR).filter(f => /^oasis_[a-z]{2}\.js$/.test(f));
+
 const throwsWith = (fn, match, msg) => {
   try {
     fn();
@@ -143,7 +146,7 @@ describe('dev: module map', (t) => {
     ok(stats.files > 100, 'files are counted');
     ok(stats.lines > 10000, 'lines are counted');
     ok(stats.modules > 40, 'modules are counted');
-    eq(stats.languages, 11, 'the eleven translations are counted');
+    eq(stats.languages, languageFiles().length, 'every translation file is counted');
   });
 });
 
@@ -158,9 +161,9 @@ describe('dev: shortcut groups', (t) => {
     eq(dev.readFile(themePath).path, 'src/client/assets/themes/Dark-SNH.css', 'entries keep their real path');
   });
 
-  t('TRANSLATIONS lists the eleven languages and TESTS the suites', () => {
+  t('TRANSLATIONS lists every language and TESTS the suites', () => {
     const langs = dev.listGroup('translations').files.filter(f => /^oasis_[a-z]{2}\.js$/.test(f.name));
-    eq(langs.length, 11);
+    eq(langs.length, languageFiles().length);
     const tests = dev.listGroup('tests');
     ok(tests.dirs.find(d => d.name === 'mods'), 'the suites folder is listed');
     ok(tests.files.find(f => f.name === 'run.js'), 'the runner is listed');

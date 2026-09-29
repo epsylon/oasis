@@ -318,7 +318,7 @@ const invitesView = ({ invitesEnabled, flash }) => {
         h2(i18n.peers || 'Peers'),
         p(i18n.directConnectDescription),
         form({ action: '/peers/connect', method: 'post' },
-          input({ type: 'text', id: 'peer_host', name: 'host', required: true, placeholder: '192.168.1.100', pattern: '(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|[a-zA-Z0-9]([a-zA-Z0-9\\-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]*[a-zA-Z0-9])?)*)', title: i18n.peerHostValidation || 'Valid IPv4 (e.g. 192.168.1.100) or hostname (e.g. pub.example.com)', maxlength: 253 }),
+          input({ type: 'text', id: 'peer_host', name: 'host', required: true, placeholder: '192.168.1.100', pattern: '(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|[a-zA-Z0-9]([a-zA-Z0-9\\-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9\\-]*[a-zA-Z0-9])?)*)', title: i18n.peerHostValidation || 'Valid IPv4 (e.g. 192.168.1.100) or hostname (e.g. pub.solarnethub.com)', maxlength: 253 }),
           br(),
           label({ for: 'peer_port' }, i18n.peerPort),
           br(),

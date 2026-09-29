@@ -28,15 +28,14 @@ const renderRandomPassword = () => p({ id: "randomPassword" }, h2({ class: "gene
 
 const renderRecovery = (kit) => kit
   ? div({ class: "backup-kit" },
-      p({ class: "backup-warning backup-kit-warning" }, `⚠ ${i18n.backupKitWarning}`),
       p({ class: "backup-kit-line" }, strong(`${i18n.backupKitId}: `), span({ class: "backup-kit-id" }, kit.id || "—")),
       p({ class: "backup-kit-line" }, strong(`${i18n.backupKitDate}: `), fmt(kit.createdAt)),
-      div({ class: "backup-kit-qr" }, img({ src: "/backup/recovery-kit/qr.png", alt: i18n.backupKitQrAlt, class: "backup-kit-qr-img" })),
       pre({ class: "backup-kit-secret" }, kit.secret),
+      div({ class: "backup-kit-qr" }, img({ src: "/backup/recovery-kit/qr.png", alt: i18n.backupKitQrAlt, class: "backup-kit-qr-img" })),
       ul({ class: "backup-kit-steps" },
         li(i18n.backupKitStep1),
         li(i18n.backupKitStep2),
-        li(i18n.backupKitStep3)
+        li(strong(i18n.backupKitStep3))
       ),
       div({ class: "doc-export-actions doc-export-left" },
         form({ method: "GET", action: "/backup/recovery-kit/pdf" }, button({ type: "submit", class: "filter-btn" }, i18n.backupKitPdfButton))
@@ -124,8 +123,7 @@ const renderRestore = (job) =>
 
 const renderInstantBackup = () =>
   div({ class: "backup-form" },
-    p({ class: "backup-warning" }, `⚠ ${i18n.backupInstantWarning}`),
-    p({ class: "backup-hint" }, i18n.backupInstantDescription),
+    p({ class: "backup-hint" }, i18n.backupInstantDescription, strong(i18n.backupInstantRisk)),
     form({ action: "/export/create", method: "POST" },
       button({ type: "submit" }, i18n.exportDataButton)
     )

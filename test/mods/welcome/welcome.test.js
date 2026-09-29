@@ -218,3 +218,53 @@ describe('welcome: the identity shown with the backup step', (t) => {
     eq((await onboarding.status()).profile.id, peer.keypair.id);
   });
 });
+
+describe('welcome: the first visit picks the language', (t) => {
+  const supported = Object.keys(require('../../../src/client/assets/translations/i18n'));
+  const { browserLanguage, firstRunLanguage } = factory;
+
+  t('a brand new node takes the language the browser asks for', () => {
+    const d = firstRunLanguage({ fresh: true, configured: 'en', header: 'es-ES,es;q=0.9,en;q=0.8', supported });
+    ok(d.settled);
+    eq(d.language, 'es');
+  });
+
+  t('regional variants and preference weights are honoured', () => {
+    eq(browserLanguage('fr-CA;q=0.5, de-AT;q=0.9, *;q=0.1', supported), 'de');
+    eq(browserLanguage('zh-CN', supported), 'zh');
+    eq(browserLanguage('pt_BR', supported), 'pt');
+    eq(browserLanguage('ja-JP, it;q=0', supported), '', 'a refused language is never picked');
+  });
+
+  t('a browser language Oasis does not speak keeps the default and lets the welcome go out', () => {
+    const d = firstRunLanguage({ fresh: true, configured: 'en', header: 'ja-JP,ja;q=0.9', supported });
+    ok(d.settled);
+    eq(d.language, '');
+  });
+
+  t('a request that says nothing about language does not decide', () => {
+    notOk(firstRunLanguage({ fresh: true, configured: 'en', header: '', supported }).settled);
+    notOk(firstRunLanguage({ fresh: true, configured: 'en', supported }).settled);
+  });
+
+  t('a language already chosen in this browser wins over the browser default', () => {
+    eq(firstRunLanguage({ fresh: true, configured: 'en', cookie: 'eu', header: 'es-ES', supported }).language, 'eu');
+    eq(firstRunLanguage({ fresh: true, configured: 'en', cookie: 'xx', header: 'fr', supported }).language, 'fr', 'an unknown cookie is ignored');
+  });
+
+  t('a node that already greeted, was configured or is public keeps its language', () => {
+    eq(firstRunLanguage({ fresh: false, configured: 'en', header: 'es', supported }).language, '');
+    eq(firstRunLanguage({ fresh: true, configured: 'it', header: 'es', supported }).language, '');
+    eq(firstRunLanguage({ fresh: true, isPublic: true, configured: 'en', header: 'es', supported }).language, '');
+    ok(firstRunLanguage({ fresh: true, isPublic: true, supported }).settled, 'and none of them waits for a visit');
+  });
+
+  t('hostile headers stay cheap and never throw', () => {
+    const started = Date.now();
+    eq(browserLanguage(`${'x-'.repeat(50000)},es`, supported), '');
+    eq(browserLanguage(';;;,q=,*,  ;q=abc', supported), '');
+    eq(browserLanguage(null, supported), '');
+    eq(browserLanguage('es', null), '');
+    ok(Date.now() - started < 200);
+  });
+});

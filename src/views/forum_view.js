@@ -1,5 +1,5 @@
 const {
-  div, a, span, form, button, section, p,
+  div, a, span, form, button, section, p, ul, li,
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
@@ -179,72 +179,45 @@ const renderThread = (nodes, level = 0, forumId) => {
     });
 };
 
+const forumHref = (f) => `/forum/${encodeURIComponent(f.key)}`;
+
+const forumCounts = (f) => span({ class: 'card-label activity-update-counts mailing-counts' },
+  `👥: ${f.participants?.length || 1} · 💬 ${Math.max(0, (f.messagesCount || 1) - 1)} · ▲ ${f.positiveVotes || 0} · ▼ ${f.negativeVotes || 0}`);
+
 const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
   const visibleForums = (Array.isArray(forums) ? forums : []).filter(f =>
     (f && f.title && String(f.title).trim()) || (f && f.text && String(f.text).trim())
   )
-  return div({ class: 'forum-list' },
-    visibleForums.length
-      ? visibleForums.map(f =>
-        div({ class: 'forum-card' },
-          div({ class: 'forum-score-col' },
-            renderVotes(f.key, f.score, f.key)
-          ),
-          div({ class: 'forum-main-col' },
-            div({ class: 'card-header activity-card-header' },
-              renderContentActions(f.key, `/forum/${encodeURIComponent(f.key)}`, { spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title })
-            ),
-            div({ class: 'forum-header-row' },
-              a({
-                class: 'forum-category',
-                href: `/forum?filter=${encodeURIComponent(f.category)}`
-              }, `[${catLabel(f.category)}]`),
-              a({
-                class: 'forum-title',
-                href: `/forum/${encodeURIComponent(f.key)}`
-              }, f.title),
-              f.isPrivate ? renderPrivacyChip(true, i18n) : null,
-              f.isPrivate ? renderForumEncryptedChip(i18n) : null,
-              renderLifespanChip(f.lifetime, i18n),
-              f.subscriptionIn === true
-                ? renderStateChip('mutuals', '✉', i18n.subscriptionOn)
-                : (f.subscriptionIn === false ? renderStateChip('closed', '✉', i18n.subscriptionOff) : null)
-            ),
-	    div({
-	      class: 'forum-body',
-	      innerHTML: sanitizeHtml(renderStyledHtml(f.text || ''))
-	    }),
-            div({ class: 'forum-meta' },
-              span({ class: 'forum-positive-votes' },
-                `▲: ${f.positiveVotes || 0}`),
-              span({ class: 'forum-negative-votes' },
-                `▼: ${f.negativeVotes || 0}`),
-              span({ class: 'forum-participants' },
-                `${i18n.forumParticipants.toUpperCase()}: ${f.participants?.length || 1}`),
-              span({ class: 'forum-messages' },
-                `${i18n.forumMessages.toUpperCase()}: ${(f.messagesCount || 1) - 1}`)
-            ),
-            div({ class: 'forum-footer' },
-              span({ class: 'date-link' },
-                `${moment(f.createdAt).format('YYYY/MM/DD HH:mm')}`),
-              userLink(f.author)
-            ),
-            currentFilter === 'mine' && f.author === userId
-              ? div({ class: 'forum-owner-actions' },
-                form({
-                  method: 'POST',
-                  action: `/forum/delete/${encodeURIComponent(f.key)}`,
-                  class: 'forum-delete-form'
-                },
-                  button({ type: 'submit', class: 'delete-btn' },
-                    i18n.forumDeleteButton)
-                )
-              )
-              : null
+  if (!visibleForums.length) return div({ class: 'tribe-grid' }, p(i18n.noForums));
+  return ul({ class: 'mailing-archive' },
+    ...visibleForums.map(f => {
+      const ownerActions = currentFilter === 'mine' && f.author === userId
+        ? form({ method: 'POST', action: `/forum/delete/${encodeURIComponent(f.key)}`, class: 'forum-delete-form' },
+            button({ type: 'submit', class: 'delete-btn' }, i18n.forumDeleteButton)
           )
-        )
-      )
-      : p(i18n.noForums)
+        : null;
+      return li({ class: 'mailing-archive-item' },
+        div({ class: 'emergency-update-head mailing-archive-head' },
+          div({ class: 'mailing-archive-meta' },
+            a({ href: forumHref(f), class: 'user-link' }, f.title || '—'),
+            a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(f.category)}` }, `[${catLabel(f.category)}]`),
+            forumCounts(f),
+            f.isPrivate ? renderPrivacyChip(true, i18n) : null,
+            f.isPrivate ? renderForumEncryptedChip(i18n) : null,
+            renderLifespanChip(f.lifetime, i18n),
+            f.subscriptionIn === true
+              ? renderStateChip('mutuals', '✉', i18n.subscriptionOn)
+              : (f.subscriptionIn === false ? renderStateChip('closed', '✉', i18n.subscriptionOff) : null)
+          ),
+          renderContentActions(f.key, forumHref(f), { spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title })
+        ),
+        ownerActions
+          ? div({ class: 'emergency-update-head mailing-archive-row' },
+              div({ class: 'tribe-side-actions emergency-update-actions' }, ownerActions)
+            )
+          : null
+      );
+    })
   );
 }
 

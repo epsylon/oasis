@@ -811,6 +811,23 @@ h3 { font-size: 1em !important; }
 }
 .oasis-menu-btn .oasis-menu-ico { font-size: 1.05rem !important; }
 
+.oasis-menu-slot {
+  display: inline-flex !important;
+}
+.oasis-menu-slot .oasis-menu-close {
+  display: none !important;
+}
+#nav-left-toggle:checked ~ .header .oasis-menu-slot-left .oasis-menu-open,
+#nav-right-toggle:checked ~ .header .oasis-menu-slot-right .oasis-menu-open {
+  display: none !important;
+}
+#nav-left-toggle:checked ~ .header .oasis-menu-slot-left .oasis-menu-close,
+#nav-right-toggle:checked ~ .header .oasis-menu-slot-right .oasis-menu-close {
+  display: inline-flex !important;
+  background: #FFD700 !important;
+  color: #161616 !important;
+}
+
 .header .top-bar-left nav {
   order: 3 !important;
   flex: 1 1 100% !important;
@@ -2000,4 +2017,14 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .stats-block .stats-toplist .stats-toplist-num {
   margin-left: auto !important;
   text-align: right !important;
+}
+
+.mailing-archive-meta > .user-link,
+.mailing-archive-meta > .forum-category {
+  flex: 0 0 100% !important;
+}
+.mailing-archive-meta > .mailing-counts {
+  flex: 0 1 auto !important;
+  width: auto !important;
+  font-size: .85em !important;
 }

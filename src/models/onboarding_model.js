@@ -55,6 +55,33 @@ const isPending = (dir) => {
 
 const bannerVisible = (ssbPath) => isPending(ssbPathOf(ssbPath));
 
+const DEFAULT_LANGUAGE = 'en';
+
+const browserLanguage = (header, supported) => {
+  const list = Array.isArray(supported) ? supported : [];
+  const wanted = String(header || '').slice(0, 1024).split(',').map((part, i) => {
+    const [tag, ...params] = part.trim().split(';');
+    const qParam = params.map(p => p.trim()).find(p => /^q=/i.test(p));
+    const q = qParam ? Number(qParam.slice(2)) : 1;
+    return { tag: String(tag || '').trim().toLowerCase().replace(/_/g, '-'), q: Number.isFinite(q) ? q : 0, i };
+  }).filter(w => w.tag && w.tag !== '*' && w.q > 0).sort((a, b) => b.q - a.q || a.i - b.i);
+  for (const w of wanted) {
+    if (list.includes(w.tag)) return w.tag;
+    const base = w.tag.split('-')[0];
+    if (list.includes(base)) return base;
+  }
+  return '';
+};
+
+const firstRunLanguage = ({ fresh, isPublic, configured, cookie, header, supported } = {}) => {
+  const list = Array.isArray(supported) ? supported : [];
+  if (!fresh || isPublic) return { settled: true, language: '' };
+  if (list.includes(configured) && configured !== DEFAULT_LANGUAGE) return { settled: true, language: '' };
+  const picked = (list.includes(cookie) ? cookie : '') || browserLanguage(header, list);
+  if (!picked && !String(header || '').trim()) return { settled: false, language: '' };
+  return { settled: true, language: picked };
+};
+
 module.exports = ({ cooler, ssbPath } = {}) => {
   const dir = () => ssbPathOf(ssbPath);
 
@@ -198,3 +225,5 @@ module.exports = ({ cooler, ssbPath } = {}) => {
 
 module.exports.bannerVisible = bannerVisible;
 module.exports.STEPS = STEPS;
+module.exports.browserLanguage = browserLanguage;
+module.exports.firstRunLanguage = firstRunLanguage;

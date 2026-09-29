@@ -72,7 +72,7 @@ const AI_HREF_BY_TYPE = {
   shopProduct: '/shops/product', chat: '/chats', mailingList: '/mailing', report: '/reports'
 };
 const aiHrefFor = (type, id) => (type && id && AI_HREF_BY_TYPE[type]) ? `${AI_HREF_BY_TYPE[type]}/${encodeURIComponent(id)}` : null;
-const AI_LANG_NAMES = { en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', zh: 'Chinese', ar: 'Arabic', eu: 'Basque', hi: 'Hindi' };
+const AI_LANG_NAMES = { en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian', pt: 'Portuguese', ru: 'Russian', zh: 'Chinese', ar: 'Arabic', eu: 'Basque', ca: 'Catalan', gl: 'Galician', hi: 'Hindi' };
 const aiSystemPrompt = (lang) => {
   const custom = (getConfig().ai?.prompt || '').trim() || 'Provide an informative and precise response.';
   return [
@@ -11532,6 +11532,7 @@ router
   })
   .post("/language", koaBody(), async (ctx) => {
     const lang = String(ctx.request.body.language || "en");
+    if (!supportedLanguages().includes(lang)) return safeRefererRedirect(ctx, '/settings');
     const cfg = getConfig();
     cfg.language = lang;
     fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
@@ -12150,12 +12151,12 @@ router
   });
 const routes = router.routes();
 const middleware = [
-  async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0 }, next); },
+  async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path }, next); },
   publicModeGuard({
     isPublic: !!config.public,
     onBlocked: (ctx) => sendErrorPage(ctx, "Sorry, many actions are unavailable when Oasis is running in public mode. Please run Oasis in the default mode and try again.", { status: 403 })
   }),
-  async (ctx, next) => { setLanguage(ctx.cookies.get("language") || getConfig().language || "en"); await next(); },
+  async (ctx, next) => { applyFirstRunLanguage(ctx); setLanguage(ctx.cookies.get("language") || getConfig().language || "en"); await next(); },
   async (ctx, next) => {
     try { require('../views/comments_view').setCommentsOpen(ctx.method === 'GET' && String(ctx.query.comments || '') === 'open'); } catch (_) {}
     await next();
@@ -12408,9 +12409,36 @@ async function sendWelcomePmIfFirstLaunch() {
     welcomePmAttempted = false;
   }
 }
+let firstRunLanguageSettled = false;
+const supportedLanguages = () => Object.keys(require('../client/assets/translations/i18n'));
+function applyFirstRunLanguage(ctx) {
+  if (firstRunLanguageSettled) return;
+  const cfg = getConfig();
+  const decision = require('../models/onboarding_model').firstRunLanguage({
+    fresh: !onboardingModel.firstContactSeen(),
+    isPublic: !!config.public,
+    configured: cfg.language,
+    cookie: ctx.cookies.get('language'),
+    header: ctx.get('accept-language'),
+    supported: supportedLanguages()
+  });
+  if (!decision.settled) return;
+  firstRunLanguageSettled = true;
+  if (decision.language && decision.language !== cfg.language) {
+    cfg.language = decision.language;
+    saveConfig(cfg);
+  }
+  setTimeout(welcomePmTick, 0);
+}
 let welcomePmRetries = 0;
 const welcomePmTick = async () => {
   if (onboardingModel.firstContactSeen()) return;
+  if (!firstRunLanguageSettled) {
+    const cfg = getConfig();
+    const decision = require('../models/onboarding_model').firstRunLanguage({ fresh: true, isPublic: !!config.public, configured: cfg.language, supported: supportedLanguages() });
+    if (!decision.settled) return;
+    firstRunLanguageSettled = true;
+  }
   await sendWelcomePmIfFirstLaunch();
   if (onboardingModel.firstContactSeen()) return;
   if (welcomePmRetries++ >= 30) return;

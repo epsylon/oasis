@@ -64,18 +64,18 @@ const renderArchiveItem = (list, params = {}) =>
   li({ class: "mailing-archive-item" },
     div({ class: "emergency-update-head mailing-archive-head" },
       div({ class: "mailing-archive-meta" },
-        span({ class: "date-link" }, fmt(list.lastActivityTs || list.createdAt)),
-        userLink(list.author),
+        a({ href: listHref(list), class: "user-link" }, list.title || "—"),
         countsLine(list),
         renderOpenClosedChip(list.listType, i18n),
         statusChip(list)
       ),
       renderContentActions(list.id, listHref(list), { author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: (params.spreadMap && params.spreadMap.get(list.id)) || null })
     ),
-    div({ class: "emergency-update-head mailing-archive-row" },
-      h2({ class: "mailing-archive-title" }, a({ href: listHref(list) }, list.title || "—")),
-      subscribeForm(list, "/mailing") ? div({ class: "tribe-side-actions emergency-update-actions" }, subscribeForm(list, "/mailing")) : null
-    )
+    subscribeForm(list, "/mailing")
+      ? div({ class: "emergency-update-head mailing-archive-row" },
+          div({ class: "tribe-side-actions emergency-update-actions" }, subscribeForm(list, "/mailing"))
+        )
+      : null
   );
 
 const chipButtons = (modes, filter, census, labelOf) =>

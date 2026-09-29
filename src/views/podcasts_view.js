@@ -5,9 +5,7 @@ const { renderStyledText } = require("../backend/renderStyledText");
 const { renderReachChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { getConfig } = require("../configs/config-manager.js");
 
-const isMobileTheme = () => { try { return getConfig().themes.current === "OasisMobile"; } catch (_) { return false; } };
 
 const userId = config.keys.id;
 const BASE_FILTERS = ["ALL", "MINE", "RECENT", "TOP", "VIEWERS"];
@@ -96,7 +94,7 @@ const renderChannelForm = (ch) =>
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.podcastTitlePlaceholder, value: ch ? ch.title : "" }), br(),
       label(i18n.podcastDescriptionLabel), br(),
       textarea({ name: "description", rows: 5, maxlength: "3000", placeholder: i18n.podcastDescriptionPlaceholder }, ch ? ch.description : ""), br(),
-      label(i18n.uploadMedia), br(),
+      label(i18n.podcastCoverLabel), br(),
       input({ type: "file", name: "cover", accept: "image/*,video/*" }), br(), br(),
       label(i18n.podcastCategoryLabel), br(),
       select({ name: "category" }, ...CATEGORIES.map(c => option({ value: c, ...((ch ? ch.category : "TALK") === c ? { selected: true } : {}) }, catLabel(c)))), br(), br(),
@@ -114,8 +112,8 @@ const renderEpisodeForm = (ch, ep) =>
       input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.podcastEpisodeTitlePlaceholder, value: ep ? ep.title : "" }), br(),
       label(i18n.podcastEpisodeDescriptionLabel), br(),
       textarea({ name: "description", rows: 6, maxlength: "5000", placeholder: i18n.podcastEpisodeDescriptionPlaceholder }, ep ? ep.description : ""), br(),
-      label(i18n.uploadMedia), br(),
-      input({ type: "file", name: "media", accept: isMobileTheme() ? "audio/*" : "audio/*,video/*", ...(ep ? {} : { required: true }) }), br(), br(),
+      label(i18n.podcastEpisodeAudioLabel), br(),
+      input({ type: "file", name: "media", accept: "audio/*,video/*", ...(ep ? {} : { required: true }) }), br(), br(),
       label(i18n.podcastTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.podcastTagsPlaceholder, value: ep ? ep.tags.join(", ") : "" }), br(), br(),
       button({ type: "submit", class: "create-button" }, ep ? i18n.podcastUpdate : i18n.podcastEpisodePublish)

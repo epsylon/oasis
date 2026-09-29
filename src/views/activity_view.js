@@ -37,7 +37,7 @@ const renderMediaBlob = (value, fallbackSrc = null) => {
   if (!s) return fallbackSrc ? img({ src: fallbackSrc, class: 'post-image' }) : null
   if (s.startsWith('&')) return renderZoomableImage(`/blob/${encodeURIComponent(s)}`, { imgClass: 'post-image' })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mVideo) return videoHyperaxe({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
+  if (mVideo) return videoHyperaxe({ controls: true, class: 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}`, preload: 'metadata' })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mAudio) return audioHyperaxe({ controls: true, class: 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
@@ -1256,8 +1256,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const listTitle = content.title || action.title || '';
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field' }, listKey ? a({ href: `/mailing/${encodeURIComponent(listKey)}`, class: 'card-value user-link' }, listTitle || listKey) : span({ class: 'card-value' }, listTitle || '')),
-          content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, String(content.description))) : ''
+          div({ class: 'card-field' }, listKey ? a({ href: `/mailing/${encodeURIComponent(listKey)}`, class: 'card-value user-link' }, listTitle || listKey) : span({ class: 'card-value' }, listTitle || ''))
         )
       );
     }
@@ -1281,12 +1280,14 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const pKey = action.id || action.key || '';
       const pTitle = content.title || action.title || '';
       const pHref = type === 'podcast' ? `/podcasts/${encodeURIComponent(pKey)}` : `/podcasts/episode/${encodeURIComponent(pKey)}`;
+      const pDesc = stripMediaMarkdown(content.description);
+      const pShortDesc = pDesc ? (pDesc.length > 140 ? pDesc.slice(0, 140) + "\u2026" : pDesc) : '';
       cardBody.push(
         div({ class: 'card-section' },
           type === 'podcastEpisode' ? '' : div({ class: 'card-field' }, pKey ? a({ href: pHref, class: 'card-value user-link' }, pTitle || pKey) : span({ class: 'card-value' }, pTitle || '')),
+          pShortDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, pShortDesc)) : '',
           type === 'podcast' && content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.podcastCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
-          renderMediaObject(type === 'podcast' ? content.cover : content.media, type === 'podcast' ? pHref : null),
-          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.description).slice(0, 280))) : ''
+          renderMediaObject(type === 'podcast' ? content.cover : content.media, type === 'podcast' ? pHref : null)
         )
       );
     }

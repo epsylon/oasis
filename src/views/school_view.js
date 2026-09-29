@@ -767,7 +767,7 @@ const renderMaterial = (material, course, isTeacher) => {
     const url = `/blob/${encodeURIComponent(blobId)}`
     if (kind === "pdf") body = div({ class: "pdf-viewer-container", id: `pdf-${material.id.slice(1, 9)}`, "data-pdf-url": url }, a({ href: url }, `📎 ${name || "PDF"}`))
     else if (kind === "image") body = img({ src: url, alt: name, class: "school-material-image" })
-    else if (kind === "video") body = video({ controls: true, src: url, class: "post-video" })
+    else if (kind === "video") body = video({ controls: true, src: url, class: "post-video", preload: 'metadata' })
     else if (kind === "audio") body = audio({ controls: true, src: url })
     else body = p(a({ href: url }, `📎 ${name || blobId}`))
   } else if (ref) {

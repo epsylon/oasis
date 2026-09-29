@@ -184,7 +184,7 @@ const renderHousingList = (items, filter, params = {}) => {
         div({ class: "card-section housing-card-body" },
           clip || (cover && isVideoEntry(cover))
             ? div({ class: "tribe-card-image-wrapper housing-card-video" },
-                video({ controls: true, class: "housing-card-hero-video", src: blobUrl(blobIdOf(clip || cover)) })
+                video({ controls: true, class: "housing-card-hero-video", src: blobUrl(blobIdOf(clip || cover)), preload: 'metadata' })
               )
             : cover
               ? div({ class: "tribe-card-image-wrapper" },

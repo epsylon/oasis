@@ -12,6 +12,8 @@ const LANGUAGES = [
   ["Español", "es"],
   ["Français", "fr"],
   ["Euskara", "eu"],
+  ["Català", "ca"],
+  ["Galego", "gl"],
   ["Deutsch", "de"],
   ["Italiano", "it"],
   ["Português", "pt"],

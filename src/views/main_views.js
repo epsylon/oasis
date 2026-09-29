@@ -731,16 +731,34 @@ const customCSS = (filename) => {
   }
 };
 
+const currentNavPath = () => {
+  let store = null;
+  try { store = require('../models/typed_log').requestScope.getStore(); } catch (_) { store = null; }
+  return store && typeof store.path === 'string' ? store.path : '';
+};
+
+const navGroupHasPath = (items, path) => {
+  if (!path) return false;
+  return items.flat(Infinity).some(item => {
+    const html = item && item.outerHTML ? item.outerHTML : '';
+    const m = html.match(/href="([^"?#]*)/);
+    const href = m ? m[1] : '';
+    if (!href || href === '/') return false;
+    return path === href || path.startsWith(href + '/');
+  });
+};
+
 const navGroup = ({ id, emoji, title, defaultOpen = false }, ...items) => {
   const active = items.filter(Boolean);
   if (!active.length) return null;
+  const open = defaultOpen || navGroupHasPath(active, currentNavPath());
   return li(
     { class: "oasis-nav-group" },
     input({
       type: "checkbox",
       id: `oasis-nav-group-${id}`,
       class: "oasis-nav-toggle",
-      ...(defaultOpen ? { checked: true } : {})
+      ...(open ? { checked: true } : {})
     }),
     label(
       { for: `oasis-nav-group-${id}`, class: "oasis-nav-header" },
@@ -1549,7 +1567,7 @@ const template = (titlePrefix, ...elements) => {
     href: `/assets/themes/${theme}.css?v=${assetVersion()}`
   });
   const nodes = html(
-    { lang: "en" },
+    { lang: i18nBase[selectedLanguage] ? selectedLanguage : "en" },
     head(
       title(titlePrefix, " | Oasis"),
       link({ rel: "stylesheet", href: `/assets/styles/style.css?v=${assetVersion()}` }),
@@ -1891,7 +1909,7 @@ exports.ainavHomeView = ({ recentTags = [] } = {}) => {
   const theme = currentConfig.themes.current || "Dark-SNH";
   const placeholder = i18n.aiNavPlaceholder || 'Where do you want to go?';
   const nodes = html(
-    { lang: "en" },
+    { lang: i18nBase[selectedLanguage] ? selectedLanguage : "en" },
     head(
       title(placeholder, " | Oasis"),
       link({ rel: "stylesheet", href: `/assets/styles/style.css?v=${assetVersion()}` }),
@@ -2320,7 +2338,7 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
             if (u && isMsgId(u)) {
                 nodes.push(
                     div({ class: 'card-field card-field-mt' },
-                        videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(u)}` })
+                        videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(u)}`, preload: 'metadata' })
                     )
                 );
             }

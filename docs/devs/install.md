@@ -76,7 +76,7 @@ What the tests cover, how to add a new module suite, and a record of bugs the te
 - `src/views/` — hyperaxe view functions. Pure HTML builders.
 - `src/AI/` — local LLM service (`ai_service.mjs` on port 4001) and context assembler.
 - `src/configs/` — the application's own configuration: `oasis-config.json` (module toggles, themes, language), `server-config.json` (sbot), `snh-invite-code.json`, and the `*.js` helpers. No user data is kept here: everything a person accumulates lives under `~/.ssb/oasis/` (see [`inventory.md`](./inventory.md)), and `state-manager.js` is what resolves those paths.
-- `src/client/assets/` — CSS, theme files, translations (11 languages), static images.
+- `src/client/assets/` — CSS, theme files, translations (one `oasis_<lang>.js` file per language), static images.
 - `docs/` — user and developer documentation (this folder). [`inventory.md`](./inventory.md) explains every file in `~/.ssb`.
 - `test/` — test harness (`run.sh`, `run.js`, `seed.js`, `helpers/`) and per-module test suites in `mods/`.
 - `scripts/` — build helpers (`build-deb.sh`, node_modules patcher).

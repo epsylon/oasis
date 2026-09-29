@@ -243,7 +243,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.videoTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
           content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null,
           br(),
-          videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(content.url)}`, type: content.mimeType || 'video/mp4', width: '640', height: '360' }),
+          videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(content.url)}`, type: content.mimeType || 'video/mp4', width: '640', height: '360', preload: 'metadata' }),
           br(),
           content.tags && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>

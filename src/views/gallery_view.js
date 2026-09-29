@@ -26,7 +26,7 @@ const imagesOf = (item) => {
 const videoOf = (item) => safeText(item && item.video)
 
 const renderMediaThumb = (entry, alt = "") => isVideoEntry(entry)
-  ? video({ controls: true, class: "gallery-image", src: blobUrl(blobIdOf(entry)) })
+  ? video({ controls: true, class: "gallery-image", src: blobUrl(blobIdOf(entry)), preload: 'metadata' })
   : img({ src: blobUrl(blobIdOf(entry), 256), class: "gallery-image", alt })
 
 const lightboxId = (scope, itemId, index) => `${scope}-photo-${encodeURIComponent(itemId)}-${index}`
@@ -68,7 +68,7 @@ const renderPhotoGallery = (item, scope = "media") => {
     ),
     clip
       ? div({ class: "media-video media-video-centered" },
-          video({ controls: true, class: "media-video-player", src: blobUrl(blobIdOf(clip)) })
+          video({ controls: true, class: "media-video-player", src: blobUrl(blobIdOf(clip)), preload: 'metadata' })
         )
       : null
   )

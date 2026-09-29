@@ -46,7 +46,7 @@ const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
   if (s.startsWith('/assets/') || s.startsWith('/blob/') || s.startsWith('/image/')) return img({ src: s, ...attrs })
   if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, ...attrs })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}` })
+  if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}`, preload: 'metadata' })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
@@ -557,7 +557,7 @@ const renderTribeActivitySection = (tribe, sectionData) => {
         : item.contentType === 'media' && item.mediaType === 'audio' && blobUrl
           ? audio({ src: blobUrl, controls: true, class: 'tribe-media-audio' })
         : item.contentType === 'media' && item.mediaType === 'video' && blobUrl
-          ? video({ src: blobUrl, controls: true, class: 'tribe-media-thumb' })
+          ? video({ src: blobUrl, controls: true, class: 'tribe-media-thumb', preload: 'metadata' })
         : item.contentType === 'media' && item.mediaType === 'document' && blobUrl
           ? a({ href: blobUrl, target: '_blank', class: 'tribe-action-btn' }, i18n.readDocument || 'Read Document')
         : item.contentType === 'media' && item.mediaType === 'bookmark' && (item.url || item.description)
@@ -1306,7 +1306,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
     }
     if (mediaType === 'video') {
       return div({ class: 'tribe-media-item' },
-        blobUrl ? video({ src: blobUrl, controls: true, class: 'tribe-media-thumb' }) : p(i18n.tribeMediaEmpty),
+        blobUrl ? video({ src: blobUrl, controls: true, class: 'tribe-media-thumb', preload: 'metadata' }) : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
           m.title ? h2(m.title) : null,
           m.description ? p(...renderStyledText(m.description)) : null,
