@@ -2,6 +2,30 @@ const { a, br, div, input, span, strong } = require("../server/node_modules/hype
 const { renderStyledHtml } = require('../backend/renderStyledText');
 const sharedState = require('../configs/shared-state');
 const cnPkg = (() => { try { return require('../server/package.json'); } catch (_) { return {}; } })();
+const mv = () => require('./main_views');
+const cnScope = () => { try { return require('../models/typed_log').requestScope.getStore() || {}; } catch (_) { return {}; } };
+const cnWithLang = (href, lang) => {
+  if (!lang || !/^\/c(?:[/?#]|$)/.test(href) || /[?&]lang=/.test(href)) return href;
+  const [pathAndQuery, hash] = href.split('#');
+  const joined = `${pathAndQuery}${pathAndQuery.includes('?') ? '&' : '?'}lang=${lang}`;
+  return hash != null ? `${joined}#${hash}` : joined;
+};
+const propagateLang = (html, lang) => !lang ? html : String(html)
+  .replace(/href="(\/c(?:[/?#][^"]*)?)"/g, (m, href) => `href="${cnWithLang(href, lang)}"`)
+  .replace(/(<form[^>]*action="\/c(?:\/[^"]*)?"[^>]*>)/g, (m) => `${m}<input type="hidden" name="lang" value="${lang}"/>`);
+const renderLangSelector = (current) => {
+  const langs = Object.keys(require('../client/assets/translations/i18n'));
+  const scope = cnScope();
+  const base = String(scope.path || '/c');
+  const params = new URLSearchParams(String(scope.query || ''));
+  params.delete('lang');
+  const others = langs.filter(l => l !== current).map(l => {
+    const q = new URLSearchParams(params); q.set('lang', l);
+    return `<a href="${escapeHtml(`${base}?${q.toString()}`)}" lang="${l}">${l.toUpperCase()}</a>`;
+  }).join('');
+  return `<div class="cn-lang" tabindex="0"><span class="cn-lang-current">${escapeHtml(String(current).toUpperCase())}</span><div class="cn-lang-list">${others}</div></div>`;
+};
+const cnText = (key, fallback) => { const v = mv().i18n[key]; return typeof v === 'string' && v ? v : fallback; };
 
 const STAT_TYPE_KEYS = { post:'statsPost', event:'statsEvent', task:'statsTask', forum:'statsForum', tribe:'statsTribe', market:'statsMarket', job:'statsJob', project:'statsProject', shop:'statsShop', image:'statsImage', video:'statsVideo', audio:'statsAudio', document:'statsDocument', bookmark:'statsBookmark', transfer:'statsTransfer', map:'statsMap' };
 const STAT_ORDER = ['post','event','task','forum','tribe','market','job','project','shop','image','video','audio','document','bookmark','transfer','map'];
@@ -36,7 +60,9 @@ const renderTagChips = (tags) => {
   return `<div class="cn-tags">${chips}</div>`;
 };
 
-const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(String(kind || '').toUpperCase())}]</span>`;
+const KIND_KEYS = { audio: 'cnKindAudio', blog: 'cnKindBlog', bookmark: 'cnKindBookmark', document: 'cnKindDocument', event: 'cnKindEvent', feed: 'cnKindFeed', image: 'cnKindImage', job: 'cnKindJob', market: 'cnKindMarket', podcast: 'cnKindPodcast', project: 'cnKindProject', course: 'cnKindCourse', shop: 'cnKindShop', torrent: 'cnKindTorrent', video: 'cnKindVideo', wiki: 'cnKindWiki' };
+const kindLabel = (kind) => cnText(KIND_KEYS[String(kind || '').toLowerCase()], String(kind || ''));
+const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(kindLabel(kind).toUpperCase())}]</span>`;
 
 const renderRichText = (s, { links = true, wikiLinks = null } = {}) => renderStyledHtml(s, {
   blobPrefix: '/c/blob/',
@@ -45,7 +71,7 @@ const renderRichText = (s, { links = true, wikiLinks = null } = {}) => renderSty
   plainUrlClass: 'cn-url',
   hashtagHref: links ? (tag) => `/c?q=%23${encodeURIComponent(tag)}` : null,
   wikiLink: wikiLinks ? (target, slug, label) => wikiLinks.has(slug)
-    ? a({ href: `/c/wiki/${encodeURIComponent(slug)}`, class: 'cn-wiki-link' }, label)
+    ? a({ href: wikiLinks.get(slug), class: 'cn-wiki-link' }, label)
     : label : null
 }).replace(/\n/g, '<br/>');
 
@@ -128,10 +154,10 @@ const stripInternalAnchors = (html) => {
   return html.replace(hrefedClosed, '$1').replace(hrefedBare, '$1');
 };
 
-const renderClearnetSearchForm = ({ authorFeedId = '', query = '', placeholder = 'Search…' }) => {
+const renderClearnetSearchForm = ({ authorFeedId = '', query = '', placeholder = '' }) => {
   if (!authorFeedId) return '';
   const safeQuery = escapeHtml(query || '');
-  const safePh = escapeHtml(placeholder);
+  const safePh = escapeHtml(placeholder || cnText('cnSearchPlaceholder', 'Search…'));
   return `<form class="cn-search" method="GET" action="/c/inhabitant/${encodeURIComponent(authorFeedId)}"><input type="text" name="q" value="${safeQuery}" placeholder="${safePh}" autocomplete="off"/></form>`;
 };
 
@@ -254,10 +280,12 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   const safeOgDesc = escapeHtml(ogDescription || '');
   const palette = getCurrentPalette();
   const baseCss = buildBaseCss(palette);
-  const brandInner = `<div class="cn-brand">⛱ Oasis HUB</div><div class="cn-brand-sub">Libre · P2P · Federated</div>`;
-  const brandBlock = `<a class="cn-brand-block cn-brand-link" href="/c">${brandInner}</a>`;
+  const brandInner = `<div class="cn-brand">⛱ Oasis HUB</div><div class="cn-brand-sub">${escapeHtml(cnText('cnBrandSub', 'Libre · P2P · Federated'))}</div>`;
+  const lang = escapeHtml(mv().getLanguage ? mv().getLanguage() : 'en');
+  const langOverride = cnScope().cnLang || '';
+  const brandBlock = `<a class="cn-brand-block cn-brand-link" href="${cnWithLang('/c', langOverride)}">${brandInner}</a>`;
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${lang}">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -273,19 +301,27 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
 
 .cn-brand-link:hover .cn-brand{color:var(--accent)}
 .cn-brand-link:hover{text-decoration:none}
+.cn-header-extra{gap:10px}
+.cn-lang{position:relative;flex:0 0 auto;font-size:13px;outline:none}
+.cn-lang-current{display:block;cursor:pointer;background:var(--bg-sub);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-weight:600;letter-spacing:1px;user-select:none}
+.cn-lang:focus-within .cn-lang-current,.cn-lang:hover .cn-lang-current{border-color:var(--fg)}
+.cn-lang-list{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:10;flex-direction:column;min-width:100%;max-height:260px;overflow-y:auto;background:var(--bg-elev);border:1px solid var(--border);border-radius:6px}
+.cn-lang:focus-within .cn-lang-list{display:flex}
+.cn-lang-list a{padding:6px 12px;color:var(--fg-soft);text-decoration:none;letter-spacing:1px}
+.cn-lang-list a:hover{background:var(--bg-sub);color:var(--fg);text-decoration:none}
 </style>
 </head>
 <body>
   <header class="cn-header">
     ${brandBlock}
-    ${headerExtra ? `<div class="cn-header-extra">${headerExtra}</div>` : ''}
+    <div class="cn-header-extra">${renderLangSelector(lang)}${propagateLang(headerExtra || '', langOverride)}</div>
   </header>
-  ${stripInternalAnchors(body)}
+  ${propagateLang(stripInternalAnchors(body), langOverride)}
   <footer class="cn-footer">
     <a href="https://wiki.solarnethub.com" target="_blank" rel="noopener"><img class="cn-footer-logo" src="/c/assets/images/snh-oasis.jpg" alt="Oasis"/></a>
-    <div class="cn-footer-line">Synced-peers: [ <strong>${Number(sharedState.getSyncedPeerCount ? sharedState.getSyncedPeerCount() : 0) || 0}</strong> ]</div>
+    <div class="cn-footer-line">${escapeHtml(cnText('cnSyncedPeers', 'Synced-peers'))}: [ <strong>${Number(sharedState.getSyncedPeerCount ? sharedState.getSyncedPeerCount() : 0) || 0}</strong> ]</div>
     <div class="cn-footer-line"><a href="https://code.03c8.net/krakenslab/oasis" target="_blank" rel="noopener">${escapeHtml(cnPkg.name || '@krakenslab/oasis')}</a> [ ${escapeHtml(cnPkg.version || '?')} ]</div>
-    <div class="cn-footer-line">License: <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">GPLv3</a> - ${new Date().getFullYear()}</div>
+    <div class="cn-footer-line">${escapeHtml(cnText('cnLicense', 'License'))}: <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">GPLv3</a> - ${new Date().getFullYear()}</div>
   </footer>
 </body>
 </html>`;
@@ -297,14 +333,14 @@ const renderClearnetNotFound = () => {
     ogTitle: 'Oasis',
     ogDescription: '',
     extraCss: `.cn-notfound{color:var(--fg-soft);font-size:16px;max-width:480px;margin:80px auto 40px auto;text-align:center;line-height:1.5}`,
-    body: `<p class="cn-notfound">The content is not accessible at this moment.</p>`
+    body: `<p class="cn-notfound">${escapeHtml(cnText('cnNotAccessible', 'The content is not accessible at this moment.'))}</p>`
   });
 };
 
 const renderClearnetMediaView = ({ kind, item }) => {
   const blob = blobUrl(item.url);
-  const title = escapeHtml(item.title || 'Untitled');
-  const desc = renderRichText(item.description || '', { wikiLinks: item.wikiLinks instanceof Set ? item.wikiLinks : null });
+  const title = escapeHtml(item.title || cnText('cnUntitled', 'Untitled'));
+  const desc = renderRichText(item.description || '', { wikiLinks: item.wikiLinks instanceof Map ? item.wikiLinks : null });
   const dateStr = item.createdAt ? escapeHtml(new Date(item.createdAt).toISOString().slice(0, 10)) : '';
   const extraCss = `
 .cn-media-meta{color:var(--fg-dim);font-size:13px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
@@ -347,8 +383,8 @@ const renderClearnetMediaView = ({ kind, item }) => {
   ${renderTagChips(item.tags)}
 `;
   return renderClearnetPage({
-    title: `${item.title || String(kind || 'Oasis').replace(/^./, c => c.toUpperCase())} | Oasis`,
-    ogTitle: item.title || String(kind || 'Oasis').replace(/^./, c => c.toUpperCase()),
+    title: `${item.title || (kind ? kindLabel(kind) : 'Oasis')} | Oasis`,
+    ogTitle: item.title || (kind ? kindLabel(kind) : 'Oasis'),
     ogDescription: item.description || '',
     ogImage: (kind === 'image') ? blob : null,
     extraCss,
@@ -358,7 +394,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
 };
 
 const renderClearnetPodcastView = ({ channel }) => {
-  const title = escapeHtml(channel.title || 'Untitled');
+  const title = escapeHtml(channel.title || cnText('cnUntitled', 'Untitled'));
   const desc = renderRichText(channel.description || '');
   const cover = channel.cover && channel.cover.blobId ? blobUrl(channel.cover.blobId) : null;
   const coverIsVideo = !!(channel.cover && channel.cover.kind === 'video');
@@ -391,7 +427,7 @@ const renderClearnetPodcastView = ({ channel }) => {
   ${epHtml ? `<hr class="cn-sep"/>${epHtml}` : ''}
 `;
   return renderClearnetPage({
-    title: `${channel.title || 'Untitled'} | Oasis`,
+    title: `${channel.title || cnText('cnUntitled', 'Untitled')} | Oasis`,
     ogTitle: channel.title || 'Oasis',
     ogDescription: channel.description || '',
     ogImage: cover && !coverIsVideo ? cover : null,
@@ -402,6 +438,7 @@ const renderClearnetPodcastView = ({ channel }) => {
 };
 
 module.exports = {
+  kindLabel,
   renderTagChips,
   renderClearnetPodcastView,
   escapeHtml,

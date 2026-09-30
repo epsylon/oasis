@@ -24,3 +24,28 @@ describe('clearnet: public hub', (t) => {
     eq((all.match(/<form[^>]*method="POST"/g) || []).length, 0, 'the hub is read-only');
   });
 });
+
+describe('clearnet: two items with the same title never share a public link', (t) => {
+  t('every module gets a title slug plus a unique hash, wikis included', async () => {
+    const { clearnetHubView, clearnetSlugFor, clearnetItemHref } = require('../../../src/views/main_views');
+    const A = '@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=.ed25519';
+    const B = '@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=.ed25519';
+    const items = {
+      wiki: [
+        { id: '%w1abcdef.sha256', slug: 'solar-punk', title: 'Solar punk', snippet: 'a', author: A, authorName: 'Alice' },
+        { id: '%w2ghijkl.sha256', slug: 'solar-punk', title: 'Solar punk', snippet: 'b', author: B, authorName: 'Bob' }
+      ],
+      events: [
+        { id: '%e1mnopqr.sha256', title: 'Assembly', snippet: 'a', author: A },
+        { id: '%e2stuvwx.sha256', title: 'Assembly', snippet: 'b', author: B }
+      ]
+    };
+    const html = String(await clearnetHubView({ authors: [], items }));
+    const links = html.match(/href="\/c\/(?:wiki|events)\/[^"]+"/g) || [];
+    eq(new Set(links).size, 4, 'four distinct links for four items');
+    ok(!links.some(l => l === 'href="/c/wiki/solar-punk"'), 'the bare title slug is never used, not even when the wiki has one');
+    ok(links.every(l => /-[a-z0-9]{8}"$/.test(l)), 'every link ends with the short hash of the item');
+    eq(clearnetItemHref('events', 'Assembly', '%e1mnopqr.sha256'), `/c/events/${clearnetSlugFor('Assembly', '%e1mnopqr.sha256')}`, 'the app chips build the very same link');
+    ok(clearnetSlugFor('Assembly', '%e1mnopqr.sha256') !== clearnetSlugFor('Assembly', '%e2stuvwx.sha256'));
+  });
+});

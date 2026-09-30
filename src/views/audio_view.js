@@ -17,7 +17,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -329,7 +329,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   const audioSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, `/c/audios/${encodeURIComponent(audioObj.key)}`)
+      renderReachChip(isClearnet, i18n, clearnetItemHref('audios', audioObj.title, audioObj.key))
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(audioObj.description)

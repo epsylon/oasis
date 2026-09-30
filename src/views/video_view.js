@@ -18,7 +18,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -318,7 +318,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   const videoSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, `/c/videos/${encodeURIComponent(videoObj.key)}`)
+      renderReachChip(isClearnet, i18n, clearnetItemHref('videos', videoObj.title, videoObj.key))
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(videoObj.description)

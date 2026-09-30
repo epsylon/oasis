@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -434,7 +434,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   const chips = [
     renderPrivacyChip(isPrivate, i18n),
     renderEventStatusChip(event.status),
-    isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n, `/c/events/${encodeURIComponent(event.id)}`),
+    isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n, clearnetItemHref('events', event.title, event.id)),
     isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
     renderLifespanChip(event.lifetime, i18n),
     renderEcoTax(event.msgSize, event.id),
@@ -556,7 +556,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
 
 exports.clearnetEventView = async (event) => {
   const { escapeHtml: esc, renderRichText, renderKindTag, renderClearnetPage } = require('./clearnet_view');
-  const title = esc(event.title || 'Event');
+  const title = esc(event.title || i18n.cnKindEvent);
   const desc = renderRichText(event.description || '');
   const dateStr = event.date ? esc(moment(event.date).format("YYYY/MM/DD HH:mm")) : '';
   const loc = esc(event.location || '');
@@ -581,7 +581,7 @@ exports.clearnetEventView = async (event) => {
   </div>
   <hr class="cn-sep"/>
   ${desc ? `<p class="cn-event-desc">${desc}</p>` : ''}
-  ${urlHref ? `<a class="cn-event-link" href="${esc(urlHref)}" target="_blank" rel="noopener noreferrer">More info →</a>` : ''}
+  ${urlHref ? `<a class="cn-event-link" href="${esc(urlHref)}" target="_blank" rel="noopener noreferrer">${esc(i18n.cnMoreInfo)}</a>` : ''}
 `;
   return renderClearnetPage({
     title: `${event.title || 'Event'} | Oasis`,

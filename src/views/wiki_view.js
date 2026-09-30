@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow } = require("./main_views");
 const { renderEncryptedChip, renderReachChip } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
@@ -70,7 +70,7 @@ const renderDiff = (oldText, newText) =>
 const reachChip = (page, params = {}) =>
   page.tribeId || !params.authorPrefs
     ? null
-    : renderReachChip(params.authorPrefs.clearnetWiki === true, i18n, `/c/wiki/${encodeURIComponent(page.id)}`);
+    : renderReachChip(params.authorPrefs.clearnetWiki === true, i18n, clearnetItemHref('wiki', page.title, page.id));
 
 const statusChip = (page) =>
   renderStateChip(page.editPolicy === "author" ? "closed" : "open", "", page.editPolicy === "author" ? i18n.wikiStatusClosed : i18n.wikiStatusOpen);
@@ -298,14 +298,12 @@ exports.wikiPageView = async (page, params = {}) => {
   const shownBody = version ? version.body : page.body;
   const census = Array.isArray(params.censusList) ? params.censusList : [];
   const subscriptionNodes = params.subscription
-    ? renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base, inline: true })
+    ? renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base, inline: true, compact: true })
     : null;
   const barChips = [reachChip(page, params), statusChip(page)].filter(Boolean);
   const actions = div({ class: "tribe-side-actions wiki-actions-top" },
-    span({ class: "wiki-actions-left" },
-      ...barChips,
-      ...(subscriptionNodes && subscriptionNodes.length ? subscriptionNodes : [])
-    ),
+    span({ class: "wiki-actions-left" }, ...barChips),
+    ...(subscriptionNodes && subscriptionNodes.length ? subscriptionNodes : []),
     page.canEdit && !version
       ? form({ method: "GET", action: "/wiki" },
           input({ type: "hidden", name: "filter", value: "edit" }),

@@ -17,14 +17,15 @@ const slugify = (value) => String(value == null ? '' : value)
 
 const linkTarget = (raw) => {
   const s = String(raw || '').trim();
-  const wikiPath = s.match(/\/wiki\/([^?#]+)/);
+  const isUrl = /^[a-z]+:\/\//i.test(s);
+  const wikiPath = (isUrl || s.startsWith('/')) ? s.match(/\/wiki\/([^?#]+)/) : null;
   if (wikiPath) { try { return decodeURIComponent(wikiPath[1]).trim(); } catch (_) { return wikiPath[1].trim(); } }
-  if (/^[a-z]+:\/\//i.test(s)) {
+  if (isUrl) {
     const seg = s.replace(/[?#].*$/, '').split('/').filter(Boolean).pop() || '';
     try { return decodeURIComponent(seg).trim(); } catch (_) { return seg.trim(); }
   }
-  const idx = s.lastIndexOf(':');
-  return idx >= 0 ? s.slice(idx + 1).trim() : s;
+  const namespaced = s.match(/^[a-z]+:(?=\S)(.+)$/i);
+  return namespaced ? namespaced[1].trim() : s;
 };
 
 const extractWikiLinks = (text) => {
@@ -175,12 +176,12 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         id: root,
         rootId: root,
         tipId: tip.key,
-        slug: safeText(c.slug) || slugify(c.title),
+        slug: slugify(c.title) || safeText(c.slug),
         title: safeText(c.title).slice(0, MAX_TITLE),
         body,
         image: (body.match(IMAGE_RE) || [])[1] || null,
         tags: normalizeList(c.tags),
-        aliases: normalizeList(c.aliases).map(slugify).filter(Boolean),
+        aliases: [...new Set([...normalizeList(c.aliases).map(slugify), safeText(c.slug)].filter(a => a && a !== slugify(c.title)))],
         editPolicy: normalizePolicy(c.editPolicy),
         tribeId: c.tribeId || null,
         encrypted: !!c.tribeId,

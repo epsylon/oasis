@@ -170,7 +170,7 @@ const renderThread = (nodes, level = 0, forumId) => {
               class: 'comment-textarea'
             }),
             div({ class: 'comment-file-upload' }, input({ type: 'file', name: 'blob' })),
-            button({ type: 'submit', class: 'forum-send-btn' }, 'Reply')
+            button({ type: 'submit', class: 'forum-send-btn' }, i18n.tribeForumReply)
           )
         )
       );

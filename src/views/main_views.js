@@ -59,13 +59,15 @@ const renderInviteQrCard = ({ qrDataUrl }) =>
   qrDataUrl ? div({ class: 'invite-qr-card' }, img({ src: qrDataUrl, alt: 'QR', class: 'invite-qr-img' })) : null;
 exports.renderInviteQrCard = renderInviteQrCard;
 
-const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, returnTo, canWrite, inline }) => {
+const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, returnTo, canWrite, inline, compact }) => {
   if (!target) return null;
   if (isOwner && (Number(count) || 0) <= 1) return null;
   const showPm = canWrite !== undefined ? canWrite : (isOwner || subscribed);
   const total = Number(count) || 0;
+  const countSuffix = total ? ` (${total})` : '';
   const parts = [
-    total ? span({ class: 'card-label' }, `${i18n.subscriptionTitle} (${total})${isOwner ? '' : ':'}`) : null,
+    total && !compact ? span({ class: 'card-label' }, `${i18n.subscriptionTitle} (${total})${isOwner ? '' : ':'}`) : null,
+    compact && isOwner && total ? renderStateChip('mutuals', '🔔', `${i18n.subscriptionTitle}${countSuffix}`) : null,
     span({ class: 'subscription-actions' },
       isOwner
         ? null
@@ -74,7 +76,9 @@ const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, retu
             input({ type: 'hidden', name: 'scope', value: String(scope || '') }),
             input({ type: 'hidden', name: 'on', value: subscribed ? '0' : '1' }),
             returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
-            button({ type: 'submit', class: subscribed ? 'tribe-action-btn danger-btn' : 'tribe-action-btn' }, `${subscribed ? '🔕' : '🔔'} ${String(subscribed ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe).toUpperCase()}`)
+            compact
+              ? button({ type: 'submit', class: subscribed ? 'delete-btn' : 'update-btn' }, `${subscribed ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe}${countSuffix}`)
+              : button({ type: 'submit', class: subscribed ? 'tribe-action-btn danger-btn' : 'tribe-action-btn' }, `${subscribed ? '🔕' : '🔔'} ${String(subscribed ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe).toUpperCase()}`)
           ),
       showPm && total
         ? a({ href: `/pm?list=${encodeURIComponent(target)}`, class: 'btn-singleview btn-pm', title: i18n.pmCreateButton || 'Write a PM' }, '✉')
@@ -151,6 +155,8 @@ const clearnetSlugFor = (title, id) => {
 };
 exports.clearnetShortId = clearnetShortId;
 exports.clearnetSlugFor = clearnetSlugFor;
+const clearnetItemHref = (modulePath, title, id) => `/c/${modulePath}/${encodeURIComponent(clearnetSlugFor(title, id))}`;
+exports.clearnetItemHref = clearnetItemHref;
 const CLEARNET_PATHS = { blogs: 'blog', wiki: 'wiki', market: 'market', audios: 'audios', videos: 'videos', images: 'images', documents: 'documents', bookmarks: 'bookmarks', events: 'events', feed: 'feed', jobs: 'jobs', podcasts: 'podcasts', projects: 'projects', torrents: 'torrents', shops: 'shops' };
 let clearnetBaseCache = null;
 const clearnetBase = () => {
@@ -167,7 +173,7 @@ const clearnetHrefFor = (viewHref, blockId, title) => {
   const seg = m[1] === 'school/course' ? 'school' : CLEARNET_PATHS[m[1]];
   if (!seg) return null;
   const base = clearnetBase();
-  const id = seg === 'wiki' || !blockId ? m[2] : encodeURIComponent(clearnetSlugFor(title, blockId));
+  const id = blockId ? encodeURIComponent(clearnetSlugFor(title, blockId)) : m[2];
   return base ? `${base}/c/${seg}/${id}` : null;
 };
 let linkBoxSeq = 0;
@@ -490,6 +496,7 @@ const i18nBase = require("../client/assets/translations/i18n");
 let selectedLanguage = "en";
 let i18n = {};
 Object.assign(i18n, i18nBase[selectedLanguage]);
+exports.getLanguage = () => (i18nBase[selectedLanguage] ? selectedLanguage : 'en');
 exports.setLanguage = (language) => {
   selectedLanguage = language;
   const newLang = i18nBase[selectedLanguage] || i18nBase['en'];
@@ -2747,7 +2754,7 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
   const dateStr = sentAt ? esc(new Date(sentAt).toISOString().slice(0, 10)) : '';
   const cw = esc(contentWarning || '');
   const firstLine = rawText.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<[^>]+>/g, '').split('\n').map(s => s.trim()).find(Boolean) || '';
-  const titleText = cw || firstLine.slice(0, 100) || 'Post';
+  const titleText = cw || firstLine.slice(0, 100) || i18n.cnKindBlog;
   const extraCss = `
 .cn-blog-meta{color:var(--fg-dim);font-size:13px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap}
 .cn-blog-cw{background:#663d00;color:#ffd700;border:1px solid #ff7300;padding:8px 14px;border-radius:6px;margin-bottom:16px;font-weight:600}
@@ -2780,23 +2787,25 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
   });
 };
 
+const cnModuleLabel = (m) => (m && i18n[m.labelKey]) || (m && m.label) || '';
+exports.cnModuleLabel = cnModuleLabel;
 const CLEARNET_MODULES = [
-  { key: 'audios',    label: 'Audios',    kind: 'Audio',    prefKey: 'clearnetAudios' },
-  { key: 'posts',     label: 'Blogs',     kind: 'Blog',     prefKey: 'clearnetPosts',     modulePath: 'blog' },
-  { key: 'bookmarks', label: 'Bookmarks', kind: 'Bookmark', prefKey: 'clearnetBookmarks' },
-  { key: 'documents', label: 'Documents', kind: 'Document', prefKey: 'clearnetDocuments' },
-  { key: 'events',    label: 'Events',    kind: 'Event',    prefKey: 'clearnetEvents' },
-  { key: 'feed',      label: 'Feed',      kind: 'Feed',     prefKey: 'clearnetFeed' },
-  { key: 'images',    label: 'Images',    kind: 'Image',    prefKey: 'clearnetImages' },
-  { key: 'jobs',      label: 'Jobs',      kind: 'Job',      prefKey: 'clearnetJobs' },
-  { key: 'market',    label: 'Market',    kind: 'Market',   prefKey: 'clearnetMarket' },
-  { key: 'podcasts',  label: 'Podcasts',  kind: 'Podcast',  prefKey: 'clearnetPodcasts' },
-  { key: 'projects',  label: 'Projects',  kind: 'Project',  prefKey: 'clearnetProjects' },
-  { key: 'school',    label: 'School',    kind: 'Course',   prefKey: 'clearnetSchool' },
-  { key: 'shops',     label: 'Shops',     kind: 'Shop',     prefKey: 'clearnetShops' },
-  { key: 'torrents',  label: 'Torrents',  kind: 'Torrent',  prefKey: 'clearnetTorrents' },
-  { key: 'videos',    label: 'Videos',    kind: 'Video',    prefKey: 'clearnetVideos' },
-  { key: 'wiki',      label: 'Wikis',     kind: 'Wiki',     prefKey: 'clearnetWiki' }
+  { key: 'audios',    label: 'Audios',    kind: 'audio', labelKey: 'audiosLabel',    prefKey: 'clearnetAudios' },
+  { key: 'posts',     label: 'Blogs',     kind: 'blog', labelKey: 'blogTitle',     prefKey: 'clearnetPosts',     modulePath: 'blog' },
+  { key: 'bookmarks', label: 'Bookmarks', kind: 'bookmark', labelKey: 'bookmarksLabel', prefKey: 'clearnetBookmarks' },
+  { key: 'documents', label: 'Documents', kind: 'document', labelKey: 'docsLabel', prefKey: 'clearnetDocuments' },
+  { key: 'events',    label: 'Events',    kind: 'event', labelKey: 'eventsLabel',    prefKey: 'clearnetEvents' },
+  { key: 'feed',      label: 'Feed',      kind: 'feed', labelKey: 'feedTitle',     prefKey: 'clearnetFeed' },
+  { key: 'images',    label: 'Images',    kind: 'image', labelKey: 'imagesLabel',    prefKey: 'clearnetImages' },
+  { key: 'jobs',      label: 'Jobs',      kind: 'job', labelKey: 'modulesJobsLabel',      prefKey: 'clearnetJobs' },
+  { key: 'market',    label: 'Market',    kind: 'market', labelKey: 'marketTitle',   prefKey: 'clearnetMarket' },
+  { key: 'podcasts',  label: 'Podcasts',  kind: 'podcast', labelKey: 'podcastsTitle',  prefKey: 'clearnetPodcasts' },
+  { key: 'projects',  label: 'Projects',  kind: 'project', labelKey: 'projectsTitle',  prefKey: 'clearnetProjects' },
+  { key: 'school',    label: 'School',    kind: 'course', labelKey: 'schoolTitle',   prefKey: 'clearnetSchool' },
+  { key: 'shops',     label: 'Shops',     kind: 'shop', labelKey: 'shopsTitle',     prefKey: 'clearnetShops' },
+  { key: 'torrents',  label: 'Torrents',  kind: 'torrent', labelKey: 'torrentsLabel',  prefKey: 'clearnetTorrents' },
+  { key: 'videos',    label: 'Videos',    kind: 'video', labelKey: 'videosLabel',    prefKey: 'clearnetVideos' },
+  { key: 'wiki',      label: 'Wikis',     kind: 'wiki', labelKey: 'wikiTitle',     prefKey: 'clearnetWiki' }
 ];
 
 exports.CLEARNET_MODULES = CLEARNET_MODULES;
@@ -2830,11 +2839,11 @@ audio.cn-hub-player{background:transparent;height:36px}
 `;
 
 const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '', query = '', showAuthor = false }) => {
-  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips } = require('./clearnet_view');
+  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips, kindLabel } = require('./clearnet_view');
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
-    const href = `/c/${modulePath}/${encodeURIComponent(it.slug || clearnetSlugFor(it.title, it.id))}`;
-    const title = esc(it.title || 'Untitled');
+    const href = clearnetItemHref(modulePath, it.title, it.id);
+    const title = esc(it.title || i18n.cnUntitled);
     const raw = String(it.snippet || '');
     const snippet = renderRichText(raw.slice(0, 300));
     const meta = esc(it.meta || '');
@@ -2872,7 +2881,7 @@ const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '
     if (prefs && !prefs[m.prefKey]) continue;
     for (const it of (items[m.key] || [])) {
       if (!matches(it)) continue;
-      allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: m.kind, _moduleKey: m.key });
+      allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: kindLabel(m.kind), _moduleKey: m.key });
     }
   }
   allItems.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
@@ -2880,15 +2889,15 @@ const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '
   const visibleItems = activeFilter ? allItems.filter(it => it._moduleKey === activeFilter) : allItems;
   const qs = q ? `&q=${encodeURIComponent(query)}` : '';
   const filterButtons = `<div class="cn-filter-row">
-    <a class="cn-filter-btn${activeFilter ? '' : ' active'}" href="${filterBase}${q ? `?q=${encodeURIComponent(query)}` : ''}">All (${allItems.length})</a>
+    <a class="cn-filter-btn${activeFilter ? '' : ' active'}" href="${filterBase}${q ? `?q=${encodeURIComponent(query)}` : ''}">${esc(i18n.all)} (${allItems.length})</a>
     ${CLEARNET_MODULES.filter(m => allItems.some(it => it._moduleKey === m.key)).map(m => {
       const count = allItems.filter(it => it._moduleKey === m.key).length;
-      return `<a class="cn-filter-btn${activeFilter === m.key ? ' active' : ''}" href="${filterBase}?type=${m.key}${qs}">${esc(m.label)} (${count})</a>`;
+      return `<a class="cn-filter-btn${activeFilter === m.key ? ' active' : ''}" href="${filterBase}?type=${m.key}${qs}">${esc(cnModuleLabel(m))} (${count})</a>`;
     }).join('')}
   </div>`;
   const sections = visibleItems.length
-    ? `${filterButtons}<h2 class="cn-section">Public Content (${visibleItems.length})</h2><div class="cn-hub-grid">${visibleItems.map(it => renderHubItem(it.modulePath, it)).join('')}</div>`
-    : (allItems.length ? `${filterButtons}<div class="cn-empty-content">No content in this category.</div>` : '');
+    ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${visibleItems.length})</h2><div class="cn-hub-grid">${visibleItems.map(it => renderHubItem(it.modulePath, it)).join('')}</div>`
+    : (allItems.length ? `${filterButtons}<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
   return { sections, total: allItems.length, visible: visibleItems.length };
 };
 
@@ -2898,20 +2907,20 @@ exports.clearnetHubView = async ({ authors = [], items = {}, filterType = '', qu
   const extraCss = CLEARNET_HUB_CSS + `
 `;
   const body = `
-  ${hub.total ? hub.sections : '<div class="cn-empty-content">No public content has been shared to Clearnet yet.</div>'}
+  ${hub.total ? hub.sections : `<div class="cn-empty-content">${esc(i18n.cnHubEmpty)}</div>`}
 `;
   return renderClearnetPage({
-    title: 'Clearnet HUB | Oasis',
-    ogTitle: 'Clearnet HUB | Oasis',
-    ogDescription: 'Public content shared by the inhabitants of this Oasis network.',
+    title: `${i18n.cnHubTitle} | Oasis`,
+    ogTitle: `${i18n.cnHubTitle} | Oasis`,
+    ogDescription: i18n.cnHubDescription,
     extraCss,
     body,
-    headerExtra: `<form class="cn-search" method="GET" action="/c">${filterType ? `<input type="hidden" name="type" value="${esc(filterType)}"/>` : ''}<input type="text" name="q" value="${esc(query || '')}" placeholder="Search…" autocomplete="off"/></form>`
+    headerExtra: `<form class="cn-search" method="GET" action="/c">${filterType ? `<input type="hidden" name="type" value="${esc(filterType)}"/>` : ''}<input type="text" name="q" value="${esc(query || '')}" placeholder="${esc(i18n.cnSearchPlaceholder)}" autocomplete="off"/></form>`
   });
 };
 
 exports.clearnetInhabitantView = async ({ feedId, name, description, image, prefs, items = {}, query = '', filterType = '' }) => {
-  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips, renderClearnetPage } = require('./clearnet_view');
+  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips, renderClearnetPage, kindLabel } = require('./clearnet_view');
   const blobAvatarUrl = cnBlob(image);
   const avatarSrc = blobAvatarUrl || '/assets/images/default-avatar.png';
   const qrSrc = feedId ? `/c/qr/${encodeURIComponent(feedId)}` : null;
@@ -2919,7 +2928,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   const desc = renderRichText(description && description !== 'Redacted' ? description : '');
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
-    const title = esc(it.title || 'Untitled');
+    const title = esc(it.title || i18n.cnUntitled);
     const raw = String(it.snippet || '');
     const snippet = renderRichText(raw.slice(0, 300));
     const meta = esc(it.meta || '');
@@ -2928,7 +2937,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
     const preview = mediaSrc && it.media.kind === 'image'
       ? `<img class="cn-hub-player" src="${mediaSrc}" alt="" loading="lazy"/>`
       : '';
-    const href = `/c/${modulePath}/${encodeURIComponent(it.slug || clearnetSlugFor(it.title, it.id))}`;
+    const href = clearnetItemHref(modulePath, it.title, it.id);
     const chipRow = [
       meta ? `<span class="cn-detail">📅 ${meta}</span>` : '',
       ...(Array.isArray(it.details) ? it.details : []).map(d => `<span class="cn-detail">${esc(String(d))}</span>`),
@@ -2951,7 +2960,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   const allItems = [];
   for (const m of moduleDef) {
     for (const it of (items[m.key] || [])) {
-      allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: m.kind, _moduleKey: m.key });
+      allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: kindLabel(m.kind), _moduleKey: m.key });
     }
   }
   allItems.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
@@ -2962,17 +2971,17 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   const totalCount = visibleItems.length;
   const filterBase = `/c/inhabitant/${encodeURIComponent(feedId)}`;
   const filterButtons = `<div class="cn-filter-row">
-    <a class="cn-filter-btn${activeFilter ? '' : ' active'}" href="${filterBase}">All (${allItems.length})</a>
+    <a class="cn-filter-btn${activeFilter ? '' : ' active'}" href="${filterBase}">${esc(i18n.all)} (${allItems.length})</a>
     ${moduleDef.filter(m => prefs && prefs[m.prefKey] && (items[m.key] || []).length).map(m => {
       const isActive = activeFilter === m.key;
       const count = (items[m.key] || []).length;
-      return `<a class="cn-filter-btn${isActive ? ' active' : ''}" href="${filterBase}?type=${m.key}">${esc(m.label)} (${count})</a>`;
+      return `<a class="cn-filter-btn${isActive ? ' active' : ''}" href="${filterBase}?type=${m.key}">${esc(cnModuleLabel(m))} (${count})</a>`;
     }).join('')}
   </div>`;
   const sections = totalCount
-    ? `${filterButtons}<h2 class="cn-section">Public Content (${totalCount})</h2><div class="cn-hub-grid">${visibleItems.map(it => renderHubItem(it.modulePath, it)).join('')}</div>`
-    : (allItems.length ? `${filterButtons}<div class="cn-empty-content">No content in this category.</div>` : '');
-  const noResults = '<div class="cn-empty-content">This inhabitant has not published content to Clearnet yet.</div>';
+    ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${totalCount})</h2><div class="cn-hub-grid">${visibleItems.map(it => renderHubItem(it.modulePath, it)).join('')}</div>`
+    : (allItems.length ? `${filterButtons}<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
+  const noResults = `<div class="cn-empty-content">${esc(i18n.cnInhabitantEmpty)}</div>`;
   const extraCss = `
 .cn-profile{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-bottom:24px}
 .cn-avatar{width:160px;height:160px;border-radius:8px;border:3px solid var(--fg);object-fit:cover;background:#000;flex:0 0 auto}

@@ -722,7 +722,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
 exports.clearnetProjectView = async (project) => {
   const { escapeHtml: esc, renderRichText, renderKindTag, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
   const pr = project || {};
-  const title = esc(pr.title || 'Project');
+  const title = esc(pr.title || i18n.cnKindProject);
   const desc = renderRichText(pr.description || '');
   const goal = Math.max(0, toNum(pr.goal) || 0);
   const pledged = Math.max(0, toNum(pr.pledged) || 0);
@@ -732,7 +732,7 @@ exports.clearnetProjectView = async (project) => {
   const deadline = pr.deadline ? new Date(pr.deadline).toISOString().slice(0, 10) : '';
   const milestones = Array.isArray(pr.milestones) ? pr.milestones.slice(0, 10) : [];
   const milestonesBlock = milestones.length
-    ? `<div class="cn-prj-section"><h2>Milestones</h2><ol class="cn-prj-ms">${milestones.map(m => `<li>${esc(m.title || '')}${m.targetPercent ? ` <span class="cn-prj-pct">— ${m.targetPercent}%</span>` : ''}</li>`).join('')}</ol></div>`
+    ? `<div class="cn-prj-section"><h2>${esc(i18n.projectMilestones)}</h2><ol class="cn-prj-ms">${milestones.map(m => `<li>${esc(m.title || '')}${m.targetPercent ? ` <span class="cn-prj-pct">— ${m.targetPercent}%</span>` : ''}</li>`).join('')}</ol></div>`
     : '';
   const extraCss = `
 .cn-prj-title{color:var(--fg);margin:0 0 12px 0;font-size:32px;font-weight:700}
@@ -758,19 +758,19 @@ ${Array.from({ length: 21 }, (_, i) => `.cn-prj-bar-fill-${i * 5}{width:${i * 5}
   <h1 class="cn-prj-title">${title}</h1>
   <div class="cn-prj-meta">
     ${renderKindTag('project')}
-    <span class="cn-prj-status">${esc(status)}</span>
+    <span class="cn-prj-status">${esc(i18n['projectStatus' + status] || status)}</span>
     ${pr.createdAt ? `<span class="cn-prj-date">📅 ${esc(new Date(pr.createdAt).toISOString().slice(0,10))}</span>` : ''}
   </div>
   <hr class="cn-sep"/>
   ${projectImg ? `<img class="cn-prj-img" src="${projectImg}" alt="${title}"/>` : ''}
   ${goal > 0 ? `
   <div class="cn-prj-funding">
-    <div class="cn-prj-funding-label">Funding</div>
+    <div class="cn-prj-funding-label">${esc(i18n.projectFunding)}</div>
     <div class="cn-prj-funding-amount">${pledged.toFixed(2)} / ${goal.toFixed(2)} ECO · ${fundingPct}%</div>
     <div class="cn-prj-bar"><div class="cn-prj-bar-fill cn-prj-bar-fill-${Math.round(fundingPct / 5) * 5}"></div></div>
-    ${deadline ? `<div class="cn-prj-deadline">Deadline: ${deadline}</div>` : ''}
+    ${deadline ? `<div class="cn-prj-deadline">${esc(i18n.deadline)}: ${deadline}</div>` : ''}
   </div>` : ''}
-  ${desc ? `<div class="cn-prj-section"><h2>Description</h2><p>${desc}</p></div>` : ''}
+  ${desc ? `<div class="cn-prj-section"><h2>${esc(i18n.description)}</h2><p>${desc}</p></div>` : ''}
   ${milestonesBlock}
 `;
   return renderClearnetPage({

@@ -20,7 +20,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -310,7 +310,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   const torrentSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, `/c/torrents/${encodeURIComponent(torrentObj.key)}`)
+      renderReachChip(isClearnet, i18n, clearnetItemHref('torrents', torrentObj.title, torrentObj.key))
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(torrentObj.description)

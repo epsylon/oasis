@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -277,7 +277,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         : renderStateChip("mutuals", "✓", i18n.shopOpen),
       shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
       renderLifespanChip(shop.lifetime, i18n),
-      renderReachChip(isClearnet, i18n, `/c/shops/${encodeURIComponent(shop.rootId || shop.key)}`),
+      renderReachChip(isClearnet, i18n, clearnetItemHref('shops', shop.title, shop.rootId || shop.key)),
       shop.subscription
         ? ((isAuthor || shop.subscription.subscribed === true)
             ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
@@ -664,8 +664,8 @@ exports.clearnetShopView = async (shop, products = []) => {
     </div>
   </div>
   <hr class="cn-sep"/>
-  <h2 class="cn-section">Products</h2>
-  ${productCards ? `<div class="cn-products">${productCards}</div>` : '<div class="cn-empty">No products available.</div>'}
+  <h2 class="cn-section">${cnEscapeHtml(i18n.shopProducts)}</h2>
+  ${productCards ? `<div class="cn-products">${productCards}</div>` : `<div class="cn-empty">${cnEscapeHtml(i18n.shopNoProducts)}</div>`}
 `;
   return renderClearnetPage({
     title: `${shop.title || 'Shop'} | Oasis`,

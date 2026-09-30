@@ -3,7 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -292,7 +292,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
 
   const docSide = div({ class: "tribe-side" },
     title ? h2({ class: "tribe-card-title" }, title) : null,
-    div({ class: "card-chips-row" }, renderReachChip(isClearnet, i18n, `/c/documents/${encodeURIComponent(doc.key)}`), ...chips),
+    div({ class: "card-chips-row" }, renderReachChip(isClearnet, i18n, clearnetItemHref('documents', doc.title, doc.key)), ...chips),
     safeText(doc.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(doc.description))
       : null,

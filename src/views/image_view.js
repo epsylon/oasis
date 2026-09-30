@@ -3,7 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel } = require("./maps_view");
@@ -335,7 +335,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   const imageSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, `/c/images/${encodeURIComponent(imageObj.key)}`)
+      renderReachChip(isClearnet, i18n, clearnetItemHref('images', imageObj.title, imageObj.key))
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(imageObj.description)

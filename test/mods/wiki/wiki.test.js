@@ -1,4 +1,5 @@
 const { eq, ok, notOk } = require('../../helpers/assert');
+const { slugify } = require('../../../src/models/wiki_model');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
 describe('wiki: pages, slugs and versions', (t) => {
@@ -222,10 +223,36 @@ describe('wiki: link targets and title limits', (t) => {
     eq(slugify(linkTarget('http://localhost:3000/wiki/this-is-my-new-wiki')), 'this-is-my-new-wiki');
     eq(slugify(linkTarget('/wiki/This%20Page?tribeId=x')), 'this-page');
     eq(linkTarget('Tribe:Page name'), 'Page name');
+    eq(linkTarget('TCP/IP'), 'TCP/IP', 'a slash inside a title is part of the title');
+    eq(linkTarget('Docs/wiki/setup'), 'Docs/wiki/setup', 'even when the title happens to contain /wiki/');
+    eq(linkTarget('Notas: 1/2'), 'Notas: 1/2', 'a colon followed by a space is punctuation, not a namespace');
+    eq(linkTarget('Ratio 16:9'), 'Ratio 16:9');
+    eq(slugify(linkTarget('Guía/Instalación')), slugify('Guía/Instalación'), 'so a [[link]] to such a page resolves to its slug');
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('wiki').createPage({ title: 'x'.repeat(300), body: 'b' });
     const page = await A.use('wiki').getPage(r.key);
     eq(page.title.length, 100);
     ok(page.slug.length <= 80);
+  });
+});
+
+describe('wiki: pages created with an older slug format', (t) => {
+  t('a [[link]] to a page whose stored slug kept the accents as dashes still resolves, and the old URL keeps working', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const title = 'Soberanía Distribuida/La Revolución Silenciosa en Marcha';
+    const oldSlug = 'soberan-a-distribuida-la-revoluci-n-silenciosa-en-marcha';
+    const now = new Date().toISOString();
+    await new Promise((res, rej) => A.node.publish({ type: 'wikiPage', title, slug: oldSlug, body: 'old page', tags: [], aliases: [], editPolicy: 'OPEN', author: A.keypair.id, createdAt: now, updatedAt: now }, (e, m) => e ? rej(e) : res(m)));
+    const w = A.use('wiki');
+    const page = await w.getPage(oldSlug);
+    ok(page, 'the old URL still finds the page');
+    eq(page.slug, slugify(title), 'but its canonical slug now follows the current rules');
+    ok(page.aliases.includes(oldSlug), 'and the stored slug survives as an alias');
+    const linking = await w.createPage({ title: 'Índice', body: `1. [[${title}|La Revolución Silenciosa en Marcha]]` });
+    const index = await w.getPage(linking.key);
+    eq(index.missingLinks.length, 0, 'the link is not reported as a page to create');
+    eq(index.links[0], page.slug);
+    const dup = await w.createPage({ title, body: 'again' });
+    ok(dup.existing && dup.key === page.id, 'creating it again is detected as the same page');
   });
 });

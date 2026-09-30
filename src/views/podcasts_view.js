@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, audio: audioHyperaxe, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderStyledText } = require("../backend/renderStyledText");
 const { renderReachChip } = require("./clearnet_view");
@@ -200,7 +200,7 @@ exports.singleChannelView = async (ch, params = {}) => {
     div({ class: "card-header activity-card-header" },
       renderContentActions(ch.id, null, { author: ch.author, favKind: "podcasts", isFavorite: ch.isFavorite, reportTitle: ch.title, spread: params.spread || null })
     ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, ch.title), renderReachChip(!!(params.authorPrefs && params.authorPrefs.clearnetPodcasts), i18n, `/c/podcasts/${encodeURIComponent(ch.id)}`)),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, ch.title), renderReachChip(!!(params.authorPrefs && params.authorPrefs.clearnetPodcasts), i18n, clearnetItemHref('podcasts', ch.title, ch.id))),
     div({ class: "card-chips-row" }, renderStateChip("neutral", "", catLabel(ch.category))),
     ch.cover && ch.cover.blobId ? a({ href: channelHref(ch), class: "podcast-cover-link" }, renderCover(ch, "podcast-cover podcast-cover-large")) : null,
     ch.description ? p({ class: "tribe-side-description" }, ...renderStyledText(ch.description)) : null,
@@ -275,7 +275,7 @@ exports.singleEpisodeView = async (ep, params = {}) => {
     div({ class: "card-header activity-card-header" },
       renderContentActions(ep.id, null, { author: ep.author, favKind: "podcasts", isFavorite: ep.isFavorite, reportTitle: ep.title, spread: params.spread || null })
     ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: channelHref(ch), class: "user-link" }, ch.title || i18n.podcastsTitle)), renderReachChip(!!(params.authorPrefs && params.authorPrefs.clearnetPodcasts), i18n, `/c/podcasts/${encodeURIComponent(ch.id)}`)),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: channelHref(ch), class: "user-link" }, ch.title || i18n.podcastsTitle)), renderReachChip(!!(params.authorPrefs && params.authorPrefs.clearnetPodcasts), i18n, clearnetItemHref('podcasts', ch.title, ch.id))),
     ch.cover && ch.cover.blobId ? a({ href: channelHref(ch), class: "podcast-cover-link" }, renderCover(ch, "podcast-cover podcast-cover-large")) : null,
     ep.description ? p({ class: "tribe-side-description" }, ...renderStyledText(ep.description)) : null,
     infoTable(ep),

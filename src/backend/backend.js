@@ -220,7 +220,7 @@ async function buildLeaderMeta(leader) {
 
 const safeArr = v => Array.isArray(v) ? v : [];
 const safeText = v => String(v || '').trim();
-const { safeReturnTo, safeRefererRedirect, pickMsgKeys, isMsgKey, publicModeGuard } = require('./request_guards');
+const { safeReturnTo, safeRefererRedirect, pickMsgKeys, isMsgKey, publicModeGuard, isClearnetPath } = require('./request_guards');
 
 const { stripDangerousTags, sanitizeHtml } = require('./sanitizeHtml');
 
@@ -537,19 +537,20 @@ const blobSizeOf = async (value) => {
 const detailsOf = (...parts) => parts.map(p => String(p == null ? '' : p).trim()).filter(Boolean).slice(0, 4);
 const clearnetDetails = (kind, x) => {
   if (!x) return [];
+  const { i18n } = require('../views/main_views');
   if (kind === 'market') {
     const type = String(x.item_type || '').toLowerCase();
-    return detailsOf(type === 'auction' ? '🔨 AUCTION' : type === 'exchange' ? '🔁 EXCHANGE' : type.toUpperCase());
+    return detailsOf(type === 'auction' ? `🔨 ${i18n.cnAuction}` : type === 'exchange' ? `🔁 ${i18n.cnExchange}` : type.toUpperCase());
   }
   if (kind === 'events') return detailsOf(x.location ? `📍 ${x.location}` : '');
   if (kind === 'jobs') {
     const time = String(x.job_time || '').toLowerCase();
     return detailsOf(
       x.job_type ? `💼 ${String(x.job_type).toUpperCase()}` : '',
-      time === 'partial' ? '⏱ PART TIME' : time === 'complete' ? '⏱ FULL TIME' : ''
+      time === 'partial' ? `⏱ ${String(i18n.jobTimePartial).toUpperCase()}` : time === 'complete' ? `⏱ ${String(i18n.jobTimeComplete).toUpperCase()}` : ''
     );
   }
-  if (kind === 'podcasts') return detailsOf(Number(x.episodeCount) > 0 ? `🎙 ${Number(x.episodeCount)} EPISODES` : '');
+  if (kind === 'podcasts') return detailsOf(Number(x.episodeCount) > 0 ? `🎙 ${Number(x.episodeCount)} ${String(i18n.podcastEpisodesLabel).toUpperCase()}` : '');
   if (kind === 'projects') {
     const progress = Number(x.progress);
     return detailsOf(Number.isFinite(progress) ? `📈 ${Math.max(0, Math.min(100, Math.round(progress)))}%` : '');
@@ -623,13 +624,14 @@ const clearnetIdFor = async (kind, param) => {
   const { clearnetShortId, clearnetSlugFor } = require('../views/main_views');
   const short = raw.split('-').pop().toLowerCase();
   const find = (index) => {
-    for (const entry of index) {
-      for (const it of (entry.items[kind] || [])) {
-        if (it.slug && it.slug === raw) return it.id;
-        if (clearnetSlugFor(it.title, it.id) === raw || clearnetShortId(it.id) === short) return it.id;
-      }
-    }
-    return null;
+    const all = [];
+    for (const entry of index) for (const it of (entry.items[kind] || [])) all.push(it);
+    const exact = all.find(it => clearnetSlugFor(it.title, it.id) === raw);
+    if (exact) return exact.id;
+    const byShort = all.find(it => clearnetShortId(it.id) === short);
+    if (byShort) return byShort.id;
+    const bySlug = all.find(it => it.slug && it.slug === raw);
+    return bySlug ? bySlug.id : null;
   };
   let hit = find(await getClearnetIndex());
   if (!hit) hit = find(await getClearnetIndex(true));
@@ -6803,9 +6805,10 @@ router
       ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
       return;
     }
-    const wikiLinks = new Set();
+    const wikiLinks = new Map();
     try {
       const { extractWikiLinks } = require('../models/wiki_model');
+      const { clearnetItemHref } = require('../views/main_views');
       const slugs = extractWikiLinks(page.body || '');
       if (slugs.length) {
         const all = await wikiModel.listPages({ filter: 'all' }).catch(() => []);
@@ -6819,7 +6822,7 @@ router
             prefsByAuthor.set(target.author, await about.visibilityPrefs(target.author).catch(() => null));
           }
           const targetPrefs = prefsByAuthor.get(target.author);
-          if (targetPrefs && targetPrefs.clearnetWiki === true) wikiLinks.add(slug);
+          if (targetPrefs && targetPrefs.clearnetWiki === true) wikiLinks.set(slug, clearnetItemHref('wiki', target.title, target.id));
         }
       }
     } catch (_) {}
@@ -6962,7 +6965,7 @@ router
       urls.push(`${base}/c/inhabitant/${encodeURIComponent(entry.feedId)}`);
       for (const m of CLEARNET_MODULES) {
         for (const it of (entry.items[m.key] || [])) {
-          urls.push(`${base}/c/${m.modulePath || m.key}/${encodeURIComponent(it.slug || clearnetSlugFor(it.title, it.id))}`);
+          urls.push(`${base}/c/${m.modulePath || m.key}/${encodeURIComponent(clearnetSlugFor(it.title, it.id))}`);
         }
       }
     }
@@ -6971,7 +6974,7 @@ router
   })
   .get("/c/rss/:module", async (ctx) => {
     const { escapeHtml: esc } = require('../views/clearnet_view');
-    const { CLEARNET_MODULES, clearnetSlugFor } = require('../views/main_views');
+    const { CLEARNET_MODULES, clearnetSlugFor, cnModuleLabel, i18n } = require('../views/main_views');
     const wanted = String(ctx.params.module || '').replace(/\.xml$/i, '').toLowerCase();
     const mod = CLEARNET_MODULES.find(m => m.key === wanted || (m.modulePath || m.key) === wanted);
     if (!mod) { ctx.status = 404; ctx.body = require('../views/clearnet_view').renderClearnetNotFound(); return; }
@@ -6983,12 +6986,12 @@ router
     }
     items.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
     const rssItems = items.slice(0, 50).map(it => {
-      const link = `${base}/c/${mod.modulePath || mod.key}/${encodeURIComponent(it.slug || clearnetSlugFor(it.title, it.id))}`;
+      const link = `${base}/c/${mod.modulePath || mod.key}/${encodeURIComponent(clearnetSlugFor(it.title, it.id))}`;
       const date = new Date(Number(it.ts) || Date.now()).toUTCString();
-      return `    <item>\n      <title>${esc(it.title || 'Untitled')}</title>\n      <link>${esc(link)}</link>\n      <guid isPermaLink="false">${esc(String(it.id || link))}</guid>\n      <pubDate>${date}</pubDate>\n      <author>${esc(it.authorName || it.feedId || '')}</author>\n      <description>${esc(String(it.snippet || '').slice(0, 500))}</description>\n    </item>`;
+      return `    <item>\n      <title>${esc(it.title || i18n.cnUntitled)}</title>\n      <link>${esc(link)}</link>\n      <guid isPermaLink="false">${esc(String(it.id || link))}</guid>\n      <pubDate>${date}</pubDate>\n      <author>${esc(it.authorName || it.feedId || '')}</author>\n      <description>${esc(String(it.snippet || '').slice(0, 500))}</description>\n    </item>`;
     }).join('\n');
     ctx.type = 'application/rss+xml';
-    ctx.body = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n    <title>Oasis HUB · ${esc(mod.label)}</title>\n    <link>${esc(`${base}/c?type=${mod.key}`)}</link>\n    <description>${esc(`${mod.label} published by the inhabitants of this HUB`)}</description>\n${rssItems}\n  </channel>\n</rss>\n`;
+    ctx.body = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n    <title>Oasis HUB · ${esc(cnModuleLabel(mod))}</title>\n    <link>${esc(`${base}/c?type=${mod.key}`)}</link>\n    <description>${esc(`${cnModuleLabel(mod)} ${i18n.cnRssDescription}`)}</description>\n${rssItems}\n  </channel>\n</rss>\n`;
   })
   .get("/c/inhabitant/:feedId", async (ctx) => {
     const feedId = decodeURIComponent(ctx.params.feedId || '');
@@ -12151,12 +12154,12 @@ router
   });
 const routes = router.routes();
 const middleware = [
-  async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path }, next); },
+  async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path, query: ctx.querystring }, next); },
   publicModeGuard({
     isPublic: !!config.public,
     onBlocked: (ctx) => sendErrorPage(ctx, "Sorry, many actions are unavailable when Oasis is running in public mode. Please run Oasis in the default mode and try again.", { status: 403 })
   }),
-  async (ctx, next) => { applyFirstRunLanguage(ctx); setLanguage(ctx.cookies.get("language") || getConfig().language || "en"); await next(); },
+  async (ctx, next) => { applyFirstRunLanguage(ctx); setLanguage(isClearnetPath(ctx.request) ? clearnetLanguage(ctx) : (ctx.cookies.get("language") || getConfig().language || "en")); await next(); },
   async (ctx, next) => {
     try { require('../views/comments_view').setCommentsOpen(ctx.method === 'GET' && String(ctx.query.comments || '') === 'open'); } catch (_) {}
     await next();
@@ -12411,8 +12414,19 @@ async function sendWelcomePmIfFirstLaunch() {
 }
 let firstRunLanguageSettled = false;
 const supportedLanguages = () => Object.keys(require('../client/assets/translations/i18n'));
+function clearnetLanguage(ctx) {
+  const supported = supportedLanguages();
+  const wanted = String(ctx.query.lang || '').trim().toLowerCase();
+  if (supported.includes(wanted)) {
+    const store = require('../models/typed_log').requestScope.getStore();
+    if (store) store.cnLang = wanted;
+    return wanted;
+  }
+  const detected = require('../models/onboarding_model').browserLanguage(ctx.get('accept-language'), supported);
+  return detected || getConfig().language || 'en';
+}
 function applyFirstRunLanguage(ctx) {
-  if (firstRunLanguageSettled) return;
+  if (firstRunLanguageSettled || isClearnetPath(ctx.request)) return;
   const cfg = getConfig();
   const decision = require('../models/onboarding_model').firstRunLanguage({
     fresh: !onboardingModel.firstContactSeen(),

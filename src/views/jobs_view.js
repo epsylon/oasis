@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -627,7 +627,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
     renderLifespanChip(job.lifetime, i18n),
     renderEcoTax(job.msgSize, job.id),
-    renderReachChip(isClearnet, i18n, `/c/jobs/${encodeURIComponent(job.id)}`)
+    renderReachChip(isClearnet, i18n, clearnetItemHref('jobs', job.title, job.id))
   ].filter(Boolean)
 
   const nextVisibility = visibility === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC'
@@ -719,18 +719,18 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
 
 exports.clearnetJobView = async (job) => {
   const { escapeHtml: esc, renderRichText, renderKindTag, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
-  const title = esc(job.title || 'Job');
+  const title = esc(job.title || i18n.cnKindJob);
   const desc = renderRichText(job.description || '');
   const req = esc(job.requirements || '');
   const lang = esc(String(job.languages || '').toUpperCase());
   const loc = esc(String(job.location || '').toUpperCase());
   const jobType = String(job.job_type || '').toLowerCase();
   const jobTime = String(job.job_time || '').toLowerCase();
-  const jobTimeLabel = jobTime === 'partial' ? 'Part time' : jobTime === 'complete' ? 'Full time' : '';
-  const jobTypeLabel = jobType === 'exchange' ? 'Hour exchange' : jobType === 'employee' ? 'Employee' : 'Freelancer';
+  const jobTimeLabel = jobTime === 'partial' ? i18n.jobTimePartial : jobTime === 'complete' ? i18n.jobTimeComplete : '';
+  const jobTypeLabel = jobType === 'exchange' ? i18n.jobTypeExchange : jobType === 'employee' ? i18n.jobTypeSalary : i18n.jobTypeFreelance;
   let compensation = '';
   if (jobType === 'exchange') {
-    compensation = `${Number(job.hoursOffered || 0)}h offered · ${Number(job.hoursRequested || 0)}h requested`;
+    compensation = `${esc(i18n.jobsHoursOffered)}: ${Number(job.hoursOffered || 0)}h · ${esc(i18n.jobsHoursRequested)}: ${Number(job.hoursRequested || 0)}h`;
     if (job.exchangeSkill) compensation += ` · ${esc(job.exchangeSkill)}`;
   } else {
     compensation = `${parseFloat(job.salary || 0).toFixed(2)} ECO`;
@@ -748,8 +748,8 @@ exports.clearnetJobView = async (job) => {
   <h1 class="cn-job-title">${title}</h1>
   <div class="cn-job-meta">
     <span class="cn-job-meta-item">${renderKindTag('job')}</span>
-    <span class="cn-job-meta-item">💼 ${jobTypeLabel}</span>
-    ${jobTimeLabel ? `<span class="cn-job-meta-item">⏱ ${jobTimeLabel}</span>` : ''}
+    <span class="cn-job-meta-item">💼 ${esc(jobTypeLabel)}</span>
+    ${jobTimeLabel ? `<span class="cn-job-meta-item">⏱ ${esc(jobTimeLabel)}</span>` : ''}
     ${job.createdAt ? `<span class="cn-job-meta-item">📅 ${esc(new Date(job.createdAt).toISOString().slice(0,10))}</span>` : ''}
     ${loc ? `<span class="cn-job-meta-item">📍 ${loc}</span>` : ''}
     ${lang ? `<span class="cn-job-meta-item">🗣 ${lang}</span>` : ''}
@@ -757,8 +757,8 @@ exports.clearnetJobView = async (job) => {
   </div>
   <hr class="cn-sep"/>
   ${jobImg ? `<img class="cn-job-img" src="${jobImg}" alt="${title}"/>` : ''}
-  ${desc ? `<div class="cn-job-section"><h2>Description</h2><p>${desc}</p></div>` : ''}
-  ${req ? `<div class="cn-job-section"><h2>Requirements</h2><p>${req}</p></div>` : ''}
+  ${desc ? `<div class="cn-job-section"><h2>${esc(i18n.description)}</h2><p>${desc}</p></div>` : ''}
+  ${req ? `<div class="cn-job-section"><h2>${esc(i18n.jobRequirements)}</h2><p>${req}</p></div>` : ''}
 `;
   return renderClearnetPage({
     title: `${job.title || 'Job'} | Oasis`,

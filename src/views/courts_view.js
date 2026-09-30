@@ -83,7 +83,7 @@ const CaseForm = (prefill = {}) =>
         type: 'text',
         name: 'titleSuffix',
         required: true,
-        placeholder: 'Subject or short description',
+        placeholder: i18n.courtsCaseSubjectPlaceholder,
         value: prefill.titleSuffix || ''
       }),
       br(),
