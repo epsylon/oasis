@@ -1,0 +1,6 @@
+#! /usr/bin/env node
+
+var api = require('./').init()
+console.error('api:', api)
+require('../../wrapper')(api, require('./manifest.json'))
+

@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/schema#",
+  "type": "object",
+  "required": [
+    "type",
+    "version",
+    "groupKey",
+    "root",
+    "tangles"
+  ],
+  "properties": {
+    "type": { "type": "string", "pattern": "^group/add-member$" },
+    "version": { "type": "string", "pattern": "^v1$" },
+    "groupKey": { "type": "string", "pattern": "^[a-zA-Z0-9\\/+]{42}[AEIMQUYcgkosw048]=$" },
+    "root": { "$ref": "#/definitions/messageId" },
+    "text": { "type": "string" },
+    "recps": { "type": "array",
+      "items": [
+        { "$ref": "#/definitions/cloakedMessageId" }
+      ],
+      "additionalItems": { "$ref": "#/definitions/feedId" },
+      "minItems": 2,
+      "maxItems": 16
+    },
+    "tangles": {
+      "type": "object",
+      "required": [
+        "group",
+        "members"
+      ],
+      "properties": {
+        "group": { "$ref": "#/definitions/tangle/update" },
+        "members": { "$ref": "#/definitions/tangle/any" }
+      }
+    }
+  },
+  "additionalProperties": false,
+
+  "definitions": {
+    "messageId": {
+      "type": "string",
+      "pattern": "^%[a-zA-Z0-9\\/+]{42}[AEIMQUYcgkosw048]=.sha256$"
+    },
+    "cloakedMessageId": {
+      "type": "string",
+      "pattern": "^%[a-zA-Z0-9\\/+]{42}[AEIMQUYcgkosw048]=.cloaked$"
+    },
+    "feedId": {
+      "type": "string",
+      "pattern": "^@[a-zA-Z0-9\\/+]{42}[AEIMQUYcgkosw048]=.(?:sha256|ed25519)$"
+    },
+    "tangle": {
+      "root": {
+        "type": "object",
+        "required": [
+          "root",
+          "previous"
+        ],
+        "properties": {
+          "root": { "type": "null" },
+          "previous": { "type": "null" }
+        }
+      },
+      "update": {
+        "type": "object",
+        "required": [
+          "root",
+          "previous"
+        ],
+        "properties": {
+          "root": {
+            "$ref": "#/definitions/messageId"
+          },
+          "previous": {
+            "type": "array",
+            "item": { "$ref": "#/definitions/messageId" },
+            "minItems": 1
+          }
+        }
+      },
+      "any": {
+        "oneOf": [
+          { "$ref": "#/definitions/tangle/root" },
+          { "$ref": "#/definitions/tangle/update" }
+        ]
+      }
+    }
+  }
+}

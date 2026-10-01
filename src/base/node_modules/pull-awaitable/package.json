@@ -1,0 +1,33 @@
+{
+  "name": "pull-awaitable",
+  "version": "1.0.0",
+  "description": "Convert a pull-stream to an Async Iterable",
+  "main": "index.js",
+  "scripts": {
+    "test": "tape test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/staltz/pull-awaitable.git"
+  },
+  "keywords": [
+    "pull-stream",
+    "async",
+    "async-iterable",
+    "for-await-of",
+    "async-await"
+  ],
+  "author": "staltz.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/staltz/pull-awaitable/issues"
+  },
+  "homepage": "https://github.com/staltz/pull-awaitable",
+  "dependencies": {
+    "pull-thenable": "~1.0.0"
+  },
+  "devDependencies": {
+    "pull-stream": "^3.6.8",
+    "tape": "^4.9.0"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "description": "labels used for the Cloaked Id derivation",
+  "cloaked_msg_id": "cloaked_msg_id"
+}

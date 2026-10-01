@@ -1,0 +1,18 @@
+[
+  {
+    "host": "bloor.ansuz.xyz",
+    "port": 8008,
+    "key": "@dABVXEERk+yJSzdrDRUfF8R6FlXG7h9PaXKXlt8ma78=.ed25519",
+    "source": "stored",
+    "announcers": 5,
+    "duration": {
+      "mean": 0,
+      "stdev": 0,
+      "count": 440,
+      "sum": 0,
+      "sqsum": 0
+    },
+    "stateChange": 1551706983825,
+    "failure": 440
+  }
+]

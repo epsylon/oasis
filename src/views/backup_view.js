@@ -149,6 +149,7 @@ exports.backupView = async ({ type = "RECOVERY", options = null, restoreJob = nu
   return restoreJob && restoreJob.running ? html.replace('</head>', '<meta http-equiv="refresh" content="5"></head>') : html;
 };
 
+exports.renderRestoreStatus = renderRestoreStatus;
 exports.recoveryKitView = async (kit) => exports.backupView({ type: "RECOVERY", kit });
 
 exports.renderRebuildReport = (report) => {

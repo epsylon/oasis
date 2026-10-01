@@ -63,7 +63,7 @@ const bookingsBlock = (route) => route.isOwner
 const renderCover = (route) => {
   if (!route.media || !route.media.blobId) return null;
   if (route.media.kind === "video") return videoHyperaxe({ class: "logistics-card-cover", src: `/blob/${encodeURIComponent(route.media.blobId)}`, controls: true, preload: "metadata" });
-  return a({ href: routeHref(route) }, img({ class: "logistics-card-cover", src: `/blob/${encodeURIComponent(route.media.blobId)}`, alt: route.title || "" }));
+  return a({ href: routeHref(route) }, img({ loading: 'lazy', class: "logistics-card-cover", src: `/blob/${encodeURIComponent(route.media.blobId)}`, alt: route.title || "" }));
 };
 
 const logisticsChipFor = (mode, census) => {

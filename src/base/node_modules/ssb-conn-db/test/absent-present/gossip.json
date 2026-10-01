@@ -1,0 +1,20 @@
+[
+  {
+    "host": "bloor.ansuz.xyz",
+    "port": 8008,
+    "key": "@dABVXEERk+yJSzdrDRUfF8R6FlXG7h9PaXKXlt8ma78=.ed25519",
+    "source": "stored",
+    "announcers": 5,
+    "duration": {
+      "mean": 0,
+      "stdev": 0,
+      "count": 440,
+      "sum": 0,
+      "sqsum": 0
+    },
+    "stateChange": 1551706983825,
+    "failure": 440,
+    "error": "Error: getaddrinfo ENOTFOUND bloor.ansuz.xyz bloor.ansuz.xyz:8008\n    at errnoException (dns.js:50:10)\n    at GetAddrInfoReqWrap.onlookup [as oncomplete] (dns.js:92:26)",
+    "address": "net:bloor.ansuz.xyz:8008~shs:dABVXEERk+yJSzdrDRUfF8R6FlXG7h9PaXKXlt8ma78="
+  }
+]

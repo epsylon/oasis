@@ -27,7 +27,7 @@ const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
   if (!value) return fallbackSrc ? require("../server/node_modules/hyperaxe").img({ src: fallbackSrc, ...attrs }) : null
   const { img } = require("../server/node_modules/hyperaxe")
   const s = String(value).trim()
-  if (s.startsWith('&')) return img({ src: `/blob/${encodeURIComponent(s)}`, ...attrs })
+  if (s.startsWith('&')) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(s)}`, ...attrs })
   return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
 }
 

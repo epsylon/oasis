@@ -1,0 +1,1 @@
+:warning: schema.json is generated so don't modify it directly

@@ -100,6 +100,8 @@ const getConfig = () => {
   if (cfg.ux.current !== 'blocks' && cfg.ux.current !== 'ainav' && cfg.ux.current !== 'chats' && cfg.ux.current !== 'feed') cfg.ux.current = 'blocks';
   if (cfg.ux.current === 'ainav' && cfg.modules && cfg.modules.aiNavMod !== 'on') cfg.ux.current = 'blocks';
   if (cfg.ux.current === 'chats' && cfg.modules && cfg.modules.chatsMod !== 'on') cfg.ux.current = 'blocks';
+  if (!cfg.blobCache || typeof cfg.blobCache !== 'object' || !Number.isFinite(Number(cfg.blobCache.maxMB))) cfg.blobCache = { maxMB: 2048 };
+  if (!Number.isFinite(Number(cfg.blobCache.pubMaxMB))) cfg.blobCache.pubMaxMB = 0;
   if (cfg.modules && typeof cfg.modules === 'object') {
     if (cfg.modules.backupMod === undefined) cfg.modules.backupMod = cfg.modules.legacyMod === 'off' ? 'off' : 'on';
     for (const mod of ['wikiMod', 'emergenciesMod', 'mailingMod', 'logisticsMod', 'podcastsMod', 'campaignsMod']) {

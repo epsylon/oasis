@@ -2,6 +2,7 @@ const fs = require("fs")
 const path = require("path")
 const { form, button, div, h2, p, section, a, span, select, option, label, input, textarea, img, strong } = require("../server/node_modules/hyperaxe")
 const { template, i18n } = require("./main_views")
+const { renderRestoreStatus } = require("./backup_view")
 const { config } = require("../server/SSB_server.js")
 
 const FEED_TEXT_MIN = Number(config?.feed?.minLength ?? 1)
@@ -47,7 +48,7 @@ const languageAction = (lang) => form({ method: "POST", action: "/language", cla
   button({ type: "submit", class: "filter-btn" }, i18n.setLanguage || "Set Language")
 )
 
-const stepContent = (key, lang, profile) => {
+const stepContent = (key, lang, profile, status) => {
   if (key === "language") return {
     title: i18n.welcomeStepLanguageTitle || "Choose your language",
     text: i18n.welcomeStepLanguageText || "Oasis speaks different languages. You can change it whenever you want.",
@@ -62,7 +63,7 @@ const stepContent = (key, lang, profile) => {
       label(i18n.profileDescription || "Description"),
       textarea({ name: "description", rows: "3", maxlength: "600" }, profile.description || ""),
       label(i18n.profileImage || "Image"),
-      img({ class: "welcome-profile-avatar", src: profile.image ? `/image/256/${encodeURIComponent(profile.image)}` : "/assets/images/default-avatar.png" }),
+      img({ loading: 'lazy', class: "welcome-profile-avatar", src: profile.image ? `/image/256/${encodeURIComponent(profile.image)}` : "/assets/images/default-avatar.png" }),
       input({ type: "file", name: "image", accept: "image/*" }),
       div({ class: "welcome-action" },
         button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepProfileAction || "Save Profile")
@@ -71,9 +72,19 @@ const stepContent = (key, lang, profile) => {
   }
   if (key === "federation") {
     const invite = snhInvite()
+    const bootstrap = status && status.bootstrap
+    if (bootstrap && bootstrap.running) {
+      return {
+        title: invite && invite.name ? `${i18n.welcomeJoinPub || "Join"} ${invite.name}` : (i18n.welcomeStepFederationTitle || "Join Main Network"),
+        text: i18n.welcomeBootstrapRunning || "Loading the pub's snapshot. The pub is joined as soon as it finishes.",
+        extra: renderRestoreStatus(bootstrap),
+        action: null
+      }
+    }
     return {
       title: invite && invite.name ? `${i18n.welcomeJoinPub || "Join"} ${invite.name}` : (i18n.welcomeStepFederationTitle || "Join Main Network"),
       text: i18n.welcomeStepFederationText || "Connect to our pub to meet other inhabitants and start replicating.",
+      extra: bootstrap && !bootstrap.running ? renderRestoreStatus(bootstrap) : null,
       action: div({ class: "welcome-action" },
         invite
           ? form({ method: "POST", action: "/settings/invite/accept" },
@@ -153,8 +164,9 @@ exports.welcomeView = async (status, currentLanguage, profile = {}) => {
   const steps = (status && status.steps) || {}
   const usable = (status && status.usable) || []
   const lang = String(currentLanguage || "en")
+  const bootstrapping = !!(status && status.bootstrap && status.bootstrap.running)
 
-  return template(
+  const html = template(
     i18n.welcomeTitle || "Welcome",
     section(
       div({ class: "tags-header module-header-line" },
@@ -179,7 +191,7 @@ exports.welcomeView = async (status, currentLanguage, profile = {}) => {
       div({ class: "welcome-steps" },
         usable.map((key, idx) => {
           const done = steps[key] === true
-          const content = stepContent(key, lang, profile || {})
+          const content = stepContent(key, lang, profile || {}, status)
           return div({ class: done ? "welcome-step welcome-step-done" : "welcome-step" },
             div({ class: "welcome-step-head" },
               span({ class: "welcome-step-number" }, String(idx + 1)),
@@ -196,4 +208,5 @@ exports.welcomeView = async (status, currentLanguage, profile = {}) => {
       )
     )
   )
+  return bootstrapping ? html.replace('</head>', '<meta http-equiv="refresh" content="5"></head>') : html
 }

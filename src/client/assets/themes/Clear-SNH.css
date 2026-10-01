@@ -318,6 +318,8 @@ a.user-link:focus {
 .btn-singleview:hover { background: #E0E0E0 !important; color: #FF8F00 !important; }
 .btn-spread-on, .content-actions .btn-pin-on { background: #FF6F00 !important; color: #FFFFFF !important; }
 .btn-spread-on:hover, .content-actions .btn-pin-on:hover { background: #FF8F00 !important; color: #FFFFFF !important; }
+.content-actions .btn-singleview.btn-content { border: 1px solid #FF6F00 !important; }
+.content-actions .btn-singleview.btn-content:hover { background: rgba(255, 111, 0, .18) !important; border-color: #FF6F00 !important; }
 .btn-back { background: #FF6F00 !important; color: #FFFFFF !important; }
 .btn-back:hover { background: #FF8F00 !important; color: #FFFFFF !important; }
 .block-info-table td, .pm-info-table td { border-color: #E0E0E0 !important; }

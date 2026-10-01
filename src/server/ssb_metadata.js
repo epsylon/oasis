@@ -112,6 +112,7 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   if (hasHttp) console.log(`- URL: ${colors.cyan}${oscLink}${colors.reset}`);
   console.log(walletId ? `- ECOin ID: [ ${colors.orange}${walletId}${colors.reset} ]` : `- ECOin ID: disabled`);
   console.log("- Logging Level:", logLevel);
+  console.log("- Engine: db2-legacy");
   const ifaces = os.networkInterfaces();
   const isOnline = Object.values(ifaces).some(list =>
     list && list.some(i => !i.internal && i.family === 'IPv4')

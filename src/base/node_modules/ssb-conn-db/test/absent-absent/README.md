@@ -1,0 +1,1 @@
+The purpose of this file is to show, in git, that this directory should be empty, to test the use case where both `conn.json` and `gossip.json` are absent.

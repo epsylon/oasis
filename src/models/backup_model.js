@@ -5,9 +5,12 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { pipeline } = require('stream');
 const pull = require('../server/node_modules/pull-stream');
+const toPull = require('../server/node_modules/stream-to-pull-stream');
 
 const KEY_MAGIC = Buffer.from('OASIS1');
 const BACKUP_MAGIC = Buffer.from('OASISBK1');
+const SNAPSHOT_MAGIC = Buffer.from('OASISSN1');
+const SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const SALT_LEN = 16;
 const IV_LEN = 12;
 const TAG_LEN = 16;
@@ -27,7 +30,7 @@ const listStateFiles = (dir, base = dir) => {
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...listStateFiles(full, base));
-    else if (entry.isFile() && !entry.name.endsWith('.migrated')) out.push({ rel: path.relative(base, full), full });
+    else if (entry.isFile() && !entry.name.endsWith('.migrated') && !/^snapshot(-recent)?\.oasissn/.test(entry.name)) out.push({ rel: path.relative(base, full), full });
   }
   return out;
 };
@@ -330,27 +333,130 @@ module.exports = ({ cooler }) => {
       return { path: outPath, messages: picked.length, blobs, bytes: fs.statSync(outPath).size, filename: `oasis-backup-${new Date().toISOString().slice(0, 10)}.oasisbk` };
     },
 
+    async createSnapshot(outPath, { sinceMs = 0, now = Date.now() } = {}) {
+      const ssbClient = await openSsb();
+      const all = await readLog(ssbClient);
+      const byAuthor = new Map();
+      for (const m of all) {
+        if (!m || !m.value || !m.value.author || m.value.content === undefined || m.value.content === null) continue;
+        const list = byAuthor.get(m.value.author) || [];
+        list.push(m);
+        byAuthor.set(m.value.author, list);
+      }
+      const latest = (list) => list.reduce((t, m) => Math.max(t, Number(m.timestamp) || 0, Number(m.value.timestamp) || 0), 0);
+      const picked = [...byAuthor.values()]
+        .filter(list => !(sinceMs > 0) || latest(list) >= now - sinceMs)
+        .sort((a, b) => latest(b) - latest(a))
+        .flatMap(list => list.sort((a, b) => (a.value.sequence || 0) - (b.value.sequence || 0)));
+      const gzip = zlib.createGzip();
+      const out = fs.createWriteStream(outPath);
+      const done = new Promise((resolve, reject) => pipeline(gzip, out, (err) => err ? reject(err) : resolve()));
+      out.write(SNAPSHOT_MAGIC);
+      const meta = { version: 1, kind: 'snapshot', createdAt: new Date().toISOString(), author: ssbClient.id, messages: picked.length, feeds: new Set(picked.map(m => m.value.author)).size, boxed: picked.filter(m => typeof m.value.content === 'string').length, sinceMs: sinceMs > 0 ? sinceMs : null };
+      await writeChunk(gzip, record(REC_META, Buffer.from(JSON.stringify(meta), 'utf8')));
+      for (const m of picked) {
+        await writeChunk(gzip, record(REC_MSG, Buffer.from(JSON.stringify({ key: m.key, value: m.value, timestamp: m.timestamp }), 'utf8')));
+      }
+      gzip.end();
+      await done;
+      return { path: outPath, messages: picked.length, feeds: meta.feeds, bytes: fs.statSync(outPath).size, createdAt: meta.createdAt };
+    },
+
+    isSnapshotFile(filePath) {
+      try {
+        const fd = fs.openSync(filePath, 'r');
+        const head = Buffer.alloc(SNAPSHOT_MAGIC.length);
+        fs.readSync(fd, head, 0, head.length, 0);
+        fs.closeSync(fd);
+        return head.equals(SNAPSHOT_MAGIC);
+      } catch (_) { return false; }
+    },
+
+    async fetchSnapshot({ address, connect = null, tier = 'full' }, outPath) {
+      const ssbClient = await openSsb();
+      const doConnect = connect || ((addr, cb) => ssbClient.conn.connect(addr, cb));
+      const discard = () => { try { fs.unlinkSync(outPath); } catch (_) {} return null; };
+      try {
+        const rpc = await new Promise((resolve, reject) => doConnect(address, (err, r) => err ? reject(err) : resolve(r)));
+        if (!rpc || !rpc.snapshot || typeof rpc.snapshot.get !== 'function') return null;
+        const info = await new Promise((resolve) => rpc.snapshot.info({ tier }, (err, i) => resolve(err ? null : i)));
+        if (!info || !(info.bytes > 0) || info.bytes > SNAPSHOT_MAX_BYTES) return null;
+        const out = fs.createWriteStream(outPath);
+        let written = 0;
+        await new Promise((resolve, reject) => {
+          pull(
+            rpc.snapshot.get({ tier }),
+            pull.map(c => Buffer.isBuffer(c) ? c : Buffer.from(c)),
+            pull.through(c => { written += c.length; }),
+            toPull.sink(out, (err) => err ? reject(err) : resolve())
+          );
+        });
+        if (written > SNAPSHOT_MAX_BYTES || !this.isSnapshotFile(outPath)) return discard();
+        return { address, tier, path: outPath, bytes: written, createdAt: info.createdAt };
+      } catch (_) { return discard(); }
+    },
+
+    startBootstrap({ address, connect = null, tiers = ['recent', 'full'] }) {
+      if (restoreJob && restoreJob.running) return restoreJob;
+      const empty = () => ({ messages: 0, skipped: 0, failed: 0, forked: 0, blobs: 0, blobsSkipped: 0, percent: 0 });
+      const job = { running: true, source: 'snapshot', phase: null, tier: null, tiers: [], address, startedAt: new Date().toISOString(), finishedAt: null, progress: empty(), result: null, error: null };
+      restoreJob = job;
+      const total = { ...empty(), files: 0, forks: [], errors: [], meta: null };
+      const run = async () => {
+        for (const tier of tiers) {
+          const tmp = path.join(os.tmpdir(), `oasis-snapshot-${tier}-${Date.now()}-${Math.random().toString(36).slice(2)}.oasissn`);
+          job.tier = tier;
+          job.phase = 'download';
+          try {
+            const got = await this.fetchSnapshot({ address, connect, tier }, tmp);
+            if (!got) continue;
+            job.phase = 'restore';
+            const res = await this.restoreBackup({ filePath: tmp, password: '', onProgress: (p) => { job.progress = { ...total, ...p, messages: total.messages + p.messages, skipped: total.skipped + p.skipped, failed: total.failed + p.failed, forked: total.forked + p.forked }; } });
+            for (const k of ['messages', 'skipped', 'failed', 'forked', 'blobs', 'blobsSkipped', 'files']) total[k] += Number(res[k]) || 0;
+            total.forks.push(...(res.forks || []));
+            total.errors.push(...(res.errors || []));
+            total.meta = res.meta || total.meta;
+            job.tiers.push({ tier, messages: res.messages, skipped: res.skipped, bytes: got.bytes });
+          } finally { try { fs.unlinkSync(tmp); } catch (_) {} }
+        }
+        if (!job.tiers.length) throw new Error('snapshot not available');
+        total.percent = 100;
+        return total;
+      };
+      job.promise = run()
+        .then((res) => { job.result = res; job.progress = { ...job.progress, ...res }; return res; })
+        .catch((err) => { job.error = err && err.message ? err.message : String(err); return null; })
+        .finally(() => { job.running = false; job.phase = null; job.finishedAt = new Date().toISOString(); });
+      return job;
+    },
+
     async readBackup(filePath, password, onRecord) {
-      const pw = normalizePassword(password);
       const size = fs.statSync(filePath).size;
-      const headLen = BACKUP_MAGIC.length + SALT_LEN + IV_LEN;
-      if (size < headLen + TAG_LEN) throw new Error('Unrecognized or corrupt backup file.');
+      const snapshot = this.isSnapshotFile(filePath);
+      const pw = snapshot ? '' : normalizePassword(password);
+      const headLen = snapshot ? SNAPSHOT_MAGIC.length : BACKUP_MAGIC.length + SALT_LEN + IV_LEN;
+      const tailLen = snapshot ? 0 : TAG_LEN;
+      if (size < headLen + tailLen) throw new Error('Unrecognized or corrupt backup file.');
       const fd = fs.openSync(filePath, 'r');
       const head = Buffer.alloc(headLen);
       fs.readSync(fd, head, 0, headLen, 0);
       const tag = Buffer.alloc(TAG_LEN);
-      fs.readSync(fd, tag, 0, TAG_LEN, size - TAG_LEN);
+      if (!snapshot) fs.readSync(fd, tag, 0, TAG_LEN, size - TAG_LEN);
       fs.closeSync(fd);
-      if (!head.slice(0, BACKUP_MAGIC.length).equals(BACKUP_MAGIC)) throw new Error('Unrecognized or corrupt backup file.');
-      const salt = head.slice(BACKUP_MAGIC.length, BACKUP_MAGIC.length + SALT_LEN);
-      const iv = head.slice(BACKUP_MAGIC.length + SALT_LEN, headLen);
-      const decipher = crypto.createDecipheriv('aes-256-gcm', deriveKey(pw, salt), iv);
-      decipher.setAuthTag(tag);
+      if (!snapshot && !head.slice(0, BACKUP_MAGIC.length).equals(BACKUP_MAGIC)) throw new Error('Unrecognized or corrupt backup file.');
+      let decipher = null;
+      if (!snapshot) {
+        const salt = head.slice(BACKUP_MAGIC.length, BACKUP_MAGIC.length + SALT_LEN);
+        const iv = head.slice(BACKUP_MAGIC.length + SALT_LEN, headLen);
+        decipher = crypto.createDecipheriv('aes-256-gcm', deriveKey(pw, salt), iv);
+        decipher.setAuthTag(tag);
+      }
       const gunzip = zlib.createGunzip();
-      const total = size - headLen - TAG_LEN;
-      const source = fs.createReadStream(filePath, { start: headLen, end: size - TAG_LEN - 1 });
+      const total = size - headLen - tailLen;
+      const source = fs.createReadStream(filePath, { start: headLen, end: size - tailLen - 1 });
       let streamError = null;
-      pipeline(source, decipher, gunzip, (err) => { if (err) streamError = err; });
+      if (decipher) pipeline(source, decipher, gunzip, (err) => { if (err) streamError = err; });
+      else pipeline(source, gunzip, (err) => { if (err) streamError = err; });
       const chunks = [];
       let pendingLen = 0;
       let meta = null;
@@ -425,6 +531,16 @@ module.exports = ({ cooler }) => {
       const addBlob = (data) => new Promise((resolve) => {
         pull(pull.values([data]), ssbClient.blobs.add((err, ref) => resolve(err ? null : ref)));
       });
+      const getByKey = (key) => new Promise((resolve) => {
+        if (!key || typeof ssbClient.get !== 'function') return resolve(false);
+        try { ssbClient.get(key, (err, value) => resolve(!err && !!value)); } catch (_) { resolve(false); }
+      });
+      const storedByKey = async (msg) => {
+        if (await getByKey(msg.key)) return true;
+        let computed = null;
+        try { computed = validate ? validate.id(msg.value) : null; } catch (_) { computed = null; }
+        return computed && computed !== msg.key ? getByKey(computed) : false;
+      };
       const supportsLs = !!(ssbClient.blobs && typeof ssbClient.blobs.ls === 'function');
       const present = supportsLs ? await listBlobs(ssbClient) : new Map();
       const hasBlob = (id) => supportsLs ? Promise.resolve(present.has(id)) : new Promise((resolve) => ssbClient.blobs.has(id, (err, has) => resolve(!err && !!has)));
@@ -443,7 +559,12 @@ module.exports = ({ cooler }) => {
           return true;
         }
         const err = await addMsg(msg.value);
-        if (err) return err;
+        if (err) {
+          if (!(await storedByKey(msg))) return err;
+          stats.skipped += 1;
+          existing.set(k, msg.key);
+          return true;
+        }
         stats.messages += 1;
         existing.set(k, msg.key);
         return true;
@@ -499,9 +620,9 @@ module.exports = ({ cooler }) => {
       return { ...stats, meta: stats.meta || meta };
     },
 
-    startRestore({ filePath, password }) {
+    startRestore({ filePath, password, source = 'file' }) {
       if (restoreJob && restoreJob.running) return restoreJob;
-      const job = { running: true, startedAt: new Date().toISOString(), finishedAt: null, progress: { messages: 0, skipped: 0, failed: 0, forked: 0, blobs: 0, blobsSkipped: 0, percent: 0 }, result: null, error: null };
+      const job = { running: true, source, startedAt: new Date().toISOString(), finishedAt: null, progress: { messages: 0, skipped: 0, failed: 0, forked: 0, blobs: 0, blobsSkipped: 0, percent: 0 }, result: null, error: null };
       restoreJob = job;
       job.promise = this.restoreBackup({ filePath, password, onProgress: (p) => { job.progress = p; } })
         .then((res) => { job.result = res; return res; })
@@ -525,7 +646,7 @@ module.exports = ({ cooler }) => {
     async rebuildIndexes() {
       const started = Date.now();
       const ssbClient = await openSsb();
-      const indexDir = path.join(require('../configs/state-manager').ssbDir(), 'flume');
+      const indexDir = path.join(require('../configs/state-manager').ssbDir(), 'db2', 'indexes');
       const measure = (dir) => {
         let files = 0, bytes = 0;
         const walk = (d) => {

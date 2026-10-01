@@ -2327,7 +2327,7 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
             if (u && isMsgId(u)) {
                 nodes.push(
                     div({ class: 'card-field card-field-mt' },
-                        img({ src: `/blob/${encodeURIComponent(u)}`, class: 'feed-image img-content' })
+                        img({ loading: 'lazy', src: `/blob/${encodeURIComponent(u)}`, class: 'feed-image img-content' })
                     )
                 );
             }

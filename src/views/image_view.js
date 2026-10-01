@@ -145,7 +145,7 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
       br(),
       br(),
       imageToEdit?.url
-        ? img({ src: `/blob/${encodeURIComponent(imageToEdit.url)}`, class: "media-preview", alt: imageToEdit?.title || "" })
+        ? img({ loading: 'lazy', src: `/blob/${encodeURIComponent(imageToEdit.url)}`, class: "media-preview", alt: imageToEdit?.title || "" })
         : null,
       label(i18n.imageTitleLabel),
       br(),

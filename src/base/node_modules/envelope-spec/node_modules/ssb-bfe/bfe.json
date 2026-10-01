@@ -1,0 +1,66 @@
+[
+  {
+    "code": 0,
+    "type": "feed",
+    "sigil": "@",
+    "formats": [
+      { "code": 0, "format": "ssb/classic",     "data_length": 32, "suffix": ".ed25519"   },
+      { "code": 1, "format": "ssb/gabby-grove", "data_length": 32, "suffix": ".ggfeed-v1" },
+      { "code": 2, "format": "bamboo",          "data_length": 32, "suffix": ".bamboo" },
+      { "code": 3, "format": "ssb/bendy-butt",  "data_length": 32, "suffix": ".bbfeed-v1" },
+      { "code": 4, "format": "ssb/fusion-identity", "data_length": 32, "suffix": ".fusion-v1" }
+    ]
+  },
+  {
+    "code": 1,
+    "type": "msg",
+    "sigil": "%",
+    "formats": [
+      { "code": 0, "format": "ssb/classic",     "data_length": 32, "suffix": ".sha256"   },
+      { "code": 1, "format": "ssb/gabby-grove", "data_length": 32, "suffix": ".ggmsg-v1" },
+      { "code": 2, "format": "cloaked msg",     "data_length": 32, "suffix": ".cloaked" },
+      { "code": 3, "format": "bamboo",          "data_length": 64, "suffix": ".bamboo" },
+      { "code": 4, "format": "ssb/bendy-butt",  "data_length": 32, "suffix": ".bbmsg-v1" }
+    ]
+  },
+  {
+    "code": 2,
+    "type": "blob",
+    "sigil": "&",
+    "formats": [
+      { "code": 0, "format": "ssb/classic", "data_length": 32, "suffix": ".sha256" }
+    ]
+  },
+  {
+    "code": 3,
+    "type": "diffie-hellman",
+    "formats": [
+      { "code": 0, "format": "curve25519", "data_length": 32, "key_length": 32 }
+    ]
+  },
+  {
+    "code": 4,
+    "type": "signature",
+    "formats": [
+      { "code": 0, "format": "ed25519", "data_length": 64, "signature_length": 64, "suffix": ".sig.ed25519" }
+    ]
+  },
+  {
+    "code": 5,
+    "type": "encrypted",
+    "formats": [
+      { "code": 0, "format": "box1", "suffix": ".box" },
+      { "code": 1, "format": "box2", "suffix": ".box2" }
+    ]
+  },
+  {
+    "code": 6,
+    "type": "generic",
+    "formats": [
+      { "code": 0, "format": "UTF8 string" },
+      { "code": 1, "format": "boolean" },
+      { "code": 2, "format": "nil" },
+      { "code": 3, "format": "arbitrary bytes" }
+    ]
+  }
+]

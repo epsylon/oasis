@@ -1,6 +1,6 @@
 # Oasis HUB Clearnet Guide
 
-A PUB launched with `sh oasis.sh server` does two things: it replicates the network, and it serves a **read-only web HUB** with the public content of the inhabitants it replicates. Guests reach it from the clearnet with a normal browser: they can read, listen and watch, but never write. Every POST is blocked in this mode.
+A PUB launched with `./oasis.sh server` does two things: it replicates the network, and it serves a **read-only web HUB** with the public content of the inhabitants it replicates. Guests reach it from the clearnet with a normal browser: they can read, listen and watch, but never write. Every POST is blocked in this mode.
 
 ## What is served
 
@@ -68,7 +68,7 @@ server {
 Now you can launch OASIS, this way: 
 
 ```
-sh oasis.sh --public --no-open --host=0.0.0.0 --port=3000 --allow-host=<your_domain.org>
+./oasis.sh --public --no-open --host=0.0.0.0 --port=3000 --allow-host=<your_domain.org>
 ```
 
 ## Notes

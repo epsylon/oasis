@@ -189,7 +189,7 @@ exports.cvView = async (cv, certificates = []) => {
       h2({ class: "tribe-card-title" }, cv.name || i18n.unnamed || 'Anonymous')
     ),
     cv.photo
-      ? img({ src: `/blob/${encodeURIComponent(cv.photo)}`, class: "cv-photo tribe-detail-image" })
+      ? img({ loading: 'lazy', src: `/blob/${encodeURIComponent(cv.photo)}`, class: "cv-photo tribe-detail-image" })
       : null,
     (cv.contact || cv.author)
       ? div({ class: 'profile-qr' },

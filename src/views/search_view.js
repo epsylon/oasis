@@ -128,7 +128,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         return div({ class: 'search-about' },
           content.name ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.name + ':'), span({ class: 'card-value' }, content.name)) : null,
           content.description ? div({ class: 'card-field card-field-stacked' }, span({ class: 'card-value' }, content.description)) : null,
-          content.image ? img({ src: `/image/64/${encodeURIComponent(content.image)}` }) : null
+          content.image ? img({ loading: 'lazy', src: `/image/64/${encodeURIComponent(content.image)}` }) : null
         );
       case 'feed': {
         const rawText = typeof content.text === 'string' ? content.text.trim() : '';
@@ -198,7 +198,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     case 'tribe':
       return div({ class: 'search-tribe' },
         content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, content.title)) : null,
-        (() => { const s = String(content.image || '').trim().replace(/&amp;/g, '&'); const m = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/); const src = m ? m[1] : s; return src.startsWith('&') ? img({ src: `/blob/${encodeURIComponent(src)}`, class: 'feed-image' }) : img({ src: '/assets/images/default-tribe.png', class: 'feed-image' }); })(),
+        (() => { const s = String(content.image || '').trim().replace(/&amp;/g, '&'); const m = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/); const src = m ? m[1] : s; return src.startsWith('&') ? img({ loading: 'lazy', src: `/blob/${encodeURIComponent(src)}`, class: 'feed-image' }) : img({ src: '/assets/images/default-tribe.png', class: 'feed-image' }); })(),
         content.description ? div({ class: 'card-field card-field-stacked' }, span({ class: 'card-value' }, ...renderStyledText(content.description))) : null,
         content.location ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeLocationLabel + ':'), span({ class: 'card-value' }, ...renderStyledText(content.location))) : null,
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeIsAnonymousLabel + ':'), span({ class: 'card-value' }, content.isAnonymous ? i18n.tribePrivate : i18n.tribePublic)),

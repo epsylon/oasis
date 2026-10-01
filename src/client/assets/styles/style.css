@@ -668,6 +668,49 @@ table th {
   background-color: #222;
 }
 
+.main-column table th {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: auto;
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.main-column table td {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.gov-overview {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.gov-overview th,
+.gov-overview td {
+  padding: 8px 3px;
+  overflow-wrap: break-word;
+}
+
+.gov-overview th {
+  font-size: 10.5px;
+  letter-spacing: 0;
+}
+
+.gov-overview th:first-child,
+.gov-overview td:first-child {
+  width: 15%;
+}
+
+.gov-overview td:first-child {
+  font-size: 14px;
+}
+
 table tr:nth-child(even) {
   background-color: #444;
 }
@@ -6302,21 +6345,29 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 }
 .inhabitant-stats-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+  grid-template-columns:repeat(2,minmax(0,1fr));
   gap:6px;
 }
 .inhabitant-stat{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  gap:8px;
-  padding:5px 10px;
+  gap:4px;
+  min-width:0;
+  padding:4px 7px;
   border:1px solid rgba(128,128,128,.35);
   border-radius:6px;
+  white-space:nowrap;
 }
 .inhabitant-stat-label{
-  font-size:12px;
+  font-size:11px;
   opacity:.85;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.inhabitant-stat-value{
+  flex:0 0 auto;
+  font-size:13px;
 }
 .inhabitant-stat-value{
   font-weight:700;
@@ -7764,6 +7815,10 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .ai-status-loading{background:#2a2410;color:#ffd95a;border:1px solid #a39134}
 .ai-status-missing{background:#3a1a1a;color:#ffb3b3;border:1px solid #d9534f}
 .ai-export-btn{margin-left:8px}
+.blob-cache-clean-btn{margin-left:8px}
+.blob-cache-usage{margin:4px 0 10px 0}
+.blob-cache-notice{margin:0 0 10px 0;font-weight:bold}
+.blob-cache-note{opacity:.8;font-size:.95em;margin-top:10px}
 .user-prompt-text{font-style:italic}
 .chat-entry{margin-bottom:2em;position:relative;background:#191919;border-radius:10px;box-shadow:0 0 8px #0004;padding-top:1.8em}
 .chat-entry-timestamp{position:absolute;top:.5em;right:1.3em;font-size:.92em;color:#888}

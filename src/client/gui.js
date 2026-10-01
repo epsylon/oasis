@@ -10,10 +10,11 @@ const { printMetadata } = require('../server/ssb_metadata');
 const updateFlagPath = path.join(__dirname, "../server/.update_required");
 
 let internalSSB = null;
+let internalOpen = null;
 if (!process.env.OASIS_TEST) {
   try {
-    const { server } = require('../server/SSB_server');
-    internalSSB = server;
+    const SSB_server = require('../server/SSB_server');
+    internalOpen = () => SSB_server.open().then((srv) => { internalSSB = srv; return srv; });
   } catch {}
 }
 
@@ -116,6 +117,13 @@ module.exports = ({ offline, port = 3000, host = 'localhost', isPublic = false }
           const { printMetadata, colors } = require('../server/ssb_metadata');
           printMetadata('OASIS GUI', colors.yellow, port, host, offline, isPublic);
           return resolve(windowLogStream(internalSSB));
+        }
+        if (internalOpen) {
+          return internalOpen().then((srv) => {
+            const { printMetadata, colors } = require('../server/ssb_metadata');
+            printMetadata('OASIS GUI', colors.yellow, port, host, offline, isPublic);
+            resolve(windowLogStream(srv));
+          }).catch(reject);
         }
 
         if (clientHandle && clientHandle.closed === false) {

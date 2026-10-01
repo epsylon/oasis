@@ -17,7 +17,8 @@ Most of these files are created the first time something needs them. A missing f
 | --- | --- |
 | `secret` | Your identity — the ed25519 keypair your feed is signed with. Whoever holds it *is* you, and nobody can reissue it. Back it up (Tools › Backup), never share it. |
 | `secret.bak-DATE` | The identity that was here before you imported another one from Backup. Kept so an import can be undone. |
-| `flume/` | The log itself and its indexes. See the table below. |
+| `db2/` | The log itself and its indexes. See the table below. |
+| `flume/` | Only on a device that ran an Oasis older than the ssb-db2 move: the previous log. It is migrated into `db2/` on the first start of the new version and then removed, leaving a single small `flume/log.offset` that is not a log but a guard: an older Oasis cannot read it and refuses to start, instead of starting with an empty log and forking your feed. Keep it. |
 | `blobs/` | The blob store: every image, audio, video and attachment, filed by its hash. |
 | `blobs_push/` | A small database tracking which blobs still have to be handed to which peer. |
 | `ebt/` | Replication bookkeeping: how far along each peer is in each feed, so a reconnection resumes instead of starting over. |
@@ -30,21 +31,18 @@ Most of these files are created the first time something needs them. A missing f
 | `invites/` | The invite codes this node has issued. Only exists on a node running in PUB mode. |
 | `config` | An optional JSON file to override the sbot configuration. Oasis never writes it; it is there because SSB reads it if you create it. |
 
-### Inside `flume/`
+### Inside `db2/`
 
-`log.offset` is the real thing: every message, yours and everyone's you replicate, in the order they arrived. Everything else in the folder is an index derived from it, and can be deleted — the next start rebuilds it, which on a large log takes a while. Deleting `log.offset` loses whatever the network no longer holds for you.
+`log.bipf` is the real thing: every message, yours and everyone's you replicate, in the order they arrived. Everything else in the folder is an index derived from it, and can be deleted — the next start rebuilds it, which on a large log takes a while (Settings offers the same as *Rebuild indexes*). Deleting `log.bipf` loses whatever the network no longer holds for you.
 
 | Path | What it indexes |
 | --- | --- |
-| `log.offset` | The append-only log. The single file that matters. |
-| `clock`, `last.json` | The latest sequence number known for each feed. |
-| `feed` | Messages by author and sequence — how a profile's history is read. |
-| `keys` | Messages by their id, for fetching one message directly. |
-| `time` | Messages by the moment they arrived. |
-| `links`, `links2` | Which message points at which. |
-| `backlinks-<id>`, `private-<id>` | One pair per identity that has run on this device (`<id>` is the start of its feed id): replies pointing back at a message, and private messages this identity can open. |
-| `contacts2.json` | The follow and block graph — who follows whom, and how many hops away each feed is. |
-| `query`, `search`, `meme` | Indexes behind the query API, full-text search and memes. |
+| `log.bipf` | The append-only log. The single file that matters. |
+| `jit/` | Small bitmaps built on demand, one per question the interface asks often: messages of a type, messages by an author, which ones are encrypted and which ones you could open. |
+| `indexes/base`, `indexes/keys` | The latest sequence known for each feed, and messages by their id, for fetching one message directly. |
+| `indexes/oasisLinks` | Which message points at which: replies, votes, mentions, tombstones. It is what "what links here", comment counts and the vote tallies read. |
+| `indexes/contacts` | The follow and block graph — who follows whom, and how many hops away each feed is. |
+| `indexes/private`, `encrypted.index`, `decrypted.index` | Which messages are boxed and which of them this identity can open. |
 
 ## The Oasis side: `~/.ssb/oasis/`
 
@@ -73,6 +71,8 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `content/content_favorites.json` | What you marked as a favourite, by content type. |
 | `content/follow_state.json` | Follow requests pending and accepted, with the moment of the last one. |
 | `content/agenda-config.json` | How you arranged your Agenda. |
+| `content/blob-access.json` | When each downloaded blob was last opened. The media cache (Settings → Media cache) uses it to decide what to drop first once the quota is exceeded. |
+| `content/snapshot.oasissn`, `content/snapshot-recent.oasissn` | Only on a PUB: the copies of its log (every feed whole, and the feeds active in the last 7 days; private messages as ciphertext) that newcomers receive over the SSB connection when they join, so they start in seconds. Rebuilt every 6 hours. |
 | `ai/AI-history.json` | Your conversation with the AI. It stays here; it is never published. |
 | `ai/AI-vectors.json` | Embeddings of the approved AI exchanges of the network, so 42 can pick the ones related to a question without recomputing them. Rebuilt on demand. |
 | `ai/AI-search-vectors.json` | Embeddings of public content titles and descriptions, used by the semantic part of Search. Rebuilt on demand. |

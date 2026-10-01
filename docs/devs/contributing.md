@@ -16,15 +16,14 @@ Assuming you already have a [developer install](./install.md) you should be
 able to start editing source code. There are a few useful commands you should
 know about:
 
-- **`npm install`**: Ensure that software dependencies are installed.
-- **`npm test`**: Ensure that all automated tests pass.
-- **`npm run fix`**: If an automated test failed, this may fix it.
+- **`./install.sh`**: Ensure that everything is in place (the packages ship in `src/base`; the installer only links them and, if you want AI, installs its stack).
+- **`cd test && node run.js`**: Ensure that all automated tests pass (`node run.js mods/<module>` runs one module's suite).
 
-Please run `npm test` before writing a commit, because if there are errors then
-maintainers won't be able to merge your patch. Please ask for help if `npm test`
-is giving you any trouble.
+Please run the test suite before writing a commit, because if there are errors then
+maintainers won't be able to merge your patch. Please ask for help if the tests
+are giving you any trouble.
 
-**Note:** `npm run fix` is run automatically as a pre-commit hook. You always
+**Note:** the pre-commit hook runs `cspell` and `prettier` on the staged files. You always
 have the option to disable pre-commit hooks with `git commit --no-verify`.
 
 ## Frequently Failed Tests
@@ -51,7 +50,7 @@ README.md
 Code style issues found in the above file(s). Forgot to run Prettier?
 ```
 
-You can use `npm run fix` to resolve inconsistent code style. Please remember to
+You can use `npx prettier --write <file>` to resolve inconsistent code style. Please remember to
 add those changes with `git add` or similar before you commit.
 
 ## Tips

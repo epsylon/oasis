@@ -5,7 +5,7 @@ To deploy the development environment:
 ```shell
 git clone https://code.03c8.net/KrakensLab/oasis
 cd oasis
-bash install.sh
+./install.sh
 cd src/server
 npm run dev
 ```
@@ -18,7 +18,7 @@ The backend restarts automatically (via [nodemon](https://nodemon.io)) whenever 
 
 Oasis runs as two cooperating Node processes:
 
-- **`SSB_server.js`** — boots the local Secure Scuttlebutt sbot (gossip, EBT, friends, blobs, LAN, search, box, query, tangle, links, backlinks). Owns `~/.ssb`.
+- **`SSB_server.js`** — boots the local Secure Scuttlebutt sbot on ssb-db2 (gossip, EBT, friends, blobs, conn, LAN, invites) plus `db2_legacy.js`, which gives the models the classic `createLogStream` / `messagesByType` / `backlinks` / `private` surface over db2. Owns `~/.ssb`; a `flume/` log left by an older install is migrated into `db2/` once, before the sbot starts.
 - **`backend.js`** — Koa HTTP server that connects to the sbot through `ssb-client` and renders pages with hyperaxe. Serves `http://localhost:3000`.
 
 The backend talks to the sbot over a local Unix socket. If you only restart the backend (the default in `npm run dev`), the sbot keeps running. If you change anything under `src/server/` or anything that holds an SSB handle inside a model, restart the sbot too (kill the `SSB_server.js` process and re-run `npm start`).
@@ -64,13 +64,15 @@ What the tests cover, how to add a new module suite, and a record of bugs the te
 
 ## Useful commands while developing
 
-- **`npm install`** — install / refresh dependencies.
-- **`npm test`** — run automated tests (calls into the `test/` harness).
-- **`npm run fix`** — auto-fix formatting and lint issues (also runs as a pre-commit hook).
+- **`./install.sh`** — link the packages shipped in `src/base` and, if you want AI features, install its stack. Never `npm install` inside `src/server` (see [`base.md`](./base.md)).
+- **`cd test && node run.js`** — run the whole test suite with the mock sbot; `node run.js mods/<module>` runs one module.
+- **`npm run dev`** (from `src/server`) — backend under nodemon, fetched through `npx` the first time.
 
 ## Directory map (cheat sheet)
 
-- `src/server/` — SSB sbot entry, ssb-config, secret-stack plugin wiring, vendored `packages/ssb-server`.
+- `src/server/` — SSB sbot entry, ssb-config, secret-stack plugin wiring, `db2_legacy.js`; its `node_modules` is a link to `src/base/node_modules`.
+- `src/base/` — the runtime packages Oasis ships in the repository (see [`base.md`](./base.md)).
+- `src/AI/` — the AI service and its own `package.json`; `src/AI/node_modules` is installed only when AI features are chosen.
 - `src/backend/` — Koa HTTP entry (`backend.js`), middleware, blob handler, URL renderer, sanitizer.
 - `src/models/` — per-module data access. Factory functions that receive `cooler` (and sometimes `tribeCrypto`, `tribesModel`) and return query/publish methods.
 - `src/views/` — hyperaxe view functions. Pure HTML builders.
@@ -83,4 +85,4 @@ What the tests cover, how to add a new module suite, and a record of bugs the te
 
 ## Pre-commit checks
 
-The pre-commit hook runs `cspell` and `prettier`. See [`contributing.md`](./contributing.md) for what to do when a check fails (typos go in `.cspell.json`; formatting via `npm run fix`).
+The pre-commit hook runs `cspell` and `prettier`. See [`contributing.md`](./contributing.md) for what to do when a check fails (typos go in `.cspell.json`; formatting with `npx prettier --write <file>`).

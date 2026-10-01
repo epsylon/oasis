@@ -468,7 +468,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const createdAt = secretStat.birthtime.toLocaleString();
 
     const folderSize = getFolderSize(`${os.homedir()}/.ssb`);
-    const flumeSize = getFolderSize(`${os.homedir()}/.ssb/flume`);
+    const logSize = getFolderSize(`${os.homedir()}/.ssb/db2`);
     const blobsSize = getFolderSize(`${os.homedir()}/.ssb/blobs`);
 
     const allTs = scopedMsgs.map(m => m.value.timestamp || 0).filter(Boolean);
@@ -608,7 +608,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       userTombstoneCount: scopedMsgs.filter(m => m.value.content.type === 'tombstone' && m.value.author === userId).length,
       networkTombstoneCount: validatedTombstoneCount,
       folderSize: formatSize(folderSize),
-      statsBlockchainSize: formatSize(flumeSize),
+      statsBlockchainSize: formatSize(logSize),
       statsBlobsSize: formatSize(blobsSize),
       pubsCount,
       activity: {

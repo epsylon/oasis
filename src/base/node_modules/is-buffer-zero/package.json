@@ -1,0 +1,19 @@
+{
+  "name": "is-buffer-zero",
+  "version": "1.0.0",
+  "description": "Checks if a buffer only consist of zeros",
+  "main": "index.js",
+  "devDependencies": {
+    "is-zero-buffer": "^1.0.1",
+    "tape": "^5.5.2"
+  },
+  "scripts": {
+    "test": "tape test/*.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arj/is-buffer-zero.git"
+  },
+  "author": "Anders Rune Jensen <arj03@protonmail.ch>",
+  "license": "MIT"
+}

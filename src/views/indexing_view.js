@@ -14,15 +14,13 @@ exports.indexingView = ({ percent }) => {
 
   const pct = Math.max(0, Math.min(100, Number(percent) || 0));
   const headingText = i18n.indexingTitle || 'Synchronizing';
-  const message = i18n.indexingMessage || 'Oasis is trying to syncronize a huge network of inhabitants. Just wait!';
   const refreshNote = i18n.indexingRefreshNote || 'This page refreshes every 10 seconds.';
 
   return template(
     headingText,
     section(
       div({ class: 'tags-header module-header-line' },
-        h2(`❤  ${headingText}`),
-        p(message)
+        h2(`❤  ${headingText}`)
       ),
       div({ class: 'indexing-progress-block' },
         progress({ value: String(pct), max: '100', class: 'indexing-progress' }),

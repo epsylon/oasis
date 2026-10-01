@@ -22,7 +22,7 @@ remote="https://code.03c8.net/krakenlabs/oasis.git"
 git fetch "$remote"
 git reset --hard $remote master
 git pull "$remote" pull/42/head
-npm ci && npm test && npm start
+(cd test && node run.js) && ./oasis.sh
 ```
 
 No need to add their fork as a remote.
@@ -33,3 +33,7 @@ Or for ultimate convenience (and github lock-in), use the [github cli tool](http
 gh pr list
 gh pr checkout 42
 ```
+
+## Packages
+
+Oasis ships its runtime libraries inside the repository (`src/base`); `src/server/node_modules` is a link to it. Upgrading or adding a package is a deliberate step with its own procedure, described in [`base.md`](./base.md). Release artefacts (the `.deb`, tarballs) simply carry `src/base`, so they install without npm.

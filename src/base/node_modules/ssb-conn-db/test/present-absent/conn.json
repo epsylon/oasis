@@ -1,0 +1,11 @@
+{
+  "net:staltz.com:8008~noauth": {
+    "duration": {
+      "mean": 0,
+      "stdev": 0,
+      "count": 440,
+      "sum": 0,
+      "sqsum": 0
+    }
+  }
+}

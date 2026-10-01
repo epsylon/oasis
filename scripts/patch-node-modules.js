@@ -79,7 +79,7 @@ if (fs.existsSync(ssbBlobsPath)) {
 }
 
 // === Patch @xenova/transformers (onnxruntime 1.19 Tensor getter) ===
-const xenovaTensorPath = path.resolve(__dirname, '../src/server/node_modules/@xenova/transformers/src/utils/tensor.js');
+const xenovaTensorPath = path.resolve(__dirname, '../src/AI/node_modules/@xenova/transformers/src/utils/tensor.js');
 if (fs.existsSync(xenovaTensorPath)) {
   let data = fs.readFileSync(xenovaTensorPath, 'utf8');
   if (!data.includes('this.data = args[0].data')) {

@@ -124,6 +124,113 @@ describe('backup: full and selective copies', (t) => {
   });
 });
 
+describe('backup: public snapshots', (t) => {
+  t('a snapshot carries only public messages, most recently active feeds first, and restores on a fresh node', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    A.node.publish({ type: 'post', text: 'public one' }, () => {});
+    A.node.publish({ type: 'wikiPage', title: 'W', body: 'b' }, () => {});
+    A.node.publish('aGVsbG8=.box', () => {});
+    const outPath = tmpFile('snap');
+    const res = await A.use('backup').createSnapshot(outPath);
+    eq(res.messages, 3, 'every message of the feed travels, the chain stays whole');
+    eq(res.feeds, 1);
+    const stale = await A.use('backup').createSnapshot(tmpFile('stale'), { sinceMs: 1000, now: Date.now() + 60 * 60 * 1000 });
+    eq(stale.messages, 0, 'the recent tier leaves out feeds without activity in the window');
+    const fresh = await A.use('backup').createSnapshot(tmpFile('fresh'), { sinceMs: 60 * 60 * 1000 });
+    eq(fresh.messages, 3, 'and keeps whole feeds that were active');
+    ok(fs.existsSync(outPath) && res.bytes > 0);
+    ok(A.use('backup').isSnapshotFile(outPath), 'recognised as a snapshot');
+    notOk(A.use('backup').isSnapshotFile(__filename), 'an arbitrary file is not');
+    const net2 = makeNetwork(); const B = makePeer(net2); B.setActor();
+    const copy = tmpFile('snapcopy');
+    fs.copyFileSync(outPath, copy);
+    const restored = await B.use('backup').restoreBackup({ filePath: copy, password: '' });
+    eq(restored.messages, 3); eq(restored.failed, 0);
+    eq(restored.meta && restored.meta.kind, 'snapshot'); eq(restored.meta.boxed, 1, 'the private one is counted as a box');
+    eq(net2.log.length, 3, 'the fresh node now holds the whole log');
+    ok(net2.log.some(m => typeof m.value.content === 'string'), 'and the private message arrived as ciphertext, not decrypted');
+    fs.copyFileSync(outPath, copy);
+    const again = await B.use('backup').restoreBackup({ filePath: copy, password: '' });
+    eq(again.messages, 0); eq(again.skipped, 3, 'a second pass changes nothing');
+  });
+
+  t('the pub hands its snapshot only to feeds it follows, over the SSB connection', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    A.node.publish({ type: 'post', text: 'p' }, () => {});
+    const home = tmpFile('pubhome');
+    fs.mkdirSync(path.join(home, 'oasis', 'content'), { recursive: true });
+    const snapPath = path.join(home, 'oasis', 'content', 'snapshot.oasissn');
+    await A.use('backup').createSnapshot(snapPath);
+    const plugin = require('../../../src/server/snapshot_plugin');
+    const server = { id: '@pub.ed25519', friends: { isFollowing: ({ dest }, cb) => cb(null, dest === '@member.ed25519') } };
+    const config = { path: home };
+    const api = plugin.init(server, config);
+    eq(plugin.permissions.anonymous.allow.sort().join(','), 'get,info', 'reachable by any authenticated peer, the method itself decides');
+    const collect = (src) => new Promise((resolve) => pull(src, pull.collect((err, arr) => resolve({ err, data: Buffer.concat((arr || []).map(c => Buffer.isBuffer(c) ? c : Buffer.from(c))) }))));
+    const member = await collect(api.get.call({ id: '@member.ed25519' }, { tier: 'full' }));
+    ok(!member.err && member.data.equals(fs.readFileSync(snapPath)), 'a followed inhabitant gets the exact file');
+    const info = await new Promise((resolve) => api.info.call({ id: '@member.ed25519' }, { tier: 'full' }, (err, i) => resolve(err ? null : i)));
+    eq(info && info.bytes, fs.statSync(snapPath).size);
+    const noRecent = await collect(api.get.call({ id: '@member.ed25519' }, { tier: 'recent' }));
+    ok(noRecent.err && /not available/.test(noRecent.err.message), 'a tier that was not built is reported as unavailable');
+    const stranger = await collect(api.get.call({ id: '@stranger.ed25519' }, { tier: 'full' }));
+    ok(stranger.err && /not allowed/.test(stranger.err.message), 'a feed the pub does not follow is refused');
+    const anon = await collect(api.get.call({}));
+    ok(anon.err, 'no identity, nothing');
+    const client = plugin.init(server, { path: tmpFile('nosnap') });
+    const fromClient = await collect(client.get.call({ id: '@member.ed25519' }, { tier: 'full' }));
+    ok(fromClient.err && /not available/.test(fromClient.err.message), 'a node that never built one has nothing to serve');
+  });
+
+  t('a newcomer downloads the snapshot through the pub connection and restores it in the background', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    A.node.publish({ type: 'post', text: 'one' }, () => {});
+    A.node.publish({ type: 'post', text: 'two' }, () => {});
+    const snapPath = tmpFile('pubsnap');
+    await A.use('backup').createSnapshot(snapPath);
+    const bytes = fs.readFileSync(snapPath);
+    const chunks = [bytes.slice(0, 100), bytes.slice(100)];
+    const asked = [];
+    const rpcFor = (ok) => ({
+      snapshot: {
+        info: (opts, cb) => { asked.push(opts.tier); if (!ok) return cb(new Error('not allowed')); if (opts.tier === 'recent') return cb(new Error('not available')); cb(null, { bytes: bytes.length, createdAt: new Date().toISOString() }); },
+        get: (opts) => ok && opts.tier === 'full' ? pull.values(chunks) : pull.error(new Error('not available'))
+      }
+    });
+    const net2 = makeNetwork(); const B = makePeer(net2); B.setActor();
+    const seen = [];
+    const connect = (addr, cb) => { seen.push(addr); cb(null, rpcFor(true)); };
+    const job = B.use('backup').startBootstrap({ address: 'net:pub.example:8008~shs:abc', connect });
+    ok(job.running && job.source === 'snapshot', 'the job is visible while it runs');
+    ok(B.use('backup').restoreStatus().running, 'and reported like any other restore');
+    const res = await job.promise;
+    eq(seen[0], 'net:pub.example:8008~shs:abc', 'it dialled the pub');
+    eq(asked.join(','), 'recent,full', 'the recent tier is tried first, then the full one');
+    eq(res.messages, 2); eq(res.failed, 0);
+    eq(job.tiers.length, 1); eq(job.tiers[0].tier, 'full', 'a missing recent tier is skipped, not fatal');
+    eq(net2.log.length, 2, 'the newcomer holds the pub\'s public log');
+    notOk(job.running); eq(job.error, null);
+    const refused = B.use('backup').startBootstrap({ address: 'net:pub.example:8008~shs:abc', connect: (addr, cb) => cb(null, rpcFor(false)) });
+    await refused.promise;
+    ok(refused.error, 'when the pub refuses, the job ends with an error and nothing else changes');
+    eq(net2.log.length, 2);
+  });
+
+  t('a message that replication stored meanwhile counts as already present, not as a failure', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    A.node.publish({ type: 'post', text: 'x' }, () => {});
+    const snapPath = tmpFile('race');
+    await A.use('backup').createSnapshot(snapPath);
+    const net2 = makeNetwork(); const B = makePeer(net2); B.setActor();
+    const copy = tmpFile('racecopy');
+    fs.copyFileSync(snapPath, copy);
+    const origAdd = B.node.add.bind(B.node);
+    B.node.add = (value, cb) => origAdd(value, (err) => { if (err) return cb(err); origAdd(value, () => cb(new Error('already added'))); });
+    const restored = await B.use('backup').restoreBackup({ filePath: copy, password: '' });
+    eq(restored.failed, 0); eq(restored.skipped, 1); eq(net2.log.length, 1);
+  });
+});
+
 describe('backup: restore robustness', (t) => {
   t('a large blob survives the streamed restore intact', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();

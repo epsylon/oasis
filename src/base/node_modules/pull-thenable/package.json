@@ -1,0 +1,33 @@
+{
+  "name": "pull-thenable",
+  "version": "1.0.0",
+  "description": "Convert a pull-stream into a thenable",
+  "main": "index.js",
+  "scripts": {
+    "test": "tape test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/staltz/pull-thenable.git"
+  },
+  "keywords": [
+    "pull-stream",
+    "then",
+    "thenable",
+    "promise",
+    "async-await"
+  ],
+  "author": "staltz.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/staltz/pull-thenable/issues"
+  },
+  "homepage": "https://github.com/staltz/pull-thenable",
+  "dependencies": {
+    "quicktask": "~1.0.0"
+  },
+  "devDependencies": {
+    "pull-stream": "^3.6.8",
+    "tape": "^4.9.0"
+  }
+}

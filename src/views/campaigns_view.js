@@ -37,7 +37,7 @@ const renderProgress = (cp) =>
 const renderCover = (cp) => {
   if (!cp.media || !cp.media.blobId) return null;
   if (cp.media.kind === "video") return videoHyperaxe({ class: "campaign-card-cover", src: `/blob/${encodeURIComponent(cp.media.blobId)}`, controls: true, preload: "metadata" });
-  return a({ href: campaignHref(cp) }, img({ class: "campaign-card-cover", src: `/blob/${encodeURIComponent(cp.media.blobId)}`, alt: cp.title || "" }));
+  return a({ href: campaignHref(cp) }, img({ loading: 'lazy', class: "campaign-card-cover", src: `/blob/${encodeURIComponent(cp.media.blobId)}`, alt: cp.title || "" }));
 };
 
 const campaignChipFor = (mode, census) => {

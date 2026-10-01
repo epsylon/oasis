@@ -71,5 +71,9 @@
   "language": "en",
   "wish": "whole",
   "pmVisibility": "whole",
-  "lanBroadcasting": false
+  "lanBroadcasting": false,
+  "blobCache": {
+    "maxMB": 2048,
+    "pubMaxMB": 0
+  }
 }

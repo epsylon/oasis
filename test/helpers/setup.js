@@ -49,6 +49,7 @@ const FACTORIES = {
   podcasts: '../../src/models/podcasts_model',
   campaigns: '../../src/models/campaigns_model',
   backup: '../../src/models/backup_model',
+  blobcache: '../../src/models/blobcache_model',
   subscriptions: '../../src/models/subscriptions_model',
   maps: '../../src/models/maps_model',
   torrents: '../../src/models/torrents_model',

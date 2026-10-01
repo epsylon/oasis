@@ -1,0 +1,43 @@
+{
+  "name": "chloride",
+  "version": "2.4.1",
+  "author": "Dominic Tarr",
+  "license": "MIT",
+  "description": "node.js sodium bindings + pure js polyfil",
+  "main": "index.js",
+  "browser": "browser.js",
+  "dependencies": {
+    "sodium-browserify": "^1.2.7",
+    "sodium-browserify-tweetnacl": "^0.2.5",
+    "sodium-chloride": "^1.1.2"
+  },
+  "optionalDependencies": {
+    "sodium-native": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dominictarr/chloride"
+  },
+  "keywords": [
+    "encryption",
+    "ed25519",
+    "curve25519",
+    "NaCl",
+    "libsodium",
+    "crypto",
+    "unique",
+    "stamp"
+  ],
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "http://opensource.org/licenses/mit-license.php"
+    }
+  ],
+  "devDependencies": {
+    "chloride-test": "^1.2.4"
+  },
+  "scripts": {
+    "test": "node test.js"
+  }
+}

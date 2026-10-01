@@ -1166,6 +1166,7 @@ const panicmodeModel = require('../models/panicmode_model');
 const cipherModel = require('../models/cipher_model');
 const pmPolicy = require('./pm_policy');
 const backupModel = require('../models/backup_model')({ cooler });
+const blobCacheModel = require('../models/blobcache_model')({ cooler });
 const devModel = require('../models/dev_model');
 const walletModel = require('../models/wallet_model')
 const pmModel = require('../models/pm_model')({ cooler, isPublic: config.public });
@@ -1432,6 +1433,54 @@ const fsCleanupTimer = setTimeout(() => { runFileshareCleanup(); }, 120000);
 if (fsCleanupTimer.unref) fsCleanupTimer.unref();
 const fsCleanupInterval = setInterval(() => { runFileshareCleanup(); }, 12 * 60 * 60 * 1000);
 if (fsCleanupInterval.unref) fsCleanupInterval.unref();
+const runBlobCacheCollect = async () => {
+  try {
+    const maxBytes = blobCacheModel.maxBytesFor(getConfig(), { isPublic: config.public });
+    if (!(maxBytes > 0)) return null;
+    const res = await blobCacheModel.collect({ maxBytes });
+    if (res.deleted) debug(`[blob-cache] removed ${res.deleted} blobs (${res.freed} bytes)`);
+    return res;
+  } catch (_) { return null; }
+};
+const blobCacheTimer = setTimeout(() => { runBlobCacheCollect(); }, 5 * 60 * 1000);
+if (blobCacheTimer.unref) blobCacheTimer.unref();
+const blobCacheInterval = setInterval(() => { runBlobCacheCollect(); }, 6 * 60 * 60 * 1000);
+if (blobCacheInterval.unref) blobCacheInterval.unref();
+const SNAPSHOT_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const buildSnapshotFile = async (name, opts) => {
+  const target = stateFilePath(name);
+  const tmp = `${target}.tmp`;
+  try {
+    const res = await backupModel.createSnapshot(tmp, opts);
+    fs.renameSync(tmp, target);
+    debug(`[snapshot] ${name}: ${res.messages} public messages of ${res.feeds} feeds, ${res.bytes} bytes`);
+    return res;
+  } catch (e) { try { fs.unlinkSync(tmp); } catch (_) {} debug(`[snapshot] ${name} failed: ${e && e.message ? e.message : e}`); return null; }
+};
+const runSnapshotBuild = async () => {
+  if (!config.public) return null;
+  const recent = await buildSnapshotFile('snapshot-recent.oasissn', { sinceMs: SNAPSHOT_RECENT_MS });
+  const full = await buildSnapshotFile('snapshot.oasissn', {});
+  return { recent, full };
+};
+const snapshotTimer = setTimeout(() => { runSnapshotBuild(); }, 2 * 60 * 1000);
+if (snapshotTimer.unref) snapshotTimer.unref();
+const snapshotInterval = setInterval(() => { runSnapshotBuild(); }, 6 * 60 * 60 * 1000);
+if (snapshotInterval.unref) snapshotInterval.unref();
+const pubAddressFor = (invite) => {
+  const m = String(invite || '').trim().match(/^(?:net:)?([^:~\s]+):(\d+)(?::|~shs:)(@?[A-Za-z0-9+/=_-]+(?:\.ed25519)?)~/);
+  return m ? msAddrFrom(m[1], m[2], m[3]) : null;
+};
+const bootstrapFromPub = (invite) => {
+  if (config.public) return null;
+  const address = pubAddressFor(invite);
+  if (!address) return null;
+  const current = backupModel.restoreStatus();
+  if (current && current.running) return current;
+  const job = backupModel.startBootstrap({ address });
+  job.promise.then((res) => { if (res) { try { activityModel.invalidateCache(); } catch (_) {} } });
+  return job;
+};
 const bookmarksModel = require("../models/bookmarking_model")({ cooler, isPublic: config.public });
 const opinionsModel = require('../models/opinions_model')({ cooler, isPublic: config.public });
 const tasksModel = require('../models/tasks_model')({ cooler, isPublic: config.public, pmModel });
@@ -5125,7 +5174,7 @@ router
     };
     ctx.body = await json(message);
   })
-  .get("/blob/:blobId", serveBlob)
+  .get("/blob/:blobId", async (ctx) => { blobCacheModel.touch(ctx.params.blobId); return serveBlob(ctx); })
   .get("/c/blob/:cnBlobId", async (ctx) => {
     const blobId = ctx.params.cnBlobId;
     if (!isBlob(blobId)) { ctx.status = 404; ctx.body = ''; return; }
@@ -5207,6 +5256,7 @@ router
   })
   .get("/image/:imageSize/:blobId", async (ctx) => {
     const { blobId, imageSize } = ctx.params;
+    blobCacheModel.touch(blobId);
     const size = Number(imageSize);
     const fallbackPixel = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -5265,7 +5315,10 @@ router
     settingsReports.rebuild = null;
     let aiExportCount = 0;
     if (cfg.modules?.aiMod === 'on') { try { aiExportCount = ((await listAiExchanges()).exchanges || []).length; } catch (_) { aiExportCount = 0; } }
-    ctx.body = await settingsView({ theme, version: version.toString(), aiPrompt: cfg.ai?.prompt || "", aiExportCount, fediverseAccount: fediverseModel.getAccount(), fediverseError: typeof ctx.query.fediverseError === "string" ? ctx.query.fediverseError : "", telegramAccount: fediverseModel.telegram.getAccount(), telegramLogin: fediverseModel.telegram.loginState(), telegramError: typeof ctx.query.telegramError === "string" ? ctx.query.telegramError : (fediverseModel.telegram.loginState() && fediverseModel.telegram.loginState().error) || "", verification, rebuild });
+    let blobCacheUsage = null;
+    try { blobCacheUsage = await blobCacheModel.usage(); } catch (_) { blobCacheUsage = null; }
+    const blobCache = { maxMB: Number(cfg.blobCache && cfg.blobCache.maxMB) || 0, usage: blobCacheUsage, cleaned: ctx.query.cleaned === undefined ? null : Number(ctx.query.cleaned) || 0, freed: Number(ctx.query.freed) || 0 };
+    ctx.body = await settingsView({ theme, version: version.toString(), aiPrompt: cfg.ai?.prompt || "", aiExportCount, blobCache, fediverseAccount: fediverseModel.getAccount(), fediverseError: typeof ctx.query.fediverseError === "string" ? ctx.query.fediverseError : "", telegramAccount: fediverseModel.telegram.getAccount(), telegramLogin: fediverseModel.telegram.loginState(), telegramError: typeof ctx.query.telegramError === "string" ? ctx.query.telegramError : (fediverseModel.telegram.loginState() && fediverseModel.telegram.loginState().error) || "", verification, rebuild });
   })
   .get("/peers", async (ctx) => {
     const { discoveredPeers, unknownPeers } = await meta.discovered();
@@ -6204,6 +6257,9 @@ router
     };
     try {
       const status = await onboardingModel.status(available);
+      const job = backupModel.restoreStatus();
+      status.bootstrap = job && job.source === 'snapshot' ? job : null;
+      if (status.bootstrap) ctx.set('Cache-Control', 'no-store');
       ctx.body = await welcomeView(status, lang, status.profile);
     } catch (error) { sendErrorPage(ctx, error.message || String(error), { status: 500 }); }
   })
@@ -11560,7 +11616,9 @@ router
         if (activePub) { ctx.redirect('/invites?flash=alreadyFederated'); return; }
       } catch (_) {}
     }
-    try { await meta.acceptInvite(invite); } catch (_) {}
+    let joined = false;
+    try { await meta.acceptInvite(invite); joined = true; } catch (_) {}
+    if (joined) bootstrapFromPub(invite);
     safeRefererRedirect(ctx, "/invites");
   })
   .post("/invites/inhabitant/follow", koaBody(), async (ctx) => {
@@ -11762,7 +11820,7 @@ router
       }
       const inviteMatch = trimmed.match(/^[^:]+:\d+:@[A-Za-z0-9+/_\-]{43}=?\.ed25519~/);
       if (inviteMatch) {
-        try { await meta.acceptInvite(trimmed); } catch (_) {}
+        try { await meta.acceptInvite(trimmed); bootstrapFromPub(trimmed); } catch (_) {}
         continue;
       }
     }
@@ -11921,6 +11979,20 @@ router
       fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
     }
     ctx.redirect("/settings#logstream");
+  })
+  .post("/settings/blob-cache", koaBody(), async (ctx) => {
+    const maxMB = parseInt(ctx.request.body.blob_cache_mb, 10);
+    if ([0, 512, 1024, 2048, 5120, 10240].includes(maxMB)) {
+      const cfg = getConfig();
+      cfg.blobCache = { ...(cfg.blobCache || {}), maxMB };
+      saveConfig(cfg);
+    }
+    ctx.redirect("/settings#blobcache");
+  })
+  .post("/settings/blob-cache/collect", koaBody(), async (ctx) => {
+    let res = null;
+    try { res = await blobCacheModel.collect({ maxBytes: blobCacheModel.maxBytesFor(getConfig()) }); } catch (_) { res = null; }
+    ctx.redirect(`/settings?cleaned=${res ? res.deleted : 0}&freed=${res ? res.freed : 0}#blobcache`);
   })
   .post("/settings/replication", koaBody(), async (ctx) => {
     const hops = parseInt(ctx.request.body.hops, 10);
@@ -12205,7 +12277,9 @@ const middleware = [
       }
       return;
     }
-    const ssb = await cooler.open(), status = await ssb.status(), values = Object.values(status.sync.plugins);
+    const migration = typeof SSBconfig.migrationStatus === 'function' ? SSBconfig.migrationStatus() : null;
+    if (migration && migration.running) { ctx.response.body = indexingView({ percent: migration.percent }); return; }
+    const ssb = await cooler.open(), status = await ssb.status(), values = Object.values(status.sync.plugins).map(v => Math.max(0, Number(v) || 0));
     const totalCurrent = values.reduce((acc, cur) => acc + cur, 0), totalTarget = status.sync.since * values.length;
     if (totalTarget - totalCurrent > 1024 * 1024) ctx.response.body = indexingView({ percent: Math.floor((totalCurrent / totalTarget) * 1000) / 10 });
     else { try { await next(); } catch (err) {

@@ -1,0 +1,22 @@
+{
+  "name": "ssb-no-auth",
+  "version": "1.0.0",
+  "description": "secret-stack plugin for unauthenticated connections",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ssbc/ssb-no-auth.git"
+  },
+  "author": "SSBC",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ssbc/ssb-no-auth/issues"
+  },
+  "homepage": "https://github.com/ssbc/ssb-no-auth#readme",
+  "dependencies": {
+    "multiserver": "^3.3.3"
+  }
+}

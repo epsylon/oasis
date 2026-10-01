@@ -1,0 +1,2 @@
+
+require('./timeout')(require('../closures'))

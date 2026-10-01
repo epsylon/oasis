@@ -33,7 +33,7 @@ const renderContentStats = (stats, i18nObj = {}) => {
   if (!stats || typeof stats !== 'object') return null;
   const chips = STAT_ORDER
     .filter(t => (stats[t] || 0) > 0)
-    .map(t => span({ class: 'inhabitant-stat' },
+    .map(t => span({ class: 'inhabitant-stat', title: `${i18nObj[STAT_TYPE_KEYS[t]] || t}: ${stats[t]}` },
       span({ class: 'inhabitant-stat-label' }, i18nObj[STAT_TYPE_KEYS[t]] || t),
       strong({ class: 'inhabitant-stat-value' }, String(stats[t]))
     ));

@@ -1,0 +1,22 @@
+{
+  "name": "ssb-unix-socket",
+  "version": "1.0.0",
+  "description": "secret-stack plugin for unix socket connections",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ssbc/ssb-unix-socket.git"
+  },
+  "author": "Secure Scuttlebutt Consortium",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ssbc/ssb-unix-socket/issues"
+  },
+  "homepage": "https://github.com/ssbc/ssb-unix-socket#readme",
+  "dependencies": {
+    "multiserver": "^3.3.3"
+  }
+}

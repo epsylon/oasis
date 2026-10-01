@@ -270,6 +270,13 @@ of any kind. Like a crypto transaction, SSB posts are censorship-resistant and a
 In SSB each user hosts their own content and the content of the peers they follow, which provides fault tolerance and 
 eventual consistency. 
 
+A node never stores the whole network, only its neighbourhood: you, the inhabitants you follow and the ones they follow 
+(two hops, at most 300 feeds per hop). Media is kept in a cache with a quota you choose (Settings → Media cache, 2 GB by default); 
+what is dropped is fetched again when somebody opens it. A PUB keeps a snapshot of its public log and hands it, over the 
+encrypted SSB connection and only to the inhabitants it follows, to whoever joins through it: the newcomer has the latest 
+content in seconds while replication completes the rest in the background. The real size of your log, your indexes and 
+your media is shown at any time under Stats.
+
 ----------
 
 ## Installing:

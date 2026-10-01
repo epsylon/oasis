@@ -1,32 +1,121 @@
-#!/bin/bash
+#!/bin/sh
 
-cd src/server
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT/src/server" || exit 1
 
 printf "==========================\n"
-printf "|| OASIS Installer v0.5 ||\n"
+printf "|| OASIS Installer v0.6 ||\n"
 printf "==========================\n"
 
-sudo apt-get install -y git curl tar
+NODE_MIN=22
 
-curl -sL http://deb.nodesource.com/setup_22.x | sudo bash -
-sudo apt-get install -y nodejs
+have() { command -v "$1" >/dev/null 2>&1; }
 
-GREEN=$'\e[32m'
-DIM=$'\e[2m'
-RESET=$'\e[0m'
+node_ok() {
+    have node || return 1
+    local major
+    major=$(node -p "process.versions.node.split('.')[0]" 2>/dev/null) || return 1
+    [ "$major" -ge "$NODE_MIN" ] 2>/dev/null
+}
 
-echo ""
-echo "Installing Node.js packages..."
-echo ""
+SUDO=""
+if [ "$(id -u)" -ne 0 ]; then
+    if have sudo; then SUDO="sudo"; elif have doas; then SUDO="doas"; fi
+fi
 
-NPM_LOG=$(mktemp)
-if ! npm install . --silent --no-audit --no-fund --no-progress --loglevel=error >"$NPM_LOG" 2>&1; then
-    echo "npm install failed. Output:"
-    cat "$NPM_LOG"
-    rm -f "$NPM_LOG"
+PM="none"
+if have apt-get; then PM="apt"
+elif have pacman; then PM="pacman"
+elif have dnf; then PM="dnf"
+elif have zypper; then PM="zypper"
+elif have apk; then PM="apk"
+elif have xbps-install; then PM="xbps"
+elif have brew; then PM="brew"
+fi
+
+install_base() {
+    case "$PM" in
+        apt)    $SUDO apt-get install -y git curl tar python3 make g++ ;;
+        pacman) $SUDO pacman -S --needed --noconfirm git curl tar base-devel python ;;
+        dnf)    $SUDO dnf install -y git curl tar python3 make gcc-c++ ;;
+        zypper) $SUDO zypper --non-interactive install git curl tar python3 make gcc-c++ ;;
+        apk)    $SUDO apk add git curl tar python3 make g++ ;;
+        xbps)   $SUDO xbps-install -y git curl tar python3 make gcc ;;
+        brew)   brew install git curl ;;
+    esac
+}
+
+install_node() {
+    case "$PM" in
+        apt)
+            curl -fsSL "https://deb.nodesource.com/setup_${NODE_MIN}.x" | $SUDO bash -
+            $SUDO apt-get install -y nodejs
+            ;;
+        pacman) $SUDO pacman -S --needed --noconfirm nodejs npm ;;
+        dnf)    $SUDO dnf install -y "nodejs${NODE_MIN}" npm 2>/dev/null || $SUDO dnf install -y nodejs npm ;;
+        zypper) $SUDO zypper --non-interactive install "nodejs${NODE_MIN}" "npm${NODE_MIN}" 2>/dev/null || $SUDO zypper --non-interactive install nodejs npm ;;
+        apk)    $SUDO apk add nodejs npm ;;
+        xbps)   $SUDO xbps-install -y nodejs ;;
+        brew)   brew install "node@${NODE_MIN}" && brew link --overwrite --force "node@${NODE_MIN}" ;;
+    esac
+}
+
+if [ -z "${OASIS_NO_SYSTEM_DEPS:-}" ]; then
+    if [ "$PM" = "none" ]; then
+        echo "No known package manager found (apt, pacman, dnf, zypper, apk, xbps, brew)."
+        echo "Install git, curl, tar and Node.js ${NODE_MIN}+ yourself, then run: OASIS_NO_SYSTEM_DEPS=1 ./install.sh"
+        exit 1
+    fi
+    echo ""
+    echo "System packages via $PM..."
+    install_base
+    if node_ok; then
+        echo "Node.js $(node -v) already present."
+    else
+        echo "Installing Node.js ${NODE_MIN}..."
+        install_node
+    fi
+fi
+
+if ! node_ok; then
+    echo ""
+    echo "Oasis needs Node.js ${NODE_MIN} or newer; found: $(node -v 2>/dev/null || echo none)."
+    echo "Install it from https://nodejs.org or with nvm (https://github.com/nvm-sh/nvm), then run this installer again."
     exit 1
 fi
-rm -f "$NPM_LOG"
+
+GREEN=$(printf '\033[32m')
+DIM=$(printf '\033[2m')
+RESET=$(printf '\033[0m')
+
+ensure_base() {
+    if [ -e node_modules ]; then return 0; fi
+    [ -L node_modules ] && rm -f node_modules
+    if [ -d ../base/node_modules ]; then ln -s ../base/node_modules node_modules; return 0; fi
+    return 1
+}
+
+core_loads() {
+    node -e "require('ssb-db2'); require('koa'); require('sodium-native'); require('leveldown'); require('hyperaxe')" >/dev/null 2>&1
+}
+
+if ensure_base && core_loads; then
+    DEPS_USED="src/base/node_modules, shipped with Oasis"
+else
+    echo ""
+    echo "src/base is missing or does not load on this system; installing the packages with npm instead..."
+    [ -L node_modules ] && rm -f node_modules
+    NPM_LOG=$(mktemp)
+    if [ -f package-lock.json ]; then NPM_CMD="npm ci"; else NPM_CMD="npm install ."; fi
+    if ! $NPM_CMD --no-audit --no-fund --no-progress --loglevel=error >"$NPM_LOG" 2>&1; then
+        echo "$NPM_CMD failed. Output:"
+        cat "$NPM_LOG"
+        rm -f "$NPM_LOG"
+        exit 1
+    fi
+    rm -f "$NPM_LOG"
+    DEPS_USED="$NPM_CMD (package-lock.json)"
+fi
 
 DEPS=$(node -e "const p=require('./package.json'); console.log(Object.keys({...(p.dependencies||{}), ...(p.devDependencies||{})}).sort().join('\n'))" 2>/dev/null)
 for dep in $DEPS; do
@@ -37,17 +126,28 @@ done
 
 echo ""
 
-npm audit fix --silent --no-fund --no-progress >/dev/null 2>&1 || true
-
 MODEL_DIR="../AI"
 LLM_FILE="oasis-42-1-chat.Q4_K_M.gguf"
 LLM_TAR="$LLM_FILE.tar.gz"
-LLM_URL="https://solarnethub.com/code/models/$LLM_TAR"
 EMB_DIR="$MODEL_DIR/embeddings"
 EMB_TAR="oasis-embeddings.tar.gz"
-EMB_URL="https://solarnethub.com/code/models/$EMB_TAR"
 EMB_FILE="$EMB_DIR/onnx/model_quantized.onnx"
 CONFIG_PATH="../configs/oasis-config.json"
+MODEL_MIRRORS="${OASIS_MODEL_MIRRORS:-} https://solarnethub.com/code/models https://pub.4ndr0m3d4.xyz"
+
+download_package() {
+    local name="$1" out="$2" base url
+    for base in $MODEL_MIRRORS; do
+        url="${base%/}/$name"
+        echo "  trying $url"
+        if curl -fL --progress-bar --retry 2 --connect-timeout 20 -o "$out.part" "$url" && tar -tzf "$out.part" >/dev/null 2>&1; then
+            mv "$out.part" "$out"
+            return 0
+        fi
+        rm -f "$out.part"
+    done
+    return 1
+}
 
 CHOICE="${OASIS_AI:-}"
 
@@ -59,7 +159,8 @@ if [ -z "$CHOICE" ] && [ -t 0 ]; then
     echo "  [2] Smart navigation only (~150 MB)"
     echo "  [3] No AI features (no downloads, AI tabs hidden)"
     echo ""
-    read -p "Choose [1/2/3] (default 3): " ANS
+    printf "Choose [1/2/3] (default 3): "
+    read ANS
     case "$ANS" in
         1) CHOICE="full" ;;
         2) CHOICE="nav" ;;
@@ -89,23 +190,44 @@ esac
 if [ "$WANT_LLM" = "1" ] && [ ! -f "$MODEL_DIR/$LLM_FILE" ]; then
     echo ""
     echo "downloading AI model [size: 3,8 GiB (4.081.004.224 bytes)] ..."
-    curl -L -o "$MODEL_DIR/$LLM_TAR" "$LLM_URL"
-    echo ""
-    echo "extracting package: $LLM_TAR..."
-    echo ""
-    tar -xzf "$MODEL_DIR/$LLM_TAR" -C "$MODEL_DIR"
-    rm "$MODEL_DIR/$LLM_TAR"
+    if download_package "$LLM_TAR" "$MODEL_DIR/$LLM_TAR"; then
+        echo ""
+        echo "extracting package: $LLM_TAR..."
+        echo ""
+        tar -xzf "$MODEL_DIR/$LLM_TAR" -C "$MODEL_DIR"
+        rm "$MODEL_DIR/$LLM_TAR"
+    else
+        echo "The AI model could not be downloaded from any mirror; the assistant stays off. Run the installer again later, or set OASIS_MODEL_MIRRORS=https://your.mirror"
+        WANT_LLM=0
+    fi
 fi
 
 if [ "$WANT_EMB" = "1" ] && [ ! -f "$EMB_FILE" ]; then
     echo ""
     echo "downloading embeddings model [size: ~60 MiB] ..."
-    curl -L -o "$MODEL_DIR/$EMB_TAR" "$EMB_URL"
+    if download_package "$EMB_TAR" "$MODEL_DIR/$EMB_TAR"; then
+        echo ""
+        echo "extracting package: $EMB_TAR..."
+        echo ""
+        tar -xzf "$MODEL_DIR/$EMB_TAR" -C "$MODEL_DIR"
+        rm "$MODEL_DIR/$EMB_TAR"
+    else
+        echo "The embeddings model could not be downloaded from any mirror; smart navigation stays off."
+        WANT_EMB=0
+    fi
+fi
+
+if [ "$WANT_LLM" = "1" ] || [ "$WANT_EMB" = "1" ]; then
     echo ""
-    echo "extracting package: $EMB_TAR..."
-    echo ""
-    tar -xzf "$MODEL_DIR/$EMB_TAR" -C "$MODEL_DIR"
-    rm "$MODEL_DIR/$EMB_TAR"
+    echo "Installing the AI packages in src/AI..."
+    ( cd ../AI && {
+        if [ "$WANT_LLM" = "1" ]; then AI_NPM="npm ci"; AI_CHECK="require('@xenova/transformers'); require('node-llama-cpp')"; else AI_NPM="npm ci --omit=optional"; AI_CHECK="require('@xenova/transformers')"; fi
+        if [ -d node_modules ] && node -e "$AI_CHECK" >/dev/null 2>&1; then
+            echo "AI packages already in place."
+        else
+            $AI_NPM --no-audit --no-fund --no-progress --loglevel=error && node ../../scripts/patch-node-modules.js || { echo "The AI packages could not be installed; AI features will stay off."; WANT_LLM=0; WANT_EMB=0; }
+        fi
+    } )
 fi
 
 if [ -f "$CONFIG_PATH" ]; then
@@ -124,5 +246,6 @@ fs.writeFileSync(p, JSON.stringify(cfg, null, 2) + '\n');
 fi
 
 printf "==========================\n"
+printf "\nNode.js %s, database: ssb-db2, packages: %s\n" "$(node -v)" "$DEPS_USED"
 printf "\nOASIS has been correctly deployed! ;)\n\n"
-printf "Run: 'sh oasis.sh' to start ...\n\n"
+printf "Run: './oasis.sh' to start ...\n\n"

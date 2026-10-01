@@ -1,0 +1,288 @@
+{
+  "key": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+  "timestamp": 1469681468667,
+  "value": {
+    "previous": "%elJW/mbW34wVSsYeZ0uI5yEumSiedWAYjMRsA6niuA8=.sha256",
+    "author": "@EMovhfIrFk4NihAKnRNhrfRaqIhBv1Wj8pTxJNgvCCY=.ed25519",
+    "sequence": 3480,
+    "timestamp": 1469681468622,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": "## how small in your identity?\n\nThe paul graham essasy \"keep your identity small\" has been mentioned several times recently %Ueo+Ezq3c6CDuU47Q3A7LAEZs0t8hR1+5KSKaKNOCTs=.sha256 %V1FMg0a+VL+ILNpMfELLG3wK1h2V7GIHKGFTGPb8Mss=.sha256\n\nI wanted to have a discussion about this...\n\nI read the essay, and my reaction was, okay, that is easy to say, but how small is paul graham's identity? He talks about it in abstract, but doesn't describe how he sees his own identity, or what practices he does to keep it small, how he notices when he's not keeping his identity small.\n\nI think paul graham's self-identity may be quite a bit bigger than he thinks it is. For example, I think he identifies as \"a rational person\" and also \"highly intelligent\" which is the same as saying that if you disagree with him you are probably wrong.\n\n---\n\nIdentity is an interesting thing. To a degree, you get to choose who you are... but you also get to choose who other people are. Back when I hung out with lots of hippies, my favorite hippies where those who didn't think of them selves as hippies... Others might identify them as hippies, but they personally gravitated to whatever bits and pieces of \"hippie\" culture as it appealed to them or not. Maybe you could consider this a small identity? I know one guy who said he used to hate hippies, but then he woke up one morning and realized that he was the biggest hippie, after that he embraced the hippie aesthetic very firmly. He lived in a commune and had matted blond dreadlocks (only from not washing his hair he said)\n\n---\n\nI tried on the hippie identity for a bit (after getting a job in the city and \"giving polite society a fair chance\", which it failed) but after attending the \"rainbow gathering\" I decided nope. not interested in being a hippie. After that, for a bit I felt weirdly identity less. What am I then? I decided I would be an anarchist, because no body could decide what that word even ment. Of course, nobody ever asks you what your identity is, they just decide based on what you are wearing. \n\nTo me, an anarchist is someone who doesn't care wether you think they are an anarchist or not. (you can tell me this isn't what an anarchist is... but I don't care what you think an anarchist is ;)\n\n---\n\nImplicit in this idea of \"a small identity is good\" is the notion that a big identity is _bad_, and therefor, with a small identity, you are _better_ (less stupid, etc) than whoever you perceive to have a big identity... (\"most people\")\n\nThat sounds like a rather big identity though right?\n",
+      "mentions": [
+        {
+          "link": "%Ueo+Ezq3c6CDuU47Q3A7LAEZs0t8hR1+5KSKaKNOCTs=.sha256",
+          "rel": "mentions"
+        },
+        {
+          "link": "%V1FMg0a+VL+ILNpMfELLG3wK1h2V7GIHKGFTGPb8Mss=.sha256",
+          "rel": "mentions"
+        }
+      ]
+    },
+    "signature": "G8bxjchrsGKgV9vNw36J8Kyvvx3kOVZ/oINREuW8CM9WNioifj99NKj5kreu85o7L0/i8Ao8uPcs+yOD7p9lBw==.sig.ed25519"
+  }
+}
+
+{
+  "value": {
+    "previous": "%g5kRcC7sf3zEfdIT11b2j7O67IThgQb5p0BEch0rBmE=.sha256",
+    "author": "@4OR/xSKbQ0WWY7QTr7szYizISldc6MqqVScqKMKfdMQ=.ed25519",
+    "sequence": 22,
+    "timestamp": 1469755171185,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": "I like to wonder: is identity even a thing we get to choose? Or is it more like a byproduct, a reflection of our core values?  And even then, we often only learn about our core values through self-observation, and only alter them by fighting against a current.\n\nIn our highly individualistic culture we like to think we can choose our identity, and we pick the one that we find most appealing. I know a lot of people who identify with \"the scientist\" PG describes in his post. They like to think of themselves as rational, they only follow where the evidence leads. But then they go and do irrational things or make life decisions with no evidence.  So is \"scientist\" really part of their identity or is it just wishful thinking at this point?\n\nSo personally I don't see value in the advice \"keep your identity small\" or \"don't let yourself get too attached\". Being a part of something bigger can be a good thing, if the bigger thing is good.  But it's all bias. We can have fruitful discussions if we know what our bias is and check it. ",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%GlH/a+gZqGfOg3zdVh+Ntmkl4CQPOBdPbyeC1AVL/kw=.sha256"
+    },
+    "signature": "k0dT0r05GEk5GE5s6QRu+fvHEqmaVTqWYRnptf45mqLeATKE6T8r6llIEis4FbVCvbr2kPo51n9iXDsH1UCSBg==.sig.ed25519"
+  },
+  "timestamp": 1469757146786.001,
+  "key": "%RgmRIW9GK4pfWRVg/zEvJw6TH8pfIZrghu2EOX3bRqE=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%JrJf8Loji5/8IX+H6kmVxxfVonaKUlXjbs/KOAJlS4w=.sha256",
+    "author": "@8Qee0I/DwI5DHSCi3p5fsl6FyLGArrnDz3ox9qZr5Qc=.ed25519",
+    "sequence": 961,
+    "timestamp": 1469690081385,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "text": "I've read this piece a few times, and it seems to me that point Paul Graham's trying to make is 'if you want to have an argument that goes on forever, talk about subjects that do not have definite answers'. He references politics and religion as two examples of topics that do not have definite answers. The solution, he says, is to keep your identity small. \n\nGraham references JavaScript as a subject that usually has much more fruitful discussions, because it compiles and the expertise threshold for weighing in is much higher.\n\nI'm not sure if Paul Graham is right or not. He obviously is influenced by having created a discussion platform where people argue all of the time.\n\nPerhaps the question that remains open is whether or not keeping your identity small is a good thing or not, and how to do that in a practical way. \n\nI think my own identity has been sprawled over time. I've had lot of interests over time, lived in a lot of different places, and done a lot of different things. Have I failed at keeping my identity small?\n\nI used to identify as a photographer, but after working as a photo editor for three years and then trying to become a 'professional' I got major burnout and couldn't pick up a camera for a few years. I eventually decided that I was going to actively work towards NOT being identified as a photographer. I think I've been successful at this.\n\nAnother identity I tried to get away from was being 'a minimalist'. I wrote a blog from 2009-2011 and one of the things I wrote about was living out of one bag. The topic was popular, so I kept hitting it, and kept being known for it. But by 2011 I was so bored of the topic that I deleted the blog and started writing about cyborgs instead. \n\nWriting about cyborgs turned out to not be popular at all, and in fact got a decidedly poor response from the audience I'd built up hitting the minimalism topic.\n\nYears went by, and people kept asking me to write about minimalism, and I resisted resisted resisted. Then earlier this year while I was running food at a restaurant a neighbor got evicted for not paying rent for 10 months -- all of his junk was piled high on his porch and all over the street. And I realized that he had become a minimalist, but by force instead of choice, because he'd decided not to (or couldn't) pay his rent.\n\nAll of a sudden I felt inspired to write about minimalism again. I did, but I put it almost all into a book this time instead of blogging about it. This led to being able to move back to Mexico, because some of the people who used to read my blog buy the book on occasion and it's cheap to live in Mexico.\n\nIt turns out I've failed to escape being identified as a minimalist after all. But I did unidentify as being a photographer.\n\nThese days I try to keep my blog focused on code and technology, because that is what I'm interested in writing about. I might sometimes have other things on my mind, but I try not to write about them unless I think I want to be known for writing on the topic. \n\nI suppose the obvious question to consider is how an append-only log will effect your identity. ",
+      "mentions": []
+    },
+    "signature": "7I0BDuR/N6Ro9fl9OMnFW1MnSJaRol2kKgQMIMItBMQogDEeT8oSPTmpy5e8lBNaQKBXiEkbDN1iBpj1kAgGBQ==.sig.ed25519"
+  },
+  "timestamp": 1469690044131,
+  "key": "%7LbpV8JgqkFIdbszIDmb/MpMmz0J/UqmRNPIFsJx4oM=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%0yxSiPDHtAwWeagL//BtGTfGl2GSavPtBDfVSzhWdQc=.sha256",
+    "author": "@EMovhfIrFk4NihAKnRNhrfRaqIhBv1Wj8pTxJNgvCCY=.ed25519",
+    "sequence": 3504,
+    "timestamp": 1469757935677,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%RgmRIW9GK4pfWRVg/zEvJw6TH8pfIZrghu2EOX3bRqE=.sha256",
+      "text": "[@cryptix](@p13zSAiOpguI9nsawkGijsnMfWmFd5rlUNpzekEE+vI=.ed25519) the identitarians sound like basically a movement to [rigidize](%RIIJcWVN/6t6eai7HOqiEXt0QPt6cWnmNEoRt33kMcw=.sha256) the concept of ethnicity.",
+      "mentions": [
+        {
+          "link": "@p13zSAiOpguI9nsawkGijsnMfWmFd5rlUNpzekEE+vI=.ed25519",
+          "rel": "mentions",
+          "name": "cryptix"
+        },
+        {
+          "link": "%RIIJcWVN/6t6eai7HOqiEXt0QPt6cWnmNEoRt33kMcw=.sha256",
+          "rel": "mentions",
+          "name": "rigidize"
+        }
+      ]
+    },
+    "signature": "GrV9I35isRSJ807rX88JEbPdgsw2pGU5758Ght97bMTxcT1txxkkfQ1bGXEDmpKmRTKr6vL8cyXG76FwuWBpAA==.sig.ed25519"
+  },
+  "timestamp": 1469757935724,
+  "key": "%tUcUeAl2/uoOt/No3w2jf7VGuqtW+StmpB7/4rQcaQA=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%PGK/L9lsW4SDYgRXeKZmACEDmgRWbbFTlwuweAfv5w4=.sha256",
+    "author": "@KSW+Uwrc1wLzaCjJF8MZZl+wmw1P1LgB3ANiLbgS454=.ed25519",
+    "sequence": 194,
+    "timestamp": 1470348111711,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": "I don't like his scientist example at all; being a \"Scientist\" isn't a null identity. It comes with ideas about who we should listen to (academics and people with degrees versus people working in their garages claiming to have discovered levitation) and what topics are worthy of human attention (namely, those in which one can make falsifiable predictions).\n\nIn general I'm not sure if having a smaller identity is really the answer; you have to be *somebody*. If you could go through life as a bare rational agent free of any emotional ties to objects, ideas, or people, it would be supremely boring. But he does have a point that taking on an identity is essentially making a commitment so support some assertions on a non-rational basis.\n\nI think the important thing is to be deliberate about your self-construction and to curate what you put into your identity, and to recognize when your opinions stem from who you have decided to be rather than from what others can perceive. People often uncritically copy and paste whole swathes of identity from people they look up to, or from the people around them. There's a lot rolled up in being, say, a \"Democrat\", and most people who put themselves in that box didn't do it after a thorough evaluation of that box as it relates to other boxes and what being in that box entails. They just see a box full of people they like and jump in.\n\nThis whole post, though, could just be the product of someone who thinks of themselves as a \"critical thinker\". In most situations, being able to generally agree with the people around you trumps the actual content of whatever you're agreeing about. It lets you form strong interpersonal relationships and gives you a clear sense of membership in a mutually beneficial group. It doesn't matter if the Sharks are *really* the best team or a path to citizenship is *really* the best political policy or Mr. Robot is *really* a good TV show if we all stand to benefit more by agreeing with each other than we stand to lose by being wrong.",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%SjfHxROgaD0VPCMc3G46Th3FHJ+0++rRVfR44n/579Q=.sha256"
+    },
+    "signature": "YdfOqHbxYeZIhRsVjVEM5M68eIIisgOql1WdaOJsENkyba/crNedmHNhl8ubl3iZxCUhGdNNWsyl1n/D3JsqDw==.sig.ed25519"
+  },
+  "timestamp": 1470354037371,
+  "key": "%rUgtTUVFwerhXMtpy4HlxDB+pufXVB85h1Q9AH2Vuxg=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%IIMplQnA0oZurKqhYB/1BCD2zK3dloGLr1XI6Ogu7zI=.sha256",
+    "author": "@dnr1swLSAgf36g+FzGjNLgmytj2IIyDaYeKZ7F5GdzY=.ed25519",
+    "sequence": 1501,
+    "timestamp": 1469774034762,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": "I wouldn't go too deep into that essay;  PG's concept of identity is critically lacking.  It's basically no different than \"we don't discuss politics or religion at the dinner table\". Great for keeping yr lil' McPatriarchy docile, but if you ain't feeding the world, don't tell them how to behave at the table.\n\nDoffing your identity is also a privilege for teh whitmale; for everybody else, much of one's identity are uncontrollably politicized (or religious'd);  so suggesting somebody else's identity should be minimized (esp to avoid \"conflict\") is basically a form of oppression;  not answering to this intrinsic problem in your quest to save everybody with your startup religion is ethically questionable.\n\nPG is not writing to regular folks tho, he's writing to his sect (so let's try not to spread the FUD).  In that context, this essay is basically a warning about one's involvement with the high order.  Don't bring up the politics of the issue please, and won't you wear that pretty thing I like?  I'm having the XY devops team over for dinner....",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%tUcUeAl2/uoOt/No3w2jf7VGuqtW+StmpB7/4rQcaQA=.sha256"
+    },
+    "signature": "0yyR15an56P5ExS1HGnK19wNz0uTHTeOIkLjLZnRJxl4qwYaFdk+EE4Fp9J6xahe2PyOHb3bfJrOdEH+FhasAg==.sig.ed25519"
+  },
+  "timestamp": 1469775702033,
+  "key": "%rWuKdVSOnIA+RF/VCGwICAPzZZ86RzKuUQVkZqjJqh4=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%qVUULSBE4+9w20RHvNOwRU3LBGGDGwIWs42e8iyUkns=.sha256",
+    "author": "@iL6NzQoOLFP18pCpprkbY80DMtiG4JFFtVSVUaoGsOQ=.ed25519",
+    "sequence": 1817,
+    "timestamp": 1469699263124,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": "> I think paul graham's self-identity may be quite a bit bigger than he thinks it is. For example, I think he identifies as \"a rational person\" and also \"highly intelligent\" which is the same as saying that if you disagree with him you are probably wrong.\n\nNo kidding!  This is a trait of \"personal superiority\" in that other framework in that other spinoff of that other thread that this thread spun off from...:wink:",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%7LbpV8JgqkFIdbszIDmb/MpMmz0J/UqmRNPIFsJx4oM=.sha256"
+    },
+    "signature": "CjV+M/Jfd1CC7hfVvbT1kMEc48UwcyfTvyPw75yacZzW+HWjDsXpL7QpcqtRZjzwMqumbkGtOM6HkGr8bbNpDQ==.sig.ed25519"
+  },
+  "timestamp": 1469699225925,
+  "key": "%tYaoXa84mHHtimp6YI8qkks1ldrR2lGjDM8OYGN4+F0=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%M6rpA71KW9nJ24ofVNIwCCaVBx/qcYAZnycAthA0V5s=.sha256",
+    "author": "@rMM3Dpy3rj3VG5BgUsuTHvAuJqTF8IQxZKvZygZzOUE=.ed25519",
+    "sequence": 242,
+    "timestamp": 1469752524180,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": "Generally speaking, the best approach to most things is to not care too much.  However if you do this all the time then you'll become very boring.",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%5lVxBf4G6127qUIZwblyy7bHB+WGxcU0mrLEM99SktQ=.sha256"
+    },
+    "signature": "e9t9tSZw0+lbEtVshyDediA5wUvm8jr6uVGDqIb9O7gvwvjmk1JxeONS/3gxzQA+/AR6bltAWjsq3QGPpxV/CQ==.sig.ed25519"
+  },
+  "timestamp": 1469757136704,
+  "key": "%GlH/a+gZqGfOg3zdVh+Ntmkl4CQPOBdPbyeC1AVL/kw=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%88RRfnxujZQjzoBaWkuqykmZFy+njT51Y+fH52rN1tc=.sha256",
+    "author": "@uikkwUQU4dcd/ZrHU7JstnkTgncxQB2A8PDLHV9wDAs=.ed25519",
+    "sequence": 1544,
+    "timestamp": 1469724737449,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": "> What I took away from Grahams essay is that people get aggrevated more easily when they are emotiaonly invested.\n\nbasically this is what I was coming from when posting the article. There was a big debate in ethereum land whether to fork or not-to-fork and I found myself being more attached to the issue than I though useful. The fork debate resulted in a flame war or [memetic virus ](https://youtu.be/rE3j_RHkqJc). Maybe another equivalent to \"keeping a small identity\"  is [pancritical rationalism](https://en.wikipedia.org/wiki/Pancritical_rationalism) ",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%+TA+wWS2nkC+pOslKRgD2Exu9eXpXnHmHtpE05qSQ7M=.sha256"
+    },
+    "signature": "OiaUICkotQQ1Tkkx7Y2G+Swk/1LhR+i7NwxUT7B082hRv21K4TNYyol8zqpw+d7AZp6LZbzSdeZqLvn1ahNECA==.sig.ed25519"
+  },
+  "timestamp": 1469739925548.001,
+  "key": "%SjfHxROgaD0VPCMc3G46Th3FHJ+0++rRVfR44n/579Q=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%Z6Sg5I0WNJXDH4FJ1xhB3UR2wuLD9f5y03GQpw3TxqE=.sha256",
+    "author": "@uikkwUQU4dcd/ZrHU7JstnkTgncxQB2A8PDLHV9wDAs=.ed25519",
+    "sequence": 1579,
+    "timestamp": 1470361764162,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": ">  In most situations, being able to generally agree with the people around you trumps the actual content of whatever you're agreeing about\n\nI disagree, I think a few discordians around is useful :) \n\n",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%ottxWj8lp5O/TlM+SLp7FaFX9yH2GC3cXfT2dyGs9dw=.sha256"
+    },
+    "signature": "AO3qZS6wNmngH/XsR0ppFVFmX1X6YY1n7XiCyj0lX2ztvmggsK31zco6yULturc3hNRsCuPEhna7WFcvhcTDDA==.sig.ed25519"
+  },
+  "timestamp": 1470368279785,
+  "key": "%wKocq0AVg4SNj7KKhm6J+kERKRYaGkkmxsA/hDQOe1U=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%gbybmlitfa7HASS8M6f7q6Fdms5VeBZf9PqXQnQxeCw=.sha256",
+    "author": "@vHr4OE+jmCnoMDg0TvIwCQNXbCZMzTQU+hS1P+kHQ5g=.ed25519",
+    "sequence": 69,
+    "timestamp": 1469707797892,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%tYaoXa84mHHtimp6YI8qkks1ldrR2lGjDM8OYGN4+F0=.sha256",
+      "text": "What I took away from Grahams essay is that people get aggrevated more easily when they are emotiaonly invested. Not that much news there IMHO.\n\nFor most of my life I identified as an alternativist/individualist, which is also pretty steriotypical in hindsight. Fitting in with the majority really never interessted me, quite the contrary: blind capitalist consumption, local patriotism to sports teams, ... _ugh..._\n\nMost of the time it's easier to figure out what you don't want in your life than to draw a clear picture of what you really want, at least for me.\n\nSomething I currently try to wrap my head around while not barfing at my screen is the [identitarian movement](https://en.wikipedia.org/wiki/Identitarian_movement). They seem to exploit the herd-flocking-aspect of the human condition quite sucessfully. Looking like your typical _anarcholeftwing black block_ people from the outside while beeing rooted in folkish rightwing idioligy. There again I see it in myself: _They stole our outfits...!_. _stole_.. _our_... yea. great job, cryptix.\n\nIn the end it's about self-reflection and decency again, isn't it. I don't have to walk all over people just because they don't share my belive in kopimism or which js control flow is the best. I'm not quite sure why I shouldn't identify as w/e as long as a I remain respectful to others.\n\nPersonally I can ignore or walk away from people that are barfinducing but what about people that can't? Grahams _don't be $foo_ doesn't cut it there.\n\n![we are all individuals.jpg](&0zgbivBDs/v2tVj/m45Bz0J+V3gsKXWjNzcUIc+SPow=.sha256)\n",
+      "mentions": [
+        {
+          "link": "&0zgbivBDs/v2tVj/m45Bz0J+V3gsKXWjNzcUIc+SPow=.sha256",
+          "rel": "mentions",
+          "name": "we are all individuals.jpg"
+        },
+        {
+          "link": "&0zgbivBDs/v2tVj/m45Bz0J+V3gsKXWjNzcUIc+SPow=.sha256",
+          "name": "Yes! We're all individuals!- The Life of Brian (The Monty Python dixit) - Imgur.jpg",
+          "size": 108595,
+          "type": "image/jpeg"
+        }
+      ]
+    },
+    "signature": "cx08xxW5UAl7Gb5/Imrwxt7sF7oka6vs38jKZP04nsogJSaJMOFS5UEHU9F80SSzK69r0NWZH7m8N8SOz/xsAg==.sig.ed25519"
+  },
+  "timestamp": 1469739942713,
+  "key": "%+TA+wWS2nkC+pOslKRgD2Exu9eXpXnHmHtpE05qSQ7M=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%CF898r1qCAzaA/3hEu5/CnAxfz2s4EFmtw1wR/XZCYQ=.sha256",
+    "author": "@ya/sq19NPxRza5xtoqi9BilwLZ7HgQjG3QpcTRnGgWs=.ed25519",
+    "sequence": 287,
+    "timestamp": 1469739920417,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "text": "Maybe the the article could best be re-titled to _Don't Get Tripped Up on Your Identity_ or _Don't Let Your Identity Get in the Way of You Doing the Work_.",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%SjfHxROgaD0VPCMc3G46Th3FHJ+0++rRVfR44n/579Q=.sha256"
+    },
+    "signature": "fMz/bgvXLvi4la2VEbL9yxS00OxPy8Co4T29Fj83ANyX9gZrsAAL3nqpTFJ2NripGnOlgjZqEDUr00ryDChTAw==.sig.ed25519"
+  },
+  "timestamp": 1469739929546.009,
+  "key": "%5lVxBf4G6127qUIZwblyy7bHB+WGxcU0mrLEM99SktQ=.sha256"
+}
+
+{
+  "value": {
+    "previous": "%CelemXz9AmkTA9YC5jltlOAmPm5cenmXVBRfJ2ZlUpQ=.sha256",
+    "author": "@ya/sq19NPxRza5xtoqi9BilwLZ7HgQjG3QpcTRnGgWs=.ed25519",
+    "sequence": 360,
+    "timestamp": 1470360682062,
+    "hash": "sha256",
+    "content": {
+      "type": "post",
+      "root": "%zIazVw/982bgMESjeR699B1UdMTVs2Qi1yLi41Nd+Rw=.sha256",
+      "branch": "%rUgtTUVFwerhXMtpy4HlxDB+pufXVB85h1Q9AH2Vuxg=.sha256",
+      "text": "[@amnovak](@KSW+Uwrc1wLzaCjJF8MZZl+wmw1P1LgB3ANiLbgS454=.ed25519) found your response to be thoughtful (and read it twice) -- thank you.",
+      "mentions": [
+        {
+          "link": "@KSW+Uwrc1wLzaCjJF8MZZl+wmw1P1LgB3ANiLbgS454=.ed25519",
+          "rel": "mentions",
+          "name": "amnovak"
+        }
+      ]
+    },
+    "signature": "IkIA+9oP1NGDwVWESrFstnRUmpNv4+rN7zAleNYMihnTQV/VT3PSZspkkFZK3bOlxx9L7f555ybNMhnclBPBAQ==.sig.ed25519"
+  },
+  "timestamp": 1470368288703,
+  "key": "%ottxWj8lp5O/TlM+SLp7FaFX9yH2GC3cXfT2dyGs9dw=.sha256"
+}
+

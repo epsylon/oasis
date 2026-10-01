@@ -1,0 +1,36 @@
+{
+  "name": "nano-equal",
+  "version": "2.0.2",
+  "description": "Ultra fast and compact implementation of deep equal without any production dependencies.",
+  "main": "src/index.js",
+  "scripts": {
+    "lint": "eslint src",
+    "test": "npm run lint && ./node_modules/mocha/bin/mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smelukov/nano-equal.git"
+  },
+  "keywords": [
+    "equal",
+    "deep equal"
+  ],
+  "author": "Sergey Melyukov",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/smelukov/nano-equal/issues"
+  },
+  "homepage": "https://github.com/smelukov/nano-equal#readme",
+  "devDependencies": {
+    "chai": "^3.4.1",
+    "eslint": "^4.5.0",
+    "lodash": "^4.17.4",
+    "mocha": "^2.3.4",
+    "underscore": "^1.8.3"
+  },
+  "files": [
+    "CHANGELOG.md",
+    "LICENSE.md",
+    "src/index.js"
+  ]
+}

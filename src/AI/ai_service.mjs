@@ -3,7 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import http from 'http';
 import { fileURLToPath } from 'url';
-import { getLlama, LlamaChatSession } from '../server/node_modules/node-llama-cpp/dist/index.js';
+import { getLlama, LlamaChatSession } from './node_modules/node-llama-cpp/dist/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

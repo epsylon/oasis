@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const SecretStack = require('secret-stack');
 const caps = require('ssb-caps');
-const SSB = require('ssb-db');
+const db2Defaults = require('ssb-db2/defaults');
 const config = require('./ssb_config');
 const { printMetadata } = require('./ssb_metadata');
 
@@ -54,31 +54,33 @@ const { printMetadata } = require('./ssb_metadata');
 require('ssb-plugins').loadUserPlugins(SecretStack({ caps }), config);
 
 const Server = SecretStack({ caps })
-  .use(SSB)
+  .use(require('ssb-db2/core'))
+  .use(require('ssb-classic'))
+  .use(require('ssb-box'))
+  .use(require('ssb-db2/compat/publish'))
+  .use(require('ssb-db2/compat/post'))
+  .use(require('ssb-db2/compat/db'))
+  .use(require('ssb-db2/compat/log-stream'))
+  .use(require('ssb-db2/compat/history-stream'))
+  .use(require('ssb-db2/compat/ebt'))
+  .use(require('ssb-db2/compat/feedstate'))
+  .use(require('./db2_legacy'))
   .use(require('ssb-master'))
   .use(require('ssb-gossip'))
   .use(require('ssb-ebt'))
   .use(require('ssb-friends'))
   .use(require('ssb-blobs'))
-  .use(require('ssb-meme'))
   .use(require('ssb-plugins'))
   .use(require('ssb-conn'))
-  .use(require('ssb-box'))
-  .use(require('ssb-search'))
-  .use(require('ssb-private'))
   .use(require('ssb-friend-pub'))
   .use(config.pub ? require('ssb-invite') : require('ssb-invite-client'))
   .use(require('ssb-logging'))
   .use(require('ssb-replication-scheduler'))
   .use(require('ssb-partial-replication'))
-  .use(require('ssb-about'))
   .use(require('ssb-onion'))
   .use(require('ssb-unix-socket'))
   .use(require('ssb-no-auth'))
-  .use(require('ssb-backlinks'))
-  .use(require('ssb-links'))
-  .use(require('ssb-tangle'))
-  .use(require('ssb-query'));
+  .use(require('./snapshot_plugin'));
 
 if (!config.pub) {
   Server.use(require('ssb-lan'));
@@ -111,8 +113,78 @@ const isLockError = (err) => {
 const isCorruptStoreError = (err) => {
   const msg = String((err && err.message) || '');
   const stack = String((err && err.stack) || '');
-  return /JSON|Unexpected token|Unexpected end/i.test(msg)
-    && /flumelog-offset|aligned-block-file|flumeview|flumedb/i.test(stack);
+  return /JSON|Unexpected token|Unexpected end|bipf|Invalid|corrupt/i.test(msg)
+    && /flumelog-offset|aligned-block-file|flumeview|flumedb|async-append-only-log|jitdb|bipf|ssb-db2/i.test(stack);
+};
+
+const migration = { running: false, percent: 0, done: false, error: null };
+let migrationPromise = null;
+const MIGRATED_MARKER = 'OASIS: this log was migrated to ssb-db2';
+const oldLogIsMarker = (file) => {
+  try {
+    const st = fs.statSync(file);
+    return st.size < 4096 && fs.readFileSync(file, 'utf8').startsWith(MIGRATED_MARKER);
+  } catch (_) { return false; }
+};
+const writeMigratedMarker = () => {
+  try {
+    fs.mkdirSync(db2Defaults.flumePath(config.path), { recursive: true });
+    fs.writeFileSync(db2Defaults.oldLogPath(config.path), `${MIGRATED_MARKER} (${config.path}/db2/log.bipf) on ${new Date().toISOString()}.\nThis file is a guard: an Oasis older than the ssb-db2 move cannot read it and refuses to start, instead of starting with an empty log and forking your feed. Do not delete it unless you are moving back to that version on purpose, and never run both versions on this folder.\n`);
+  } catch (_) {}
+};
+const migrateFlume = () => {
+  if (migrationPromise) return migrationPromise;
+  migrationPromise = new Promise((resolve, reject) => {
+    const oldLog = db2Defaults.oldLogPath(config.path);
+    if (!fs.existsSync(oldLog) || oldLogIsMarker(oldLog)) { migration.done = true; return resolve(false); }
+    if (isDebug()) console.log('- Database: migrating the local log to ssb-db2');
+    migration.running = true;
+    let mig;
+    try {
+      mig = SecretStack({ caps })
+        .use(require('ssb-db2/migrate'))
+        .call(null, { ...config, connections: { incoming: {}, outgoing: {} }, db2: { ...(config.db2 || {}), automigrate: false, dangerouslyKillFlumeWhenMigrated: true } });
+    } catch (err) { migration.running = false; migration.error = err; return reject(err); }
+    const pull = require('pull-stream');
+    let shown = -1;
+    pull(mig.db2migrate.progress(), pull.drain((p) => {
+      const pct = Math.max(0, Math.min(100, Math.floor((Number(p) || 0) * 100)));
+      migration.percent = pct;
+      if (pct !== shown && isDebug()) { shown = pct; console.log(`  migrating ${pct}%`); }
+    }));
+    const finish = () => {
+      const waitGone = (tries) => {
+        if (!fs.existsSync(db2Defaults.oldLogPath(config.path))) {
+          mig.close(() => {
+            writeMigratedMarker();
+            migration.running = false; migration.done = true; migration.percent = 100;
+            if (isDebug()) console.log('  migrated 100%');
+            resolve(true);
+          });
+          return;
+        }
+        if (tries <= 0) {
+          try { fs.rmSync(db2Defaults.flumePath(config.path), { recursive: true, force: true }); } catch (_) {}
+          mig.close(() => {
+            if (!fs.existsSync(db2Defaults.oldLogPath(config.path))) writeMigratedMarker();
+            else if (isDebug()) console.log('  the old log could not be removed; it is left in place');
+            migration.running = false; migration.done = true; migration.percent = 100;
+            resolve(true);
+          });
+          return;
+        }
+        setTimeout(() => waitGone(tries - 1), 200);
+      };
+      waitGone(300);
+    };
+    try { mig.db2migrate.start(); } catch (err) { migration.running = false; migration.error = err; return reject(err); }
+    mig.db2migrate.synchronized((synced) => {
+      if (synced !== true) return;
+      finish();
+      return false;
+    });
+  });
+  return migrationPromise;
 };
 
 const isDebug = () => process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
@@ -139,14 +211,14 @@ const handleFatal = (err) => {
   }
   if (isCorruptStoreError(err)) {
     console.log('');
-    console.log('Oasis could not read its local database (a record in ~/.ssb/flume looks corrupted).');
+    console.log('Oasis could not read its local database (a record in ~/.ssb/db2 looks corrupted).');
     console.log('This usually happens after an unclean shutdown or a disk error.');
     console.log('');
     console.log('What you can try, in order:');
     console.log('  1. Simply start Oasis again — transient read errors often clear on the next boot.');
     console.log('  2. Check your disk health (e.g. run fsck on the partition holding ~/.ssb).');
-    console.log('  3. Rebuild the indexes from Settings once Oasis starts, or remove the flume view');
-    console.log('     folders (NOT log.offset, NOT secret) so they are regenerated from the log.');
+    console.log('  3. Rebuild the indexes from Settings once Oasis starts, or remove ~/.ssb/db2/indexes');
+    console.log('     and ~/.ssb/db2/jit (NOT log.bipf, NOT secret) so they are regenerated from the log.');
     console.log('');
     if (isDebug()) console.log(`Technical detail: ${String((err && err.message) || err)}`);
     process.exit(1);
@@ -156,7 +228,7 @@ const handleFatal = (err) => {
 
 process.on('uncaughtException', handleFatal);
 
-if (argv[0] === 'start') {
+const startServerOnly = () => {
   try {
     server = Server(config);
   } catch (err) {
@@ -260,15 +332,20 @@ if (argv[0] === 'start') {
     } catch (_) {}
   }, 7000);
 
+};
+
+if (argv[0] === 'start') {
+  migrateFlume().then(startServerOnly, handleFatal);
 }
 
 module.exports = {
   config,
   get server() {
-    if (!server) server = Server(config);
     return server;
   },
+  migrationStatus: () => ({ ...migration }),
   open: async () => {
+    await migrateFlume();
     if (!server) server = Server(config);
     return server;
   }

@@ -105,7 +105,7 @@ if (process.argv[2] === '--embed-worker') {
       let mod
       try {
         const url = require('url')
-        const transformersPath = path.join(__dirname, '..', 'server', 'node_modules', '@xenova', 'transformers', 'src', 'transformers.js')
+        const transformersPath = path.join(__dirname, 'node_modules', '@xenova', 'transformers', 'src', 'transformers.js')
         mod = await import(url.pathToFileURL(transformersPath).href)
       } catch (_) {
         return null

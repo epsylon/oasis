@@ -1,5 +1,7 @@
 node_modules/
-packages/
+!src/base/node_modules/
+!src/base/**/node_modules/
+src/server/node_modules.full/
 *.gguf
 *.onnx
 *.tar.gz

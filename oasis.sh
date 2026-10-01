@@ -2,6 +2,10 @@
 
 CURRENT_DIR=$(pwd)
 MODE=$1
+if [ ! -e "$CURRENT_DIR/src/server/node_modules" ] && [ -d "$CURRENT_DIR/src/base/node_modules" ]; then
+  rm -f "$CURRENT_DIR/src/server/node_modules"
+  ln -s ../base/node_modules "$CURRENT_DIR/src/server/node_modules"
+fi
 MODEL_PATH="$CURRENT_DIR/src/AI/oasis-42-1-chat.Q4_K_M.gguf"
 CONFIG_FILE="$CURRENT_DIR/src/configs/oasis-config.json"
 
@@ -14,15 +18,16 @@ OASIS is a libre, open-source, encrypted, peer-to-peer, distributed & federated
 social network: your data lives on your own device, replicates directly with the
 inhabitants you support and keeps working offline.
 
-Usage: sh oasis.sh [mode] [-- <option>=<value> ...]
+Usage: ./oasis.sh [mode] [-- <option>=<value> ...]
 
 Modes:
   gui             Launch the web GUI (default).
   server          Launch the PUB: sbot + read-only web HUB on /c (headless, VPS).
+                  Pub defaults: 2 hops, unlimited media, snapshot for newcomers over SSB.
   test            Run the test suite.
   help, -h        Show this help message.
 
-PUB admin commands (require the sbot to be running: sh oasis.sh server):
+PUB admin commands (require the sbot to be running: ./oasis.sh server):
   whoami                   Print this PUB id
   invite [N]               Create an invite code (default uses=1)
   name <text>              Set this PUB display name
@@ -41,21 +46,21 @@ GUI options (forwarded to the backend):
   --debug               Verbose logging.
 
 TEST commands (runs against an ISOLATED ~/.ssb):
-  sh oasis.sh test                 Run every suite (your real ~/.ssb is backed up first).
-  sh oasis.sh test -y              Same, skipping the confirmation prompt.
-  sh oasis.sh test --restore       Restore your original ~/.ssb when done (drops test data).
-  sh oasis.sh test --seed          After the tests, fill the test ~/.ssb with dummy content.
-  sh oasis.sh test dummy           Publish dummy content into the running instance (no tests).
-  sh oasis.sh test clean-all       Delete test reports and the test ~/.ssb, restore the backup.
+  ./oasis.sh test                 Run every suite (your real ~/.ssb is backed up first).
+  ./oasis.sh test -y              Same, skipping the confirmation prompt.
+  ./oasis.sh test --restore       Restore your original ~/.ssb when done (drops test data).
+  ./oasis.sh test --seed          After the tests, fill the test ~/.ssb with dummy content.
+  ./oasis.sh test dummy           Publish dummy content into the running instance (no tests).
+  ./oasis.sh test clean-all       Delete test reports and the test ~/.ssb, restore the backup.
 
 Examples:
-  sh oasis.sh
-  sh oasis.sh server --port=3000
-  sh oasis.sh test -y
-  sh oasis.sh invite 100
-  sh oasis.sh name "My PUB"
-  sh oasis.sh announce mypub.example.com
-  sh oasis.sh --host=0.0.0.0 --port=8080 --no-open
+  ./oasis.sh
+  ./oasis.sh server --port=3000
+  ./oasis.sh test -y
+  ./oasis.sh invite 100
+  ./oasis.sh name "My PUB"
+  ./oasis.sh announce mypub.example.com
+  ./oasis.sh --host=0.0.0.0 --port=8080 --no-open
 EOF
 }
 
@@ -80,6 +85,10 @@ case "$MODE" in
       rm -f "$CONFIG_FILE.bak"
     fi
     shift
+    if ! grep -q '"pub": *true' "$CURRENT_DIR/src/configs/server-config.json" 2>/dev/null; then
+      echo "Note: src/configs/server-config.json is the desktop config (pub: false, hops 2)."
+      echo "      For a PUB copy docs/PUB/server-config.json.example there first (pub: true). See docs/PUB/deploy.md, step 4."
+    fi
     cd "$CURRENT_DIR/src/backend" || exit 1
     exec node backend.js --public --no-open --host=0.0.0.0 "$@"
     ;;

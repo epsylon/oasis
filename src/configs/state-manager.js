@@ -16,6 +16,7 @@ const FOLDERS = {
   'banking-ubi-paid.json': 'banking',
   'banking-funds-history.json': 'banking',
   'content_favorites.json': 'content',
+  'blob-access.json': 'content',
   'follow_state.json': 'content',
   'agenda-config.json': 'content',
   'AI-history.json': 'ai',
@@ -28,7 +29,9 @@ const FOLDERS = {
   'oasis-inbox-read': 'flags',
   'oasis-inbox-archived': 'flags',
   'oasis-political-seen': 'flags',
-  'gossip_unfollowed.json': 'peers'
+  'gossip_unfollowed.json': 'peers',
+  'snapshot.oasissn': 'content',
+  'snapshot-recent.oasissn': 'content'
 };
 
 const ALIASES = {

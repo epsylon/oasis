@@ -94,7 +94,7 @@ const renderPageCard = (page, params = {}) => {
       renderContentActions(page.id, href, { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: (params.spreadMap && params.spreadMap.get(page.id)) || null })
     ),
     div({ class: "tribe-card-body" },
-      page.image ? a({ href }, img({ class: "wiki-card-cover", src: `/blob/${encodeURIComponent(page.image)}`, alt: page.title || "" })) : null,
+      page.image ? a({ href }, img({ loading: 'lazy', class: "wiki-card-cover", src: `/blob/${encodeURIComponent(page.image)}`, alt: page.title || "" })) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href }, page.title || "—"))),
       div({ class: "card-chips-row" }, ...pageChips(page))
     )

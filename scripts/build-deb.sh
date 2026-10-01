@@ -39,6 +39,10 @@ echo "Copying application files..."
 
 cp -r "${SRC_DIR}/src/server/package.json" "${DEB_ROOT}${INSTALL_DIR}/src/server/"
 cp -r "${SRC_DIR}/src/server/package-lock.json" "${DEB_ROOT}${INSTALL_DIR}/src/server/" 2>/dev/null || true
+if [ -d "${SRC_DIR}/src/base" ]; then
+    cp -r "${SRC_DIR}/src/base" "${DEB_ROOT}${INSTALL_DIR}/src/base"
+fi
+cp "${SRC_DIR}/src/AI/package.json" "${SRC_DIR}/src/AI/package-lock.json" "${DEB_ROOT}${INSTALL_DIR}/src/AI/" 2>/dev/null || true
 cp "${SRC_DIR}/src/server/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/server/"
 
 if [ -d "${SRC_DIR}/src/server/packages" ]; then
@@ -94,10 +98,19 @@ cat > "${DEB_ROOT}/DEBIAN/postinst" << 'POSTINST'
 
 INSTALL_DIR="/opt/oasis"
 
-echo "Installing Node.js dependencies..."
 cd "${INSTALL_DIR}/src/server"
-npm install --production 2>&1 | tail -10
-node ../../scripts/patch-node-modules.js 2>/dev/null || true
+if [ -d ../base/node_modules ]; then
+    [ -e node_modules ] || ln -s ../base/node_modules node_modules
+    echo "Using the packages shipped in src/base."
+else
+    echo "Installing Node.js dependencies..."
+    if [ -f package-lock.json ]; then
+        npm ci --omit=dev --no-audit --no-fund 2>&1 | tail -10
+    else
+        npm install --production 2>&1 | tail -10
+    fi
+    node ../../scripts/patch-node-modules.js 2>/dev/null || true
+fi
 
 if ! id -u oasis >/dev/null 2>&1; then
     useradd --system --home-dir /var/lib/oasis --create-home --shell /usr/sbin/nologin oasis
