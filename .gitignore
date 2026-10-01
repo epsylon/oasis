@@ -8,7 +8,7 @@ src/server/node_modules.full/
 src/AI/embeddings/
 src/AI/.cache/
 .update_required
-cache/
+/cache/
 src/configs/*
 !src/configs/config-manager.js
 !src/configs/shared-state.js
