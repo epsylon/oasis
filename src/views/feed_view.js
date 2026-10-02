@@ -217,7 +217,7 @@ exports.feedView = (feeds, opts = "ALL") => {
     section(
       filter === "CREATE"
         ? form(
-            { method: "POST", action: "/feed/create" },
+            { method: "POST", action: "/feed/create", enctype: "multipart/form-data" },
             textarea({
               name: "text",
               placeholder: i18n.feedPlaceholder,
@@ -227,6 +227,7 @@ exports.feedView = (feeds, opts = "ALL") => {
               rows: 4,
               cols: 50
             }),
+            div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
             br(),
             button({ type: "submit", class: "create-button" }, i18n.createFeedButton)
           )
@@ -259,7 +260,7 @@ exports.feedCreateView = (opts = {}) => {
       div({ class: "tags-header module-header-line" }, h2(i18n.createFeedTitle), p(i18n.FeedshareYourOpinions)),
       div({ class: "mode-buttons-row" }, ...generateFilterButtons(["ALL"], "CREATE", "/feed", { q, tag })),
       form(
-        { method: "POST", action: "/feed/create" },
+        { method: "POST", action: "/feed/create", enctype: "multipart/form-data" },
         textarea({
           name: "text",
           required: true,
@@ -269,6 +270,7 @@ exports.feedCreateView = (opts = {}) => {
           cols: 50,
           placeholder: i18n.feedPlaceholder
         }),
+        div({ class: "comment-file-upload" }, label(i18n.uploadMedia), input({ type: "file", name: "blob" })),
         br(),
         button({ type: "submit", class: "create-button" }, i18n.createFeedButton || "Send Feed!")
       )

@@ -114,7 +114,7 @@ module.exports = ({ cooler }) => {
     return idx.resolve(id);
   };
 
-  const createFeed = async (text, mentions) => {
+  const createFeed = async (text, mentions, media = null) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
 
@@ -129,7 +129,7 @@ module.exports = ({ cooler }) => {
 
     const content = {
       type: "feed",
-      text: cleaned,
+      text: typeof media === "string" && media.trim() ? `${cleaned}\n${media.trim()}` : cleaned,
       author: userId,
       createdAt: new Date().toISOString(),
       tags: extractTags(cleaned),

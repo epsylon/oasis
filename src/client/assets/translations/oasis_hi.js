@@ -526,6 +526,7 @@ module.exports = {
       "यदि आप दूसरी भाषा उपयोग करना चाहते हैं, तो यहाँ चुनें।",
     setLanguage: "भाषा सेट करें",
     peerConnectionsIntro: "अन्य पीयर के साथ अपने सभी कनेक्शन प्रबंधित करें।",
+    peersConnectFailed: "कनेक्ट नहीं हो सका: {reason}। वह नोड इस पते या पोर्ट पर सुन नहीं रहा है।",
     peerConnectionsTitle: "कनेक्शन",
     online: "ऑनलाइन",
     offline: "ऑफ़लाइन",

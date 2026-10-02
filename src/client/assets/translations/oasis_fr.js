@@ -519,6 +519,7 @@ module.exports = {
       "Si vous souhaitez utiliser une autre langue, sélectionnez-la ici.",
     setLanguage: "Définir la langue",
     peerConnectionsIntro: "Gérez toutes vos connexions avec d’autres nœuds.",
+    peersConnectFailed: "Connexion impossible : {reason}. Ce nœud n'écoute pas à cette adresse ou sur ce port.",
     peerConnectionsTitle: "Connexions",
     online: "En ligne",
     offline: "Hors ligne",

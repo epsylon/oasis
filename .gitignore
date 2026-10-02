@@ -9,6 +9,7 @@ src/AI/embeddings/
 src/AI/.cache/
 .update_required
 /cache/
+src/maps/cache/
 src/configs/*
 !src/configs/config-manager.js
 !src/configs/shared-state.js

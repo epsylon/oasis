@@ -281,7 +281,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
                 )
               )
             ),
-            div({ class: "audios-list" }, renderAudioList(list, filter, { q, sort }))
+            div({ class: "audios-list" }, renderAudioList(list, filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

@@ -1885,7 +1885,9 @@ display:flex; gap:8px; margin-top:16px;
   padding: 6px 4px;
   font-size: 12px;
   width: 100%;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
 }
 
 .tribe-feed .feed-main,
@@ -5632,7 +5634,7 @@ a.pm-btn:hover { text-decoration: none }
   align-items: center;
   justify-content: center;
 }
-.map-popup:target {
+.map-popup-anchor:target .map-popup {
   display: flex;
 }
 .map-popup-box {
@@ -7420,6 +7422,20 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
     background: transparent !important;
 }
 
+.poll-ballot-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.chat-poll-close-form:empty,
+.chat-poll-close-form:not(:has(button)) {
+    margin: 0;
+    padding: 0;
+}
+
 .report-category-select {
     width: auto;
     max-width: 260px;
@@ -7818,6 +7834,7 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .blob-cache-clean-btn{margin-left:8px}
 .blob-cache-usage{margin:4px 0 10px 0}
 .blob-cache-notice{margin:0 0 10px 0;font-weight:bold}
+.peers-connect-error{margin:0 0 12px 0;padding:8px 12px;border:1px solid #d9534f;border-radius:6px;color:#d9534f;font-weight:bold}
 .blob-cache-note{opacity:.8;font-size:.95em;margin-top:10px}
 .user-prompt-text{font-style:italic}
 .chat-entry{margin-bottom:2em;position:relative;background:#191919;border-radius:10px;box-shadow:0 0 8px #0004;padding-top:1.8em}
@@ -8209,6 +8226,7 @@ details[open] > .school-unit-summary::after{content:" \25B4"}
 .rt-item::before{content:"• ";opacity:.7}
 .rt-item-number{text-indent:-1.2em}
 .rt-item-number::before{content:none}
+.rt-item .tag-link{text-indent:0}
 .rt-quote{display:block;border-left:3px solid currentColor;padding-left:10px;margin:6px 0;opacity:.85}
 .rt-rule{display:block;border-top:1px solid currentColor;opacity:.4;margin:10px 0}
 .rt-code{font-family:monospace;background:rgba(128,128,128,.18);padding:1px 4px;border-radius:3px;word-break:break-word}

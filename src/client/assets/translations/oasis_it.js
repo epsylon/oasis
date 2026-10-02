@@ -524,6 +524,7 @@ module.exports = {
       "Se desideri usare un'altra lingua, selezionala qui.",
     setLanguage: "Imposta lingua",
     peerConnectionsIntro: "Gestisci tutte le tue connessioni con altri peer.",
+    peersConnectFailed: "Impossibile connettersi: {reason}. Quel nodo non è in ascolto su quell'indirizzo o porta.",
     peerConnectionsTitle: "Connessioni",
     online: "Online",
     offline: "Offline",

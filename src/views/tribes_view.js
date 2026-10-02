@@ -970,7 +970,7 @@ const renderTribePollsSection = (tribe, items, query) => {
         poll.author === userId && poll.status === 'OPEN'
           ? form({ method: 'POST', action: `/polls/close/${encodeURIComponent(poll.id)}` },
               input({ type: 'hidden', name: 'returnTo', value: returnTo }),
-              button({ type: 'submit', class: 'filter-btn' }, i18n.pollCloseButton)
+              button({ type: 'submit', class: 'danger-btn' }, i18n.pollCloseButton)
             )
           : null,
         poll.author === userId

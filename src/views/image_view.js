@@ -293,7 +293,7 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
                 )
               )
             ),
-            filter === "gallery" ? renderGallery(list) : div({ class: "images-list" }, renderImageList(list, filter, { q, sort }))
+            filter === "gallery" ? renderGallery(list) : div({ class: "images-list" }, renderImageList(list, filter, { q, sort, spreadMap: params.spreadMap }))
           )
     ),
     ...(filter === "gallery" ? renderLightbox(list) : [])

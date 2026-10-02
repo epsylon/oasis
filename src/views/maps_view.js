@@ -30,7 +30,7 @@ const renderTags = (tags) => {
 
 let areaCounter = 0;
 
-const buildAreas = (clickUrl, latParam = "lat", lngParam = "lng", viewport = null) => {
+const buildAreas = (clickUrl, latParam = "lat", lngParam = "lng", viewport = null, anchor = "") => {
   const GRID = 16;
   const cellW = MAP_W / GRID;
   const cellH = MAP_H / GRID;
@@ -51,7 +51,7 @@ const buildAreas = (clickUrl, latParam = "lat", lngParam = "lng", viewport = nul
       const y1 = Math.round(gy * cellH);
       const x2 = Math.round((gx + 1) * cellW);
       const y2 = Math.round((gy + 1) * cellH);
-      areas.push(`<area shape="rect" coords="${x1},${y1},${x2},${y2}" href="${clickUrl}${latParam}=${c.lat}&amp;${lngParam}=${c.lng}" alt="${c.lat},${c.lng}">`);
+      areas.push(`<area shape="rect" coords="${x1},${y1},${x2},${y2}" href="${clickUrl}${latParam}=${c.lat}&amp;${lngParam}=${c.lng}${anchor}" alt="${c.lat},${c.lng}">`);
     }
   }
   return areas;
@@ -82,8 +82,8 @@ const renderMap = (markers, clickUrl, mainIdx, opts = {}) => {
 
   let gridAreasHtml = "";
   if (clickUrl) {
-    const clickUrlWithZoom = zoom > 2 ? `${clickUrl}zoom=${zoom}&` : clickUrl;
-    gridAreasHtml = buildAreas(clickUrlWithZoom, latParam, lngParam, viewport).join("");
+    const clickUrlWithZoom = zoom > 2 && !/[?&]zoom=/.test(clickUrl) ? `${clickUrl}zoom=${zoom}&` : clickUrl;
+    gridAreasHtml = buildAreas(clickUrlWithZoom, latParam, lngParam, viewport, typeof opts.anchor === "string" ? opts.anchor : "").join("");
   }
   let popupAreasHtml = "";
   let popupsHtml = "";
@@ -119,7 +119,7 @@ const renderMap = (markers, clickUrl, mainIdx, opts = {}) => {
       const imgBlobId = pinImages[i] && String(pinImages[i]).startsWith("&") ? pinImages[i] : "";
       const imgHtml = imgBlobId ? `<img src="/blob/${encodeURIComponent(imgBlobId)}" class="map-popup-img" alt="">` : "";
       popupAreasHtml += `<area shape="rect" coords="${x1},${y1},${x2},${y2}" title="${escaped}" alt="${escaped}" href="#${popupId}">`;
-      popupsHtml += `<div id="${popupId}" class="map-popup"><div class="map-popup-box"><a href="#" class="map-popup-close">&#x2715;</a>${imgHtml}<div class="map-popup-label">${sanitizeHtml(withLinks)}</div><div class="map-popup-coords">${latStr}, ${lngStr}</div></div></div>`;
+      popupsHtml += `<div id="${popupId}" class="map-popup-anchor"><div class="map-popup"><div class="map-popup-box"><a href="#${pfx}_map" class="map-popup-close">&#x2715;</a>${imgHtml}<div class="map-popup-label">${sanitizeHtml(withLinks)}</div><div class="map-popup-coords">${latStr}, ${lngStr}</div></div></div></div>`;
     });
   }
   const mapHtml = useMap ? `<map name="${mapTag}">${popupAreasHtml}${gridAreasHtml}</map>` : "";
@@ -128,7 +128,7 @@ const renderMap = (markers, clickUrl, mainIdx, opts = {}) => {
   const mapWrapHtml = `<div class="map-wrap"><img src="${imgSrc}" class="map-img" alt="map"${useAttr}>${mapHtml}</div>`;
   const viewerEl = div({ class: "map-viewer" }, { innerHTML: mapWrapHtml });
   if (!popupsHtml) return viewerEl;
-  return div({ class: "map-zone" }, viewerEl, div({ class: "map-popup-container", innerHTML: popupsHtml }));
+  return div({ class: "map-zone" }, div({ class: "map-popup-container", id: `${pfx}_map`, innerHTML: popupsHtml }), viewerEl);
 };
 
 const renderCoordPreview = (lat, lng) => {
@@ -307,7 +307,7 @@ const renderMarkerForm = (mapObj, returnTo, params = {}, tribeMembers = []) => {
       br(),br(),
       button({ type: "submit", attrs: { formmethod: "GET" }, formaction: `/maps/${encodeURIComponent(mapObj.key)}`, class: "filter-btn" }, i18n.mapApplyZoom || "Apply Zoom"),
       div({ class: "map-form-map-slot" },
-        renderMap(existingMarkers, clickUrl, 0, { latParam: "mkLat", lngParam: "mkLng", pinLabels, pinPrefix: `mk${areaCounter}`, zoom: zoomVal, centerLat: parseFloat(mkLat) || parseFloat(mapObj.lat) || 0, centerLng: parseFloat(mkLng) || parseFloat(mapObj.lng) || 0 })),
+        renderMap(existingMarkers, clickUrl, 0, { latParam: "mkLat", lngParam: "mkLng", pinLabels, pinPrefix: `mk${areaCounter}`, anchor: "#add-marker", zoom: zoomVal, centerLat: parseFloat(mkLat) || parseFloat(mapObj.lat) || 0, centerLng: parseFloat(mkLng) || parseFloat(mapObj.lng) || 0 })),
       button({ type: "submit", class: "create-button" }, i18n.mapAddMarkerButton)));
 };
 
@@ -425,7 +425,7 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
                 input({ type: "hidden", name: "filter", value: filter }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.mapSearchPlaceholder, class: "filter-box__input" }),
                 div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.mapSearchButton)))),
-            div({ class: "jobs-grid" }, renderMapList(list, filter, { q })))));
+            div({ class: "jobs-grid" }, renderMapList(list, filter, { q, spreadMap: params.spreadMap })))));
 };
 
 exports.singleMapView = async (mapObj, filter = "all", params = {}) => {

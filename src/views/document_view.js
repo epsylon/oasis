@@ -235,7 +235,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
                 )
               )
             ),
-            div({ class: "documents-list" }, renderDocumentList(list, filter, { q, sort }))
+            div({ class: "documents-list" }, renderDocumentList(list, filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

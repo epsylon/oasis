@@ -1,4 +1,4 @@
-const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [], versions = {} }) => {
+const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [], versions = {}, connectError = null }) => {
   const { form, button, div, h2, p, section, a, hr, input, label, br, span, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
   const { template, i18n } = require('./main_views');
 
@@ -126,6 +126,9 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
         h2(i18n.peers),
         p(i18n.peerConnectionsIntro)
       ),
+      connectError
+        ? div({ class: 'peers-connect-error' }, String(i18n.peersConnectFailed || 'Could not connect: {reason}').replace('{reason}', connectError))
+        : null,
       div({ class: "conn-actions" }, ...connButtons),
       (onlineCount + discoveredCount + unknownCount) > 0
         ? div({ class: "peers-list" },

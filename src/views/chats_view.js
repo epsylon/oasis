@@ -192,15 +192,21 @@ const renderChatPoll = (poll, chat) => {
       : [
           p({ class: "chat-poll-question" }, poll.question),
           showResults ? renderResults(poll) : null,
-          div({ class: "chat-poll-actions" },
-            renderBallot(poll, `/chats/${encodeURIComponent(chat.key)}`, "/polls"),
-            String(poll.author) === String(userId) && poll.status === "OPEN"
-              ? form({ method: "POST", action: `/polls/close/${encodeURIComponent(poll.id)}` },
-                  input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}` }),
-                  button({ type: "submit", class: "filter-btn" }, i18n.pollCloseButton)
-                )
-              : null
-          ),
+          (() => {
+            const canClose = String(poll.author) === String(userId) && poll.status === "OPEN";
+            const closeFormId = `poll-close-${String(poll.id).replace(/[^a-zA-Z0-9]/g, "")}`;
+            const ballot = renderBallot(poll, `/chats/${encodeURIComponent(chat.key)}`, "/polls",
+              canClose ? [button({ type: "submit", form: closeFormId, class: "danger-btn" }, i18n.pollCloseButton)] : null);
+            return div({ class: "chat-poll-actions" },
+              ballot,
+              canClose
+                ? form({ id: closeFormId, method: "POST", action: `/polls/close/${encodeURIComponent(poll.id)}`, class: "chat-poll-close-form" },
+                    input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}` }),
+                    ballot ? null : button({ type: "submit", class: "danger-btn" }, i18n.pollCloseButton)
+                  )
+                : null
+            );
+          })(),
           div({ class: "chat-poll-meta" },
             span({ class: "card-label" }, `${i18n.pollVoters}: `),
             span({ class: "card-value" }, String(poll.totalVoters)),

@@ -229,4 +229,30 @@ describe('ssb-db2: the legacy surface the models rely on', (t) => {
       eq(refs.join(','), confirm.key);
     } finally { await closeSbot(sbot); }
   });
+
+  t('a live stream the consumer abandons releases its log listener', async () => {
+    const sbot = makeSbot();
+    try {
+      const root = await publish(sbot, { type: 'post', text: 'root' });
+      const listeners = () => sbot.db.getLog().streams.size;
+      const base = listeners();
+      const takeOne = (src) => new Promise((resolve) => pull(src, pull.take(1), pull.collect(() => resolve())));
+      for (let i = 0; i < 20; i++) {
+        await takeOne(sbot.createLogStream({ live: true }));
+        await takeOne(sbot.messagesByType({ type: 'post', live: true }));
+        await takeOne(sbot.createUserStream({ id: sbot.id, live: true }));
+        await takeOne(sbot.query.read({ query: [{ $filter: { value: { content: { type: 'post' } } } }], live: true }));
+        await takeOne(sbot.backlinks.read({ query: [{ $filter: { dest: root.key } }], live: true }));
+        await takeOne(sbot.links({ dest: root.key, live: true }));
+        await takeOne(sbot.private.read({ live: true }));
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      eq(listeners(), base, 'no live query survives its consumer');
+      const woke = new Promise((resolve) => pull(sbot.createLogStream({ live: true, old: false }), pull.filter(m => !m.sync), pull.drain((m) => { resolve(m.value.content.text); return false; })));
+      await publish(sbot, { type: 'post', text: 'wake' });
+      eq(await woke, 'wake', 'a live stream still delivers what arrives after it opened');
+      await new Promise((r) => setTimeout(r, 50));
+      eq(listeners(), base, 'live streams never hold a log listener of their own');
+    } finally { await closeSbot(sbot); }
+  });
 });

@@ -67,7 +67,7 @@ const renderResults = (poll) =>
     )
   );
 
-const renderBallot = (poll, returnTo, basePath) => {
+const renderBallot = (poll, returnTo, basePath, extra = null) => {
   if (poll.status === "CLOSED" || poll.hasVoted) return null;
   const inputType = poll.multiple ? "checkbox" : "radio";
   return form({ method: "POST", action: `${basePath}/vote/${encodeURIComponent(poll.id)}`, class: "poll-ballot" },
@@ -84,7 +84,10 @@ const renderBallot = (poll, returnTo, basePath) => {
         )
       )
     ),
-    button({ type: "submit", class: "filter-btn" }, i18n.pollVoteButton)
+    div({ class: "poll-ballot-actions" },
+      button({ type: "submit", class: "filter-btn" }, i18n.pollVoteButton),
+      ...(Array.isArray(extra) ? extra.filter(Boolean) : [])
+    )
   );
 };
 

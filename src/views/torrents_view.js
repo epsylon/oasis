@@ -100,6 +100,12 @@ const formatSize = (bytes) => {
   return (n / (1024 * 1024)).toFixed(1) + " MB";
 };
 
+const renderTorrentSpread = (t, spreadMap) => {
+  const info = (spreadMap instanceof Map && spreadMap.get(t.key)) || null;
+  if (String(t.author) === String(userId)) return `⟳ ${info && typeof info.count === "number" ? info.count : 0}`;
+  return renderSpreadButton(t.key, info);
+};
+
 const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
@@ -112,6 +118,7 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
       th(i18n.authorLabel || "AUTHOR"),
       th(i18n.torrentTitleLabel || "TITLE"),
       th(i18n.torrentSizeLabel || "SIZE"),
+      th(i18n.spreadChron),
       th(""),
       th("")
     ),
@@ -121,6 +128,7 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
         td(userLink(t.author)),
         td(t.title || ""),
         td(formatSize(t.size)),
+        td(renderTorrentSpread(t, params.spreadMap)),
         td(
           form(
             { method: "GET", action: `/torrents/${encodeURIComponent(t.key)}` },
@@ -269,7 +277,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
                 )
               )
             ),
-            div({ class: "audios-list" }, renderTorrentTable(list, filter, { q, sort }))
+            div({ class: "audios-list" }, renderTorrentTable(list, filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

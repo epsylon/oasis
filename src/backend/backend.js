@@ -5435,7 +5435,8 @@ router
     await Promise.all(Array.from(versionKeys).map(async (k) => {
       versions[k] = String(k) === String(getViewerId()) ? OASIS_VERSION : await getOasisVersion(k).catch(() => null);
     }));
-    ctx.body = await peersView({ onlinePeers: onlinePeersList, discoveredPeers, unknownPeers, lanBroadcastActive, technicalPeers, versions });
+    const connectError = String((ctx.query && ctx.query.connectError) || '').slice(0, 120);
+    ctx.body = await peersView({ onlinePeers: onlinePeersList, discoveredPeers, unknownPeers, lanBroadcastActive, technicalPeers, versions, connectError });
   })
   .get("/graphos", async (ctx) => {
     if (!checkMod(ctx, 'graphosMod')) return ctx.redirect('/modules');
@@ -9024,10 +9025,11 @@ router
   .post('/agenda/restore/:itemId', async (ctx) => {
     await agendaModel.restoreItem(ctx.params.itemId); ctx.redirect('/agenda?filter=discarded');
   })
-  .post("/feed/create", koaBody(), async (ctx) => {
+  .post("/feed/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     const text = ctx.request.body?.text != null ? stripDangerousTags(String(ctx.request.body.text)) : "";
     const mentions = await extractMentions(text);
-    await feedModel.createFeed(text, mentions);
+    const media = await handleBlobUpload(ctx, 'blob');
+    await feedModel.createFeed(text, mentions, media);
     ctx.redirect("/feed?filter=ALL&msg=feedPublished");
   })
   .post("/feed/opinions/:feedId/:category", async (ctx) => {
@@ -11689,11 +11691,12 @@ router
     const ssb = await cooler.open();
     const addr = msAddrFrom(hostStr, prt, kcanon);
     try { ssb.conn.remember(addr, { type: "peer", autoconnect: true, key: kcanon }); } catch (e) { console.error('[peers/connect] remember failed:', e.message || e); }
-    try { await new Promise((res, rej) => ssb.conn.connect(addr, { type: "peer" }, (err) => err ? rej(err) : res())); } catch (_) {}
+    let connectError = null;
+    try { await new Promise((res, rej) => ssb.conn.connect(addr, { type: "peer" }, (err) => err ? rej(err) : res())); } catch (e) { connectError = String((e && e.message) || e || 'connect failed').replace(/^connect\s+/i, '').slice(0, 120); }
     try { await new Promise((res, rej) => ssb.publish({ type: "contact", contact: kcanon, following: true }, e => e ? rej(e) : res())); } catch (_) {}
     const unf = readJSON(unfollowedPath);
     writeJSON(unfollowedPath, unf.filter(x => !(x && canonicalKey(x.key) === kcanon)));
-    ctx.redirect("/peers");
+    ctx.redirect(connectError ? `/peers?connectError=${encodeURIComponent(connectError)}` : "/peers");
   })
   .post("/peers/disconnect", koaBody(), async (ctx) => {
     const { key, host, port } = ctx.request.body || {};

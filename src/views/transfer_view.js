@@ -208,6 +208,8 @@ const generateTransferCard = (transfer, filter, params = {}) => {
   )
 }
 
+const isUbiTagged = (t) => safeArr(t.tags).some(tag => String(tag).toUpperCase() === "UBI")
+
 const trChipFor = (normalizedFilter, censusT) => (mode) => {
   if (mode === normalizedFilter) return true
   if (!Array.isArray(censusT)) return true;
@@ -219,7 +221,7 @@ const trChipFor = (normalizedFilter, censusT) => (mode) => {
   if (mode === "economic") return censusT.some(t => categoryOf(t) === "ECONOMIC")
   if (mode === "time") return censusT.some(t => categoryOf(t) === "TIME")
   if (mode === "trust") return censusT.some(t => categoryOf(t) === "TRUST")
-  if (mode === "market") return censusT.length > 0
+  if (mode === "market") return censusT.some(t => !isUbiTagged(t))
   if (mode === "pending") return censusT.some(t => stT(t) === "UNCONFIRMED" && t.to === userId && !safeArr(t.confirmedBy).includes(userId))
   if (mode === "unconfirmed") return censusT.some(t => stT(t) === "UNCONFIRMED")
   if (mode === "closed" || mode === "top") return censusT.some(t => stT(t) === "CLOSED")
@@ -254,7 +256,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
     normalizedFilter === "economic"    ? list.filter(t => categoryOf(t) === "ECONOMIC") :
     normalizedFilter === "time"        ? list.filter(t => categoryOf(t) === "TIME") :
     normalizedFilter === "trust"       ? list.filter(t => categoryOf(t) === "TRUST") :
-    normalizedFilter === "market"      ? list :
+    normalizedFilter === "market"      ? list.filter(t => !isUbiTagged(t)) :
                                         list
 
   if (q) {

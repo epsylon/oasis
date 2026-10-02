@@ -551,6 +551,7 @@ module.exports = {
       "If you'd like to use another language, select it here.",
     setLanguage: "Set Language",
     peerConnectionsIntro: "Manage all your connections with other peers.",
+    peersConnectFailed: "Could not connect: {reason}. The peer is not listening on that address or port.",
     peerConnectionsTitle: "Connections",
     online: "Online",
     offline: "Offline",

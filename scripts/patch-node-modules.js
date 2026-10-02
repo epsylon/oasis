@@ -31,7 +31,9 @@ if (fs.existsSync(ssbBlobsPath)) {
 
   const marker = 'want: function (id, cb)';
   const startIndex = data.indexOf(marker);
-  if (startIndex !== -1) {
+  if (data.includes('if (wantCallbacks[id]) registerWant(id);')) {
+    log('ssb-blobs already patched');
+  } else if (startIndex !== -1) {
     const endIndex = data.indexOf('},', startIndex);
     if (endIndex !== -1) {
       const before = data.slice(0, startIndex);
@@ -76,6 +78,35 @@ if (fs.existsSync(ssbBlobsPath)) {
   } else {
     log('ssb-blobs patch skipped: want function not found');
   }
+}
+
+// === Patch ssb-db2 (onceWhen leaks its listener when the condition already holds) ===
+const ssbDb2UtilsPath = path.resolve(__dirname, '../src/server/node_modules/ssb-db2/utils.js');
+if (fs.existsSync(ssbDb2UtilsPath)) {
+  const data = fs.readFileSync(ssbDb2UtilsPath, 'utf8');
+  if (!data.includes('answered = true\n    cb()\n    return false')) {
+    const start = data.indexOf('function onceWhen(obv, filter, cb) {');
+    const end = data.indexOf('\n}\n', start);
+    if (start >= 0 && end > start) {
+      const replacement = `function onceWhen(obv, filter, cb) {
+  if (!obv) return cb()
+  let answered = false
+  obv((x) => {
+    if (answered) return false
+    if (!filter(x)) return
+    answered = true
+    cb()
+    return false
+  })
+}`;
+      fs.writeFileSync(ssbDb2UtilsPath, data.slice(0, start) + replacement + data.slice(end + 2));
+      log('Patched ssb-db2 utils.js so onceWhen releases its listener once answered');
+    } else {
+      log('ssb-db2 patch skipped: onceWhen not found');
+    }
+  }
+} else {
+  log('ssb-db2 patch skipped: file not found');
 }
 
 // === Patch @xenova/transformers (onnxruntime 1.19 Tensor getter) ===

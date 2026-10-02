@@ -7,7 +7,7 @@ const ssbKeys = require('ssb-keys');
 const ssbMsgs = require('ssb-msgs');
 const { heads } = require('ssb-sort');
 const Plugin = require('ssb-db2/indexes/plugin');
-const { where, and, or, type, author, descending, sortByArrival, live, toPullStream, seqs, isDecrypted } = require('ssb-db2/operators');
+const { where, and, or, type, author, descending, sortByArrival, toPullStream, seqs, isDecrypted } = require('ssb-db2/operators');
 
 const BIPF_CONTENT = bipf.allocAndEncode('content');
 const BIPF_AUTHOR = bipf.allocAndEncode('author');
@@ -61,19 +61,34 @@ const linksOf = (content) => {
   return out;
 };
 
-const buffered = (source) => {
+const plainOf = (kvt, keys, opts) => {
+  if (!kvt || !kvt.value) return null;
+  const base = { key: kvt.key, value: kvt.value, timestamp: kvt.timestamp };
+  const c = kvt.value.content;
+  if (typeof c !== 'string') return opts.decryptedOnly ? null : base;
+  if (!opts.private && !opts.decryptedOnly) return base;
+  let plain = null;
+  try { plain = ssbKeys.unbox(c, keys.private); } catch (_) { plain = null; }
+  if (!plain) return opts.decryptedOnly ? null : base;
+  return legacy({ key: kvt.key, value: { ...kvt.value, content: plain }, timestamp: kvt.timestamp, meta: { private: true, originalContent: c } }, { private: opts.private });
+};
+
+const liveTap = (sbot, keys, opts, match) => {
   const items = [];
   let waiting = null;
   let ended = null;
-  pull(source, pull.drain((m) => {
+  const remove = sbot.db.onMsgAdded((ev) => {
+    if (ended) return false;
+    const m = plainOf(ev && ev.kvt, keys, opts);
+    if (!m || (match && !match(m))) return;
     items.push(m);
     if (waiting) { const w = waiting; waiting = null; w(null, items.shift()); }
-  }, (err) => {
-    ended = err || true;
-    if (waiting) { const w = waiting; waiting = null; w(ended); }
-  }));
+  }, false);
   return (abort, cb) => {
-    if (abort) { ended = abort; return cb(abort); }
+    if (abort) {
+      if (!ended) { ended = abort; items.length = 0; remove(); }
+      return cb(abort);
+    }
     if (items.length) return cb(null, items.shift());
     if (ended) return cb(ended);
     waiting = cb;
@@ -180,7 +195,8 @@ module.exports = [
         const order = [opts.arrival ? sortByArrival() : null, opts.reverse ? descending() : null].filter(Boolean);
         const fmt = formatter(opts);
         if (!opts.live) return pull(query(ops, order), shape(), boxed(), pass(), limit >= 0 ? pull.take(limit) : pull.through(), pull.map(fmt));
-        const live$ = buffered(pull(query(ops, [live({ old: false })]), shape(), boxed(), pass()));
+        const match = (m) => (!opts.skipPrivate || typeof (m.value && m.value.content) !== 'string') && (!opts.match || opts.match(m)) && (!opts.filter || opts.filter(m));
+        const live$ = liveTap(sbot, config.keys, { private: opts.private, decryptedOnly: opts.decryptedOnly }, match);
         const old$ = pull(query(ops, order), shape(), boxed(), pass(), limit >= 0 ? pull.take(limit) : pull.through());
         return pull(withSync(old$, live$, opts), pull.map(fmt));
       };
@@ -203,11 +219,8 @@ module.exports = [
         });
       };
 
-      const liveLinked = (dest, opts) => pull(
-        query(null, [live({ old: false })]),
-        pull.map(m => legacy(m, { private: opts.private })),
-        pull.filter(m => linksOf(m.value && m.value.content).some(l => l.dest === dest && (!opts.rel || l.rel === opts.rel)) && (!opts.source || m.value.author === opts.source))
-      );
+      const liveLinked = (dest, opts) => liveTap(sbot, config.keys, { private: opts.private }, (m) =>
+        linksOf(m.value && m.value.content).some(l => l.dest === dest && (!opts.rel || l.rel === opts.rel)) && (!opts.source || m.value.author === opts.source));
 
       const sortLegacy = (arr, byTs, reverse) => {
         const claimed = (m) => Number(m.value && m.value.timestamp) || 0;
@@ -246,23 +259,23 @@ module.exports = [
         const filter = (opts.gt !== undefined || opts.gte !== undefined || opts.lt !== undefined || opts.lte !== undefined)
           ? (m) => (opts.gt === undefined || seqOf(m) > opts.gt) && (opts.gte === undefined || seqOf(m) >= opts.gte) && (opts.lt === undefined || seqOf(m) < opts.lt) && (opts.lte === undefined || seqOf(m) <= opts.lte)
           : null;
-        return stream(author(id), { reverse: opts.reverse === true, limit: opts.limit, live: opts.live === true, old: opts.old, sync: opts.sync, filter, private: opts.private === true, arrival: true, keys: opts.keys, values: opts.values });
+        return stream(author(id), { reverse: opts.reverse === true, limit: opts.limit, live: opts.live === true, old: opts.old, sync: opts.sync, filter, match: (m) => m.value && m.value.author === id, private: opts.private === true, arrival: true, keys: opts.keys, values: opts.values });
       };
 
       const messagesByType = (opts = {}) => {
         const t = typeof opts === 'string' ? opts : opts.type;
         if (!t) return pull.error(new Error('messagesByType: missing type'));
         const o = typeof opts === 'string' ? {} : opts;
-        return stream(type(t), { reverse: o.reverse === true, limit: o.limit, live: o.live === true, old: o.old, sync: o.sync, skipPrivate: true, arrival: true, keys: o.keys, values: o.values });
+        return stream(type(t), { reverse: o.reverse === true, limit: o.limit, live: o.live === true, old: o.old, sync: o.sync, skipPrivate: true, match: (m) => !!(m.value && m.value.content && m.value.content.type === t), arrival: true, keys: o.keys, values: o.values });
       };
 
       const links = (opts = {}) => {
         const src = defer.source();
         const toLink = (m) => opts.values ? m : { source: m.value.author, dest: opts.dest, rel: opts.rel, key: m.key };
         if (opts.dest) {
-          const live$ = opts.live ? buffered(liveLinked(opts.dest, { rel: opts.rel, source: opts.source })) : null;
+          const live$ = opts.live ? liveLinked(opts.dest, { rel: opts.rel, source: opts.source }) : null;
           linked(opts.dest, { rel: opts.rel, source: opts.source }, (err, arr) => {
-            if (err) return src.abort(err);
+            if (err) { if (live$) live$(err, () => {}); return src.abort(err); }
             const out = sortLegacy(arr, false, opts.reverse === true);
             if (!live$) return src.resolve(pull(pull.values(out), pull.map(toLink)));
             src.resolve(pull(withSync(pull.values(out), live$, opts), pull.map((m) => m.sync ? m : toLink(m))));
@@ -332,7 +345,7 @@ module.exports = [
           };
         },
         read(opts = {}) {
-          return sbot._oasisDb2.stream(isDecrypted('box'), { reverse: opts.reverse === true, limit: opts.limit, live: opts.live === true, old: opts.old, sync: opts.sync, private: true, arrival: true, keys: opts.keys, values: opts.values });
+          return sbot._oasisDb2.stream(isDecrypted('box'), { reverse: opts.reverse === true, limit: opts.limit, live: opts.live === true, old: opts.old, sync: opts.sync, private: true, decryptedOnly: true, arrival: true, keys: opts.keys, values: opts.values });
         }
       };
     }
@@ -354,7 +367,7 @@ module.exports = [
           const src = defer.source();
           const limit = typeof opts.limit === 'number' && opts.limit >= 0 ? opts.limit : -1;
           const fmt = formatter(opts);
-          const live$ = opts.live ? buffered(pull(liveLinked(filter.dest, { private: priv }), pull.filter(pass))) : null;
+          const live$ = opts.live ? pull(liveLinked(filter.dest, { private: priv }), pull.filter(pass)) : null;
           const finish = (arr) => {
             let out = sortLegacy(arr.filter(pass), opts.index === 'DTA', opts.reverse === true);
             if (limit >= 0) out = out.slice(0, limit);
@@ -362,7 +375,11 @@ module.exports = [
             src.resolve(pull(withSync(pull.values(out), live$, opts), pull.map(fmt)));
           };
           if (opts.old === false && opts.live) return finish([]), src;
-          linked(filter.dest, { private: priv }, (err, arr) => err ? src.abort(err) : finish(arr));
+          linked(filter.dest, { private: priv }, (err, arr) => {
+            if (!err) return finish(arr);
+            if (live$) live$(err, () => {});
+            src.abort(err);
+          });
           return src;
         }
       };

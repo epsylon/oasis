@@ -224,6 +224,8 @@ const aiPkg = {
 };
 for (const n of EMBED_ROOTS) if (aiVersions[n]) aiPkg.dependencies[n] = aiVersions[n];
 for (const n of LLAMA_ROOTS) if (aiVersions[n]) aiPkg.optionalDependencies[n] = aiVersions[n];
+const overrides = Object.fromEntries(Object.entries(serverPkg.overrides || {}).filter(([k]) => /^onnxruntime/.test(k)));
+if (Object.keys(overrides).length) aiPkg.overrides = overrides;
 fs.writeFileSync(path.join(AI_DIR, 'package.json'), JSON.stringify(aiPkg, null, 2) + '\n');
 const llamaOnly = new Set([...ai].filter(k => !embed.has(k)));
 const aiLock = {

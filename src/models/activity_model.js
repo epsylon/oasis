@@ -167,14 +167,17 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
     }
     const msgsByRoot = new Map();
     for (const a of idToAction.values()) {
-      if (a.type !== 'chatMessage') continue;
+      const isPoll = a.type === 'poll';
+      if (a.type !== 'chatMessage' && !isPoll) continue;
       const c = a.content || {};
-      if (c.tribeId || c.encryptedText) continue;
+      if (c.tribeId || c.encryptedText || c.encryptedQuestion) continue;
       const root = c.chatId;
       if (!root) continue;
-      if (!(typeof c.text === 'string' && c.text) && !c.image) continue;
+      if (isPoll) {
+        if (!(typeof c.question === 'string' && c.question.trim())) continue;
+      } else if (!(typeof c.text === 'string' && c.text) && !c.image) continue;
       if (!msgsByRoot.has(root)) msgsByRoot.set(root, []);
-      msgsByRoot.get(root).push(a);
+      msgsByRoot.get(root).push(isPoll ? { ...a, content: { chatId: root, text: c.question.trim(), poll: true } } : a);
     }
     for (const root of msgsByRoot.keys()) {
       if (stateByRoot.has(root)) continue;
@@ -214,6 +217,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
                 author: m.author,
                 ts: m.ts || 0,
                 text: (m.content && m.content.text) || '',
+                poll: !!(m.content && m.content.poll),
                 image: (m.content && m.content.image) || null,
                 mimeType: (m.content && m.content.mimeType) || '',
                 replyTo: quotedId,

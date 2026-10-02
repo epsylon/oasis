@@ -526,6 +526,7 @@ module.exports = {
       "إذا كنت ترغب في استخدام لغة أخرى، اخترها هنا.",
     setLanguage: "تعيين اللغة",
     peerConnectionsIntro: "إدارة جميع اتصالاتك مع الأقران الآخرين.",
+    peersConnectFailed: "تعذّر الاتصال: {reason}. هذه العقدة لا تستمع على هذا العنوان أو المنفذ.",
     peerConnectionsTitle: "الاتصالات",
     online: "متصل",
     offline: "غير متصل",

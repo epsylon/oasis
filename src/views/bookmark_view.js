@@ -266,7 +266,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
                 )
               )
             ),
-            div({ class: "bookmark-list" }, renderBookmarkList(list, filter, { q, sort }))
+            div({ class: "bookmark-list" }, renderBookmarkList(list, filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

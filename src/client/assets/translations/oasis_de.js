@@ -522,6 +522,7 @@ module.exports = {
     languageDescription: "Wenn du eine andere Sprache verwenden möchtest, wähle sie hier aus.",
     setLanguage: "Sprache festlegen",
     peerConnectionsIntro: "Verwalte alle Verbindungen mit anderen Peers.",
+    peersConnectFailed: "Verbindung nicht möglich: {reason}. Dieser Knoten lauscht nicht unter dieser Adresse oder diesem Port.",
     peerConnectionsTitle: "Verbindungen",
     online: "Online",
     offline: "Offline",

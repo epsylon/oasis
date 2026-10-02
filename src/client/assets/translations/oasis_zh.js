@@ -526,6 +526,7 @@ module.exports = {
       "如果你想使用其他语言，请在此选择。",
     setLanguage: "设置语言",
     peerConnectionsIntro: "管理与其他节点的所有连接。",
+    peersConnectFailed: "无法连接：{reason}。该节点没有在此地址或端口上监听。",
     peerConnectionsTitle: "连接",
     online: "在线",
     offline: "离线",

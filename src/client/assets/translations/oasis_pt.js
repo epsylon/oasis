@@ -524,6 +524,7 @@ module.exports = {
       "Se preferires usar outro idioma, seleciona-o aqui.",
     setLanguage: "Definir idioma",
     peerConnectionsIntro: "Gere todas as tuas ligações com outros pares.",
+    peersConnectFailed: "Não foi possível ligar: {reason}. Esse nó não está à escuta nesse endereço ou porta.",
     peerConnectionsTitle: "Ligações",
     online: "Online",
     offline: "Offline",

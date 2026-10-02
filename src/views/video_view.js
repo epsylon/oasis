@@ -277,7 +277,7 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
                 )
               )
             ),
-            div({ class: "videos-list" }, renderVideoList(list, filter, { q, sort }))
+            div({ class: "videos-list" }, renderVideoList(list, filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

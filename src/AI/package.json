@@ -9,5 +9,10 @@
   },
   "optionalDependencies": {
     "node-llama-cpp": "^3.10.0"
+  },
+  "overrides": {
+    "onnxruntime-node": "1.19.2",
+    "onnxruntime-common": "1.19.2",
+    "onnxruntime-web": "1.19.2"
   }
 }

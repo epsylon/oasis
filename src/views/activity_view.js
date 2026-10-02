@@ -883,7 +883,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                                       : renderZoomableImage(attSrc, { imgClass: 'post-image' }))
                             : renderMediaBlob(latest.image);
                         const textNode = latest.text
-                            ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(latest.text))
+                            ? p({ class: 'post-text post-text-pre' }, ...(latest.poll ? [span({ class: 'card-label' }, `${String(i18n.pollInChat || 'Poll').toUpperCase()}: `)] : []), ...renderStyledText(latest.text))
                             : null;
                         const quoted = latest.reply || null;
                         const replyNode = quoted
