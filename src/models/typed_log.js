@@ -142,7 +142,7 @@ const NON_MESSAGE_LITERALS = new Set([
   'hidden', 'submit', 'text', 'file', 'number', 'checkbox', 'radio', 'password', 'date', 'datetime-local', 'time', 'url', 'email', 'search', 'button', 'reset',
   'png', 'jpeg', 'jpg', 'gif', 'svg', 'webp', 'pdf', 'zip', 'json', 'html', 'error', 'meta', 'msg', 'blob', 'peer', 'inhabitant', 'chatThread', 'taskAssignment'
 ]);
-const CORE_TYPES = ['post', 'about', 'contact', 'vote', 'pub', 'tombstone'];
+const CORE_TYPES = ['post', 'about', 'contact', 'vote', 'pub', 'tombstone', 'file'];
 
 const discoverContentTypes = () => {
   const fs = require('fs');

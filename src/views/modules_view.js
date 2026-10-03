@@ -28,6 +28,7 @@ const modulesView = () => {
     { name: 'blogs', label: i18n.modulesBlogsLabel, description: i18n.modulesBlogsDescription },
     { name: 'fediverse', label: i18n.modulesFediverseLabel, description: i18n.modulesFediverseDescription },
     { name: 'feed', label: i18n.modulesFeedLabel, description: i18n.modulesFeedDescription },
+    { name: 'files', label: i18n.modulesFilesLabel, description: i18n.modulesFilesDescription },
     { name: 'forum', label: i18n.modulesForumLabel, description: i18n.modulesForumDescription },
     { name: 'games', label: i18n.modulesGamesLabel, description: i18n.modulesGamesDescription },
     { name: 'graphos', label: i18n.modulesGraphosLabel, description: i18n.modulesGraphosDescription },

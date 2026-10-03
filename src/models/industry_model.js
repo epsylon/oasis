@@ -564,6 +564,7 @@ module.exports = ({ cooler }) => {
       }
       const f = String(filter || "ALL").toUpperCase()
       if (f === "MINE") list = list.filter(x => x.steward === uid)
+      else if (f === "RECENT") list = list.filter(x => (Date.parse(x.createdAt || "") || 0) >= Date.now() - 86400000)
       else if (f === "MEMBER") list = list.filter(x => Array.isArray(x.members) && x.members.includes(uid))
       else if (f === "ACTIVE") list = list.filter(x => x.status === "ACTIVE")
       else if (f === "PAUSED") list = list.filter(x => x.status === "PAUSED")

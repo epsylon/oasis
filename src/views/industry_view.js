@@ -1,4 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, img, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
+const { renderZoomableImage } = require("./gallery_view")
 const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, renderCardMetaRow, moduleIsEmpty } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -11,13 +12,13 @@ const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null
   const s = String(value).trim()
   if (!s) return null
-  if (s.startsWith('&')) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(s)}`, ...attrs })
+  if (s.startsWith('&')) return renderZoomableImage(`/blob/${encodeURIComponent(s)}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}`, preload: 'metadata' })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mImg) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(mImg[1])}`, class: attrs.class || 'post-image' })
+  if (mImg) return renderZoomableImage(`/blob/${encodeURIComponent(mImg[1])}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
   return null
 }
 
@@ -25,8 +26,9 @@ const SECTORS = ["software", "hardware", "agriculture", "textile", "energy", "fo
 const POLICIES = ["open", "vote", "invite"]
 
 const FILTERS = [
-  { key: "ALL", i18n: "industryFilterAll", title: "industryAllTitle" },
+  { key: "RECENT", i18n: "industryFilterRecent", title: "industryRecentTitle" },
   { key: "MINE", i18n: "industryFilterMine", title: "industryMineTitle" },
+  { key: "ALL", i18n: "industryFilterAll", title: "industryAllTitle" },
   { key: "ACTIVE", i18n: "industryFilterActive", title: "industryActiveTitle" },
   { key: "PAUSED", i18n: "industryFilterPaused", title: "industryPausedTitle" },
   { key: "DISSOLVED", i18n: "industryFilterDissolved", title: "industryDissolvedTitle" },
@@ -328,6 +330,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
     if (m === "MINE") return censusI.some(fc => String(fc.steward) === String(userId) || safeArr(fc.members).includes(userId))
     if (m === "ACTIVE" || m === "PAUSED" || m === "DISSOLVED") return censusI.some(fc => String(fc.status || "ACTIVE").toUpperCase() === m)
     if (m === "MEMBER") return censusI.some(fc => safeArr(fc.members).includes(userId))
+    if (m === "RECENT") return censusI.some(fc => (Date.parse(fc.createdAt || "") || 0) >= Date.now() - 86400000)
     if (m === "BLUEPRINTS" || m === "BUILDS") return censusI.length > 0
     return true
   }

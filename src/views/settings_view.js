@@ -29,7 +29,7 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "", verification = null, rebuild = null }) => {
+const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "", peertubeAccount = null, peertubeError = "", verification = null, rebuild = null }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -39,7 +39,7 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
   const walletUrl = currentConfig.wallet.url;
   const walletUser = currentConfig.wallet.user;
   const walletFee = currentConfig.wallet.fee;
-  const currentWish = ['mutuals', 'only-lan'].includes(currentConfig.wish) ? currentConfig.wish : 'whole';
+  const currentWish = ['mutuals', 'only-lan', 'local'].includes(currentConfig.wish) ? currentConfig.wish : 'whole';
   const currentPmVisibility = currentConfig.pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
 
   const themeElements = [
@@ -174,7 +174,8 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
           select({ name: "wish" },
             option({ value: "whole", ...(currentWish === "whole" ? { selected: true } : {})}, i18n.settingsWishWhole),
             option({ value: "mutuals", ...(currentWish === "mutuals" ? { selected: true } : {})}, i18n.settingsWishMutuals),
-            option({ value: "only-lan", ...(currentWish === "only-lan" ? { selected: true } : {})}, i18n.settingsWishOnlyLan || "Only LAN")
+            option({ value: "only-lan", ...(currentWish === "only-lan" ? { selected: true } : {})}, i18n.settingsWishOnlyLan || "Only LAN"),
+            option({ value: "local", ...(currentWish === "local" ? { selected: true } : {})}, i18n.settingsWishLocal || "Local")
           ), br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
         )
@@ -451,6 +452,27 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
                     input({ type: "tel", id: "telegram_phone", name: "phone", placeholder: "+34 60000000", required: true }), br(), br(),
                     button({ type: "submit" }, i18n.fediverseConnect)
                   )
+        )
+        ,
+        div({ class: "fediverse-network" },
+          h3("PeerTube"),
+          peertubeError ? p({ class: "fediverse-error" }, i18n[peertubeError] || i18n.peertubeErrConnect) : "",
+          peertubeAccount
+            ? form(
+                { action: "/settings/peertube/disconnect", method: "POST" },
+                p(`${i18n.fediverseConnectedAs}: `, a({ href: peertubeAccount.channelUrl || peertubeAccount.profileUrl, target: "_blank", rel: "noopener noreferrer" }, peertubeAccount.handle)),
+                button({ type: "submit" }, i18n.fediverseDisconnect)
+              )
+            : form(
+                { action: "/settings/peertube", method: "POST" },
+                label({ for: "peertube_instance" }, i18n.fediverseInstanceLabel), br(),
+                input({ type: "text", id: "peertube_instance", name: "instance", placeholder: "peertube.example.org", required: true }), br(),
+                label({ for: "peertube_username" }, i18n.peertubeUsernameLabel), br(),
+                input({ type: "text", id: "peertube_username", name: "username", autocomplete: "off", required: true }), br(),
+                label({ for: "peertube_password" }, i18n.peertubePasswordLabel), br(),
+                input({ type: "password", id: "peertube_password", name: "password", autocomplete: "off", required: true }), br(),
+                button({ type: "submit" }, i18n.fediverseConnect)
+              )
         )
       )
     ) : null,

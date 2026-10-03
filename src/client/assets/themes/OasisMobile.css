@@ -1943,11 +1943,18 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .torrent-table td:nth-child(3) {
   font-weight: 700 !important;
 }
-.torrent-table td:nth-child(5),
-.torrent-table td:nth-child(6) {
+.torrent-table td:nth-child(5) {
+  display: block !important;
+  width: 100% !important;
+  padding: 3px 0 !important;
+}
+.torrent-table td:nth-child(6),
+.torrent-table td:nth-child(7),
+.torrent-table td:nth-child(8) {
   display: inline-block !important;
   width: auto !important;
   padding: 6px 8px 0 0 !important;
+  vertical-align: middle !important;
 }
 .torrent-table td form {
   display: inline-block !important;
@@ -2266,4 +2273,92 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .content-actions .btn-singleview.btn-content:hover {
   background: rgba(255, 163, 0, .18) !important;
   border-color: #ffa300 !important;
+}
+
+.tribe-details.pad-page { padding: 8px !important; gap: 10px !important; }
+.pad-page > .tribe-side { padding: 8px 10px !important; gap: 6px 12px !important; }
+.pad-page > .tribe-side .tribe-info-table { font-size: .85em !important; }
+.pad-page > .tribe-side .tribe-side-actions form, .pad-page > .tribe-side .inline-form { display: inline-flex !important; margin: 0 !important; }
+.pad-page > .tribe-main { padding: 0 !important; border: none !important; background: transparent !important; }
+.pad-workspace { grid-template-columns: 1fr !important; gap: 10px !important; }
+.pad-workspace-main form { margin: 0 !important; }
+.pad-editor { min-height: 45vh !important; font-size: 16px !important; padding: 10px !important; }
+.pad-document { min-height: 30vh !important; padding: 10px !important; }
+.pad-workspace-side { flex-direction: column !important; }
+.pad-history { max-height: 32vh !important; }
+.pad-gutter { padding: 10px 6px 10px 6px !important; font-size: 16px !important; }
+.pad-editor-wrap .pad-editor { min-height: 45vh !important; }
+.pad-member-chip .user-link { max-width: 150px !important; }
+
+.file-table,
+.file-table tbody,
+.file-table tr,
+.file-table td {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.file-table tr:first-child,
+.file-table th {
+  display: none !important;
+}
+.file-table tr {
+  margin: 0 0 8px 0 !important;
+  padding: 10px !important;
+  border: 1px solid #444444 !important;
+  border-radius: 6px !important;
+  background: #222222 !important;
+}
+.file-table td {
+  padding: 3px 0 !important;
+  border: 0 !important;
+  background: none !important;
+  font-size: 13px !important;
+  white-space: normal !important;
+  text-align: left !important;
+  overflow-wrap: anywhere !important;
+  height: auto !important;
+}
+.file-table td .user-link {
+  display: inline-block !important;
+  max-width: 100% !important;
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
+  font-size: 12px !important;
+}
+.file-table td:nth-child(3) {
+  font-weight: 700 !important;
+}
+.file-table td:nth-child(5) {
+  display: block !important;
+  width: 100% !important;
+  padding: 3px 0 !important;
+}
+.file-table td:nth-child(6),
+.file-table td:nth-child(7) {
+  display: inline-block !important;
+  width: auto !important;
+  padding: 6px 8px 0 0 !important;
+  vertical-align: middle !important;
+}
+.file-table td form {
+  display: inline-block !important;
+  margin: 0 !important;
+}
+
+.file-table td[data-label]::before,
+.torrent-table td[data-label]::before {
+  content: attr(data-label) ": " !important;
+  color: #ffa300 !important;
+  font-weight: 600 !important;
+}
+.file-table td:empty,
+.torrent-table td:empty {
+  display: none !important;
+}
+.file-table td .user-link,
+.torrent-table td .user-link {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  line-height: 1.25 !important;
 }

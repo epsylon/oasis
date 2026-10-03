@@ -14,15 +14,15 @@ const FILTER_LABELS = {
   aiExchange: i18n.typeAiExchange, parliament: i18n.typeParliament, courts: i18n.typeCourts,
   map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product',
   pad: i18n.typePad || 'PAD', wikiPage: i18n.typeWiki || 'WIKI', emergency: i18n.typeEmergency || 'EMERGENCY', emergencyConfirm: i18n.typeEmergencyConfirm || 'EMERGENCY CONFIRM', emergencyUpdate: i18n.typeEmergencyUpdate || 'EMERGENCY UPDATE', mailingList: i18n.typeMailingList || 'MAILING LIST', logisticsRoute: i18n.typeLogisticsRoute || 'ROUTE', logisticsRating: i18n.typeLogisticsRating || 'ROUTE RATING', podcast: i18n.typePodcast || 'PODCAST', podcastEpisode: i18n.typePodcastEpisode || 'EPISODE', podcastOpinion: i18n.typePodcastOpinion || 'EPISODE OPINION', podcastPlay: i18n.typePodcastPlay || 'EPISODE PLAY', campaign: i18n.typeCampaign || 'CAMPAIGN', campaignSignature: i18n.typeCampaignSignature || 'SIGNATURE', campaignUpdate: i18n.typeCampaignUpdate || 'CAMPAIGN UPDATE', chat: i18n.typeChat || 'CHAT', gameScore: i18n.typeGameScore || 'GAME SCORE',
-  calendar: i18n.typeCalendar || 'CALENDAR', torrent: i18n.typeTorrent,
+  calendar: i18n.typeCalendar || 'CALENDAR', torrent: i18n.typeTorrent, file: i18n.typeFile,
   school: i18n.typeSchool || 'SCHOOL'
 };
 
-const BASE_FILTERS = ['recent', 'all', 'mine', 'tombstone', 'logs'];
+const BASE_FILTERS = ['recent', 'mine', 'all', 'tombstone', 'logs'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'school', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
 const CAT_BLOCK3  = ['banking', 'job', 'housing', 'market', 'project', 'industry', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
-const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map', 'torrent'];
+const CAT_BLOCK4  = ['forum', 'pad', 'chat', 'bookmark', 'image', 'video', 'audio', 'document', 'map', 'torrent', 'file'];
 
 const SEARCH_FIELDS = ['author','id','from','to'];
 
@@ -206,6 +206,7 @@ const getViewDetailsAction = (type, block) => {
     case 'courtsNominationVote': return `/courts`;
     case 'map': return `/maps/${encodeURIComponent(block.id)}`;
     case 'torrent': return `/torrents/${encodeURIComponent(block.id)}`;
+    case 'file': return `/files/${encodeURIComponent(block.id)}`;
     case 'mapMarker': return block.content?.mapId ? `/maps/${encodeURIComponent(block.content.mapId)}` : `/maps`;
     case 'shop': return `/shops/${encodeURIComponent(block.id)}`;
     case 'shopProduct': return `/shops/product/${encodeURIComponent(block.id)}`;
@@ -445,7 +446,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
   const qs = toQueryString(filter, s);
   const censusBlocks = Array.isArray(extras && extras.censusBlocks) ? extras.censusBlocks : blocks;
   const chipVisible = (mode) => mode === filter || filterBlocks(censusBlocks, mode, userId).length > 0;
-  const baseChips = ['recent', 'all', 'mine', ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
+  const baseChips = ['recent', 'mine', 'all', ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
 
   return template(
     i18n.blockchain,

@@ -19,6 +19,7 @@ const KIND_LABEL = {
   documents: () => i18n.documentTitle,
   bookmarks: () => i18n.bookmarkTitle,
   torrents: () => i18n.typeTorrent,
+  files: () => i18n.typeFile,
   chats: () => i18n.chatsTitle,
   pads: () => i18n.padsTitle,
   maps: () => i18n.mapTitle,
@@ -48,12 +49,12 @@ const REASON_LABEL = {
 };
 
 const FILTER_COLUMNS = [
-  ["ALL", "RECENT", "TOP"],
+  ["RECENT", "ALL", "TOP"],
   ["INHABITANTS", "TRIBES"],
   ["VOTES", "EVENTS", "CALENDARS", "TASKS", "REPORTS", "EMERGENCIES", "MAILING", "CAMPAIGNS"],
   ["MARKET", "HOUSING", "JOBS", "PROJECTS", "INDUSTRY", "LOGISTICS"],
   ["FORUM", "CHATS", "PADS", "WIKI", "MAPS", "SCHOOL"],
-  ["AUDIOS", "BOOKMARKS", "DOCUMENTS", "IMAGES", "TORRENTS", "VIDEOS", "PODCASTS"]
+  ["AUDIOS", "BOOKMARKS", "DOCUMENTS", "FILES", "IMAGES", "TORRENTS", "VIDEOS", "PODCASTS"]
 ];
 
 const kindLabel = (kind) => (KIND_LABEL[kind] ? KIND_LABEL[kind]() : String(kind || '').toUpperCase());

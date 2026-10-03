@@ -157,7 +157,7 @@ exports.clearnetShortId = clearnetShortId;
 exports.clearnetSlugFor = clearnetSlugFor;
 const clearnetItemHref = (modulePath, title, id) => `/c/${modulePath}/${encodeURIComponent(clearnetSlugFor(title, id))}`;
 exports.clearnetItemHref = clearnetItemHref;
-const CLEARNET_PATHS = { blogs: 'blog', wiki: 'wiki', market: 'market', audios: 'audios', videos: 'videos', images: 'images', documents: 'documents', bookmarks: 'bookmarks', events: 'events', feed: 'feed', jobs: 'jobs', podcasts: 'podcasts', projects: 'projects', torrents: 'torrents', shops: 'shops' };
+const CLEARNET_PATHS = { blogs: 'blog', wiki: 'wiki', market: 'market', audios: 'audios', videos: 'videos', images: 'images', documents: 'documents', bookmarks: 'bookmarks', events: 'events', feed: 'feed', jobs: 'jobs', podcasts: 'podcasts', projects: 'projects', torrents: 'torrents', files: 'files', shops: 'shops' };
 let clearnetBaseCache = null;
 const clearnetBase = () => {
   if (clearnetBaseCache !== null) return clearnetBaseCache;
@@ -204,9 +204,26 @@ exports.renderWalletChip = renderWalletChip;
 const torrentFileName = (title) => `${String(title || 'download').replace(/\.torrent$/i, '')}.torrent`;
 const torrentDownloadHref = (blobId, title) => `/blob/${encodeURIComponent(blobId)}?name=${encodeURIComponent(torrentFileName(title))}`;
 const renderTorrentDownload = (href, opts = {}) =>
-  a({ href, class: opts.class || 'filter-btn' }, '\u2B07 TORRENT');
+  a({ href, class: opts.class || 'filter-btn' }, `\u2B07 ${i18n.torrentExternalButton || 'EXTERNAL'}`);
 exports.torrentDownloadHref = torrentDownloadHref;
 exports.renderTorrentDownload = renderTorrentDownload;
+const renderTorrentSourceDownload = (torrentKey, source, opts = {}) => {
+  if (typeof source !== 'string' || !source.startsWith('&') || !torrentKey) return null;
+  return a({ href: `/torrents/${encodeURIComponent(torrentKey)}/get`, class: opts.class || 'filter-btn' }, `\u2B07 ${i18n.torrentOasisButton || 'OASIS'}`);
+};
+exports.renderTorrentSourceDownload = renderTorrentSourceDownload;
+const renderFileDownloads = (fileKey, torrentUrl, name, opts = {}) => {
+  if (!fileKey) return null;
+  const btnClass = opts.class || 'filter-btn';
+  const torrentName = `${String(name || 'download').replace(/\.torrent$/i, '')}.torrent`;
+  return div({ class: 'torrent-card-actions' },
+    a({ href: `/files/${encodeURIComponent(fileKey)}/get`, class: btnClass }, `\u2B07 ${i18n.torrentOasisButton || 'OASIS'}`),
+    typeof torrentUrl === 'string' && torrentUrl.startsWith('&')
+      ? a({ href: `/blob/${encodeURIComponent(torrentUrl)}?name=${encodeURIComponent(torrentName)}`, class: btnClass }, `\u2B07 ${i18n.torrentExternalButton || 'EXTERNAL'}`)
+      : null
+  );
+};
+exports.renderFileDownloads = renderFileDownloads;
 
 const renderContentActions = (msgId, viewHref, opts = {}) => {
   const o = (opts && typeof opts === 'object') ? opts : {};
@@ -221,7 +238,15 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
       )
     : null;
 
-  const spreadBtn = o.spread !== undefined && blockId && !(o.author && String(o.author) === String(myId)) ? renderSpreadButton(blockId, o.spread) : null;
+  const spreadBtn = o.spread !== undefined && blockId && !(o.author && String(o.author) === String(myId)) ? renderSpreadButton(blockId, o.spread, o.spreadTitle || null) : null;
+
+  const torrentBtn = (() => {
+    const src = o.torrentFrom && typeof o.torrentFrom === 'object' ? o.torrentFrom : null;
+    if (!src || typeof src.blobId !== 'string' || !src.blobId.startsWith('&')) return null;
+    try { if (getConfig().modules.torrentsMod !== 'on') return null; } catch (_) { return null; }
+    const name = String(src.name || o.reportTitle || '').slice(0, 100);
+    return a({ href: `/torrents?filter=create&fromBlob=${encodeURIComponent(src.blobId)}&name=${encodeURIComponent(name)}`, class: 'btn-singleview btn-torrent', title: i18n.torrentFromContent }, '\u21C5');
+  })();
 
   const chainBtn = blockId
     ? a({ href: `/blockexplorer/block/${encodeURIComponent(blockId)}`, class: 'btn-singleview', title: i18n.blockchainViewBlockexplorer }, '⦿')
@@ -258,8 +283,8 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
       )
     : null;
 
-  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !deleteBtn && !donateBtn) return null;
-  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, donateBtn, reportBtn, pmBtn, linkBtn, chainBtn, contentBtn);
+  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !deleteBtn && !donateBtn && !torrentBtn) return null;
+  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, torrentBtn, pinBtn, donateBtn, reportBtn, pmBtn, linkBtn, chainBtn, contentBtn);
 };
 exports.renderContentActions = renderContentActions;
 
@@ -433,7 +458,7 @@ const renderVotesSummary = (opinions = {}) => {
 };
 exports.renderVotesSummary = renderVotesSummary;
 
-const renderSpreadButton = (msgKey, opts) => {
+const renderSpreadButton = (msgKey, opts, title = null, showCount = true) => {
   if (!msgKey || typeof msgKey !== 'string' || !msgKey.startsWith('%') || !/\.sha256$/.test(msgKey)) return null;
   const o = (opts && typeof opts === 'object') ? opts : {};
   const voters = Array.isArray(o.voters) ? o.voters : [];
@@ -442,8 +467,8 @@ const renderSpreadButton = (msgKey, opts) => {
   return form(
     { method: 'POST', action: `/spread/${encodeURIComponent(msgKey)}`, class: 'spread-form' },
     button(
-      { type: 'submit', class: alreadySpread ? 'btn-singleview btn-spread-on' : 'btn-singleview', title: i18n.spreadContent },
-      `⟳ ${count}`
+      { type: 'submit', class: alreadySpread ? 'btn-singleview btn-spread-on' : 'btn-singleview', title: title || i18n.spreadContent },
+      showCount ? `⟳ ${count}` : '⟳'
     )
   );
 };
@@ -914,6 +939,21 @@ const renderImagesLink = () => {
         emoji: "ꕥ",
         text: i18n.imagesLabel,
         class: "images-link enabled"
+      })
+    ];
+  }
+  return "";
+};
+
+const renderFilesLink = () => {
+  const filesMod = getConfig().modules.filesMod === "on";
+  if (filesMod) {
+    return [
+      navLink({
+        href: "/files",
+        emoji: "▣",
+        text: i18n.filesLabel,
+        class: "files-link enabled"
       })
     ];
   }
@@ -1876,6 +1916,7 @@ const template = (titlePrefix, ...elements) => {
                 renderBookmarksLink(),
                 renderDocsLink(),
                 renderImagesLink(),
+                renderFilesLink(),
                 renderTorrentsLink(),
                 renderVideosLink(),
                 renderPodcastsLink()
@@ -2583,6 +2624,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     clearnetImages:    visibilityPrefs.clearnetImages    === true,
     clearnetDocuments: visibilityPrefs.clearnetDocuments === true,
     clearnetTorrents:  visibilityPrefs.clearnetTorrents  === true,
+    clearnetFiles:     visibilityPrefs.clearnetFiles     === true,
     clearnetBookmarks: visibilityPrefs.clearnetBookmarks === true,
     clearnetPodcasts:  visibilityPrefs.clearnetPodcasts  === true,
     clearnetMarket:    visibilityPrefs.clearnetMarket    === true,
@@ -2598,6 +2640,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     profileImages:     visibilityPrefs.profileImages     === true,
     profileDocuments:  visibilityPrefs.profileDocuments  === true,
     profileTorrents:   visibilityPrefs.profileTorrents   === true,
+    profileFiles:      visibilityPrefs.profileFiles      === true,
     profileBookmarks:  visibilityPrefs.profileBookmarks  === true,
     profilePodcasts:   visibilityPrefs.profilePodcasts   === true,
     profileSchool:     visibilityPrefs.profileSchool     === true,
@@ -2610,7 +2653,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
     gpg:               visibilityPrefs.gpg               === true
   };
   const fediverseHandleValue = typeof visibilityPrefs.fediverseHandle === 'string' ? visibilityPrefs.fediverseHandle : '';
-  prefs.clearnet = prefs.clearnetShops || prefs.clearnetSchool || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetBookmarks || prefs.clearnetPodcasts || prefs.clearnetMarket || prefs.clearnetFeed || prefs.clearnetWiki;
+  prefs.clearnet = prefs.clearnetShops || prefs.clearnetSchool || prefs.clearnetJobs || prefs.clearnetEvents || prefs.clearnetProjects || prefs.clearnetPosts || prefs.clearnetAudios || prefs.clearnetVideos || prefs.clearnetImages || prefs.clearnetDocuments || prefs.clearnetTorrents || prefs.clearnetFiles || prefs.clearnetBookmarks || prefs.clearnetPodcasts || prefs.clearnetMarket || prefs.clearnetFeed || prefs.clearnetWiki;
   const pillRows = (entries) => div({ class: "pref-pill-row" },
     ...entries.slice().sort((a, b) => String(a[1]).localeCompare(String(b[1]))).map(([key, labelText]) => togglePill(key, labelText))
   );
@@ -2687,6 +2730,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
               ['profileSchool',    i18n.profileClearnetSchoolLabel    || 'School'],
               ['profileShops',     i18n.profileClearnetShopsLabel     || 'Shops'],
               ['profileTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'],
+              ['profileFiles',  i18n.profileClearnetFilesLabel  || 'Files'],
               ['profileVideos',    i18n.profileClearnetVideosLabel    || 'Videos'],
               ['profileWiki',      i18n.profileClearnetWikiLabel      || 'Wikis']
           ])
@@ -2729,6 +2773,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
               ['clearnetSchool',    i18n.profileClearnetSchoolLabel    || 'School'],
               ['clearnetShops',     i18n.profileClearnetShopsLabel     || 'Shops'],
               ['clearnetTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'],
+              ['clearnetFiles',  i18n.profileClearnetFilesLabel  || 'Files'],
               ['clearnetVideos',    i18n.profileClearnetVideosLabel    || 'Videos'],
               ['clearnetWiki',      i18n.profileClearnetWikiLabel      || 'Wikis']
           ])
@@ -2804,6 +2849,7 @@ const CLEARNET_MODULES = [
   { key: 'school',    label: 'School',    kind: 'course', labelKey: 'schoolTitle',   prefKey: 'clearnetSchool' },
   { key: 'shops',     label: 'Shops',     kind: 'shop', labelKey: 'shopsTitle',     prefKey: 'clearnetShops' },
   { key: 'torrents',  label: 'Torrents',  kind: 'torrent', labelKey: 'torrentsLabel',  prefKey: 'clearnetTorrents' },
+  { key: 'files',  label: 'Files',  kind: 'file', labelKey: 'filesLabel',  prefKey: 'clearnetFiles' },
   { key: 'videos',    label: 'Videos',    kind: 'video', labelKey: 'videosLabel',    prefKey: 'clearnetVideos' },
   { key: 'wiki',      label: 'Wikis',     kind: 'wiki', labelKey: 'wikiTitle',     prefKey: 'clearnetWiki' }
 ];
@@ -3210,6 +3256,7 @@ exports.authorView = async ({
       images:    new Set(['image']),
       documents: new Set(['document']),
       torrents:  new Set(['torrent']),
+      files:     new Set(['file']),
       bookmarks: new Set(['bookmark']),
       podcasts:  new Set(['podcast']),
       school:    new Set(['schoolCourse']),
@@ -3232,6 +3279,7 @@ exports.authorView = async ({
       { key: 'school',    label: i18n.profileClearnetSchoolLabel    || 'School' },
       { key: 'shops',     label: i18n.profileClearnetShopsLabel     || 'Shops' },
       { key: 'torrents',  label: i18n.profileClearnetTorrentsLabel  || 'Torrents' },
+      { key: 'files',  label: i18n.profileClearnetFilesLabel  || 'Files' },
       { key: 'videos',    label: i18n.profileClearnetVideosLabel    || 'Videos' },
       { key: 'wiki',      label: i18n.profileClearnetWikiLabel      || 'Wikis' }
     ];
@@ -3698,7 +3746,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       .replace(/\/ai\/ask\?[^\s<"]+/g, (match) => `<a class="ai-ask-link" href="${match}">${match}</a>`)
       .replace(/\/tribe\/([%A-Za-z0-9/+._=-]+\.sha256)(\?section=[a-zA-Z]+)?/g, (match) => `<a class="tribe-link" href="${match}">${match}</a>`)
       .replace(/\/larp\/([a-zA-Z]+)/g, (match) => `<a class="larp-link" href="${match}">${match}</a>`)
-      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|parliament|courts|melody|audios|videos|images|documents|bookmarks|torrents|forum|feed|fediverse|multiverse|events|tasks|votes|reports|market|jobs|projects|industry|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games|search)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
+      .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|parliament|courts|melody|audios|videos|images|documents|bookmarks|torrents|files|forum|feed|fediverse|multiverse|events|tasks|votes|reports|market|jobs|projects|industry|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games|search)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
       .replace(/(https?:\/\/[^\s<"]+)/g, (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`)
       .replace(/\u0000MD(\d+)\u0000/g, (m, i) => mdLinks[Number(i)] !== undefined ? mdLinks[Number(i)] : m)
   }

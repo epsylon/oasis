@@ -1,5 +1,6 @@
-const { div, h2, h3, p, section, button, form, a, span, strong, input, label, img, textarea, br, hr, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
+const { div, h2, h3, h4, p, section, button, form, a, span, strong, input, label, img, textarea, br, hr, select, option, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require("./main_views");
+const { renderZoomableImage } = require("./gallery_view");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const moment = require("../server/node_modules/moment");
 
@@ -17,7 +18,7 @@ const renderMedia = (m) => {
   if (m.type === 'audio') {
     return audioHyperaxe({ class: "post-audio", src: m.url, controls: true });
   }
-  return img({ class: "post-image", src: m.url, alt: m.description || "" });
+  return renderZoomableImage(m.url, { imgClass: "post-image", alt: m.description || "" });
 };
 
 const renderComposeForm = (opts = {}) => {
@@ -148,7 +149,7 @@ const telegramKindLabel = (kind) => kind === 'channel' ? i18n.telegramChannel : 
 
 const renderTelegramMedia = (m) => {
   if (!m || !m.url) return "";
-  if (m.kind === 'photo') return img({ class: "post-image", src: m.url, alt: m.name || "" });
+  if (m.kind === 'photo') return renderZoomableImage(m.url, { imgClass: "post-image", alt: m.name || "" });
   if (m.kind === 'video') return videoHyperaxe({ class: "post-video", src: m.url, controls: true, preload: "metadata" });
   if (m.kind === 'audio') return audioHyperaxe({ class: "post-audio", src: m.url, controls: true });
   return a({ href: m.url, class: "filter-btn" }, `📎 ${m.name || m.mime || "file"}`);
@@ -236,7 +237,185 @@ exports.telegramChatView = ({ account, stats, chat, error } = {}) => {
   return template(i18n.fediverse, header, section(...body));
 };
 
-exports.fediverseOverviewView = ({ account, stats, telegram, telegramStats } = {}) => {
+
+const fmtDuration = (sec) => {
+  const n = Math.max(0, Math.floor(Number(sec) || 0));
+  const h = Math.floor(n / 3600), m = Math.floor((n % 3600) / 60), sInt = n % 60;
+  const mm = String(m).padStart(h ? 2 : 1, "0"), ss = String(sInt).padStart(2, "0");
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+};
+
+const fmtBytes = (n) => {
+  const b = Number(n) || 0;
+  if (b >= 1024 ** 3) return `${(b / 1024 ** 3).toFixed(1)} GB`;
+  if (b >= 1024 ** 2) return `${(b / 1024 ** 2).toFixed(1)} MB`;
+  if (b >= 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${b} B`;
+};
+
+const peertubeBox = (account, stats, actions, showLabel) => {
+  const stat = (lbl, val) => div({ class: "fediverse-stat" }, span({ class: "fediverse-stat-label" }, lbl), strong(String(val)));
+  return div({ class: "fediverse-network" },
+    showLabel ? h3("PeerTube") : "",
+    div({ class: "fediverse-profile" },
+      div({ class: "fediverse-namerow" },
+        account.avatar ? img({ class: "fediverse-avatar", src: account.avatar, alt: account.displayName }) : "",
+        div({ class: "fediverse-profile-id" },
+          div({ class: "fediverse-name" }, account.displayName || account.handle),
+          a({ class: "fediverse-acct", href: account.channelUrl || account.profileUrl, target: "_blank", rel: "noopener noreferrer" }, account.handle)
+        ),
+        actions && actions.length ? div({ class: "fediverse-compact-actions" }, actions) : ""
+      ),
+      stats
+        ? div({ class: "fediverse-stats" },
+            stat(i18n.peertubeVideos, stats.videos),
+            stat(i18n.peertubeSubscriptions, stats.subscriptions),
+            stat(i18n.peertubeFollowers, stats.followers),
+            stats.quota > 0 ? stat(i18n.peertubeQuota, `${fmtBytes(stats.quotaUsed)} / ${fmtBytes(stats.quota)}`) : ""
+          )
+        : ""
+    )
+  );
+};
+
+const peertubeHeader = (account, stats, actions) => section(
+  div({ class: "tags-header module-header-line" }, h2(i18n.fediverse), p(i18n.fediverseDescription)),
+  peertubeBox(account, stats, actions, false)
+);
+
+const renderPeertubeVideo = (v) => {
+  const href = `/fediverse/peertube/video/${encodeURIComponent(v.id)}`;
+  const ch = v.channel || {};
+  const chips = [];
+  if (v.privacyId && v.privacyId !== 1 && v.privacy) chips.push(span({ class: "card-label" }, v.privacy));
+  if (v.state && !/published/i.test(v.state)) chips.push(span({ class: "card-label" }, v.state));
+  return div({ class: "feed-card fediverse-card peertube-card" },
+    a({ href, class: "peertube-thumb" },
+      v.thumbnail ? img({ src: v.thumbnail, alt: v.name, loading: "lazy" }) : div({ class: "peertube-thumb-empty" }),
+      v.duration ? span({ class: "peertube-duration" }, fmtDuration(v.duration)) : ""
+    ),
+    div({ class: "peertube-card-body" },
+      a({ href, class: "peertube-title" }, v.name || v.id),
+      div({ class: "peertube-meta" },
+        ch.avatar ? img({ class: "peertube-channel-avatar", src: ch.avatar, alt: "" }) : "",
+        span({ class: "fediverse-acct" }, ch.displayName || ch.handle || ""),
+        span({ class: "fediverse-date" }, fmtDate(v.publishedAt)),
+        span(`${v.views} ${i18n.peertubeViews} · ${v.likes} ${i18n.peertubeLikes}`)
+      ),
+      chips.length ? div({ class: "card-chips-row" }, ...chips) : ""
+    )
+  );
+};
+
+exports.peertubeFeedView = ({ account, stats, videos, kind, error, notice } = {}) => {
+  if (!account) return exports.fediverseOverviewView({ account: null });
+  const current = kind === "mine" ? "mine" : "subscriptions";
+  const body = [];
+  if (error) body.push(div({ class: "fediverse-error" }, i18n[error] || i18n.peertubeErrConnect));
+  if (notice) body.push(div({ class: "feed-success-msg" }, p(i18n[notice] || String(notice))));
+  body.push(div({ class: "mode-buttons-row" },
+    form({ method: "GET", action: "/fediverse/peertube" },
+      button({ type: "submit", name: "filter", value: "subscriptions", class: current === "subscriptions" ? "filter-btn active" : "filter-btn" }, String(i18n.peertubeSubscriptions).toUpperCase()),
+      button({ type: "submit", name: "filter", value: "mine", class: current === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.peertubeMyVideos).toUpperCase())
+    )
+  ));
+  const list = Array.isArray(videos) ? videos : [];
+  if (!list.length && !error) body.push(p({ class: "muted" }, i18n.peertubeNoVideos));
+  else body.push(section({ class: "peertube-grid" }, list.map(renderPeertubeVideo)));
+  return template(i18n.fediverse, peertubeHeader(account, stats, [
+    a({ href: "/fediverse", class: "filter-btn" }, `← ${i18n.fediverse}`),
+    a({ href: `/fediverse/peertube?filter=${current}&refresh=1`, class: "filter-btn" }, i18n.fediverseRefresh),
+    a({ href: "/fediverse/peertube/upload", class: "filter-btn" }, i18n.peertubeUpload)
+  ]), section(...body));
+};
+
+const renderPeertubeComment = (c) => {
+  const acc = c.account || {};
+  return div({ class: "feed-card fediverse-card" },
+    div({ class: "fediverse-head" },
+      acc.avatar ? img({ class: "fediverse-avatar", src: acc.avatar, alt: acc.displayName }) : "",
+      div({ class: "fediverse-author" },
+        span({ class: "fediverse-name" }, acc.displayName || acc.name),
+        span({ class: "fediverse-acct" }, acc.name ? `@${acc.name}${acc.host ? "@" + acc.host : ""}` : "")
+      ),
+      span({ class: "fediverse-date" }, fmtDate(c.createdAt))
+    ),
+    div({ class: "feed-text", innerHTML: sanitizeHtml(c.html) })
+  );
+};
+
+exports.peertubeVideoView = ({ account, stats, video, comments, myRating, error } = {}) => {
+  if (!account) return exports.fediverseOverviewView({ account: null });
+  const header = peertubeHeader(account, stats, [a({ href: "/fediverse/peertube", class: "filter-btn" }, `← ${i18n.peertubeVideos}`)]);
+  if (!video) return template(i18n.fediverse, header, section(div({ class: "fediverse-error" }, i18n[error] || i18n.peertubeErrFetch)));
+  const id = encodeURIComponent(video.id);
+  const ch = video.channel || {};
+  const liked = myRating === "like";
+  const body = [];
+  if (error) body.push(div({ class: "fediverse-error" }, i18n[error] || i18n.peertubeErrConnect));
+  body.push(div({ class: "feed-card fediverse-card peertube-watch" },
+    video.stream
+      ? videoHyperaxe({ class: "peertube-player", src: video.stream, controls: true, preload: "metadata", poster: video.thumbnail || undefined })
+      : div({ class: "peertube-nostream" }, video.thumbnail ? img({ src: video.thumbnail, alt: video.name, class: "post-image" }) : "", p(i18n.peertubeNoStream)),
+    h3({ class: "peertube-title" }, video.name),
+    div({ class: "peertube-meta" },
+      ch.avatar ? img({ class: "peertube-channel-avatar", src: ch.avatar, alt: "" }) : "",
+      ch.url ? a({ href: ch.url, target: "_blank", rel: "noopener noreferrer", class: "fediverse-acct" }, ch.displayName || ch.handle) : span({ class: "fediverse-acct" }, ch.displayName || ""),
+      span({ class: "fediverse-date" }, fmtDate(video.publishedAt)),
+      span(`${video.views} ${i18n.peertubeViews}`),
+      video.duration ? span(fmtDuration(video.duration)) : ""
+    ),
+    div({ class: "fediverse-actions" },
+      form({ method: "POST", action: `/fediverse/peertube/video/${id}/rate` },
+        input({ type: "hidden", name: "rating", value: liked ? "none" : "like" }),
+        button({ type: "submit", class: liked ? "filter-btn active" : "filter-btn" }, `${liked ? "★" : "☆"} ${video.likes}`)
+      ),
+      a({ href: video.url, target: "_blank", rel: "noopener noreferrer", class: "filter-btn" }, i18n.peertubeOpen)
+    ),
+    video.description ? div({ class: "feed-text peertube-description" }, video.description) : "",
+    Array.isArray(video.tags) && video.tags.length ? div({ class: "card-chips-row" }, video.tags.map(t => span({ class: "tag-link" }, `#${t}`))) : ""
+  ));
+  body.push(h4(`${i18n.peertubeComments} · ${Array.isArray(comments) ? comments.length : 0}`));
+  const list = Array.isArray(comments) ? comments : [];
+  if (!list.length) body.push(p({ class: "muted" }, i18n.peertubeNoComments));
+  else body.push(section({ class: "feed-container" }, list.map(renderPeertubeComment)));
+  body.push(div({ class: "publish-form" },
+    form({ method: "POST", action: `/fediverse/peertube/video/${id}/comment` },
+      textarea({ maxlength: "4000", name: "text", rows: "4", class: "publish-textarea", placeholder: i18n.peertubeCommentPlaceholder, required: true }),
+      br(),
+      button({ type: "submit", class: "filter-btn" }, i18n.peertubeComment)
+    )
+  ));
+  return template(i18n.fediverse, header, section(...body));
+};
+
+exports.peertubeUploadView = ({ account, stats, error } = {}) => {
+  if (!account) return exports.fediverseOverviewView({ account: null });
+  const header = peertubeHeader(account, stats, [a({ href: "/fediverse/peertube", class: "filter-btn" }, `← ${i18n.peertubeVideos}`)]);
+  return template(i18n.fediverse, header, section(
+    error ? div({ class: "fediverse-error" }, i18n[error] || i18n.peertubeErrUpload) : "",
+    div({ class: "publish-form" },
+      form({ method: "POST", action: "/fediverse/peertube/upload", enctype: "multipart/form-data" },
+        p(i18n.peertubeUploadHelp),
+        label({ for: "peertube_video" }, i18n.fediverseAttach), br(),
+        input({ type: "file", id: "peertube_video", name: "video", accept: "video/*", required: true }), br(), br(),
+        label({ for: "peertube_name" }, i18n.peertubeTitleLabel), br(),
+        input({ type: "text", id: "peertube_name", name: "name", maxlength: "120", required: true }), br(),
+        label({ for: "peertube_description" }, i18n.peertubeDescriptionLabel), br(),
+        textarea({ id: "peertube_description", name: "description", rows: "5", maxlength: "10000", class: "publish-textarea" }), br(),
+        label({ for: "peertube_privacy" }, i18n.peertubePrivacyLabel), br(),
+        select({ id: "peertube_privacy", name: "privacy" },
+          option({ value: "public" }, i18n.peertubePrivacyPublic),
+          option({ value: "unlisted" }, i18n.peertubePrivacyUnlisted),
+          option({ value: "private" }, i18n.peertubePrivacyPrivate)
+        ), br(), br(),
+        button({ type: "submit", class: "filter-btn" }, i18n.peertubeUpload)
+      )
+    )
+  ));
+};
+
+exports.fediverseOverviewView = ({ account, stats, telegram, telegramStats, peertube, peertubeStats } = {}) => {
   const boxes = [];
   if (account) {
     boxes.push(mastodonBox(account, stats, [
@@ -246,6 +425,11 @@ exports.fediverseOverviewView = ({ account, stats, telegram, telegramStats } = {
   if (telegram) {
     boxes.push(telegramBox(telegram, telegramStats, [
       form({ method: "GET", action: "/fediverse/telegram" }, button({ type: "submit", class: "filter-btn" }, i18n.fediverseManage))
+    ], true));
+  }
+  if (peertube) {
+    boxes.push(peertubeBox(peertube, peertubeStats, [
+      form({ method: "GET", action: "/fediverse/peertube" }, button({ type: "submit", class: "filter-btn" }, i18n.fediverseManage))
     ], true));
   }
 

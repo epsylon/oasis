@@ -40,7 +40,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
   const searchableTypes = [
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
-    'image', 'audio', 'video', 'torrent', 'market', 'bankWallet', 'bankClaim',
+    'image', 'audio', 'video', 'torrent', 'file', 'market', 'bankWallet', 'bankClaim',
     'project', 'job', 'housing', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad', 'poll', 'schoolCourse', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign'
   ];
 
@@ -67,6 +67,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       case 'document':
         return [content?.url, content?.title, content?.description, ...(content?.tags || []), content?.key];
       case 'torrent':
+      case 'file':
         return [content?.title, content?.description, ...(content?.tags || []), content?.url];
       case 'market':
         return [content?.item_type, content?.title, content?.description, content?.price, ...(content?.tags || []), content?.status, content?.item_status, content?.deadline, content?.includesShipping, content?.seller, content?.image, content?.auctions_poll, content?.stock];
@@ -161,6 +162,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     if (t === 'audio') return `audio:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
     if (t === 'video') return `video:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
     if (t === 'torrent') return `torrent:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
+    if (t === 'file') return `file:${c.url || `${author}|${norm(c.title)}|${norm(c.description)}` || msg.key}`;
     if (t === 'bookmark') return `bookmark:${author}|${c.url || norm(c.description) || msg.key}`;
 
     if (t === 'tribe') {

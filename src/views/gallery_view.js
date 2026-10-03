@@ -4,6 +4,7 @@ const { MAX_IMAGES } = require("../models/media_gallery")
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v == null ? "" : v).trim()
+const downloadHref = (src) => `${src}${String(src).includes("?") ? "&" : "?"}download=1`
 
 const blobIdOf = (entry) => {
   const value = safeText(entry)
@@ -39,6 +40,7 @@ const renderZoomableImage = (src, { alt = "", imgClass = "", linkClass = "" } = 
   return [
     a({ href: `#${id}`, id: `${id}-src`, class: linkClass ? `zoom-link ${linkClass}` : "zoom-link" }, img({ src, class: imgClass, alt })),
     div({ id, class: "lightbox" },
+      a({ href: downloadHref(src), class: "lightbox-download", title: i18n.fileShareDownload || "Download" }, "⤓"),
       a({ href: `#${id}-src`, class: "lightbox-close" }, "×"),
       img({ src, class: "lightbox-image", alt })
     )
@@ -62,6 +64,7 @@ const renderPhotoGallery = (item, scope = "media") => {
       : null,
     list.filter(entry => !isVideoEntry(entry)).map((entry) =>
       div({ id: lightboxId(scope, id, list.indexOf(entry)), class: "lightbox" },
+        a({ href: downloadHref(blobUrl(blobIdOf(entry))), class: "lightbox-download", title: i18n.fileShareDownload || "Download" }, "⤓"),
         a({ href: `#${lightboxId(scope, id, list.indexOf(entry))}-src`, class: "lightbox-close" }, "×"),
         img({ src: blobUrl(blobIdOf(entry)), class: "lightbox-image", alt: "" })
       )

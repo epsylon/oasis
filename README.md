@@ -83,6 +83,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Events: Module to discover and manage events.
  + Favorites: Module to manage your favorite content.
  + Feed: Module to discover and share short-texts (feeds).
+ + Files: Module to discover and manage files.
  + Forums: Module to discover and manage forums.
  + Games: Module to play and share your scores in various mini-games.	
  + Governance: Module to discover and manage votes.	
@@ -211,7 +212,7 @@ Check "The Houses" to review which one fit better with your ambitions:
 
 ## Multiverse
 
-Oasis bridges to the **Fediverse** and beyond. You can connect your other accounts (**Mastodon**, **Telegram**) and use them from inside Oasis: read your Mastodon home timeline, publish (text, images and video), reply, boost and favourite; read your Telegram chats, groups and channels and send messages or files — without storing any third-party content in your SSB log (everything is fetched live and shown ephemerally; only your credentials are kept locally).
+Oasis bridges to the **Fediverse** and beyond. You can connect your other accounts (**Mastodon**, **Telegram**, **PeerTube**) and use them from inside Oasis: read your Mastodon home timeline, publish (text, images and video), reply, boost and favourite; read your Telegram chats, groups and channels and send messages or files; watch, like and comment the videos of your PeerTube subscriptions and upload your own to your channel — without storing any third-party content in your SSB log (everything is fetched live and shown ephemerally; only your credentials are kept locally).
 
   ![SNH](https://solarnethub.com/git/oasis-fediverse.png "SolarNET.HuB")
 
@@ -219,6 +220,7 @@ Connect your accounts from **Settings → Multiverse**, then open them from the 
 
  + Mastodon connect guide: [docs/MULTIVERSE/MASTODON/connect.md](docs/MULTIVERSE/MASTODON/connect.md)
  + Telegram connect guide: [docs/MULTIVERSE/TELEGRAM/connect.md](docs/MULTIVERSE/TELEGRAM/connect.md)
+ + PeerTube connect guide: [docs/MULTIVERSE/PEERTUBE/connect.md](docs/MULTIVERSE/PEERTUBE/connect.md)
 
 ----------
   

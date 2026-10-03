@@ -3,6 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
+const { renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
 const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -81,11 +82,11 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', isFavorite: doc.isFavorite, reportTitle: doc.title })
+            renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title })
           ),
           div(
             { class: "card-section document-card-body" },
-            title ? h2(title) : null,
+            div({ class: "shop-title-row" }, title ? h2(title) : null, renderLicenseChip(doc.license)),
             doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
             doc?.url
               ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
@@ -150,6 +151,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       br(),
       input({ type: "text", name: "tags", placeholder: i18n.documentTagsPlaceholder, value: tagsValue }),
       br(),
+      ...renderLicenseSelect(docToEdit?.license, i18n),
       br(),
       button({ type: "submit" }, filter === "edit" ? i18n.documentUpdateButton : i18n.documentCreateButton)
     )
@@ -199,9 +201,9 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
-          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.documentFilterFavorites).toUpperCase()
@@ -282,7 +284,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   const detailActions = div({ class: "card-header activity-card-header" },
     renderContentActions(doc.key, null, {
       author: doc.author,
-      favKind: 'documents',
+      favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title },
       isFavorite: doc.isFavorite,
       spread: params.spreads || null,
       returnTo,
@@ -291,8 +293,12 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   );
 
   const docSide = div({ class: "tribe-side" },
-    title ? h2({ class: "tribe-card-title" }, title) : null,
-    div({ class: "card-chips-row" }, renderReachChip(isClearnet, i18n, clearnetItemHref('documents', doc.title, doc.key)), ...chips),
+    div({ class: "shop-title-row" },
+      title ? h2({ class: "tribe-card-title" }, title) : null,
+      renderReachChip(isClearnet, i18n, clearnetItemHref('documents', doc.title, doc.key)),
+      renderLicenseChip(doc.license)
+    ),
+    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(doc.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(doc.description))
       : null,
@@ -341,9 +347,9 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
           { method: "GET", action: "/documents", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
-          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.documentFilterFavorites).toUpperCase()

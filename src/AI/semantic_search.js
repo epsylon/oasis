@@ -6,7 +6,7 @@ const MAX_ITEMS = 4000
 const MIN_SCORE = 0.42
 const TEXT_MAX = 400
 
-const TYPES = ['post', 'event', 'job', 'project', 'market', 'shop', 'shopProduct', 'tribe', 'task', 'wikiPage', 'document', 'audio', 'video', 'image', 'bookmark', 'forum', 'campaign', 'emergency', 'podcast', 'schoolCourse', 'housing', 'logisticsRoute', 'mailingList', 'curriculum', 'blog', 'report', 'poll', 'torrent']
+const TYPES = ['post', 'event', 'job', 'project', 'market', 'shop', 'shopProduct', 'tribe', 'task', 'wikiPage', 'document', 'audio', 'video', 'image', 'bookmark', 'forum', 'campaign', 'emergency', 'podcast', 'schoolCourse', 'housing', 'logisticsRoute', 'mailingList', 'curriculum', 'blog', 'report', 'poll', 'torrent', 'file']
 
 const vectorsPath = () => { try { return require('../configs/state-manager').statePath(VECTORS_FILE) } catch (_) { return null } }
 const readVectors = () => { try { const j = JSON.parse(fs.readFileSync(vectorsPath(), 'utf8')); return j && typeof j === 'object' ? j : {} } catch (_) { return {} } }

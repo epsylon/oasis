@@ -16,10 +16,10 @@ module.exports = ({ cooler }) => {
     return ssb;
   };
 
-  const cleanText = (t) => (typeof t === "string" ? t.trim() : "");
+  const cleanText = (t) => (typeof t === "string" ? t.replace(/\r\n?/g, "\n").trim() : "");
 
   const isValidFeedText = (t) => {
-    const s = cleanText(t);
+    const s = cleanText(t).replace(/!?\[[^\]\n]*\]\(\s*&[^)\s]+\.sha256\s*\)/g, "").trim();
     return s.length >= FEED_TEXT_MIN && s.length <= FEED_TEXT_MAX;
   };
 
@@ -367,7 +367,7 @@ module.exports = ({ cooler }) => {
 
     if (filter === "MINE") {
       feeds = feeds.filter((m) => (m.value?.author || m.value?.content?.author) === userId);
-    } else if (filter === "TODAY") {
+    } else if (filter === "RECENT" || filter === "TODAY") {
       feeds = feeds.filter((m) => now - getTs(m) < 86400000);
     }
 

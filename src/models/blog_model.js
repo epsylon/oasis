@@ -93,6 +93,7 @@ module.exports = ({ cooler, isPublic = false }) => {
 
       if (f === 'MINE') out = out.filter(b => String(b.author) === String(viewerId));
       else if (f === 'FAVORITES') out = favorites ? out.filter(b => favorites.has(String(b.id))) : [];
+      else if (f === 'RECENT') out = out.filter(b => (Date.parse(b.createdAt || '') || 0) >= Date.now() - 86400000);
 
       const q = String(opts.q || '').trim().toLowerCase();
       if (q) out = out.filter(b =>

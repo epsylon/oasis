@@ -71,9 +71,9 @@ exports.tagsView = async (tags, filter, search = '') => {
       emptyTags ? null : div({ class: 'filters' },
         form({ method: 'GET', action: '/tags', class: 'ui-toolbar ui-toolbar--filters' },
           input({ type: 'hidden', name: 'search', value: query }),
-          button({ type: 'submit', name: 'filter', value: 'all', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterAll).toUpperCase()),
-          button({ type: 'submit', name: 'filter', value: 'mine', class: filter === 'mine' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterMine).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'recent', class: filter === 'recent' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterRecent).toUpperCase()),
+          button({ type: 'submit', name: 'filter', value: 'mine', class: filter === 'mine' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterMine).toUpperCase()),
+          button({ type: 'submit', name: 'filter', value: 'all', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterAll).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'top', class: filter === 'top' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterTop).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'cloud', class: filter === 'cloud' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterCloud).toUpperCase())
         )

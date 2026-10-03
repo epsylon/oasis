@@ -195,6 +195,52 @@ function waitForBlob(ssbClient, blobId, timeoutMs = 8000) {
   });
 }
 
+const contentDisposition = (type, name) => {
+  const clean = String(name || 'file').replace(/["\r\n\\/]/g, '').trim() || 'file';
+  const ascii = clean.replace(/[^\x20-\x7e]/g, '_');
+  if (ascii === clean) return `${type}; filename="${clean}"`;
+  return `${type}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(clean).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())}`;
+};
+
+const sendBlobBuffer = (ctx, buffer) => {
+  const size = buffer.length;
+  const range = ctx.headers.range;
+
+  if (range) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (!match) {
+      ctx.status = 416;
+      ctx.set('Content-Range', `bytes */${size}`);
+      return;
+    }
+
+    let start = match[1] ? parseInt(match[1], 10) : 0;
+    let end = match[2] ? parseInt(match[2], 10) : size - 1;
+
+    if (Number.isNaN(start) || start < 0) start = 0;
+    if (Number.isNaN(end) || end >= size) end = size - 1;
+
+    if (start > end || start >= size) {
+      ctx.status = 416;
+      ctx.set('Content-Range', `bytes */${size}`);
+      return;
+    }
+
+    const chunk = buffer.slice(start, end + 1);
+
+    ctx.status = 206;
+    ctx.set('Content-Range', `bytes ${start}-${end}/${size}`);
+    ctx.set('Accept-Ranges', 'bytes');
+    ctx.set('Content-Length', String(chunk.length));
+    ctx.body = chunk;
+  } else {
+    ctx.status = 200;
+    ctx.set('Accept-Ranges', 'bytes');
+    ctx.set('Content-Length', String(size));
+    ctx.body = buffer;
+  }
+};
+
 const serveBlob = async function (ctx) {
   const encodedParam = (ctx.params.id || ctx.params.blobId || '').trim();
   const raw = decodeURIComponent(encodedParam);
@@ -234,8 +280,6 @@ const serveBlob = async function (ctx) {
     return;
   }
 
-  const size = buffer.length;
-
   let mime = 'application/octet-stream';
   try {
     const ft = await FileType.fromBuffer(buffer);
@@ -243,7 +287,7 @@ const serveBlob = async function (ctx) {
   } catch {}
 
   if (mime === 'application/octet-stream' && buffer.length > 10 && buffer[0] === 0x64) {
-    const head = buffer.slice(0, 128).toString('ascii');
+    const head = buffer.slice(0, 512).toString('ascii');
     if (head.includes('announce') || head.includes('8:announce') || head.includes('4:info')) mime = 'application/x-bittorrent';
   }
 
@@ -261,48 +305,17 @@ const serveBlob = async function (ctx) {
   const isSvg = mime === 'image/svg+xml';
   const qName = ctx.query.name ? String(ctx.query.name).replace(/["\r\n\\]/g, '').trim() : '';
   const safeRaw = String(raw).replace(/["\r\n\\]/g, '');
-  const filename = qName || (mime === 'application/x-bittorrent' ? 'download.torrent' : safeRaw);
-  const disposition = isSvg ? 'attachment' : 'inline';
+  const wantsDownload = String(ctx.query.download || '') === '1';
+  const extByMime = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'video/mp4': 'mp4', 'video/webm': 'webm', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'application/pdf': 'pdf', 'application/x-bittorrent': 'torrent' };
+  const ext = extByMime[mime] || String(mime.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'bin';
+  const filename = qName || (mime === 'application/x-bittorrent' ? 'download.torrent' : (wantsDownload ? `oasis-${safeRaw.replace(/^&/, '').slice(0, 8)}.${ext}` : safeRaw));
+  const disposition = isSvg || wantsDownload ? 'attachment' : 'inline';
   ctx.type = mime;
-  ctx.set('Content-Disposition', `${disposition}; filename="${filename}"`);
+  ctx.set('Content-Disposition', contentDisposition(disposition, filename));
   ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
 
-  const range = ctx.headers.range;
-
-  if (range) {
-    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-    if (!match) {
-      ctx.status = 416;
-      ctx.set('Content-Range', `bytes */${size}`);
-      return;
-    }
-
-    let start = match[1] ? parseInt(match[1], 10) : 0;
-    let end = match[2] ? parseInt(match[2], 10) : size - 1;
-
-    if (Number.isNaN(start) || start < 0) start = 0;
-    if (Number.isNaN(end) || end >= size) end = size - 1;
-
-    if (start > end || start >= size) {
-      ctx.status = 416;
-      ctx.set('Content-Range', `bytes */${size}`);
-      return;
-    }
-
-    const chunk = buffer.slice(start, end + 1);
-
-    ctx.status = 206;
-    ctx.set('Content-Range', `bytes ${start}-${end}/${size}`);
-    ctx.set('Accept-Ranges', 'bytes');
-    ctx.set('Content-Length', String(chunk.length));
-    ctx.body = chunk;
-  } else {
-    ctx.status = 200;
-    ctx.set('Accept-Ranges', 'bytes');
-    ctx.set('Content-Length', String(size));
-    ctx.body = buffer;
-  }
+  sendBlobBuffer(ctx, buffer);
 };
 
-module.exports = { handleBlobUpload, handleBlobUploads, serveBlob, oggMime, FileTooLargeError };
+module.exports = { handleBlobUpload, handleBlobUploads, serveBlob, sendBlobBuffer, contentDisposition, oggMime, FileTooLargeError };
 

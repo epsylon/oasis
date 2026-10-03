@@ -1,13 +1,13 @@
 const ALL_MODULES = [
   'agenda', 'ai', 'aiNav', 'emergencies', 'audios', 'backup', 'banking', 'blogs', 'bookmarks', 'calendars', 'campaigns', 'chats', 'cipher',
-  'courts', 'dev', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'forum', 'games', 'graphos',
+  'courts', 'dev', 'docs', 'events', 'favorites', 'fediverse', 'feed', 'files', 'forum', 'games', 'graphos',
   'housing', 'images', 'industry', 'invites', 'jobs', 'larp', 'logistics', 'logs', 'mailing', 'maps', 'market',
   'melody', 'opinions', 'pads', 'wiki', 'parliament', 'pixelia', 'podcasts', 'polls', 'projects', 'reports', 'school', 'shops',
   'tags', 'tasks', 'torrents', 'transfers', 'trending', 'tribes', 'videos', 'votes', 'wallet'
 ];
 
 const NETWORK = ['feed', 'blogs', 'tags', 'trending', 'opinions', 'pads', 'wiki', 'forum', 'maps', 'chats'];
-const MEDIA = ['audios', 'bookmarks', 'docs', 'images', 'torrents', 'videos', 'podcasts'];
+const MEDIA = ['audios', 'bookmarks', 'docs', 'files', 'images', 'torrents', 'videos', 'podcasts'];
 const OFFICE = ['agenda', 'calendars', 'campaigns', 'events', 'tasks', 'reports', 'mailing', 'favorites'];
 const GOVERNANCE = ['tribes', 'larp', 'votes', 'polls', 'school', 'parliament', 'courts', 'emergencies', 'logs'];
 const ECONOMY = ['banking', 'wallet', 'transfers', 'market', 'logistics', 'housing', 'jobs', 'shops', 'industry', 'projects'];
@@ -26,7 +26,7 @@ const PRESETS = {
 const MOBILE_MODULES = [
   'agenda', 'favorites', 'wallet', 'tribes', 'larp', 'votes', 'polls', 'events', 'calendars', 'tasks',
   'reports', 'banking', 'market', 'housing', 'jobs', 'shops', 'school', 'transfers', 'cipher', 'invites',
-  'games', 'audios', 'bookmarks', 'docs', 'images', 'torrents', 'emergencies', 'mailing', 'logistics', 'podcasts', 'campaigns', ...NETWORK
+  'games', 'audios', 'bookmarks', 'docs', 'files', 'images', 'torrents', 'emergencies', 'mailing', 'logistics', 'podcasts', 'campaigns', ...NETWORK
 ];
 
 const WORKFLOWS = [

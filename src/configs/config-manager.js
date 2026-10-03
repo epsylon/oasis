@@ -65,6 +65,7 @@ if (!fs.existsSync(configFilePath)) {
       "mapsMod": "on",
       "chatsMod": "on",
       "torrentsMod": "on",
+      "filesMod": "on",
       "graphosMod": "on",
       "larpMod": "on"
     },
@@ -92,7 +93,7 @@ if (!fs.existsSync(configFilePath)) {
 const getConfig = () => {
   const configData = fs.readFileSync(configFilePath);
   const cfg = JSON.parse(configData);
-  if (!['whole', 'mutuals', 'only-lan'].includes(cfg.wish)) cfg.wish = 'whole';
+  if (!['whole', 'mutuals', 'only-lan', 'local'].includes(cfg.wish)) cfg.wish = 'whole';
   if (cfg.pmVisibility !== 'whole' && cfg.pmVisibility !== 'mutuals') cfg.pmVisibility = 'whole';
   if (typeof cfg.ux === 'string') cfg.ux = { current: cfg.ux };
   if (!cfg.ux || typeof cfg.ux !== 'object') cfg.ux = { current: 'blocks' };
@@ -104,7 +105,7 @@ const getConfig = () => {
   if (!Number.isFinite(Number(cfg.blobCache.pubMaxMB))) cfg.blobCache.pubMaxMB = 0;
   if (cfg.modules && typeof cfg.modules === 'object') {
     if (cfg.modules.backupMod === undefined) cfg.modules.backupMod = cfg.modules.legacyMod === 'off' ? 'off' : 'on';
-    for (const mod of ['wikiMod', 'emergenciesMod', 'mailingMod', 'logisticsMod', 'podcastsMod', 'campaignsMod']) {
+    for (const mod of ['wikiMod', 'emergenciesMod', 'mailingMod', 'logisticsMod', 'podcastsMod', 'campaignsMod', 'filesMod']) {
       if (cfg.modules[mod] === undefined) cfg.modules[mod] = 'on';
     }
   }

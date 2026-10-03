@@ -1,14 +1,16 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, torrentDownloadHref } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 
-const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent']);
+const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent','file']);
+const TORRENTABLE_TYPES = new Set(['audio','video','image','document','file']);
 const OPINION_ROUTES = {
   feed:        (id) => `/feed/opinions/${encodeURIComponent(id)}`,
   bookmark:    (id) => `/bookmarks/opinions/${encodeURIComponent(id)}`,
   image:       (id) => `/images/opinions/${encodeURIComponent(id)}`,
   audio:       (id) => `/audios/opinions/${encodeURIComponent(id)}`,
   torrent:     (id) => `/torrents/opinions/${encodeURIComponent(id)}`,
+  file:        (id) => `/files/opinions/${encodeURIComponent(id)}`,
   video:       (id) => `/videos/opinions/${encodeURIComponent(id)}`,
   document:    (id) => `/documents/opinions/${encodeURIComponent(id)}`,
   votes:       (id) => `/votes/opinions/${encodeURIComponent(id)}`
@@ -53,7 +55,7 @@ function cleanFeedText(t) {
 }
 
 function isValidFeedText(t) {
-  const s = cleanFeedText(t);
+  const s = cleanFeedText(t).replace(/!?\[[^\]\n]*\]\(\s*&[^)\s]+\.sha256\s*\)/g, '').trim();
   return s.length >= FEED_TEXT_MIN && s.length <= FEED_TEXT_MAX;
 }
 
@@ -228,7 +230,7 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
 
 exports.renderActionCards = renderActionCards;
 const SPREADABLE_TYPES = new Set([
-  'post', 'audio', 'video', 'image', 'document', 'torrent', 'bookmark',
+  'post', 'audio', 'video', 'image', 'document', 'torrent', 'file', 'bookmark',
   'event', 'calendar', 'task', 'votes', 'vote', 'market', 'shop', 'shopProduct',
   'project', 'transfer', 'housing', 'job', 'report', 'industry', 'industryBuild', 'industryBlueprint',
   'chat', 'chatMessage', 'pad', 'padEntry', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign', 'forum', 'map', 'poll', 'blog', 'schoolCourse', 'feed'
@@ -621,11 +623,24 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'torrent') {
-      const { title, url } = content;
+      const { title, url, source, sourceName } = content;
       cardBody.push(
         div({ class: 'card-section' },
           title?.trim() ? h2({ class: 'torrent-title' }, title) : "",
-          url ? renderTorrentDownload(torrentDownloadHref(url, title)) : null
+          url ? div({ class: 'torrent-card-actions' },
+            renderTorrentSourceDownload(action.tipId || action.id || action.key, source),
+            renderTorrentDownload(torrentDownloadHref(url, title))
+          ) : null
+        )
+      );
+    }
+
+    if (type === 'file') {
+      const { title, url, fileName, torrentUrl } = content;
+      cardBody.push(
+        div({ class: 'card-section' },
+          title?.trim() ? h2({ class: 'torrent-title' }, title) : "",
+          url ? renderFileDownloads(action.tipId || action.id || action.key, torrentUrl, fileName || title) : null
         )
       );
     }
@@ -719,11 +734,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const { text, refeeds } = content;
       if (!isValidFeedText(text)) return null;
       const safeText = cleanFeedText(text);
-      const htmlText = safeText ? renderStyledHtml(safeText) : '';
+      const textNodes = safeText ? renderStyledText(safeText, { zoomImages: true }) : [];
       const refeedsNum = Number(refeeds || 0) || 0;
       cardBody.push(
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text', innerHTML: sanitizeHtml(htmlText) }),
+          div({ class: 'feed-text' }, ...textNodes),
           refeedsNum > 0
             ? h2({ class: 'card-field' },
                 span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '),
@@ -1818,6 +1833,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           author: action.author,
           reportTitle: (content && (content.title || content.question || content.concept || content.name)) || '',
           spread: SPREADABLE_TYPES.has(type) ? (spreadMap.get(action.id) || null) : undefined,
+          ...(type === 'torrent' || type === 'file' ? { spreadTitle: i18n.seedAction } : {}),
+          ...(TORRENTABLE_TYPES.has(type) && content && typeof content.url === 'string' && content.url.startsWith('&')
+            ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
+            : {}),
           ...favOptsFor(type, msgId, extras)
         })
       ),
@@ -1872,7 +1891,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
 
 const FAV_KIND_BY_TYPE = {
   image: 'images', audio: 'audios', video: 'videos', document: 'documents',
-  bookmark: 'bookmarks', torrent: 'torrents', event: 'events', task: 'tasks',
+  bookmark: 'bookmarks', torrent: 'torrents', file: 'files', event: 'events', task: 'tasks',
   report: 'reports', votes: 'votes', poll: 'polls', market: 'market',
   housing: 'housing', job: 'jobs', project: 'projects', shop: 'shops',
   chat: 'chats', chatThread: 'chats', pad: 'pads', calendar: 'calendars',
@@ -1935,6 +1954,7 @@ function getViewDetailsAction(type, action) {
     case 'audio':      return `/audios/${id}`;
     case 'video':      return `/videos/${id}`;
     case 'torrent':    return `/torrents/${id}`;
+    case 'file':       return `/files/${id}`;
     case 'forum':      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
     case 'document':   return `/documents/${id}`;
     case 'bookmark':   return `/bookmarks/${id}`;
@@ -1979,9 +1999,9 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const desc = i18n.activityDesc;
 
   const activityTypes = [
-    { type: 'all',       label: i18n.allButton },
-    { type: 'mine',      label: i18n.mineButton },
     { type: 'recent',    label: i18n.typeRecent },
+    { type: 'mine',      label: i18n.mineButton },
+    { type: 'all',       label: i18n.allButton },
     { type: 'top',       label: i18n.typeTop },
     { type: 'inhabitants', label: i18n.typeInhabitants },
     { type: 'tribe',     label: i18n.typeTribe },
@@ -2017,6 +2037,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'document',  label: i18n.typeDocument },
     { type: 'image',     label: i18n.typeImage },
     { type: 'torrent',   label: i18n.typeTorrent },
+    { type: 'file',      label: i18n.typeFile },
     { type: 'video',     label: i18n.typeVideo }
   ];
 
@@ -2072,6 +2093,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment'));
   } else if (filter === 'torrent') {
     filteredActions = actions.filter(action => action.type === 'torrent');
+  } else if (filter === 'file') {
+    filteredActions = actions.filter(action => action.type === 'file');
   } else if (filter === 'chat') {
     filteredActions = actions.filter(action => (action.type === 'chat' || action.type === 'chatThread') && action.type !== 'tombstone');
   } else if (filter === 'wiki') {
@@ -2158,27 +2181,28 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   }
 
   const MODULE_SUB_FILTERS = {
-    audio:   { url: '/audios',     filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
-    video:   { url: '/videos',     filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
-    image:   { url: '/images',     filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
-    document:{ url: '/documents',  filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
-    bookmark:{ url: '/bookmarks',  filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
-    torrent: { url: '/torrents',   filters: ['all', 'mine', 'recent', 'top', 'favorites'] },
-    map:     { url: '/maps',       filters: ['all', 'mine', 'recent'] },
-    forum:   { url: '/forum',      filters: ['all', 'mine', 'recent', 'top'] },
-    event:   { url: '/events',     filters: ['all', 'mine', 'recent', 'top'] },
+    audio:   { url: '/audios',     filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
+    video:   { url: '/videos',     filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
+    image:   { url: '/images',     filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
+    document:{ url: '/documents',  filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
+    bookmark:{ url: '/bookmarks',  filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
+    torrent: { url: '/torrents',   filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
+    file: { url: '/files',   filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
+    map:     { url: '/maps',       filters: ['recent', 'mine', 'all'] },
+    forum:   { url: '/forum',      filters: ['recent', 'mine', 'all', 'top'] },
+    event:   { url: '/events',     filters: ['recent', 'mine', 'all', 'top'] },
     task:    { url: '/tasks',      filters: ['all', 'mine', 'assigned', 'open', 'closed'] },
-    votes:   { url: '/votes',      filters: ['all', 'mine', 'recent', 'top'] },
+    votes:   { url: '/votes',      filters: ['recent', 'mine', 'all', 'top'] },
     transfer:{ url: '/transfers',  filters: ['all', 'mine', 'pending', 'unconfirmed', 'closed'] },
     market:  { url: '/market',     filters: ['all', 'mine', 'exchange', 'auctions', 'for sale', 'sold'] },
-    shop:    { url: '/shops',      filters: ['all', 'mine', 'recent'] },
+    shop:    { url: '/shops',      filters: ['recent', 'mine', 'all'] },
     job:     { url: '/jobs',       filters: ['ALL', 'MINE', 'REMOTE', 'PRESENCIAL', 'OPEN', 'CLOSED'] },
     project: { url: '/projects',   filters: ['all', 'mine', 'active', 'completed'] },
     industry:{ url: '/industry',   filters: ['ALL', 'MINE', 'ACTIVE', 'PAUSED', 'DISSOLVED', 'BLUEPRINTS', 'BUILDS', 'MEMBER', 'RULES'] },
     chat:    { url: '/chats',      filters: ['all', 'mine'] },
     pad:     { url: '/pads',       filters: ['all', 'mine'] },
     calendar:{ url: '/calendars',  filters: ['all', 'mine'] },
-    report:  { url: '/reports',    filters: ['all', 'mine', 'recent'] },
+    report:  { url: '/reports',    filters: ['recent', 'mine', 'all'] },
     curriculum:{ url: '/cv',       filters: ['view', 'edit'] }
   };
 
@@ -2195,12 +2219,12 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
       emptyAct ? null : div({ class: 'activity-filter-chips' },
         (() => {
           const ORDER = [
-            'all', 'mine', 'recent', 'top',
+            'recent', 'mine', 'all', 'top',
             'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts', 'emergency',
             'votes', 'event', 'calendar', 'task', 'report', 'campaign',
             'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'logistics',
             'post', 'feed', 'chat', 'pad', 'wiki', 'mailing', 'forum', 'map',
-            'audio', 'bookmark', 'document', 'image', 'torrent', 'video', 'podcast'
+            'audio', 'bookmark', 'document', 'file', 'image', 'torrent', 'video', 'podcast'
           ];
           const byType = new Map(activityTypes.map(t => [t.type, t]));
           const placed = new Set(ORDER);

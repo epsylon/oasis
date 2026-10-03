@@ -1,7 +1,7 @@
 const { hr, div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
-const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
+const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -10,13 +10,13 @@ const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null;
   const s = String(value).trim();
   if (!s) return null;
-  if (s.startsWith('&')) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(s)}`, ...attrs });
+  if (s.startsWith('&')) return renderZoomableImage(`/blob/${encodeURIComponent(s)}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' });
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
   if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}`, preload: 'metadata' });
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
   if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` });
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/);
-  if (mImg) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(mImg[1])}`, class: attrs.class || 'post-image' });
+  if (mImg) return renderZoomableImage(`/blob/${encodeURIComponent(mImg[1])}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' });
   return null;
 };
 
@@ -378,9 +378,9 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
         { class: "filters" },
         ...(emptyMod ? [] : [form(
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
-          ...chipBtn("all", i18n.reportsFilterAll),
-          ...chipBtn("mine", i18n.reportsFilterMine),
           ...chipBtn("recent", i18n.reportsFilterRecent),
+          ...chipBtn("mine", i18n.reportsFilterMine),
+          ...chipBtn("all", i18n.reportsFilterAll),
           ...chipBtn("top", i18n.reportsFilterTop),
           ...chipBtn("features", i18n.reportsFilterFeatures),
           ...chipBtn("bugs", i18n.reportsFilterBugs),
@@ -606,9 +606,9 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
         { class: "filters" },
         form(
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
-          button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
-          ...(reportChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase())] : []),
           ...(reportChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: btnClass("recent") }, String(i18n.reportsFilterRecent).toUpperCase())] : []),
+          ...(reportChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
           button({ type: "submit", name: "filter", value: "top", class: btnClass("top") }, String(i18n.reportsFilterTop).toUpperCase()),
           ...(reportChip("features") ? [button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, String(i18n.reportsFilterFeatures).toUpperCase())] : []),
           ...(reportChip("bugs") ? [button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, String(i18n.reportsFilterBugs).toUpperCase())] : []),

@@ -5,11 +5,11 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "MINE", "SUBSCRIBED", "RECENT"];
+const BASE_FILTERS = ["RECENT", "MINE", "ALL", "SUBSCRIBED"];
 const TYPE_FILTERS = ["OPEN", "CLOSED"];
 const STATUS_FILTERS = ["ACTIVE", "ARCHIVED"];
 const HISTORY_MODES = ["DATE", "THREADS", "INHABITANTS"];
-const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const baseLabel = (f) => String(i18n[`mailingFilter${cap(f)}`] || f).toUpperCase();

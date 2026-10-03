@@ -61,3 +61,20 @@ describe('clearnet: choosing a language without cookies', (t) => {
     }
   });
 });
+
+describe('licenses', (t) => {
+  const { normalizeLicense, licenseInfo } = require('../../../src/views/clearnet_view');
+
+  t('form values outside the list fall back to Public Domain', () => {
+    eq(normalizeLicense('CC-BY-4.0'), 'CC-BY-4.0');
+    eq(normalizeLicense(''), 'CC0-1.0');
+    eq(normalizeLicense('CC-BY-NC-4.0'), 'CC0-1.0');
+  });
+
+  t('content without a license is Public Domain; a value nobody chose from the list is not credited to anyone', () => {
+    eq(licenseInfo('').name, 'Public Domain');
+    eq(licenseInfo(undefined).name, 'Public Domain');
+    eq(licenseInfo('GFDL-1.3-or-later').name, 'GNU Free Documentation License 1.3');
+    eq(licenseInfo('CC-BY-NC-4.0'), null);
+  });
+});

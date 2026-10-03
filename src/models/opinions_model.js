@@ -23,7 +23,7 @@ module.exports = ({ cooler }) => {
 
   const validTypes = [
     'bookmark', 'votes', 'transfer',
-    'feed', 'image', 'audio', 'video', 'document', 'torrent',
+    'feed', 'image', 'audio', 'video', 'document', 'torrent', 'file',
     'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse',
     'podcast', 'podcastEpisode', 'campaign', 'logisticsRoute'
   ];
@@ -43,6 +43,7 @@ module.exports = ({ cooler }) => {
     video: 'videoOpinion',
     document: 'documentOpinion',
     torrent: 'torrentOpinion',
+    file: 'fileOpinion',
     industry: 'industryOpinion',
     project: 'projectOpinion',
     report: 'reportOpinion',

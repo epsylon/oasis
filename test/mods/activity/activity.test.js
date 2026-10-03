@@ -254,7 +254,7 @@ describe('activity: general OPEN chat replies surface in activity as a thread', 
       { name: 'VideoRoom', mime: 'video/mp4', marker: '<video' },
       { name: 'AudioRoom', mime: 'audio/mpeg', marker: '<audio' },
       { name: 'PdfRoom', mime: 'application/pdf', marker: '📄 PDF' },
-      { name: 'TorrentRoom', mime: 'application/x-bittorrent', marker: 'TORRENT' }
+      { name: 'TorrentRoom', mime: 'application/x-bittorrent', marker: '\u2B07' }
     ];
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     for (const f of FORMATS) {

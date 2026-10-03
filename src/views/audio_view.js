@@ -17,6 +17,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
+const { renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
 const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -115,11 +116,11 @@ const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) 
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(audioObj.key, `/audios/${encodeURIComponent(audioObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads || null, author: audioObj.author, favKind: 'audios', isFavorite: audioObj.isFavorite, reportTitle: audioObj.title })
+            renderContentActions(audioObj.key, `/audios/${encodeURIComponent(audioObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads || null, author: audioObj.author, favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title }, isFavorite: audioObj.isFavorite, reportTitle: audioObj.title })
           ),
           div(
             { class: "card-section audio-card-body" },
-            title ? h2(title) : null,
+            div({ class: "shop-title-row" }, title ? h2(title) : null, renderLicenseChip(audioObj.license)),
             audioObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(audioObj.lifetime, i18n)) : null,
             renderAudioPlayer(audioObj),
             renderEngagement(audioObj.key,
@@ -189,6 +190,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
         value: safeArr(audioToEdit?.tags).join(", ")
       }),
       br(),
+      ...renderLicenseSelect(audioToEdit?.license, i18n),
       br(),
       button({ type: "submit" }, filter === "edit" ? i18n.audioUpdateButton : i18n.audioCreateButton)
     )
@@ -238,9 +240,9 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterAll).toUpperCase()),
-          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterMine).toUpperCase())] : []),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.audioFilterFavorites).toUpperCase()
@@ -318,7 +320,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   const detailActions = div({ class: "card-header activity-card-header" },
     renderContentActions(audioObj.key, null, {
       author: audioObj.author,
-      favKind: 'audios',
+      favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title },
       isFavorite: audioObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
@@ -329,7 +331,8 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   const audioSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, clearnetItemHref('audios', audioObj.title, audioObj.key))
+      renderReachChip(isClearnet, i18n, clearnetItemHref('audios', audioObj.title, audioObj.key)),
+      renderLicenseChip(audioObj.license)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(audioObj.description)
@@ -379,9 +382,9 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
           { method: "GET", action: "/audios", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterAll).toUpperCase()),
-          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterMine).toUpperCase())] : []),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.audioFilterFavorites).toUpperCase()

@@ -18,7 +18,7 @@ const RECURRENCES = ['NONE', 'DAILY', 'WEEKLY', 'MONTHLY'];
 const STATUSES = ['OPEN', 'CLOSED'];
 const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'DELIVERED'];
 const OWNER_BOOKING_STATUSES = ['CONFIRMED', 'REJECTED', 'DELIVERED'];
-const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_MS = 24 * 60 * 60 * 1000;
 const MAX_ZONES = 8;
 
 const safeText = (v) => String(v == null ? '' : v).trim();

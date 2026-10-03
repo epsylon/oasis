@@ -12,7 +12,7 @@ const PROPOSAL_TYPE = 'parliamentProposal';
 const TYPES = [CAMPAIGN_TYPE, SIGNATURE_TYPE, UPDATE_TYPE, OPINION_TYPE, PROPOSAL_TYPE, 'tombstone'];
 const CATEGORIES = ['ENVIRONMENT', 'RIGHTS', 'HEALTH', 'EDUCATION', 'INFRASTRUCTURE', 'CULTURE', 'ECONOMY', 'OTHER'];
 const STATUSES = ['OPEN', 'ACHIEVED', 'CLOSED'];
-const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const safeText = (v) => String(v == null ? '' : v).trim();
 const normU = (v) => String(v || '').trim().toUpperCase();

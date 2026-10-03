@@ -1,4 +1,5 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
+const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
@@ -10,27 +11,27 @@ const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null
   const s = String(value).trim()
   if (!s) return null
-  if (s.startsWith('&')) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(s)}`, ...attrs })
+  if (s.startsWith('&')) return renderZoomableImage(`/blob/${encodeURIComponent(s)}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}`, preload: 'metadata' })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mImg) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(mImg[1])}`, class: attrs.class || 'post-image' })
+  if (mImg) return renderZoomableImage(`/blob/${encodeURIComponent(mImg[1])}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
   return null
 }
 
 const userId = config.keys.id
 
 const FILTERS = [
-  { key: "ALL", i18n: "projectFilterAll", title: "projectAllTitle" },
+  { key: "RECENT", i18n: "projectFilterRecent", title: "projectRecentTitle" },
   { key: "MINE", i18n: "projectFilterMine", title: "projectMineTitle" },
+  { key: "ALL", i18n: "projectFilterAll", title: "projectAllTitle" },
   { key: "APPLIED", i18n: "projectFilterApplied", title: "projectAppliedTitle" },
   { key: "ACTIVE", i18n: "projectFilterActive", title: "projectActiveTitle" },
   { key: "PAUSED", i18n: "projectFilterPaused", title: "projectPausedTitle" },
   { key: "COMPLETED", i18n: "projectFilterCompleted", title: "projectCompletedTitle" },
   { key: "FOLLOWING", i18n: "projectFilterFollowing", title: "projectFollowingTitle" },
-  { key: "RECENT", i18n: "projectFilterRecent", title: "projectRecentTitle" },
   { key: "TOP", i18n: "projectFilterTop", title: "projectTopTitle" },
   { key: "BACKERS", i18n: "projectFilterBackers", title: "projectBackersLeaderboardTitle" }
 ]

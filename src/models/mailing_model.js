@@ -10,7 +10,7 @@ const LEAVE_TYPE = 'mailingLeave';
 const LIST_TYPES = ['OPEN', 'CLOSED'];
 const STATUSES = ['ACTIVE', 'ARCHIVED'];
 const BATCH = 6;
-const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const safeText = (v) => String(v == null ? '' : v).trim();
 const normU = (v) => String(v || '').trim().toUpperCase();

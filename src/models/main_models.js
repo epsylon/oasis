@@ -270,7 +270,8 @@ module.exports = ({ cooler, isPublic }) => {
       const { host, pubId } = parseRemote(remote);
       const effectiveKey = pubId || (data && data.key ? canonicalizePubId(data.key) : null);
       const name = host || (effectiveKey ? await models.about.name(effectiveKey).catch(() => (effectiveKey || '').slice(0, 10)) : remote);
-      const users = effectiveKey && ebtMap.has(effectiveKey) ? ebtMap.get(effectiveKey) : [];
+      const known = !!(effectiveKey && ebtMap.has(effectiveKey));
+      const users = known ? ebtMap.get(effectiveKey) : [];
       const usersWithNames = await Promise.all(
         users.map(async (user) => {
           const userName = await models.about.name(user.id).catch(() => user.id);
@@ -283,7 +284,7 @@ module.exports = ({ cooler, isPublic }) => {
           ...data,
           key: effectiveKey || remote,
           name,
-          users: usersWithNames
+          users: known ? usersWithNames : null
         }
       ];
     })
@@ -329,6 +330,7 @@ models.about = {
       clearnetImages:    result.clearnetImages    === true,
       clearnetDocuments: result.clearnetDocuments === true,
       clearnetTorrents:  result.clearnetTorrents  === true,
+      clearnetFiles:     result.clearnetFiles     === true,
       clearnetBookmarks: result.clearnetBookmarks === true,
       clearnetPodcasts:  result.clearnetPodcasts  === true,
       clearnetSchool:    result.clearnetSchool    === true,
@@ -345,6 +347,7 @@ models.about = {
       profileImages:     result.profileImages     === true,
       profileDocuments:  result.profileDocuments  === true,
       profileTorrents:   result.profileTorrents   === true,
+      profileFiles:      result.profileFiles      === true,
       profileBookmarks:  result.profileBookmarks  === true,
       profilePodcasts:   result.profilePodcasts   === true,
       profileSchool:     result.profileSchool     === true,
@@ -1946,6 +1949,7 @@ const post = {
           clearnetImages:    r.clearnetImages    === true,
           clearnetDocuments: r.clearnetDocuments === true,
           clearnetTorrents:  r.clearnetTorrents  === true,
+          clearnetFiles:     r.clearnetFiles     === true,
           clearnetBookmarks: r.clearnetBookmarks === true,
           clearnetPodcasts:  r.clearnetPodcasts  === true,
           clearnetSchool:    r.clearnetSchool    === true,
@@ -1962,6 +1966,7 @@ const post = {
           profileImages:     r.profileImages     === true,
           profileDocuments:  r.profileDocuments  === true,
           profileTorrents:   r.profileTorrents   === true,
+          profileFiles:      r.profileFiles      === true,
           profileBookmarks:  r.profileBookmarks  === true,
           profilePodcasts:   r.profilePodcasts   === true,
           profileSchool:     r.profileSchool     === true,

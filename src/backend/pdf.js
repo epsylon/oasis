@@ -149,7 +149,13 @@ const flattenSections = (sections) => {
   return lines;
 };
 
-function buildDocumentPdf({ title, issuedToLabel, issuedTo, sections } = {}) {
+const licenseFooter = (id) => {
+  const l = require('../views/clearnet_view').licenseInfo(id);
+  return l ? `License: ${l.name}` : '';
+};
+
+function buildDocumentPdf({ title, issuedToLabel, issuedTo, sections, license = '' } = {}) {
+  const footerNote = licenseFooter(license);
   const pageW = 612;
   const pageH = 792;
   const marginX = 50;
@@ -254,6 +260,7 @@ function buildDocumentPdf({ title, issuedToLabel, issuedTo, sections } = {}) {
 
     parts.push(`q\n0.6 0.6 0.6 RG\n0.5 w\n${marginX} ${footerH + 5} m\n${pageW - marginX} ${footerH + 5} l\nS\nQ`);
     parts.push(`BT\n/F1 8 Tf\n${marginX} ${footerH - 10} Td\n(${escapePdf(footerLeft)}) Tj\nET`);
+    if (footerNote) parts.push(`BT\n/F1 8 Tf\n${marginX} ${footerH - 21} Td\n(${escapePdf(footerNote)}) Tj\nET`);
     const pageLabel = `Page ${pgIdx + 1} of ${pages.length}`;
     const pageLabelW = pageLabel.length * 4.8;
     parts.push(`BT\n/F1 8 Tf\n${pageW - marginX - pageLabelW} ${footerH - 10} Td\n(${escapePdf(pageLabel)}) Tj\nET`);
@@ -586,6 +593,30 @@ const pushWikiBody = (out, body, images = {}) => {
   flush();
 };
 
+const padSections = (pad, extra = {}) => {
+  const out = [];
+  out.push({ kind: 'title', text: txt(pad.title) || '-' });
+  out.push({ kind: 'blank' });
+  out.push({ kind: 'kv', label: 'Author', value: txt(pad.author) });
+  out.push({ kind: 'kv', label: 'Created', value: fmtDate(pad.createdAt) });
+  out.push({ kind: 'kv', label: 'Status', value: txt(pad.status).toUpperCase() });
+  out.push({ kind: 'kv', label: 'Members', value: String(Array.isArray(pad.members) ? pad.members.length : 0) });
+  out.push({ kind: 'kv', label: 'Versions', value: String(Array.isArray(pad.versions) ? pad.versions.length : 0) });
+  pushTags(out, pad);
+  out.push({ kind: 'blank' });
+  out.push({ kind: 'section', text: 'CONTENT' });
+  out.push({ kind: 'blank' });
+  out.push({ kind: 'text', text: String(pad.text || '').replace(/\r\n/g, '\n') });
+  const versions = Array.isArray(pad.versions) ? pad.versions : [];
+  if (versions.length) {
+    out.push({ kind: 'blank' });
+    out.push({ kind: 'section', text: 'VERSION HISTORY' });
+    out.push({ kind: 'blank' });
+    for (const v of versions.slice().reverse().slice(0, 50)) out.push({ kind: 'kv', label: fmtDate(v.createdAt), value: txt(v.author) });
+  }
+  return out;
+};
+
 const wikiSections = (page, extra = {}) => {
   const out = [];
   out.push({ kind: 'title', text: txt(page.title) || '-' });
@@ -735,6 +766,7 @@ const mailingSections = (item, extra = {}) => {
 
 const BUILDERS = {
   wiki: { title: 'OASIS - Wiki', sections: wikiSections, name: item => item.title },
+  pads: { title: 'OASIS - Pad', sections: padSections, name: item => item.title },
   campaigns: { title: 'OASIS - Campaign', sections: campaignSections, name: item => item.title },
   logistics: { title: 'OASIS - Route', sections: logisticsSections, name: item => item.title },
   mailing: { title: 'OASIS - Mailing List', sections: mailingSections, name: item => item.title },
@@ -763,7 +795,8 @@ const buildContentPdf = (kind, item, extra = {}, viewerId = null) => {
     title: b.title,
     issuedToLabel: 'Issued to',
     issuedTo: viewerId || null,
-    sections: b.sections(item || {}, extra)
+    sections: b.sections(item || {}, extra),
+    license: (item && item.license) || ''
   });
 };
 
@@ -910,6 +943,7 @@ function buildSmartContractPdf({ transfer, block, viewerId }) {
 
     parts.push(`q\n0.6 0.6 0.6 RG\n0.5 w\n${marginX} ${footerH + 5} m\n${pageW - marginX} ${footerH + 5} l\nS\nQ`);
     parts.push(`BT\n/F1 8 Tf\n${marginX} ${footerH - 10} Td\n(${escapePdf(footerLeft)}) Tj\nET`);
+    parts.push(`BT\n/F1 8 Tf\n${marginX} ${footerH - 21} Td\n(${escapePdf(licenseFooter(''))}) Tj\nET`);
     const pageLabel = `Page ${pgIdx + 1} of ${pages.length}`;
     const pageLabelW = pageLabel.length * 4.8;
     parts.push(`BT\n/F1 8 Tf\n${pageW - marginX - pageLabelW} ${footerH - 10} Td\n(${escapePdf(pageLabel)}) Tj\nET`);
@@ -1014,6 +1048,7 @@ function buildCertificatePdf({ cert, course, studentName, teacherName }) {
 
   parts.push(centered('Cryptographically signed on the Oasis P2P network — verifiable by anyone', 8, 'F1', margin + 30, '0.35 0.35 0.35'));
   if (c.id) parts.push(centered(`Certificate ID: ${c.id}`, 6, 'F1', margin + 18, '0.45 0.45 0.45'));
+  parts.push(centered(licenseFooter(''), 6, 'F1', margin + 42, '0.45 0.45 0.45'));
 
   const content = parts.join('\n');
 
@@ -1179,6 +1214,7 @@ function buildLogsPdf(entries, oasisId, opts = {}) {
 
     parts.push(`q\n0.6 0.6 0.6 RG\n0.5 w\n${marginX} ${footerH + 5} m\n${pageW - marginX} ${footerH + 5} l\nS\nQ`);
     parts.push(`BT\n/F1 8 Tf\n${marginX} ${footerH - 10} Td\n(${escapePdf(footerLeft)}) Tj\nET`);
+    parts.push(`BT\n/F1 8 Tf\n${marginX} ${footerH - 21} Td\n(${escapePdf(licenseFooter(''))}) Tj\nET`);
     const pageLabel = `Page ${pgIdx + 1} of ${pages.length}`;
     const pageLabelW = pageLabel.length * 4.8;
     parts.push(`BT\n/F1 8 Tf\n${pageW - marginX - pageLabelW} ${footerH - 10} Td\n(${escapePdf(pageLabel)}) Tj\nET`);

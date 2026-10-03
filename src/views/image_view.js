@@ -3,6 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
+const { renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
 const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -86,11 +87,11 @@ const renderImageList = exports.renderImageList = (images, filter, params = {}) 
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(imgObj.key, `/images/${encodeURIComponent(imgObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(imgObj.key)) || params.spreads || null, author: imgObj.author, favKind: 'images', isFavorite: imgObj.isFavorite, reportTitle: imgObj.title })
+            renderContentActions(imgObj.key, `/images/${encodeURIComponent(imgObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(imgObj.key)) || params.spreads || null, author: imgObj.author, favKind: 'images', torrentFrom: { blobId: imgObj.url, name: imgObj.title }, isFavorite: imgObj.isFavorite, reportTitle: imgObj.title })
           ),
           div(
             { class: "card-section image-card-body" },
-            title ? h2(title) : null,
+            div({ class: "shop-title-row" }, title ? h2(title) : null, renderLicenseChip(imgObj.license)),
             imgObj.lifetime ? div({ class: "card-chips-row" },
               imgObj.lifetime ? renderLifespanChip(imgObj.lifetime, i18n) : null
             ) : null,
@@ -163,6 +164,7 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
       br(),
       input({ type: "text", name: "tags", placeholder: i18n.imageTagsPlaceholder, value: tagsValue }),
       br(),
+      ...renderLicenseSelect(imageToEdit?.license, i18n),
       br(),
       button({ type: "submit" }, filter === "edit" ? i18n.imageUpdateButton : i18n.imageCreateButton)
     )
@@ -246,9 +248,9 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),
-          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterMine).toUpperCase())] : []),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.imageFilterFavorites).toUpperCase()
@@ -324,7 +326,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   const detailActions = div({ class: "card-header activity-card-header" },
     renderContentActions(imageObj.key, null, {
       author: imageObj.author,
-      favKind: 'images',
+      favKind: 'images', torrentFrom: { blobId: imageObj.url, name: imageObj.title },
       isFavorite: imageObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
@@ -335,7 +337,8 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   const imageSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, clearnetItemHref('images', imageObj.title, imageObj.key))
+      renderReachChip(isClearnet, i18n, clearnetItemHref('images', imageObj.title, imageObj.key)),
+      renderLicenseChip(imageObj.license)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(imageObj.description)
@@ -395,9 +398,9 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
           { method: "GET", action: "/images", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterMine).toUpperCase())] : []),
-          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterRecent).toUpperCase())] : []),          ...(mediaChip("favorites") ? [button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.imageFilterFavorites).toUpperCase()
           )] : []),

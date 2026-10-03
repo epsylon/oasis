@@ -18,6 +18,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
+const { renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
 const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -110,11 +111,11 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads || null, author: videoObj.author, favKind: 'videos', isFavorite: videoObj.isFavorite, reportTitle: videoObj.title })
+            renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads || null, author: videoObj.author, favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title }, isFavorite: videoObj.isFavorite, reportTitle: videoObj.title })
           ),
           div(
             { class: "card-section video-card-body" },
-            title ? h2(title) : null,
+            div({ class: "shop-title-row" }, title ? h2(title) : null, renderLicenseChip(videoObj.license)),
             videoObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(videoObj.lifetime, i18n)) : null,
             renderVideoPlayer(videoObj),
             renderEngagement(videoObj.key,
@@ -185,6 +186,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
         value: safeArr(videoToEdit?.tags).join(", ")
       }),
       br(),
+      ...renderLicenseSelect(videoToEdit?.license, i18n),
       br(),
       button({ type: "submit" }, filter === "edit" ? i18n.videoUpdateButton : i18n.videoCreateButton)
     )
@@ -234,9 +236,9 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
-          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase())] : []),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.videoFilterFavorites).toUpperCase()
@@ -307,7 +309,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   const detailActions = div({ class: "card-header activity-card-header" },
     renderContentActions(videoObj.key, null, {
       author: videoObj.author,
-      favKind: 'videos',
+      favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title },
       isFavorite: videoObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
@@ -318,7 +320,8 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   const videoSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, clearnetItemHref('videos', videoObj.title, videoObj.key))
+      renderReachChip(isClearnet, i18n, clearnetItemHref('videos', videoObj.title, videoObj.key)),
+      renderLicenseChip(videoObj.license)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(videoObj.description)
@@ -368,9 +371,9 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
           { method: "GET", action: "/videos", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase())] : []),
-          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase())] : []),          ...(mediaChip("favorites") ? [button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.videoFilterFavorites).toUpperCase()
           )] : []),

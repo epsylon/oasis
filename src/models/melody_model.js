@@ -28,6 +28,7 @@ const TYPE_TO_DEGREE = {
   image: 10,
   document: 11,
   torrent: 0,
+  file: 0,
   map: 2,
   pixelia: 3,
   gameScore: 5,

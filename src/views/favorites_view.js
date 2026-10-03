@@ -17,6 +17,7 @@ const FILTER_KINDS = [
   { value: "chats", label: () => i18n.favoritesFilterChats },
   { value: "documents", label: () => i18n.favoritesFilterDocuments },
   { value: "events", label: () => i18n.favoritesFilterEvents },
+  { value: "files", label: () => i18n.favoritesFilterFiles },
   { value: "forum", label: () => i18n.favoritesFilterForum },
   { value: "housing", label: () => i18n.favoritesFilterHousing },
   { value: "images", label: () => i18n.favoritesFilterImages },
@@ -185,12 +186,12 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "") => {
         form(
           { method: "GET", action: "/favorites", class: "ui-toolbar ui-toolbar--filters" },
           button(
-            { type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterAll} (${total})`
+            { type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterRecent} (${c.recent || 0})`
           ),
           button(
-            { type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterRecent} (${total})`
+            { type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterAll} (${total})`
           ),
           ...FILTER_KINDS.filter((k) => (c[k.value] || 0) > 0).map((k) =>
             button(

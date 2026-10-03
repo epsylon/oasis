@@ -10,7 +10,7 @@ const OPINION_TYPE = 'podcastOpinion';
 const PLAY_TYPE = 'podcastPlay';
 const TYPES = [CHANNEL_TYPE, EPISODE_TYPE, OPINION_TYPE, PLAY_TYPE, 'tombstone'];
 const CATEGORIES = ['NEWS', 'MUSIC', 'TALK', 'EDUCATION', 'TECH', 'CULTURE', 'COMMUNITY', 'OASIS', 'OTHER'];
-const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_MS = 24 * 60 * 60 * 1000;
 const MEDIA_RE = /!?\[(image|audio|video):([^\]]*)\]\((&[^)]+)\)/;
 
 const safeText = (v) => String(v == null ? '' : v).trim();

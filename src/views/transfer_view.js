@@ -215,6 +215,7 @@ const trChipFor = (normalizedFilter, censusT) => (mode) => {
   if (!Array.isArray(censusT)) return true;
   const stT = (t) => String(t.status || "").toUpperCase()
   if (mode === "mine") return censusT.some(t => t.from === userId || t.to === userId)
+  if (mode === "recent") return censusT.some(t => (Date.parse(t.createdAt || "") || 0) >= Date.now() - 86400000)
   if (mode === "mine-pending") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "UNCONFIRMED")
   if (mode === "mine-confirmed") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "CLOSED")
   if (mode === "ubi") return censusT.some(t => safeArr(t.tags).some(tag => String(tag).toUpperCase() === "UBI"))
@@ -244,6 +245,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
   const list = safeArr(transfers)
 
   let filtered =
+    normalizedFilter === "recent"      ? list.filter(t => (Date.parse(t.createdAt || "") || 0) >= Date.now() - 86400000) :
     normalizedFilter === "mine"        ? list.filter(t => t.from === userId || t.to === userId) :
     normalizedFilter === "mine-pending" ? list.filter(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "UNCONFIRMED") :
     normalizedFilter === "mine-confirmed" ? list.filter(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "CLOSED") :
@@ -312,8 +314,9 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
           input({ type: "hidden", name: "maxAmount", value: String(maxAmountRaw ?? "") }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
-          button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
+          ...(trChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: normalizedFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterRecent).toUpperCase())] : []),
           ...(trChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
           ...(trChip("ubi") ? [button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUBI).toUpperCase())] : []),
           ...(trChip("economic") ? [button({ type: "submit", name: "filter", value: "economic", class: normalizedFilter === "economic" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterEconomic || (i18n.transfersCategoryEconomic || "ECONOMIC"))] : []),
           ...(trChip("time") ? [button({ type: "submit", name: "filter", value: "time", class: normalizedFilter === "time" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTime || (i18n.transfersCategoryTime || "TIME"))] : []),
@@ -579,8 +582,9 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           input({ type: "hidden", name: "minAmount", value: String(params.minAmount ?? "") }),
           input({ type: "hidden", name: "maxAmount", value: String(params.maxAmount ?? "") }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
+          ...(trChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: normalizedFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterRecent).toUpperCase())] : []),
           ...(trChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
           ...(trChip("ubi") ? [button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUBI).toUpperCase())] : []),
           ...(trChip("economic") ? [button({ type: "submit", name: "filter", value: "economic", class: normalizedFilter === "economic" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterEconomic || (i18n.transfersCategoryEconomic || "ECONOMIC"))] : []),
           ...(trChip("time") ? [button({ type: "submit", name: "filter", value: "time", class: normalizedFilter === "time" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTime || (i18n.transfersCategoryTime || "TIME"))] : []),

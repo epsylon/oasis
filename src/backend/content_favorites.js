@@ -32,6 +32,7 @@ const DEFAULT = {
   shopProducts: [],
   tasks: [],
   torrents: [],
+  files: [],
   transfers: [],
   videos: [],
   votes: [],

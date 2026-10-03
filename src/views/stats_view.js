@@ -38,7 +38,7 @@ exports.statsView = (stats, filter) => {
   const modes = ['ALL', 'MINE', 'TOMBSTONE'];
   const types = [
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project', 'industry', 'industryBlueprint',
-    'image', 'torrent', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
+    'image', 'torrent', 'file', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
     'chat', 'chatMessage', 'pad', 'padEntry', 'wikiPage', 'emergency', 'emergencyConfirm', 'emergencyUpdate', 'mailingList', 'logisticsRoute', 'logisticsRating', 'podcast', 'podcastEpisode', 'podcastPlay', 'campaign', 'campaignSignature', 'campaignUpdate', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
     'schoolCourse', 'schoolLesson', 'schoolEnroll', 'schoolCertificate',
@@ -57,6 +57,7 @@ exports.statsView = (stats, filter) => {
     industryBlueprint: i18n.industryBlueprints,
     image: i18n.statsImage,
     torrent: i18n.statsTorrent,
+    file: i18n.statsFile,
     audio: i18n.statsAudio,
     video: i18n.statsVideo,
     document: i18n.statsDocument,

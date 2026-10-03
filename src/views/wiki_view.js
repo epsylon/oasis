@@ -1,13 +1,13 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
 const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow } = require("./main_views");
-const { renderEncryptedChip, renderReachChip } = require("./clearnet_view");
+const { renderEncryptedChip, renderReachChip, renderLicenseChip, renderLicenseSelect } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const FILTERS = ["all", "mine", "recent", "linked"];
+const FILTERS = ["recent", "mine", "all", "linked"];
 
 const pageHref = (idOrSlug, tribeId = null) =>
   `/wiki/${encodeURIComponent(idOrSlug)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`;
@@ -96,14 +96,14 @@ const renderPageCard = (page, params = {}) => {
     div({ class: "tribe-card-body" },
       page.image ? a({ href }, img({ loading: 'lazy', class: "wiki-card-cover", src: `/blob/${encodeURIComponent(page.image)}`, alt: page.title || "" })) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href }, page.title || "—"))),
-      div({ class: "card-chips-row" }, ...pageChips(page))
+      div({ class: "card-chips-row" }, ...pageChips(page), renderLicenseChip(page.license))
     )
   );
 };
 
 const renderFilters = (filter, q, params = {}, census = []) => {
   const tribeId = params.tribeId || null;
-  const dayAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const chipVisible = (mode) => {
     if (mode === filter || mode === "all") return true;
     if (mode === "mine") return census.some(p => String(p.author) === String(userId) || (p.versions || []).some(v => String(v.author) === String(userId)));
@@ -133,6 +133,8 @@ const renderForm = (page, params = {}) => {
   const bodyValue = draft ? draft.body : (page ? page.body : "");
   const tagsValue = draft ? draft.tags : (page ? page.tags.join(", ") : "");
   const summaryValue = draft ? draft.summary : "";
+  const licenseValue = draft && draft.license ? draft.license : (page ? page.license : "");
+  const canLicense = !page || String(page.author) === String(userId);
   const statusOptions = [
     { value: "OPEN", label: i18n.wikiStatusOpen },
     { value: "CLOSED", label: i18n.wikiStatusClosed }
@@ -167,6 +169,7 @@ const renderForm = (page, params = {}) => {
         : [label(i18n.wikiStatusLabel), br(), select({ name: "status" }, ...statusOptions.map(o => option({ value: o.value, ...(o.value === status ? { selected: true } : {}) }, o.label))), br(), br()],
       label(i18n.wikiTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.wikiTagsPlaceholder, value: tagsValue }), br(),
+      canLicense ? renderLicenseSelect(licenseValue, i18n) : null,
       br(),
       button({ type: "submit", class: "filter-btn", formaction: "/wiki/preview", formmethod: "POST" }, i18n.wikiPreview),
       " ",
@@ -315,7 +318,7 @@ exports.wikiPageView = async (page, params = {}) => {
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       button({ type: "submit", class: "update-btn" }, `${i18n.wikiHistory} (${page.versionCount})`)),
     form({ method: "GET", action: `/wiki/${encodeURIComponent(page.id)}/pdf` },
-      button({ type: "submit", class: "update-btn" }, i18n.wikiExportPdf)),
+      button({ type: "submit", class: "update-btn" }, i18n.generatePdf)),
     page.isOwner
       ? form({ method: "POST", action: `/wiki/delete/${encodeURIComponent(page.id)}` }, tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null, button({ type: "submit", class: "delete-btn" }, i18n.wikiDelete))
       : null
@@ -340,7 +343,7 @@ exports.wikiPageView = async (page, params = {}) => {
         ),
         div({ class: "card-section" },
           actions,
-          h2({ class: "wiki-page-title" }, shownTitle),
+          div({ class: "shop-title-row" }, h2({ class: "wiki-page-title" }, shownTitle), renderLicenseChip(page.license)),
           (() => { const rest = pageChips(page, params, { withStatus: false }); return rest.length ? div({ class: "card-chips-row" }, ...rest) : null; })(),
           version ? p({ class: "wiki-version-notice" }, `${i18n.wikiViewingVersion} (${moment(version.createdAt).format("YYYY/MM/DD HH:mm")}) — `, a({ href: base }, i18n.wikiBackToPage)) : null,
           diffBlock || renderWikiBody(shownBody, { missing: page.missingLinks, tribeId }),

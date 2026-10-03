@@ -59,6 +59,7 @@
     "mapsMod": "on",
     "chatsMod": "on",
     "torrentsMod": "on",
+    "filesMod": "on",
     "graphosMod": "on",
     "larpMod": "on"
   },

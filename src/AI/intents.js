@@ -336,10 +336,10 @@ Object.assign(RUNNERS, {
   },
   async media({ models }) {
     const count = async (m) => m && typeof m.listAll === 'function' ? listOf(await m.listAll('all').catch(() => [])).length : 0;
-    const [audios, videos, images, documents, torrents] = await Promise.all([count(models.audios), count(models.videos), count(models.images), count(models.documents), count(models.torrents)]);
+    const [audios, videos, images, documents, torrents, files] = await Promise.all([count(models.audios), count(models.videos), count(models.images), count(models.documents), count(models.torrents), count(models.files)]);
     return [
       line(`Audios: ${audios}`, '/audios'), line(`Videos: ${videos}`, '/videos'), line(`Images: ${images}`, '/images'),
-      line(`Documents: ${documents}`, '/documents'), line(`Torrents: ${torrents}`, '/torrents')
+      line(`Documents: ${documents}`, '/documents'), line(`Files: ${files}`, '/files'), line(`Torrents: ${torrents}`, '/torrents')
     ];
   },
   async blogs({ models }) {

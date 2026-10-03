@@ -22,7 +22,7 @@ exports.renderForumInvitePage = (code) => {
   return template(i18n.invitesForumsTitle || 'Forums', section(pageContent));
 };
 
-const BASE_FILTERS = ['all','mine','recent','top'];
+const BASE_FILTERS = ['recent','mine','all','top'];
 const CAT_BLOCK1 = ['GENERAL','OASIS','L.A.R.P.'];
 const CAT_BLOCK2 = ['POLITICS','TECH','SCIENCE','MUSIC','ART','GAMING','BOOKS','FILMS'];
 const CAT_BLOCK3 = ['PHILOSOPHY','SOCIETY','PRIVACY','CYBERWARFARE','SURVIVALISM'];

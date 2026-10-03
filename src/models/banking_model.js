@@ -743,6 +743,7 @@ function basePointsFor(action) {
   else if (t === "larphousepost") return 6;
   else if (t === "larptestattempt") return 3;
   else if (t === "torrent") return 6;
+  else if (t === "file") return 6;
   else if (t === "shop" || t === "shopproduct") return 6;
   else if (t === "shop-purchase") return 2;
   else if (t === "pad" || t === "padentry") return 3;

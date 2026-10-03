@@ -16,6 +16,7 @@ const detailHref = (type, key) => {
     case 'video': return `/videos/${encodeURIComponent(key)}`;
     case 'audio': return `/audios/${encodeURIComponent(key)}`;
     case 'torrent': return `/torrents/${encodeURIComponent(key)}`;
+    case 'file': return `/files/${encodeURIComponent(key)}`;
     case 'document': return `/documents/${encodeURIComponent(key)}`;
     case 'feed': return `/feed/${encodeURIComponent(key)}`;
     case 'votes': return `/votes/${encodeURIComponent(key)}`;
@@ -230,6 +231,12 @@ const renderContentHtml = (content, key) => {
           )
         )
       );
+    case 'file':
+      return div({ class: 'opinion-file' },
+        div({ class: 'card-section' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.fileTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, content.title)) : ""
+        )
+      );
     case 'torrent':
       return div({ class: 'opinion-torrent' },
         div({ class: 'card-section' },
@@ -358,7 +365,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
     });
 
   const title = i18n.opinionsTitle;
-  const baseFilters = ['ALL', 'MINE', 'RECENT', 'TOP'];
+  const baseFilters = ['RECENT', 'MINE', 'ALL', 'TOP'];
   const emptyOps = (Array.isArray(allItems) ? allItems : items).length === 0 && !String(q || '').trim();
 
   const cards = items

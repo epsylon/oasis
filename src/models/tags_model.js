@@ -212,7 +212,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
       if (filter === 'mine') {
         tags = tags.filter(t => (t.mine || 0) > 0).sort((a, b) => b.mine - a.mine || a.name.localeCompare(b.name));
       } else if (filter === 'recent') {
-        const since = Date.now() - 7 * DAY;
+        const since = Date.now() - DAY;
         tags = tags.filter(t => (t.lastTs || 0) >= since).sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
       } else if (filter === 'top') {
         tags.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));

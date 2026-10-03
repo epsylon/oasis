@@ -7,7 +7,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "MINE", "BOOKED", "RECENT", "HISTORY", "TOP"];
+const BASE_FILTERS = ["RECENT", "MINE", "ALL", "BOOKED", "HISTORY", "TOP"];
 const KIND_FILTERS = ["TRIPS", "SHIPMENTS"];
 const MODE_FILTERS = ["OFFERS", "REQUESTS"];
 const DATE_FILTERS = ["UPCOMING", "PAST", "CLOSED"];
@@ -15,7 +15,7 @@ const PRICE_FILTERS = ["FREE", "ECO", "TIME"];
 const KINDS = ["TRIP", "SHIPMENT"];
 const MODES = ["OFFER", "REQUEST"];
 const RECURRENCES = ["NONE", "DAILY", "WEEKLY", "MONTHLY"];
-const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const lbl = (prefix, v) => String(i18n[`logistics${prefix}${cap(v)}`] || v).toUpperCase();

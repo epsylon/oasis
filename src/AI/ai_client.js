@@ -24,7 +24,7 @@ const pickPort = async () => {
 };
 const MODEL_FILE = 'oasis-42-1-chat.Q4_K_M.gguf';
 const MODEL_PATH = process.env.OASIS_AI_MODEL || path.join(__dirname, MODEL_FILE);
-const ASK_TIMEOUT_MS = 130000;
+const ASK_TIMEOUT_MS = 300000;
 const DEBUG = process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
 const STATUS_TIMEOUT_MS = 3000;
 
@@ -66,7 +66,7 @@ const status = async () => {
   if (!isModelInstalled()) return { installed: false, ready: false, loading: false, error: 'model_missing' };
   await start();
   try {
-    const r = await axios.get(`http://127.0.0.1:${PORT}/status`, { headers: headers(), timeout: STATUS_TIMEOUT_MS });
+    const r = await axios.get(`http://127.0.0.1:${PORT}/status`, { headers: headers(), timeout: STATUS_TIMEOUT_MS, proxy: false });
     return { installed: true, ...(r.data || {}) };
   } catch (_) {
     return { installed: true, ready: false, loading: true, error: null };
@@ -83,7 +83,7 @@ const ask = async ({ system = '', history = [], context = [], input = '', lang =
   let lastErr = null;
   for (let attempt = 0; attempt < CONNECT_RETRIES; attempt++) {
     try {
-      const r = await axios.post(`http://127.0.0.1:${PORT}/ai`, { system, history, context, input, lang, maxTokens }, { headers: headers(), timeout: ASK_TIMEOUT_MS });
+      const r = await axios.post(`http://127.0.0.1:${PORT}/ai`, { system, history, context, input, lang, maxTokens }, { headers: headers(), timeout: ASK_TIMEOUT_MS, proxy: false });
       if (!r.data || typeof r.data.answer !== 'string') throw new Error('bad_answer');
       return r.data.answer;
     } catch (e) {

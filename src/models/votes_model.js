@@ -361,6 +361,8 @@ module.exports = ({ cooler }) => {
 
       if (filter === 'mine') {
         list = list.filter(v => v.createdBy === userId);
+      } else if (filter === 'recent') {
+        list = list.filter(v => (Date.parse(v.createdAt || '') || 0) >= Date.now() - 86400000);
       } else if (filter === 'open') {
         list = list.filter(v => v.status === 'OPEN');
       } else if (filter === 'closed') {

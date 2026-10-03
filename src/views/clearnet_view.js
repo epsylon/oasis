@@ -1,4 +1,4 @@
-const { a, br, div, input, span, strong } = require("../server/node_modules/hyperaxe");
+const { a, br, div, input, option, select, span, strong } = require("../server/node_modules/hyperaxe");
 const { renderStyledHtml } = require('../backend/renderStyledText');
 const sharedState = require('../configs/shared-state');
 const cnPkg = (() => { try { return require('../server/package.json'); } catch (_) { return {}; } })();
@@ -60,7 +60,7 @@ const renderTagChips = (tags) => {
   return `<div class="cn-tags">${chips}</div>`;
 };
 
-const KIND_KEYS = { audio: 'cnKindAudio', blog: 'cnKindBlog', bookmark: 'cnKindBookmark', document: 'cnKindDocument', event: 'cnKindEvent', feed: 'cnKindFeed', image: 'cnKindImage', job: 'cnKindJob', market: 'cnKindMarket', podcast: 'cnKindPodcast', project: 'cnKindProject', course: 'cnKindCourse', shop: 'cnKindShop', torrent: 'cnKindTorrent', video: 'cnKindVideo', wiki: 'cnKindWiki' };
+const KIND_KEYS = { audio: 'cnKindAudio', blog: 'cnKindBlog', bookmark: 'cnKindBookmark', document: 'cnKindDocument', event: 'cnKindEvent', feed: 'cnKindFeed', image: 'cnKindImage', job: 'cnKindJob', market: 'cnKindMarket', podcast: 'cnKindPodcast', project: 'cnKindProject', course: 'cnKindCourse', shop: 'cnKindShop', torrent: 'cnKindTorrent', file: 'cnKindFile', video: 'cnKindVideo', wiki: 'cnKindWiki' };
 const kindLabel = (kind) => cnText(KIND_KEYS[String(kind || '').toLowerCase()], String(kind || ''));
 const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(kindLabel(kind).toUpperCase())}]</span>`;
 
@@ -130,6 +130,52 @@ const renderFediverseReach = (prefs, i18nObj = {}) => {
   );
 };
 
+const LICENSES = [
+  { id: 'CC0-1.0', label: 'Public Domain', name: 'Public Domain' },
+  { id: 'CC-BY-4.0', label: 'CC BY 4.0', name: 'Creative Commons Attribution 4.0' },
+  { id: 'CC-BY-SA-4.0', label: 'CC BY-SA 4.0', name: 'Creative Commons Attribution-ShareAlike 4.0' },
+  { id: 'GFDL-1.3-or-later', label: 'GNU FDL 1.3', name: 'GNU Free Documentation License 1.3' },
+  { id: 'LAL-1.3', label: 'Free Art License 1.3', name: 'Free Art License 1.3' }
+];
+const DEFAULT_LICENSE = LICENSES[0].id;
+const LICENSED_KINDS = new Set(['wiki', 'audio', 'video', 'image', 'document']);
+const licenseInfo = (id) => {
+  const v = String(id || '').trim() || DEFAULT_LICENSE;
+  return LICENSES.find(l => l.id === v) || null;
+};
+const normalizeLicense = (id) => (LICENSES.find(l => l.id === String(id || '').trim()) || LICENSES[0]).id;
+
+const renderLicenseChip = (id) => {
+  const l = licenseInfo(id);
+  if (!l) return null;
+  return span({ class: 'pm-exposition-chip pm-exposition-license', title: l.name },
+    span({ class: 'pm-exposition-icon' }, '\u2696'),
+    span({ class: 'pm-exposition-text' }, l.label)
+  );
+};
+
+const renderLicenseSelect = (current, i18nObj = {}) => {
+  const selectedId = normalizeLicense(current);
+  return [
+    span(i18nObj.licenseLabel || 'License'),
+    br(),
+    select({ name: 'license' }, ...LICENSES.map(l => option({ value: l.id, ...(l.id === selectedId ? { selected: true } : {}) }, l.label))),
+    br()
+  ];
+};
+
+const renderClearnetLicense = (id) => {
+  const l = licenseInfo(id);
+  return l ? `<span class="cn-license" title="${escapeHtml(l.name)}">\u2696 ${escapeHtml(l.label)}</span>` : '';
+};
+
+const renderTransportChip = (i18nObj = {}) => {
+  return span({ class: 'pm-exposition-chip pm-exposition-transport', title: 'Secret Handshake + boxstream · SHA-256' },
+    span({ class: 'pm-exposition-icon' }, '\u21C4'),
+    span({ class: 'pm-exposition-text' }, i18nObj.transportChipLabel || 'Encrypted in transit')
+  );
+};
+
 const renderEncryptedChip = (i18nObj = {}) => {
   return span({ class: 'pm-exposition-chip pm-exposition-encrypted' },
     span({ class: 'pm-exposition-icon' }, '🔒'),
@@ -174,6 +220,7 @@ const CLEARNET_TEXT_CSS = `
 .cn-detail{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--fg-soft);background:var(--bg-sub);white-space:nowrap}
 .cn-tag{border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--fg-soft);background:var(--bg-sub);text-decoration:none;white-space:nowrap}
 .cn-tag:hover{color:var(--fg);border-color:var(--fg)}
+.cn-license{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;letter-spacing:1px;color:var(--fg-soft);background:var(--bg-sub);text-decoration:none;white-space:nowrap}
 a.tag-link{color:var(--accent);text-decoration:none}
 a.cn-wiki-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 a.cn-wiki-link:hover{color:var(--fg)}
@@ -352,8 +399,9 @@ const renderClearnetMediaView = ({ kind, item }) => {
 .cn-media-frame audio,.cn-media-frame video{width:100%;max-width:100%;display:block;border-radius:6px;background:#000}
 .cn-media-frame .cn-media-doc{display:inline-block;background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:10px 18px;color:var(--fg);text-decoration:none}
 .cn-media-frame .cn-media-doc:hover{border-color:var(--fg)}
+.cn-media-frame .cn-media-doc + .cn-media-doc{margin-left:10px}
 `;
-  const fileKind = kind === 'document' || kind === 'torrent';
+  const fileKind = kind === 'document' || kind === 'torrent' || kind === 'file';
   let mediaHtml = '';
   if (blob) {
     if (kind === 'image') {
@@ -362,7 +410,15 @@ const renderClearnetMediaView = ({ kind, item }) => {
       mediaHtml = `<audio controls preload="metadata" src="${blob}"></audio>`;
     } else if (kind === 'video') {
       mediaHtml = `<video controls preload="metadata" src="${blob}"></video>`;
-    } else if (kind === 'document' || kind === 'torrent') {
+    } else if (kind === 'file' || kind === 'torrent') {
+      const dlName = (v) => String(v || '').replace(/[\\/:*?"<>|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+      const dlLink = (href, name) => `<a class="cn-media-doc" href="${href}?name=${encodeURIComponent(name)}" rel="noopener">⇩ ${escapeHtml(name)}</a>`;
+      const original = kind === 'file' ? blob : blobUrl(item.source);
+      const originalName = dlName(kind === 'file' ? item.fileName : item.sourceName) || dlName(item.title) || 'file';
+      const torrentBlob = kind === 'file' ? blobUrl(item.torrentUrl) : blob;
+      const torrentName = `${kind === 'file' ? originalName : (dlName(item.title) || 'download').replace(/\.torrent$/i, '')}.torrent`;
+      mediaHtml = [original ? dlLink(original, originalName) : '', torrentBlob ? dlLink(torrentBlob, torrentName) : ''].filter(Boolean).join('');
+    } else if (kind === 'document') {
       mediaHtml = `<a class="cn-media-doc" href="${blob}" target="_blank" rel="noopener">⇩ ${title}</a>`;
     } else {
       mediaHtml = `<img src="${blob}" alt="${title}"/>`;
@@ -374,6 +430,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
     ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
     ${(Array.isArray(item.details) ? item.details : []).map(d => `<span class="cn-detail">${escapeHtml(String(d))}</span>`).join('')}
     ${item.price ? `<span class="cn-price">${escapeHtml(String(item.price))} ECO</span>` : ''}
+    ${LICENSED_KINDS.has(kind) ? renderClearnetLicense(item.license) : ''}
   </div>
   ${item.title ? `<h1 class="cn-media-title">${title}</h1>` : ''}
   <hr class="cn-sep"/>
@@ -450,6 +507,13 @@ module.exports = {
   renderFediverseReach,
   renderContentStats,
   renderEncryptedChip,
+  renderTransportChip,
+  LICENSES,
+  licenseInfo,
+  normalizeLicense,
+  renderLicenseChip,
+  renderLicenseSelect,
+  renderClearnetLicense,
   renderDoubleEncryptionChip,
   renderClearnetUrlBlock,
   renderClearnetSearchForm,

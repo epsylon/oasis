@@ -15,7 +15,7 @@ const toTs = (d) => {
   return Number.isFinite(t) ? t : 0;
 };
 
-module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel, pollsModel, schoolModel, wikiModel, emergenciesModel, mailingModel, logisticsModel, podcastsModel, campaignsModel }) => {
+module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, filesModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel, pollsModel, schoolModel, wikiModel, emergenciesModel, mailingModel, logisticsModel, podcastsModel, campaignsModel }) => {
   const kindConfig = {
     audios: {
       base: "/audios/",
@@ -81,6 +81,10 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
       base: "/torrents/",
       getById: getFn(torrentsModel, ["getTorrentById", "getById"])
     },
+    files: {
+      base: "/files/",
+      getById: getFn(filesModel, ["getFileById", "getById"])
+    },
     market: {
       base: "/market/",
       getById: getFn(marketModel, ["getItemById", "getById"])
@@ -143,7 +147,7 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     }
   };
 
-  const kindOrder = ["audios", "blogs", "bookmarks", "calendars", "campaigns", "chats", "documents", "events", "forum", "housing", "images", "jobs", "logistics", "mailing", "maps", "market", "pads", "podcasts", "polls", "projects", "reports", "school", "shopProducts", "shops", "emergencies", "tasks", "torrents", "transfers", "videos", "votes", "wiki"];
+  const kindOrder = ["audios", "blogs", "bookmarks", "calendars", "campaigns", "chats", "documents", "events", "files", "forum", "housing", "images", "jobs", "logistics", "mailing", "maps", "market", "pads", "podcasts", "polls", "projects", "reports", "school", "shopProducts", "shops", "emergencies", "tasks", "torrents", "transfers", "videos", "votes", "wiki"];
 
   const hydrateKind = async (kind, ids) => {
     const cfg = kindConfig[kind];
@@ -200,8 +204,10 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     for (const k of kindOrder) counts[k] = (byKind[k] || []).length;
 
     const recentFlat = flat
-      .slice()
+      .filter((x) => (toTs(x.updatedAt) || toTs(x.createdAt) || 0) >= Date.now() - 86400000)
       .sort((a, b) => (toTs(b.updatedAt) || toTs(b.createdAt)) - (toTs(a.updatedAt) || toTs(a.createdAt)));
+
+    counts.recent = recentFlat.length;
 
     return { byKind, flat, recentFlat, counts };
   };

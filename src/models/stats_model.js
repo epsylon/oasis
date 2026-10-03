@@ -60,7 +60,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
   const types = [
     'bookmark','event','task','votes','report','feed','project','industry','industryBlueprint',
-    'image','torrent','audio','video','document','transfer','post','tribe',
+    'image','torrent','file','audio','video','document','transfer','post','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
     'pad','padEntry','wikiPage','emergency','emergencyConfirm','emergencyUpdate','mailingList','logisticsRoute','logisticsRating','podcast','podcastEpisode','podcastPlay','campaign','campaignSignature','campaignUpdate','gameScore','calendar','calendarDate','calendarNote','log',
     'schoolCourse','schoolLesson','schoolEnroll','schoolCertificate',
@@ -276,6 +276,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       else if (t === 'larphousepost') score += 6;
       else if (t === 'larptestattempt') score += 3;
       else if (t === 'torrent') score += 6;
+      else if (t === 'file') score += 6;
       else if (t === 'shop' || t === 'shopproduct') score += 6;
       else if (t === 'schoolcourse' || rawType === 'schoolcourse') score += 10;
       else if (t === 'schoollesson' || rawType === 'schoollesson') score += 6;

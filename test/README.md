@@ -2,7 +2,7 @@
 
 Per-module unit/integration tests covering all publishing actions across the network.
 
-**Current status:** 94 test files / 1309 tests passing.
+**Current status:** 97 test files / 1340 tests passing.
 
 Module tests live under `test/mods/` to keep them grouped and the top-level
 `test/` directory clean (so `results/`, the runner, and the README are easy
@@ -112,24 +112,27 @@ test/
   mods/ai                  ai_nav.test.js ai_assistant.test.js
   mods/backup              backup.test.js
   mods/banking             banking.test.js
+  mods/blobcache           blobcache.test.js
   mods/blockchain          blockchain.test.js
   mods/blogs               blogs.test.js
   mods/calendars           calendars.test.js
   mods/campaigns           campaigns.test.js
   mods/chats               chats.test.js
   mods/cipher              cipher.test.js
-  mods/clearnet            hub.test.js
+  mods/clearnet            clearnet.test.js hub.test.js
   mods/comments            comments.test.js
   mods/conventions         conventions.test.js
   mods/courts              courts.test.js rules.test.js
   mods/crypto              invite-safety.test.js primitives.test.js tombstone-author.test.js
   mods/cv                  cv.test.js
   mods/data                data.test.js
+  mods/db2                 db2.test.js
   mods/dev                 dev.test.js
   mods/emergencies         emergencies.test.js
   mods/events              crypto.test.js events.test.js recurrence.test.js
   mods/favorites           favorites.test.js
   mods/feed                feed.test.js
+  mods/files               encryption.test.js files.test.js
   mods/fileshare           fileshare.test.js
   mods/forum               crypto.test.js forum.test.js
   mods/gallery             gallery.test.js
@@ -175,7 +178,7 @@ test/
   mods/sub-tribes          basic.test.js content.test.js
   mods/tags                tags.test.js
   mods/tasks               tasks.test.js
-  mods/torrents            torrents.test.js
+  mods/torrents            downloads.test.js torrents.test.js
   mods/transfers           transfers.test.js
   mods/trending            trending.test.js
   mods/tribes              basic.test.js
@@ -186,7 +189,7 @@ test/
   mods/workflows           workflows.test.js
 ```
 
-Most module directories have their own `run.sh` (54 of 78); for the rest use
+Most module directories have their own `run.sh` (50 of 76); for the rest use
 `node test/run.js mods/<module>`:
 ```sh
 bash test/mods/tribes/run.sh

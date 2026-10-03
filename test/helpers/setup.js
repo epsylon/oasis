@@ -53,6 +53,7 @@ const FACTORIES = {
   subscriptions: '../../src/models/subscriptions_model',
   maps: '../../src/models/maps_model',
   torrents: '../../src/models/torrents_model',
+  files: '../../src/models/files_model',
   calendars: '../../src/models/calendars_model',
   reports: '../../src/models/reports_model',
   market: '../../src/models/market_model',
@@ -115,7 +116,7 @@ function makePeer(network, keypair) {
     if (models[name]) return models[name];
     const f = loadFactory(name);
     let deps;
-    if (name === 'tribesContent' || name === 'torrents') {
+    if (name === 'tribesContent' || name === 'torrents' || name === 'files') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes') };
     } else if (name === 'polls') {
       deps = { ...baseDeps, chatsModel: requireOnce('chats') };

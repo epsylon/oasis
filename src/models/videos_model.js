@@ -132,6 +132,7 @@ module.exports = ({ cooler }) => {
       author: c.author,
       title: c.title || "",
       description: c.description || "",
+      license: c.license || "",
       mapUrl: c.mapUrl || "",
       opinions,
       opinions_inhabitants: voters,
@@ -167,7 +168,7 @@ module.exports = ({ cooler }) => {
       return root;
     },
 
-    async createVideo(blobMarkdown, tagsRaw, title, description, mapUrl) {
+    async createVideo(blobMarkdown, tagsRaw, title, description, mapUrl, license) {
       const ssbClient = await openSsb();
       const blobId = parseBlobId(blobMarkdown);
       const tags = normalizeTags(tagsRaw) || [];
@@ -184,7 +185,8 @@ module.exports = ({ cooler }) => {
         description: description || "",
         mapUrl: mapUrl || "",
         opinions: {},
-        opinions_inhabitants: []
+        opinions_inhabitants: [],
+        ...(license ? { license } : {})
       };
 
       return new Promise((resolve, reject) => {
@@ -192,7 +194,7 @@ module.exports = ({ cooler }) => {
       });
     },
 
-    async updateVideoById(id, blobMarkdown, tagsRaw, title, description, mapUrl) {
+    async updateVideoById(id, blobMarkdown, tagsRaw, title, description, mapUrl, license) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const tipId = await this.resolveCurrentId(id);
@@ -216,7 +218,8 @@ module.exports = ({ cooler }) => {
         description: description !== undefined ? description || "" : oldMsg.content.description || "",
         mapUrl: mapUrl !== undefined ? mapUrl || "" : oldMsg.content.mapUrl || "",
         createdAt: oldMsg.content.createdAt,
-        updatedAt: now
+        updatedAt: now,
+        ...(license !== undefined ? { license } : {})
       };
 
       const tombstone = { type: "tombstone", target: tipId, deletedAt: now, author: userId };

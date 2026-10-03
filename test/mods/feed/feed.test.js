@@ -76,4 +76,15 @@ describe('feed: content author can delete forged copies', (t) => {
     feeds = await A.use('feed').listFeeds('ALL');
     ok(!feeds.find(m => (m.value?.content?.text || '') === 'forged legacy copy'), 'content author tombstone hides it');
   });
+
+  t('a feed at the length limit with an attachment is still listed', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const text = 'x'.repeat(270) + ' #tag';
+    const media = '![image:photo.jpg](&' + 'A'.repeat(43) + '=.sha256)';
+    await A.use('feed').createFeed(text, [], media);
+    const feeds = await A.use('feed').listFeeds('ALL');
+    const mine = feeds.find(m => String(m.value?.content?.text || '').startsWith('x'.repeat(270)));
+    ok(mine, 'the feed with an attachment shows up');
+    ok(String(mine.value.content.text).includes('&' + 'A'.repeat(43)), 'the attachment travels with it');
+  });
 });

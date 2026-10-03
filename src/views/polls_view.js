@@ -8,9 +8,9 @@ const { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls
 const userId = config.keys.id;
 
 const FILTERS = [
-  { key: "ALL", i18n: "pollFilterAll" },
-  { key: "MINE", i18n: "pollFilterMine" },
   { key: "RECENT", i18n: "pollFilterRecent" },
+  { key: "MINE", i18n: "pollFilterMine" },
+  { key: "ALL", i18n: "pollFilterAll" },
   { key: "TOP", i18n: "pollFilterTop" },
   { key: "VOTED", i18n: "pollFilterVoted" },
   { key: "OPEN", i18n: "pollFilterOpen" },

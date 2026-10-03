@@ -137,6 +137,7 @@ module.exports = ({ cooler }) => {
       author: node.author,
       title: c.title || "",
       description: c.description || "",
+      license: c.license || "",
       opinions: agg ? agg.opinions : (c.opinions || {}),
       opinions_inhabitants: agg ? agg.voters : safeArr(c.opinions_inhabitants),
       sizeBytes: node.sizeBytes || 0
@@ -184,7 +185,7 @@ module.exports = ({ cooler }) => {
       return root;
     },
 
-    async createDocument(blobMarkdown, tagsRaw, title, description) {
+    async createDocument(blobMarkdown, tagsRaw, title, description, license) {
       const ssbClient = await openSsb();
       const blobId = parseBlobId(blobMarkdown);
       if (!blobId) throw new Error("Missing document blob");
@@ -200,7 +201,8 @@ module.exports = ({ cooler }) => {
         title: title || "",
         description: description || "",
         opinions: {},
-        opinions_inhabitants: []
+        opinions_inhabitants: [],
+        ...(license ? { license } : {})
       };
 
       return new Promise((resolve, reject) => {
@@ -208,7 +210,7 @@ module.exports = ({ cooler }) => {
       });
     },
 
-    async updateDocumentById(id, blobMarkdown, tagsRaw, title, description) {
+    async updateDocumentById(id, blobMarkdown, tagsRaw, title, description, license) {
       const ssbClient = await openSsb();
       const tipId = await this.resolveCurrentId(id);
 
@@ -235,7 +237,8 @@ module.exports = ({ cooler }) => {
         tags,
         title: title !== undefined ? (title || "") : oldMsg.content.title || "",
         description: description !== undefined ? (description || "") : oldMsg.content.description || "",
-        updatedAt
+        updatedAt,
+        ...(license !== undefined ? { license } : {})
       };
 
       const tombstone = { type: "tombstone", target: tipId, deletedAt: updatedAt, author: userId };
@@ -342,6 +345,7 @@ module.exports = ({ cooler }) => {
         author: agg.contentNode.author,
         title: c.title || "",
         description: c.description || "",
+        license: c.license || "",
         opinions: agg.opinions,
         opinions_inhabitants: agg.voters,
         isFavorite: favorites.has(rootId || agg.contentTip)

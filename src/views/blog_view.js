@@ -9,9 +9,9 @@ const { sanitizeHtml } = require("../backend/sanitizeHtml");
 const userId = config.keys.id;
 
 const FILTERS = [
-  { key: "ALL", i18n: "blogFilterAll" },
-  { key: "MINE", i18n: "blogFilterMine" },
   { key: "RECENT", i18n: "blogFilterRecent" },
+  { key: "MINE", i18n: "blogFilterMine" },
+  { key: "ALL", i18n: "blogFilterAll" },
   { key: "FAVORITES", i18n: "blogFilterFavorites" },
   { key: "TOP", i18n: "blogFilterTop" }
 ];

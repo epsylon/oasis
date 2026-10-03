@@ -1,26 +1,7 @@
-const {
-  form,
-  button,
-  div,
-  h2,
-  p,
-  section,
-  input,
-  br,
-  a,
-  span,
-  textarea,
-  select,
-  label,
-  option,
-  table,
-  tr,
-  th,
-  td
-} = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td, progress, strong } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -100,11 +81,12 @@ const formatSize = (bytes) => {
   return (n / (1024 * 1024)).toFixed(1) + " MB";
 };
 
-const renderTorrentSpread = (t, spreadMap) => {
-  const info = (spreadMap instanceof Map && spreadMap.get(t.key)) || null;
-  if (String(t.author) === String(userId)) return `⟳ ${info && typeof info.count === "number" ? info.count : 0}`;
-  return renderSpreadButton(t.key, info);
+const spreadInfoOf = (t, spreadMap) => (spreadMap instanceof Map && spreadMap.get(t.key)) || null;
+const renderTorrentSeeds = (t, spreadMap) => {
+  const info = spreadInfoOf(t, spreadMap);
+  return String(info && typeof info.count === "number" ? info.count : (info && Array.isArray(info.voters) ? info.voters.length : 0));
 };
+const renderTorrentSpread = (t, spreadMap) => String(t.author) === String(userId) ? "" : renderSpreadButton(t.key, spreadInfoOf(t, spreadMap), i18n.seedAction, false);
 
 const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
@@ -118,7 +100,8 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
       th(i18n.authorLabel || "AUTHOR"),
       th(i18n.torrentTitleLabel || "TITLE"),
       th(i18n.torrentSizeLabel || "SIZE"),
-      th(i18n.spreadChron),
+      th(i18n.seedsLabel),
+      th(i18n.seedAction),
       th(""),
       th("")
     ),
@@ -128,7 +111,8 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
         td(userLink(t.author)),
         td(t.title || ""),
         td(formatSize(t.size)),
-        td(renderTorrentSpread(t, params.spreadMap)),
+        td({ class: "torrent-spread-cell" }, renderTorrentSeeds(t, params.spreadMap)),
+        td({ class: "torrent-spread-cell" }, renderTorrentSpread(t, params.spreadMap)),
         td(
           form(
             { method: "GET", action: `/torrents/${encodeURIComponent(t.key)}` },
@@ -141,7 +125,7 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
         ),
         td(
           t.url && t.url.startsWith("&")
-            ? renderTorrentDownload(torrentDownloadHref(t.url, t.title))
+            ? div({ class: "torrent-card-actions" }, renderTorrentSourceDownload(t.key, t.source), renderTorrentDownload(torrentDownloadHref(t.url, t.title)))
             : ""
         )
       )
@@ -152,6 +136,8 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
 const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
   const returnTo = safeText(params.returnTo) || buildReturnTo("all", params);
   const tribeId = safeText(params.tribeId || "");
+  const fromBlob = filter === "edit" ? "" : safeText(params.fromBlob || "");
+  const fromName = safeText(params.fromName || "");
   return div(
     { class: "div-center audio-form" },
     params.spreadWarning || null,
@@ -163,14 +149,26 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
       },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
-      span(i18n.torrentFileLabel),
-      br(),
-      input({ type: "file", name: "torrent", accept: ".torrent", required: filter !== "edit" }),
-      br(),
-      br(),
+      params.formError ? div({ class: "feed-error-msg" }, p(i18n[params.formError] || i18n.torrentFromContentMissing)) : null,
+      fromBlob
+        ? div({ class: "torrent-from-notice" },
+            input({ type: "hidden", name: "fromBlob", value: fromBlob }),
+            input({ type: "hidden", name: "fromName", value: fromName }),
+            table({ class: "tribe-info-table torrent-file-info" },
+              tr(td({ class: "tribe-info-label" }, i18n.fileShareFileLabel), td({ class: "tribe-info-value" }, fromName || fromBlob.slice(0, 16))),
+              tr(td({ class: "tribe-info-label" }, i18n.torrentSizeLabel), td({ class: "tribe-info-value" }, formatSize(Number(params.fromSize) || 0))),
+              tr(td({ class: "tribe-info-label" }, "SHA-256"), td({ class: "tribe-info-value" }, span({ class: "bank-address-code" }, blobSha256Hex(fromBlob))))
+            )
+          )
+        : null,
+      fromBlob ? null : span(i18n.torrentFileLabel),
+      fromBlob ? null : br(),
+      fromBlob ? null : input({ type: "file", name: "torrent", accept: ".torrent", required: filter !== "edit" }),
+      fromBlob ? null : br(),
+      fromBlob ? null : br(),
       span(i18n.torrentTitleLabel),
       br(),
-      input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.torrentTitlePlaceholder, value: torrentToEdit?.title || "", required: true }),
+      input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.torrentTitlePlaceholder, value: torrentToEdit?.title || fromName || "", required: true }),
       br(),
       span(i18n.torrentDescriptionLabel),
       br(),
@@ -188,6 +186,75 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
       br(),
       button({ type: "submit" }, filter === "edit" ? i18n.torrentUpdateButton : i18n.torrentCreateButton)
     )
+  );
+};
+
+const torrentStateLabel = (state) => {
+  const map = { queued: i18n.torrentStateQueued, probing: i18n.torrentStateProbing, downloading: i18n.torrentStateDownloading, done: i18n.torrentStateDone, failed: i18n.torrentStateFailed, nosource: i18n.torrentStateNoSource, cancelled: i18n.torrentStateCancelled };
+  return map[state] || String(state || "");
+};
+
+const sourceSaveHref = (blobId, name) => `/blob/${encodeURIComponent(blobId)}?download=1&name=${encodeURIComponent(String(name || "download"))}`;
+
+const renderDownloadRow = (d) => {
+  const pct = d.size > 0 ? Math.min(100, Math.floor((d.received / d.size) * 100)) : (d.state === "done" ? 100 : 0);
+  const titleNode = d.torrentKey ? a({ href: `/torrents/${encodeURIComponent(d.torrentKey)}` }, d.name || d.blobId.slice(0, 12)) : span(d.name || d.blobId.slice(0, 12));
+  const actions = d.state === "done"
+    ? a({ href: sourceSaveHref(d.blobId, d.name), class: "filter-btn" }, i18n.torrentSaveFile)
+    : d.active
+      ? form({ method: "POST", action: `/torrents/downloads/${encodeURIComponent(d.blobId)}/cancel` }, button({ type: "submit", class: "filter-btn" }, i18n.torrentCancel))
+      : form({ method: "POST", action: `/torrents/downloads/${encodeURIComponent(d.blobId)}/remove` }, button({ type: "submit", class: "filter-btn" }, "✕"));
+  return tr({ class: "torrent-download-row torrent-state-" + d.state },
+    td(titleNode),
+    td(d.size ? formatSize(d.size) : "—"),
+    td(String(d.seeds || 0)),
+    td({ class: "torrent-progress-cell" }, progress({ value: String(pct), max: "100", class: "torrent-progress" }), span({ class: "torrent-progress-text" }, ` ${pct}%`)),
+    td(torrentStateLabel(d.state)),
+    td(actions)
+  );
+};
+
+const renderDownloads = (downloads) => {
+  const list = safeArr(downloads);
+  if (!list.length) return p(i18n.torrentNoDownloads);
+  return table(
+    { border: "1", class: "torrent-table torrent-downloads" },
+    tr(
+      th(i18n.torrentSourceFile),
+      th(i18n.torrentSizeLabel),
+      th(i18n.torrentSeeds),
+      th(""),
+      th(""),
+      th("")
+    ),
+    ...list.map(renderDownloadRow)
+  );
+};
+
+const renderOasisDownload = (torrentObj, params = {}) => {
+  if (!torrentObj.source || params.isPublic) return null;
+  const d = params.download || null;
+  const rows = [
+    tr(td({ class: "tribe-info-label" }, i18n.fileShareFileLabel), td({ class: "tribe-info-value" }, torrentObj.sourceName || torrentObj.source.slice(0, 16))),
+    tr(td({ class: "tribe-info-label" }, i18n.torrentSizeLabel), td({ class: "tribe-info-value" }, formatSize(torrentObj.size))),
+    tr(td({ class: "tribe-info-label" }, "SHA-256"), td({ class: "tribe-info-value" }, span({ class: "bank-address-code" }, blobSha256Hex(torrentObj.source))))
+  ];
+  let action;
+  if (d && d.active) {
+    const pct = d.size > 0 ? Math.min(100, Math.floor((d.received / d.size) * 100)) : 0;
+    action = div({ class: "torrent-progress-cell" },
+      progress({ value: String(pct), max: "100", class: "torrent-progress" }),
+      span({ class: "torrent-progress-text" }, ` ${pct}% · ${torrentStateLabel(d.state)} · ${d.seeds || 0} ${i18n.torrentSeeds}`),
+      br(),
+      a({ href: "/torrents?filter=downloads", class: "filter-btn" }, i18n.torrentDownloads)
+    );
+  } else {
+    action = renderTorrentSourceDownload(torrentObj.key, torrentObj.source);
+  }
+  return div({ class: "torrent-oasis torrent-detail-section" },
+    h3({ class: "torrent-section-title" }, i18n.torrentOriginalSection || "Original"),
+    table({ class: "tribe-info-table torrent-file-info" }, ...rows),
+    action
   );
 };
 
@@ -234,15 +301,16 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
-          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase())] : []),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase())] : []),
+          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.torrentFilterFavorites).toUpperCase()
           )] : []),
 
           ...(mediaChip("top") ? [button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterTop).toUpperCase())] : []),
+          ...(params.isPublic || filter === "create" ? [] : [button({ type: "submit", name: "filter", value: "downloads", class: filter === "downloads" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentDownloads).toUpperCase())]),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.torrentCreateButton)
         )
@@ -251,6 +319,8 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
     section(
       filter === "create" || filter === "edit"
         ? renderTorrentForm(filter, torrentId, torrentToEdit, { ...params, filter })
+        : filter === "downloads"
+        ? section(renderDownloads(params.downloads))
         : section(
             emptyMod ? null : div(
               { class: "audios-search activity-filter-chips activity-toolbar-row" },
@@ -290,7 +360,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(torrentObj.title);
-  const { renderReachChip } = require('./clearnet_view');
+  const { renderReachChip, renderEncryptedChip, renderTransportChip } = require('./clearnet_view');
   const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetTorrents);
 
   const chips = [
@@ -306,6 +376,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
 
   const detailActions = div({ class: "card-header activity-card-header" },
     renderContentActions(torrentObj.key, null, {
+      spreadTitle: i18n.seedAction,
       author: torrentObj.author,
       favKind: 'torrents',
       isFavorite: torrentObj.isFavorite,
@@ -318,7 +389,8 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   const torrentSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, clearnetItemHref('torrents', torrentObj.title, torrentObj.key))
+      torrentObj.tribeId && torrentObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
+      torrentObj.tribeId ? null : renderReachChip(isClearnet, i18n, clearnetItemHref('torrents', torrentObj.title, torrentObj.key))
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(torrentObj.description)
@@ -332,12 +404,18 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
     detailActions,
     torrentObj.url && torrentObj.url.startsWith("&")
       ? div({ class: "torrent-download" },
-          table({ class: "tribe-info-table torrent-file-info" },
-            tr(td({ class: "tribe-info-label" }, i18n.fileShareFileLabel), td({ class: "tribe-info-value" }, `${String(torrentObj.title || "download").replace(/\.torrent$/i, "")}.torrent`)),
-            tr(td({ class: "tribe-info-label" }, i18n.torrentSizeLabel), td({ class: "tribe-info-value" }, formatSize(torrentObj.size))),
-            tr(td({ class: "tribe-info-label" }, "SHA-256"), td({ class: "tribe-info-value" }, span({ class: "bank-address-code" }, blobSha256Hex(torrentObj.url))))
-          ),
-          renderTorrentDownload(torrentDownloadHref(torrentObj.url, torrentObj.title))
+          renderOasisDownload(torrentObj, params),
+          div({ class: "torrent-detail-section" },
+            h3({ class: "torrent-section-title" }, "Torrent"),
+            table({ class: "tribe-info-table torrent-file-info" },
+              tr(td({ class: "tribe-info-label" }, i18n.fileShareFileLabel), td({ class: "tribe-info-value" }, `${String(torrentObj.title || "download").replace(/\.torrent$/i, "")}.torrent`)),
+              torrentObj.source ? null : tr(td({ class: "tribe-info-label" }, i18n.torrentSizeLabel), td({ class: "tribe-info-value" }, formatSize(torrentObj.size))),
+              torrentObj.cipher
+                ? tr(td({ class: "tribe-info-label" }, i18n.encryptedChipLabel || "E2E"), td({ class: "tribe-info-value" }, "AES-256-GCM"))
+                : tr(td({ class: "tribe-info-label" }, "SHA-256"), td({ class: "tribe-info-value" }, span({ class: "bank-address-code" }, blobSha256Hex(torrentObj.url))))
+            ),
+            renderTorrentDownload(torrentObj.cipher ? `/torrents/${encodeURIComponent(torrentObj.key)}/file` : torrentDownloadHref(torrentObj.url, torrentObj.title))
+          )
         )
       : p(i18n.torrentNoFile),
     (() => {
@@ -376,9 +454,9 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
           { method: "GET", action: "/torrents", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
+          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase())] : []),
-          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase())] : []),          ...(mediaChip("favorites") ? [button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.torrentFilterFavorites).toUpperCase()
           )] : []),

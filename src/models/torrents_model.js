@@ -14,6 +14,10 @@ const normalizeTags = (raw) => {
   return String(raw).split(",").map((t) => t.trim()).filter(Boolean);
 };
 
+const cipherField = (cipher) => (cipher && typeof cipher === "object" && cipher.key && cipher.manifestBlobId)
+  ? { cipher: { v: Number(cipher.v) || 1, key: String(cipher.key), manifestBlobId: String(cipher.manifestBlobId), chunkCount: Number(cipher.chunkCount) || 0 } }
+  : {};
+
 const parseBlobId = (blobMarkdown) => {
   const s = String(blobMarkdown || "");
   const match = s.match(/\((&[^)]+\.sha256)\)/);
@@ -156,6 +160,10 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       title: undec ? "" : (c.title || ""),
       description: undec ? "" : (c.description || ""),
       size: c.size || 0,
+      source: undec ? "" : (typeof c.source === "string" && c.source.startsWith("&") ? c.source : ""),
+      sourceName: undec ? "" : (c.sourceName || ""),
+      cipher: undec ? null : (c.cipher && typeof c.cipher === "object" && typeof c.cipher.key === "string" && typeof c.cipher.manifestBlobId === "string" ? { v: Number(c.cipher.v) || 1, key: c.cipher.key, manifestBlobId: c.cipher.manifestBlobId, chunkCount: Number(c.cipher.chunkCount) || 0 } : null),
+      sourceMime: undec ? "" : (c.sourceMime || ""),
       opinions,
       opinions_inhabitants: voters,
       hasVoted: viewerId ? voters.includes(viewerId) : false,
@@ -193,7 +201,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       return root;
     },
 
-    async createTorrent(blobMarkdown, tagsRaw, title, description, size, tribeId) {
+    async createTorrent(blobMarkdown, tagsRaw, title, description, size, tribeId, source = null) {
       const ssbClient = await openSsb();
       const blobId = parseBlobId(blobMarkdown);
       const tags = normalizeTags(tagsRaw) || [];
@@ -211,7 +219,11 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         size: Number(size) || 0,
         opinions: {},
         opinions_inhabitants: [],
-        ...(tribeId ? { tribeId } : {})
+        ...(tribeId ? { tribeId } : {}),
+        ...(source && typeof source.source === "string" && source.source.startsWith("&")
+          ? { source: source.source, sourceName: String(source.sourceName || ""), sourceMime: String(source.sourceMime || "") }
+          : {}),
+        ...cipherField(source && source.cipher)
       };
 
       content = await encryptIfTribe(content);
@@ -221,7 +233,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       });
     },
 
-    async updateTorrentById(id, blobMarkdown, tagsRaw, title, description) {
+    async updateTorrentById(id, blobMarkdown, tagsRaw, title, description, extra = null) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const tipId = await this.resolveCurrentId(id);
@@ -243,6 +255,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         type: "torrent",
         replaces: tipId,
         url: blobId || oldDec.url,
+        ...(blobId ? cipherField(extra && extra.cipher) : cipherField(oldDec.cipher)),
         tags,
         title: title !== undefined ? title || "" : oldDec.title || "",
         description: description !== undefined ? description || "" : oldDec.description || "",

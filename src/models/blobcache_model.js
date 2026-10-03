@@ -6,6 +6,10 @@ const DEFAULT_MAX_MB = 2048;
 const PROTECT_MS = 24 * 60 * 60 * 1000;
 const FLUSH_MS = 60 * 1000;
 
+const pinsPath = () => {
+  try { return require('../configs/state-manager').statePath('blob-pins.json'); } catch (_) { return null; }
+};
+
 const accessPath = () => {
   try { return require('../configs/state-manager').statePath('blob-access.json'); } catch (_) { return null; }
 };
@@ -58,15 +62,44 @@ module.exports = ({ cooler } = {}) => {
     }));
   });
 
+  const loadPins = () => {
+    const p = pinsPath();
+    if (!p) return [];
+    try { const arr = JSON.parse(fs.readFileSync(p, 'utf8')); return Array.isArray(arr) ? arr : []; } catch (_) { return []; }
+  };
+
+  const pin = (ids) => {
+    const p = pinsPath();
+    if (!p) return;
+    const set = new Set(loadPins());
+    for (const raw of (Array.isArray(ids) ? ids : [ids])) { const id = normalizeId(raw); if (id) set.add(id); }
+    try { fs.writeFileSync(p, JSON.stringify(Array.from(set))); } catch (_) {}
+  };
+
+  const getContent = (ssb, key) => new Promise((resolve) => {
+    try { ssb.get(key, (err, v) => resolve(!err && v && v.content && typeof v.content === 'object' ? v.content : null)); } catch (_) { resolve(null); }
+  });
+
   const ownBlobIds = async (ssb) => {
     const own = new Set();
     const msgs = await new Promise((resolve) => {
       pull(ssb.createUserStream({ id: ssb.id, reverse: false }), pull.collect((err, arr) => resolve(err ? [] : (arr || []))));
     });
+    const spreads = new Map();
+    const tombstoned = new Set();
     for (const m of msgs) {
       const content = m && m.value && m.value.content;
       if (!content || typeof content !== 'object') continue;
+      if (content.type === 'spread' && typeof content.link === 'string') spreads.set(m.key, content.link);
+      else if (content.type === 'tombstone' && typeof content.target === 'string') tombstoned.add(content.target);
       for (const id of (JSON.stringify(content).match(BLOB_RE) || [])) own.add(id);
+    }
+    for (const id of loadPins()) own.add(id);
+    for (const [key, link] of spreads) {
+      if (tombstoned.has(key)) continue;
+      const seeded = await getContent(ssb, link);
+      if (!seeded || (seeded.type !== 'torrent' && seeded.type !== 'file')) continue;
+      for (const id of (JSON.stringify(seeded).match(BLOB_RE) || [])) own.add(id);
     }
     return own;
   };
@@ -114,6 +147,6 @@ module.exports = ({ cooler } = {}) => {
     return Math.round(mb * 1024 * 1024);
   };
 
-  return { touch, usage, collect, ownBlobIds, maxBytesFor, flush, DEFAULT_MAX_MB };
+  return { touch, usage, collect, ownBlobIds, maxBytesFor, flush, pin, DEFAULT_MAX_MB };
 };
 module.exports.DEFAULT_MAX_MB = DEFAULT_MAX_MB;

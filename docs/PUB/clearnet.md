@@ -8,7 +8,7 @@ A PUB launched with `./oasis.sh server` does two things: it replicates the netwo
 | --- | --- |
 | `/c` (alias `/clearnet`) | Global HUB: every public item of every inhabitant who enabled Clearnet, with type filters, search and a row of inhabitant links. |
 | `/c/inhabitant/<feedId>` | One inhabitant's HUB: avatar, description, QR and their public items. |
-| `/c/audios/<id>`, `/c/blog/<key>`, `/c/documents/<id>`, `/c/events/<id>`, `/c/feed/<id>`, `/c/images/<id>`, `/c/jobs/<id>`, `/c/market/<id>`, `/c/podcasts/<id>`, `/c/projects/<id>`, `/c/school/<id>`, `/c/shops/<id>`, `/c/torrents/<id>`, `/c/videos/<id>`, `/c/wiki/<id>` | Detail pages, one per module. |
+| `/c/audios/<id>`, `/c/blog/<key>`, `/c/documents/<id>`, `/c/events/<id>`, `/c/feed/<id>`, `/c/files/<id>`, `/c/images/<id>`, `/c/jobs/<id>`, `/c/market/<id>`, `/c/podcasts/<id>`, `/c/projects/<id>`, `/c/school/<id>`, `/c/shops/<id>`, `/c/torrents/<id>`, `/c/videos/<id>`, `/c/wiki/<id>` | Detail pages, one per module. |
 | `/c/blob/<blobId>` | Media files referenced by the pages above. |
 
 Only content whose inhabitant opted in is ever listed or served. Nothing else of the replicated log is exposed.

@@ -149,3 +149,28 @@ describe('pdf: text that is not plain ASCII', (t) => {
     eq(Number(m[1]), Buffer.byteLength(m[2], 'latin1'), 'declared length equals real length');
   });
 });
+
+describe('pdf: license in the footer', (t) => {
+  const pdf = require('../../../src/backend/pdf');
+  const footerLicense = (buf) => {
+    const s = asText(Buffer.isBuffer(buf) ? buf : Buffer.from(buf)).replace(/\\\(/g, '(').replace(/\\\)/g, ')');
+    const m = s.match(/\((License: [^\n]*?)\) Tj/);
+    return m ? m[1] : null;
+  };
+
+  t('every generated PDF names a license, Public Domain when the content has none', async () => {
+    const docs = [
+      ...Object.entries(SAMPLES).map(([kind, [item, extra]]) => [kind, buildContentPdf(kind, item, extra, '@me.ed25519')]),
+      ['transfer', pdf.buildSmartContractPdf({ transfer: { id: '%t.sha256', from: '@a.ed25519', to: '@b.ed25519', amount: 1, concept: 'c', status: 'UNCONFIRMED', deadline: '2026-09-01T00:00:00Z', createdAt: '2026-01-01T00:00:00Z' }, block: null, viewerId: null })],
+      ['certificate', pdf.buildCertificatePdf({ cert: { id: '%c.sha256', author: '@t.ed25519', createdAt: '2026-01-01T00:00:00Z' }, course: { title: 'Course' }, studentName: 'S', teacherName: 'T' })],
+      ['logs', await pdf.buildLogsPdf([{ ts: Date.now(), type: 'log', text: 'x' }], '@me.ed25519')],
+      ['recovery', pdf.buildRecoveryKitPdf({ id: '@me.ed25519', createdAt: '2026-01-01T00:00:00Z', secret: 's' })]
+    ];
+    for (const [kind, buf] of docs) eq(footerLicense(buf), 'License: Public Domain', `${kind}: Public Domain in the footer`);
+  });
+
+  t('a wiki page prints its own license', () => {
+    const buf = buildContentPdf('wiki', { title: 'Page', body: 'text', license: 'CC-BY-SA-4.0' }, {}, '@me.ed25519');
+    eq(footerLicense(buf), 'License: Creative Commons Attribution-ShareAlike 4.0');
+  });
+});

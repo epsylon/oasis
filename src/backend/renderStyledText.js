@@ -43,7 +43,7 @@ const URL_TAIL_RE = /[.,;:!?»"')\]}>]+$/;
 const SELF_HOST_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?#]|$)/i;
 const INTERNAL_PATHS = [
   'agenda','ai','audios','author','backup','banking','blockexplorer','blogs','bookmarks','calendars','campaigns',
-  'chats','cipher','courts','cv','dev','docs','emergencies','events','favorites','feed','forum','games','graphos',
+  'chats','cipher','courts','cv','dev','docs','emergencies','events','favorites','feed','files','forum','games','graphos',
   'hashtag','housing','images','industry','inbox','inhabitants','invites','jobs','larp','logistics','logs','mailing',
   'maps','market','melody','mentions','modules','multiverse','opinions','pads','parliament','peers','pixelia','pm',
   'podcasts','polls','popular','profile','projects','publish','reports','school','search','settings','shops','spread',
@@ -181,6 +181,7 @@ function renderStyledText(value, opts = {}) {
         const zoomId = `rtzoom-${zoomSeq}-${String(m.blob).replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;
         result.push(a({ href: `#${zoomId}`, id: `${zoomId}-src`, class: 'zoom-link' }, img({ src: imageSrc, alt: m.name || '', class: 'post-image' })));
         result.push(span({ id: zoomId, class: 'lightbox' },
+          a({ href: `${imageSrc}${imageSrc.includes('?') ? '&' : '?'}download=1`, class: 'lightbox-download', title: getI18n().fileShareDownload || 'Download' }, '\u2913'),
           a({ href: `#${zoomId}-src`, class: 'lightbox-close' }, '\u00d7'),
           img({ src: imageSrc, alt: m.name || '', class: 'lightbox-image' })
         ));

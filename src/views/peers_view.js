@@ -33,12 +33,12 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     const { name, users, key } = peer;
     const peerUrl = `/author/${encodeURIComponent(key)}`;
     const filteredUsers = (users || []).filter(u => u.id !== key);
-    const userCount = filteredUsers.length;
+    const userCount = Array.isArray(users) ? filteredUsers.length : null;
     return tr(
       td({ 'data-label': i18n.peerHost || 'Pub' }, a({ href: peerUrl, class: "user-link" }, name || key.slice(0, 20) + '…')),
       td({ 'data-label': i18n.peersOasisId || 'Oasis ID' }, a({ href: peerUrl, class: 'user-link peer-key' }, key)),
       td({ 'data-label': i18n.peersOasisVersion || 'Version' }, String((versions || {})[key] || '—')),
-      td({ 'data-label': i18n.peersReplicatedFeeds || 'Replicated' }, String(userCount))
+      td({ 'data-label': i18n.peersReplicatedFeeds || 'Replicated' }, userCount == null ? '—' : String(userCount))
     );
   };
 

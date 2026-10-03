@@ -30,7 +30,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
-    "report", "task", "event", "bookmark", "image", "audio", "video", "document", "torrent",
+    "report", "task", "event", "bookmark", "image", "audio", "video", "document", "torrent", "file",
     "bankWallet", "bankClaim", "project", "job", "industry", "industryBlueprint", "forum", "vote", "contact", "map", "shop", "shopProduct", "chat", "pad", "schoolCourse", "wikiPage", "emergency", "mailingList", "logisticsRoute", "podcast", "podcastEpisode", "campaign", "all"
   ];
 
@@ -102,6 +102,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'podcastEpisode': return `/podcasts/episode/${encodeURIComponent(contentId)}`;
       case 'campaign': return `/campaigns/${encodeURIComponent(contentId)}`;
       case 'torrent': return `/torrents/${encodeURIComponent(contentId)}`;
+      case 'file': return `/files/${encodeURIComponent(contentId)}`;
       case 'gameScore': return content && content.game ? `/games/${encodeURIComponent(content.game)}` : '/games';
       default: return '#';
     }
@@ -268,6 +269,12 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
             ))
             : null
+        );
+      case 'file':
+        return div({ class: 'search-file' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.fileTitleLabel || i18n.title) + ':'), span({ class: 'card-value' }, content.title)) : null,
+          content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null,
+          content.size ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.fileSizeLabel || 'Size') + ':'), span({ class: 'card-value' }, String(content.size))) : null
         );
       case 'torrent':
         return div({ class: 'search-torrent' },

@@ -8,9 +8,9 @@ const { config } = require("../server/SSB_server.js");
 
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "MINE", "RECENT", "TOP", "VIEWERS"];
+const BASE_FILTERS = ["RECENT", "MINE", "ALL", "TOP", "VIEWERS"];
 const CATEGORIES = ["NEWS", "MUSIC", "TALK", "EDUCATION", "TECH", "CULTURE", "COMMUNITY", "OASIS", "OTHER"];
-const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const filterLabel = (f) => String(i18n[`podcastFilter${cap(f)}`] || f).toUpperCase();

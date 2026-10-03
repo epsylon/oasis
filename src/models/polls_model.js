@@ -272,6 +272,7 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
       else if (f === 'OPEN') out = out.filter(p => p.status === 'OPEN');
       else if (f === 'CLOSED') out = out.filter(p => p.status === 'CLOSED');
       else if (f === 'VOTED') out = out.filter(p => p.hasVoted);
+      else if (f === 'RECENT') out = out.filter(p => (Date.parse(p.createdAt || '') || 0) >= Date.now() - 86400000);
       else if (f === 'FAVORITES') {
         const fav = new Set((opts.favorites || []).map(String));
         out = out.filter(p => fav.has(String(p.id)));

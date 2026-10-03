@@ -1,8 +1,8 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, renderFileDownloads } = require('./main_views');
 const { renderTribeWikiSection } = require('./wiki_view');
-const { renderEncryptedChip: renderTribeEncryptedChip } = require('./clearnet_view');
+const { renderEncryptedChip: renderTribeEncryptedChip, renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
 const { renderResults: renderPollResults, renderBallot: renderPollBallot } = require('./polls_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText, safeExternalHref } = require('../backend/renderStyledText');
@@ -196,7 +196,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
 
   const modeButtons = div({ class: 'tribe-mode-buttons' },
     ...(emptyMod ? [] : [
-    ['all','recent','mine','membership','subtribes','top','gallery'].filter(tribeChip).map(f =>
+    ['recent','mine','all','membership','subtribes','top','gallery'].filter(tribeChip).map(f =>
     form({ method: 'GET', action: '/tribes' },
       input({ type: 'hidden', name: 'filter', value: f }),
       button({ type: 'submit', class: filter === f ? 'filter-btn active' : 'filter-btn' },
@@ -361,7 +361,7 @@ const renderFeedTribeView = async (feedItems, tribe, query = {}, filter) => {
   const filteredFeed = filterAndSortFeed(feed, feedFilter);
   return div({ class: 'tribe-feed-full' },
     div({ class: 'feed-actions' },
-      ['TOP', 'MINE', 'ALL', 'RECENT'].map(f =>
+      ['RECENT', 'MINE', 'ALL', 'TOP'].map(f =>
 	form({ method: 'GET', action: `/tribe/${encodeURIComponent(tribe.id)}` },
 	  input({ type: 'hidden', name: 'section', value: 'feed' }),
 	  input({ type: 'hidden', name: 'feedFilter', value: f }),
@@ -408,7 +408,7 @@ const renderSectionNav = (tribe, section) => {
     { items: firstGroup },
     { items: [{ key: 'votations', label: i18n.tribeSectionVotations }, { key: 'polls', label: i18n.pollsTitle }, { key: 'events', label: i18n.tribeSectionEvents }, { key: 'tasks', label: i18n.tribeSectionTasks }] },
     { items: [{ key: 'feed', label: i18n.tribeSectionFeed }, { key: 'forum', label: i18n.tribeSectionForum }, { key: 'maps', label: i18n.tribeSectionMaps || 'MAPS' }, { key: 'torrents', label: i18n.tribeSectionTorrents || 'TORRENTS' }, { key: 'pads', label: i18n.tribeSectionPads || 'PADS' }, { key: 'wiki', label: i18n.tribeSectionWiki || 'WIKI' }, { key: 'chats', label: i18n.tribeSectionChats || 'CHATS' }, { key: 'calendars', label: i18n.tribeSectionCalendars || 'CALENDARS' }] },
-    { items: [{ key: 'images', label: i18n.tribeSectionImages || 'IMAGES' }, { key: 'audios', label: i18n.tribeSectionAudios || 'AUDIOS' }, { key: 'videos', label: i18n.tribeSectionVideos || 'VIDEOS' }, { key: 'documents', label: i18n.tribeSectionDocuments || 'DOCUMENTS' }, { key: 'bookmarks', label: i18n.tribeSectionBookmarks || 'BOOKMARKS' }] },
+    { items: [{ key: 'images', label: i18n.tribeSectionImages || 'IMAGES' }, { key: 'audios', label: i18n.tribeSectionAudios || 'AUDIOS' }, { key: 'videos', label: i18n.tribeSectionVideos || 'VIDEOS' }, { key: 'documents', label: i18n.tribeSectionDocuments || 'DOCUMENTS' }, { key: 'files', label: i18n.tribeSectionFiles || 'FILES' }, { key: 'bookmarks', label: i18n.tribeSectionBookmarks || 'BOOKMARKS' }] },
     { items: [{ key: 'tags', label: i18n.tribeSectionTags || 'TAGS' }, { key: 'search', label: i18n.tribeSectionSearch }] },
   ];
   return div({ class: 'tribe-section-nav no-border' },
@@ -491,19 +491,19 @@ const activitySectionMap = {
   event: 'events', task: 'tasks', votation: 'votations', poll: 'polls',
   forum: 'forum', 'forum-reply': 'forum',
   feed: 'feed',
-  pad: 'pads', chat: 'chats', calendar: 'calendars', map: 'maps', torrent: 'torrents'
+  pad: 'pads', chat: 'chats', calendar: 'calendars', map: 'maps', torrent: 'torrents', file: 'files'
 };
 
 const activitySectionForItem = (item) => {
   if (item.contentType === 'media' && item.mediaType) {
-    const map = { image: 'images', audio: 'audios', video: 'videos', document: 'documents', bookmark: 'bookmarks', torrent: 'torrents' };
+    const map = { image: 'images', audio: 'audios', video: 'videos', document: 'documents', bookmark: 'bookmarks', torrent: 'torrents', file: 'files' };
     return map[item.mediaType] || 'media';
   }
   return activitySectionMap[item.contentType] || 'activity';
 };
 
 const activityMediaTypeName = (mt) => {
-  const map = { image: i18n.tribeSectionImages, audio: i18n.tribeSectionAudios, video: i18n.tribeSectionVideos, document: i18n.tribeSectionDocuments, bookmark: i18n.tribeSectionBookmarks, torrent: i18n.tribeSectionTorrents };
+  const map = { image: i18n.tribeSectionImages, audio: i18n.tribeSectionAudios, video: i18n.tribeSectionVideos, document: i18n.tribeSectionDocuments, bookmark: i18n.tribeSectionBookmarks, torrent: i18n.tribeSectionTorrents, file: i18n.tribeSectionFiles };
   return map[mt] || i18n.tribeSectionMedia || 'MEDIA';
 };
 
@@ -1219,10 +1219,10 @@ const renderForumSection = (tribe, items, query) => {
   );
 };
 
-const sectionKeyForMediaType = { image: 'images', audio: 'audios', video: 'videos', document: 'documents', bookmark: 'bookmarks', torrent: 'torrents' };
-const acceptForMediaType = { image: 'image/*', audio: 'audio/*', video: 'video/*', document: 'application/pdf,.pdf,.doc,.docx,.txt,.odt', bookmark: null, torrent: '.torrent' };
+const sectionKeyForMediaType = { image: 'images', audio: 'audios', video: 'videos', document: 'documents', bookmark: 'bookmarks', torrent: 'torrents', file: 'files' };
+const acceptForMediaType = { image: 'image/*', audio: 'audio/*', video: 'video/*', document: 'application/pdf,.pdf,.doc,.docx,.txt,.odt', bookmark: null, torrent: '.torrent', file: null };
 const sectionTitleForMediaType = (mt) => {
-  const map = { image: i18n.tribeSectionImages, audio: i18n.tribeSectionAudios, video: i18n.tribeSectionVideos, document: i18n.tribeSectionDocuments, bookmark: i18n.tribeSectionBookmarks, torrent: i18n.tribeSectionTorrents };
+  const map = { image: i18n.tribeSectionImages, audio: i18n.tribeSectionAudios, video: i18n.tribeSectionVideos, document: i18n.tribeSectionDocuments, bookmark: i18n.tribeSectionBookmarks, torrent: i18n.tribeSectionTorrents, file: i18n.tribeSectionFiles };
   return map[mt] || mt;
 };
 
@@ -1240,6 +1240,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
     document: () => i18n.tribeCreateDocument || 'Create Document',
     bookmark: () => i18n.tribeCreateBookmark || 'Create Bookmark',
     torrent: () => i18n.tribeCreateTorrent || 'Upload Torrent',
+    file: () => i18n.tribeCreateFile || 'Upload File',
   };
   const mediaBtnLabel = createMediaLabel[mediaType] ? createMediaLabel[mediaType]() : i18n.tribeCreateButton;
 
@@ -1269,6 +1270,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
         textarea({ maxlength: "3000", name: 'description', id: 'description', rows: 3, placeholder: i18n.tribeMediaDescription }, ''), br(),
         label({ for: 'media' }, i18n.tribeMediaUpload), br,
         input({ type: 'file', name: 'media', id: 'media', accept: acceptForMediaType[mediaType] || '*/*', required: true }), br(), br(),
+        ...renderLicenseSelect('', i18n), br(),
         button({ type: 'submit', class: 'create-button' }, mediaBtnLabel)
       )
     );
@@ -1288,7 +1290,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
       return div({ class: 'tribe-media-item' },
         blobUrl ? a({ href: blobUrl, target: '_blank' }, img({ src: blobUrl, alt: m.title || '', class: 'tribe-media-thumb' })) : null,
         div({ class: 'tribe-media-item-info' },
-          m.title ? h2(m.title) : null,
+          div({ class: 'shop-title-row' }, m.title ? h2(m.title) : null, renderLicenseChip(m.license)),
           m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
@@ -1298,7 +1300,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
       return div({ class: 'tribe-media-item' },
         blobUrl ? audio({ src: blobUrl, controls: true, class: 'tribe-media-audio' }) : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
-          m.title ? h2(m.title) : null,
+          div({ class: 'shop-title-row' }, m.title ? h2(m.title) : null, renderLicenseChip(m.license)),
           m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
@@ -1308,7 +1310,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
       return div({ class: 'tribe-media-item' },
         blobUrl ? video({ src: blobUrl, controls: true, class: 'tribe-media-thumb', preload: 'metadata' }) : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
-          m.title ? h2(m.title) : null,
+          div({ class: 'shop-title-row' }, m.title ? h2(m.title) : null, renderLicenseChip(m.license)),
           m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
@@ -1318,7 +1320,7 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
       return div({ class: 'tribe-media-item' },
         blobUrl ? a({ href: blobUrl, target: '_blank', class: 'tribe-action-btn' }, i18n.readDocument || 'Read Document') : p(i18n.tribeMediaEmpty),
         div({ class: 'tribe-media-item-info' },
-          m.title ? h2(m.title) : null,
+          div({ class: 'shop-title-row' }, m.title ? h2(m.title) : null, renderLicenseChip(m.license)),
           m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
@@ -1334,6 +1336,16 @@ const renderTribeMediaTypeSection = (tribe, items, query, mediaType) => {
             a({ href: safeExternalHref(url), target: '_blank', class: 'card-value' }, url)
           ) : null,
           m.description && m.description !== url ? p(...renderStyledText(m.description)) : null,
+          ...mediaFooter(m)
+        )
+      );
+    }
+    if (mediaType === 'file') {
+      return div({ class: 'tribe-media-item' },
+        blobUrl ? a({ href: blobUrl, class: 'tribe-action-btn' }, i18n.fileDownloadButton || 'DOWNLOAD!') : p(i18n.tribeMediaEmpty),
+        div({ class: 'tribe-media-item-info' },
+          m.title ? h2(m.title) : null,
+          m.description ? p(...renderStyledText(m.description)) : null,
           ...mediaFooter(m)
         )
       );
@@ -1453,7 +1465,7 @@ const renderTribeTorrentsSection = (tribe, torrents) => {
     div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionTorrents || 'TORRENTS'), createBtn),
     items.map(m => {
       const blobName = encodeURIComponent((m.title || 'download').replace(/\.torrent$/i, '') + '.torrent');
-      const blobUrl = m.url ? `/blob/${encodeURIComponent(m.url)}?name=${blobName}` : null;
+      const blobUrl = m.url ? (m.cipher && !m._isMedia ? `/torrents/${encodeURIComponent(m.rootId || m.key)}/file` : `/blob/${encodeURIComponent(m.url)}?name=${blobName}`) : null;
       return div({ class: 'card card-rpg tribe-card-padded' },
         div({ class: 'card-header' },
           h2({ class: 'card-label' }, `[${(i18n.typeTorrent || 'TORRENT').toUpperCase()}]`),
@@ -1470,7 +1482,46 @@ const renderTribeTorrentsSection = (tribe, torrents) => {
               : a({ href: `/torrents/${encodeURIComponent(m.rootId || m.key)}` }, m.title))
           ) : null,
           m.description ? p(String(m.description).substring(0, 200)) : null,
-          blobUrl && !m._isMedia ? div({ class: 'card-field' }, renderTorrentDownload(blobUrl)) : null
+          blobUrl && !m._isMedia ? div({ class: 'card-field torrent-card-actions' }, renderTorrentSourceDownload(m.rootId || m.key, m.source), renderTorrentDownload(blobUrl)) : null
+        ),
+        p({ class: 'card-footer' },
+          span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm")),
+          userLink(m.author)
+        )
+      );
+    })
+  );
+};
+
+const renderTribeFilesSection = (tribe, files) => {
+  const items = Array.isArray(files) ? files : [];
+  const createBtn = form({ method: 'GET', action: '/files' },
+    input({ type: 'hidden', name: 'filter', value: 'create' }),
+    input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
+    button({ type: 'submit', class: 'create-button' }, i18n.tribeCreateFile || 'Upload File'));
+  if (items.length === 0) return div({ class: 'tribe-content-list' }, div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionFiles || 'FILES'), createBtn), p(i18n.tribeFilesEmpty || 'No files, yet.'));
+  return div({ class: 'tribe-content-list' },
+    div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionFiles || 'FILES'), createBtn),
+    items.map(m => {
+      const blobName = encodeURIComponent(m.fileName || m.title || 'download');
+      const blobUrl = m.url ? `/blob/${encodeURIComponent(m.url)}?download=1&name=${blobName}` : null;
+      return div({ class: 'card card-rpg tribe-card-padded' },
+        div({ class: 'card-header' },
+          h2({ class: 'card-label' }, `[${(i18n.typeFile || 'FILE').toUpperCase()}]`),
+          m._isMedia
+            ? (blobUrl ? a({ href: blobUrl, class: 'filter-btn' }, i18n.fileDownloadButton || 'DOWNLOAD!') : null)
+            : form({ method: 'GET', action: `/files/${encodeURIComponent(m.rootId || m.key)}` },
+                button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails || 'View Details'))
+        ),
+        div({ class: 'tribe-card-body' },
+          m.title ? div({ class: 'card-field' },
+            span({ class: 'card-label' }, (i18n.title || 'Title') + ':'),
+            span({ class: 'card-value' }, m._isMedia
+              ? (blobUrl ? a({ href: blobUrl }, m.title) : m.title)
+              : a({ href: `/files/${encodeURIComponent(m.rootId || m.key)}` }, m.title))
+          ) : null,
+          m.description ? p(String(m.description).substring(0, 200)) : null,
+          blobUrl && !m._isMedia ? div({ class: 'card-field' }, renderFileDownloads(m.rootId || m.key, m.torrentUrl, m.fileName || m.title)) : null
         ),
         p({ class: 'card-footer' },
           span({ class: 'date-link' }, moment(m.createdAt).format("YYYY/MM/DD HH:mm")),
@@ -1620,6 +1671,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
     case 'documents': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'document'); break;
     case 'bookmarks': sectionContent = renderTribeMediaTypeSection(tribe, sectionData, query, 'bookmark'); break;
     case 'torrents': sectionContent = renderTribeTorrentsSection(tribe, sectionData); break;
+    case 'files': sectionContent = renderTribeFilesSection(tribe, sectionData); break;
     case 'maps': sectionContent = renderTribeMapsSection(tribe, sectionData); break;
     case 'pads': sectionContent = renderTribePadsSection(tribe, sectionData); break;
     case 'wiki': sectionContent = renderTribeWikiSection(tribe, sectionData); break;

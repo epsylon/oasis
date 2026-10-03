@@ -142,7 +142,7 @@ const renderCvFields = (user) => {
 const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) => {
   const isMe = user.id === currentUserId;
   const raw = user.visibilityPrefs || {};
-  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks','clearnetPodcasts'];
+  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetFiles','clearnetBookmarks','clearnetPodcasts'];
   const hasClearnet = raw.clearnet === true || clearnetSubKeys.some(k => raw[k] === true);
   const prefs = {
     activity: raw.activity === true,
@@ -364,7 +364,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
   const totalClaimed = typeof safe.totalClaimed === 'number' ? safe.totalClaimed : 0;
   const ecoAddress = typeof safe.ecoAddress === 'string' ? safe.ecoAddress : null;
   const rawPrefs = safe.visibilityPrefs || {};
-  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetBookmarks','clearnetPodcasts'];
+  const clearnetSubKeys = ['clearnetShops','clearnetJobs','clearnetEvents','clearnetProjects','clearnetPosts','clearnetAudios','clearnetVideos','clearnetImages','clearnetDocuments','clearnetTorrents','clearnetFiles','clearnetBookmarks','clearnetPodcasts'];
   const prefs = {
     activity: rawPrefs.activity === true,
     device:   rawPrefs.device   === true,

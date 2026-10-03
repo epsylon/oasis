@@ -545,9 +545,11 @@ const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId, ha
   if (!pubId && !isPub) return "";
   if (!isPub && !(hasValidWallet && addressPublished)) return "";
   if (!isPub && ubiAvailability !== "OK") return "";
-  if (!pendingAllocation && !isPub) {
+  if (!isPub) {
     return div({ class: "bank-claim-ubi" },
       div({ class: "bank-claim-card" },
+        pendingAllocation ? p(`${i18n.bankUbiThisMonth}: `, span({ class: "accent" }, `${Number(pendingAllocation.amount || 0).toFixed(6)} ECO`)) : null,
+        pendingAllocation ? p(`${i18n.bankEpoch}: `, span(pendingAllocation.concept || "")) : null,
         div({ class: "bank-claim-actions" },
           form({ method: "POST", action: "/banking/claim-ubi" },
             button({ type: "submit", class: "create-button bank-claim-btn" }, i18n.bankClaimUBI)

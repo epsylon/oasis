@@ -190,9 +190,9 @@ const renderFilters = (filter, q, emptyMod = false, chip = null) =>
     form({ method: "GET", action: "/maps", class: "ui-toolbar ui-toolbar--filters" },
       input({ type: "hidden", name: "q", value: q || "" }),
       ...(emptyMod ? [] : [
-      button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterAll).toUpperCase()),
-      ...(!chip || chip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterMine).toUpperCase())] : []),
       ...(!chip || chip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterRecent).toUpperCase())] : []),
+      ...(!chip || chip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterMine).toUpperCase())] : []),
+      button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterAll).toUpperCase()),
       ...(!chip || chip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterFavorites).toUpperCase())] : []),
       ]),
       button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.mapCreateButton)));

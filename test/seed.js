@@ -67,6 +67,7 @@ async function step(name, fn) {
     shops: require(path.join(__dirname, '..', 'src', 'models', 'shops_model'))({ cooler: sCooler, tribeCrypto }),
     pixelia: require(path.join(__dirname, '..', 'src', 'models', 'pixelia_model'))({ cooler: sCooler, tribeCrypto }),
     torrents: require(path.join(__dirname, '..', 'src', 'models', 'torrents_model'))({ cooler: sCooler, tribeCrypto }),
+    files: require(path.join(__dirname, '..', 'src', 'models', 'files_model'))({ cooler: sCooler, tribeCrypto }),
     polls: require(path.join(__dirname, '..', 'src', 'models', 'polls_model'))({ cooler: sCooler, tribeCrypto }),
     blogs: require(path.join(__dirname, '..', 'src', 'models', 'blog_model'))({ cooler: sCooler }),
     housing: require(path.join(__dirname, '..', 'src', 'models', 'housing_model'))({ cooler: sCooler, tribeCrypto }),
@@ -179,6 +180,8 @@ async function step(name, fn) {
 
   console.log('\nSEED: torrents');
   await step('torrent', () => models.torrents.createTorrent(fakeBlob('t'), pickTags(2), `Torrent ${hash(2)}`, `${longHash()}`, 1000, null));
+  console.log('\nSEED: files');
+  await step('file', () => models.files.createFile(fakeBlob('f'), pickTags(2), `File ${hash(2)}`, `${longHash()}`, 2048, null, { mime: 'application/zip', fileName: `archive-${hash(1)}.zip` }));
 
   console.log('\nSEED: pixelia');
   for (let i = 0; i < 5; i++) {

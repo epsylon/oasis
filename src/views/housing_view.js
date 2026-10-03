@@ -11,9 +11,9 @@ const { renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const userId = config.keys.id
 
 const FILTERS = [
-  { key: "ALL", i18n: "housingFilterAll" },
   { key: "RECENT", i18n: "housingFilterRecent" },
   { key: "MINE", i18n: "housingFilterMine" },
+  { key: "ALL", i18n: "housingFilterAll" },
   { key: "TOP", i18n: "housingFilterTop" },
   { key: "REQUESTED", i18n: "housingFilterRequested" },
   { key: "SALE", i18n: "housingFilterSale" },

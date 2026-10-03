@@ -256,3 +256,22 @@ describe('wiki: pages created with an older slug format', (t) => {
     ok(dup.existing && dup.key === page.id, 'creating it again is detected as the same page');
   });
 });
+
+describe('wiki: license', (t) => {
+  t('the creator sets and changes the license; other editors keep it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const created = await A.use('wiki').createPage({ title: 'Licensed page', body: 'a', license: 'LAL-1.3' });
+    eq((await A.use('wiki').getPage(created.key)).license, 'LAL-1.3');
+    B.setActor();
+    await B.use('wiki').updatePage(created.key, { body: 'b edited', license: 'CC-BY-4.0' });
+    const afterB = await B.use('wiki').getPage(created.key);
+    eq(afterB.body, 'b edited', 'the edit itself is accepted');
+    eq(afterB.license, 'LAL-1.3', 'but the license is not B to change');
+    A.setActor();
+    await A.use('wiki').updatePage(created.key, { body: 'a again', license: 'CC-BY-SA-4.0' });
+    eq((await A.use('wiki').getPage(created.key)).license, 'CC-BY-SA-4.0', 'the creator can change it');
+    await A.use('wiki').updatePage(created.key, { body: 'no license field' });
+    eq((await A.use('wiki').getPage(created.key)).license, 'CC-BY-SA-4.0', 'and edits that do not touch it keep it');
+  });
+});

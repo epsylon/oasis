@@ -26,6 +26,7 @@ const KINDS = {
   documents: { type: 'document', href: (id) => `/documents/${encodeURIComponent(id)}` },
   bookmarks: { type: 'bookmark', href: (id) => `/bookmarks/${encodeURIComponent(id)}` },
   torrents: { type: 'torrent', href: (id) => `/torrents/${encodeURIComponent(id)}` },
+  files: { type: 'file', href: (id) => `/files/${encodeURIComponent(id)}` },
   chats: { type: 'chat', href: (id) => `/chats/${encodeURIComponent(id)}` },
   pads: { type: 'pad', href: (id) => `/pads/${encodeURIComponent(id)}` },
   maps: { type: 'map', href: (id) => `/maps/${encodeURIComponent(id)}` },
@@ -357,7 +358,7 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
       }
 
       if (f === 'RECENT') {
-        const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
         out = out.filter(s => s.ts >= cutoff);
       } else if (f !== 'ALL' && f !== 'TOP') {
         const kind = f.toLowerCase();

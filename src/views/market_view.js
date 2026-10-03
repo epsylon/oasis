@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
+const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
@@ -11,13 +12,13 @@ const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
   if (!value) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
   const s = String(value).trim()
   if (!s) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
-  if (s.startsWith('&')) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(s)}`, ...attrs })
+  if (s.startsWith('&')) return renderZoomableImage(`/blob/${encodeURIComponent(s)}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}`, preload: 'metadata' })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mImg) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(mImg[1])}`, class: attrs.class || 'post-image' })
+  if (mImg) return renderZoomableImage(`/blob/${encodeURIComponent(mImg[1])}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
   return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
 }
 
@@ -315,8 +316,9 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
           { method: "GET", action: "/market", class: "ui-toolbar ui-toolbar--filters" },
           ...hiddenCtx,
           ...(emptyMod ? [] : [
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
+          ...(marketChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase())] : []),
           ...(marketChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
           ...(marketChipVisible("exchange") ? [button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterItems).toUpperCase())] : []),
           ...(marketChipVisible("auctions") ? [button({ type: "submit", name: "filter", value: "auctions", class: filter === "auctions" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAuctions).toUpperCase())] : []),
           ...(marketChipVisible("mybids") ? [button({ type: "submit", name: "filter", value: "mybids", class: filter === "mybids" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMyBids).toUpperCase())] : []),
@@ -326,7 +328,6 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
           ...(marketChipVisible("for sale") ? [button({ type: "submit", name: "filter", value: "for sale", class: filter === "for sale" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterForSale).toUpperCase())] : []),
           ...(marketChipVisible("sold") ? [button({ type: "submit", name: "filter", value: "sold", class: filter === "sold" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterSold).toUpperCase())] : []),
           ...(marketChipVisible("discarded") ? [button({ type: "submit", name: "filter", value: "discarded", class: filter === "discarded" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterDiscarded).toUpperCase())] : []),
-          ...(marketChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase())] : []),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.marketCreateButton)
         )
@@ -562,8 +563,9 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           input({ type: "hidden", name: "minPrice", value: minPrice ?? "" }),
           input({ type: "hidden", name: "maxPrice", value: maxPrice ?? "" }),
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
+          ...(marketChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase())] : []),
           ...(marketChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMine).toUpperCase())] : []),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
           ...(marketChipVisible("exchange") ? [button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterItems).toUpperCase())] : []),
           ...(marketChipVisible("auctions") ? [button({ type: "submit", name: "filter", value: "auctions", class: filter === "auctions" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAuctions).toUpperCase())] : []),
           ...(marketChipVisible("mybids") ? [button({ type: "submit", name: "filter", value: "mybids", class: filter === "mybids" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMyBids).toUpperCase())] : []),
@@ -573,7 +575,6 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           ...(marketChipVisible("for sale") ? [button({ type: "submit", name: "filter", value: "for sale", class: filter === "for sale" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterForSale).toUpperCase())] : []),
           ...(marketChipVisible("sold") ? [button({ type: "submit", name: "filter", value: "sold", class: filter === "sold" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterSold).toUpperCase())] : []),
           ...(marketChipVisible("discarded") ? [button({ type: "submit", name: "filter", value: "discarded", class: filter === "discarded" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterDiscarded).toUpperCase())] : []),
-          ...(marketChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase())] : []),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.marketCreateButton)
         )
       ),

@@ -43,7 +43,7 @@ const extractWikiLinks = (text) => {
 const WIKI_TYPE = 'wikiPage';
 const ENVELOPE_TYPE = 'tribe-msg';
 const EDIT_POLICIES = ['open', 'author', 'tribe'];
-const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_MS = 24 * 60 * 60 * 1000;
 const MAX_CHANGES = 60;
 const MAX_TITLE = 100;
 const IMAGE_RE = /!\[image:[^\]]*\]\((&[^)]+)\)/;
@@ -183,6 +183,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         tags: normalizeList(c.tags),
         aliases: [...new Set([...normalizeList(c.aliases).map(slugify), safeText(c.slug)].filter(a => a && a !== slugify(c.title)))],
         editPolicy: normalizePolicy(c.editPolicy),
+        license: safeText(c.license),
         tribeId: c.tribeId || null,
         encrypted: !!c.tribeId,
         author: first.c.author || first.author,
@@ -287,7 +288,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
     EDIT_POLICIES,
     slugify,
 
-    async createPage({ title, body, tags, aliases, editPolicy, tribeId = null }) {
+    async createPage({ title, body, tags, aliases, editPolicy, license, tribeId = null }) {
       const { ssbClient, idx } = await load();
       const cleanTitle = safeText(title).slice(0, MAX_TITLE);
       if (!cleanTitle) throw new Error('Title required');
@@ -305,6 +306,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         tags: normalizeList(tags),
         aliases: normalizeList(aliases).map(slugify).filter(Boolean),
         editPolicy: normalizePolicy(editPolicy),
+        ...(license ? { license } : {}),
         author: ssbClient.id,
         createdAt: now,
         updatedAt: now,
@@ -321,6 +323,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
       if (!(await canEdit(page, ssbClient.id))) throw new Error('Not allowed to edit');
       const now = new Date().toISOString();
       const nextTitle = data.title !== undefined ? safeText(data.title).slice(0, MAX_TITLE) : page.title;
+      const nextLicense = data.license !== undefined && String(page.author) === String(ssbClient.id) ? safeText(data.license) : page.license;
       const content = {
         type: WIKI_TYPE,
         title: nextTitle || page.title,
@@ -329,6 +332,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         tags: data.tags !== undefined ? normalizeList(data.tags) : page.tags,
         aliases: data.aliases !== undefined ? normalizeList(data.aliases).map(slugify).filter(Boolean) : page.aliases,
         editPolicy: data.editPolicy !== undefined ? normalizePolicy(data.editPolicy) : page.editPolicy,
+        ...(nextLicense ? { license: nextLicense } : {}),
         summary: safeText(data.summary).slice(0, 200),
         author: ssbClient.id,
         createdAt: page.createdAt,

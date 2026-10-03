@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, torrentDownloadHref } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
@@ -75,14 +75,25 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
           : div({ class: 'card-field' }, p(i18n.videoNoFile))
       )
     );
+  } else if (c.type === 'file') {
+    const { url, title, description, fileName, torrentUrl } = c;
+    contentHtml = div({ class: 'trending-file' },
+      div({ class: 'card-section file' },
+        title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.fileTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, title)) : "",
+        description ? [span({ class: 'card-label' }, (i18n.fileDescriptionLabel || 'Description') + ":"), p(...renderStyledText(description))] : null,
+        url && url.startsWith("&")
+          ? div({ class: 'card-field' }, renderFileDownloads(item.key, torrentUrl, fileName || title))
+          : div({ class: 'card-field' }, p(i18n.fileNoFile || 'No file'))
+      )
+    );
   } else if (c.type === 'torrent') {
-    const { url, title, description } = c;
+    const { url, title, description, source, sourceName } = c;
     contentHtml = div({ class: 'trending-torrent' },
       div({ class: 'card-section torrent' },
         title?.trim() ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.torrentTitleLabel || 'Title') + ':'), span({ class: 'card-value' }, title)) : "",
         description ? [span({ class: 'card-label' }, (i18n.torrentDescriptionLabel || 'Description') + ":"), p(...renderStyledText(description))] : null,
         url && url.startsWith("&")
-          ? div({ class: 'card-field' }, renderTorrentDownload(torrentDownloadHref(url, title)))
+          ? div({ class: 'card-field torrent-card-actions' }, renderTorrentSourceDownload(item.key, source), renderTorrentDownload(torrentDownloadHref(url, title)))
           : div({ class: 'card-field' }, p(i18n.torrentNoFile || 'No file'))
       )
     );
@@ -154,7 +165,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { text, refeeds } = c;
     contentHtml = div({ class: 'trending-feed' },
       div({ class: 'card-section feed' },
-        div({ class: 'feed-text', innerHTML: sanitizeHtml(renderStyledHtml(text)) }),
+        div({ class: 'feed-text' }, ...renderStyledText(String(text || ''), { zoomImages: true })),
         refeeds
             ? h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '), span({ class: 'card-value' }, refeeds))
             : ""
@@ -206,6 +217,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     audio: 'audios',
     video: 'videos',
     torrent: 'torrents',
+    file: 'files',
     document: 'documents',
     feed: 'feed',
     votes: 'votes',
@@ -272,11 +284,11 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
-  const baseFilters = ['ALL', 'MINE', 'RECENT', 'TOP'];
+  const baseFilters = ['RECENT', 'MINE', 'ALL', 'TOP'];
   const contentFilters = [
     ['votes', 'event', 'task', 'report'],
     ['feed', 'project', 'industry', 'shopProduct', 'transfer'],
-    ['audio', 'bookmark', 'document', 'image', 'torrent', 'video'],
+    ['audio', 'bookmark', 'document', 'file', 'image', 'torrent', 'video'],
     ['podcast', 'podcastEpisode', 'campaign', 'logisticsRoute']
   ];
 

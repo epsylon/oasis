@@ -40,7 +40,7 @@ const REMINDER_OPTIONS = [7, 30, 90, 0];
 
 const MODULE_GROUPS = [
   { key: 'feed', test: (t) => /^(post|feed|about|contact|pub|vote|subscription)$/.test(t) },
-  { key: 'media', test: (t) => /^(audio|video|image|document|bookmark|torrent)/i.test(t) },
+  { key: 'media', test: (t) => /^(audio|video|image|document|bookmark|torrent|file)/i.test(t) },
   { key: 'blogs', test: (t) => /^blog/i.test(t) },
   { key: 'forum', test: (t) => /^forum/i.test(t) },
   { key: 'chats', test: (t) => /^chat/i.test(t) },

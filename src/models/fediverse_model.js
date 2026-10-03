@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { Readable } = require('stream');
 const { getConfig, saveConfig } = require('../configs/config-manager.js');
 
 const ACCOUNTS_PATH = require('../configs/state-manager').statePath('fediverse-accounts.json');
@@ -701,12 +702,342 @@ module.exports = ({ isPublic } = {}) => {
       };
     })(),
 
+
+    peertube: (() => {
+      const getPt = () => readStore().peertube || null;
+      const feedCache = new Map();
+      const PT_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000;
+      const PT_PRIVACY = { public: 1, unlisted: 2, private: 3 };
+
+      const fetchTimed = async (url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try { return await fetch(url, { ...opts, signal: controller.signal }); } finally { clearTimeout(timer); }
+      };
+      const oauthClient = async (instance) => {
+        let res;
+        try { res = await fetchTimed(`${instance}/api/v1/oauth-clients/local`, { headers: spoofHeaders('application/json') }); } catch (_) { throw new Error('peertubeErrConnect'); }
+        if (!res.ok) throw new Error('peertubeErrConnect');
+        const data = await res.json().catch(() => null);
+        if (!data || !data.client_id || !data.client_secret) throw new Error('peertubeErrConnect');
+        return data;
+      };
+      const tokenRequest = async (instance, params) => {
+        let res;
+        try {
+          res = await fetchTimed(`${instance}/api/v1/users/token`, {
+            method: 'POST',
+            headers: { ...spoofHeaders('application/json'), 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(params).toString()
+          });
+        } catch (_) { throw new Error('peertubeErrConnect'); }
+        if (res.status === 400 || res.status === 401 || res.status === 403) throw new Error('peertubeErrAuth');
+        if (!res.ok) throw new Error('peertubeErrConnect');
+        const data = await res.json().catch(() => null);
+        if (!data || !data.access_token) throw new Error('peertubeErrAuth');
+        return data;
+      };
+      const saveTokens = (pt, data) => {
+        const store = readStore();
+        if (!store.peertube) return null;
+        store.peertube = { ...store.peertube, token: data.access_token, refreshToken: data.refresh_token || pt.refreshToken || '', expiresAt: Date.now() + (Number(data.expires_in) || 0) * 1000 };
+        writeStore(store);
+        return store.peertube;
+      };
+      const refreshAccess = async (pt) => {
+        if (!pt || !pt.refreshToken) return null;
+        try {
+          const data = await tokenRequest(pt.instance, { client_id: pt.clientId, client_secret: pt.clientSecret, grant_type: 'refresh_token', refresh_token: pt.refreshToken });
+          return saveTokens(pt, data);
+        } catch (_) { return null; }
+      };
+      const ptFetch = async (pathName, opts = {}, retry = true) => {
+        let pt = getPt();
+        if (!pt) throw new Error('peertubeErrAuth');
+        if (pt.expiresAt && Date.now() > pt.expiresAt - 60000 && retry) { const fresh = await refreshAccess(pt); if (fresh) pt = fresh; }
+        const headers = Object.assign(spoofHeaders('application/json'), { Authorization: `Bearer ${pt.token}` }, opts.headers || {});
+        let res;
+        try { res = await fetchTimed(`${pt.instance}${pathName}`, { method: opts.method || 'GET', body: opts.body, headers }, opts.timeoutMs || FETCH_TIMEOUT_MS); } catch (_) { throw new Error('peertubeErrConnect'); }
+        if (res.status === 401 && retry) {
+          const fresh = await refreshAccess(pt);
+          if (fresh) return ptFetch(pathName, opts, false);
+        }
+        return res;
+      };
+      const absUrl = (pt, p) => {
+        if (typeof p !== 'string' || !p) return '';
+        if (/^https?:\/\//i.test(p)) return p;
+        return `${pt.instance}${p.startsWith('/') ? '' : '/'}${p}`;
+      };
+      const rememberHost = (url) => { try { mediaHosts.add(new URL(url).host); } catch (_) {} };
+      const avatarOf = (pt, obj) => {
+        const list = Array.isArray(obj && obj.avatars) ? obj.avatars.slice().sort((a, b) => (Number(b.width) || 0) - (Number(a.width) || 0)) : [];
+        const p = list.length ? list[0].path : (obj && obj.avatar && obj.avatar.path) || '';
+        return p ? proxify(absUrl(pt, p)) : '';
+      };
+      const channelOf = (pt, ch) => {
+        if (!ch || typeof ch !== 'object') return { name: '', displayName: '', host: '', handle: '', avatar: '', url: '' };
+        const host = ch.host || (() => { try { return new URL(pt.instance).host; } catch (_) { return ''; } })();
+        return { name: ch.name || '', displayName: ch.displayName || ch.name || '', host, handle: ch.name ? `${ch.name}@${host}` : '', avatar: avatarOf(pt, ch), url: ch.url || (ch.name ? `${pt.instance}/c/${ch.name}` : '') };
+      };
+      const mapVideo = (pt, v) => {
+        if (!v || typeof v !== 'object') return null;
+        const id = String(v.uuid || v.shortUUID || v.id || '');
+        return {
+          id,
+          numericId: v.id,
+          name: typeof v.name === 'string' ? v.name : '',
+          description: typeof v.description === 'string' ? v.description : '',
+          thumbnail: proxify(absUrl(pt, v.thumbnailPath || v.previewPath || '')),
+          duration: Number(v.duration) || 0,
+          views: Number(v.views) || 0,
+          likes: Number(v.likes) || 0,
+          dislikes: Number(v.dislikes) || 0,
+          publishedAt: v.publishedAt || v.createdAt || '',
+          channel: channelOf(pt, v.channel),
+          url: typeof v.url === 'string' && v.url ? v.url : `${pt.instance}/w/${id}`,
+          privacy: v.privacy && v.privacy.label ? String(v.privacy.label) : '',
+          privacyId: v.privacy && v.privacy.id ? Number(v.privacy.id) : 0,
+          state: v.state && v.state.label ? String(v.state.label) : '',
+          isLive: v.isLive === true,
+          nsfw: v.nsfw === true
+        };
+      };
+      const pickFile = (v) => {
+        const candidates = [];
+        for (const f of (Array.isArray(v.files) ? v.files : [])) if (f && f.fileUrl) candidates.push(f);
+        for (const pl of (Array.isArray(v.streamingPlaylists) ? v.streamingPlaylists : [])) for (const f of (Array.isArray(pl.files) ? pl.files : [])) if (f && f.fileUrl) candidates.push(f);
+        if (!candidates.length) return null;
+        const resOf = (f) => Number(f.resolution && f.resolution.id) || 0;
+        const under = candidates.filter(f => resOf(f) > 0 && resOf(f) <= 720).sort((a, b) => resOf(b) - resOf(a));
+        const pick = under[0] || candidates.slice().sort((a, b) => resOf(a) - resOf(b))[0];
+        return { url: pick.fileUrl, resolution: resOf(pick), size: Number(pick.size) || 0 };
+      };
+      const mapComment = (pt, c) => c && typeof c === 'object' ? {
+        id: String(c.id || ''),
+        html: typeof c.text === 'string' ? c.text : '',
+        createdAt: c.createdAt || '',
+        totalReplies: Number(c.totalReplies) || 0,
+        account: c.account ? { name: c.account.name || '', displayName: c.account.displayName || c.account.name || '', host: c.account.host || '', avatar: avatarOf(pt, c.account) } : { name: '', displayName: '', host: '', avatar: '' }
+      } : null;
+      const listOf = async (pathName) => {
+        const res = await ptFetch(pathName);
+        if (res.status === 401 || res.status === 403) return { error: 'peertubeErrAuth' };
+        if (!res.ok) return { error: 'peertubeErrFetch' };
+        const data = await res.json().catch(() => null);
+        return { total: Number(data && data.total) || 0, data: Array.isArray(data && data.data) ? data.data : [] };
+      };
+      const invalidatePt = () => feedCache.clear();
+
+      return {
+        hasAccount() { return !!(getPt() && getPt().token); },
+        getAccount() {
+          const pt = getPt();
+          if (!pt || !pt.token) return null;
+          let host = '';
+          try { host = new URL(pt.instance).host; } catch (_) {}
+          return {
+            network: 'peertube',
+            instance: pt.instance,
+            host,
+            username: pt.username || '',
+            displayName: pt.displayName || pt.username || '',
+            handle: pt.username ? `${pt.username}@${host}` : host,
+            avatar: pt.avatar ? proxify(pt.avatar) : '',
+            channel: pt.channelName || '',
+            channelDisplayName: pt.channelDisplayName || pt.channelName || '',
+            channelUrl: pt.channelName ? `${pt.instance}/c/${pt.channelName}` : pt.instance,
+            profileUrl: pt.username ? `${pt.instance}/a/${pt.username}` : pt.instance
+          };
+        },
+        async connect({ instance, username, password }) {
+          if (isPublic) throw new Error('fediverseErrPublic');
+          const origin = (() => { try { return normalizeInstance(instance); } catch (_) { throw new Error('peertubeErrInstance'); } })();
+          const user = String(username || '').trim();
+          const pass = String(password || '');
+          if (!user || !pass) throw new Error('peertubeErrMissing');
+          const client = await oauthClient(origin);
+          const tokens = await tokenRequest(origin, { client_id: client.client_id, client_secret: client.client_secret, grant_type: 'password', response_type: 'code', username: user, password: pass });
+          let me;
+          try {
+            const res = await fetchTimed(`${origin}/api/v1/users/me`, { headers: Object.assign(spoofHeaders('application/json'), { Authorization: `Bearer ${tokens.access_token}` }) });
+            if (!res.ok) throw new Error('peertubeErrAuth');
+            me = await res.json();
+          } catch (_) { throw new Error('peertubeErrConnect'); }
+          const channel = Array.isArray(me.videoChannels) && me.videoChannels.length ? me.videoChannels[0] : null;
+          const acc = me.account || {};
+          const avatars = Array.isArray(acc.avatars) ? acc.avatars.slice().sort((a, b) => (Number(b.width) || 0) - (Number(a.width) || 0)) : [];
+          const avatarPath = avatars.length ? avatars[0].path : (acc.avatar && acc.avatar.path) || '';
+          const store = readStore();
+          store.peertube = {
+            instance: origin,
+            clientId: client.client_id,
+            clientSecret: client.client_secret,
+            token: tokens.access_token,
+            refreshToken: tokens.refresh_token || '',
+            expiresAt: Date.now() + (Number(tokens.expires_in) || 0) * 1000,
+            userId: String(me.id || ''),
+            username: me.username || user,
+            displayName: acc.displayName || me.username || user,
+            avatar: avatarPath ? `${origin}${avatarPath.startsWith('/') ? '' : '/'}${avatarPath}` : '',
+            accountName: acc.name || me.username || user,
+            channelId: channel ? String(channel.id) : '',
+            channelName: channel ? channel.name || '' : '',
+            channelDisplayName: channel ? channel.displayName || channel.name || '' : ''
+          };
+          writeStore(store);
+          invalidatePt();
+          try { mediaHosts.add(new URL(origin).host); } catch (_) {}
+          setModuleFlag('on');
+          return this.getAccount();
+        },
+        async disconnect() {
+          const pt = getPt();
+          if (pt && pt.token) {
+            try { await fetchTimed(`${pt.instance}/api/v1/users/revoke-token`, { method: 'POST', headers: Object.assign(spoofHeaders('application/json'), { Authorization: `Bearer ${pt.token}` }) }); } catch (_) {}
+          }
+          const store = readStore();
+          delete store.peertube;
+          writeStore(store);
+          invalidatePt();
+          return true;
+        },
+        invalidateCache() { invalidatePt(); },
+        async getAccountStats() {
+          const pt = getPt();
+          if (!pt) return null;
+          let me = null;
+          try { const res = await ptFetch('/api/v1/users/me'); if (res.ok) me = await res.json().catch(() => null); } catch (_) {}
+          if (!me) return null;
+          const channel = Array.isArray(me.videoChannels) && me.videoChannels.length ? me.videoChannels[0] : null;
+          let videos = 0, subscriptions = 0;
+          try { const v = await listOf('/api/v1/users/me/videos?start=0&count=1'); if (!v.error) videos = v.total; } catch (_) {}
+          try { const sub = await listOf('/api/v1/users/me/subscriptions?start=0&count=1'); if (!sub.error) subscriptions = sub.total; } catch (_) {}
+          return {
+            videos,
+            subscriptions,
+            followers: channel ? Number(channel.followersCount) || 0 : 0,
+            quota: Number(me.videoQuota) || 0,
+            quotaUsed: Number(me.videoQuotaUsed) || 0
+          };
+        },
+        async getFeed(kind = 'subscriptions', force = false) {
+          const pt = getPt();
+          if (!pt) return { connected: false, videos: [] };
+          try { mediaHosts.add(new URL(pt.instance).host); } catch (_) {}
+          const key = kind === 'mine' ? 'mine' : 'subscriptions';
+          const now = Date.now();
+          const hit = feedCache.get(key);
+          if (!force && hit && now - hit.ts < TIMELINE_CACHE_MS) return hit.value;
+          let result;
+          try {
+            result = await listOf(key === 'mine' ? `/api/v1/users/me/videos?start=0&count=${TIMELINE_LIMIT}&sort=-publishedAt` : `/api/v1/users/me/subscriptions/videos?start=0&count=${TIMELINE_LIMIT}&sort=-publishedAt`);
+          } catch (err) {
+            return { connected: true, account: this.getAccount(), videos: [], error: (err && err.message) || 'peertubeErrFetch' };
+          }
+          if (result.error) return { connected: true, account: this.getAccount(), videos: [], error: result.error };
+          const value = { connected: true, account: this.getAccount(), videos: result.data.map(v => mapVideo(pt, v)).filter(Boolean), total: result.total, kind: key };
+          feedCache.set(key, { ts: now, value });
+          return value;
+        },
+        async getVideo(id) {
+          const pt = getPt();
+          if (!pt) return null;
+          const vid = encodeURIComponent(String(id || ''));
+          let res;
+          try { res = await ptFetch(`/api/v1/videos/${vid}`); } catch (_) { return { error: 'peertubeErrFetch' }; }
+          if (!res.ok) return { error: 'peertubeErrFetch' };
+          const raw = await res.json().catch(() => null);
+          const video = mapVideo(pt, raw);
+          if (!video) return { error: 'peertubeErrFetch' };
+          const file = pickFile(raw || {});
+          if (file) { rememberHost(file.url); video.stream = `/fediverse/peertube/stream?u=${encodeURIComponent(file.url)}`; video.resolution = file.resolution; video.fileSize = file.size; }
+          video.embedUrl = raw && raw.embedPath ? absUrl(pt, raw.embedPath) : '';
+          video.tags = Array.isArray(raw && raw.tags) ? raw.tags.map(String) : [];
+          let comments = [];
+          try {
+            const c = await listOf(`/api/v1/videos/${vid}/comment-threads?start=0&count=${TIMELINE_LIMIT}&sort=-createdAt`);
+            if (!c.error) comments = c.data.map(x => mapComment(pt, x)).filter(Boolean);
+          } catch (_) {}
+          let myRating = 'none';
+          try { const r = await ptFetch(`/api/v1/users/me/videos/${vid}/rating`); if (r.ok) { const d = await r.json().catch(() => null); if (d && d.rating) myRating = String(d.rating); } } catch (_) {}
+          return { video, comments, myRating };
+        },
+        async rate(id, rating) {
+          const allowed = { like: 1, dislike: 1, none: 1 };
+          if (!allowed[rating]) throw new Error('peertubeErrFetch');
+          let res;
+          try { res = await ptFetch(`/api/v1/videos/${encodeURIComponent(String(id || ''))}/rate`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating }) }); } catch (_) { throw new Error('peertubeErrConnect'); }
+          if (res.status === 401 || res.status === 403) throw new Error('peertubeErrAuth');
+          if (!res.ok && res.status !== 204) throw new Error('peertubeErrFetch');
+          invalidatePt();
+          return true;
+        },
+        async comment(id, text) {
+          const body = String(text || '').trim();
+          if (!body) throw new Error('fediverseErrEmpty');
+          let res;
+          try { res = await ptFetch(`/api/v1/videos/${encodeURIComponent(String(id || ''))}/comment-threads`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: body }) }); } catch (_) { throw new Error('peertubeErrConnect'); }
+          if (res.status === 401 || res.status === 403) throw new Error('peertubeErrAuth');
+          if (!res.ok) throw new Error('peertubeErrComment');
+          return true;
+        },
+        async upload({ file, name, description, privacy } = {}) {
+          const pt = getPt();
+          if (!pt) throw new Error('peertubeErrAuth');
+          if (!file || !file.filepath || !(Number(file.size) > 0)) throw new Error('peertubeErrNoFile');
+          const title = String(name || '').trim();
+          if (!title) throw new Error('peertubeErrTitle');
+          let buf;
+          try { buf = fs.readFileSync(file.filepath); } catch (_) { throw new Error('peertubeErrUpload'); }
+          const fd = new FormData();
+          fd.append('videofile', new Blob([buf], { type: file.mimetype || 'video/mp4' }), file.originalFilename || 'video.mp4');
+          if (pt.channelId) fd.append('channelId', String(pt.channelId));
+          fd.append('name', title.slice(0, 120));
+          fd.append('privacy', String(PT_PRIVACY[String(privacy || 'public')] || 1));
+          const desc = String(description || '').trim();
+          if (desc) fd.append('description', desc.slice(0, 10000));
+          let res;
+          try { res = await ptFetch('/api/v1/videos/upload', { method: 'POST', body: fd, timeoutMs: PT_UPLOAD_TIMEOUT_MS }); } catch (_) { throw new Error('peertubeErrUpload'); }
+          if (res.status === 401 || res.status === 403) throw new Error('peertubeErrAuth');
+          if (!res.ok) throw new Error('peertubeErrUpload');
+          const data = await res.json().catch(() => ({}));
+          invalidatePt();
+          const v = data && data.video ? data.video : {};
+          return { id: String(v.uuid || v.shortUUID || v.id || '') };
+        },
+        async openStream(remoteUrl, range) {
+          let u;
+          try { u = new URL(String(remoteUrl || '')); } catch (_) { return null; }
+          if (u.protocol !== 'https:' || isPrivateHost(u.hostname) || !api.isHostAllowed(u.host)) return null;
+          const headers = spoofHeaders('*/*');
+          if (range) headers.Range = String(range);
+          let res;
+          try { res = await fetch(u.href, { headers, redirect: 'follow' }); } catch (_) { return null; }
+          if (!res.ok && res.status !== 206) return null;
+          const type = res.headers.get('content-type') || 'application/octet-stream';
+          if (!/^(video|audio|application\/octet-stream)/i.test(type)) return null;
+          return {
+            status: res.status,
+            type,
+            length: res.headers.get('content-length') || '',
+            contentRange: res.headers.get('content-range') || '',
+            body: res.body ? Readable.fromWeb(res.body) : null
+          };
+        }
+      };
+    })(),
+
     isHostAllowed(host) {
       if (mediaHosts.has(host)) return true;
       const m = getMastodon();
       if (m) {
         try { if (new URL(m.instance).host === host) return true; } catch (_) {}
         try { if (m.avatar && new URL(m.avatar).host === host) return true; } catch (_) {}
+      }
+      const pt = readStore().peertube;
+      if (pt && pt.instance) {
+        try { if (new URL(pt.instance).host === host) return true; } catch (_) {}
       }
       return false;
     },

@@ -21,7 +21,7 @@ const FILTER_WINDOWS = {
 
 const ACTION_TYPES = new Set([
   'post', 'about', 'contact', 'feed', 'bookmark', 'image', 'audio', 'video',
-  'document', 'torrent', 'event', 'task', 'taskAssignment',
+  'document', 'torrent', 'file', 'event', 'task', 'taskAssignment',
   'votes', 'vote', 'report', 'tribe', 'chat', 'chatMessage', 'pad', 'padEntry',
   'forum', 'market', 'job', 'project', 'industry', 'industryBuild', 'pixelia', 'map', 'mapMarker',
   'shop', 'shopProduct', 'curriculum', 'gameScore',
@@ -50,6 +50,7 @@ const ACTION_PHRASES = {
   video: 'uploaded a video',
   document: 'uploaded a document',
   torrent: 'shared a torrent',
+  file: 'shared a file',
   event: 'created an event',
   task: 'created a task',
   taskAssignment: 'updated a task assignment',
