@@ -76,19 +76,21 @@ describe('welcome: nothing is mandatory', (t) => {
 });
 
 describe('welcome: the steps', (t) => {
-  t('language and backup are recorded in the same flag file', async () => {
+  t('language, interface, wish and configuration are recorded in the same flag file', async () => {
     const { onboarding, peer, dir } = setup();
     onboarding.begin(peer.keypair.id);
     eq((await onboarding.status()).steps.language, false);
     onboarding.markStep('language');
-    onboarding.markStep('backup');
+    onboarding.markStep('wish');
+    onboarding.markStep('workflow');
     onboarding.markStep('ux');
     const status = await onboarding.status();
     ok(status.steps.language);
-    ok(status.steps.backup);
+    ok(status.steps.wish);
+    ok(status.steps.workflow);
     ok(status.steps.ux, 'the chosen UX is recorded there too');
-    eq(status.done, 3);
-    eq(status.total, 7);
+    eq(status.done, 4);
+    eq(status.total, 8);
     notOk(onboarding.markStep('whatever'), 'an unknown step is refused');
     ok(flagOf(dir).includes('step=language'));
   });
@@ -119,12 +121,19 @@ describe('welcome: the steps', (t) => {
     ok((await onboarding.status()).steps.federation);
   });
 
+  t('backups are no longer a step of the guide', () => {
+    notOk(factory.STEPS.includes('backup'));
+    const i = factory.STEPS.indexOf('wish');
+    eq(factory.STEPS[i + 1], 'workflow', 'the wish is asked right before choosing a configuration');
+    ok(i < factory.STEPS.indexOf('federation'), 'and both come before joining the network');
+  });
+
   t('steps of disabled modules are left out of the count', async () => {
     const { onboarding, peer } = setup();
     onboarding.begin(peer.keypair.id);
     onboarding.markStep('language');
     await publish(peer, { type: 'about', about: peer.keypair.id, name: 'Alice' });
-    const status = await onboarding.status({ federation: false, larp: false, backup: false, greeting: false, ux: false });
+    const status = await onboarding.status({ federation: false, larp: false, wish: false, workflow: false, greeting: false, ux: false });
     eq(status.total, 2, 'only the steps that this node can do');
     eq(status.done, 2);
     ok(status.complete, 'the guide can be completed without them');
@@ -138,14 +147,15 @@ describe('welcome: the steps', (t) => {
     const onboarding = factory({ cooler: A.cooler, ssbPath: dir });
     onboarding.begin(A.keypair.id);
     onboarding.markStep('language');
-    onboarding.markStep('backup');
+    onboarding.markStep('wish');
+    onboarding.markStep('workflow');
     onboarding.markStep('ux');
     await publish(A, { type: 'about', about: A.keypair.id, name: 'Alice' });
     await publish(A, { type: 'contact', contact: B.keypair.id, following: true });
     await publish(A, { type: 'feed', text: 'Hello, I have just arrived.' });
     await publish(A, { type: 'larpJoinHouse', house: 'academia' });
     const status = await onboarding.status();
-    eq(status.done, 7);
+    eq(status.done, 8);
     ok(status.complete);
     notOk(onboarding.isVisible(), 'the banner disappears on its own');
     ok(flagOf(dir).includes('welcome=done'));
@@ -211,7 +221,7 @@ describe('welcome: the guide reads the profile without extra queries', (t) => {
   });
 });
 
-describe('welcome: the identity shown with the backup step', (t) => {
+describe('welcome: status carries the identity', (t) => {
   t('status carries the feed id of the inhabitant', async () => {
     const { onboarding, peer } = setup();
     onboarding.begin(peer.keypair.id);

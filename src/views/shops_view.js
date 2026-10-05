@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -554,6 +554,7 @@ exports.shopOrdersView = async (shop, orders) => {
       acts.push(statusForm(o.id, "SHIPPED", i18n.shopOrderMarkShipped || "Mark shipped"))
     }
     acts.push(a({ href: `/pm?recipients=${encodeURIComponent(o.buyer)}`, class: "tribe-action-btn" }, i18n.shopOrderPmBuyer || i18n.privateMessage || "PM"))
+    { const cb = renderCallButton(o.buyer, { cls: "tribe-action-btn", pam: true }); if (cb) acts.push(cb); }
     return div({ class: "tribe-side-actions" }, ...acts)
   }
   const rows = (orders || []).map(o => div({ class: "shop-order-card card-section" },
@@ -584,6 +585,7 @@ exports.myPurchasesView = async (purchases, params = {}) => {
   const buyerActions = (o) => {
     const acts = []
     if (o.seller) acts.push(a({ href: `/pm?recipients=${encodeURIComponent(o.seller)}`, class: "tribe-action-btn" }, i18n.shopOrderPmSeller || i18n.privateMessage || "PM"))
+    if (o.seller) { const cb = renderCallButton(o.seller, { cls: "tribe-action-btn", pam: true }); if (cb) acts.push(cb); }
     if (String(o.status || "PENDING").toUpperCase() === "SHIPPED") {
       acts.push(form({ method: "POST", action: `/shops/orders/${encodeURIComponent(o.id)}/status`, class: "inline-form" },
         input({ type: "hidden", name: "status", value: "RECEIVED" }),

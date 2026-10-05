@@ -23,6 +23,7 @@ function stagePeer(ssb, address, key, eagerReplicate) {
       routed = true;
     }
   } catch (_) {}
+  try { require('../models/viewer_filters').rememberLanPeers([key]); } catch (_) {}
   if (!routed) {
     try {
       if (ssb.gossip && typeof ssb.gossip.add === 'function') {
@@ -52,11 +53,23 @@ function handleDiscovery(ssb, d, opts) {
   if (key) stagePeer(ssb, d.address, key, opts.eagerReplicate);
 }
 
-function startRouter(ssb, opts) {
+function guardLan(ssb, isEnabled) {
+  const lan = ssb && ssb.lan;
+  if (!lan || typeof lan.start !== 'function' || lan.oasisGuarded) return false;
+  const start = lan.start.bind(lan);
+  lan.start = (...args) => {
+    if (!isEnabled()) return undefined;
+    try { return start(...args); } catch (_) { return undefined; }
+  };
+  lan.oasisGuarded = true;
+  if (!isEnabled() && typeof lan.stop === 'function') { try { lan.stop(); } catch (_) {} }
+  return true;
+}
+
+function startRouter(ssb, opts, isEnabled) {
   if (!ssb.lan || typeof ssb.lan.discoveredPeers !== 'function') return;
-  const oasisCfg = readOasisConfig();
-  if (oasisCfg.lanBroadcasting === false) return;
-  try { ssb.lan.start(); } catch (_) {}
+  if (isEnabled()) { try { ssb.lan.start(); } catch (_) {} }
+  else if (typeof ssb.lan.stop === 'function') { try { ssb.lan.stop(); } catch (_) {} }
   pull(
     ssb.lan.discoveredPeers(),
     pull.drain(d => handleDiscovery(ssb, d, opts), () => {})
@@ -73,7 +86,11 @@ module.exports = {
       acceptUnverified: lanCfg.acceptUnverified === true,
       eagerReplicate: lanCfg.eagerReplicate === true
     };
-    setImmediate(() => startRouter(ssb, opts));
+    const isEnabled = () => { const c = readOasisConfig(); return c.lanBroadcasting !== false && c.networkPaused !== true; };
+    guardLan(ssb, isEnabled);
+    setImmediate(() => startRouter(ssb, opts, isEnabled));
     return {};
   }
 };
+
+module.exports.guardLan = guardLan;

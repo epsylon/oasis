@@ -129,13 +129,19 @@ const imageXObject = (buf) => {
   return { w: png.w, h: png.h, dict: `<< /Type /XObject /Subtype /Image /Width ${png.w} /Height ${png.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${compressed.length} >>`, stream: compressed };
 };
 
+const rasterXObject = (raster) => {
+  if (!raster || !raster.w || !raster.h || !Buffer.isBuffer(raster.rgb) || raster.rgb.length !== raster.w * raster.h * 3) return null;
+  const compressed = zlib.deflateSync(raster.rgb);
+  return { w: raster.w, h: raster.h, dict: `<< /Type /XObject /Subtype /Image /Width ${raster.w} /Height ${raster.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Interpolate false /Filter /FlateDecode /Length ${compressed.length} >>`, stream: compressed };
+};
+
 const flattenSections = (sections) => {
   const lines = [];
   for (const s of Array.isArray(sections) ? sections : []) {
     if (!s) continue;
     if (s.kind === 'image') {
-      const xo = imageXObject(s.buffer);
-      if (xo) lines.push({ kind: 'image', xo, caption: s.caption || '' });
+      const xo = s.raster ? rasterXObject(s.raster) : imageXObject(s.buffer);
+      if (xo) lines.push({ kind: 'image', xo, caption: s.caption || '', maxW: s.maxW, maxH: s.maxH });
       else if (s.caption) lines.push({ kind: 'kv', text: `[image: ${s.caption}]` });
     } else if (s.kind === 'kv') {
       const txt = `${s.label}: ${s.value == null ? '' : s.value}`;
@@ -175,11 +181,11 @@ function buildDocumentPdf({ title, issuedToLabel, issuedTo, sections, license = 
   const lines = flattenSections(sections);
   const maxImgW = 240;
   const maxImgH = 160;
-  const imageBox = (xo) => {
-    const scale = Math.min(1, maxImgW / xo.w, maxImgH / xo.h);
-    return { w: Math.round(xo.w * scale), h: Math.round(xo.h * scale) };
+  const imageBox = (ln) => {
+    const scale = Math.min(1, (ln.maxW || maxImgW) / ln.xo.w, (ln.maxH || maxImgH) / ln.xo.h);
+    return { w: Math.round(ln.xo.w * scale), h: Math.round(ln.xo.h * scale) };
   };
-  const heightOf = (ln) => ln.kind === 'image' ? imageBox(ln.xo).h + lineH : lineH;
+  const heightOf = (ln) => ln.kind === 'image' ? imageBox(ln).h + lineH : lineH;
 
   const bodyHeight = bodyTop - bodyBottom;
   const pages = [];
@@ -251,7 +257,7 @@ function buildDocumentPdf({ title, issuedToLabel, issuedTo, sections, license = 
       } else if (ln.kind === 'kv') {
         parts.push(`BT\n/F1 10 Tf\n0 0 0 rg\n${marginX} ${y} Td\n(${escapePdf(ln.text)}) Tj\nET`);
       } else if (ln.kind === 'image') {
-        const box = imageBox(ln.xo);
+        const box = imageBox(ln);
         parts.push(`q\n${box.w} 0 0 ${box.h} ${marginX} ${y - box.h + lineH - 4} cm\n/Im${imageIds.get(ln)} Do\nQ`);
         y -= box.h;
       }
@@ -764,6 +770,79 @@ const mailingSections = (item, extra = {}) => {
   return out;
 };
 
+const PIXELIA_EMPTY = [0x1a, 0x1a, 0x1a];
+const PIXELIA_GRID = [0x33, 0x33, 0x33];
+const PIXELIA_PAGE_W = 512;
+const PIXELIA_PAGE_H = 520;
+const PIXELIA_MAX_CELL = 24;
+
+const pixeliaCells = (pixels, cols, rows) => {
+  const cells = new Map();
+  for (const px of asList(pixels)) {
+    const key = `${px.x},${px.y}`;
+    const hex = /^#[0-9a-f]{6}$/i.test(String(px.color || '')) ? String(px.color).slice(1) : null;
+    if (!hex || cells.has(key) || px.x < 1 || px.x > cols || px.y < 1 || px.y > rows) continue;
+    cells.set(key, [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)));
+  }
+  return cells;
+};
+
+const pixeliaRaster = (cells, x0, y0, cols, rows, block) => {
+  const w = cols * block;
+  const h = rows * block;
+  const rgb = Buffer.alloc(w * h * 3);
+  const segment = (c, edge) => {
+    const seg = Buffer.alloc(block * 3);
+    for (let i = 0; i < block; i++) {
+      const col = edge || i === block - 1 ? PIXELIA_GRID : c;
+      seg[i * 3] = col[0]; seg[i * 3 + 1] = col[1]; seg[i * 3 + 2] = col[2];
+    }
+    return seg;
+  };
+  const gridSeg = segment(PIXELIA_GRID, true);
+  const segs = new Map();
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < cols; cx++) {
+      const c = cells.get(`${x0 + cx},${y0 + cy}`) || PIXELIA_EMPTY;
+      const key = c.join(',');
+      if (!segs.has(key)) segs.set(key, segment(c, false));
+      const seg = segs.get(key);
+      for (let py = 0; py < block; py++) {
+        rgb.set(py === block - 1 ? gridSeg : seg, (((cy * block + py) * w) + cx * block) * 3);
+      }
+    }
+  }
+  return { w, h, rgb };
+};
+
+const pixeliaSections = (canvas) => {
+  const out = [];
+  const pixels = asList(canvas.pixels);
+  const cols = Number(canvas.width) || 1;
+  const rows = Number(canvas.height) || 1;
+  const contributors = [...new Set(pixels.flatMap(px => asList(px.contributors_inhabitants)))];
+  const cells = pixeliaCells(pixels, cols, rows);
+  const cell = Math.min(PIXELIA_MAX_CELL, PIXELIA_PAGE_W / cols);
+  const block = Math.max(6, Math.ceil(cell * 2));
+  const perPage = Math.max(1, Math.floor(PIXELIA_PAGE_H / cell));
+  out.push({ kind: 'title', text: 'Pixelia' });
+  out.push({ kind: 'blank' });
+  out.push({ kind: 'kv', label: 'Total pixels', value: String(pixels.length) });
+  out.push({ kind: 'kv', label: 'Contributors', value: String(contributors.length) });
+  out.push({ kind: 'blank' });
+  for (let y = 1; y <= rows; y += perPage) {
+    const n = Math.min(perPage, rows - y + 1);
+    out.push({ kind: 'image', raster: pixeliaRaster(cells, 1, y, cols, n, block), maxW: cols * cell, maxH: n * cell });
+  }
+  if (contributors.length) {
+    out.push({ kind: 'blank' });
+    out.push({ kind: 'section', text: 'CONTRIBUTORS' });
+    out.push({ kind: 'blank' });
+    for (const id of contributors) out.push({ kind: 'text', text: txt(id) });
+  }
+  return out;
+};
+
 const BUILDERS = {
   wiki: { title: 'OASIS - Wiki', sections: wikiSections, name: item => item.title },
   pads: { title: 'OASIS - Pad', sections: padSections, name: item => item.title },
@@ -776,7 +855,8 @@ const BUILDERS = {
   events: { title: 'OASIS - Event', sections: eventSections, name: item => item.title },
   tasks: { title: 'OASIS - Task', sections: taskSections, name: item => item.title },
   calendars: { title: 'OASIS - Calendar', sections: calendarSections, name: item => item.title },
-  cv: { title: 'OASIS - Curriculum', sections: cvSections, name: item => item.name || item.author }
+  cv: { title: 'OASIS - Curriculum', sections: cvSections, name: item => item.name || item.author },
+  pixelia: { title: 'OASIS - Pixelia', sections: pixeliaSections, name: () => 'canvas' }
 };
 
 const isSupported = kind => Object.prototype.hasOwnProperty.call(BUILDERS, kind);

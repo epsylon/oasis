@@ -2,6 +2,13 @@
 process.env.OASIS_TEST = '1';
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+if (!process.env.ssb_path) process.env.ssb_path = process.env.OASIS_TEST_SSB || path.join(os.homedir(), '.ssb-oasis-test');
+fs.mkdirSync(process.env.ssb_path, { recursive: true });
+if (fs.realpathSync(process.env.ssb_path) === path.join(fs.realpathSync(os.homedir()), '.ssb')) {
+  console.error('refusing to run the tests on your ~/.ssb');
+  process.exit(3);
+}
 
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';

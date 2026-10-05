@@ -165,7 +165,7 @@ const renderTransferCategoryChip = (cat) =>
 const generateTransferCard = (transfer, filter, params = {}) => {
   const confirmedBy = safeArr(transfer.confirmedBy)
   const settledUbiTx = (Array.isArray(transfer.tags) ? transfer.tags : []).some(t => String(t).toUpperCase() === "UBI") && /^[0-9a-f]{64}$/i.test(String(transfer.txid || ""))
-  const required = (transfer.from === transfer.to || settledUbiTx) ? 1 : 2
+  const required = (transfer.from === transfer.to || settledUbiTx) ? Math.max(1, Math.min(confirmedBy.length, 2)) : 2
   const confirmedCount = confirmedBy.length
   const dl = transfer.deadline ? moment(transfer.deadline) : null
   const isExpired = dl && dl.isValid() ? dl.isBefore(moment()) : false
@@ -215,7 +215,7 @@ const trChipFor = (normalizedFilter, censusT) => (mode) => {
   if (!Array.isArray(censusT)) return true;
   const stT = (t) => String(t.status || "").toUpperCase()
   if (mode === "mine") return censusT.some(t => t.from === userId || t.to === userId)
-  if (mode === "recent") return censusT.some(t => (Date.parse(t.createdAt || "") || 0) >= Date.now() - 86400000)
+  if (mode === "recent") return censusT.length > 0
   if (mode === "mine-pending") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "UNCONFIRMED")
   if (mode === "mine-confirmed") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "CLOSED")
   if (mode === "ubi") return censusT.some(t => safeArr(t.tags).some(tag => String(tag).toUpperCase() === "UBI"))
@@ -448,7 +448,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
 
   const confirmedBy = safeArr(transfer.confirmedBy)
   const settledUbiTx = (Array.isArray(transfer.tags) ? transfer.tags : []).some(t => String(t).toUpperCase() === "UBI") && /^[0-9a-f]{64}$/i.test(String(transfer.txid || ""))
-  const required = (transfer.from === transfer.to || settledUbiTx) ? 1 : 2
+  const required = (transfer.from === transfer.to || settledUbiTx) ? Math.max(1, Math.min(confirmedBy.length, 2)) : 2
   const confirmedCount = confirmedBy.length
   const isUnconfirmed = String(transfer.status || "").toUpperCase() === "UNCONFIRMED"
   const dl = transfer.deadline ? moment(transfer.deadline) : null

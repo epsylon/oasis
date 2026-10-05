@@ -106,15 +106,8 @@ exports.walletSendFormView = async (balance, destination, amount, fee, statusMes
     const titleKey = statusMessages?.title || '';
     const messages = statusMessages?.messages || [];
     const statusText = [i18n.walletStatusMessages[titleKey] || titleKey || '', ...messages.map(error => i18n.walletStatusMessages[error] || error)].filter(Boolean).join(': ');
-    const statusBlock = messages.length > 0
-        ? (type === 'error'
-            ? section({ class: 'inline-error' },
-                div({ class: 'tags-header inline-error-box' },
-                    p({ class: 'error-page-message' }, statusText),
-                    a({ href: '/wallet/send', class: 'filter-btn' }, i18n.errorDismiss || 'OK')
-                )
-              )
-            : div({ class: 'flash-banner wallet-status' }, p(statusText)))
+    const statusBlock = messages.length > 0 && type !== 'error'
+        ? div({ class: 'flash-banner wallet-status' }, p(statusText))
         : null;
 
     return walletViewRender(

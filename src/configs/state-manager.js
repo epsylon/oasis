@@ -30,6 +30,10 @@ const FOLDERS = {
   'oasis-inbox-archived': 'flags',
   'oasis-political-seen': 'flags',
   'gossip_unfollowed.json': 'peers',
+  'lan-peers.json': 'peers',
+  'peer-health.json': 'peers',
+  'phone-history.json': 'phone',
+  'phone-seen.json': 'phone',
   'snapshot.oasissn': 'content',
   'snapshot-recent.oasissn': 'content'
 };

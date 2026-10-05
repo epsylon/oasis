@@ -330,7 +330,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
     if (m === "MINE") return censusI.some(fc => String(fc.steward) === String(userId) || safeArr(fc.members).includes(userId))
     if (m === "ACTIVE" || m === "PAUSED" || m === "DISSOLVED") return censusI.some(fc => String(fc.status || "ACTIVE").toUpperCase() === m)
     if (m === "MEMBER") return censusI.some(fc => safeArr(fc.members).includes(userId))
-    if (m === "RECENT") return censusI.some(fc => (Date.parse(fc.createdAt || "") || 0) >= Date.now() - 86400000)
+    if (m === "RECENT") return censusI.length > 0
     if (m === "BLUEPRINTS" || m === "BUILDS") return censusI.length > 0
     return true
   }

@@ -46,7 +46,7 @@ const renderEmergencyCard = (emergency, params = {}) =>
 const chipVisible = (mode, filter, census) => {
   if (mode === filter || mode === "ALL") return true;
   if (mode === "MINE") return census.some(al => String(al.author) === String(userId));
-  if (mode === "RECENT") return census.some(al => al.lastActivityTs >= Date.now() - 86400000);
+  if (mode === "RECENT") return census.length > 0;
   if (STATUSES.includes(mode)) return census.some(al => al.status === mode);
   if (SEVERITIES.includes(mode)) return census.some(al => al.severity === mode);
   if (CATEGORIES.includes(mode)) return census.some(al => al.category === mode);

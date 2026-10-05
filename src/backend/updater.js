@@ -7,6 +7,45 @@ const remoteUrl = 'https://code.03c8.net/KrakensLab/oasis/raw/master/src/server/
 const remoteUrl2 = 'https://raw.githubusercontent.com/epsylon/oasis/refs/heads/main/src/server/package.json'; // Mirror SNH-Oasis
 
 let printed = false;
+const repoRoot = join(__dirname, '..', '..');
+const updateFlagFile = join(__dirname, '../server/.update_required');
+
+const git = (args, cwd = repoRoot) => new Promise((resolve) => {
+  require('child_process').execFile('git', args, { cwd, timeout: 60000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (err, out) => resolve(err ? '' : String(out || '').trim()));
+});
+const commitOf = (line) => {
+  const [hash, date, ...rest] = String(line || '').split('\t');
+  return hash ? { hash, date: date || '', subject: rest.join('\t') } : null;
+};
+const cleanOrigin = (url) => String(url || '').replace(/\/\/[^@\/]*@/, '//').replace(/\.git$/, '');
+
+async function collectDetails(root = repoRoot) {
+  if (!existsSync(join(root, '.git'))) return null;
+  const installed = commitOf(await git(['log', '-1', '--format=%h%x09%cI%x09%s'], root));
+  await git(['fetch', '--quiet'], root);
+  const upstream = (await git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], root)) || 'origin/master';
+  const available = commitOf(await git(['log', '-1', '--format=%h%x09%cI%x09%s', upstream], root));
+  const commits = (await git(['log', '--format=%h%x09%cI%x09%s', '-n', '10', `HEAD..${upstream}`], root)).split('\n').map(commitOf).filter(Boolean);
+  const count = Number(await git(['rev-list', '--count', `HEAD..${upstream}`], root)) || commits.length;
+  const stat = await git(['diff', '--shortstat', 'HEAD', upstream], root);
+  const num = (re) => { const m = stat.match(re); return m ? Number(m[1]) : 0; };
+  return {
+    installed, available, commits, count,
+    files: num(/(\d+) files? changed/), insertions: num(/(\d+) insertions?/), deletions: num(/(\d+) deletions?/),
+    origin: cleanOrigin(await git(['remote', 'get-url', 'origin'], root))
+  };
+}
+exports.collectDetails = collectDetails;
+
+exports.readUpdateInfo = () => {
+  if (!existsSync(updateFlagFile)) return null;
+  try {
+    const info = JSON.parse(readFileSync(updateFlagFile, 'utf8'));
+    return info && info.required ? info : { required: true };
+  } catch (_) {
+    return { required: true };
+  }
+};
 
 async function extractVersionFromText(text) {
   try {
@@ -33,7 +72,18 @@ async function diffVersion(body, callback) {
     const updateFlagPath = join(__dirname, "../server/.update_required");
 
     if (remoteVersion !== localVersion) {
-      writeFileSync(updateFlagPath, JSON.stringify({ required: true }));
+      const alreadyKnown = existsSync(updateFlagPath);
+      writeFileSync(updateFlagPath, JSON.stringify({ required: true, version: remoteVersion, installedVersion: localVersion }));
+      collectDetails().then((details) => {
+        if (details && existsSync(updateFlagPath)) writeFileSync(updateFlagPath, JSON.stringify({ required: true, version: remoteVersion, installedVersion: localVersion, details }));
+      }).catch(() => {});
+      if (!alreadyKnown) {
+        try {
+          const { notify, i18nNow } = require('./desktopNotify');
+          const i18n = i18nNow();
+          notify(i18n.notifyUpdateLabel, `${i18n.updateBannerText} (${remoteVersion})`);
+        } catch (_) {}
+      }
       callback("required");
     } else {
       if (existsSync(updateFlagPath)) unlinkSync(updateFlagPath);

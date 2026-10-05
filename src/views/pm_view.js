@@ -9,14 +9,6 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
   const description = i18n.pmDescription;
   const textLen = (initialText || '').length;
 
-  const fileErrorText = {
-    recipient: i18n.pmInvalidRecipients || 'Invalid Oasis ID',
-    mutual: i18n.fileShareMutualError || 'You can only share files with habitants with mutual support.',
-    nofile: i18n.fileShareNoFile || 'No file selected.',
-    size: i18n.fileShareTooLarge || 'The file exceeds the allowed size.',
-    failed: i18n.fileShareFailed || 'Could not prepare the file.',
-    send: i18n.fileShareSendError || 'Could not send the file.'
-  }[fileError] || '';
 
   const { renderEncryptedChip, renderDoubleEncryptionChip } = require('./clearnet_view');
   return template(
@@ -27,12 +19,6 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
         p(description),
         renderEncryptedChip(i18n)
       ),
-      crypterError
-        ? div({ class: "pm-form-error-msg" }, p('✗ ' + i18n.pmCrypterTooLong))
-        : null,
-      recipientError
-        ? div({ class: "pm-form-error-msg" }, p('✗ ' + i18n.pmInvalidRecipients))
-        : null,
       sentKey
         ? div({ class: "pm-sent-key" },
             input({ type: "text", readonly: true, value: sentKey, class: "pm-sent-key-value" })
@@ -141,7 +127,6 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
       section({ id: "fileshare" },
         div({ class: "pm-form pm-fileshare-form-wrap" },
           h2({ class: "pm-section-title" }, i18n.fileShareTitle || 'Share a file'),
-          fileErrorText ? div({ class: "pm-form-error-msg" }, p('✗ ' + fileErrorText)) : null,
           form({ method: "POST", action: "/pm/file/preview#fileshare", enctype: "multipart/form-data", class: "pm-fileshare-form" },
             input({ id: "fs-recipient", type: "text", name: "recipient", placeholder: i18n.fileShareRecipientPlaceholder || 'Enter Oasis ID (@....ed25519)', required: true, value: initialRecipients, maxlength: "120" }),
             br(),

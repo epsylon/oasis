@@ -29,9 +29,11 @@
     "reportsMod": "on",
     "opinionsMod": "on",
     "padsMod": "on",
+    "roomsMod": "on",
     "wikiMod": "on",
     "emergenciesMod": "on",
     "mailingMod": "on",
+    "phoneMod": "on",
     "logisticsMod": "on",
     "podcastsMod": "on",
     "campaignsMod": "on",
@@ -76,8 +78,17 @@
     "limit": 2000
   },
   "homePage": "activity",
-  "language": "es",
+  "language": "en",
   "wish": "whole",
   "pmVisibility": "whole",
-  "lanBroadcasting": true
+  "lanBroadcasting": true,
+  "blobCache": {
+    "maxMB": 0,
+    "pubMaxMB": 0
+  },
+  "phone": {
+    "visibility": "whole",
+    "dnd": false,
+    "relay": true
+  }
 }

@@ -10,7 +10,6 @@ const { config } = require("../server/SSB_server.js");
 const userId = config.keys.id;
 const BASE_FILTERS = ["RECENT", "MINE", "ALL", "TOP", "VIEWERS"];
 const CATEGORIES = ["NEWS", "MUSIC", "TALK", "EDUCATION", "TECH", "CULTURE", "COMMUNITY", "OASIS", "OTHER"];
-const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const filterLabel = (f) => String(i18n[`podcastFilter${cap(f)}`] || f).toUpperCase();
@@ -47,7 +46,7 @@ const podcastChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(c => String(c.author) === String(userId));
-  if (mode === "RECENT") return census.some(c => c.lastActivityTs >= Date.now() - RECENT_MS);
+  if (mode === "RECENT") return census.length > 0;
   if (mode === "TOP") return census.some(c => (c.opinionCount || 0) > 0 || (c.spreadCount || 0) > 0);
   if (mode === "VIEWERS") return census.some(c => (c.playCount || 0) > 0);
   if (CATEGORIES.includes(mode)) return census.some(c => c.category === mode);

@@ -11,6 +11,8 @@ const modulesView = () => {
     { name: 'aiNav', label: i18n.modulesAINavLabel, description: i18n.modulesAINavDescription },
     { name: 'emergencies', label: i18n.modulesEmergenciesLabel, description: i18n.modulesEmergenciesDescription },
     { name: 'mailing', label: i18n.modulesMailingLabel, description: i18n.modulesMailingDescription },
+    { name: 'rooms', label: i18n.modulesRoomsLabel, description: i18n.modulesRoomsDescription },
+    { name: 'phone', label: i18n.modulesPhoneLabel, description: i18n.modulesPhoneDescription },
     { name: 'logistics', label: i18n.modulesLogisticsLabel, description: i18n.modulesLogisticsDescription },
     { name: 'podcasts', label: i18n.modulesPodcastsLabel, description: i18n.modulesPodcastsDescription },
     { name: 'campaigns', label: i18n.modulesCampaignsLabel, description: i18n.modulesCampaignsDescription },

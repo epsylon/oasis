@@ -218,7 +218,7 @@ const renderMarketTopbar = (item, returnTo) => {
 const marketChipFor = (filter, list) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(list)) return true;
-  if (mode === "recent") { const oneDayAgo = moment().subtract(1, "days").toISOString(); return list.some((e) => e.status === "FOR SALE" && String(e.createdAt || "") >= oneDayAgo); }
+  if (mode === "recent") return list.length > 0;
   if (mode === "mine") return list.some((e) => String(e.seller) === String(userId));
   if (mode === "exchange") return list.some((e) => e.item_type === "exchange" && e.status === "FOR SALE");
   if (mode === "auctions") return list.some((e) => e.item_type === "auction" && e.status === "FOR SALE");

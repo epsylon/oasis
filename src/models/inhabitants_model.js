@@ -285,6 +285,14 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
       };
     },
 
+    async listSupporters(feedId) {
+      const ssbClient = await openSsb();
+      const graph = await new Promise((resolve) => ssbClient.friends.graph((err, g) => resolve(err ? {} : (g || {}))));
+      return Object.entries(graph)
+        .filter(([source, edges]) => source !== feedId && edges && (edges[feedId] === true || Number(edges[feedId]) > 0))
+        .map(([source]) => source);
+    },
+
     async getLatestAboutById(id) {
       const ssbClient = await openSsb();
       const records = await new Promise((res, rej) => {

@@ -1,6 +1,7 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
+const { roomNumberOf } = require('../models/phone_number');
 
 const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent','file']);
 const TORRENTABLE_TYPES = new Set(['audio','video','image','document','file']);
@@ -233,7 +234,7 @@ const SPREADABLE_TYPES = new Set([
   'post', 'audio', 'video', 'image', 'document', 'torrent', 'file', 'bookmark',
   'event', 'calendar', 'task', 'votes', 'vote', 'market', 'shop', 'shopProduct',
   'project', 'transfer', 'housing', 'job', 'report', 'industry', 'industryBuild', 'industryBlueprint',
-  'chat', 'chatMessage', 'pad', 'padEntry', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign', 'forum', 'map', 'poll', 'blog', 'schoolCourse', 'feed'
+  'chat', 'chatMessage', 'pad', 'padEntry', 'room', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign', 'forum', 'map', 'poll', 'blog', 'schoolCourse', 'feed'
 ]);
 
 function renderActionCards(actions, userId, allActions, spreadMap = new Map(), extras = {}) {
@@ -381,7 +382,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
 
       const voteOutcome = (() => {
         const totalNum = Number(totalVotes || 0);
-        const noResult = { text: i18n.voteNoQuorum || 'NO QUORUM', color: '#ffcc00' };
+        const noResult = { text: i18n.voteNoQuorum || 'NO QUORUM', tone: 'none' };
         if (totalNum < 2) return noResult;
         const entries = Object.entries(votes || {}).filter(([o]) => o !== 'FOLLOW_MAJORITY');
         const maxCount = entries.reduce((m, [, c]) => Math.max(m, Number(c) || 0), 0);
@@ -389,7 +390,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         if (maxCount === 0 || top.length > 1) return noResult;
         const w = top[0][0];
         const label = i18n['vote' + w.split('_').map(x => x.charAt(0) + x.slice(1).toLowerCase()).join('')] || w;
-        return { text: label, color: w === 'YES' ? '#4caf50' : w === 'NO' ? '#e53935' : '#ffcc00' };
+        return { text: label, tone: w === 'YES' ? 'yes' : w === 'NO' ? 'no' : 'none' };
       })();
 
       cardBody.push(
@@ -412,7 +413,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           div(
             { class: 'card-field' },
             span({ class: 'card-label' }, (i18n.voteResults || 'Results') + ':'),
-            span({ class: 'card-value', style: `color:${voteOutcome.color};font-weight:bold;` }, voteOutcome.text)
+            span({ class: `card-value vote-outcome vote-outcome-${voteOutcome.tone}` }, voteOutcome.text)
           ),
           div(
             { class: 'card-field' },
@@ -1252,6 +1253,21 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       );
     }
 
+    if (type === 'room') {
+      const roomKey = action.id || action.key || '';
+      const roomTitle = content.title || action.title || '';
+      const roomNumber = roomNumberOf(action.rootId || roomKey);
+      cardBody.push(
+        div({ class: 'card-section' },
+          div({ class: 'card-field activity-room-title' },
+            roomKey ? a({ href: `/rooms/${encodeURIComponent(roomKey)}`, class: 'card-value user-link' }, roomTitle || roomKey) : span({ class: 'card-value' }, roomTitle || ''),
+            roomNumber ? renderStateChip('whole', '✆', roomNumber) : ''
+          ),
+          content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, String(content.description).slice(0, 200))) : ''
+        )
+      );
+    }
+
     if (type === 'emergency') {
       const emergencyKey = action.id || action.key || '';
       const emergencyTitle = content.title || action.title || '';
@@ -1894,7 +1910,7 @@ const FAV_KIND_BY_TYPE = {
   bookmark: 'bookmarks', torrent: 'torrents', file: 'files', event: 'events', task: 'tasks',
   report: 'reports', votes: 'votes', poll: 'polls', market: 'market',
   housing: 'housing', job: 'jobs', project: 'projects', shop: 'shops',
-  chat: 'chats', chatThread: 'chats', pad: 'pads', calendar: 'calendars',
+  chat: 'chats', chatThread: 'chats', pad: 'pads', room: 'rooms', calendar: 'calendars',
   map: 'maps', forum: 'forum', transfer: 'transfers', post: 'blogs',
   wikiPage: 'wiki', emergency: 'emergencies', mailingList: 'mailing', logisticsRoute: 'logistics',
   podcast: 'podcasts', podcastEpisode: 'podcasts', campaign: 'campaigns', campaignUpdate: 'campaigns'
@@ -1967,6 +1983,7 @@ function getViewDetailsAction(type, action) {
     case 'shopProduct': return `/shops/product/${id}`;
     case 'chat':       return `/chats/${id}`;
     case 'pad':        return `/pads/${id}`;
+    case 'room':       return `/rooms/${id}`;
     case 'wikiPage':   return `/wiki/${id}`;
     case 'emergency':      return `/emergencies/${id}`;
     case 'emergencyUpdate': return action.content && action.content.target ? `/emergencies/${encodeURIComponent(action.content.target)}` : '/emergencies';
@@ -2017,6 +2034,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'feed',      label: i18n.typeFeed },
     { type: 'chat',      label: i18n.typeChat },
     { type: 'pad',       label: i18n.typePad },
+    { type: 'room',      label: i18n.typeRoom },
     { type: 'wiki',      label: i18n.typeWiki },
     { type: 'emergency',     label: i18n.typeEmergency },
     { type: 'mailing',   label: i18n.typeMailingList },
@@ -2103,6 +2121,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action => action.type === 'emergency' || action.type === 'emergencyUpdate');
   } else if (filter === 'mailing') {
     filteredActions = actions.filter(action => action.type === 'mailingList');
+  } else if (filter === 'room') {
+    filteredActions = actions.filter(action => action.type === 'room');
   } else if (filter === 'logistics') {
     filteredActions = actions.filter(action => action.type === 'logisticsRoute');
   } else if (filter === 'podcast') {
@@ -2223,7 +2243,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
             'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts', 'emergency',
             'votes', 'event', 'calendar', 'task', 'report', 'campaign',
             'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'logistics',
-            'post', 'feed', 'chat', 'pad', 'wiki', 'mailing', 'forum', 'map',
+            'post', 'feed', 'chat', 'room', 'pad', 'wiki', 'mailing', 'forum', 'map',
             'audio', 'bookmark', 'document', 'file', 'image', 'torrent', 'video', 'podcast'
           ];
           const byType = new Map(activityTypes.map(t => [t.type, t]));

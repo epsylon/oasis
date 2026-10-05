@@ -259,7 +259,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
   const voteChip = (m) => {
     if (m === mode) return true;
     if (m === "mine") return censusV.some((v) => v.createdBy === userId);
-    if (m === "recent") return censusV.some((v) => (Date.parse(v.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "recent") return censusV.length > 0;
     if (m === "open") return censusV.some((v) => normalizeStatus(v.status) === "OPEN");
     if (m === "closed") return censusV.some((v) => normalizeStatus(v.status) === "CLOSED");
     return true;
@@ -273,11 +273,6 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
     : (voteToEdit.deadline ? moment(voteToEdit.deadline).format("YYYY-MM-DDTHH:mm") : "");
   const questionValue = draft.question !== undefined && draft.question !== "" ? String(draft.question) : (voteToEdit.question || "");
   const tagsValue = draft.tags ? String(draft.tags) : editTags.join(", ");
-  const formError = params.error === "deadline"
-    ? String(i18n.voteErrorDeadlineMin || "The deadline must be at least {days} days from now.").replace("{days}", String(minVoteDays))
-    : params.error
-      ? (i18n.voteErrorGeneric || "The vote could not be saved.")
-      : "";
 
   return template(
     title,
@@ -315,12 +310,6 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
         ? div(
             { class: "vote-form" },
             mode === "edit" ? await renderSpreadEditWarning(voteId) : null,
-            formError
-              ? div({ class: "error-box vote-form-error" },
-                  p({ class: "error-title" }, i18n.voteErrorTitle || "Check the form"),
-                  p(formError)
-                )
-              : null,
             form(
               { action: mode === "edit" ? `/votes/update/${encodeURIComponent(voteId)}` : "/votes/create", method: "POST" },
               input({ type: "hidden", name: "returnTo", value: listReturnTo }),

@@ -22,6 +22,7 @@ const TYPE_TO_DEGREE = {
   bookmark: 4,
   feed: 5,
   pad: 6,
+  room: 6,
   chat: 7,
   audio: 8,
   video: 9,
@@ -56,6 +57,21 @@ const TYPE_TO_DEGREE = {
   campaignUpdate: 9
 };
 
+const FAMILY_DEGREE = [
+  ['tribeParliament', 11], ['parliament', 11], ['courts', 0], ['school', 1], ['housing', 4], ['industry', 6],
+  ['poll', 2], ['blog', 0], ['larp', 9], ['chat', 7], ['pad', 6], ['room', 6], ['wiki', 2], ['emergency', 11],
+  ['mailing', 5], ['logistics', 3], ['podcast', 8], ['campaign', 9], ['project', 6], ['market', 1], ['shop', 1],
+  ['job', 3], ['event', 8], ['task', 10], ['report', 10], ['votes', 7], ['calendar', 8], ['map', 2],
+  ['transfer', 11], ['bank', 11], ['ubi', 11], ['feed', 5], ['tribe', 9], ['forum', 7], ['bookmark', 4],
+  ['audio', 8], ['video', 9], ['image', 10], ['document', 11], ['torrent', 0], ['file', 0]
+];
+
+const degreeOf = (type) => {
+  if (TYPE_TO_DEGREE[type] != null) return TYPE_TO_DEGREE[type];
+  const family = FAMILY_DEGREE.find(([prefix]) => type.startsWith(prefix));
+  return family ? family[1] : (Math.abs(hashStr(type)) % 12);
+};
+
 const NOTE_FREQS = (() => {
   const a4 = 440;
   const map = {};
@@ -73,7 +89,7 @@ function blockToNote(msg) {
   const c = msg && msg.value && msg.value.content;
   if (!c || typeof c !== 'object') return null;
   const type = String(c.type || '').trim() || 'unknown';
-  const degree = TYPE_TO_DEGREE[type] != null ? TYPE_TO_DEGREE[type] : (Math.abs(hashStr(type)) % 12);
+  const degree = degreeOf(type);
   const size = Buffer.byteLength(JSON.stringify(msg.value), 'utf8');
   const octIdx = size < 256 ? 0 : (size < 1024 ? 1 : 2);
   const octave = OCTAVES[octIdx];

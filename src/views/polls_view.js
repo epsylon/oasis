@@ -190,7 +190,7 @@ const renderFilterBar = (filter, q, showSearch = true, items = null, censusList 
     if (m === filter) return true;
     if (m === "TOP") return censusPl.length > 0;
     if (m === "MINE") return censusPl.some(pl => String(pl.author || pl.createdBy) === String(userId));
-    if (m === "RECENT") return censusPl.some(pl => (Date.parse(pl.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "RECENT") return censusPl.length > 0;
     if (m === "VOTED") return censusPl.some(pl => pl.hasVoted || safeArr(pl.myChoices).length > 0);
     if (m === "OPEN" || m === "CLOSED") return censusPl.some(pl => String(pl.status || "OPEN").toUpperCase() === m);
     return true;

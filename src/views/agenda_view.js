@@ -31,6 +31,7 @@ function getViewDetailsAction(item) {
     case 'campaign': return `/campaigns/${encodeURIComponent(item.id)}`;
     case 'logisticsRoute': return `/logistics/${encodeURIComponent(item.id)}`;
     case 'calendar': return `/calendars/${encodeURIComponent(item.id)}`;
+    case 'calendarDate': return `/calendars/${encodeURIComponent(item.calendarId)}`;
     default: return `/messages/${encodeURIComponent(item.id)}`;
   }
 }

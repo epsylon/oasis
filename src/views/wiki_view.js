@@ -103,11 +103,10 @@ const renderPageCard = (page, params = {}) => {
 
 const renderFilters = (filter, q, params = {}, census = []) => {
   const tribeId = params.tribeId || null;
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const chipVisible = (mode) => {
     if (mode === filter || mode === "all") return true;
     if (mode === "mine") return census.some(p => String(p.author) === String(userId) || (p.versions || []).some(v => String(v.author) === String(userId)));
-    if (mode === "recent") return census.some(p => p.ts >= dayAgo);
+    if (mode === "recent") return census.length > 0;
     if (mode === "linked") return census.some(p => p.isLinked);
     return true;
   };
@@ -141,9 +140,6 @@ const renderForm = (page, params = {}) => {
   ];
   return div({ class: "div-center audio-form" },
     h2(page ? i18n.wikiUpdateSectionTitle : i18n.wikiCreateSectionTitle),
-    params.notice
-      ? div({ class: "tags-header inline-error-box" }, p({ class: "error-page-message" }, params.notice))
-      : null,
     draft
       ? section({ class: "post-preview wiki-preview" },
           div({ class: "preview-content" },

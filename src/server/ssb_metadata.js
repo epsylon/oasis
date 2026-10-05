@@ -90,7 +90,7 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   const httpUrl = hasHttp ? `http://${httpHost}:${httpPort}` : '';
   const oscLink = hasHttp ? `\x1b]8;;${httpUrl}\x07${httpUrl}\x1b]8;;\x07` : '';
   const ssbPort = config.connections?.incoming?.net?.[0]?.port || config.port || 8008;
-  const localDiscovery = config.local === true;
+  const localDiscovery = (() => { try { return require('../configs/config-manager.js').getConfig().lanBroadcasting !== false; } catch (_) { return false; } })();
   const hops = config.conn?.hops ?? config.friends?.hops ?? 2;
 
   console.log("=========================");
@@ -109,7 +109,12 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   })();
   console.log(`- OASIS ID: [ ${colors.orange}@${publicKey}${colors.reset} ]`);
   console.log(`- Package: ${colors.blue}${name} ${colors.yellow}[Version: ${version}]${colors.reset}`);
-  if (hasHttp) console.log(`- URL: ${colors.cyan}${oscLink}${colors.reset}`);
+  if (hasHttp) console.log(`- GUI: ${colors.cyan}${oscLink}${colors.reset}`);
+  const phoneEnabled = (() => {
+    try { return ((require('../configs/config-manager.js').getConfig() || {}).modules || {}).phoneMod !== 'off'; } catch (_) { return false; }
+  })();
+  const phoneNumber = phoneEnabled ? (() => { try { return require('../models/phone_number').phoneNumberOf(`@${publicKey}`); } catch (_) { return null; } })() : null;
+  console.log(`- VoIP ID: ${phoneEnabled ? (phoneNumber ? `[ ${colors.orange}${phoneNumber}${colors.reset} ]` : 'enabled') : 'disabled'}`);
   console.log(walletId ? `- ECOin ID: [ ${colors.orange}${walletId}${colors.reset} ]` : `- ECOin ID: disabled`);
   console.log("- Logging Level:", logLevel);
   console.log("- Engine: db2-legacy");
@@ -118,19 +123,47 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
     list && list.some(i => !i.internal && i.family === 'IPv4')
   );
   console.log(`- Protocol (port): ${ssbPort}`);
-  console.log(`- Mode: ${isOnline ? 'online' : 'offline'}`);
+  const networkPaused = (() => { try { return require('../configs/config-manager.js').getConfig().networkPaused === true || process.env.OASIS_NETWORK_PAUSED === '1'; } catch (_) { return false; } })();
+  console.log(`- Mode: ${networkPaused ? 'paused' : (isOnline ? 'online' : 'offline')}`);
   console.log(`- Replication (hops): ${hops}`);
+  const oasisCfg = (() => { try { return require('../configs/config-manager.js').getConfig() || {}; } catch (_) { return {}; } })();
+  console.log(`- Blockchain backlog: ${Number(oasisCfg.ssbLogStream && oasisCfg.ssbLogStream.limit) || 1000}`);
   console.log(`- LAN Broadcasting (UDP): ${localDiscovery ? 'enabled' : 'disabled'}`);
   const clearnetModules = await waitForClearnet();
   const clearnetStatus = (clearnetModules && clearnetModules.length > 0) ? clearnetModules.join(', ') : 'disabled';
-  let fediverseConnected = false;
-  try {
-    const acc = JSON.parse(fs.readFileSync(require('../configs/state-manager').statePath('fediverse-accounts.json'), 'utf8'));
-    fediverseConnected = !!(acc && acc.mastodon);
-  } catch (_) {}
+  const multiverse = (() => {
+    if ((oasisCfg.modules || {}).fediverseMod === 'off') return [];
+    try {
+      const acc = JSON.parse(fs.readFileSync(require('../configs/state-manager').statePath('fediverse-accounts.json'), 'utf8')) || {};
+      return [
+        acc.mastodon && acc.mastodon.token ? 'Mastodon' : null,
+        acc.peertube && acc.peertube.token ? 'PeerTube' : null,
+        acc.telegram && acc.telegram.session ? 'Telegram' : null
+      ].filter(Boolean);
+    } catch (_) { return []; }
+  })();
   console.log(`- Internet Broadcasting:`);
   console.log(`  - Clearnet: ${clearnetStatus}`);
-  console.log(`  - Fediverse: ${fediverseConnected ? 'enabled' : 'disabled'}`);
+  console.log(`  - Multiverse: ${multiverse.length ? multiverse.join(', ') : 'disabled'}`);
+  if (hasHttp) {
+    const en = (() => { try { return require('../client/assets/translations/i18n').en || {}; } catch (_) { return {}; } })();
+    const uxNames = { blocks: en.uxModeMenus, ainav: en.uxModeAINav, chats: en.uxModeChats, feed: en.uxModeFeed, phone: en.phoneTitle };
+    const wishNames = { whole: en.settingsWishWhole, mutuals: en.settingsWishMutuals, 'only-lan': en.settingsWishOnlyLan, local: en.settingsWishLocal };
+    const workflow = (() => {
+      try {
+        const wf = require('../models/workflows_model');
+        const key = wf.currentWorkflow(oasisCfg);
+        if (key) return en[`workflow_${key}`] || key;
+        const mods = oasisCfg.modules || {};
+        return wf.ALL_MODULES.every(m => mods[`${m}Mod`] === 'on') ? (en.welcomeWorkflow_full || 'Default') : 'custom';
+      } catch (_) { return 'custom'; }
+    })();
+    const ux = (oasisCfg.ux && oasisCfg.ux.current) || 'blocks';
+    const wish = oasisCfg.wish || 'whole';
+    console.log(`- Workflow: ${workflow}`);
+    console.log(`- UX mode: ${uxNames[ux] || ux}`);
+    console.log(`- Wish: ${wishNames[wish] || wish}`);
+  }
   console.log("");
   console.log("=========================");
   console.log("Modules loaded: [", modules.length, "]");

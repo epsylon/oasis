@@ -4,9 +4,9 @@ The Collective Artificial Intelligence (CAI) of Oasis is called **"42"**.
 
 ## Model
 
-`src/AI/oasis-42-1-chat.Q4_K_M.gguf` is **Qwen2.5-3B-Instruct** quantised to Q4_K_M (2,1 GB, 4-bit), released under the Apache-2.0 licence:
+`src/AI/oasis-42-1-chat.Q4_K_M.gguf` is **Qwen2.5-3B-Instruct** quantised to Q4_K_M, released under the Apache-2.0 licence.
 
-It speaks 29 languages, has a 32k-token context window and runs on CPU on any machine with 4 GB of free RAM. Oasis uses a context of 2k to 8k tokens depending on the RAM of the machine. No GPU is required or used.
+It is multilingual, has a long context window and runs on the CPU of an ordinary machine. Oasis sizes the context it uses to the memory of the machine. No GPU is required or used.
 
 ## How 42 answers
 

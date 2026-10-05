@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const log = (msg) => console.log(`[OASIS] [PATCH] ${msg}`);
+const verbose = process.argv.includes('--verbose') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
+const log = (msg) => { if (verbose) console.log(`[OASIS] [PATCH] ${msg}`); };
 
 // === Patch ssb-ref ===
 const ssbRefPath = path.resolve(__dirname, '../src/server/node_modules/ssb-ref/index.js');
@@ -132,4 +133,93 @@ if (fs.existsSync(xenovaTensorPath)) {
   }
 } else {
   log('@xenova/transformers patch skipped: file not found');
+}
+
+// === Patch ssb-gossip (forgotten pubs stay forgotten; a bad gossip.json entry no longer stops the server) ===
+const ssbGossipPath = path.resolve(__dirname, '../src/server/node_modules/ssb-gossip/index.js');
+if (fs.existsSync(ssbGossipPath)) {
+  const data = fs.readFileSync(ssbGossipPath, 'utf8');
+  if (!data.includes('function isForgotten (key)')) {
+    const forgottenBlock = `    var stateFile = AtomicFile(gossipJsonPath)
+    var forgottenPath = (function () {
+      try { return require(path.join(__dirname, '..', '..', '..', 'configs', 'state-manager')).statePath('gossip_unfollowed.json') }
+      catch (e) { return path.join(config.path, 'oasis', 'peers', 'gossip_unfollowed.json') }
+    })()
+    var forgotten = { at: -1, keys: new Set() }
+    function isForgotten (key) {
+      try {
+        var st = fs.statSync(forgottenPath)
+        if (st.mtimeMs !== forgotten.at) {
+          forgotten.at = st.mtimeMs
+          var list = JSON.parse(fs.readFileSync(forgottenPath, 'utf8') || '[]')
+          forgotten.keys = new Set((Array.isArray(list) ? list : []).map(function (e) { return e && e.key }).filter(Boolean))
+        }
+      } catch (e) { forgotten.at = -1; forgotten.keys = new Set() }
+      return !!key && forgotten.keys.has(key)
+    }`;
+    const patched = data
+      .replace('    var stateFile = AtomicFile(gossipJsonPath)', forgottenBlock)
+      .replace("        if(addr.key === server.id) return\n", "        if(addr.key === server.id) return\n        if(isForgotten(addr.key)) return\n")
+      .replace("          if(v.source !== 'local') {\n            gossip.add(v, 'stored')\n          }", "          if(v.source !== 'local' && !isForgotten(v.key)) {\n            try { gossip.add(v, 'stored') } catch (e) {}\n          }")
+      .replace("    var int = setInterval(function () {\n      var copy = peers.filter(", "    var int = setInterval(function () {\n      for (var i = peers.length - 1; i >= 0; i--) {\n        if (peers[i] && isForgotten(peers[i].key)) peers.splice(i, 1)\n      }\n      var copy = peers.filter(");
+    const applied = ['function isForgotten (key)', 'if(isForgotten(addr.key)) return', "try { gossip.add(v, 'stored') } catch (e) {}", 'if (peers[i] && isForgotten(peers[i].key)) peers.splice(i, 1)'].every(m => patched.includes(m));
+    if (applied) {
+      fs.writeFileSync(ssbGossipPath, patched);
+      log('Patched ssb-gossip so forgotten pubs are not re-added and bad gossip.json entries are skipped');
+    } else {
+      log('ssb-gossip patch skipped: unexpected index.js format');
+    }
+  }
+} else {
+  log('ssb-gossip patch skipped: file not found');
+}
+
+// === Patch ssb-gossip scheduler (no connection attempts while Oasis is paused) ===
+const ssbGossipSchedulePath = path.resolve(__dirname, '../src/server/node_modules/ssb-gossip/schedule.js');
+if (fs.existsSync(ssbGossipSchedulePath)) {
+  const data = fs.readFileSync(ssbGossipSchedulePath, 'utf8');
+  if (!data.includes('server.oasisNetworkPaused')) {
+    const patched = data.replace('    if(connecting || closed) return\n', '    if(connecting || closed || server.oasisNetworkPaused) return\n');
+    if (patched !== data) {
+      fs.writeFileSync(ssbGossipSchedulePath, patched);
+      log('Patched ssb-gossip scheduler to stay quiet while Oasis is paused');
+    } else {
+      log('ssb-gossip scheduler patch skipped: unexpected schedule.js format');
+    }
+  }
+} else {
+  log('ssb-gossip scheduler patch skipped: file not found');
+}
+
+// === Patch ssb-lan (broadcast address detection throws without a private IPv4) ===
+const ssbLanPath = path.resolve(__dirname, '../src/server/node_modules/ssb-lan/lib/index.js');
+if (fs.existsSync(ssbLanPath)) {
+  const data = fs.readFileSync(ssbLanPath, 'utf8');
+  if (!data.includes("e.family === 'IPv4' && IP.isPrivate(addr)")) {
+    const start = data.indexOf('    getBroadcastIPs() {');
+    const end = data.indexOf('\n    }\n', start);
+    if (start >= 0 && end > start) {
+      const replacement = `    getBroadcastIPs() {
+        if (process.platform === 'ios')
+            return ['255.255.255.255'];
+        try {
+            const details = nonPrivateIP(null, (addr, e) => e.family === 'IPv4' && IP.isPrivate(addr), true);
+            if (!details || details.family !== 'IPv4')
+                return ['255.255.255.255'];
+            const { broadcastAddress } = IP.subnet(details.address, details.netmask);
+            return [broadcastAddress];
+        }
+        catch (err) {
+            debug('LAN broadcast address detection failed: %s', err);
+            return ['255.255.255.255'];
+        }
+    }`;
+      fs.writeFileSync(ssbLanPath, data.slice(0, start) + replacement + data.slice(end + 6));
+      log('Patched ssb-lan to fall back to the global broadcast address');
+    } else {
+      log('ssb-lan patch skipped: getBroadcastIPs not found');
+    }
+  }
+} else {
+  log('ssb-lan patch skipped: file not found');
 }

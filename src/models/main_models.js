@@ -13,7 +13,6 @@ const pullSort = require("../server/node_modules/pull-sort");
 
 const path = require('path');
 const fs = require('fs/promises');
-const os = require('os');
 
 const ssbRef = require("../server/node_modules/ssb-ref");
 const nameCache = require('../backend/nameCache');
@@ -67,7 +66,9 @@ const publicOnlyFilter = pull.filter(isNotPrivate);
 const configure = (...customOptions) =>
   Object.assign({}, defaultOptions, ...customOptions);
  
-const ebtDir = path.join(os.homedir(), '.ssb', 'ebt');
+const ssbConfig = require('../server/ssb_config');
+const peerHealth = require('./peer_health');
+const ebtDir = path.join(ssbConfig.path, 'ebt');
 const unfollowedPath = require('../configs/state-manager').statePath('gossip_unfollowed.json');
 
 async function loadPeersFromEbt() {
@@ -84,13 +85,15 @@ async function loadPeersFromEbt() {
       try {
         const data = await fs.readFile(filePath, 'utf8');
         const users = JSON.parse(data);
+        const touchedAt = (await fs.stat(filePath)).mtimeMs;
         const userList = Object.keys(users).map(u => ({
           id: u,
           link: `/author/${encodeURIComponent(u)}`
         }));
         result.push({
           pub: `@${core}.ed25519`,
-          users: userList
+          users: userList,
+          touchedAt
         });
       } catch {}
     }
@@ -120,7 +123,7 @@ const canonicalizePubId = (s) => {
 };
 
 const parseRemote = (remote) => {
-  let m = /^net:([^:]+):\d+~shs:([^=]+)=/.exec(remote);
+  let m = /^(?:net|onion):([^:]+):\d+~shs:([^=]+)=/.exec(remote);
   if (m) return { host: m[1], pubId: canonicalizePubId(m[2]) };
   m = /^wss?:\/\/([^:/]+)(?::\d+)?.*~shs:([^=]+)=/.exec(remote);
   if (m) return { host: m[1], pubId: canonicalizePubId(m[2]) };
@@ -317,6 +320,7 @@ models.about = {
       ecoTax:   result.ecoTax   !== false,
       larpSign: result.larpSign === true,
       gpg:      result.gpg      !== false,
+      phone:    result.phone === 'mutuals' || result.phone === 'off' ? result.phone : 'whole',
       clearnet: result.clearnet === true,
       fediverse: result.fediverse === true,
       fediverseHandle: typeof result.fediverseHandle === 'string' ? result.fediverseHandle : '',
@@ -495,14 +499,13 @@ models.about = {
 };
 
 function blobIdToHexPath(blobId) {
-  const homeDir = os.homedir();
   const m = /^&([A-Za-z0-9+/=]+)\.sha256$/.exec(blobId);
   if (!m) throw new Error('Invalid blobId: ' + blobId);
   const b64 = m[1];
   const buf = Buffer.from(b64, 'base64');
   const hex = buf.toString('hex');
   const prefix = hex.slice(0, 2);
-  return path.join(homeDir, '.ssb', 'blobs', 'sha256', prefix, hex);
+  return path.join(ssbConfig.path, 'blobs', 'sha256', prefix, hex);
 }
 
 async function checkLocalBlob(blobId) {
@@ -766,7 +769,7 @@ models.meta = {
           let addr = p.address;
           if (!addr && p.host && p.port) {
             const core = String(p.key).replace(/^@/, "").replace(/\.ed25519$/, "");
-            addr = `net:${p.host}:${p.port}~shs:${core}`;
+            addr = `${/\.onion$/i.test(String(p.host)) ? 'onion' : 'net'}:${p.host}:${p.port}~shs:${core}`;
           }
           if (!addr) continue;
           seen.add(key);
@@ -801,7 +804,7 @@ models.meta = {
     discovered: async () => {
       const ssb = await cooler.open();
       const snapshot = await ssb.conn.dbPeers();
-      const gossipPath = path.join(os.homedir(), '.ssb', 'gossip.json');
+      const gossipPath = path.join(ssbConfig.path, 'gossip.json');
       let gossipMap = new Map();
       try {
         const gossipData = JSON.parse(await fs.readFile(gossipPath, 'utf8'));
@@ -842,7 +845,7 @@ models.meta = {
         if (dbKeys.has(ck)) continue;
         let host = data.host, port = data.port;
         if ((!host || !port) && addr) {
-          const m = String(addr).match(/^net:([^:]+):(\d+)/);
+          const m = String(addr).match(/^(?:net|onion):([^:]+):(\d+)/);
           if (m) { host = host || m[1]; port = port || Number(m[2]); }
         }
         mergedSnapshot.push([addr, { key: data.key, host, port, source: data.type || 'staged', verified: data.verified }]);
@@ -861,80 +864,25 @@ models.meta = {
           .map(([, d]) => d && d.key ? canonicalizePubId(d.key) : null)
           .filter(Boolean)
       );
-      const discoveredPeers = allDbPeers.filter(([, d]) => !onlineKeys.has(canonicalizePubId(d.key)));
+      const isDeadPeer = (d) => {
+        const ck = canonicalizePubId(d.key);
+        const legacy = gossipMap.get(ck) || {};
+        return peerHealth.isDead({ key: ck, failures: Math.max(Number(d.failure) || 0, Number(legacy.failure) || 0) });
+      };
+      const forgotten = await loadUnfollowedSet();
+      const discoveredPeers = allDbPeers.filter(([, d]) => !onlineKeys.has(canonicalizePubId(d.key)) && !isDeadPeer(d) && !forgotten.has(canonicalizePubId(d.key)));
       const discoveredIds = new Set(allDbPeers.map(([, d]) => canonicalizePubId(d.key)));
       const ebtList = await loadPeersFromEbt();
       const ebtMap = new Map(ebtList.map(e => [e.pub, e.users]));
       const unknownPeers = [];
-      for (const { pub } of ebtList) {
+      for (const { pub, touchedAt } of ebtList) {
+        if (Date.now() - (Number(touchedAt) || 0) >= peerHealth.DEAD_AFTER_MS || forgotten.has(pub)) continue;
         if (!discoveredIds.has(pub) && !onlineKeys.has(pub)) {
           const name = await models.about.name(pub).catch(() => pub);
           unknownPeers.push([pub, { key: pub, name, users: ebtMap.get(pub) || [] }]);
         }
       }
       return { discoveredPeers, unknownPeers };
-    },
-    connStop: async () => {
-      const ssb = await cooler.open();
-      try {
-        const result = await ssb.conn.stop();
-        return result;
-      } catch (e) {
-        const expectedName = "TypeError";
-        const expectedMessage = "Cannot read property 'close' of null";
-        if (e.name === expectedName && e.message === expectedMessage) {
-          debug("ssbConn is already stopped -- caught error");
-        } else {
-          throw new Error(e);
-        }
-      }
-    },
-    connStart: async () => {
-      const ssb = await cooler.open();
-      const result = await ssb.conn.start();
-
-      return result;
-    },
-    connRestart: async () => {
-      await models.meta.connStop();
-      await models.meta.connStart();
-    },
-    sync: async () => {
-      const ssb = await cooler.open();
-
-      const progress = await ssb.progress();
-      let previousTarget = progress.indexes.target;
-
-      let keepGoing = true;
-      const timeoutInterval = setTimeout(() => {
-        keepGoing = false;
-      }, 5 * 60 * 1000);
-
-      await ssb.conn.start();
-
-      const diff = async () =>
-        new Promise((resolve) => {
-          setTimeout(async () => {
-            const currentProgress = await ssb.progress();
-            const currentTarget = currentProgress.indexes.target;
-            const difference = currentTarget - previousTarget;
-            previousTarget = currentTarget;
-            debug(`Difference: ${difference} bytes`);
-            resolve(difference);
-          }, 5000);
-        });
-
-      debug("Starting sync, waiting for new messages...");
-      while (keepGoing && (await diff()) === 0) {
-        debug("Received no new messages.");
-      }
-      debug("Finished waiting for first new message.");
-      while (keepGoing && (await diff()) > 0) {
-        debug(`Still receiving new messages...`);
-      }
-      debug("Finished waiting for last new message.");
-      clearInterval(timeoutInterval);
-      await ssb.conn.stop();
     },
     acceptInvite: async (invite) => {
       const ssb = await cooler.open();
@@ -1936,6 +1884,8 @@ const post = {
           ecoTax:   r.ecoTax   !== false,
           larpSign: r.larpSign === true,
           gpg:      r.gpg      !== false,
+          phone:    r.phone === 'mutuals' || r.phone === 'off' ? r.phone : 'whole',
+          phoneDnd: !!(getConfig().phone || {}).dnd,
           clearnet: r.clearnet === true,
           fediverse: r.fediverse === true,
           fediverseHandle: typeof r.fediverseHandle === 'string' ? r.fediverseHandle : '',

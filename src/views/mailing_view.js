@@ -9,7 +9,6 @@ const BASE_FILTERS = ["RECENT", "MINE", "ALL", "SUBSCRIBED"];
 const TYPE_FILTERS = ["OPEN", "CLOSED"];
 const STATUS_FILTERS = ["ACTIVE", "ARCHIVED"];
 const HISTORY_MODES = ["DATE", "THREADS", "INHABITANTS"];
-const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const baseLabel = (f) => String(i18n[`mailingFilter${cap(f)}`] || f).toUpperCase();
@@ -52,7 +51,7 @@ const mailingChipFor = (mode, census) => {
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(l => String(l.author) === String(userId));
   if (mode === "SUBSCRIBED") return census.some(l => l.isMember && String(l.author) !== String(userId));
-  if (mode === "RECENT") return census.some(l => l.lastActivityTs >= Date.now() - RECENT_MS);
+  if (mode === "RECENT") return census.length > 0;
   if (mode === "OPEN") return census.some(l => !l.closed);
   if (mode === "CLOSED") return census.some(l => l.closed);
   if (STATUS_FILTERS.includes(mode)) return census.some(l => l.status === mode);

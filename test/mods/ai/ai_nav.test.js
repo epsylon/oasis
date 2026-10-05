@@ -85,3 +85,31 @@ describe('ai: routes_index.resolveBest backward compat', (t) => {
     eq(best, null);
   });
 });
+
+describe('ai: the suggestion follows the module you are in', (t) => {
+  const state = require('../../../src/configs/shared-state');
+  const m = (href, kind) => ({ href, title: href, kind, score: 0.5 });
+  state.setMatchPool([m('/videos/v1', 'videos'), m('/forum/f1', 'forum'), m('/wiki/w1', 'wiki')]);
+  state.setSectionMatches(new Map([['videos', [m('/videos/v1', 'videos'), m('/videos/v2', 'videos')]], ['tribes', [m('/tribe/t1', 'tribes')]], ['tribe', [m('/tribe/t1', 'tribes')]]]));
+
+  t('a module page gets its own best match, other pages keep rotating', () => {
+    eq(state.getSectionMatch('videos').href, '/videos/v1');
+    eq(state.getSectionMatch('tribe').href, '/tribe/t1', 'detail pages of a module share its match');
+    eq(state.getSectionMatch('activity'), null, 'pages without matches of their own fall back to the rotation');
+    const seen = new Set([state.nextBestMatch().href, state.nextBestMatch().href, state.nextBestMatch().href]);
+    eq(seen.size, 3, 'the rotation shows a different suggestion each time');
+  });
+
+  t('dismissing a module match moves to the next one of that module, then to the rotation', () => {
+    state.dismissSuggestion('/videos/v1');
+    eq(state.getSectionMatch('videos').href, '/videos/v2');
+    state.dismissSuggestion('/videos/v2');
+    eq(state.getSectionMatch('videos'), null);
+    ok(!['/videos/v1', '/videos/v2'].includes(state.nextBestMatch().href), 'dismissed suggestions leave the rotation too');
+  });
+
+  t('only real suggestions can be dismissed', () => {
+    ok(state.isKnownSuggestion('/tribe/t1'));
+    ok(!state.isKnownSuggestion('/anything/else'), 'arbitrary links are ignored');
+  });
+});

@@ -303,9 +303,8 @@ const reportChipFor = (filter, censusReports) => (mode) => {
   if (mode === filter || mode === "all") return true;
   if (!Array.isArray(censusReports)) return true;
   if (mode === "top") return censusReports.length > 0;
-  const dayAgoReports = Date.now() - 86400000;
   if (mode === "mine") return censusReports.some((r) => r.author === userId);
-  if (mode === "recent") return censusReports.some((r) => new Date(r.createdAt).getTime() >= dayAgoReports);
+  if (mode === "recent") return censusReports.length > 0;
   if (mode === "confirmed") return censusReports.some((r) => Array.isArray(r.confirmations) && r.confirmations.includes(userId));
   if (CATEGORY_BY_FILTER[mode]) return censusReports.some((r) => normU(r.category) === CATEGORY_BY_FILTER[mode]);
   if (STATUS_BY_FILTER[mode]) return censusReports.some((r) => normalizeStatus(r.status) === STATUS_BY_FILTER[mode]);

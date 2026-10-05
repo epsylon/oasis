@@ -38,6 +38,8 @@ if (!fs.existsSync(configFilePath)) {
       "wikiMod": "on",
       "emergenciesMod": "on",
       "mailingMod": "on",
+      "roomsMod": "on",
+      "phoneMod": "on",
       "logisticsMod": "on",
       "podcastsMod": "on",
       "campaignsMod": "on",
@@ -85,6 +87,7 @@ if (!fs.existsSync(configFilePath)) {
     "language": "en",
     "wish": "whole",
     "pmVisibility": "whole",
+    "phone": { "visibility": "whole", "dnd": false, "relay": true },
     "lanBroadcasting": true
   };
   fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
@@ -95,17 +98,21 @@ const getConfig = () => {
   const cfg = JSON.parse(configData);
   if (!['whole', 'mutuals', 'only-lan', 'local'].includes(cfg.wish)) cfg.wish = 'whole';
   if (cfg.pmVisibility !== 'whole' && cfg.pmVisibility !== 'mutuals') cfg.pmVisibility = 'whole';
+  if (!cfg.phone || typeof cfg.phone !== 'object') cfg.phone = {};
+  cfg.phone = { visibility: cfg.phone.visibility === 'mutuals' ? 'mutuals' : 'whole', dnd: cfg.phone.dnd === true, relay: cfg.phone.relay !== false };
   if (typeof cfg.ux === 'string') cfg.ux = { current: cfg.ux };
   if (!cfg.ux || typeof cfg.ux !== 'object') cfg.ux = { current: 'blocks' };
   if (cfg.ux.current === 'menus') cfg.ux.current = 'blocks';
-  if (cfg.ux.current !== 'blocks' && cfg.ux.current !== 'ainav' && cfg.ux.current !== 'chats' && cfg.ux.current !== 'feed') cfg.ux.current = 'blocks';
+  if (cfg.ux.current !== 'blocks' && cfg.ux.current !== 'ainav' && cfg.ux.current !== 'chats' && cfg.ux.current !== 'feed' && cfg.ux.current !== 'phone') cfg.ux.current = 'blocks';
   if (cfg.ux.current === 'ainav' && cfg.modules && cfg.modules.aiNavMod !== 'on') cfg.ux.current = 'blocks';
   if (cfg.ux.current === 'chats' && cfg.modules && cfg.modules.chatsMod !== 'on') cfg.ux.current = 'blocks';
-  if (!cfg.blobCache || typeof cfg.blobCache !== 'object' || !Number.isFinite(Number(cfg.blobCache.maxMB))) cfg.blobCache = { maxMB: 2048 };
+  if (cfg.ux.current === 'phone' && cfg.modules && cfg.modules.phoneMod === 'off') cfg.ux.current = 'blocks';
+  if (cfg.ux.current === 'feed' && cfg.modules && cfg.modules.feedMod === 'off') cfg.ux.current = 'blocks';
+  if (!cfg.blobCache || typeof cfg.blobCache !== 'object' || !Number.isFinite(Number(cfg.blobCache.maxMB))) cfg.blobCache = { maxMB: 0 };
   if (!Number.isFinite(Number(cfg.blobCache.pubMaxMB))) cfg.blobCache.pubMaxMB = 0;
   if (cfg.modules && typeof cfg.modules === 'object') {
     if (cfg.modules.backupMod === undefined) cfg.modules.backupMod = cfg.modules.legacyMod === 'off' ? 'off' : 'on';
-    for (const mod of ['wikiMod', 'emergenciesMod', 'mailingMod', 'logisticsMod', 'podcastsMod', 'campaignsMod', 'filesMod']) {
+    for (const mod of ['wikiMod', 'emergenciesMod', 'mailingMod', 'logisticsMod', 'podcastsMod', 'campaignsMod', 'filesMod', 'phoneMod', 'roomsMod']) {
       if (cfg.modules[mod] === undefined) cfg.modules[mod] = 'on';
     }
   }

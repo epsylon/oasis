@@ -42,6 +42,7 @@ const FACTORIES = {
   tasks: '../../src/models/tasks_model',
   chats: '../../src/models/chats_model',
   pads: '../../src/models/pads_model',
+  rooms: '../../src/models/rooms_model',
   wiki: '../../src/models/wiki_model',
   emergencies: '../../src/models/emergencies_model',
   mailing: '../../src/models/mailing_model',
@@ -105,6 +106,7 @@ function makePeer(network, keypair) {
   const tribeCrypto = tribeCryptoFactory(configDir, 'tribes');
   const chatCrypto = tribeCryptoFactory(configDir, 'chats');
   const padCrypto = tribeCryptoFactory(configDir, 'pads');
+  const roomCrypto = tribeCryptoFactory(configDir, 'rooms');
   const mapCrypto = tribeCryptoFactory(configDir, 'maps');
   const calendarCrypto = tribeCryptoFactory(configDir, 'calendars');
   const eventCrypto = tribeCryptoFactory(configDir, 'events');
@@ -124,6 +126,8 @@ function makePeer(network, keypair) {
       deps = { ...baseDeps, chatCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'pads') {
       deps = { ...baseDeps, padCrypto, tribesModel: requireOnce('tribes') };
+    } else if (name === 'rooms') {
+      deps = { ...baseDeps, roomCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'maps') {
       deps = { ...baseDeps, mapCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'calendars') {

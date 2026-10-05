@@ -1,7 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
-const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const ssbDirOf = () => require('../server/ssb_config').path;
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
@@ -23,7 +23,7 @@ function readAddrMap() {
 
 const listPubsFromEbt = () => {
   try {
-    const ebtDir = path.join(os.homedir(), '.ssb', 'ebt');
+    const ebtDir = path.join(ssbDirOf(), 'ebt');
     const files = fs.readdirSync(ebtDir);
     return files.filter(f => f.endsWith('.ed25519'));
   } catch {
@@ -62,7 +62,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     'bookmark','event','task','votes','report','feed','project','industry','industryBlueprint',
     'image','torrent','file','audio','video','document','transfer','post','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
-    'pad','padEntry','wikiPage','emergency','emergencyConfirm','emergencyUpdate','mailingList','logisticsRoute','logisticsRating','podcast','podcastEpisode','podcastPlay','campaign','campaignSignature','campaignUpdate','gameScore','calendar','calendarDate','calendarNote','log',
+    'pad','padEntry','room','roomMember','wikiPage','emergency','emergencyConfirm','emergencyUpdate','mailingList','logisticsRoute','logisticsRating','podcast','podcastEpisode','podcastPlay','campaign','campaignSignature','campaignUpdate','gameScore','calendar','calendarDate','calendarNote','log',
     'schoolCourse','schoolLesson','schoolEnroll','schoolCertificate',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
@@ -287,6 +287,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       else if (t === 'schoolopinion' || rawType === 'schoolopinion') score += 2;
       else if (t === 'shop-purchase') score += 2;
       else if (t === 'pad' || t === 'padentry') score += 3;
+      else if (t === 'room') score += 3;
+      else if (t === 'roommember') score += 1;
       else if (t === 'wikipage') score += 3;
       else if (t === 'emergency') score += 4;
       else if (t === 'emergencyconfirm' || t === 'emergencyupdate') score += 1;
@@ -465,12 +467,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
     const inhabitants = new Set(allMsgs.map(m => m.value.author)).size;
 
-    const secretStat = fs.statSync(`${os.homedir()}/.ssb/secret`);
+    const secretStat = fs.statSync(path.join(ssbDirOf(), 'secret'));
     const createdAt = secretStat.birthtime.toLocaleString();
 
-    const folderSize = getFolderSize(`${os.homedir()}/.ssb`);
-    const logSize = getFolderSize(`${os.homedir()}/.ssb/db2`);
-    const blobsSize = getFolderSize(`${os.homedir()}/.ssb/blobs`);
+    const folderSize = getFolderSize(ssbDirOf());
+    const logSize = getFolderSize(path.join(ssbDirOf(), 'db2'));
+    const blobsSize = getFolderSize(path.join(ssbDirOf(), 'blobs'));
 
     const allTs = scopedMsgs.map(m => m.value.timestamp || 0).filter(Boolean);
     const lastTs = allTs.length ? Math.max(...allTs) : 0;

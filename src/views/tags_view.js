@@ -31,26 +31,11 @@ const renderTagsTable = (filteredTags) => {
 const renderTagsCloud = (mergedTags) => {
   const maxCount = Math.max(...mergedTags.map(t => t.count), 1);
   return div({ class: 'tag-cloud-wrap' },
-    mergedTags.map(tag => {
-      const angle = Math.random() * 2 * Math.PI;
-      const radius = 10 + Math.random() * 40;
-      const x = 50 + Math.cos(angle) * radius;
-      const y = 50 + Math.sin(angle) * radius;
-      const weight = tag.count / maxCount;
-      const fontSize = 12 + Math.round(weight * 32);
-      const hue = 200 + Math.round(weight * 120);
-
-      return a({
-        href: `/search?query=%23${encodeURIComponent(tag.name)}`,
-        class: 'tag-cloud-item',
-        style: `
-          left: ${x}%;
-          top: ${y}%;
-          font-size: ${fontSize}px;
-          color: hsl(${hue},70%,60%);
-        `
-      }, tag.name);
-    })
+    mergedTags.map(tag => a({
+      href: `/search?query=%23${encodeURIComponent(tag.name)}`,
+      class: 'tag-cloud-item',
+      'data-weight': String(1 + Math.round((tag.count / maxCount) * 4))
+    }, tag.name))
   );
 };
 

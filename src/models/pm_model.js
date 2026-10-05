@@ -63,10 +63,25 @@ const privateCacheFor = (ssb, userId) => {
   if (!byUser) { byUser = new Map(); privateCaches.set(ssb, byUser); }
   let c = byUser.get(userId);
   if (!c) {
-    c = { lastTs: 0, seen: new Set(), posts: new Map(), tombClaims: new Map(), authorByKey: new Map(), recpsByKey: new Map(), version: 0 };
+    c = { lastTs: 0, seen: new Set(), posts: new Map(), pams: new Map(), tombClaims: new Map(), authorByKey: new Map(), recpsByKey: new Map(), version: 0 };
     byUser.set(userId, c);
   }
   return c;
+};
+
+const tombedKeys = (cache, userId) => {
+  const tombed = new Set();
+  for (const [target, tombAuthors] of cache.tombClaims.entries()) {
+    const origAuthor = cache.authorByKey.get(target);
+    const origRecps = cache.recpsByKey.get(target) || [];
+    for (const tombAuthor of tombAuthors) {
+      if (tombAuthor === origAuthor || tombAuthor === userId || origRecps.includes(tombAuthor)) {
+        tombed.add(target);
+        break;
+      }
+    }
+  }
+  return tombed;
 };
 
 module.exports = ({ cooler }) => {
@@ -242,12 +257,12 @@ module.exports = ({ cooler }) => {
           continue;
         }
         cache.authorByKey.set(k, v.author);
-        if (c.type === 'post') {
+        if (c.type === 'post' || c.type === 'pam') {
           const to = Array.isArray(c.to) ? c.to : [];
           cache.recpsByKey.set(k, to);
           const author = v.author;
           if (author === userId || to.includes(userId)) {
-            cache.posts.set(k, {
+            (c.type === 'pam' ? cache.pams : cache.posts).set(k, {
               key: k,
               value: { author, content: c },
               timestamp: v.timestamp || tsIn
@@ -256,18 +271,32 @@ module.exports = ({ cooler }) => {
         }
       }
       cache.version += raw.length ? 1 : 0;
-      const tombed = new Set();
-      for (const [target, tombAuthors] of cache.tombClaims.entries()) {
-        const origAuthor = cache.authorByKey.get(target);
-        const origRecps = cache.recpsByKey.get(target) || [];
-        for (const tombAuthor of tombAuthors) {
-          if (tombAuthor === origAuthor || tombAuthor === userId || origRecps.includes(tombAuthor)) {
-            tombed.add(target);
-            break;
-          }
-        }
-      }
+      const tombed = tombedKeys(cache, userId);
       return Array.from(cache.posts.values()).filter(m => m && m.key && (includeDeleted || !tombed.has(m.key)));
+    },
+
+    async listPams() {
+      await this.listAllPrivate();
+      const cache = privateCacheFor(ssb, userId);
+      const tombed = tombedKeys(cache, userId);
+      return Array.from(cache.pams.values()).filter(m => m && m.key && !tombed.has(m.key));
+    },
+
+    async sendPam(recipient, share, durationSec) {
+      const ssbClient = await openSsb();
+      if (!share || typeof share !== 'object') throw new Error('Invalid audio');
+      const recps = uniqueRecps([userId, recipient]);
+      const content = {
+        type: 'pam',
+        from: userId,
+        to: recps,
+        share,
+        durationSec: Math.max(0, Math.round(Number(durationSec) || 0)),
+        sentAt: new Date().toISOString(),
+        private: true
+      };
+      const publishAsync = util.promisify(ssbClient.private.publish);
+      return publishAsync(content, recps);
     },
 
     privateCacheVersion() {

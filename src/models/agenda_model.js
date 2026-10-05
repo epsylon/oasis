@@ -240,19 +240,19 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
         .map(h => ({ ...h, type: 'housing', date: h.availableFrom || h.createdAt, requested: Array.isArray(h.requests) && h.requests.includes(userId) }));
       const myCalendars = calendarsAll
         .filter(c => c.author === userId || (Array.isArray(c.participants) && c.participants.includes(userId)));
-      const calendars = myCalendars.map(c => ({ ...c, type: 'calendar' }));
+      const calendars = myCalendars.map(c => ({ ...c, id: c.rootId || c.id || c.key, type: 'calendar' }));
       const calendarDates = [];
       if (calendarsModel && typeof calendarsModel.getDatesForCalendar === 'function') {
         for (const cal of myCalendars) {
           try {
-            const dates = await calendarsModel.getDatesForCalendar(cal.id || cal.key);
+            const dates = await calendarsModel.getDatesForCalendar(cal.rootId || cal.id || cal.key);
             for (const d of (dates || [])) {
               calendarDates.push({
                 type: 'calendarDate',
                 id: d.key || d.id,
                 title: d.label || cal.title || 'Calendar date',
                 calendarTitle: cal.title || '',
-                calendarId: cal.id || cal.key,
+                calendarId: cal.rootId || cal.id || cal.key,
                 date: d.date || d.createdAt,
                 label: d.label || '',
                 author: cal.author,

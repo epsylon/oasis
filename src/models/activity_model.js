@@ -758,7 +758,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       }
 
       const tribeInternalTypes = new Set(['tribe-content', 'tribeParliamentCandidature', 'tribeParliamentTerm', 'tribeParliamentProposal', 'tribeParliamentRule', 'tribeParliamentLaw', 'tribeParliamentRevocation']);
-      const hiddenTypes = new Set(['wallet', 'bankWallet', 'padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'logPublic', 'gameScore', 'pollVote', 'pollClose', 'pollOpinion', 'curriculum', 'schoolLesson', 'schoolEnroll', 'schoolCertificate', 'schoolProgress', 'schoolExam', 'schoolExamResult', 'school-invite', 'schoolExamQuestion', 'schoolLessonMedia']);
+      const hiddenTypes = new Set(['wallet', 'bankWallet', 'padEntry', 'roomMember', 'chatMessage', 'calendarDate', 'calendarNote', 'calendarReminderSent', 'taskReminderSent', 'feed-action', 'pubBalance', 'pubAvailability', 'log', 'logPublic', 'gameScore', 'pollVote', 'pollClose', 'pollOpinion', 'curriculum', 'schoolLesson', 'schoolEnroll', 'schoolCertificate', 'schoolProgress', 'schoolExam', 'schoolExamResult', 'school-invite', 'schoolExamQuestion', 'schoolLessonMedia']);
       const chatThreadItems = await buildChatThreads(ssbClient, idToAction, rootOf, deduped);
       deduped = deduped.concat(chatThreadItems);
       const isAllowedTribeActivity = (a) => {
@@ -780,6 +780,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         const c = a.content || {};
         if (c.encryptedPayload) return false;
         if (a.type === 'pad' && c.status !== 'OPEN') return false;
+        if (a.type === 'room' && (c.status !== 'OPEN' || c.encrypted === true)) return false;
         if (a.type === 'chat' && c.status !== 'OPEN') return false;
         if (a.type === 'calendar' && c.status !== 'OPEN') return false;
         if (a.type === 'event' && String(c.isPublic || '').toLowerCase() === 'private' && c.organizer !== userId && !(Array.isArray(c.attendees) && c.attendees.includes(userId))) return false;
@@ -843,6 +844,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       else if (filter === 'industry')
         out = deduped.filter(a => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(a.type) && isVisible(a));
       else if (filter === 'pad') out = deduped.filter(a => a.type === 'pad' && (a.content || {}).status === 'OPEN');
+      else if (filter === 'room') out = deduped.filter(a => a.type === 'room' && (a.content || {}).status === 'OPEN' && (a.content || {}).encrypted !== true);
       else if (filter === 'wiki') out = deduped.filter(a => a.type === 'wikiPage' && isVisible(a));
       else if (filter === 'emergency') out = deduped.filter(a => (a.type === 'emergency' || a.type === 'emergencyUpdate') && isVisible(a));
       else if (filter === 'campaign') out = deduped.filter(a => (a.type === 'campaign' || a.type === 'campaignUpdate') && isVisible(a));

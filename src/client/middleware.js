@@ -92,7 +92,7 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     if (httpDebug) console.log(`[http] ${ctx.method} ${ctx.path}`);
     
     const isClearnet = isClearnetPath(ctx.request);
-    ctx.set("Content-Security-Policy", buildCsp(isClearnet));
+    ctx.set("Content-Security-Policy", buildCsp(isClearnet, { frames: ctx.method === "GET" && /^\/games\/[a-z0-9]+\/?$/.test(ctx.path) }));
     ctx.set("X-Frame-Options", "SAMEORIGIN");
 
     ctx.set("X-Content-Type-Options", "nosniff");

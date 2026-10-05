@@ -190,7 +190,7 @@ const feedChipFor = (filter, censusF) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusF)) return true;
   if (mode === "MINE") return censusF.some((f) => String(f && f.value && f.value.author) === String(config.keys.id));
-  if (mode === "RECENT") return censusF.some((f) => (Number(f && f.value && f.value.timestamp) || 0) >= Date.now() - 86400000);
+  if (mode === "RECENT") return censusF.length > 0;
   return true;
 };
 
@@ -271,17 +271,13 @@ exports.feedView = (feeds, opts = "ALL") => {
 };
 
 exports.feedCreateView = (opts = {}) => {
-  const { q, tag, msg } = normalizeOptions(opts);
-  const errorBanner = msg === "feedTooLong"
-    ? div({ class: "feed-error-msg" }, p(i18n.publishTooLong || "Your message is too long. Please shorten it."))
-    : null;
+  const { q, tag } = normalizeOptions(opts);
 
   return template(
     i18n.createFeedTitle,
     section(
       div({ class: "tags-header module-header-line" }, h2(i18n.createFeedTitle), p(i18n.FeedshareYourOpinions)),
       div({ class: "mode-buttons-row" }, ...generateFilterButtons(["ALL"], "CREATE", "/feed", { q, tag })),
-      errorBanner,
       renderFeedComposer({ text: opts.text, media: opts.media })
     )
   );

@@ -31,7 +31,7 @@ const renderFilterBar = (filter, q, showSearch = true, total = null, censusList 
     if (m === filter || m === "ALL") return true;
     if (m === "TOP") return censusB.length > 0;
     if (m === "MINE") return censusB.some(b => String(b.author) === String(userId));
-    if (m === "RECENT") return censusB.some(b => (Date.parse(b.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "RECENT") return censusB.length > 0;
     if (m === "FAVORITES") return censusB.some(b => b.isFavorite);
     return true;
   };

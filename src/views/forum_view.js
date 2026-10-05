@@ -226,11 +226,10 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
   const emptyModForum = moduleIsEmpty(getFilteredForums(currentFilter || 'all', forums), currentFilter || 'all', 'all', params.q);
   const censusForums = Array.isArray(params.censusList) ? params.censusList : (Array.isArray(forums) ? forums : []);
   const presentCats = new Set(censusForums.map(f => f && f.category).filter(Boolean));
-  const dayAgoForum = Date.now() - 86400000;
   const baseChipVisible = (mode) => {
     if (mode === currentFilter || mode === 'all') return true;
     if (mode === 'mine') return censusForums.some(f => String(f.author) === String(userId));
-    if (mode === 'recent') return censusForums.some(f => new Date(f.createdAt).getTime() >= dayAgoForum);
+    if (mode === 'recent') return censusForums.length > 0;
     return censusForums.length > 0;
   };
   return template(i18n.forumTitle,

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, span, strong } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock, renderModuleStats } = require('./main_views');
+const { renderCallButton, template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock, renderModuleStats } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { renderContentStats } = require('./clearnet_view');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -153,6 +153,7 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
     ecoTax:   raw.ecoTax   !== false,
     larpSign: raw.larpSign === true,
     gpg:      raw.gpg      === true,
+    phone:    raw.phone === 'mutuals' || raw.phone === 'off' ? raw.phone : 'whole',
     clearnet: hasClearnet,
     fediverse: raw.fediverse === true,
     fediverseHandle: typeof raw.fediverseHandle === 'string' ? raw.fediverseHandle : ''
@@ -178,7 +179,8 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
         deviceSource: user.deviceSource, activityBucket: user.lastActivityBucket,
         gpgFingerprint: user.gpgFingerprint, ecoAddress: user.ecoAddress,
         estimatedUBI: user.estimatedUBI, lastClaimedDate: user.lastClaimedDate, totalClaimed: user.totalClaimed,
-        larpHouse: user.larpHouse, stats: user.stats
+        larpHouse: user.larpHouse, stats: user.stats,
+        mutual: !!(user.relationship && user.relationship.following && user.relationship.followsMe)
       }, { excludeContent: true }),
       filter === 'CVs'
         ? div(
@@ -374,6 +376,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
     ecoTax:   rawPrefs.ecoTax   !== false,
     larpSign: rawPrefs.larpSign === true,
     gpg:      rawPrefs.gpg      === true,
+    phone:    rawPrefs.phone === 'mutuals' || rawPrefs.phone === 'off' ? rawPrefs.phone : 'whole',
     clearnet: rawPrefs.clearnet === true || clearnetSubKeys.some(k => rawPrefs[k] === true),
     fediverse: rawPrefs.fediverse === true,
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : ''
@@ -416,15 +419,17 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
             isMe, fediverseConfigured, prefs, id: id || viewedId,
             karmaScore, carbonGrams, deviceSource: safe.deviceSource, activityBucket: providedBucket,
             gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
-            larpHouse, stats: safe.stats
+            larpHouse, stats: safe.stats,
+            mutual: !!(safe.relationship && safe.relationship.following && safe.relationship.followsMe)
           }, { excludeContent: true }),
           (!isMe && (id || viewedId))
             ? div({ class: 'cv-actions doc-export-actions' },
                 form(
                   { method: 'GET', action: '/pm' },
                   input({ type: 'hidden', name: 'recipients', value: id || viewedId }),
-                  button({ type: 'submit', class: 'filter-btn' }, i18n.pmCreateButton)
-                )
+                  button({ type: 'submit', class: 'filter-btn' }, `✉ ${i18n.pmCreateButton}`)
+                ),
+                renderCallButton(id || viewedId, { pam: true })
               )
             : null,
           (!isMe && (id || viewedId) && safe.relationship)

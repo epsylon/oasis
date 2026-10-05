@@ -11,7 +11,6 @@ const userId = config.keys.id;
 const BASE_FILTERS = ["RECENT", "MINE", "ALL", "SIGNED", "TOP"];
 const STATUSES = ["OPEN", "ACHIEVED", "CLOSED"];
 const CATEGORIES = ["ENVIRONMENT", "RIGHTS", "HEALTH", "EDUCATION", "INFRASTRUCTURE", "CULTURE", "ECONOMY", "OTHER"];
-const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const filterLabel = (f) => String(i18n[`campaignFilter${cap(f)}`] || f).toUpperCase();
@@ -45,7 +44,7 @@ const campaignChipFor = (mode, census) => {
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(c => String(c.author) === String(userId));
   if (mode === "SIGNED") return census.some(c => Array.isArray(c.signers) && c.signers.includes(userId));
-  if (mode === "RECENT") return census.some(c => c.lastActivityTs >= Date.now() - RECENT_MS);
+  if (mode === "RECENT") return census.length > 0;
   if (mode === "TOP") return census.some(c => c.signatureCount > 0);
   if (STATUSES.includes(mode)) return census.some(c => c.status === mode);
   if (CATEGORIES.includes(mode)) return census.some(c => c.category === mode);

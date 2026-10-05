@@ -929,6 +929,99 @@ a.create-button {
 .peers-technical-block .block-info-table td[data-label=""]::before { content: none !important; }
 .peers-list .block-info-table td .peer-key,
 .peers-technical-block .block-info-table td .peer-key { text-align: right !important; }
+.phone-history td.phone-dir,
+.phone-contact .phone-dir,
+.phone-dir {
+  display: none !important;
+}
+.phone-contact {
+  gap: 6px !important;
+  padding: 8px !important;
+}
+.phone-contact .user-link {
+  flex: 1 1 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.phone-contact .date-link {
+  flex: 0 1 auto !important;
+  font-size: 12px !important;
+}
+.phone-history,
+.phone-history tbody {
+  display: block !important;
+  width: 100% !important;
+}
+.phone-history tr:first-child {
+  display: none !important;
+}
+.phone-history tr {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border: 1px solid #444 !important;
+  border-radius: 10px !important;
+  margin: 0 0 8px 0 !important;
+  padding: 4px 10px !important;
+}
+.phone-history td {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: baseline !important;
+  gap: 10px !important;
+  width: 100% !important;
+  border: 0 !important;
+  padding: 3px 0 !important;
+  font-size: 12px !important;
+  text-align: right !important;
+}
+.phone-history td::before {
+  content: attr(data-label);
+  flex: 0 0 auto !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  font-size: 10px !important;
+  letter-spacing: .03em;
+  opacity: .7 !important;
+  text-align: left !important;
+  white-space: nowrap !important;
+}
+.phone-history td.phone-row-actions {
+  justify-content: flex-end !important;
+  padding: 0 !important;
+  margin-top: -6px !important;
+}
+.phone-history .phone-row-delete .btn-singleview,
+.phone-latest-row .phone-row-delete .btn-singleview {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  line-height: 1 !important;
+  padding: 0 !important;
+  font-size: 14px !important;
+}
+.phone-history td.phone-row-actions::before {
+  content: none !important;
+}
+.phone-latest-row .phone-row-delete {
+  margin-left: auto !important;
+}
+.phone-history td .user-link {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+.peers-list .block-info-table td .ubi-tick-ok,
+.peers-list .block-info-table td .peer-tor-no,
+.peers-technical-block .block-info-table td .ubi-tick-ok,
+.peers-technical-block .block-info-table td .peer-tor-no {
+  padding: 0 !important;
+  line-height: 1.2 !important;
+}
 
 .conn-actions,
 .peers-conn-actions {
@@ -1117,3 +1210,4 @@ a.create-button {
 }
 .hemi-legend-count { margin-left: auto !important; }
 .hemi-modes { flex-wrap: wrap !important; }
+.room-item .mailing-archive-head{flex-wrap:wrap}

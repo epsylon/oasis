@@ -39,7 +39,7 @@ This short guide shows you how to connect your account.
    - **Access token**: the token you just copied.
 4. Click **Connect it**.
 
-That's it. Oasis checks the token and opens your timeline. From now on you'll find **Multiverse → Timelines** in the main menu (the entry only appears while at least one account — Mastodon or Telegram — is connected).
+That's it. Oasis checks the token and opens your timeline. From now on you'll find **Multiverse → Timelines** in the main menu (the entry only appears while at least one account — Mastodon, Telegram or PeerTube — is connected).
 
 To stop using it, go back to **Settings → Multiverse** and click **Disconnect**.
 

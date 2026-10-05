@@ -2,7 +2,7 @@ const fs = require('fs');
 const pull = require('../server/node_modules/pull-stream');
 
 const BLOB_RE = /&[A-Za-z0-9+/=]{44}\.sha256/g;
-const DEFAULT_MAX_MB = 2048;
+const DEFAULT_MAX_MB = 0;
 const PROTECT_MS = 24 * 60 * 60 * 1000;
 const FLUSH_MS = 60 * 1000;
 

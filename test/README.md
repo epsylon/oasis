@@ -2,8 +2,6 @@
 
 Per-module unit/integration tests covering all publishing actions across the network.
 
-**Current status:** 97 test files / 1340 tests passing.
-
 Module tests live under `test/mods/` to keep them grouped and the top-level
 `test/` directory clean (so `results/`, the runner, and the README are easy
 to find).
@@ -23,82 +21,48 @@ must hold across the whole codebase:
 
 ## Quick start
 
-From the `oasis/` directory:
+Tests never use your `~/.ssb`: they run against a throwaway directory given
+in `ssb_path`. From `test/`:
 
 ```sh
-# Run everything (subprocess per module + safe ~/.ssb isolation):
-bash test/run.sh
-
-# Skip the prompt:
-bash test/run.sh --yes
-
-# Run all in a single Node process (no isolation):
-node test/run.js
+# Run every module:
+ssb_path=<an empty scratch dir> node run.js
 
 # Run a single module:
-node test/run.js mods/tribes
-node test/run.js mods/media/audios
-
-# Or use the per-module run.sh (no isolation, fast iteration):
-bash test/mods/tribes/run.sh
-bash test/mods/forum/run.sh
-bash test/mods/media/audios/run.sh
-
-# Run all + seed dummy content (so you can boot oasis after and inspect):
-# The seeder covers every content module (school, games, banking/UBI included):
-# it also fakes a neighbour that publishes an ECOin address, announces itself
-# as a UBI PUB and pays one UBI transfer, so Banking → UBI and Transfers → UBI
-# have something to show.
-bash test/run.sh --seed
+ssb_path=<an empty scratch dir> node run.js mods/tribes
+ssb_path=<an empty scratch dir> node run.js mods/media/audios
 
 # Show stack traces on failure:
-STACK=1 node test/run.js
+STACK=1 ssb_path=<an empty scratch dir> node run.js
 ```
 
-## ~/.ssb isolation
+From the `oasis/` directory, `./oasis.sh test` (which runs `test/run.sh`) does
+the same for every module, each in its own Node process, and writes a report
+to `test/results/`.
 
-`bash test/run.sh` (the aggregate runner) protects your real `~/.ssb`:
+## The test directory
 
-1. Asks for confirmation before touching anything.
-2. Moves your current `~/.ssb` to `~/.ssb-bak-<timestamp>`.
-3. Creates a fresh empty `~/.ssb` for the tests.
-4. Runs all tests.
-5. **On exit, the test `~/.ssb` is KEPT** so you can boot oasis and visually inspect what the tests produced.
-6. Your original `~/.ssb` stays at the backup path for you to restore manually.
+`./oasis.sh test` never touches your `~/.ssb`. It runs the suites against a
+test directory of its own, `~/.ssb-oasis-test` (or the one in
+`OASIS_TEST_SSB`), which it empties and recreates on every run, and it refuses
+to run if that directory is `~/.ssb` itself.
 
-After tests, the runner prints exactly how to restore:
-```
-Test ~/.ssb left in place for visual inspection.
-  test data:          /home/<you>/.ssb
-  your original:      /home/<you>/.ssb-bak-<ts>
-To boot oasis against the test data:  sh oasis.sh
-To restore your original later:       rm -rf /home/<you>/.ssb && mv /home/<you>/.ssb-bak-<ts> /home/<you>/.ssb
-```
-
-Flags:
-- `-y` / `--yes` — skip the confirmation prompt (CI use).
-- `--restore` — restore your original `~/.ssb` automatically on exit (destroys test data).
-- `--no-isolation` — run against the current `~/.ssb` (DANGEROUS, may LOCK-conflict).
-- `clean-all` — delete every report in `test/results/`, restore your real `~/.ssb` from the latest backup, and remove all stale backups. Useful when you want to wipe traces of testing entirely.
+Options:
+- `--seed` — after all tests pass, fill the test directory with dummy content
+  through the real SSB models (every content module, school, games and
+  banking/UBI included).
+- `dummy` — skip the tests and only fill a fresh test directory with dummy
+  content.
+- `clean-all` — delete the test reports and the test directory, then exit.
 - `-h` / `--help` — show usage.
-
-If oasis is currently running, **STOP IT FIRST** (the LOCK on `~/.ssb` will conflict).
-
-Examples:
-```sh
-bash test/run.sh                  # run, prompt, keep test ~/.ssb for inspection
-bash test/run.sh --yes            # skip prompt
-bash test/run.sh --yes --restore  # CI-friendly: run + auto-restore original
-bash test/run.sh clean-all        # wipe reports + restore original ~/.ssb
-bash test/run.sh clean-all --yes  # wipe without prompting
-```
 
 ## Layout
 
 ```
 test/
-  run.sh                       Aggregate runner (subprocess per module + ~/.ssb isolation)
+  run.sh                       Aggregate runner (subprocess per module, own test directory)
   run.js                       Single-process Node test runner
+  seed.js                      Dummy content for the test directory (--seed, dummy)
   README.md                    This file
   results/                     Generated reports (unit_test_<timestamp>.md)
   helpers/
@@ -161,6 +125,8 @@ test/
   mods/pads                pads.test.js
   mods/parliament          cycles.test.js parliament.test.js rules.test.js
   mods/pdf                 content-pdf.test.js
+  mods/peers               peers.test.js
+  mods/phone               phone.test.js
   mods/pixelia             pixelia.test.js
   mods/pm                  pm.test.js pm_refs.test.js
   mods/podcasts            podcasts.test.js
@@ -169,6 +135,7 @@ test/
   mods/profile             qr.test.js
   mods/projects            projects.test.js
   mods/reports             reports.test.js
+  mods/rooms               rooms.test.js
   mods/school              school.test.js
   mods/search              search.test.js
   mods/security            security.test.js request-guards.test.js
@@ -189,12 +156,8 @@ test/
   mods/workflows           workflows.test.js
 ```
 
-Most module directories have their own `run.sh` (50 of 76); for the rest use
-`node test/run.js mods/<module>`:
-```sh
-bash test/mods/tribes/run.sh
-node test/run.js mods/conventions
-```
+Run any of them on its own from `test/`, e.g.
+`ssb_path=<an empty scratch dir> node run.js mods/conventions`.
 
 ## Test pattern
 
@@ -237,7 +200,7 @@ When `content.recps` is set, `ssb-keys.box(content, recps)` is invoked and the m
 
 ## Generated report
 
-Every `bash test/run.sh` generates `test/results/unit_test_<YYYY-MM-DD_HH-MM-SS>.md` with:
+Every `./oasis.sh test` generates `test/results/unit_test_<YYYY-MM-DD_HH-MM-SS>.md` with:
 1. **Summary** — tests passed / total, modules passed / total.
 2. **✅ Passing modules** — every module with timing and individual test names.
 3. **❌ Failing modules** (only if any) — full output including stack traces.
@@ -246,24 +209,17 @@ Every `bash test/run.sh` generates `test/results/unit_test_<YYYY-MM-DD_HH-MM-SS>
 
 1. Create `test/mods/<module>/<name>.test.js` following the pattern.
 2. If the model isn't registered, add it to `FACTORIES` in `helpers/setup.js`. If it has unusual deps (services, cipher, etc.), add a branch in `requireOnce`.
-3. Optionally create `test/mods/<module>/run.sh` for fast iteration:
-   ```bash
-   #!/usr/bin/env bash
-   export NODE_NO_WARNINGS=1
-   cd "$(dirname "$0")/../.."
-   node test/run.js mods/<module> "$@"
-   ```
-4. Nothing to register: `test/run.sh` discovers every directory under
+3. Nothing to register: `test/run.sh` discovers every directory under
    `test/mods/` that contains a `*.test.js`. The `MODULES` array at the top only
    fixes the order of the first ones; anything not listed is appended
    automatically.
-5. `chmod +x test/mods/<module>/run.sh && bash test/mods/<module>/run.sh`.
+4. Run it from `test/`: `ssb_path=<an empty scratch dir> node run.js mods/<module>`.
 
 ## What's covered
 
 - All major content publish actions: `createX`, `updateX`, `deleteX`
 - Voting / opinion casting / attending / assigning
-- Multi-user flows (A creates → B interacts)
+- Flows between several inhabitants (A creates → B interacts)
 - Privacy / opacity (member vs non-member visibility)
 - Tribe cryptography (wrap/unwrap, AAD, invites, sub-tribes)
 - Sub-tribe content publishing + parent/sub key isolation
@@ -273,6 +229,7 @@ Every `bash test/run.sh` generates `test/results/unit_test_<YYYY-MM-DD_HH-MM-SS>
 - Backup: encrypted keys export/import, full `.oasisbk` round trip and restore
 - Clearnet HUB: public listing, filters, search and read-only guarantee (`mods/clearnet`)
 - Every module view boots from a cold start and detail views never leak content chips on an empty census (`mods/views`)
+- Phone (calls between nodes, through a pub, joint calls, private audio messages, numbers), Rooms (meeting on a pub, refusals) and Peers (failing pubs, pausing the network)
 
 ## i18n consistency (`mods/i18n`)
 
@@ -284,7 +241,7 @@ has the exact same set of keys** — only the values (the translations) differ.
 It checks:
 
 1. **Each language contains every English key** — fails listing the missing keys
-   per language (e.g. `fr is missing 3 key(s): …`).
+   per language (e.g. `fr is missing N key(s): …`).
 2. **English has no gaps** — English is not missing any key that exists in another
    language, so every file shares an identical key set.
 3. **No undefined references** — every `i18n.<key>` used in `src/views/**` is
@@ -292,8 +249,10 @@ It checks:
    hardcoded English text (e.g. a `PRIVATE` chip whose `privacyPrivate` key was
    never added to the translations).
 
-Run it on its own with `node run.js mods/i18n`. On failure it prints the exact
-keys involved, so adding a label means: add its key to **every** language file.
+Run it on its own from `test/` with
+`ssb_path=<an empty scratch dir> node run.js mods/i18n`. On failure it prints
+the exact keys involved, so adding a label means: add its key to **every**
+language file.
 
 ## Out of scope
 
@@ -302,7 +261,3 @@ These models are deliberately not tested as unit tests:
 - **`panicmode`** / **`exportmode`** — destructive operations.
 - **`wallet`** — requires external `localhost:7474` RPC; tested via `banking` mock.
 - **`tribes_content`** — covered by `tribes` and `sub-tribes` test suites.
-
-## CI
-
-Add a job that runs `bash test/run.sh --yes --restore` from the `oasis/` directory on Linux + Node ≥20. The `--restore` flag is appropriate for CI (no need to inspect test data visually).

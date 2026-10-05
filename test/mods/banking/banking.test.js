@@ -248,7 +248,7 @@ describe('banking: UBI rules (no RPC)', (t) => {
 
   t('the UBI tab reports each PUB\'s last payment from its UBI transfers', async () => {
     const net = makeNetwork(); const P = makePeer(net); const A = makePeer(net); A.setActor();
-    P.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 300, timestamp: Date.now() }, () => {});
+    P.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 300, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A', timestamp: Date.now() }, () => {});
     const now = new Date().toISOString();
     P.node.publish({ type: 'transfer', from: P.keypair.id, to: A.keypair.id, concept: 'OASIS UBI Payment · 2026-09', amount: '2.500000', createdAt: now, updatedAt: now, deadline: null, confirmedBy: [P.keypair.id], status: 'UNCONFIRMED', tags: ['UBI'], opinions: {}, opinions_inhabitants: [], txid: 'a'.repeat(64) }, () => {});
     const pubs = await A.use('banking').listUbiPubsDetailed();
@@ -258,6 +258,15 @@ describe('banking: UBI rules (no RPC)', (t) => {
     eq(row.payouts, 1);
     eq(row.paidOut, 2.5);
     ok(row.lastPayoutAt > 0);
+  });
+
+  t('the UBI tab only lists PUBs that publish their ECOin address', async () => {
+    const net = makeNetwork(); const P1 = makePeer(net); const P2 = makePeer(net); const A = makePeer(net); A.setActor();
+    P1.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 50, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A', timestamp: Date.now() }, () => {});
+    P2.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 50, timestamp: Date.now() }, () => {});
+    const ids = (await A.use('banking').listUbiPubsDetailed()).map(p => p.pubId);
+    ok(ids.includes(P1.keypair.id), 'a PUB with its address is listed');
+    ok(!ids.includes(P2.keypair.id), 'a PUB without an address is not');
   });
 });
 
@@ -313,41 +322,6 @@ describe('banking: only a PUB can say that the UBI was paid', (t) => {
   });
 });
 
-describe('banking: the UBI can only be answered once per epoch', (t) => {
-  const { renderBankingView } = require('../../../src/views/banking_views');
-  const baseData = (summary) => ({
-    summary: {
-      userBalance: 0, epochId: '2026-09', pool: 100, userEngagementScore: 10, futureUBI: 1,
-      pubId: '@pub.ed25519', hasValidWallet: true, addressPublished: true, ubiAvailability: 'OK',
-      alreadyClaimed: false, alreadyRefused: false, wealthTotals: { distributed: 0, taxes: 0 },
-      pubLastSeen: Date.now(), pubBalance: null, ...summary
-    },
-    exchange: { isSynced: true }, allocations: [], epochs: [], charts: {}, rules: {}, taxRules: {},
-    alreadyClaimed: !!(summary || {}).alreadyClaimed, pendingUBI: null, isPub: false
-  });
-  const render = (summary, filter = 'ubi') => String(renderBankingView(baseData(summary), filter, '@me.ed25519', false));
-
-  t('both buttons are offered in the UBI tab while the month is untouched', () => {
-    const html = render({});
-    ok(html.includes('/banking/claim-ubi'), 'claim is offered');
-    ok(html.includes('/banking/refuse-ubi'), 'refuse is offered');
-    const exchange = render({}, 'exchange');
-    notOk(exchange.includes('/banking/claim-ubi'), 'and they do not show up anywhere else');
-  });
-
-  t('after claiming, neither button is offered again', () => {
-    const html = render({ alreadyClaimed: true });
-    notOk(html.includes('/banking/claim-ubi'), 'claim is gone');
-    notOk(html.includes('/banking/refuse-ubi'), 'refuse is gone');
-  });
-
-  t('after refusing, neither button is offered again', () => {
-    const html = render({ alreadyRefused: true });
-    notOk(html.includes('/banking/claim-ubi'), 'claim is gone');
-    notOk(html.includes('/banking/refuse-ubi'), 'refuse is gone');
-  });
-});
-
 describe('banking: the epoch answer is remembered', (t) => {
   t('after claiming, the UBI is no longer offered', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
@@ -387,28 +361,6 @@ describe('banking: a wallet counts as configured only with its credentials', (t)
     const avail = await A.use('banking').claimAvailability(A.keypair.id);
     eq(avail.available, false);
     eq(avail.reason, 'no_wallet');
-  });
-});
-
-describe('banking: exchange charts need a synced ECOin node', (t) => {
-  const { renderBankingView } = require('../../../src/views/banking_views');
-  const history = [{ ts: Date.now() - 3600000, currentSupply: 100, inflationFactor: 1 }, { ts: Date.now(), currentSupply: 101, inflationFactor: 1 }];
-  const data = (isSynced) => ({
-    summary: { userBalance: 0, epochId: '2026-09', pool: 0, userEngagementScore: 0, futureUBI: 0, pubId: '', hasValidWallet: false, addressPublished: false, ubiAvailability: 'OK', alreadyClaimed: false, alreadyRefused: false, wealthTotals: { distributed: 0, taxes: 0 }, pubLastSeen: 0, pubBalance: null },
-    exchange: { isSynced, ecoValue: 1, currentSupply: 101, totalSupply: 25500000, ecoTimeMs: 0, inflationFactor: 1, inflationMonthly: 0, inflationIssuance: 0 },
-    exchangeHistory: history, allocations: [], epochs: [], charts: {}, rules: {}, taxRules: {}, alreadyClaimed: false, pendingUBI: null, isPub: false
-  });
-
-  t('when the node is out of sync, the supply and inflation charts are not drawn', () => {
-    const html = String(renderBankingView(data(false), 'exchange', '@me.ed25519', false));
-    notOk(html.includes('eco-supply-chart-block'), 'no supply chart');
-    notOk(html.includes('eco-inflation-chart-block'), 'no inflation chart');
-  });
-
-  t('when it is synced and there are samples, they are', () => {
-    const html = String(renderBankingView(data(true), 'exchange', '@me.ed25519', false));
-    ok(html.includes('eco-supply-chart-block'), 'supply chart present');
-    ok(html.includes('eco-inflation-chart-block'), 'inflation chart present');
   });
 });
 

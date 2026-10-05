@@ -220,7 +220,7 @@ async function buildLeaderMeta(leader) {
 
 const safeArr = v => Array.isArray(v) ? v : [];
 const safeText = v => String(v || '').trim();
-const { safeReturnTo, safeRefererRedirect, pickMsgKeys, isMsgKey, publicModeGuard, isClearnetPath } = require('./request_guards');
+const { safeReturnTo, safeRefererRedirect, pickMsgKeys, isMsgKey, publicModeGuard, isClearnetPath, isLocalPath } = require('./request_guards');
 
 const { stripDangerousTags, sanitizeHtml } = require('./sanitizeHtml');
 
@@ -240,9 +240,31 @@ const sanitizeMsgText = (msg) => {
 const sanitizeMessages = (msgs) => Array.isArray(msgs) ? msgs.map(sanitizeMsgText) : msgs;
 
 const parseBool01 = v => String(Array.isArray(v) ? v[v.length - 1] : v || '') === '1';
-const sendErrorPage = (ctx, message, { title, status } = {}) => {
+const ERROR_PATTERNS = [
+  [/^forbidden\.?$/i, 'errorForbidden'],
+  [/not found/i, 'errorNotFound'],
+  [/\bis closed\b/i, 'errorClosed'],
+  [/invite-only/i, 'errorInviteOnly'],
+  [/too long/i, 'errorTooLong'],
+  [/\brequired\b/i, 'errorRequired'],
+  [/^invalid\b|\binvalid\b/i, 'errorInvalid'],
+  [/not the author|only the (author|owner)/i, 'errorNotAuthor']
+];
+const localizeError = (message) => {
+  const t = require('../views/main_views').i18n;
+  const m = String(message == null ? '' : message).trim();
+  if (!m) return t.actionFailed;
+  if (typeof t[m] === 'string') return t[m];
+  if (Object.values(t).some(v => v === m)) return m;
+  const hit = ERROR_PATTERNS.find(([re]) => re.test(m));
+  if (hit && typeof t[hit[1]] === 'string') return t[hit[1]];
+  const en = require('../client/assets/translations/oasis_en').en || {};
+  return t.actionFailed === en.actionFailed ? m : t.actionFailed;
+};
+const sendErrorPage = (ctx, rawMessage, { title, status, keep, to, exact } = {}) => {
   const { errorView } = require('../views/main_views');
-  const ref = ctx.request.header.referer;
+  const message = exact ? String(rawMessage || '') : localizeError(rawMessage);
+  const ref = to && isLocalPath(to) ? `${ctx.protocol}://${ctx.host}${to}` : ctx.request.header.referer;
   let backHref = '/';
   let backUrl = null;
   try {
@@ -255,8 +277,12 @@ const sendErrorPage = (ctx, message, { title, status } = {}) => {
     }
   } catch (_) {}
   const backIsPage = !!backUrl && (() => { try { return !!router.match(backUrl.pathname, 'GET').route; } catch (_) { return false; } })();
-  if (backUrl && backIsPage && ctx.method !== 'GET' && (!status || status === 400 || status === 403 || status === 404) && !backUrl.pathname.startsWith('/c/')) {
+  if (backUrl && backIsPage && (ctx.method !== 'GET' || to) && (!status || status === 400 || status === 403 || status === 404) && !backUrl.pathname.startsWith('/c/')) {
     backUrl.searchParams.set('error', String(message || ''));
+    for (const [k, v] of Object.entries(keep || {})) {
+      if (v === undefined || v === null || v === '') backUrl.searchParams.delete(k);
+      else backUrl.searchParams.set(k, String(v).slice(0, 2000));
+    }
     ctx.redirect(backUrl.pathname + backUrl.search + backUrl.hash);
     return;
   }
@@ -902,6 +928,7 @@ const QR_JOIN_MODS = {
   events:    { mod: 'eventsMod',    join: async (code) => { const { eventId } = await eventsModel.joinByInvite(code); return `/events/${encodeURIComponent(eventId)}`; } },
   chats:     { mod: 'chatsMod',     join: async (code) => { const chatKey = await chatsModel.joinByInvite(code); return `/chats/${encodeURIComponent(chatKey)}`; } },
   pads:      { mod: 'padsMod',      join: async (code) => { const padId = await padsModel.joinByInvite(code); return `/pads/${encodeURIComponent(padId)}`; } },
+  rooms:     { mod: 'roomsMod',     join: async (code) => { const roomId = await roomsModel.joinByInvite(code); return `/rooms/${encodeURIComponent(roomId)}`; } },
   calendars: { mod: 'calendarsMod', join: async (code) => { const calId = await calendarsModel.joinByInvite(code); return `/calendars/${encodeURIComponent(calId)}`; } }
 };
 const getUserTribeIds = async (uid) => {
@@ -1515,6 +1542,7 @@ const onboardingModel = require('../models/onboarding_model')({ cooler, ssbPath:
 const chatCrypto = require('../models/crypto')(ssbConfig.path, 'chats');
 const schoolCrypto = require('../models/crypto')(ssbConfig.path, 'school');
 const padCrypto = require('../models/crypto')(ssbConfig.path, 'pads');
+const roomCrypto = require('../models/crypto')(ssbConfig.path, 'rooms');
 const mapCrypto = require('../models/crypto')(ssbConfig.path, 'maps');
 const calendarCrypto = require('../models/crypto')(ssbConfig.path, 'calendars');
 const eventCrypto = require('../models/crypto')(ssbConfig.path, 'events');
@@ -1572,6 +1600,12 @@ const sendDecryptedBlob = async (ctx, cipher, filename, mime) => {
   ctx.set('Content-Disposition', contentDisposition('attachment', filename || 'file'));
   ctx.body = fileshareModel.readShareStream(pointer);
 };
+const WISH_LEVELS = ['whole', 'mutuals', 'only-lan', 'local'];
+const phoneNumbers = require('../models/phone_number');
+const PHONE_FILTERS = ['all', 'records', 'missed', 'incoming', 'outgoing', 'create'];
+const PHONE_GROUP_MAX = require('../server/phone_module').GROUP_MAX;
+const phoneModel = require('../models/phone_model')({ cooler, pmModel, nameOf: async (id) => about.name(id), isPublic: config.public, encryptFile: (filepath) => encryptUploadForTribe({ filepath, size: fs.statSync(filepath).size }, { filename: 'pam.wav', mime: 'audio/wav' }) });
+const { phoneView } = require('../views/phone_view');
 const createTorrentForFile = async (ctx, blobMarkdown, { title }) => {
   try {
     const m = String(blobMarkdown || '').match(/\((&[^)\s]+\.sha256)\)/);
@@ -1620,6 +1654,7 @@ const documentsModel = require("../models/documents_model")({ cooler, isPublic: 
 const trendingModel = require('../models/trending_model')({ cooler, isPublic: config.public });
 const statsModel = require('../models/stats_model')({ cooler, isPublic: config.public, tribeCrypto, tribesModel });
 const padsModel = require('../models/pads_model')({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel });
+const roomsModel = require('../models/rooms_model')({ cooler, tribeCrypto, roomCrypto, tribesModel });
 const wikiModel = require('../models/wiki_model')({ cooler, tribeCrypto, tribesModel });
 const emergenciesModel = require('../models/emergencies_model')({ cooler });
 const logisticsModel = require('../models/logistics_model')({ cooler });
@@ -1648,7 +1683,8 @@ const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config
 const mapsModel = require("../models/maps_model")({ cooler, isPublic: config.public, tribeCrypto, mapCrypto, tribesModel });
 const gamesModel = require('../models/games_model')({ cooler });
 const notifyUbiPaid = async ({ to, amount, epochId, txid, transferKey }) => {
-  const { i18n: i18nB } = require('../views/main_views');
+  const i18nAll = require('../client/assets/translations/i18n');
+  const i18nB = { ...i18nAll.en, ...(i18nAll[getConfig().language] || {}) };
   const concept = `UBI - ${epochId}`;
   const links = transferKey
     ? ` → [${concept}](/transfers/${encodeURIComponent(transferKey)}) · [PDF](/transfers/contract/${encodeURIComponent(transferKey)})`
@@ -1656,7 +1692,7 @@ const notifyUbiPaid = async ({ to, amount, epochId, txid, transferKey }) => {
   await notifyBot('BANKING_UBI_PAID', [to], `${i18nB.bankingBotUbiPaidText}: ${amount} ECO${links}`);
 };
 const bankingModel = require("../models/banking_model")({ services: { cooler, notifyUbiPaid, transfers: transfersModel }, isPublic: config.public });
-const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, filesModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel: blogModel, pollsModel, schoolModel, wikiModel, emergenciesModel, mailingModel, logisticsModel, podcastsModel, campaignsModel });
+const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, roomsModel, chatsModel, calendarsModel, torrentsModel, filesModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel: blogModel, pollsModel, schoolModel, wikiModel, emergenciesModel, mailingModel, logisticsModel, podcastsModel, campaignsModel });
 const logsModel = require("../models/logs_model")({ cooler });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const fediverseModel = require('../models/fediverse_model')({ isPublic: config.public });
@@ -1690,7 +1726,7 @@ const { section: hSection } = require('../server/node_modules/hyperaxe');
 
 const renderPendingFollows = (items) => {
   const { template: tpl, i18n: i18nLocal } = require('../views/main_views');
-  const { div, h2, p, form, button, input, ul, li, span, a } = require('../server/node_modules/hyperaxe');
+  const { div, h2, p, form, button, input, ul, li, span, a, strong } = require('../server/node_modules/hyperaxe');
   return tpl(
     i18nLocal.inhabitantsPendingFollowsTitle || 'Pending follow requests',
     hSection(
@@ -1702,16 +1738,16 @@ const renderPendingFollows = (items) => {
         ? p('—')
         : ul({}, items.map(it =>
             li({},
-              span({ style: 'font-weight:bold' }, it.name || it.followerId),
+              strong(it.name || it.followerId),
               ' — ',
               span({ class: 'muted' }, it.followerId.slice(0, 14) + '…'),
               ' ',
-              form({ method: 'POST', action: '/inhabitants/follow/accept', style: 'display:inline' },
+              form({ method: 'POST', action: '/inhabitants/follow/accept', class: 'inline-form' },
                 input({ type: 'hidden', name: 'followerId', value: it.followerId }),
                 button({ type: 'submit', class: 'filter-btn' }, i18nLocal.inhabitantsPendingAccept || 'Accept')
               ),
               ' ',
-              form({ method: 'POST', action: '/inhabitants/follow/reject', style: 'display:inline' },
+              form({ method: 'POST', action: '/inhabitants/follow/reject', class: 'inline-form' },
                 input({ type: 'hidden', name: 'followerId', value: it.followerId }),
                 button({ type: 'submit', class: 'filter-btn' }, i18nLocal.inhabitantsPendingReject || 'Reject')
               )
@@ -1756,7 +1792,30 @@ const isOwnItem = (item, viewer) => {
   const field = OWN_ITEM_FIELDS.find(f => typeof item[f] === 'string' && item[f].startsWith('@'));
   return field ? item[field] === viewer : false;
 };
-const applyWishLocal = (items) => (getConfig().wish === 'local' && Array.isArray(items)) ? items.filter(it => isOwnItem(it, getViewerId())) : items;
+let lanRefreshedAt = 0;
+const refreshLanPeers = async (force = false) => {
+  if (!force && Date.now() - lanRefreshedAt < 15000) return viewerFilters.lanPeers();
+  lanRefreshedAt = Date.now();
+  try {
+    const ssb = await cooler.open();
+    let entries = [];
+    try { entries = entries.concat((await ssb.conn.dbPeers()) || []); } catch (_) {}
+    try { if (typeof ssb.conn.query === 'function') entries = entries.concat(ssb.conn.query().peersAll() || []); } catch (_) {}
+    viewerFilters.rememberLanPeers(viewerFilters.lanKeysFromConn(entries).filter(k => k !== ssb.id));
+  } catch (_) {}
+  return viewerFilters.lanPeers();
+};
+const applyWishScope = async (items, opts = {}) => {
+  const wish = getConfig().wish;
+  return viewerFilters.filterByWish(items, {
+    wish,
+    viewer: getViewerId(),
+    authorOf: extractItemAuthor,
+    isOwn: isOwnItem,
+    isMutual: wish === 'mutuals' && !opts.skipMutual ? makeCtxMutualCache() : null,
+    lan: wish === 'only-lan' ? await refreshLanPeers() : null
+  });
+};
 
 const extractItemTribeId = (item) => {
   if (!item || typeof item !== 'object') return null;
@@ -1791,9 +1850,7 @@ const getViewerTribeAccessSets = async (userId) => {
 
 const applyListFilters = async (items, ctx, opts = {}) => {
   if (!Array.isArray(items)) return items;
-  const cfg = getConfig();
   const viewer = getViewerId();
-  const wishMutuals = cfg.wish === 'mutuals';
   let out = items;
   if (!opts.skipTribeAccess) {
     const { memberOf, createdBy, privateNotAccessible } = await getViewerTribeAccessSets(viewer);
@@ -1805,17 +1862,7 @@ const applyListFilters = async (items, ctx, opts = {}) => {
       return true;
     });
   }
-  if (cfg.wish === 'local') out = out.filter(it => isOwnItem(it, viewer));
-  if (wishMutuals && !opts.skipMutual) {
-    const isMutual = makeCtxMutualCache();
-    const filtered = [];
-    for (const it of out) {
-      const a = extractItemAuthor(it);
-      if (!a || a === viewer) { filtered.push(it); continue; }
-      if (await isMutual(a)) filtered.push(it);
-    }
-    out = filtered;
-  }
+  out = await applyWishScope(out, opts);
   out = await markFavorites(out, ctx);
   return out;
 };
@@ -1855,11 +1902,10 @@ const shopModesAvailFor = async (hasPurchases) => {
   const me = getViewerId();
   const census = (await shopsModel.listAll({ filter: 'all', q: '', sort: 'recent', viewerId: me }).catch(() => []))
     .map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   const hasProducts = (await shopsModel.listAllProducts({ filter: 'all' }).catch(() => [])).length > 0;
   return {
     mine: census.some(x => String(x.author) === String(me)),
-    recent: census.some(x => (Date.parse(x.createdAt || '') || 0) >= dayAgo),
+    recent: census.length > 0,
     favorites: census.some(x => x.isFavorite),
     top: census.some(x => Object.values(x.opinions || {}).reduce((sum, n) => sum + (Number(n) || 0), 0) > 0),
     products: hasProducts,
@@ -1869,10 +1915,9 @@ const shopModesAvailFor = async (hasPurchases) => {
 };
 
 const schoolModesFromCensus = (census, me) => {
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   return {
     mine: census.some(c2 => String(c2.author) === String(me)),
-    recent: census.some(c2 => (Date.parse(c2.createdAt || '') || 0) >= dayAgo),
+    recent: census.length > 0,
     applied: census.some(c2 => Array.isArray(c2.students) && c2.students.includes(me)),
     open: census.some(c2 => String(c2.status || 'ONGOING').toUpperCase() !== 'CLOSED' && c2.visibility !== 'INVITE'),
     favorites: census.some(c2 => c2.isFavorite)
@@ -1885,10 +1930,9 @@ const schoolModesAvailFor = async () => {
   return schoolModesFromCensus(census, me);
 };
 const chatModesFromCensus = (census, me) => {
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   return {
     mine: census.some(c => String(c.author) === String(me) || (Array.isArray(c.members) && c.members.includes(me))),
-    recent: census.some(c => Math.max(Date.parse(c.createdAt || '') || 0, Number(c.lastMsgAt || 0)) >= dayAgo),
+    recent: census.length > 0,
     favorites: census.some(c => c.isFavorite),
     open: census.some(c => String(c.status || 'OPEN').toUpperCase() === 'OPEN'),
     closed: census.some(c => String(c.status || '').toUpperCase() === 'CLOSED')
@@ -1901,10 +1945,9 @@ const chatModesAvailFor = async () => {
   return chatModesFromCensus(census, me);
 };
 const padModesFromCensus = (census, me) => {
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   return {
     mine: census.some(x => String(x.author) === String(me)),
-    recent: census.some(x => (Date.parse(x.createdAt || '') || 0) >= dayAgo),
+    recent: census.length > 0,
     open: census.some(x => !x.isClosed && String(x.status || 'OPEN').toUpperCase() === 'OPEN'),
     closed: census.some(x => x.isClosed || String(x.status || '').toUpperCase() === 'CLOSED')
   };
@@ -1915,11 +1958,88 @@ const padModesAvailFor = async () => {
   const census = (await padsModel.listAll({ filter: 'all', viewerId: me }).catch(() => [])).filter(p2 => !p2.tribeId).map(p2 => ({ ...p2, isFavorite: fav.has(String(p2.rootId)) }));
   return padModesFromCensus(census, me);
 };
-const calModesFromCensus = (census, me) => {
+const ROOM_ERRORS = ['full', 'unreachable', 'busy', 'unavailable', 'refused', 'invalid', 'access', 'closed'];
+const roomsCensus = async () => {
+  const uid = getViewerId();
+  const fav = await contentFavorites.getFavoriteSet('rooms').catch(() => new Set());
+  return (await roomsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => [])).filter(r => !r.tribeId).map(r => ({ ...r, isFavorite: fav.has(String(r.rootId)) }));
+};
+const roomFilterFn = (filter, uid, occupancy) => {
   const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  if (filter === 'mine') return (r) => r.author === uid;
+  if (filter === 'recent') return (r) => (Date.parse(r.createdAt || '') || 0) >= dayAgo;
+  if (filter === 'live') return (r) => { const o = occupancy.get(r.rootId); return !!(o && o.count > 0); };
+  if (filter === 'open') return (r) => r.type === 'OPEN' && !r.isClosed;
+  if (filter === 'invite') return (r) => r.type === 'INVITE-ONLY' && !r.isClosed;
+  if (filter === 'closed') return (r) => r.isClosed;
+  return () => true;
+};
+const roomAccess = async (room, uid) => {
+  if (!room) return 'invalid';
+  if (room.tribeId) {
+    const t = await tribesModel.getTribeById(room.tribeId).catch(() => null);
+    return t && Array.isArray(t.members) && t.members.includes(uid) ? null : 'access';
+  }
+  if (room.type === 'INVITE-ONLY' && room.author !== uid && !room.members.includes(uid)) return 'access';
+  return null;
+};
+const enterRoom = async (room) => {
+  const uid = getViewerId();
+  const denied = await roomAccess(room, uid);
+  if (denied) return denied;
+  if (room.isClosed) return 'closed';
+  if (!room.tribeId && room.type === 'OPEN' && room.author !== uid && !room.members.includes(uid)) await roomsModel.addMemberToRoom(room.rootId, uid).catch(() => {});
+  await roomsModel.ingestKeys().catch(() => {});
+  try {
+    await roomsModel.join(room);
+    return null;
+  } catch (err) {
+    const code = err && err.message;
+    if (code === 'left') return null;
+    if (code === 'unreachable' && room.author === uid) {
+      try {
+        await roomsModel.updateRoomById(room.rootId, { refreshHub: true });
+        await roomsModel.join(await roomsModel.getRoomById(room.rootId));
+        return null;
+      } catch (e2) { return ROOM_ERRORS.includes(e2 && e2.message) ? e2.message : 'unreachable'; }
+    }
+    return ROOM_ERRORS.includes(code) ? code : 'unreachable';
+  }
+};
+const BANKING_OK = new Set(['added', 'updated', 'deleted', 'claimed_pending', 'refused']);
+const bankingResult = (ctx, filter, key) => {
+  const k = String(key || '');
+  if (BANKING_OK.has(k)) { ctx.redirect(`/banking?filter=${filter}&msg=${encodeURIComponent(k)}`); return; }
+  sendErrorPage(ctx, bankingFlashText(k) || k || require('../views/main_views').i18n.actionFailed, { status: 400, to: `/banking?filter=${filter}` });
+};
+const actionFail = (ctx, to) => sendErrorPage(ctx, require('../views/main_views').i18n.actionFailed, { status: 400, ...(to ? { to } : {}) });
+const failWith = (ctx, key, to) => sendErrorPage(ctx, require('../views/main_views').i18n[key] || require('../views/main_views').i18n.actionFailed, { status: 400, ...(to ? { to } : {}) });
+const inviteCodeFail = (ctx, err) => {
+  const t = require('../views/main_views').i18n;
+  sendErrorPage(ctx, /already a member/i.test(String(err && err.message)) ? t.inviteAlreadyMember : t.inviteCodeInvalid, { status: 400 });
+};
+const roomErrorMessage = (code) => {
+  const t = require('../views/main_views').i18n;
+  if (code === 'full') return t.roomErrorFull;
+  if (code === 'busy') return t.roomErrorBusy;
+  if (code === 'unavailable') return t.phoneUnavailable;
+  if (code === 'access') return t.roomAccessDenied;
+  if (code === 'closed') return t.roomErrorClosed;
+  return t.roomErrorUnreachable;
+};
+const refreshLiveRooms = async () => {
+  if (config.public || getConfig().modules.roomsMod === 'off') { sharedState.setLiveRooms([]); return; }
+  const uid = getViewerId();
+  const live = await roomsModel.liveState();
+  const mine = (await roomsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []))
+    .filter(r => !r.isClosed && (r.author === uid || r.members.includes(uid) || r.tribeId) && !(live && live.ref === r.rootId));
+  const occupancy = await roomsModel.occupancies(mine);
+  sharedState.setLiveRooms(mine.filter(r => (occupancy.get(r.rootId) || {}).count > 0).map(r => ({ ref: r.rootId, title: r.title, count: occupancy.get(r.rootId).count, max: occupancy.get(r.rootId).max })));
+};
+const calModesFromCensus = (census, me) => {
   return {
     mine: census.some(x => String(x.author) === String(me)),
-    recent: census.some(x => (Date.parse(x.createdAt || '') || 0) >= dayAgo),
+    recent: census.length > 0,
     favorites: census.some(x => x.isFavorite),
     open: census.some(x => !x.isClosed && String(x.status || 'OPEN').toUpperCase() === 'OPEN'),
     closed: census.some(x => x.isClosed || String(x.status || '').toUpperCase() === 'CLOSED')
@@ -2002,6 +2122,7 @@ const contentResolvers = {
   chats: id => chatsModel.resolveRootId(id),
   maps: id => mapsModel.resolveRootId(id),
   pads: id => padsModel.resolveRootId(id),
+  rooms: id => roomsModel.resolveRootId(id),
   wiki: id => wikiModel.resolveRootId(id),
   emergencies: id => emergenciesModel.resolveRootId(id),
   mailing: id => mailingModel.resolveRootId(id),
@@ -2026,7 +2147,7 @@ const contentResolvers = {
   market: async id => id,
   school: async id => schoolModel.resolveRootId(id).catch(() => id)
 };
-const contentModCheck = { images: 'imagesMod', audios: 'audiosMod', videos: 'videosMod', documents: 'documentsMod', bookmarks: 'bookmarksMod', market: 'marketMod', jobs: 'jobsMod', projects: 'projectsMod', shops: 'shopsMod', shopProducts: 'shopsMod', chats: 'chatsMod', maps: 'mapsMod', pads: 'padsMod', calendars: 'calendarsMod', wiki: 'wikiMod', emergencies: 'emergenciesMod', mailing: 'mailingMod', logistics: 'logisticsMod', podcasts: 'podcastsMod', campaigns: 'campaignsMod', torrents: 'torrentsMod', files: 'filesMod', events: 'eventsMod', forum: 'forumMod', blogs: 'blogsMod', logs: 'logsMod', polls: 'pollsMod', tasks: 'tasksMod', reports: 'reportsMod', votes: 'votesMod', housing: 'housingMod', transfers: 'transfersMod', school: 'schoolMod' };
+const contentModCheck = { images: 'imagesMod', audios: 'audiosMod', videos: 'videosMod', documents: 'documentsMod', bookmarks: 'bookmarksMod', market: 'marketMod', jobs: 'jobsMod', projects: 'projectsMod', shops: 'shopsMod', shopProducts: 'shopsMod', chats: 'chatsMod', maps: 'mapsMod', pads: 'padsMod', rooms: 'roomsMod', calendars: 'calendarsMod', wiki: 'wikiMod', emergencies: 'emergenciesMod', mailing: 'mailingMod', logistics: 'logisticsMod', podcasts: 'podcastsMod', campaigns: 'campaignsMod', torrents: 'torrentsMod', files: 'filesMod', events: 'eventsMod', forum: 'forumMod', blogs: 'blogsMod', logs: 'logsMod', polls: 'pollsMod', tasks: 'tasksMod', reports: 'reportsMod', votes: 'votesMod', housing: 'housingMod', transfers: 'transfersMod', school: 'schoolMod' };
 const favAction = async (ctx, kind, action) => {
   if (!checkMod(ctx, contentModCheck[kind])) { ctx.redirect('/modules'); return; }
   try {
@@ -2035,19 +2156,20 @@ const favAction = async (ctx, kind, action) => {
   } catch (_) {}
   ctx.redirect(safeReturnTo(ctx, `/${kind}`, [`/${kind}`]));
 };
-const voteFormRedirect = (mode, id, err, body = {}) => {
-  const params = new URLSearchParams();
-  params.set('error', err && err.code === 'VOTE_DEADLINE_MIN' ? 'deadline' : 'generic');
-  if (body.question) params.set('question', String(body.question).slice(0, 300));
-  if (body.deadline) params.set('deadline', String(body.deadline).slice(0, 40));
-  if (body.tags) params.set('tags', String(body.tags).slice(0, 300));
-  return mode === 'edit' && id
-    ? `/votes/edit/${encodeURIComponent(id)}?${params.toString()}`
-    : `/votes?filter=create&${params.toString()}`;
+const voteFormError = (ctx, mode, id, err, body = {}) => {
+  const t = require('../views/main_views').i18n;
+  const message = err && err.code === 'VOTE_DEADLINE_MIN'
+    ? String(t.voteErrorDeadlineMin || '').replace('{days}', String(votesModel.MIN_VOTE_DAYS))
+    : t.voteErrorGeneric;
+  sendErrorPage(ctx, message, {
+    status: 400,
+    exact: true,
+    to: mode === 'edit' && id ? `/votes/edit/${encodeURIComponent(id)}` : '/votes?filter=create',
+    keep: { question: String(body.question || '').slice(0, 300), deadline: String(body.deadline || '').slice(0, 40), tags: String(body.tags || '').slice(0, 300) }
+  });
 };
 
 const voteFormState = (ctx) => ({
-  error: typeof ctx.query.error === 'string' ? ctx.query.error : '',
   minVoteDays: votesModel.MIN_VOTE_DAYS,
   draft: {
     question: typeof ctx.query.question === 'string' ? ctx.query.question : '',
@@ -2255,7 +2377,11 @@ const PDF_KINDS = {
       return { item: cal, extra: { dates, notesByDate } };
     }
   },
-  cv: { mod: null, load: async () => ({ item: await cvModel.getCVByUserId() }) }
+  cv: { mod: null, load: async () => ({ item: await cvModel.getCVByUserId() }) },
+  pixelia: { mod: 'pixeliaMod', load: async () => {
+    const pixels = await pixeliaModel.listPixels();
+    return { item: pixels.length ? { title: 'Pixelia', pixels, width: 50, height: 200 } : null };
+  } }
 };
 
 const loadPdfDoc = async (ctx, kind, id) => {
@@ -2278,12 +2404,18 @@ const sendContentPdf = async (ctx, kind, id) => {
   ctx.body = pdf;
 };
 
+const fileShareError = (ctx, code) => {
+  const t = require('../views/main_views').i18n;
+  const message = { recipient: t.pmInvalidRecipients, mutual: t.fileShareMutualError, nofile: t.fileShareNoFile, size: t.fileShareTooLarge, failed: t.fileShareFailed, send: t.fileShareSendError }[code] || t.actionFailed;
+  sendErrorPage(ctx, message, { status: 400, to: '/pm' });
+};
+
 const sharePdfBuffer = async (ctx, pdf, filename, subject) => {
   let pointer;
   try {
     pointer = await fileshareModel.createShareFromBuffer({ buffer: pdf, filename, mime: 'application/pdf' });
   } catch (_) {
-    ctx.redirect('/pm?fileerror=failed#fileshare');
+    fileShareError(ctx, 'failed');
     return;
   }
   const subjectText = String(subject || filename).slice(0, 150);
@@ -2306,10 +2438,15 @@ const sharePdfAsPm = async (ctx, kind, id) => {
 const MODULE_HOME_PATHS = new Set([
   'images', 'audios', 'videos', 'documents', 'bookmarks', 'torrents', 'files', 'maps',
   'events', 'tasks', 'reports', 'votes', 'market', 'jobs', 'housing', 'projects',
-  'industry', 'shops', 'transfers', 'pads', 'wiki', 'emergencies', 'mailing', 'logistics', 'podcasts', 'campaigns', 'chats', 'calendars', 'forum',
+  'industry', 'shops', 'transfers', 'pads', 'rooms', 'wiki', 'emergencies', 'mailing', 'logistics', 'podcasts', 'campaigns', 'chats', 'calendars', 'forum',
   'tribes', 'feed', 'logs', 'opinions', 'trending', 'agenda', 'school'
 ]);
 
+const INDEXING_LAG_BYTES = 1024 * 1024;
+const indexingLag = (status) => {
+  const since = Number(status && status.sync && status.sync.since) || 0;
+  return Object.values((status && status.sync && status.sync.plugins) || {}).reduce((max, offset) => Math.max(max, since - (Number(offset) || 0)), 0);
+};
 const moduleHomeFor = (ctx) => {
   if (!ctx || ctx.method !== 'GET') return null;
   const segment = String(ctx.path || '').split('/').filter(Boolean)[0];
@@ -2415,7 +2552,8 @@ const deleteModels = { images: imagesModel, audios: audiosModel, videos: videosM
 const opinionAction = async (ctx, kind, idParam) => {
   const modKey = contentModCheck[kind];
   if (modKey && !checkMod(ctx, modKey)) { ctx.redirect('/modules'); return; }
-  await opinionModels[kind].createOpinion(ctx.params[idParam], ctx.params.category);
+  try { await opinionModels[kind].createOpinion(ctx.params[idParam], ctx.params.category); }
+  catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
   try { activityModel.invalidateCache(); } catch (_) {}
   ctx.redirect(safeReturnTo(ctx, `/${kind}`, [`/${kind}`]));
 };
@@ -2446,6 +2584,13 @@ const mediaUpdateAction = async (ctx, kind) => {
   ctx.redirect(safeReturnTo(ctx, `/${kind}?filter=mine`, [`/${kind}`]));
 };
 const qf = (ctx, def = 'all') => ctx.query.filter || def;
+const recentFallback = (ctx, shown, all = 'all') => {
+  if (ctx.query.filter || (Array.isArray(shown) ? shown.length : shown)) return false;
+  const params = new URLSearchParams(ctx.querystring || '');
+  params.set('filter', all);
+  ctx.redirect(`${ctx.path}?${params.toString()}`);
+  return true;
+};
 const qp = (ctx, def = 1) => Math.max(1, parseInt(ctx.query.page) || def);
 const dedupeLarpHouseTribes = (list) => {
   const arr = Array.isArray(list) ? list : [];
@@ -2747,6 +2892,11 @@ const collectFediverseMedia = async (ctx) => {
   return out;
 };
 const TG_KNOWN_ERRORS = new Set(['telegramErrConnect', 'telegramErrTimeout', 'telegramErrAuth', 'telegramErrFetch', 'telegramErrSend', 'telegramErrMissing', 'telegramErrCode', 'telegramErrCodeExpired', 'telegramErrPassword', 'telegramErrPhone', 'telegramErrApi', 'telegramErrFlood', 'telegramErrNoLogin', 'fediverseErrPublic', 'fediverseErrEmpty']);
+const fediverseFail = (ctx, codeOrText, to) => {
+  const t = require('../views/main_views').i18n;
+  const key = String(codeOrText || '');
+  sendErrorPage(ctx, (key && typeof t[key] === 'string' ? t[key] : key) || t.actionFailed, { status: 400, to });
+};
 const tgErrorCode = (err) => {
   const m = String((err && err.message) || '');
   return TG_KNOWN_ERRORS.has(m) ? m : 'telegramErrConnect';
@@ -2755,8 +2905,7 @@ const fediverseReturnTo = (ctx, fallback) => {
   const rt = ctx.request.body && ctx.request.body.returnTo;
   return typeof rt === 'string' && rt.startsWith('/fediverse') ? rt : fallback;
 };
-const homeDir = os.homedir();
-const blobsPath = path.join(homeDir, '.ssb', 'blobs', 'tmp');
+const blobsPath = path.join(ssbConfig.path, 'blobs', 'tmp');
 const FEDIVERSE_TMP_PREFIX = 'fediverse-';
 const FEDIVERSE_MIME_BY_EXT = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', avif:'image/avif', mp4:'video/mp4', m4v:'video/mp4', webm:'video/webm', mov:'video/quicktime', ogg:'audio/ogg', mp3:'audio/mpeg', wav:'audio/wav' };
 const fediverseExtFromName = (n) => { const m = String(n || '').match(/\.([a-zA-Z0-9]+)$/); return m ? m[1].toLowerCase() : ''; };
@@ -2808,13 +2957,88 @@ const publishFediverseTempMedia = async (names) => {
   }
   return ids;
 };
-const gossipPath = path.join(homeDir, '.ssb', 'gossip.json');
+const gossipPath = path.join(ssbConfig.path, 'gossip.json');
 const unfollowedPath = stateFilePath('gossip_unfollowed.json');
 const ensureJSONFile = (p, init = []) => { fs.mkdirSync(path.dirname(p), { recursive: true }); if (!fs.existsSync(p)) fs.writeFileSync(p, JSON.stringify(init, null, 2), 'utf8'); };
 const readJSON = p => { ensureJSONFile(p, []); try { return JSON.parse(fs.readFileSync(p, 'utf8') || '[]'); } catch { return []; } };
 const writeJSON = (p, d) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(d, null, 2), 'utf8'); };
 const canonicalKey = k => { let c = String(k).replace(/^@/, '').replace(/\.ed25519$/, '').replace(/-/g, '+').replace(/_/g, '/'); if (!c.endsWith('=')) c += '='; return `@${c}.ed25519`; };
-const msAddrFrom = (h, p, k) => `net:${h}:${Number(p) || 8008}~shs:${canonicalKey(k).slice(1, -9)}`;
+const msAddrFrom = (h, p, k) => `${/\.onion$/i.test(String(h)) ? 'onion' : 'net'}:${h}:${Number(p) || 8008}~shs:${canonicalKey(k).slice(1, -9)}`;
+const peerHealth = require('../models/peer_health');
+const peerFailures = async (ssb) => {
+  let dbPeers = [];
+  try { dbPeers = (await ssb.conn.dbPeers()) || []; } catch (_) {}
+  return { dbPeers, failures: peerHealth.failuresByKey(readJSON(gossipPath), dbPeers) };
+};
+const deadPeerKeys = async () => {
+  try {
+    const ssb = await cooler.open();
+    const { failures } = await peerFailures(ssb);
+    return new Set([...failures].filter(([k, f]) => peerHealth.isDead({ key: k, failures: f })).map(([k]) => k));
+  } catch (_) { return new Set(); }
+};
+const desiredPhoneVisibility = () => {
+  const cfg = getConfig();
+  if (config.public || (cfg.modules || {}).phoneMod === 'off') return 'off';
+  return (cfg.phone || {}).visibility === 'mutuals' ? 'mutuals' : 'whole';
+};
+const syncPhoneVisibility = async () => {
+  const want = desiredPhoneVisibility();
+  const wantDnd = !!(getConfig().phone || {}).dnd;
+  const ssb = await cooler.open();
+  const current = (await about.visibilityPrefs(ssb.id).catch(() => null)) || {};
+  if ((current.phone || 'whole') === want && !!current.phoneDnd === wantDnd) return;
+  await new Promise((resolve, reject) => ssb.publish({ type: 'about', about: ssb.id, visibilityPrefs: { ...current, phone: want, phoneDnd: wantDnd } }, (err) => err ? reject(err) : resolve()));
+};
+const phoneRefuses = async (id) => {
+  const prefs = (await about.visibilityPrefs(id).catch(() => null)) || {};
+  return prefs.phone === 'off' || prefs.phoneDnd === true;
+};
+const setNetworkPaused = async (paused) => {
+  const cfg = getConfig();
+  cfg.networkPaused = !!paused;
+  saveConfig(cfg);
+  try {
+    const ssb = await cooler.open();
+    if (ssb.networkPause) { if (paused) ssb.networkPause.pause(); else ssb.networkPause.resume(); }
+  } catch (_) {}
+};
+const refreshPeerHealth = async () => {
+  if (getConfig().networkPaused === true || process.env.OASIS_NETWORK_PAUSED === '1') return;
+  const ssb = await cooler.open();
+  const live = (ssb.peers && typeof ssb.peers === 'object') ? ssb.peers : {};
+  const connected = Object.keys(live).filter(k => Array.isArray(live[k]) && live[k].length > 0);
+  const { failures } = await peerFailures(ssb);
+  peerHealth.observe({ connected, failing: [...failures].filter(([, f]) => f > 0).map(([k]) => k) });
+};
+const forgottenPeerKeys = () => new Set(readJSON(unfollowedPath).map(u => u && peerHealth.canonicalKey(u.key)).filter(Boolean));
+const forgetPeers = async (keys) => {
+  const drop = new Set([...(keys || [])].map(k => peerHealth.canonicalKey(k)).filter(Boolean));
+  if (!drop.size) return 0;
+  const ssb = await cooler.open();
+  const { dbPeers } = await peerFailures(ssb);
+  const known = new Map();
+  for (const p of readJSON(gossipPath)) {
+    const id = p && peerHealth.canonicalKey(p.key);
+    if (id && drop.has(id)) known.set(id, { host: p.host, port: Number(p.port) || 8008, key: id });
+  }
+  for (const [addr, data] of dbPeers) {
+    const id = data && peerHealth.canonicalKey(data.key);
+    if (!id || !drop.has(id)) continue;
+    if (!known.has(id)) {
+      const m = String(addr).match(/^(?:net|onion):([^:]+):(\d+)/);
+      if (m) known.set(id, { host: m[1], port: Number(m[2]), key: id });
+    }
+    try { ssb.conn.forget(addr); } catch (_) {}
+  }
+  const unf = readJSON(unfollowedPath);
+  for (const entry of known.values()) {
+    if (!unf.find(u => u && peerHealth.canonicalKey(u.key) === entry.key)) unf.push(entry);
+  }
+  writeJSON(unfollowedPath, unf);
+  writeJSON(gossipPath, readJSON(gossipPath).filter(p => !(p && drop.has(peerHealth.canonicalKey(p.key)))));
+  return drop.size;
+};
 ensureJSONFile(gossipPath, []);
 ensureJSONFile(unfollowedPath, []);
 const koaBodyMiddleware = koaBody({
@@ -2871,7 +3095,7 @@ const resolveCommentComponents = async function (ctx) {
   }
   return { messages, myFeedId, parentMessage, contentWarning };
 };
-const { clearnetHubView, authorView, previewCommentView, commentView, editProfileView, likesView, threadView, hashtagView, privateView, previewSubtopicView, subtopicView, imageSearchView, setLanguage, tribeAccessDeniedView, inviteRequiredView, clearnetInhabitantView, clearnetBlogView } = require("../views/main_views");
+const { clearnetHubView, authorView, previewCommentView, commentView, editProfileView, likesView, supportersView, threadView, hashtagView, privateView, previewSubtopicView, subtopicView, imageSearchView, setLanguage, tribeAccessDeniedView, inviteRequiredView, clearnetInhabitantView, clearnetBlogView } = require("../views/main_views");
 const { activityView } = require("../views/activity_view");
 const { cvView, createCVView } = require("../views/cv_view");
 const { indexingView } = require("../views/indexing_view");
@@ -2927,6 +3151,7 @@ const { housingView, singleHousingView } = require("../views/housing_view");
 const { shopsView, singleShopView, singleProductView, editProductView, shopOrdersView, myPurchasesView, clearnetShopView, renderShopInvitePage } = require("../views/shops_view");
 const { chatsView, singleChatView, renderChatInvitePage } = require("../views/chats_view");
 const { padsView, singlePadView, renderPadInvitePage } = require("../views/pads_view");
+const { roomsView, singleRoomView, renderRoomInvitePage, roomModesFromCensus } = require("../views/rooms_view");
 const { wikiView, wikiPageView, wikiHistoryView, wikiChangesView } = require('../views/wiki_view');
 const { emergenciesView, singleEmergencyView } = require('../views/emergencies_view');
 const { mailingView, singleMailingView } = require('../views/mailing_view');
@@ -2936,7 +3161,7 @@ const { campaignsView, singleCampaignView } = require('../views/campaigns_view')
 const { calendarsView, singleCalendarView, renderCalendarInvitePage } = require("../views/calendars_view");
 const { projectsView, singleProjectView, clearnetProjectView } = require("../views/projects_view")
 const { industryView, singleFacilityView, singleBuildView, singleBlueprintView, blueprintEditView, buildEditView } = require("../views/industry_view")
-const { renderBankingView, renderSingleAllocationView, renderEpochView } = require("../views/banking_views")
+const { renderBankingView, renderSingleAllocationView, renderEpochView, bankingFlashText } = require("../views/banking_views")
 const { favoritesView } = require("../views/favorites_view");
 const { logsView } = require("../views/logs_view");
 const { buildLogsPdf, buildSmartContractPdf, buildCertificatePdf, buildContentPdf, pdfFilename } = require("./pdf");
@@ -3041,6 +3266,10 @@ router
       ctx.redirect("/feed");
       return;
     }
+    if (currentConfig.ux?.current === "phone" && !config.public) {
+      ctx.redirect("/phone");
+      return;
+    }
     const homePage = currentConfig.homePage || "activity";
     ctx.redirect(`/${homePage}`);
   })
@@ -3103,7 +3332,7 @@ router
   .post('/games/submit-score', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'gamesMod')) { ctx.redirect('/modules'); return; }
     const { game, score } = ctx.request.body;
-    try { await gamesModel.submitScore(game, score); } catch (_) {}
+    try { await gamesModel.submitScore(game, score); } catch (_) { return actionFail(ctx); }
     ctx.redirect('/games?filter=scoring');
   })
   .get('/school', async (ctx) => {
@@ -3121,6 +3350,7 @@ router
     let courses = await schoolModel.listCourses(filter === 'favorites' ? 'all' : filter, getViewerId(), { q, sort });
     courses = courses.map(c => ({ ...c, isFavorite: fav.has(String(c.rootId || c.id)) }));
     if (filter === 'favorites') courses = courses.filter(c => c.isFavorite);
+    if (recentFallback(ctx, await applyWishScope(courses))) return;
     let subscriptions = null;
     try {
       const { counts, mine } = await subscriptionsModel.subscriberCounts(courses.map(c => c.rootId || c.id));
@@ -3131,7 +3361,7 @@ router
       : (await schoolModel.listCourses('all', getViewerId(), { q: '', sort }).catch(() => []))
           .map(c2 => ({ ...c2, isFavorite: fav.has(String(c2.rootId || c2.id)) }));
     const schoolModesAvail = schoolModesFromCensus(schoolCensus, getViewerId());
-    ctx.body = await schoolView(applyWishLocal(courses), filter, null, { q, sort, subscriptions, modesAvail: schoolModesAvail, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId() });
+    ctx.body = await schoolView(await applyWishScope(courses), filter, null, { q, sort, subscriptions, modesAvail: schoolModesAvail, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId() });
   })
   .get('/school/course/:id', async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
@@ -3263,14 +3493,14 @@ router
   })
   .post('/school/opinions/:id/:category', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
-    try { await schoolModel.createOpinion(ctx.params.id, ctx.params.category); } catch (_) {}
+    try { await schoolModel.createOpinion(ctx.params.id, ctx.params.category); } catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
   })
   .post('/school/lesson/complete/:courseId/:lessonId', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
     const done = String(ctx.request.body.value || 'true') !== 'false';
     const passedBefore = await schoolModel.hasPassedCourse(ctx.params.courseId, getViewerId()).catch(() => false);
-    try { await schoolModel.markLesson(ctx.params.courseId, ctx.params.lessonId, done); } catch (_) {}
+    try { await schoolModel.markLesson(ctx.params.courseId, ctx.params.lessonId, done); } catch (_) { return actionFail(ctx); }
     try {
       if (!passedBefore && await schoolModel.hasPassedCourse(ctx.params.courseId, getViewerId())) {
         const course = await schoolModel.getCourseById(ctx.params.courseId, getViewerId());
@@ -3303,7 +3533,7 @@ router
   .post('/school/exam/take/:courseId/:examId', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
     const passedBefore = await schoolModel.hasPassedCourse(ctx.params.courseId, getViewerId()).catch(() => false);
-    try { await schoolModel.takeExam(ctx.params.courseId, ctx.params.examId, ctx.request.body); } catch (_) {}
+    try { await schoolModel.takeExam(ctx.params.courseId, ctx.params.examId, ctx.request.body); } catch (_) { return actionFail(ctx); }
     try {
       if (!passedBefore && await schoolModel.hasPassedCourse(ctx.params.courseId, getViewerId())) {
         const course = await schoolModel.getCourseById(ctx.params.courseId, getViewerId());
@@ -3349,7 +3579,7 @@ router
       const { code } = await schoolModel.generateInvite(ctx.params.id);
       ctx.body = await require('../views/school_view').schoolInvitePage(code);
     } catch (_) {
-      ctx.redirect(safeReturnTo(ctx, `/school/course/${encodeURIComponent(ctx.params.id)}`, ['/school']));
+      actionFail(ctx);
     }
   })
   .post('/school/join-code', koaBody(), async (ctx) => {
@@ -3611,7 +3841,7 @@ router
     const { bucket: lastActivityBucket } = inhabitantsModel.bucketLastActivity(fullLastTs || null);
     const profileItems = await fetchProfileItems(feedId, rawPrefs);
     const profileFilterType = String(ctx.query.type || '').toLowerCase();
-    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','file','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse','feed','blog','poll']);
+    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','file','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','room','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse','feed','blog','poll']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
     await warmAuthorNames(allActions, sanitizedMsgs, profileItems);
@@ -3662,20 +3892,7 @@ router
     const wishMutuals = cfgNow.wish === 'mutuals';
     const wishOnlyLan = cfgNow.wish === 'only-lan';
     const mutualCache = wishMutuals ? makeCtxMutualCache() : null;
-    let lanKeys = null;
-    if (wishOnlyLan) {
-      try {
-        const ssbX = await cooler.open();
-        const snapshot = await ssbX.conn.dbPeers();
-        lanKeys = new Set();
-        for (const entry of (snapshot || [])) {
-          const data = Array.isArray(entry) ? entry[1] : entry;
-          if (!data) continue;
-          if (data.type === 'lan' && data.key) lanKeys.add(data.key);
-        }
-        lanKeys.add(userId);
-      } catch (_) { lanKeys = new Set([userId]); }
-    }
+    const lanKeys = wishOnlyLan ? new Set([...(await refreshLanPeers()), userId]) : null;
     const accessSets = await getViewerTribeAccessSets(userId);
     const finalResults = {};
     for (const [type, msgs] of Object.entries(results)) {
@@ -3718,6 +3935,7 @@ router
     let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
     enriched = await applyListFilters(enriched, ctx);
+    if (recentFallback(ctx, enriched)) return;
     await Promise.all(enriched.map(async x => { x.commentCount = (await getVoteComments(x.key)).length; }));
     const spreadMap = await spreads.forMessages(enriched.map(x => x && x.key));
     await warmAuthorNames(enriched);
@@ -3754,8 +3972,9 @@ router
     enriched = enriched.filter(x => !x.tribeId);
     enriched = await applyListFilters(enriched, ctx);
     try { enriched = await lifetime.enrichAndFilter(enriched, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
+    if (recentFallback(ctx, enriched)) return;
     const spreadMap = await spreads.forMessages((enriched || []).map(x => x && (x.key || x.id)));
-    const censusMaps = (String(filter) === 'all' && !q) ? enriched : (await mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => [])).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMaps = (String(filter) === 'all' && !q) ? enriched : (await mapsModel.listAll({ filter: 'all', q: '', viewerId: uid }).catch(() => [])).filter(x2 => !x2.tribeId).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
     try {
       ctx.body = await mapsView(enriched, filter, null, { censusList: censusMaps, q, lat, lng, zoom, title, description, markerLabel, tags, mapType, ...(tribeId ? { tribeId } : {}), spreadMap });
     } catch (e) {
@@ -3814,6 +4033,7 @@ router
     let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
     enriched = await applyListFilters(enriched, ctx);
+    if (recentFallback(ctx, enriched)) return;
     await Promise.all(enriched.map(async x => { x.commentCount = (await getVoteComments(x.key)).length; }));
     const spreadMap = await spreads.forMessages(enriched.map(x => x && x.key));
     await warmAuthorNames(enriched);
@@ -3845,7 +4065,6 @@ router
     const fromBlob = typeof ctx.query.fromBlob === 'string' && ctx.query.fromBlob.startsWith('&') ? ctx.query.fromBlob : '';
     const fromName = typeof ctx.query.name === 'string' ? ctx.query.name.slice(0, 100) : '';
     const fromSize = fromBlob ? await blobSizeOf(fromBlob).catch(() => 0) : 0;
-    const formError = typeof ctx.query.error === 'string' ? ctx.query.error : '';
     if (filter === 'downloads') {
       const downloads = config.public ? [] : torrentDownloads.list();
       if (downloads.some(d => d.active)) ctx.set('Refresh', '5');
@@ -3857,10 +4076,11 @@ router
     let enriched = items.filter(x => !x.tribeId).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
     enriched = await applyListFilters(enriched, ctx);
+    if (recentFallback(ctx, enriched)) return;
     const spreadMap = await spreads.forMessages((enriched || []).map(x => x && x.key));
     await warmAuthorNames(enriched);
-    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await torrentsModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() }).catch(() => [])).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
-    ctx.body = await torrentsView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, ...(tribeId ? { tribeId } : {}), spreadMap, fromBlob, fromName, fromSize, formError, isPublic: !!config.public });
+    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await torrentsModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() }).catch(() => [])).filter(x2 => !x2.tribeId).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    ctx.body = await torrentsView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, ...(tribeId ? { tribeId } : {}), spreadMap, fromBlob, fromName, fromSize, isPublic: !!config.public });
   })
   .get("/torrents/edit/:id", async (ctx) => {
     if (!checkMod(ctx, 'torrentsMod')) { ctx.redirect('/modules'); return; }
@@ -3915,9 +4135,10 @@ router
     let enriched = items.filter(x => !x.tribeId).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
     enriched = await applyListFilters(enriched, ctx);
+    if (recentFallback(ctx, enriched)) return;
     const spreadMap = await spreads.forMessages((enriched || []).map(x => x && x.key));
     await warmAuthorNames(enriched);
-    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await filesModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() }).catch(() => [])).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await filesModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() }).catch(() => [])).filter(x2 => !x2.tribeId).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
     ctx.body = await filesView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, ...(tribeId ? { tribeId } : {}), spreadMap, isPublic: !!config.public });
   })
   .get("/files/:fileId/get", async (ctx) => {
@@ -3969,6 +4190,7 @@ router
     let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
     enriched = await applyListFilters(enriched, ctx);
+    if (recentFallback(ctx, enriched)) return;
     await Promise.all(enriched.map(async x => { x.commentCount = (await getVoteComments(x.key)).length; }));
     const spreadMap = await spreads.forMessages(enriched.map(x => x && x.key));
     await warmAuthorNames(enriched);
@@ -4001,6 +4223,7 @@ router
     let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
     enriched = await applyListFilters(enriched, ctx);
+    if (recentFallback(ctx, enriched)) return;
     await Promise.all(enriched.map(async x => { x.commentCount = (await getVoteComments(x.rootId || x.key)).length; }));
     const spreadMap = await spreads.forMessages(enriched.map(x => x && x.key));
     await warmAuthorNames(enriched);
@@ -4043,12 +4266,12 @@ router
     ctx.body = await createCVView(cv, true)
   })
   .get('/pm', async ctx => {
-    const { recipients = '', subject = '', quote = '', preview = '', fileerror = '', list = '' } = ctx.query;
+    const { recipients = '', subject = '', quote = '', preview = '', list = '' } = ctx.query;
     const quoted = quote ? quote.split('\n').map(l => '> ' + l).join('\n') + '\n\n' : '';
     const showPreview = preview === '1';
     const lists = await buildMyMailingLists().catch(() => []);
     const listEntry = resolveListSelection(lists, list);
-    ctx.body = await pmView(recipients, subject, quoted, showPreview, '', false, null, false, String(fileerror || ''), null, { lists, selectedList: listEntry ? listEntry.target : '' });
+    ctx.body = await pmView(recipients, subject, quoted, showPreview, '', false, null, false, '', null, { lists, selectedList: listEntry ? listEntry.target : '' });
   })
   .post('/subscriptions/toggle', koaBody(), async ctx => {
     const b = ctx.request.body || {};
@@ -4081,11 +4304,148 @@ router
     try { await subscriptionsModel.setSubscription(target, scope, on); } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }); return; }
     ctx.redirect(safeReturnTo(ctx, '/', ['/school', '/tribe', '/blogs', '/pm', '/']));
   })
+  .get('/phone', async (ctx) => {
+    if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; }
+    const q = String(ctx.query.q || '').trim();
+    const filter = PHONE_FILTERS.includes(String(ctx.query.filter || '')) ? String(ctx.query.filter) : 'all';
+    const available = await phoneModel.available().catch(() => false);
+    const state = await phoneModel.state().catch(() => null);
+    await phoneModel.refreshPubs().catch(() => null);
+    const pams = await phoneModel.pams().catch(() => []);
+    const history = phoneModel.history();
+    phoneModel.markMissedSeen();
+    ctx.body = await phoneView({
+      available, state, pams, history, q, filter,
+      refused: String(ctx.query.refused || '').split(',').filter(id => /^@[A-Za-z0-9+/]{43}=\.ed25519$/.test(id)).slice(0, PHONE_GROUP_MAX),
+      latest: phoneModel.latestCalls(history),
+      compose: await (async () => {
+        const t = require('../views/main_views').i18n;
+        const recipients = String(ctx.query.to || '').slice(0, 511).split(/[,\n]+/).map(x => x.trim()).filter(Boolean).slice(0, PHONE_GROUP_MAX);
+        let dial = String(ctx.query.dial || '').trim().slice(0, 64);
+        const key = String(ctx.query.key || '');
+        if (/^[0-9]$/.test(key)) dial = (dial + key).slice(0, 64);
+        else if (key === 'back') dial = dial.slice(0, -1);
+        else if (key === 'clear') dial = '';
+        else if (/^remove:\d+$/.test(key)) recipients.splice(Number(key.slice(7)), 1);
+        else if (key === 'add' && dial) {
+          const asNumber = phoneNumbers.normalizeNumber(dial);
+          const asId = /^@[A-Za-z0-9+/]{43}=\.ed25519$/.test(dial) ? dial : null;
+          const me = getViewerId();
+          if (!asNumber && !asId) ctx.state.inlineError = t.pmInvalidRecipients;
+          else if (asId === me || (asNumber && asNumber === phoneNumbers.phoneNumberOf(me))) ctx.state.inlineError = t.phoneOwnNumber;
+          else if (recipients.length >= PHONE_GROUP_MAX) ctx.state.inlineError = t.phoneLimitsHint;
+          else { const v = asNumber || asId; if (!recipients.includes(v)) recipients.push(v); dial = ''; }
+        }
+        const to = recipients.join(',');
+        const choose = String(ctx.query.choose || '') === '1';
+        const number = phoneNumbers.normalizeNumber(ctx.query.number) || '';
+        const compose = { to, recipients, dial, max: PHONE_GROUP_MAX, choose, number };
+        if (choose && number) {
+          const token = to.split(/[,\n]+/).map(t => t.trim()).find(t => phoneNumbers.normalizeNumber(t) === number) || number;
+          const known = await phoneModel.knownFeeds().catch(() => new Map());
+          compose.candidates = phoneNumbers.resolveNumber(number, known).map(m => ({ ...m, to: to.includes(token) ? to.replace(token, m.id) : m.id }));
+          if (checkMod(ctx, 'roomsMod')) compose.rooms = (await roomsModel.findByNumber(number).catch(() => [])).filter(r => r.line === 'SWITCHBOARD').map(r => ({ id: r.rootId, title: r.title }));
+        }
+        return compose;
+      })()
+    });
+  })
+  .post('/phone/call', koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; }
+    const raw = String(ctx.request.body.to || '').trim().slice(0, 511);
+    const fromForm = String(ctx.request.body.compose || '') === '1';
+    const t = require('../views/main_views').i18n;
+    const PHONE_ERRORS = { invalid: t.pmInvalidRecipients, max: t.phoneLimitsHint, pub: t.phoneErrorPub, busy: t.roomErrorBusy, unavailable: t.phoneUnavailable, self: t.phoneOwnNumber, roomDnd: t.roomLineDndError, refuses: t.phoneRecipientRefuses };
+    const me = (await cooler.open()).id;
+    const tokens = raw.split(/[,\n]+/).map(t => t.trim()).filter(Boolean).flatMap(t => phoneNumbers.normalizeNumber(t) ? [t] : t.split(/\s+/));
+    const back = (err, number = '', bad = []) => {
+      if (err === 'chooseNumber') { ctx.redirect(`/phone?filter=create&choose=1&to=${encodeURIComponent(raw)}&number=${encodeURIComponent(number)}`); return; }
+      const message = err === 'unknownNumber' ? String(t.phoneNumberUnknown || '').replace('{number}', number) : (PHONE_ERRORS[err] || t.actionFailed);
+      const rest = tokens.filter(x => !bad.includes(x)).join(',');
+      sendErrorPage(ctx, message, fromForm ? { status: 400, exact: true, to: '/phone?filter=create', keep: { to: rest, dial: bad[0] || '' } } : { status: 400, exact: true });
+    };
+    const picked = [];
+    let known = null;
+    for (const t of tokens) {
+      const number = phoneNumbers.normalizeNumber(t);
+      if (!number) { picked.push(t); continue; }
+      if (number === phoneNumbers.phoneNumberOf(me)) return back('self', number, [t]);
+      known = known || await phoneModel.knownFeeds().catch(() => new Map());
+      const matches = phoneNumbers.resolveNumber(number, known);
+      const found = checkMod(ctx, 'roomsMod') ? await roomsModel.findByNumber(number).catch(() => []) : [];
+      const rooms = found.filter(r => r.line === 'SWITCHBOARD');
+      if (!matches.length && !rooms.length && found.length) return back('roomDnd', number, [t]);
+      if (!matches.length && rooms.length === 1 && tokens.length === 1) {
+        const error = await enterRoom(rooms[0]);
+        if (error) { sendErrorPage(ctx, roomErrorMessage(error), { status: 400 }); return; }
+        ctx.redirect(`/rooms/${encodeURIComponent(rooms[0].rootId)}`);
+        return;
+      }
+      if (!matches.length && !rooms.length) return back('unknownNumber', number, [t]);
+      if (matches.length === 1 && matches[0].hop <= 1 && !rooms.length) { picked.push(matches[0].id); continue; }
+      return back('chooseNumber', number);
+    }
+    const ids = [...new Set(picked)];
+    if (ids.includes(me)) return back('self', '', [me]);
+    const badIds = ids.filter(id => !/^@[A-Za-z0-9+/]{43}=\.ed25519$/.test(id));
+    if (!ids.length || badIds.length) return back('invalid', '', badIds);
+    if (ids.length > PHONE_GROUP_MAX) return back('max');
+    const refusing = [];
+    for (const id of ids) if (await phoneRefuses(id)) refusing.push(id);
+    const callable = ids.filter(id => !refusing.includes(id));
+    if (!callable.length) return back('refuses', '', refusing);
+    try {
+      await phoneModel.call(callable.length === 1 ? callable[0] : callable);
+    } catch (err) {
+      const code = String((err && err.message) || '');
+      return back(code, '', code === 'pub' ? callable.filter(id => phoneModel.isPub(id)) : []);
+    }
+    ctx.redirect(refusing.length ? `/phone?refused=${encodeURIComponent(refusing.join(','))}` : '/phone');
+  })
+  .post('/phone/dnd', koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; }
+    const cfg = getConfig();
+    cfg.phone = { ...(cfg.phone || {}), dnd: String((ctx.request.body || {}).dnd) === '1' };
+    saveConfig(cfg);
+    try { await syncPhoneVisibility(); } catch (_) {}
+    safeRefererRedirect(ctx, '/profile');
+  })
+  .post('/phone/heard-all', koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; }
+    phoneModel.markAllHeard(pickMsgKeys((ctx.request.body || {}).keys));
+    safeRefererRedirect(ctx, '/phone');
+  })
+  .post('/phone/delete-shown', koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; }
+    const body = ctx.request.body || {};
+    for (const k of pickMsgKeys(body.keys)) { try { await phoneModel.deletePam(k); } catch (_) {} }
+    const calls = (Array.isArray(body.calls) ? body.calls : (body.calls ? [body.calls] : [])).map(String).filter(id => /^[0-9a-f]{32}$/.test(id));
+    phoneModel.deleteHistory(calls);
+    phoneModel.refreshCount().catch(() => {});
+    safeRefererRedirect(ctx, '/phone');
+  })
+  .post('/phone/accept', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.accept().catch(() => null); ctx.redirect('/phone'); })
+  .post('/phone/reject', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.reject().catch(() => null); safeRefererRedirect(ctx, '/phone'); })
+  .post('/phone/hangup', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.hangup().catch(() => null); safeRefererRedirect(ctx, '/phone'); })
+  .post('/phone/mute', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.mute(String(ctx.request.body.mute) === '1').catch(() => null); ctx.redirect('/phone'); })
+  .post('/phone/dismiss', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.dismiss().catch(() => null); ctx.redirect('/phone'); })
+  .post('/phone/pam/cancel', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.recordCancel().catch(() => null); ctx.redirect('/phone'); })
+  .post('/phone/pam/send', koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; }
+    await phoneModel.sendPam().catch(() => null);
+    ctx.redirect('/phone');
+  })
+  .get('/phone/pam/:key/audio', async (ctx) => {
+    if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.status = 404; ctx.body = ''; return; }
+    const cipher = await phoneModel.pamCipher(ctx.params.key).catch(() => null);
+    if (!cipher) { ctx.status = 404; ctx.body = ''; return; }
+    await sendDecryptedBlob(ctx, cipher, 'pam.wav', 'audio/wav');
+  })
+  .post('/phone/pam/:key/delete', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.deletePam(ctx.params.key).catch(() => null); ctx.redirect('/phone'); })
   .get('/inbox', async ctx => {
     if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }
     const messages = await buildInboxMessages();
     await refreshInboxCount(messages);
-    const notice = ctx.query.filestatus === 'unavailable' ? 'unavailable' : (ctx.query.filekey === 'bad' ? 'badkey' : '');
     const listTitles = await inboxListTitles(messages);
     ctx.body = await privateView({
       messages,
@@ -4095,7 +4455,7 @@ router
       mutedBots: Array.from(pmModel.mutedBots(getConfig())),
       bot: String(ctx.query.bot || ''),
       sort: String(ctx.query.sort || '')
-    }, ctx.query.filter || undefined, null, notice, String(ctx.query.q || ''));
+    }, ctx.query.filter || undefined, null, '', String(ctx.query.q || ''));
   })
   .post('/inbox/read/:key', koaBody(), async ctx => {
     if (!checkMod(ctx, 'inboxMod')) { ctx.redirect('/modules'); return; }
@@ -4148,7 +4508,8 @@ router
       try {
         decrypted = { key: id, text: cipherModel.decryptData(msg.value.content.text, key) };
       } catch (_) {
-        decrypted = { key: id, error: true };
+        decrypted = null;
+        ctx.state.inlineError = require('../views/main_views').i18n.pmCrypterBadKey;
       }
     }
     ctx.body = await privateView({ messages, listTitles: await inboxListTitles(messages) }, returnFilter || 'all', decrypted);
@@ -4156,6 +4517,7 @@ router
   .get('/tags', async ctx => {
     const filter = qf(ctx, 'recent'), search = String(ctx.query.search || '').trim();
     const tags = await tagsModel.listTags(filter, search);
+    if (recentFallback(ctx, tags)) return;
     ctx.body = await tagsView(tags, filter, search);
   })
   .get('/emergencies', async ctx => {
@@ -4174,9 +4536,10 @@ router
       return;
     }
     const emergencies = (filter === 'ALL' && !q) ? censusList : decorate(await emergenciesModel.listAll({ filter, q, viewerId: uid }));
+    if (recentFallback(ctx, await applyWishScope(emergencies), 'ALL')) return;
     const spreadMap = await spreads.forMessages(emergencies.map(x => x && x.id));
     await warmAuthorNames(emergencies);
-    ctx.body = await emergenciesView(applyWishLocal(emergencies), filter, { q, censusList, spreadMap });
+    ctx.body = await emergenciesView(await applyWishScope(emergencies), filter, { q, censusList, spreadMap });
   })
   .get('/emergencies/:id/pdf', async ctx => sendContentPdf(ctx, 'emergencies', ctx.params.id))
   .post('/emergencies/:id/share', koaBody(), async ctx => sharePdfAsPm(ctx, 'emergencies', ctx.params.id))
@@ -4208,9 +4571,10 @@ router
       return;
     }
     const lists = (filter === 'ALL' && !q) ? censusList : decorate(await mailingModel.listAll({ filter, q }));
+    if (recentFallback(ctx, await applyWishScope(lists), 'ALL')) return;
     const spreadMap = await spreads.forMessages(lists.map(x => x && x.id).filter(id => typeof id === 'string' && id.startsWith('%')));
     await warmAuthorNames(lists);
-    ctx.body = await mailingView(applyWishLocal(lists), filter, { q, censusList, spreadMap });
+    ctx.body = await mailingView(await applyWishScope(lists), filter, { q, censusList, spreadMap });
   })
   .get('/mailing/:id', async ctx => {
     if (!checkMod(ctx, 'mailingMod')) { ctx.redirect('/modules'); return; }
@@ -4249,9 +4613,10 @@ router
       return;
     }
     const routes = (filter === 'ALL' && !q && !zone) ? censusList : decorate(await logisticsModel.listAll({ filter, q, zone }));
+    if (recentFallback(ctx, await applyWishScope(routes), 'ALL')) return;
     const spreadMap = await spreads.forMessages(routes.map(x => x && x.id));
     await warmAuthorNames(routes);
-    ctx.body = await logisticsView(applyWishLocal(routes), filter, { q, zone, censusList, zones, spreadMap });
+    ctx.body = await logisticsView(await applyWishScope(routes), filter, { q, zone, censusList, zones, spreadMap });
   })
   .get('/logistics/:id', async ctx => {
     if (!checkMod(ctx, 'logisticsMod')) { ctx.redirect('/modules'); return; }
@@ -4286,8 +4651,9 @@ router
     if (filter === 'TOP') channels = censusList.filter(c => c.opinionCount > 0 || c.spreadCount > 0).sort((a, b) => b.spreadCount - a.spreadCount || b.opinionCount - a.opinionCount);
     else channels = (filter === 'ALL' && !q) ? censusList : decorate(await podcastsModel.listAll({ filter, q }));
     if (q && filter === 'TOP') channels = channels.filter(c => [c.title, c.description, ...c.tags].some(v => String(v || '').toLowerCase().includes(q.toLowerCase())));
+    if (recentFallback(ctx, await applyWishScope(channels), 'ALL')) return;
     await warmAuthorNames(channels);
-    ctx.body = await podcastsView(applyWishLocal(channels), filter, { q, censusList, spreadMap, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null) });
+    ctx.body = await podcastsView(await applyWishScope(channels), filter, { q, censusList, spreadMap, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null) });
   })
   .get('/podcasts/episode/:id', async ctx => {
     if (!checkMod(ctx, 'podcastsMod')) { ctx.redirect('/modules'); return; }
@@ -4329,9 +4695,10 @@ router
       return;
     }
     const campaigns = (filter === 'ALL' && !q) ? censusList : decorate(await campaignsModel.listAll({ filter, q, viewerId: uid }));
+    if (recentFallback(ctx, await applyWishScope(campaigns), 'ALL')) return;
     const spreadMap = await spreads.forMessages(campaigns.map(x => x && x.id));
     await warmAuthorNames(campaigns);
-    ctx.body = await campaignsView(applyWishLocal(campaigns), filter, { q, censusList, spreadMap });
+    ctx.body = await campaignsView(await applyWishScope(campaigns), filter, { q, censusList, spreadMap });
   })
   .get('/campaigns/:id/qr.png', async ctx => {
     if (!checkMod(ctx, 'campaignsMod')) { ctx.status = 404; ctx.body = ''; return; }
@@ -4361,7 +4728,7 @@ router
   .get('/qr-action/sign/:id', async ctx => {
     if (!checkMod(ctx, 'campaignsMod')) { ctx.redirect('/modules'); return; }
     const id = decodeURIComponent(ctx.params.id || '');
-    try { await campaignsModel.sign(id, ''); } catch (_) {}
+    try { await campaignsModel.sign(id, ''); } catch (e) { if (!/already/i.test(String(e && e.message))) return actionFail(ctx); }
     ctx.redirect(`/campaigns/${encodeURIComponent(id)}`);
   })
   .get('/reports', async ctx => {
@@ -4371,6 +4738,7 @@ router
     reports = applyTextSearch(reports, q, ['title', 'description', 'category', 'tags']);
     reports = await applyListFilters(reports, ctx);
     try { reports = await lifetime.enrichAndFilter(reports); } catch (_) {}
+    if (recentFallback(ctx, reports.filter(r => (new Date(r.createdAt).getTime() || 0) >= Date.now() - 86400000))) return;
     await enrichMsgSize(reports);
     const spreadMap = await spreads.forMessages((reports || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(reports);
@@ -4401,6 +4769,7 @@ router
           .some(v => String(v || '').toLowerCase().includes(needle));
       });
     }
+    if (recentFallback(ctx, filtered, 'ALL')) return;
     const spreadMap = new Map();
     const results = await Promise.all(filtered.map(it => it && it.key ? spreads.forMessage(it.key).catch(() => null) : Promise.resolve(null)));
     filtered.forEach((it, i) => { if (it && it.key && results[i]) spreadMap.set(it.key, results[i]); });
@@ -4756,6 +5125,7 @@ router
     } catch (_) {}
     let filteredTribes = search ? tribes.filter(t => t.title.toLowerCase().includes(search.toLowerCase())) : tribes;
     try { filteredTribes = await lifetime.enrichAndFilter(filteredTribes, { getKey: (x) => x.id || x.key }); } catch (_) {}
+    if (recentFallback(ctx, (await applyWishScope(filteredTribes)).filter(t => !t.parentTribeId && (!t.isAnonymous || t.author === uid || (Array.isArray(t.members) && t.members.includes(uid))) && ((typeof t.createdAt === 'string' ? Date.parse(t.createdAt) : t.createdAt) || 0) >= Date.now() - 86400000))) return;
     try { await tribesModel.enrichOpenInvites(filteredTribes); } catch (_) {}
     for (const t of filteredTribes) {
       if (t.openInviteCode) t.openInviteQr = `/qr-invite/tribe/${encodeURIComponent(t.id)}`;
@@ -4768,7 +5138,7 @@ router
         if (isIn) t.subscriptionIn = mine.has(t.id) || String(t.author) === String(viewer);
       }
     } catch (_) {}
-    ctx.body = await tribesView(applyWishLocal(filteredTribes), filter, null, ctx.query, tribes);
+    ctx.body = await tribesView(await applyWishScope(filteredTribes), filter, null, ctx.query, tribes);
   })
   .get('/tribes/create', async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
@@ -4959,6 +5329,14 @@ router
       ]);
       const tribeChainSet = new Set(tribeChain);
       sectionData = allChats.filter(c => tribeChainSet.has(c.tribeId));
+    } else if (section === 'rooms') {
+      const [allRooms, tribeChain] = await Promise.all([
+        roomsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
+        tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
+      ]);
+      const tribeChainSet = new Set(tribeChain);
+      const rooms = allRooms.filter(r => tribeChainSet.has(r.tribeId));
+      sectionData = { rooms, occupancy: await roomsModel.occupancies(rooms.filter(r => !r.isClosed)), live: await roomsModel.liveState() };
     } else if (section === 'calendars') {
       const [allCals, tribeChain] = await Promise.all([
         calendarsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
@@ -5141,7 +5519,7 @@ router
     }
     allActions = await applyListFilters(allActions, ctx);
     const spreadMap = new Map();
-    const SPREADABLE = new Set(['post','audio','video','image','document','torrent','file','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse']);
+    const SPREADABLE = new Set(['post','audio','video','image','document','torrent','file','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','room','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse']);
     const targets = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && SPREADABLE.has(a.type));
     const spreadKeysOf = (a) => Array.from(new Set([a.id, a.rootId, a.tipId].filter(k => typeof k === 'string' && k.startsWith('%'))));
     const results = await Promise.all(targets.map(a => Promise.all(spreadKeysOf(a).map(k => spreads.forMessage(k).catch(() => null)))));
@@ -5216,7 +5594,7 @@ router
     const baseUrl = resolveExternalBaseUrl(ctx);
     const profileItems = await fetchProfileItems(myFeedId, rawPrefs);
     const profileFilterType = String(ctx.query.type || '').toLowerCase();
-    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','file','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse']);
+    const profileSpreadable = new Set(['post','audio','video','image','document','torrent','file','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','room','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse']);
     const profileSpreadKeys = (allActions || []).filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && profileSpreadable.has(a.type)).map(a => a.id);
     const spreadMap = await spreads.forMessages(profileSpreadKeys).catch(() => new Map());
     ctx.body = await authorView({ feedId: myFeedId, oasisVersion: OASIS_VERSION || await getOasisVersion(myFeedId), messages: sanitizeMessages(messages), firstPost, lastPost, name, description, avatarUrl: getAvatarUrl(image), relationship: { me: true }, ecoAddress, karmaScore: bankData.karmaScore, estimatedUBI: bankData.estimatedUBI || 0, lastClaimedDate: bankData.lastClaimedDate || null, totalClaimed: bankData.totalClaimed || 0, carbonGrams, larpHouse, lastActivityBucket, visibilityPrefs, stats, baseUrl, userActions, allActions, profileItems, profileFilterType, gpgFingerprint, spreadMap, fediverseConfigured: fediverseModel.hasAccount() });
@@ -5321,6 +5699,7 @@ router
       ecoTax:   flag(body.vis_ecoTax),
       larpSign: flag(body.vis_larpSign),
       gpg:      flag(body.vis_gpg),
+      phone:    desiredPhoneVisibility(),
       fediverse: flag(body.vis_fediverse),
       fediverseHandle: typeof body.fediverseHandle === 'string' ? body.fediverseHandle : '',
       clearnet: clearnetShops || clearnetSchool || clearnetJobs || clearnetEvents || clearnetProjects || clearnetPosts || clearnetAudios || clearnetVideos || clearnetImages || clearnetDocuments || clearnetTorrents || clearnetFiles || clearnetBookmarks || clearnetPodcasts || clearnetMarket || clearnetFeed || clearnetWiki,
@@ -5574,11 +5953,11 @@ router
     let blobCacheUsage = null;
     try { blobCacheUsage = await blobCacheModel.usage(); } catch (_) { blobCacheUsage = null; }
     const blobCache = { maxMB: Number(cfg.blobCache && cfg.blobCache.maxMB) || 0, usage: blobCacheUsage, cleaned: ctx.query.cleaned === undefined ? null : Number(ctx.query.cleaned) || 0, freed: Number(ctx.query.freed) || 0 };
-    ctx.body = await settingsView({ theme, version: version.toString(), aiPrompt: cfg.ai?.prompt || "", aiExportCount, blobCache, fediverseAccount: fediverseModel.getAccount(), fediverseError: typeof ctx.query.fediverseError === "string" ? ctx.query.fediverseError : "", telegramAccount: fediverseModel.telegram.getAccount(), telegramLogin: fediverseModel.telegram.loginState(), telegramError: typeof ctx.query.telegramError === "string" ? ctx.query.telegramError : (fediverseModel.telegram.loginState() && fediverseModel.telegram.loginState().error) || "", peertubeAccount: fediverseModel.peertube.getAccount(), peertubeError: typeof ctx.query.peertubeError === "string" ? ctx.query.peertubeError : "", verification, rebuild });
+    ctx.body = await settingsView({ theme, version: version.toString(), aiPrompt: cfg.ai?.prompt || "", aiExportCount, blobCache, fediverseAccount: fediverseModel.getAccount(), telegramAccount: fediverseModel.telegram.getAccount(), telegramLogin: fediverseModel.telegram.loginState(), peertubeAccount: fediverseModel.peertube.getAccount(), verification, rebuild });
   })
   .get("/peers", async (ctx) => {
     const { discoveredPeers, unknownPeers } = await meta.discovered();
-    const lanBroadcastActive = !ssbConfig.pub;
+    const lanBroadcastActive = !ssbConfig.pub && getConfig().lanBroadcasting !== false;
     const peerMap = new Map();
     const mergePeer = (key, info) => {
       if (!key) return;
@@ -5593,7 +5972,7 @@ router
       });
     };
     try {
-      const gossipPathLocal = path.join(os.homedir(), '.ssb', 'gossip.json');
+      const gossipPathLocal = path.join(ssbConfig.path, 'gossip.json');
       let gossip = [];
       try { gossip = JSON.parse(await promisesFs.readFile(gossipPathLocal, 'utf8')); } catch (_) {}
       if (Array.isArray(gossip)) {
@@ -5620,7 +5999,7 @@ router
           if (!data || !data.key) continue;
           let host = data.host, port = data.port;
           if ((!host || !port) && addr) {
-            const m = String(addr).match(/^net:([^:]+):(\d+)/);
+            const m = String(addr).match(/^(?:net|onion):([^:]+):(\d+)/);
             if (m) { host = host || m[1]; port = port || Number(m[2]); }
           }
           mergePeer(data.key, { host, port, state: data.state, stateChange: data.stateChange, source: 'conn.dbPeers' });
@@ -5635,7 +6014,7 @@ router
           const addr = rpcs[0]?.stream?.address || null;
           let host = null, port = null;
           if (addr) {
-            const m = String(addr).match(/^net:([^:]+):(\d+)/);
+            const m = String(addr).match(/^(?:net|onion):([^:]+):(\d+)/);
             if (m) { host = m[1]; port = Number(m[2]); }
           }
           mergePeer(rawKey, { host, port, state: 'connected', source: 'rpc' });
@@ -5661,7 +6040,7 @@ router
             if (!data || !data.key) continue;
             let host = data.host, port = data.port;
             if ((!host || !port) && addr) {
-              const m = String(addr).match(/^net:([^:]+):(\d+)/);
+              const m = String(addr).match(/^(?:net|onion):([^:]+):(\d+)/);
               if (m) { host = host || m[1]; port = port || Number(m[2]); }
             }
             mergePeer(data.key, { host, port, state: 'staged', source: data.type === 'lan' ? 'lan' : (data.type || 'staged') });
@@ -5671,7 +6050,10 @@ router
     } catch (_) {}
     const PEER_IDLE_MAX_MS = 10 * 24 * 60 * 60 * 1000;
     const nowTs = Date.now();
+    const deadKeys = await deadPeerKeys();
+    const forgottenKeys = forgottenPeerKeys();
     const technicalPeers = Array.from(peerMap.values())
+      .filter(p => !deadKeys.has(peerHealth.canonicalKey(p.key)) && !forgottenKeys.has(peerHealth.canonicalKey(p.key)))
       .filter(p => {
         const st = String(p.state || '');
         if (st === 'connected' || st === 'connecting' || st === 'staged') return true;
@@ -5691,8 +6073,7 @@ router
     await Promise.all(Array.from(versionKeys).map(async (k) => {
       versions[k] = String(k) === String(getViewerId()) ? OASIS_VERSION : await getOasisVersion(k).catch(() => null);
     }));
-    const connectError = String((ctx.query && ctx.query.connectError) || '').slice(0, 120);
-    ctx.body = await peersView({ onlinePeers: onlinePeersList, discoveredPeers, unknownPeers, lanBroadcastActive, technicalPeers, versions, connectError });
+    ctx.body = await peersView({ onlinePeers: onlinePeersList, discoveredPeers, unknownPeers, lanBroadcastActive, technicalPeers, versions, paused: getConfig().networkPaused === true || process.env.OASIS_NETWORK_PAUSED === '1' });
   })
   .get("/graphos", async (ctx) => {
     if (!checkMod(ctx, 'graphosMod')) return ctx.redirect('/modules');
@@ -5859,7 +6240,7 @@ router
     const houseKey = String((ctx.request.body && ctx.request.body.house) || '').toLowerCase();
     let result = null;
     try { result = await larpModel.createHouseInvite(houseKey); } catch (_) { result = null; }
-    if (!result) return ctx.redirect(`/larp/${encodeURIComponent(houseKey || '')}`);
+    if (!result) return actionFail(ctx, `/larp/${encodeURIComponent(houseKey || '')}`);
     ctx.redirect(`/larp/${encodeURIComponent(houseKey)}?invite=${encodeURIComponent(result.code)}`);
   })
   .post("/larp/invite/redeem", koaBody(), async (ctx) => {
@@ -5869,8 +6250,8 @@ router
     let result = null;
     try { result = await larpModel.redeemHouseInvite(code); } catch (_) { result = null; }
     if (result && result.ok) return ctx.redirect(`/larp/${encodeURIComponent(result.house)}`);
-    const back = ret && ret.startsWith('/') ? ret : '/larp';
-    ctx.redirect(back);
+    const back = isLocalPath(ret) ? ret : '/larp';
+    failWith(ctx, 'inviteCodeInvalid', back);
   })
   .get("/larp/:house", async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
@@ -5906,13 +6287,13 @@ router
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
     const houseKey = String((ctx.request.body && ctx.request.body.house) || '').toLowerCase();
     if (houseKey !== 'academia') { ctx.redirect('/larp'); return; }
-    try { await larpModel.publishJoin('academia'); } catch (_) {}
+    try { await larpModel.publishJoin('academia'); } catch (_) { return actionFail(ctx); }
     const larpReturnTo = String((ctx.request.body && ctx.request.body.returnTo) || '');
     ctx.redirect(larpReturnTo === '/welcome' ? '/welcome' : '/larp/academia');
   })
   .post("/larp/leave", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
-    try { await larpModel.publishLeaveLarp(); } catch (_) {}
+    try { await larpModel.publishLeaveLarp(); } catch (_) { return actionFail(ctx); }
     ctx.redirect('/larp');
   })
   .get("/larp/tribe/:house", async (ctx) => {
@@ -5942,7 +6323,13 @@ router
   })
   .get("/invites", async (ctx) => {
     if (!checkMod(ctx, 'invitesMod')) return ctx.redirect('/modules');
-    ctx.body = await invitesView({ flash: String(ctx.query.flash || '') });
+    ctx.body = await invitesView({ deadKeys: await deadPeerKeys() });
+  })
+  .get("/supporters", async (ctx) => {
+    const feed = getViewerId();
+    const supporters = (await inhabitantsModel.listSupporters(feed).catch(() => [])).filter(id => !sharedState.isPubId(id));
+    await warmAuthorNames(supporters.map(id => ({ author: id })));
+    ctx.body = await supportersView({ supporters, feed, name: await about.name(feed) });
   })
   .get("/likes/:feed", async (ctx) => {
     const { feed } = ctx.params;
@@ -5990,6 +6377,7 @@ router
           .some(v => String(v || '').toLowerCase().includes(needle));
       });
     }
+    if (recentFallback(ctx, Array.isArray(opinions) ? opinions : [], 'ALL')) return;
     const spreadMap = new Map();
     const list = Array.isArray(opinions) ? opinions : [];
     const results = await Promise.all(list.map(it => it && it.key ? spreads.forMessage(it.key).catch(() => null) : Promise.resolve(null)));
@@ -6006,6 +6394,7 @@ router
     const msg = typeof ctx.query.msg === "string" ? ctx.query.msg : "";
     let feeds = await feedModel.listFeeds({ filter, q, tag });
     feeds = await applyListFilters(feeds, ctx);
+    if (recentFallback(ctx, feeds, 'ALL')) return;
     await warmAuthorNames(feeds);
     const feedSpreadMap = await spreads.forMessages(feeds.map(f => f && f.key)).catch(() => new Map());
     const uxFeed = getConfig().ux?.current === 'feed';
@@ -6058,7 +6447,7 @@ router
     if (!fediverseModel.telegram.hasAccount()) { ctx.redirect('/fediverse'); return; }
     const data = await fediverseModel.telegram.getDialogs(!!ctx.query.refresh);
     const stats = data && !data.error ? await fediverseModel.telegram.getAccountStats().catch(() => null) : null;
-    ctx.body = telegramDialogsView({ account: fediverseModel.telegram.getAccount(), stats, dialogs: data.dialogs, error: data.error || (typeof ctx.query.error === 'string' ? ctx.query.error : undefined) });
+    ctx.body = telegramDialogsView({ account: fediverseModel.telegram.getAccount(), stats, dialogs: data.dialogs, error: data.error });
   })
   .get("/fediverse/telegram/chat/:id", async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
@@ -6066,7 +6455,6 @@ router
     const account = fediverseModel.telegram.getAccount();
     let chat = null, error;
     try { chat = await fediverseModel.telegram.getChat(ctx.params.id); } catch (err) { error = tgErrorCode(err); }
-    if (!error && typeof ctx.query.error === 'string' && ctx.query.error) error = ctx.query.error;
     const stats = await fediverseModel.telegram.getAccountStats().catch(() => null);
     ctx.body = telegramChatView({ account, stats, chat, error });
   })
@@ -6079,7 +6467,7 @@ router
       const file = Array.isArray(raw) ? raw.find(f => f && f.size > 0) : (raw && raw.size > 0 ? raw : null);
       await fediverseModel.telegram.sendMessage(ctx.params.id, { text: ctx.request.body?.text || '', file });
     } catch (err) {
-      ctx.redirect(`${back}?error=${encodeURIComponent(tgErrorCode(err))}`);
+      fediverseFail(ctx, tgErrorCode(err), back);
       return;
     }
     ctx.redirect(back);
@@ -6109,7 +6497,7 @@ router
     const asked = ctx.query.filter === 'mine' || ctx.query.filter === 'subscriptions' ? ctx.query.filter : null;
     const kind = asked || (stats && stats.subscriptions === 0 ? 'mine' : 'subscriptions');
     const data = await fediverseModel.peertube.getFeed(kind, !!ctx.query.refresh);
-    const error = (data && data.error) || (typeof ctx.query.error === 'string' && ctx.query.error ? ctx.query.error : undefined);
+    const error = (data && data.error) || undefined;
     const notice = typeof ctx.query.notice === 'string' && /^[a-zA-Z]+$/.test(ctx.query.notice) ? ctx.query.notice : undefined;
     ctx.body = peertubeFeedView({ account: fediverseModel.peertube.getAccount(), stats, videos: data.videos, kind, error, notice });
   })
@@ -6117,7 +6505,7 @@ router
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
     if (!fediverseModel.peertube.hasAccount()) { ctx.redirect('/fediverse'); return; }
     const stats = await fediverseModel.peertube.getAccountStats().catch(() => null);
-    ctx.body = peertubeUploadView({ account: fediverseModel.peertube.getAccount(), stats, error: typeof ctx.query.error === 'string' ? ctx.query.error : undefined });
+    ctx.body = peertubeUploadView({ account: fediverseModel.peertube.getAccount(), stats });
   })
   .post("/fediverse/peertube/upload", koaBody({ multipart: true, formidable: { maxFileSize: FILESHARE_MAX_SIZE } }), async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
@@ -6126,7 +6514,7 @@ router
       const file = Array.isArray(raw) ? raw.find(f => f && f.size > 0) : raw;
       await fediverseModel.peertube.upload({ file, name: ctx.request.body?.name, description: ctx.request.body?.description, privacy: ctx.request.body?.privacy });
     } catch (err) {
-      ctx.redirect('/fediverse/peertube/upload?error=' + encodeURIComponent(err && err.message ? err.message : 'peertubeErrUpload'));
+      fediverseFail(ctx, err && err.message ? err.message : 'peertubeErrUpload', '/fediverse/peertube/upload');
       return;
     }
     ctx.redirect('/fediverse/peertube?filter=mine&refresh=1&notice=peertubeUploaded');
@@ -6137,14 +6525,14 @@ router
     const account = fediverseModel.peertube.getAccount();
     const stats = await fediverseModel.peertube.getAccountStats().catch(() => null);
     const data = await fediverseModel.peertube.getVideo(ctx.params.id);
-    const error = (data && data.error) || (typeof ctx.query.error === 'string' && ctx.query.error ? ctx.query.error : undefined);
+    const error = (data && data.error) || undefined;
     ctx.body = peertubeVideoView({ account, stats, video: data && data.video ? data.video : null, comments: data && data.comments ? data.comments : [], myRating: data && data.myRating ? data.myRating : 'none', error });
   })
   .post("/fediverse/peertube/video/:id/comment", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
     const back = `/fediverse/peertube/video/${encodeURIComponent(ctx.params.id)}`;
     try { await fediverseModel.peertube.comment(ctx.params.id, ctx.request.body?.text); }
-    catch (err) { ctx.redirect(`${back}?error=${encodeURIComponent(err && err.message ? err.message : 'peertubeErrComment')}`); return; }
+    catch (err) { fediverseFail(ctx, err && err.message ? err.message : 'peertubeErrComment', back); return; }
     ctx.redirect(back);
   })
   .post("/fediverse/peertube/video/:id/rate", koaBody(), async (ctx) => {
@@ -6173,7 +6561,6 @@ router
     if (ctx.query.refresh) { try { fediverseModel.invalidateCache(); } catch (_) {} }
     const data = await fediverseModel.getTimeline();
     if (data && data.connected) { data.stats = await fediverseModel.getAccountStats(); }
-    if (data && typeof ctx.query.error === 'string' && ctx.query.error) data.error = ctx.query.error;
     ctx.body = fediverseView(data);
   })
   .get("/fediverse/mastodon/thread/:id", async (ctx) => {
@@ -6182,7 +6569,7 @@ router
     const account = fediverseModel.getAccount();
     const stats = account ? await fediverseModel.getAccountStats() : null;
     const thread = await fediverseModel.getThread(ctx.params.id);
-    const error = (thread && thread.error) || (typeof ctx.query.error === 'string' && ctx.query.error ? ctx.query.error : undefined);
+    const error = (thread && thread.error) || undefined;
     ctx.body = fediverseThreadView({ account, stats, thread, error });
   })
   .get("/fediverse/media", async (ctx) => {
@@ -6224,8 +6611,8 @@ router
     const media = [...existing, ...fresh].slice(0, 4);
     const account = fediverseModel.getAccount();
     const stats = account ? await fediverseModel.getAccountStats() : null;
-    const error = (!String(text).trim() && !media.length) ? 'fediverseErrEmpty' : undefined;
-    ctx.body = fediversePreviewView({ account, stats, text, media, error });
+    if (!String(text).trim() && !media.length) ctx.state.inlineError = require('../views/main_views').i18n.fediverseErrEmpty;
+    ctx.body = fediversePreviewView({ account, stats, text, media });
   })
   .post("/fediverse/mastodon/post", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
@@ -6236,7 +6623,7 @@ router
       const mediaIds = [...tmpIds, ...fileIds].slice(0, 4);
       await fediverseModel.postStatus({ text, mediaIds });
     } catch (err) {
-      ctx.redirect('/fediverse/mastodon?error=' + encodeURIComponent(err && err.message ? err.message : 'fediverseErrPost'));
+      fediverseFail(ctx, err && err.message ? err.message : 'fediverseErrPost', '/fediverse/mastodon');
       return;
     }
     ctx.redirect('/fediverse/mastodon');
@@ -6256,8 +6643,8 @@ router
     const stats = account ? await fediverseModel.getAccountStats() : null;
     const thread = await fediverseModel.getThread(id);
     const parent = thread && thread.status ? thread.status : null;
-    const error = (!String(text).trim() && !media.length) ? 'fediverseErrEmpty' : undefined;
-    ctx.body = fediversePreviewView({ account, stats, text, media, error, replyToId: id, parent });
+    if (!String(text).trim() && !media.length) ctx.state.inlineError = require('../views/main_views').i18n.fediverseErrEmpty;
+    ctx.body = fediversePreviewView({ account, stats, text, media, replyToId: id, parent });
   })
   .post("/fediverse/mastodon/reply/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
@@ -6269,29 +6656,29 @@ router
       const mediaIds = [...tmpIds, ...fileIds].slice(0, 4);
       await fediverseModel.postStatus({ text, inReplyToId: id, mediaIds });
     } catch (err) {
-      ctx.redirect(`/fediverse/mastodon/thread/${encodeURIComponent(id)}?error=` + encodeURIComponent(err && err.message ? err.message : 'fediverseErrPost'));
+      fediverseFail(ctx, err && err.message ? err.message : 'fediverseErrPost', `/fediverse/mastodon/thread/${encodeURIComponent(id)}`);
       return;
     }
     ctx.redirect(`/fediverse/mastodon/thread/${encodeURIComponent(id)}`);
   })
   .post("/fediverse/mastodon/boost/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
-    try { await fediverseModel.reblog(ctx.params.id); } catch (_) {}
+    try { await fediverseModel.reblog(ctx.params.id); } catch (e) { return fediverseFail(ctx, e && e.message ? e.message : 'fediverseError'); }
     ctx.redirect(fediverseReturnTo(ctx, '/fediverse/mastodon'));
   })
   .post("/fediverse/mastodon/unboost/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
-    try { await fediverseModel.unreblog(ctx.params.id); } catch (_) {}
+    try { await fediverseModel.unreblog(ctx.params.id); } catch (e) { return fediverseFail(ctx, e && e.message ? e.message : 'fediverseError'); }
     ctx.redirect(fediverseReturnTo(ctx, '/fediverse/mastodon'));
   })
   .post("/fediverse/mastodon/fav/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
-    try { await fediverseModel.favourite(ctx.params.id); } catch (_) {}
+    try { await fediverseModel.favourite(ctx.params.id); } catch (e) { return fediverseFail(ctx, e && e.message ? e.message : 'fediverseError'); }
     ctx.redirect(fediverseReturnTo(ctx, '/fediverse/mastodon'));
   })
   .post("/fediverse/mastodon/unfav/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
-    try { await fediverseModel.unfavourite(ctx.params.id); } catch (_) {}
+    try { await fediverseModel.unfavourite(ctx.params.id); } catch (e) { return fediverseFail(ctx, e && e.message ? e.message : 'fediverseError'); }
     ctx.redirect(fediverseReturnTo(ctx, '/fediverse/mastodon'));
   })
   .post("/settings/fediverse", koaBody(), async (ctx) => {
@@ -6303,7 +6690,7 @@ router
       } catch (_) {}
       ctx.redirect('/fediverse');
     } catch (err) {
-      ctx.redirect(`/settings?fediverseError=${encodeURIComponent(err.message || 'fediverseError')}`);
+      fediverseFail(ctx, err.message || 'fediverseError', '/settings#multiverse');
     }
   })
   .post("/settings/fediverse/disconnect", koaBody(), async (ctx) => {
@@ -6316,7 +6703,7 @@ router
       await fediverseModel.peertube.connect({ instance: ctx.request.body?.instance, username: ctx.request.body?.username, password: ctx.request.body?.password });
       ctx.redirect('/fediverse');
     } catch (err) {
-      ctx.redirect(`/settings?peertubeError=${encodeURIComponent(err && err.message ? err.message : 'peertubeErrConnect')}#multiverse`);
+      fediverseFail(ctx, err && err.message ? err.message : 'peertubeErrConnect', '/settings#multiverse');
     }
   })
   .post("/settings/peertube/disconnect", koaBody(), async (ctx) => {
@@ -6326,30 +6713,30 @@ router
   .post("/settings/telegram/start", koaBody(), async (ctx) => {
     try {
       const state = await fediverseModel.telegram.beginLogin({ apiId: ctx.request.body?.apiId, apiHash: ctx.request.body?.apiHash, phone: ctx.request.body?.phone });
-      if (state && state.step === 'error') { ctx.redirect(`/settings?telegramError=${encodeURIComponent(state.error || 'telegramErrConnect')}#multiverse`); return; }
+      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings#multiverse'); return; }
       ctx.redirect('/settings#multiverse');
     } catch (err) {
-      ctx.redirect(`/settings?telegramError=${encodeURIComponent(tgErrorCode(err))}#multiverse`);
+      fediverseFail(ctx, tgErrorCode(err), '/settings#multiverse');
     }
   })
   .post("/settings/telegram/code", koaBody(), async (ctx) => {
     try {
       const state = await fediverseModel.telegram.submitCode(ctx.request.body?.code);
       if (state && state.step === 'done') { ctx.redirect('/fediverse'); return; }
-      if (state && state.step === 'error') { ctx.redirect(`/settings?telegramError=${encodeURIComponent(state.error || 'telegramErrConnect')}#multiverse`); return; }
+      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings#multiverse'); return; }
       ctx.redirect('/settings#multiverse');
     } catch (err) {
-      ctx.redirect(`/settings?telegramError=${encodeURIComponent(tgErrorCode(err))}#multiverse`);
+      fediverseFail(ctx, tgErrorCode(err), '/settings#multiverse');
     }
   })
   .post("/settings/telegram/password", koaBody(), async (ctx) => {
     try {
       const state = await fediverseModel.telegram.submitPassword(ctx.request.body?.password);
       if (state && state.step === 'done') { ctx.redirect('/fediverse'); return; }
-      if (state && state.step === 'error') { ctx.redirect(`/settings?telegramError=${encodeURIComponent(state.error || 'telegramErrConnect')}#multiverse`); return; }
+      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings#multiverse'); return; }
       ctx.redirect('/settings#multiverse');
     } catch (err) {
-      ctx.redirect(`/settings?telegramError=${encodeURIComponent(tgErrorCode(err))}#multiverse`);
+      fediverseFail(ctx, tgErrorCode(err), '/settings#multiverse');
     }
   })
   .post("/settings/telegram/cancel", koaBody(), async (ctx) => {
@@ -6361,7 +6748,7 @@ router
     ctx.redirect('/settings#multiverse');
   })
   .get('/data', async ctx => {
-    const filter = String(ctx.query.filter || 'RECENT').toUpperCase();
+    const filter = String(ctx.query.filter || 'ALL').toUpperCase();
     const q = String(ctx.query.q || '').trim();
     const reason = String(ctx.query.reason || '').trim();
     const [{ matches, total, hasProfile, kindsAvail, anyMatches, reasonsAvail, reason: activeReason }, cohesion] = await Promise.all([
@@ -6387,6 +6774,7 @@ router
     polls = polls.map(p => ({ ...p, isFavorite: fav.has(String(p.id)) }));
     polls = await applyListFilters(polls, ctx);
     try { polls = await lifetime.enrichAndFilter(polls, { getKey: (x) => x.id }); } catch (_) {}
+    if (recentFallback(ctx, polls, 'ALL')) return;
     const spreadMap = await spreads.forMessages(polls.map(p => p.id)).catch(() => new Map());
     await warmAuthorNames(polls);
     const pollCensus = (String(filter).toUpperCase() === 'ALL' && !q) ? polls : await pollsModel.listAll('ALL', { q: '', favorites: [...fav] }).catch(() => []);
@@ -6452,20 +6840,20 @@ router
   })
   .post('/polls/close/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'pollsMod')) { ctx.redirect('/modules'); return; }
-    try { await pollsModel.closePoll(ctx.params.id); } catch (_) {}
+    try { await pollsModel.closePoll(ctx.params.id); } catch (_) { return actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, `/polls/${encodeURIComponent(ctx.params.id)}`, ['/polls', '/chats', '/tribe']));
   })
   .post('/polls/delete/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'pollsMod')) { ctx.redirect('/modules'); return; }
     let poll = null;
     try { poll = await pollsModel.getPollById(ctx.params.id, getViewerId()); } catch (_) {}
-    try { await pollsModel.deletePoll(ctx.params.id); } catch (_) {}
+    try { await pollsModel.deletePoll(ctx.params.id); } catch (_) { return actionFail(ctx); }
     if (poll && poll.chatId) { ctx.redirect(`/chats/${encodeURIComponent(poll.chatId)}`); return; }
     ctx.redirect('/polls?filter=MINE');
   })
   .post('/polls/opinions/:pollId/:category', koaBody(), async ctx => {
     if (!checkMod(ctx, 'pollsMod')) { ctx.redirect('/modules'); return; }
-    try { await pollsModel.createOpinion(ctx.params.pollId, ctx.params.category); } catch (_) {}
+    try { await pollsModel.createOpinion(ctx.params.pollId, ctx.params.category); } catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, `/polls/${encodeURIComponent(ctx.params.pollId)}`, ['/polls']));
   })
@@ -6480,6 +6868,7 @@ router
     const fav = await contentFavorites.getFavoriteSet('blogs');
     let blogs = await blogModel.listAll(filter, { q, favorites: [...fav] });
     blogs = await applyListFilters(blogs, ctx);
+    if (recentFallback(ctx, blogs, 'ALL')) return;
     const spreadMap = await spreads.forMessages((blogs || []).map(b => b && b.id)).catch(() => new Map());
     await warmAuthorNames(blogs);
     const blogCensus = (String(filter).toUpperCase() === 'ALL' && !q) ? blogs : await blogModel.listAll('ALL', { q: '', favorites: [...fav] }).catch(() => []);
@@ -6540,7 +6929,7 @@ router
   })
   .post('/blogs/opinions/:blogId/:category', koaBody(), async ctx => {
     if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
-    try { await blogModel.createOpinion(ctx.params.blogId, ctx.params.category); } catch (_) {}
+    try { await blogModel.createOpinion(ctx.params.blogId, ctx.params.category); } catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, `/blogs/${encodeURIComponent(ctx.params.blogId)}`, ['/blogs']));
   })
@@ -6560,6 +6949,7 @@ router
     forums = applyTextSearch(forums, q, ['title', 'text', 'category']);
     forums = await applyListFilters(forums, ctx);
     try { forums = await lifetime.enrichAndFilter(forums); } catch (_) {}
+    if (recentFallback(ctx, forums)) return;
     const spreadMap = await spreads.forMessages((forums || []).map(x => x && (x.key || x.id)));
     await warmAuthorNames(forums);
     await decorateSubscriptionIn('forum', forums);
@@ -6591,11 +6981,14 @@ router
       federation: checkMod(ctx, 'invitesMod'),
       larp: checkMod(ctx, 'larpMod'),
       ux: true,
-      backup: checkMod(ctx, 'backupMod'),
-      greeting: checkMod(ctx, 'feedMod')
+      greeting: checkMod(ctx, 'feedMod'),
+      wish: true,
+      workflow: isLoopbackRequest(ctx)
     };
     try {
       const status = await onboardingModel.status(available);
+      status.workflow = workflowsModel.currentWorkflow(getConfig());
+      status.wish = getConfig().wish;
       const job = backupModel.restoreStatus();
       status.bootstrap = job && job.source === 'snapshot' ? job : null;
       if (status.bootstrap) ctx.set('Cache-Control', 'no-store');
@@ -6632,10 +7025,30 @@ router
     const v = String((ctx.request.body || {}).ux || '').trim().toLowerCase();
     const aiNavEnabled = cfg.modules && cfg.modules.aiNavMod === 'on';
     const chatsEnabled = cfg.modules && cfg.modules.chatsMod === 'on';
-    const next = (v === 'ainav' && aiNavEnabled) ? 'ainav' : (v === 'chats' && chatsEnabled) ? 'chats' : v === 'feed' ? 'feed' : 'blocks';
+    const phoneEnabled = !!(cfg.modules && cfg.modules.phoneMod !== 'off');
+    const next = (v === 'ainav' && aiNavEnabled) ? 'ainav' : (v === 'chats' && chatsEnabled) ? 'chats' : v === 'feed' ? 'feed' : (v === 'phone' && phoneEnabled) ? 'phone' : 'blocks';
     cfg.ux = { ...(cfg.ux && typeof cfg.ux === 'object' ? cfg.ux : {}), current: next };
     saveConfig(cfg);
     try { onboardingModel.markStep('ux'); } catch (_) {}
+    ctx.redirect('/welcome');
+  })
+  .post('/welcome/wish', koaBody(), async (ctx) => {
+    const cfg = getConfig();
+    const v = String((ctx.request.body || {}).wish || '').trim();
+    cfg.wish = WISH_LEVELS.includes(v) ? v : 'whole';
+    saveConfig(cfg);
+    try { onboardingModel.markStep('wish'); } catch (_) {}
+    ctx.redirect('/welcome#step-workflow');
+  })
+  .post('/welcome/workflow', koaBody(), async (ctx) => {
+    if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
+    const workflow = workflowsModel.wizardWorkflow(String((ctx.request.body || {}).workflow || '').trim());
+    if (workflow) {
+      const cfg = workflowsModel.applyWorkflow(getConfig(), workflow);
+      saveConfig(cfg);
+      if (workflow.theme) ctx.cookies.set("theme", cfg.themes.current, { httpOnly: true, sameSite: 'strict', secure: ctx.secure });
+    }
+    try { onboardingModel.markStep('workflow'); } catch (_) {}
     ctx.redirect('/welcome');
   })
   .post('/welcome/dismiss', koaBody(), async (ctx) => {
@@ -6643,8 +7056,11 @@ router
     safeRefererRedirect(ctx, '/');
   })
   .post('/ai/suggestion/dismiss', koaBody(), async (ctx) => {
+    const shown = String((ctx.request.body || {}).href || '');
     const current = sharedState.getBestMatch ? sharedState.getBestMatch() : null;
-    if (current && current.href) sharedState.setDismissedSuggestion(current.href);
+    if (shown && sharedState.isKnownSuggestion(shown)) sharedState.dismissSuggestion(shown);
+    else if (current && current.href) sharedState.dismissSuggestion(current.href);
+    if (current && current.href && sharedState.isSuggestionDismissed(current.href)) sharedState.nextBestMatch();
     safeRefererRedirect(ctx, '/');
   })
   .post('/emergencies/banner/dismiss', koaBody(), async (ctx) => {
@@ -6744,6 +7160,7 @@ router
     let bookmarks = (await bookmarksModel.listAll({ viewerId, filter: filter === "favorites" ? "all" : filter, q, sort })).map(b => ({ ...b, isFavorite: favs.has(String(b.rootId || b.id)) }));
     if (filter === "favorites") bookmarks = bookmarks.filter(b => b.isFavorite);
     bookmarks = await applyListFilters(bookmarks, ctx);
+    if (recentFallback(ctx, bookmarks)) return;
     await enrichWithComments(bookmarks, 'rootId');
     const spreadMap = await spreads.forMessages((bookmarks || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(bookmarks);
@@ -6770,6 +7187,8 @@ router
     tasks = applyTextSearch(tasks, q, ['title', 'description', 'location', 'tags']);
     tasks = await applyListFilters(tasks, ctx);
     try { tasks = await lifetime.enrichAndFilter(tasks); } catch (_) {}
+    const taskViewer = getViewerId();
+    if (recentFallback(ctx, tasks.filter(t => (String(t.isPublic || '').toUpperCase() === 'PUBLIC' || t.author === taskViewer || (Array.isArray(t.assignees) && t.assignees.includes(taskViewer))) && (Date.parse(t.createdAt || '') || 0) >= Date.now() - 86400000))) return;
     await enrichMsgSize(tasks);
     const spreadMap = await spreads.forMessages((tasks || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(tasks);
@@ -6796,6 +7215,7 @@ router
     events = applyTextSearch(events, q, ['title', 'description', 'location', 'tags']);
     events = await applyListFilters(events, ctx);
     try { events = await lifetime.enrichAndFilter(events); } catch (_) {}
+    if (recentFallback(ctx, events.filter(e => String(e.isPublic || 'public').toLowerCase() !== 'private' && (Date.parse(e.createdAt || '') || 0) >= Date.now() - 86400000))) return;
     await enrichMsgSize(events);
     const viewerPrefs = await about.visibilityPrefs(getViewerId()).catch(() => null);
     const spreadMap = await spreads.forMessages((events || []).map(x => x && (x.id || x.key)));
@@ -6859,6 +7279,7 @@ router
     voteList = await applyListFilters(voteList, ctx);
     voteList = applyTextSearch(voteList, q, ['question', 'tags']);
     try { voteList = await lifetime.enrichAndFilter(voteList, { getAuthor: (x) => x.createdBy }); } catch (_) {}
+    if (recentFallback(ctx, voteList)) return;
     await enrichMsgSize(voteList);
     const spreadMap = await spreads.forMessages((voteList || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(voteList);
@@ -6889,6 +7310,7 @@ router
     if (String(filter || '').toUpperCase() !== 'MINE') {
       try { marketItems = await lifetime.enrichAndFilter(marketItems, { getCreatedAt: (x) => x.updatedAt || x.createdAt }); } catch (_) {}
     }
+    if (recentFallback(ctx, marketItems.filter(e => e.status === "FOR SALE" && String(e.createdAt || "") >= new Date(Date.now() - 86400000).toISOString()))) return;
     const spreadMap = await spreads.forMessages((marketItems || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(marketItems);
     ctx.body = await marketView(marketItems, filter, null, { q, minPrice, maxPrice, sort, spreadMap, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId(), industry: ctx.query.industry || "", title: ctx.query.title || "", description: ctx.query.description || "", price: ctx.query.price || "", tags: ctx.query.tags || "", stock: ctx.query.stock || "" });
@@ -6967,6 +7389,7 @@ router
       try { jobs = await lifetime.enrichAndFilter(jobs); } catch (_) {}
     }
     await enrichMsgSize(jobs)
+    if (recentFallback(ctx, jobs, 'ALL')) return
     const spreadMap = await spreads.forMessages((jobs || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(jobs);
     const jobsCensus = (String(filter).toUpperCase() === 'ALL') ? jobs : await jobsModel.listJobs('ALL', viewerId, {}).catch(() => [])
@@ -7037,6 +7460,7 @@ router
       try { items = await lifetime.enrichAndFilter(items); } catch (_) {}
     }
     await enrichMsgSize(items)
+    if (recentFallback(ctx, items, 'ALL')) return
     const spreadMap = await spreads.forMessages((items || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(items);
     const housingCensus = (String(filter).toUpperCase() === 'ALL') ? items : await housingModel.listHousing('ALL', viewerId, {}).catch(() => [])
@@ -7118,6 +7542,7 @@ router
       return shop;
     }));
     try { withFeatured = await lifetime.enrichAndFilter(withFeatured, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
+    if (recentFallback(ctx, withFeatured)) return;
     const spreadMap = await spreads.forMessages((withFeatured || []).map(x => x && (x.key || x.id)));
     await warmAuthorNames(withFeatured);
     await decorateSubscriptionIn('shops', withFeatured);
@@ -7524,7 +7949,9 @@ router
   })
   .get("/chats", async (ctx) => {
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
-    const { filter = 'recent', q = '', tribeId = '' } = ctx.query;
+    const { q = '', tribeId = '' } = ctx.query;
+    const uxChatsMode = getConfig().ux?.current === 'chats';
+    const filter = ctx.query.filter || (uxChatsMode ? 'all' : 'recent');
     const viewerId = getViewerId();
     if (filter === 'create') {
       ctx.body = await chatsView([], 'create', null, { q, ...(tribeId ? { tribeId } : {}) });
@@ -7538,9 +7965,9 @@ router
     let finalList = filter === "favorites" ? enriched.filter(x => x.isFavorite) : enriched;
     finalList = await applyListFilters(finalList, ctx);
     try { finalList = await lifetime.enrichAndFilter(finalList, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
+    if (recentFallback(ctx, finalList)) return;
     const spreadMap = await spreads.forMessages((finalList || []).map(x => x && (x.key || x.id)));
     await warmAuthorNames(finalList);
-    const uxChatsMode = getConfig().ux?.current === 'chats';
     if (uxChatsMode && filter === 'all' && !q && finalList.length) {
       const actTs = (c) => Math.max(Number(c.lastMsgAt || 0), Date.parse(c.updatedAt || '') || 0, Date.parse(c.createdAt || '') || 0);
       const first = finalList.slice().sort((a, b) => actTs(b) - actTs(a))[0];
@@ -7631,10 +8058,11 @@ router
     }
     const favWiki = await contentFavorites.getFavoriteSet('wiki');
     const pages = (await wikiModel.listPages({ tribeId, filter, q, viewerId: uid })).map(x => ({ ...x, isFavorite: favWiki.has(String(x.id)) }));
+    if (recentFallback(ctx, await applyWishScope(pages))) return;
     const censusList = (filter === "all" && !q) ? pages : wikiCensus.map(x => ({ ...x, isFavorite: favWiki.has(String(x.id)) }));
     const spreadMap = await spreads.forMessages(pages.map(x => x && x.id));
     await warmAuthorNames(pages);
-    ctx.body = await wikiView(applyWishLocal(pages), filter, { q, tribeId, tribe, censusList, spreadMap, viewerPrefs: await about.visibilityPrefs(uid).catch(() => null), viewerId: uid });
+    ctx.body = await wikiView(await applyWishScope(pages), filter, { q, tribeId, tribe, censusList, spreadMap, viewerPrefs: await about.visibilityPrefs(uid).catch(() => null), viewerId: uid });
   })
   .get("/wiki/:id/history", async (ctx) => {
     if (!checkMod(ctx, 'wikiMod')) { ctx.redirect('/modules'); return; }
@@ -7694,6 +8122,7 @@ router
     let enriched = pads.filter(p => !p.tribeId).map(p => ({ ...p, isFavorite: fav.has(String(p.rootId)) }));
     enriched = await applyListFilters(enriched, ctx);
     try { enriched = await lifetime.enrichAndFilter(enriched, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
+    if (recentFallback(ctx, enriched)) return;
     const spreadMap = await spreads.forMessages((enriched || []).map(x => x && (x.rootId || x.key || x.id)));
     await warmAuthorNames(enriched);
     await decorateSubscriptionIn('pads', enriched);
@@ -7736,6 +8165,57 @@ router
     try { padSubscription = await subscriptionStateFor(pad.rootId || pad.key, pad.author); } catch (_) {}
     ctx.body = await singlePadView({ ...pad, subscription: padSubscription, isFavorite: fav.has(String(pad.rootId)), isTribeMember }, entries, { baseUrl, selectedVersion, modesAvail: await padModesAvailFor() });
   })
+  .get("/rooms", async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    const filter = String(ctx.query.filter || "recent").toLowerCase();
+    const uid = getViewerId();
+    await roomsModel.ingestKeys().catch(() => {});
+    if (filter === "edit") {
+      const room = await roomsModel.getRoomById(String(ctx.query.id || '')).catch(() => null);
+      if (!room || room.author !== uid) { ctx.redirect('/rooms'); return; }
+      ctx.body = await roomsView([], "edit", room, {});
+      return;
+    }
+    if (filter === "create") {
+      ctx.body = await roomsView([], "create", null, { tribeId: String(ctx.query.tribeId || '') });
+      return;
+    }
+    const q = String(ctx.query.q || "").trim();
+    const census = await roomsCensus();
+    const occupancy = await roomsModel.occupancies(census.filter(r => !r.isClosed));
+    let list = census.filter(roomFilterFn(filter, uid, occupancy));
+    list = await applyListFilters(list, ctx);
+    try { list = await lifetime.enrichAndFilter(list, { getKey: (x) => x.rootId }); } catch (_) {}
+    if (recentFallback(ctx, list)) return;
+    const spreadMap = await spreads.forMessages(list.map(x => x.rootId));
+    await warmAuthorNames(list);
+    ctx.body = await roomsView(list, filter, null, { q, spreadMap, occupancy, live: await roomsModel.liveState(), modesAvail: roomModesFromCensus(census, uid, occupancy) });
+  })
+  .get("/rooms/:roomId", async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    await roomsModel.ingestKeys().catch(() => {});
+    const uid = getViewerId();
+    const room = await roomsModel.getRoomById(ctx.params.roomId).catch(() => null);
+    if (!room) { ctx.redirect('/rooms'); return; }
+    let isTribeMember = false;
+    if (room.tribeId) {
+      const t = await tribesModel.getTribeById(room.tribeId).catch(() => null);
+      if (!t) { ctx.redirect('/tribes'); return; }
+      if (!t.members.includes(uid)) { ctx.body = tribeAccessDeniedView(t); return; }
+      isTribeMember = true;
+    }
+    const fav = await contentFavorites.getFavoriteSet('rooms').catch(() => new Set());
+    const live = await roomsModel.liveState();
+    const inside = !!(live && live.ref === room.rootId);
+    const occ = inside ? null : await roomsModel.occupancy(room);
+    const census = await roomsCensus();
+    await warmAuthorNames([room, ...room.members.map(m => ({ author: m }))]);
+    ctx.body = await singleRoomView({ ...room, isFavorite: fav.has(String(room.rootId)), isTribeMember }, {
+      live, occ, available: await phoneModel.available().catch(() => false),
+      spreads: await spreads.forMessage(room.rootId).catch(() => null),
+      modesAvail: roomModesFromCensus(census, uid, await roomsModel.occupancies(census.filter(r => !r.isClosed)))
+    });
+  })
   .get("/calendars", async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
     const filter = String(ctx.query.filter || "recent").toLowerCase();
@@ -7758,6 +8238,7 @@ router
     let finalList = filter === "favorites" ? enriched.filter(c => c.isFavorite) : enriched;
     finalList = await applyListFilters(finalList, ctx);
     try { finalList = await lifetime.enrichAndFilter(finalList, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
+    if (recentFallback(ctx, finalList)) return;
     const spreadMap = await spreads.forMessages((finalList || []).map(x => x && (x.rootId || x.key || x.id)));
     await warmAuthorNames(finalList);
     await decorateSubscriptionIn('calendars', finalList);
@@ -7821,6 +8302,7 @@ router
     projects = await applyListFilters(projects, ctx)
     try { projects = await lifetime.enrichAndFilter(projects); } catch (_) {}
     await enrichMsgSize(projects)
+    if (recentFallback(ctx, projects, 'ALL')) return
     const spreadMap = await spreads.forMessages((projects || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(projects);
     await decorateSubscriptionIn('projects', projects)
@@ -7875,7 +8357,7 @@ router
       if (q) items = items.filter(x => [x.name, x.title, x.description, x.notes, x.facilityName].some(v => String(v || "").toLowerCase().includes(q)))
       const spreadMap = await spreads.forMessages((items || []).map(x => x && (x.id || x.key))).catch(() => new Map())
       const facilityCensus = await industryModel.listFacilities('ALL').catch(() => [])
-      ctx.body = await industryView(applyWishLocal(items), filter, { spreadMap, censusList: facilityCensus })
+      ctx.body = await industryView(await applyWishScope(items), filter, { spreadMap, censusList: facilityCensus })
       return
     }
     const search = String(ctx.query.search || "").trim()
@@ -7887,12 +8369,13 @@ router
       facilities = facilities.filter(x => [x.name, x.description, x.sector].some(v => String(v || "").toLowerCase().includes(q)))
     }
     try { facilities = await lifetime.enrichAndFilter(facilities); } catch (_) {}
+    if (recentFallback(ctx, await applyWishScope(facilities), 'ALL')) return
     await enrichMsgSize(facilities)
     const spreadMap = await spreads.forMessages((facilities || []).map(x => x && (x.id || x.key)));
     await warmAuthorNames(facilities);
     await decorateSubscriptionIn('industry', facilities)
     const industryCensus = (String(filter).toUpperCase() === 'ALL' && !search) ? facilities : await industryModel.listFacilities('ALL').catch(() => [])
-    ctx.body = await industryView(applyWishLocal(facilities), filter, { spreadMap, search, sector, censusList: industryCensus })
+    ctx.body = await industryView(await applyWishScope(facilities), filter, { spreadMap, search, sector, censusList: industryCensus })
   })
   .get("/industry/edit/:id", async (ctx) => {
     if (!checkMod(ctx, 'industryMod')) { ctx.redirect('/modules'); return; }
@@ -8224,6 +8707,7 @@ router
     const filter = qf(ctx, 'recent'), q = String(ctx.query.q || '').trim();
     const data = await favoritesModel.listAll({ filter });
     const items = applyTextSearch(data.items, q, ['title', 'name', 'description', 'category', 'url', 'tags']);
+    if (recentFallback(ctx, items)) return;
     ctx.body = await favoritesView(items, filter, data.counts, q);
   })
   .get("/logs", async (ctx) => {
@@ -8266,9 +8750,13 @@ router
     const b = ctx.request.body || {};
     const mode = b.mode === 'ai' ? 'ai' : 'manual';
     try {
-      if (mode === 'ai') { startAI(); await logsModel.createAI(); }
+      if (mode === 'ai') {
+        startAI();
+        const res = await logsModel.createAI();
+        if (res && res.status !== 'ok') { failWith(ctx, res.status === 'ai_disabled' ? 'actionFailed' : 'logsNothingNew', '/logs'); return; }
+      }
       else await logsModel.createManual(b.label || '', b.text || '');
-    } catch (_) {}
+    } catch (_) { actionFail(ctx, '/logs'); return; }
     ctx.redirect('/logs');
   })
   .get("/logs/edit/:id", async (ctx) => {
@@ -8280,12 +8768,12 @@ router
   .post("/logs/update/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
-    try { await logsModel.updateLog(ctx.params.id, { label: b.label || '', text: b.text || '' }); } catch (_) {}
+    try { await logsModel.updateLog(ctx.params.id, { label: b.label || '', text: b.text || '' }); } catch (_) { return actionFail(ctx); }
     ctx.redirect(`/logs/view/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/logs/delete/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'logsMod')) { ctx.redirect('/modules'); return; }
-    try { await logsModel.deleteLog(ctx.params.id); } catch (_) {}
+    try { await logsModel.deleteLog(ctx.params.id); } catch (_) { return actionFail(ctx); }
     ctx.redirect('/logs');
   })
   .get("/logs/export", async (ctx) => {
@@ -8448,12 +8936,13 @@ router
     let filter = ctx.query.filter || 'recent'; if (filter === 'favs') filter = 'all';
     let list = await transfersModel.listAll(filter, getViewerId());
     try { list = await lifetime.enrichAndFilter(list, { getAuthor: (x) => x.from }); } catch (_) {}
+    if (recentFallback(ctx, (await applyWishScope(list)).filter(t => (Date.parse(t.createdAt || '') || 0) >= Date.now() - 86400000))) return;
     await enrichMsgSize(list);
     const spreadMap = await spreads.forMessages((list || []).map(x => x && (x.id || x.key)));
     const prefill = filter === 'create' ? { to: ctx.query.to || '', amount: ctx.query.amount || '', concept: ctx.query.concept || '', category: ctx.query.category || '' } : undefined;
     await warmAuthorNames(list);
     const transferCensus = String(filter) === 'all' ? list : await transfersModel.listAll('all', getViewerId()).catch(() => []);
-    ctx.body = await transferView(applyWishLocal(list), filter, null, { censusList: transferCensus, q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', category: ctx.query.category || '', spreadMap, prefill });
+    ctx.body = await transferView(await applyWishScope(list), filter, null, { censusList: transferCensus, q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', category: ctx.query.category || '', spreadMap, prefill });
   })
   .get('/transfers/edit/:id', async ctx => {
     if (!checkMod(ctx, 'transfersMod')) { ctx.redirect('/modules'); return; }
@@ -8764,12 +9253,12 @@ router
     } catch (_) {}
     ctx.redirect('/search?query=' + encodeURIComponent(raw));
   })
+  .get('/pixelia/pdf', async ctx => sendContentPdf(ctx, 'pixelia', null))
+  .post('/pixelia/share', koaBody(), async ctx => sharePdfAsPm(ctx, 'pixelia', null))
   .post('/pixelia/paint', koaBody(), async (ctx) => {
     const x = Number(ctx.request.body.x), y = Number(ctx.request.body.y), color = ctx.request.body.color;
     if (!Number.isFinite(x) || !Number.isFinite(y) || x < 1 || x > 50 || y < 1 || y > 200) {
-      const errorMessage = 'Coordinates are wrong!';
-      const pixelArt = await pixeliaModel.listPixels();
-      ctx.body = pixeliaView(pixelArt, errorMessage);
+      sendErrorPage(ctx, require('../views/main_views').i18n.pixeliaCoordsError, { status: 400, to: '/pixelia' });
       return;
     }
     await pixeliaModel.paintPixel(x, y, color);
@@ -8828,14 +9317,16 @@ router
         ({ encryptedText } = cipherModel.encryptData(cleanText, key));
       }
       if (encryptedText.length > PM_CRYPTER_MAX) {
-        ctx.body = await pmView(recipients, subject, text, false, '', true);
+        ctx.state.inlineError = require('../views/main_views').i18n.pmCrypterTooLong;
+        ctx.body = await pmView(recipients, subject, text);
         return;
       }
       try {
         if (fromList || recipientsArr.length > 6) await pmModel.sendToMany(recipientsArr, cleanSubject, encryptedText, true);
         else await pmModel.sendMessage(recipientsArr, cleanSubject, encryptedText, true);
       } catch (_) {
-        ctx.body = await pmView(recipients, subject, text, false, '', true);
+        ctx.state.inlineError = require('../views/main_views').i18n.actionFailed;
+        ctx.body = await pmView(recipients, subject, text);
         return;
       }
       await refreshInboxCount();
@@ -8863,14 +9354,16 @@ router
     const listOk = !!listEntry;
     const validRecipients = (recipients || '').split(',').map(s => s.trim()).filter(Boolean).filter(id => ssbRef.isFeedId(id));
     if (validRecipients.length === 0 && !listOk) {
-      ctx.body = await pmView(recipients, subject, text, false, '', false, null, true, '', null, { lists, selectedList });
+      ctx.state.inlineError = require('../views/main_views').i18n.pmInvalidRecipients;
+      ctx.body = await pmView(recipients, subject, text, false, '', false, null, false, '', null, { lists, selectedList });
       return;
     }
     if (crypter) {
       const key = cipherModel.generateKey();
       const { encryptedText } = cipherModel.encryptData(stripDangerousTags(text), key);
       if (encryptedText.length > PM_CRYPTER_MAX) {
-        ctx.body = await pmView(recipients, subject, text, false, '', true, null, false, '', null, { lists, selectedList });
+        ctx.state.inlineError = require('../views/main_views').i18n.pmCrypterTooLong;
+        ctx.body = await pmView(recipients, subject, text, false, '', false, null, false, '', null, { lists, selectedList });
         return;
       }
       ctx.body = await pmView(recipients, subject, text, true, '', false, { key, cipher: encryptedText }, false, '', null, { lists, selectedList });
@@ -8883,17 +9376,17 @@ router
     const file = ctx.request.files && (ctx.request.files.file || ctx.request.files.blob);
     const cleanup = () => { try { if (file && file.filepath) fs.unlinkSync(file.filepath); } catch (_) {} };
     const recipient = String(b.recipient || '').trim();
-    if (!ssbRef.isFeedId(recipient)) { cleanup(); ctx.redirect('/pm?fileerror=recipient#fileshare'); return; }
+    if (!ssbRef.isFeedId(recipient)) { cleanup(); fileShareError(ctx, 'recipient'); return; }
     const cfgNow = getConfig();
     if (cfgNow.pmVisibility === 'mutuals' && recipient !== getViewerId()) {
       let rel = null;
       try { rel = await friend.getRelationship(recipient); } catch (_) { rel = null; }
       if (!pmPolicy.isRecipientAllowed({ pmVisibility: cfgNow.pmVisibility, viewerId: getViewerId(), recipientId: recipient, relationship: rel })) {
-        cleanup(); ctx.redirect('/pm?fileerror=mutual#fileshare'); return;
+        cleanup(); fileShareError(ctx, 'mutual'); return;
       }
     }
-    if (!file || !file.filepath || !file.size) { cleanup(); ctx.redirect('/pm?fileerror=nofile#fileshare'); return; }
-    if (file.size > FILESHARE_MAX_SIZE) { cleanup(); ctx.redirect('/pm?fileerror=size#fileshare'); return; }
+    if (!file || !file.filepath || !file.size) { cleanup(); fileShareError(ctx, 'nofile'); return; }
+    if (file.size > FILESHARE_MAX_SIZE) { cleanup(); fileShareError(ctx, 'size'); return; }
     let pointer;
     try {
       pointer = await fileshareModel.createShareFromFile({
@@ -8901,7 +9394,7 @@ router
         filename: file.originalFilename || file.name || 'file',
         mime: file.mimetype || null
       });
-    } catch (_) { cleanup(); ctx.redirect('/pm?fileerror=failed#fileshare'); return; }
+    } catch (_) { cleanup(); fileShareError(ctx, 'failed'); return; }
     cleanup();
     const useCrypter = !!b.crypter;
     const sharedKey = useCrypter ? cipherModel.generateKey() : '';
@@ -8917,13 +9410,13 @@ router
     const file = ctx.request.files && (ctx.request.files.file || ctx.request.files.blob);
     const cleanup = () => { try { if (file && file.filepath) fs.unlinkSync(file.filepath); } catch (_) {} };
     const recipient = String(b.recipient || '').trim();
-    if (!ssbRef.isFeedId(recipient)) { cleanup(); ctx.redirect('/pm?fileerror=recipient#fileshare'); return; }
+    if (!ssbRef.isFeedId(recipient)) { cleanup(); fileShareError(ctx, 'recipient'); return; }
     const cfgNow = getConfig();
     if (cfgNow.pmVisibility === 'mutuals' && recipient !== getViewerId()) {
       let rel = null;
       try { rel = await friend.getRelationship(recipient); } catch (_) { rel = null; }
       if (!pmPolicy.isRecipientAllowed({ pmVisibility: cfgNow.pmVisibility, viewerId: getViewerId(), recipientId: recipient, relationship: rel })) {
-        cleanup(); ctx.redirect('/pm?fileerror=mutual#fileshare'); return;
+        cleanup(); fileShareError(ctx, 'mutual'); return;
       }
     }
     if (!file && b.manifestBlobId) {
@@ -8938,12 +9431,12 @@ router
         if (sk.length >= 32) { const { encryptedText } = cipherModel.encryptData(pointer.key, sk); pointer = { ...pointer, key: encryptedText, crypter: true }; }
       }
       try { await pmModel.sendFileShare([recipient], stripDangerousTags(b.subject || ''), pointer, useCrypter); }
-      catch (_) { ctx.redirect('/pm?fileerror=send#fileshare'); return; }
+      catch (_) { fileShareError(ctx, 'send'); return; }
       await refreshInboxCount();
       ctx.redirect('/inbox?filter=sent'); return;
     }
-    if (!file || !file.filepath || !file.size) { cleanup(); ctx.redirect('/pm?fileerror=nofile#fileshare'); return; }
-    if (file.size > FILESHARE_MAX_SIZE) { cleanup(); ctx.redirect('/pm?fileerror=size#fileshare'); return; }
+    if (!file || !file.filepath || !file.size) { cleanup(); fileShareError(ctx, 'nofile'); return; }
+    if (file.size > FILESHARE_MAX_SIZE) { cleanup(); fileShareError(ctx, 'size'); return; }
     let pointer;
     try {
       pointer = await fileshareModel.createShareFromFile({
@@ -8951,7 +9444,7 @@ router
         filename: file.originalFilename || file.name || 'file',
         mime: file.mimetype || null
       });
-    } catch (_) { cleanup(); ctx.redirect('/pm?fileerror=failed#fileshare'); return; }
+    } catch (_) { cleanup(); fileShareError(ctx, 'failed'); return; }
     cleanup();
     const useCrypter = !!b.crypter;
     let sharedKey = '';
@@ -8962,7 +9455,7 @@ router
     }
     try {
       await pmModel.sendFileShare([recipient], stripDangerousTags(b.subject || ''), pointer, useCrypter);
-    } catch (_) { ctx.redirect('/pm?fileerror=send#fileshare'); return; }
+    } catch (_) { fileShareError(ctx, 'send'); return; }
     await refreshInboxCount();
     if (useCrypter) { ctx.body = await pmView('', '', '', false, sharedKey); return; }
     ctx.redirect('/inbox?filter=sent');
@@ -8973,7 +9466,7 @@ router
     const msg = messages.find(m => m && m.key === ctx.params.id);
     const fileShare = msg && msg.value && msg.value.content && msg.value.content.fileShare;
     if (!fileShare || fileShare.crypter) { ctx.redirect('/inbox'); return; }
-    if (!(await fileshareModel.ensureAvailable(fileShare))) { ctx.redirect('/inbox?filestatus=unavailable'); return; }
+    if (!(await fileshareModel.ensureAvailable(fileShare))) { sendErrorPage(ctx, require('../views/main_views').i18n.fileShareUnavailable, { status: 400, to: '/inbox' }); return; }
     ctx.type = fileShare.mime || 'application/octet-stream';
     ctx.set('Content-Disposition', contentDisposition('attachment', fileShare.filename || 'file'));
     const stream = fileshareModel.readShareStream(fileShare);
@@ -8994,9 +9487,9 @@ router
       if (typeof key !== 'string' || !key) { ctx.redirect('/inbox'); return; }
       try {
         pointer = { ...fileShare, key: cipherModel.decryptData(fileShare.key, key) };
-      } catch (_) { ctx.redirect('/inbox?filekey=bad'); return; }
+      } catch (_) { sendErrorPage(ctx, require('../views/main_views').i18n.pmCrypterBadKey, { status: 400, to: '/inbox' }); return; }
     }
-    if (!(await fileshareModel.ensureAvailable(pointer))) { ctx.redirect('/inbox?filestatus=unavailable'); return; }
+    if (!(await fileshareModel.ensureAvailable(pointer))) { sendErrorPage(ctx, require('../views/main_views').i18n.fileShareUnavailable, { status: 400, to: '/inbox' }); return; }
     ctx.type = fileShare.mime || 'application/octet-stream';
     ctx.set('Content-Disposition', contentDisposition('attachment', fileShare.filename || 'file'));
     const stream = fileshareModel.readShareStream(pointer);
@@ -9279,17 +9772,17 @@ router
       const { code } = await forumModel.generateInvite(ctx.params.id);
       ctx.body = renderForumInvitePage(code);
     } catch (_) {
-      ctx.redirect(safeReturnTo(ctx, `/forum/${encodeURIComponent(ctx.params.id)}`, ['/forum']));
+      actionFail(ctx);
     }
   })
   .post('/forum/open-invite/create/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
-    try { await forumModel.generateOpenInvite(ctx.params.id); } catch (_) {}
+    try { await forumModel.generateOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(safeReturnTo(ctx, `/forum/${encodeURIComponent(ctx.params.id)}`, ['/forum']));
   })
   .post('/forum/open-invite/remove/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
-    try { await forumModel.removeOpenInvite(ctx.params.id); } catch (_) {}
+    try { await forumModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(safeReturnTo(ctx, `/forum/${encodeURIComponent(ctx.params.id)}`, ['/forum']));
   })
   .post('/forum/join-code', koaBody(), async ctx => {
@@ -9298,8 +9791,8 @@ router
     try {
       const { forumId } = await forumModel.joinByInvite(code);
       ctx.redirect(safeReturnTo(ctx, `/forum/${encodeURIComponent(forumId)}`, ['/forum']));
-    } catch (_) {
-      ctx.redirect(safeReturnTo(ctx, '/forum', ['/forum']));
+    } catch (e) {
+      inviteCodeFail(ctx, e);
     }
   })
   .post('/backup/keys/export', koaBody(), async (ctx) => {
@@ -9312,7 +9805,6 @@ router
       ctx.set('Content-Disposition', `attachment; filename="${filename}"`);
       ctx.set('Content-Length', String(data.length));
       ctx.body = data;
-      try { onboardingModel.markStep('backup'); } catch (_) {}
     } catch (error) { sendErrorPage(ctx, error.message); }
   })
   .post('/backup/keys/import', koaBody({ multipart: true, formidable: { keepExtensions: true, uploadDir: os.tmpdir() } }), async (ctx) => {
@@ -9341,7 +9833,6 @@ router
       const stream = fs.createReadStream(outPath);
       stream.on('close', () => { try { fs.unlinkSync(outPath); } catch (_) {} });
       ctx.body = stream;
-      try { onboardingModel.markStep('backup'); } catch (_) {}
     } catch (error) { try { fs.unlinkSync(outPath); } catch (_) {} sendErrorPage(ctx, error.message); }
   })
   .post('/backup/import', koaBody({ multipart: true, formidable: { keepExtensions: true, uploadDir: os.tmpdir(), maxFileSize: 4 * 1024 * 1024 * 1024 } }), async (ctx) => {
@@ -9358,14 +9849,14 @@ router
   .post('/trending/:contentId/:category', async (ctx) => {
     const { contentId, category } = ctx.params, voterId = SSBconfig?.keys?.id;
     if ((await trendingModel.getMessageById(contentId))?.content?.opinions_inhabitants?.includes(voterId)) {
-      ctx.flash = { message: 'You have already opined.' }; return ctx.redirect('/trending');
+      return failWith(ctx, 'opinionAlreadyGiven', '/trending');
     }
     await trendingModel.createVote(contentId, category); ctx.redirect('/trending');
   })
   .post('/opinions/:contentId/:category', async (ctx) => {
     const { contentId, category } = ctx.params, voterId = SSBconfig?.keys?.id;
     if ((await opinionsModel.getMessageById(contentId))?.content?.opinions_inhabitants?.includes(voterId)) {
-      ctx.flash = { message: 'You have already opined.' }; return ctx.redirect('/opinions');
+      return failWith(ctx, 'opinionAlreadyGiven', '/opinions');
     }
     await opinionsModel.createVote(contentId, category); ctx.redirect('/opinions');
   })
@@ -9388,7 +9879,13 @@ router
     const media = (await handleBlobUpload(ctx, 'blob')) || kept || null;
     try { await feedModel.createFeed(text, mentions, media); }
     catch (err) {
-      if (/too long|too short|required/i.test(String(err && err.message))) { ctx.redirect("/feed/create?msg=feedTooLong"); return; }
+      if (/too long|too short|required/i.test(String(err && err.message))) {
+        const t = require('../views/main_views').i18n;
+        ctx.state.inlineError = /too long/i.test(String(err.message)) ? t.publishTooLong : t.publishTooShort;
+        ctx.status = 400;
+        ctx.body = feedCreateView({ text, media: media || '' });
+        return;
+      }
       throw err;
     }
     ctx.redirect("/feed?filter=ALL&msg=feedPublished");
@@ -9402,7 +9899,7 @@ router
     ctx.redirect(ctx.get("Referer") || "/feed");
   })
   .post("/feed/delete/:id", koaBody(), async (ctx) => {
-    try { await feedModel.deleteFeedById(ctx.params.id); } catch (_) {}
+    try { await feedModel.deleteFeedById(ctx.params.id); } catch (_) { return actionFail(ctx); }
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, '/feed?filter=MINE', ['/feed']));
   })
@@ -9498,18 +9995,18 @@ router
     try {
       const code = await mapsModel.generateInvite(ctx.params.id);
       ctx.body = renderMapInvitePage(code);
-    } catch (e) {
-      ctx.redirect(`/maps/${encodeURIComponent(ctx.params.id)}`);
+    } catch (_) {
+      actionFail(ctx);
     }
   })
   .post("/maps/open-invite/create/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
-    try { await mapsModel.generateOpenInvite(ctx.params.id); } catch (_) {}
+    try { await mapsModel.generateOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/maps/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/maps/open-invite/remove/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
-    try { await mapsModel.removeOpenInvite(ctx.params.id); } catch (_) {}
+    try { await mapsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/maps/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/maps/join-code", koaBody(), async (ctx) => {
@@ -9518,13 +10015,13 @@ router
     try {
       const mapId = await mapsModel.joinByInvite(code);
       ctx.redirect(`/maps/${encodeURIComponent(mapId)}`);
-    } catch (_) {
-      ctx.redirect('/maps');
+    } catch (e) {
+      inviteCodeFail(ctx, e);
     }
   })
   .post("/maps/join/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
-    try { await mapsModel.joinMap(ctx.params.id); } catch (_) {}
+    try { await mapsModel.joinMap(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/maps/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/maps/:mapId/marker", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
@@ -9562,7 +10059,7 @@ router
     const uploadedSize = Number((Array.isArray(uploaded) ? uploaded[0] : uploaded)?.size || 0);
     if (fromBlob && !uploadedSize) {
       const generated = await buildTorrentFromBlob(fromBlob, title || ctx.request.body?.fromName, [resolveExternalBaseUrl(ctx), clearnetPublicBase()]).catch(() => null);
-      if (!generated) { ctx.redirect(`/torrents?filter=create&fromBlob=${encodeURIComponent(fromBlob)}&name=${encodeURIComponent(String(title || ''))}&error=torrentFromContentMissing`); return; }
+      if (!generated) { sendErrorPage(ctx, require('../views/main_views').i18n.torrentFromContentMissing, { status: 400, to: '/torrents?filter=create', keep: { fromBlob, name: String(title || '') } }); return; }
       await torrentsModel.createTorrent(generated.markdown, stripDangerousTags(tags), stripDangerousTags(title || generated.fileName), stripDangerousTags(description), generated.size, cleanTribeId, { source: fromBlob, sourceName: generated.fileName, sourceMime: generated.mime });
       ctx.redirect(cleanTribeId ? `/tribe/${encodeURIComponent(cleanTribeId)}?section=torrents` : '/torrents?filter=mine');
       return;
@@ -9750,14 +10247,16 @@ router
   })
   .post('/cipher/encrypt', koaBody(), async (ctx) => {
     const { text, password } = ctx.request.body;
-    if (password.length < 32) { ctx.body = { error: 'Password is too short or missing.' }; return ctx.redirect('/cipher'); }
+    if (String(password || '').length < 32) return failWith(ctx, 'cipherPasswordShort', '/cipher');
     const { encryptedText, iv } = cipherModel.encryptData(text, password);
     ctx.body = await cipherView(encryptedText, "", iv, password);
   })
   .post('/cipher/decrypt', koaBody(), async (ctx) => {
     const { encryptedText, password } = ctx.request.body;
-    if (password.length < 32) { ctx.body = { error: 'Password is too short or missing.' }; return ctx.redirect('/cipher'); }
-    ctx.body = await cipherView("", cipherModel.decryptData(encryptedText, password), "", password);
+    if (String(password || '').length < 32) return failWith(ctx, 'cipherPasswordShort', '/cipher');
+    let decrypted;
+    try { decrypted = cipherModel.decryptData(encryptedText, password); } catch (_) { return failWith(ctx, 'pmCrypterBadKey', '/cipher'); }
+    ctx.body = await cipherView("", decrypted, "", password);
   }) 
   .post('/tribes/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
@@ -9816,7 +10315,8 @@ router
   })
   .post('/tribes/join-code', koaBody(), async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
-    await tribesModel.joinByInvite(ctx.request.body.inviteCode)
+    try { await tribesModel.joinByInvite(ctx.request.body.inviteCode); }
+    catch (e) { inviteCodeFail(ctx, e); return; }
     ctx.redirect('/tribes?filter=membership')
   })
   .post('/tribes/leave/:id', koaBody(), async ctx => {
@@ -9827,13 +10327,13 @@ router
   .post('/tribes/open-invite/create', koaBody(), async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
     const tribeId = ctx.request.body.tribeId;
-    try { await tribesModel.generateOpenInvite(tribeId); } catch (_) {}
+    try { await tribesModel.generateOpenInvite(tribeId); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/tribe/${encodeURIComponent(tribeId)}`);
   })
   .post('/tribes/open-invite/remove', koaBody(), async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
     const tribeId = ctx.request.body.tribeId;
-    try { await tribesModel.removeOpenInvite(tribeId); } catch (_) {}
+    try { await tribesModel.removeOpenInvite(tribeId); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/tribe/${encodeURIComponent(tribeId)}`);
   })
   .post('/tribes/open-invite/join', koaBody(), async ctx => {
@@ -9842,7 +10342,7 @@ router
     try {
       const oi = await tribesModel.getOpenInvite(tribeId);
       if (oi && oi.code) await tribesModel.joinByInvite(oi.code);
-    } catch (_) {}
+    } catch (e) { if (!/already a member/i.test(String(e && e.message))) { actionFail(ctx, `/tribe/${encodeURIComponent(tribeId)}`); return; } }
     ctx.redirect(`/tribe/${encodeURIComponent(tribeId)}`);
   })
   .get('/tribes/open-invite/join/:id', async ctx => {
@@ -10029,7 +10529,7 @@ router
     const { exec } = require('child_process');
     try {
       await panicmodeModel.removeSSB();
-      sendErrorPage(ctx, 'Your blockchain has been successfully deleted!');
+      sendErrorPage(ctx, require('../views/main_views').i18n.panicRemoved);
       exec('pkill -f "node SSB_server.js start"');
       setTimeout(() => process.exit(0), 1000);
     } catch (error) { sendErrorPage(ctx, 'Error deleting your blockchain: ' + error.message); }
@@ -10102,7 +10602,7 @@ router
   })
   .post('/emergencies/confirm/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'emergenciesMod')) { ctx.redirect('/modules'); return; }
-    try { await emergenciesModel.confirmEmergency(ctx.params.id); } catch (_) {}
+    try { await emergenciesModel.confirmEmergency(ctx.params.id); } catch (e) { if (!/already/i.test(String(e && e.message))) return actionFail(ctx); }
     try { sharedState.setFeaturedEmergency(await emergenciesModel.featured()); } catch (_) {}
     ctx.redirect(`/emergencies/${encodeURIComponent(ctx.params.id)}`);
   })
@@ -10141,7 +10641,7 @@ router
   .post('/emergencies/updates/:updateId/confirm', koaBody(), async ctx => {
     if (!checkMod(ctx, 'emergenciesMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
-    try { await emergenciesModel.confirmUpdate(ctx.params.updateId); } catch (_) {}
+    try { await emergenciesModel.confirmUpdate(ctx.params.updateId); } catch (e) { if (!/already/i.test(String(e && e.message))) return actionFail(ctx); }
     ctx.redirect(`/emergencies/${encodeURIComponent(String(b.emergency || ''))}`);
   })
   .post('/emergencies/updates/:updateId/edit', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
@@ -10555,17 +11055,17 @@ router
       const { code } = await eventsModel.generateInvite(ctx.params.id);
       ctx.body = renderEventInvitePage(code);
     } catch (_) {
-      ctx.redirect(safeReturnTo(ctx, `/events/${encodeURIComponent(ctx.params.id)}`, ['/events']));
+      actionFail(ctx);
     }
   })
   .post('/events/open-invite/create/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'eventsMod')) { ctx.redirect('/modules'); return; }
-    try { await eventsModel.generateOpenInvite(ctx.params.id); } catch (_) {}
+    try { await eventsModel.generateOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(safeReturnTo(ctx, `/events/${encodeURIComponent(ctx.params.id)}`, ['/events']));
   })
   .post('/events/open-invite/remove/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'eventsMod')) { ctx.redirect('/modules'); return; }
-    try { await eventsModel.removeOpenInvite(ctx.params.id); } catch (_) {}
+    try { await eventsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(safeReturnTo(ctx, `/events/${encodeURIComponent(ctx.params.id)}`, ['/events']));
   })
   .post('/events/join-code', koaBody(), async ctx => {
@@ -10574,8 +11074,8 @@ router
     try {
       const { eventId } = await eventsModel.joinByInvite(code);
       ctx.redirect(safeReturnTo(ctx, `/events/${encodeURIComponent(eventId)}`, ['/events']));
-    } catch (_) {
-      ctx.redirect(safeReturnTo(ctx, '/events', ['/events']));
+    } catch (e) {
+      inviteCodeFail(ctx, e);
     }
   })
   .post('/events/:eventId/comments', koaBodyMiddleware, async ctx => commentAction(ctx, 'events', 'eventId'))
@@ -10586,7 +11086,7 @@ router
       if (rejectPastDates(ctx, [[b.deadline]], '/votes?filter=create')) return;
       await votesModel.createVote(stripDangerousTags(b.question), b.deadline, parsedOptions, String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean));
     } catch (err) {
-      ctx.redirect(voteFormRedirect('create', null, err, b));
+      voteFormError(ctx, 'create', null, err, b);
       return;
     }
     ctx.redirect(safeReturnTo(ctx, '/votes?filter=mine', ['/votes']));
@@ -10596,7 +11096,7 @@ router
     try {
       await votesModel.updateVoteById(ctx.params.id, { question: stripDangerousTags(b.question), deadline: b.deadline, options: parsedOptions, tags: b.tags ? b.tags.split(',').map(t => t.trim()).filter(Boolean) : [] });
     } catch (err) {
-      ctx.redirect(voteFormRedirect('edit', ctx.params.id, err, b));
+      voteFormError(ctx, 'edit', ctx.params.id, err, b);
       return;
     }
     ctx.redirect(safeReturnTo(ctx, '/votes?filter=mine', ['/votes']));
@@ -10611,31 +11111,31 @@ router
   })
   .post('/votes/opinions/:voteId/:category', koaBody(), async ctx => {
     try { await votesModel.createOpinion(ctx.params.voteId, ctx.params.category); }
-    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; ctx.flash = { message: "You have already opined." }; }
+    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; return failWith(ctx, 'opinionAlreadyGiven'); }
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, '/votes', ['/votes']));
   })
   .post('/events/opinions/:eventId/:category', koaBody(), async ctx => {
     try { await eventsModel.createOpinion(ctx.params.eventId, ctx.params.category); }
-    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; ctx.flash = { message: "You have already opined." }; }
+    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; return failWith(ctx, 'opinionAlreadyGiven'); }
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, '/events', ['/events']));
   })
   .post('/tasks/opinions/:taskId/:category', koaBody(), async ctx => {
     try { await tasksModel.createOpinion(ctx.params.taskId, ctx.params.category); }
-    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; ctx.flash = { message: "You have already opined." }; }
+    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; return failWith(ctx, 'opinionAlreadyGiven'); }
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, '/tasks', ['/tasks']));
   })
   .post('/reports/opinions/:reportId/:category', koaBody(), async ctx => {
     try { await reportsModel.createOpinion(ctx.params.reportId, ctx.params.category); }
-    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; ctx.flash = { message: "You have already opined." }; }
+    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; return failWith(ctx, 'opinionAlreadyGiven'); }
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, '/reports', ['/reports']));
   })
   .post('/projects/opinions/:projectId/:category', koaBody(), async ctx => {
     try { await projectsModel.createOpinion(ctx.params.projectId, ctx.params.category); }
-    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; ctx.flash = { message: "You have already opined." }; }
+    catch (e) { if (!/already/i.test(String(e?.message || ''))) throw e; return failWith(ctx, 'opinionAlreadyGiven'); }
     try { activityModel.invalidateCache(); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, '/projects', ['/projects']));
   })
@@ -10749,103 +11249,103 @@ router
   .post('/courts/cases/create', koaBody(), async (ctx) => {
     const b = ctx.request.body || {}, titleSuffix = String(b.titleSuffix || '').trim(), titlePreset = String(b.titlePreset || '').trim();
     const respondent = String(b.respondentId || '').trim(), method = String(b.method || '').trim().toUpperCase();
-    if (!titleSuffix && !titlePreset) { ctx.flash = { message: 'Title is required.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!respondent) { ctx.flash = { message: 'Accused / Respondent is required.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!/^@[A-Za-z0-9+/]+=*\.ed25519$/.test(respondent)) { ctx.flash = { message: 'Invalid respondent ID. Must be a valid SSB ID (@...ed25519).' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!new Set(['JUDGE','DICTATOR','POPULAR','MEDIATION','KARMATOCRACY']).has(method)) { ctx.flash = { message: 'Invalid resolution method.' }; return ctx.redirect('/courts?filter=cases'); }
+    if (!titleSuffix && !titlePreset) { return failWith(ctx, 'courtsErrTitle', '/courts?filter=cases'); }
+    if (!respondent) { return failWith(ctx, 'courtsErrRespondent', '/courts?filter=cases'); }
+    if (!/^@[A-Za-z0-9+/]+=*\.ed25519$/.test(respondent)) { return failWith(ctx, 'courtsErrRespondentId', '/courts?filter=cases'); }
+    if (!new Set(['JUDGE','DICTATOR','POPULAR','MEDIATION','KARMATOCRACY']).has(method)) { return failWith(ctx, 'courtsErrMethod', '/courts?filter=cases'); }
     try { await courtsModel.openCase({ titleBase: [titlePreset, titleSuffix].filter(Boolean).join(' - '), respondentInput: respondent, method }); }
-    catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    catch (e) { return actionFail(ctx); }
     ctx.redirect('/courts?filter=mycases');
   })
   .post('/courts/cases/:id/evidence/add', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     const caseId = ctx.params.id, b = ctx.request.body || {};
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
     try { await courtsModel.addEvidence({ caseId, text: stripDangerousTags(String(b.text || '')), link: String(b.link || ''), imageMarkdown: ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null }); }
-    catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/answer', koaBody(), async (ctx) => {
     const caseId = ctx.params.id, b = ctx.request.body || {}, answer = String(b.answer || ''), stance = String(b.stance || '').toUpperCase();
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!answer) { ctx.flash = { message: 'Response brief is required.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    if (!new Set(['DENY','ADMIT','PARTIAL']).has(stance)) { ctx.flash = { message: 'Invalid stance.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    try { await courtsModel.answerCase({ caseId, stance, text: stripDangerousTags(answer) }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    if (!answer) { return failWith(ctx, 'courtsErrBrief', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    if (!new Set(['DENY','ADMIT','PARTIAL']).has(stance)) { return failWith(ctx, 'courtsErrStance', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    try { await courtsModel.answerCase({ caseId, stance, text: stripDangerousTags(answer) }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/decide', koaBody(), async (ctx) => {
     const caseId = ctx.params.id, b = ctx.request.body || {}, result = String(b.outcome || '').trim(), orders = String(b.orders || '');
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!result) { ctx.flash = { message: 'Result is required.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    try { await courtsModel.issueVerdict({ caseId, result, orders }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    if (!result) { return failWith(ctx, 'courtsErrResult', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    try { await courtsModel.issueVerdict({ caseId, result, orders }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/settlements/propose', koaBody(), async (ctx) => {
     const caseId = ctx.params.id, terms = String(ctx.request.body?.terms || '');
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!terms) { ctx.flash = { message: 'Terms are required.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    try { await courtsModel.proposeSettlement({ caseId, terms }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    if (!terms) { return failWith(ctx, 'courtsErrTerms', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    try { await courtsModel.proposeSettlement({ caseId, terms }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/settlements/accept', koaBody(), async (ctx) => {
     const caseId = ctx.params.id;
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    try { await courtsModel.acceptSettlement({ caseId }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    try { await courtsModel.acceptSettlement({ caseId }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/support', koaBody(), async (ctx) => {
     const caseId = ctx.params.id;
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    try { await courtsModel.supportCase({ caseId }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    try { await courtsModel.supportCase({ caseId }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/mediators/accuser', koaBody(), async (ctx) => {
     const caseId = ctx.params.id, mediators = String(ctx.request.body?.mediators || '').split(',').map(s => s.trim()).filter(Boolean);
     const uid = getViewerId();
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!mediators.length) { ctx.flash = { message: 'At least one mediator is required.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    if (uid && mediators.includes(uid)) { ctx.flash = { message: 'You cannot appoint yourself as mediator.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    try { await courtsModel.setMediators({ caseId, side: 'accuser', mediators }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    if (!mediators.length) { return failWith(ctx, 'courtsErrMediator', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    if (uid && mediators.includes(uid)) { return failWith(ctx, 'courtsErrSelfMediator', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    try { await courtsModel.setMediators({ caseId, side: 'accuser', mediators }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/mediators/respondent', koaBody(), async (ctx) => {
     const caseId = ctx.params.id, mediators = String(ctx.request.body?.mediators || '').split(',').map(s => s.trim()).filter(Boolean);
     const uid = getViewerId();
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!mediators.length) { ctx.flash = { message: 'At least one mediator is required.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    if (uid && mediators.includes(uid)) { ctx.flash = { message: 'You cannot appoint yourself as mediator.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    try { await courtsModel.setMediators({ caseId, side: 'respondent', mediators }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    if (!mediators.length) { return failWith(ctx, 'courtsErrMediator', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    if (uid && mediators.includes(uid)) { return failWith(ctx, 'courtsErrSelfMediator', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    try { await courtsModel.setMediators({ caseId, side: 'respondent', mediators }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/judge', koaBody(), async (ctx) => {
     const caseId = ctx.params.id, judgeId = String(ctx.request.body?.judgeId || '').trim(), uid = getViewerId();
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (!judgeId) { ctx.flash = { message: 'Judge is required.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    if (uid && judgeId === uid) { ctx.flash = { message: 'You cannot assign yourself as judge.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    try { await courtsModel.assignJudge({ caseId, judgeId }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    if (!judgeId) { return failWith(ctx, 'courtsErrJudge', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    if (uid && judgeId === uid) { return failWith(ctx, 'courtsErrSelfJudge', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    try { await courtsModel.assignJudge({ caseId, judgeId }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/public', koaBody(), async (ctx) => {
     const caseId = ctx.params.id, pref = String(ctx.request.body?.preference || '').toUpperCase();
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    if (pref !== 'YES' && pref !== 'NO') { ctx.flash = { message: 'Invalid visibility preference.' }; return ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`); }
-    try { await courtsModel.setPublicPreference({ caseId, preference: pref === 'YES' }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    if (pref !== 'YES' && pref !== 'NO') { return failWith(ctx, 'courtsErrVisibility', `/courts/cases/${encodeURIComponent(caseId)}`); }
+    try { await courtsModel.setPublicPreference({ caseId, preference: pref === 'YES' }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/cases/:id/openVote', koaBody(), async (ctx) => {
     const caseId = ctx.params.id;
-    if (!caseId) { ctx.flash = { message: 'Case not found.' }; return ctx.redirect('/courts?filter=cases'); }
-    try { await courtsModel.openPopularVote({ caseId }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!caseId) { return failWith(ctx, 'courtsErrCaseNotFound', '/courts?filter=cases'); }
+    try { await courtsModel.openPopularVote({ caseId }); } catch (e) { return actionFail(ctx); }
     ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
   })
   .post('/courts/judges/nominate', koaBody(), async (ctx) => {
     const judgeId = String(ctx.request.body?.judgeId || '').trim();
-    if (!judgeId) { ctx.flash = { message: 'Judge is required.' }; return ctx.redirect('/courts?filter=judges'); }
-    try { await courtsModel.nominateJudge({ judgeId }); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!judgeId) { return failWith(ctx, 'courtsErrJudge', '/courts?filter=judges'); }
+    try { await courtsModel.nominateJudge({ judgeId }); } catch (e) { return actionFail(ctx); }
     ctx.redirect('/courts?filter=judges');
   })
   .post('/courts/judges/:id/vote', koaBody(), async (ctx) => {
-    if (!ctx.params.id) { ctx.flash = { message: 'Nomination not found.' }; return ctx.redirect('/courts?filter=judges'); }
-    try { await courtsModel.voteNomination(ctx.params.id); } catch (e) { ctx.flash = { message: String(e?.message || e) }; }
+    if (!ctx.params.id) { return failWith(ctx, 'courtsErrNomination', '/courts?filter=judges'); }
+    try { await courtsModel.voteNomination(ctx.params.id); } catch (e) { return actionFail(ctx); }
     ctx.redirect('/courts?filter=judges');
   })  
   .post("/market/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
@@ -10928,7 +11428,7 @@ router
   })
   .post("/market/opinions/:itemId/:category", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'marketMod')) { ctx.redirect('/modules'); return; }
-    try { await marketModel.createOpinion(ctx.params.itemId, ctx.params.category) } catch (_) {}
+    try { await marketModel.createOpinion(ctx.params.itemId, ctx.params.category) } catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, `/market/${encodeURIComponent(ctx.params.itemId)}`, ['/market']))
   })
   .post("/market/:itemId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'market', 'itemId'))
@@ -11007,7 +11507,7 @@ router
     if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
     let item = null
     try { item = await housingModel.getHousingById(ctx.params.id, getViewerId()) } catch (_) {}
-    try { await housingModel.deleteHousing(ctx.params.id) } catch (_) {}
+    try { await housingModel.deleteHousing(ctx.params.id) } catch (_) { return actionFail(ctx); }
     await notifyHousingRequesters(item, 'deleted')
     ctx.redirect(safeReturnTo(ctx, '/housing?filter=MINE', ['/housing']))
   })
@@ -11016,14 +11516,14 @@ router
     const nextStatus = String(ctx.request.body.status || '').toUpperCase()
     let item = null
     try { item = await housingModel.getHousingById(ctx.params.id, getViewerId()) } catch (_) {}
-    try { await housingModel.updateHousingStatus(ctx.params.id, nextStatus) } catch (_) {}
+    try { await housingModel.updateHousingStatus(ctx.params.id, nextStatus) } catch (_) { return actionFail(ctx); }
     if (nextStatus === 'CLOSED') await notifyHousingRequesters(item, 'closed')
     ctx.redirect(safeReturnTo(ctx, '/housing?filter=MINE', ['/housing']))
   })
   .post('/housing/visibility/:id', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
     const next = String(ctx.request.body?.visibility || '').toUpperCase() === 'HIDDEN' ? 'HIDDEN' : 'PUBLIC'
-    try { await housingModel.updateHousing(ctx.params.id, { visibility: next }) } catch (_) {}
+    try { await housingModel.updateHousing(ctx.params.id, { visibility: next }) } catch (_) { return actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, `/housing/${encodeURIComponent(ctx.params.id)}`, ['/housing']))
   })
   .post('/housing/request/:id', koaBody(), async (ctx) => {
@@ -11054,7 +11554,7 @@ router
   })
   .post('/housing/opinions/:housingId/:category', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
-    try { await housingModel.createOpinion(ctx.params.housingId, ctx.params.category) } catch (_) {}
+    try { await housingModel.createOpinion(ctx.params.housingId, ctx.params.category) } catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, `/housing/${encodeURIComponent(ctx.params.housingId)}`, ['/housing']))
   })
   .post('/housing/:housingId/comments', koaBodyMiddleware, async ctx => commentAction(ctx, 'housing', 'housingId'))
@@ -11103,7 +11603,7 @@ router
       ctx.redirect(safeReturnTo(ctx, '/jobs', ['/jobs']));
       return;
     }
-    try { await jobsModel.subscribeToJob(ctx.params.id, userId); } catch (_) {}
+    try { await jobsModel.subscribeToJob(ctx.params.id, userId); } catch (_) { return actionFail(ctx); }
     try { await notifyBot('JOB_SUBSCRIBED', [job.author], `${await actorLink(getViewerId())} has subscribed to your job offer: [${job.title || 'a job'}](/jobs/${encodeURIComponent(job.id)})`); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, '/jobs', ['/jobs']));
   })
@@ -11118,7 +11618,7 @@ router
       ctx.redirect(safeReturnTo(ctx, '/jobs', ['/jobs']));
       return;
     }
-    try { await jobsModel.unsubscribeFromJob(ctx.params.id, userId); } catch (_) {}
+    try { await jobsModel.unsubscribeFromJob(ctx.params.id, userId); } catch (_) { return actionFail(ctx); }
     try { await notifyBot('JOB_UNSUBSCRIBED', [job.author], `${await actorLink(getViewerId())} has unsubscribed from your job offer: [${job.title || 'a job'}](/jobs/${encodeURIComponent(job.id)})`); } catch (_) {}
     ctx.redirect(safeReturnTo(ctx, '/jobs', ['/jobs']));
   })
@@ -11153,17 +11653,17 @@ router
       const { code } = await shopsModel.generateInvite(ctx.params.id);
       ctx.body = renderShopInvitePage(code);
     } catch (_) {
-      ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(ctx.params.id)}`, ['/shops']));
+      actionFail(ctx);
     }
   })
   .post("/shops/open-invite/create/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
-    try { await shopsModel.generateOpenInvite(ctx.params.id); } catch (_) {}
+    try { await shopsModel.generateOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(ctx.params.id)}`, ['/shops']));
   })
   .post("/shops/open-invite/remove/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
-    try { await shopsModel.removeOpenInvite(ctx.params.id); } catch (_) {}
+    try { await shopsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(ctx.params.id)}`, ['/shops']));
   })
   .get("/shops/open-invite/join/:id", async (ctx) => {
@@ -11172,7 +11672,7 @@ router
     try {
       const oi = await shopsModel.getOpenInvite(ctx.params.id);
       if (oi && oi.code) { const r = await shopsModel.joinByCode(oi.code); if (r && r.shopId) dest = r.shopId; }
-    } catch (_) {}
+    } catch (e) { if (!/already a member/i.test(String(e && e.message))) { actionFail(ctx, `/shops/${encodeURIComponent(dest)}`); return; } }
     ctx.redirect(`/shops/${encodeURIComponent(dest)}`);
   })
   .post("/shops/join-code", koaBody(), async (ctx) => {
@@ -11181,8 +11681,8 @@ router
     try {
       const { shopId } = await shopsModel.joinByCode(code);
       ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(shopId)}`, ['/shops']));
-    } catch (_) {
-      ctx.redirect(safeReturnTo(ctx, '/shops', ['/shops']));
+    } catch (e) {
+      inviteCodeFail(ctx, e);
     }
   })
   .post("/shops/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'shops', 'add'))
@@ -11191,7 +11691,8 @@ router
   .post("/shops/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'shops', 'remove'))
   .post("/shops/opinions/:shopId/:category", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
-    await shopsModel.createOpinion(ctx.params.shopId, ctx.params.category);
+    try { await shopsModel.createOpinion(ctx.params.shopId, ctx.params.category); }
+    catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(ctx.params.shopId)}`, ['/shops']));
   })
   .post("/shops/product/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
@@ -11254,7 +11755,8 @@ router
   })
   .post("/shops/product/opinions/:productId/:category", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
-    await shopsModel.createOpinion(ctx.params.productId, ctx.params.category);
+    try { await shopsModel.createOpinion(ctx.params.productId, ctx.params.category); }
+    catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, `/shops/product/${encodeURIComponent(ctx.params.productId)}`, ['/shops']));
   })
   .post("/shops/:shopId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'shops', 'shopId'))
@@ -11299,13 +11801,13 @@ router
   .post("/chats/open-invite/create", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
     const chatId = ctx.request.body.chatId;
-    try { await chatsModel.generateOpenInvite(chatId); } catch (_) {}
+    try { await chatsModel.generateOpenInvite(chatId); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/chats/${encodeURIComponent(chatId)}`);
   })
   .post("/chats/open-invite/remove", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
     const chatId = ctx.request.body.chatId;
-    try { await chatsModel.removeOpenInvite(chatId); } catch (_) {}
+    try { await chatsModel.removeOpenInvite(chatId); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/chats/${encodeURIComponent(chatId)}`);
   })
   .post("/chats/join-code", koaBody(), async (ctx) => {
@@ -11314,8 +11816,8 @@ router
     try {
       const chatKey = await chatsModel.joinByInvite(code);
       ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(chatKey)}`, ['/chats']));
-    } catch (_) {
-      ctx.redirect(safeReturnTo(ctx, '/chats', ['/chats']));
+    } catch (e) {
+      inviteCodeFail(ctx, e);
     }
   })
   .post("/chats/join/:id", koaBody(), async (ctx) => {
@@ -11412,7 +11914,7 @@ router
     const target = String(ctx.request.body.target || '').trim();
     const emoji = String(ctx.request.body.emoji || '').trim();
     if (!target || !emoji) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
-    try { await chatsModel.toggleReaction(ctx.params.chatId, target, emoji); } catch (_) {}
+    try { await chatsModel.toggleReaction(ctx.params.chatId, target, emoji); } catch (_) { return actionFail(ctx); }
     const anchor = 'msg-' + target.replace(/[^a-zA-Z0-9]/g, '');
     ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}#${anchor}`);
   })
@@ -11420,7 +11922,7 @@ router
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
     const target = String(ctx.request.body.target || '').trim();
     if (!target) { ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}`); return; }
-    try { await chatsModel.togglePin(ctx.params.chatId, target); } catch (_) {}
+    try { await chatsModel.togglePin(ctx.params.chatId, target); } catch (_) { return actionFail(ctx); }
     const anchor = 'msg-' + target.replace(/[^a-zA-Z0-9]/g, '');
     ctx.redirect(`/chats/${encodeURIComponent(ctx.params.chatId)}#${anchor}`);
   })
@@ -11444,7 +11946,8 @@ router
         const tribe = tribeId ? await tribesModel.getTribeById(tribeId).catch(() => null) : null;
         const draft = { title: title.slice(0, 100), body, tags: stripDangerousTags(String(b.tags || "")), status: String(b.status || "OPEN"), license: formLicense(b), summary: "" };
         ctx.status = 409;
-        ctx.body = await wikiView([], 'create', { draft, tribe, tribeId, censusList, returnTo: String(b.returnTo || ""), notice: require('../views/main_views').i18n.wikiDuplicateTitle });
+        ctx.state.inlineError = require('../views/main_views').i18n.wikiDuplicateTitle;
+        ctx.body = await wikiView([], 'create', { draft, tribe, tribeId, censusList, returnTo: String(b.returnTo || "") });
         return;
       }
       ctx.redirect(`/wiki/${encodeURIComponent(res.key)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`);
@@ -11540,7 +12043,7 @@ router
   })
   .post("/pads/close/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
-    try { await padsModel.closePadById(ctx.params.id); } catch (_) {}
+    try { await padsModel.closePadById(ctx.params.id); } catch (_) { return actionFail(ctx); }
     ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/pads/delete/:id", koaBody(), async (ctx) => {
@@ -11555,12 +12058,12 @@ router
   })
   .post("/pads/open-invite/create/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
-    try { await padsModel.generateOpenInvite(ctx.params.id); } catch (_) {}
+    try { await padsModel.generateOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/pads/open-invite/remove/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
-    try { await padsModel.removeOpenInvite(ctx.params.id); } catch (_) {}
+    try { await padsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/pads/join-code", koaBody(), async (ctx) => {
@@ -11569,8 +12072,8 @@ router
     try {
       const padId = await padsModel.joinByInvite(code);
       ctx.redirect(`/pads/${encodeURIComponent(padId)}`);
-    } catch (_) {
-      ctx.redirect('/pads');
+    } catch (e) {
+      inviteCodeFail(ctx, e);
     }
   })
   .post("/pads/join/:id", koaBody(), async (ctx) => {
@@ -11608,6 +12111,95 @@ router
   })
   .post("/pads/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'pads', 'add'))
   .post("/pads/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'pads', 'remove'))
+  .post("/rooms/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const tribeId = b.tribeId || null;
+    if (tribeId) {
+      const t = await tribesModel.getTribeById(tribeId).catch(() => null);
+      if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+      await tribesModel.ensureTribeKeyDistribution(tribeId).catch(() => {});
+    }
+    const image = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : '';
+    const msg = await roomsModel.createRoom({ title: stripDangerousTags(String(b.title || '')), description: stripDangerousTags(String(b.description || '')), image: image || '', status: b.status, tags: b.tags || '', tribeId });
+    ctx.redirect(tribeId ? `/tribe/${encodeURIComponent(tribeId)}?section=rooms` : `/rooms/${encodeURIComponent(msg.key)}`);
+  })
+  .post("/rooms/update/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    const room = await roomsModel.getRoomById(ctx.params.id).catch(() => null);
+    if (!room || room.author !== getViewerId()) { ctx.redirect('/rooms'); return; }
+    const image = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image')) : null;
+    const patch = { title: stripDangerousTags(String(b.title || '')), description: stripDangerousTags(String(b.description || '')), tags: b.tags || '' };
+    if (image) patch.image = image;
+    if (room.hub !== getViewerId() && !(await roomsModel.occupancy(room))) patch.refreshHub = true;
+    try { await roomsModel.updateRoomById(room.rootId, patch); } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); return; }
+    ctx.redirect(`/rooms/${encodeURIComponent(room.rootId)}`);
+  })
+  .post("/rooms/close/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    try { await roomsModel.closeRoomById(ctx.params.id); } catch (_) { return actionFail(ctx); }
+    ctx.redirect(`/rooms/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/rooms/line/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    try { await roomsModel.setRoomLine(ctx.params.id, String((ctx.request.body || {}).line || '')); } catch (_) { return actionFail(ctx); }
+    ctx.redirect(`/rooms/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/rooms/delete/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    const live = await roomsModel.liveState();
+    if (live && live.ref === ctx.params.id) await roomsModel.leave();
+    try { await roomsModel.deleteRoomById(ctx.params.id); } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); return; }
+    ctx.redirect('/rooms');
+  })
+  .post("/rooms/generate-invite/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    try { ctx.body = renderRoomInvitePage(await roomsModel.generateInvite(ctx.params.id)); } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); }
+  })
+  .post("/rooms/open-invite/create/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    try { await roomsModel.generateOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
+    ctx.redirect(`/rooms/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/rooms/open-invite/remove/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    try { await roomsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
+    ctx.redirect(`/rooms/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post("/rooms/join-code", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    const code = String((ctx.request.body || {}).code || "").trim();
+    try { ctx.redirect(`/rooms/${encodeURIComponent(await roomsModel.joinByInvite(code))}`); }
+    catch (e) { inviteCodeFail(ctx, e); }
+  })
+  .post("/rooms/join/:id", koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    const room = await roomsModel.getRoomById(ctx.params.id).catch(() => null);
+    if (!room) { ctx.redirect('/rooms'); return; }
+    const error = await enterRoom(room);
+    if (error) { sendErrorPage(ctx, roomErrorMessage(error), { status: 400 }); return; }
+    ctx.redirect(`/rooms/${encodeURIComponent(room.rootId)}`);
+  })
+  .post("/rooms/leave", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    await roomsModel.leave();
+    if ((ctx.request.body || {}).returnTo) ctx.redirect(safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']));
+    else safeRefererRedirect(ctx, '/rooms');
+  })
+  .post("/rooms/mute", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    await roomsModel.mute(String((ctx.request.body || {}).mute) === '1').catch(() => null);
+    if ((ctx.request.body || {}).returnTo) ctx.redirect(safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']));
+    else safeRefererRedirect(ctx, '/rooms');
+  })
+  .post("/rooms/live/dismiss", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    sharedState.dismissLiveRoom(String((ctx.request.body || {}).ref || ''));
+    safeRefererRedirect(ctx, '/rooms');
+  })
+  .post("/rooms/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'rooms', 'add'))
+  .post("/rooms/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'rooms', 'remove'))
   .post("/forum/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'forum', 'add'))
   .post("/forum/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'forum', 'remove'))
   .post("/events/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'events', 'add'))
@@ -11696,7 +12288,7 @@ router
       const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
     }
-    try { await calendarsModel.joinCalendar(ctx.params.id); } catch (_) {}
+    try { await calendarsModel.joinCalendar(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/calendars/generate-invite/:id", koaBody(), async (ctx) => {
@@ -11704,18 +12296,18 @@ router
     try {
       const code = await calendarsModel.generateInvite(ctx.params.id);
       ctx.body = renderCalendarInvitePage(code);
-    } catch (e) {
-      ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
+    } catch (_) {
+      actionFail(ctx);
     }
   })
   .post("/calendars/open-invite/create/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
-    try { await calendarsModel.generateOpenInvite(ctx.params.id); } catch (_) {}
+    try { await calendarsModel.generateOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/calendars/open-invite/remove/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
-    try { await calendarsModel.removeOpenInvite(ctx.params.id); } catch (_) {}
+    try { await calendarsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/calendars/join-code", koaBody(), async (ctx) => {
@@ -11724,8 +12316,8 @@ router
     try {
       const calId = await calendarsModel.joinByInvite(code);
       ctx.redirect(`/calendars/${encodeURIComponent(calId)}`);
-    } catch (_) {
-      ctx.redirect('/calendars');
+    } catch (e) {
+      inviteCodeFail(ctx, e);
     }
   })
   .post("/calendars/leave/:id", koaBody(), async (ctx) => {
@@ -11735,7 +12327,7 @@ router
       const t = await tribesModel.getTribeById(target.tribeId).catch(() => null);
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
     }
-    try { await calendarsModel.leaveCalendar(ctx.params.id); } catch (_) {}
+    try { await calendarsModel.leaveCalendar(ctx.params.id); } catch (_) { return actionFail(ctx); }
     ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
   })
   .post("/calendars/add-date/:id", koaBody(), async (ctx) => {
@@ -11757,7 +12349,7 @@ router
       if (noteText && Array.isArray(dateMsgs)) {
         for (const msg of dateMsgs) {
           if (msg && msg.key) {
-            try { await calendarsModel.addNote(ctx.params.id, msg.key, noteText); } catch (_) {}
+            try { await calendarsModel.addNote(ctx.params.id, msg.key, noteText); } catch (_) { return actionFail(ctx); }
           }
         }
       }
@@ -11779,7 +12371,7 @@ router
     const b = ctx.request.body || {};
     const text = stripDangerousTags(String(b.text || "").trim());
     if (text) {
-      try { await calendarsModel.addNote(ctx.params.id, b.dateId || "", text); } catch (_) {}
+      try { await calendarsModel.addNote(ctx.params.id, b.dateId || "", text); } catch (_) { return actionFail(ctx); }
     }
     ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
   })
@@ -11793,7 +12385,7 @@ router
         if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
       }
     }
-    try { await calendarsModel.deleteNote(ctx.params.noteId); } catch (_) {}
+    try { await calendarsModel.deleteNote(ctx.params.noteId); } catch (_) { return actionFail(ctx); }
     ctx.redirect(calendarId ? `/calendars/${encodeURIComponent(calendarId)}` : '/calendars');
   })
   .post("/calendars/delete-date/:id", koaBody(), async (ctx) => {
@@ -11806,7 +12398,7 @@ router
         if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
       }
     }
-    try { await calendarsModel.deleteDate(ctx.params.id, calendarId); } catch (_) {}
+    try { await calendarsModel.deleteDate(ctx.params.id, calendarId); } catch (_) { return actionFail(ctx); }
     ctx.redirect(calendarId ? `/calendars/${encodeURIComponent(calendarId)}` : '/calendars');
   })
   .post("/calendars/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'calendars', 'add'))
@@ -11872,7 +12464,7 @@ router
     if (!tagProject) ctx.throw(400, "Missing project tag on transfer");
     const projectId = String(tagProject).split(":")[1];
     await transfersModel.confirmTransferById(ctx.params.id);
-    try { await projectsModel.confirmPledge(projectId, ctx.params.id); } catch (_) {}
+    try { await projectsModel.confirmPledge(projectId, ctx.params.id); } catch (_) { return actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, `/projects/${encodeURIComponent(projectId)}`, ["/projects", "/transfers"]));
   })
   .post("/projects/follow/:id", koaBody(), async (ctx) => {
@@ -11957,7 +12549,7 @@ router
       const connectedId = String((await bankingModel.discoverUbiPub()).pubId || '');
       const pub = wanted ? pubs.find(p => String(p.pubId) === wanted) : (pubs.find(p => String(p.pubId) === connectedId) || null);
       const address = pub ? (pub.address || await bankingModel.getUserAddress(pub.pubId).catch(() => null)) : null;
-      if (!address || !ECO_ADDRESS_RE.test(String(address))) { ctx.redirect('/banking?filter=ubi&msg=no_pub_address'); return; }
+      if (!address || !ECO_ADDRESS_RE.test(String(address))) { bankingResult(ctx, 'ubi', 'no_pub_address'); return; }
       const q = new URLSearchParams({ to: address, payee: pub.pubId, concept: 'OASIS UBI Fund', ref: '/banking?filter=ubi', tag: 'UBI' });
       ctx.redirect(`/wallet/send?${q.toString()}#wallet-send`);
     } catch (_) { ctx.redirect('/banking?filter=overview'); }
@@ -11969,7 +12561,7 @@ router
       await bankingModel.claimUBI(userId);
       ctx.redirect("/banking?filter=overview&msg=claimed_pending");
     } catch (e) {
-      ctx.redirect(`/banking?filter=overview&msg=${encodeURIComponent(e.message || "error")}`);
+      bankingResult(ctx, 'overview', e.message || "error");
     }
   })
   .post("/banking/refuse-ubi", koaBody(), async (ctx) => {
@@ -11978,7 +12570,7 @@ router
       await bankingModel.refuseUBI(getViewerId());
       ctx.redirect("/banking?filter=overview&msg=refused");
     } catch (e) {
-      ctx.redirect(`/banking?filter=overview&msg=${encodeURIComponent(e.message || "error")}`);
+      bankingResult(ctx, 'overview', e.message || "error");
     }
   })
   .post("/banking/claim/:id", koaBody(), async (ctx) => {
@@ -11988,7 +12580,7 @@ router
         await bankingModel.claimUBI(getViewerId());
         ctx.redirect("/banking?filter=overview&msg=claimed_pending");
       } catch (e) {
-        ctx.redirect(`/banking?filter=overview&msg=${encodeURIComponent(e.message || "error")}`);
+        bankingResult(ctx, 'overview', e.message || "error");
       }
       return;
     }
@@ -12021,7 +12613,7 @@ router
     const res = submittedId === viewerId && !label
       ? await bankingModel.addAddress({ userId: viewerId, address })
       : bankingModel.addAddressBookEntry({ label, address, userId: submittedId });
-    ctx.redirect(`/banking?filter=addresses&msg=${encodeURIComponent(res.status)}`);
+    bankingResult(ctx, 'addresses', res.status);
   })
   .post("/banking/addresses/delete", koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
@@ -12029,7 +12621,7 @@ router
     const res = String(b.source || '') === 'book'
       ? bankingModel.removeAddressBookEntry(String(b.entryId || ''))
       : await bankingModel.removeAddress({ userId: getViewerId() });
-    ctx.redirect(`/banking?filter=addresses&msg=${encodeURIComponent(res.status)}`);
+    bankingResult(ctx, 'addresses', res.status);
   })
   .post("/favorites/remove/:kind/:id", koaBody(), async (ctx) => {
     await favoritesModel.removeFavorite(ctx.params.kind, ctx.params.id);
@@ -12050,12 +12642,8 @@ router
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
     const workflow = workflowsModel.getWorkflow(String(ctx.request.body.workflow || '').trim());
     if (!workflow) { ctx.redirect("/settings#workflows"); return; }
-    const cfg = getConfig();
-    const enabled = new Set(workflowsModel.modulesOf(workflow));
-    workflowsModel.ALL_MODULES.forEach(mod => { cfg.modules[`${mod}Mod`] = enabled.has(mod) ? 'on' : 'off'; });
-    cfg.themes.current = workflow.theme;
-    if (workflow.homePage) cfg.homePage = workflow.homePage;
-    if (!enabled.has('aiNav') && cfg.ux) cfg.ux.current = 'blocks';
+    const cfg = workflowsModel.applyWorkflow(getConfig(), workflow);
+    if (cfg.modules.aiNavMod !== 'on' && cfg.ux) cfg.ux.current = 'blocks';
     saveConfig(cfg);
     ctx.cookies.set("theme", cfg.themes.current, { httpOnly: true, sameSite: 'strict', secure: ctx.secure });
     ctx.redirect("/settings#workflows");
@@ -12077,26 +12665,25 @@ router
     try { onboardingModel.markStep('language'); } catch (_) {}
     safeRefererRedirect(ctx, '/settings');
   })
-  .post("/settings/conn/start", koaBody(), async ctx => { await meta.connStart(); ctx.redirect("/peers"); })
-  .post("/settings/conn/stop", koaBody(), async ctx => { await meta.connStop(); ctx.redirect("/peers"); })
-  .post("/settings/conn/sync", koaBody(), async ctx => { await meta.sync(); ctx.redirect("/peers"); })
-  .post("/settings/conn/restart", koaBody(), async ctx => { await meta.connRestart(); ctx.redirect("/peers"); })
+  .post("/peers/pause", koaBody(), async ctx => { await setNetworkPaused(true); ctx.redirect("/peers"); })
+  .post("/peers/resume", koaBody(), async ctx => { await setNetworkPaused(false); ctx.redirect("/peers"); })
   .post("/settings/invite/accept", koaBody(), async ctx => {
     const invite = String(ctx.request.body.invite || '');
     const pubKey = (invite.match(/@[A-Za-z0-9+/=_-]{43,}\.ed25519/) || [])[0] || null;
     if (pubKey) {
       try {
-        const os = require('os'), fsx = require('fs'), px = require('path');
-        const gossip = JSON.parse(fsx.readFileSync(px.join(os.homedir(), '.ssb', 'gossip.json'), 'utf8') || '[]');
+        const fsx = require('fs'), px = require('path');
+        const gossip = JSON.parse(fsx.readFileSync(px.join(ssbConfig.path, 'gossip.json'), 'utf8') || '[]');
         let unfollowed = [];
         try { unfollowed = JSON.parse(fsx.readFileSync(stateFilePath('gossip_unfollowed.json'), 'utf8') || '[]'); } catch (_) {}
         const activePub = Array.isArray(gossip) && gossip.some(p => p && p.key === pubKey) && !unfollowed.some(u => u && u.key === pubKey);
-        if (activePub) { ctx.redirect('/invites?flash=alreadyFederated'); return; }
+        if (activePub) { sendErrorPage(ctx, require('../views/main_views').i18n.invitesAlreadyFederated, { status: 400, to: '/invites' }); return; }
       } catch (_) {}
     }
     let joined = false;
     try { await meta.acceptInvite(invite); joined = true; } catch (_) {}
-    if (joined) bootstrapFromPub(invite);
+    if (!joined) return failWith(ctx, 'inviteCodeInvalid');
+    bootstrapFromPub(invite);
     safeRefererRedirect(ctx, "/invites");
   })
   .post("/invites/inhabitant/follow", koaBody(), async (ctx) => {
@@ -12135,7 +12722,7 @@ router
     const { key, host, port } = ctx.request.body || {};
     if (!key || !host) return ctx.redirect("/invites");
     const pubs = readJSON(gossipPath), kcanon = canonicalKey(key);
-    if (pubs.find(p => p.host === host)?.error) return ctx.redirect("/invites");
+    if (!ssbRef.isFeed(kcanon)) return ctx.redirect("/invites");
     const ssb = await cooler.open(), unf = readJSON(unfollowedPath);
     const rec = unf.find(x => x && canonicalKey(x.key) === kcanon) || { host, port: Number(port) || 8008, key: kcanon };
     if (!pubs.find(x => x && canonicalKey(x.key) === kcanon)) { pubs.push({ host: rec.host, port: Number(rec.port) || 8008, key: kcanon }); writeJSON(gossipPath, pubs); }
@@ -12159,6 +12746,7 @@ router
     const keyStr = String(key).trim();
     if (!/^@[A-Za-z0-9+/_\-]{43}=\.ed25519$/.test(keyStr)) { sendErrorPage(ctx, `Invalid public key. Expected @<44 chars>=.ed25519`, { status: 400 }); return; }
     const kcanon = canonicalKey(keyStr);
+    if (!ssbRef.isFeed(kcanon)) { sendErrorPage(ctx, `Invalid public key. Expected @<44 chars>=.ed25519`, { status: 400 }); return; }
     const pubs = readJSON(gossipPath);
     if (!pubs.find(x => x && canonicalKey(x.key) === kcanon)) {
       pubs.push({ host: hostStr, port: prt, key: kcanon });
@@ -12172,7 +12760,8 @@ router
     try { await new Promise((res, rej) => ssb.publish({ type: "contact", contact: kcanon, following: true }, e => e ? rej(e) : res())); } catch (_) {}
     const unf = readJSON(unfollowedPath);
     writeJSON(unfollowedPath, unf.filter(x => !(x && canonicalKey(x.key) === kcanon)));
-    ctx.redirect(connectError ? `/peers?connectError=${encodeURIComponent(connectError)}` : "/peers");
+    if (connectError) { sendErrorPage(ctx, String(require('../views/main_views').i18n.peersConnectFailed || '').replace('{reason}', connectError), { status: 400, exact: true, to: '/peers' }); return; }
+    ctx.redirect("/peers");
   })
   .post("/peers/disconnect", koaBody(), async (ctx) => {
     const { key, host, port } = ctx.request.body || {};
@@ -12232,11 +12821,9 @@ router
   })
   .post("/invites/clear-unreachable", koaBody(), async (ctx) => {
     try {
-      const pubs = readJSON(gossipPath);
-      if (Array.isArray(pubs)) {
-        const kept = pubs.filter(p => p && !p.error && !(typeof p.failure === 'number' && p.failure > 0));
-        if (kept.length !== pubs.length) writeJSON(gossipPath, kept);
-      }
+      const dead = await deadPeerKeys();
+      const pubKeys = new Set(readJSON(gossipPath).map(p => p && peerHealth.canonicalKey(p.key)).filter(Boolean));
+      await forgetPeers([...dead].filter(k => pubKeys.has(k)));
     } catch (_) {}
     ctx.redirect("/invites");
   })
@@ -12281,12 +12868,13 @@ router
     for (const line of raw.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
-      const msMatch = trimmed.match(/^net:([^:]+):(\d+)~shs:([A-Za-z0-9+/_\-]{43}=?)(?:\.ed25519)?$/);
+      const msMatch = trimmed.match(/^(?:net|onion):([^:]+):(\d+)~shs:([A-Za-z0-9+/_\-]{43}=?)(?:\.ed25519)?$/);
       if (msMatch) {
         const host = msMatch[1];
         const port = Number(msMatch[2]);
         const keyCore = msMatch[3].endsWith('=') ? msMatch[3] : (msMatch[3] + '=');
         const kcanon = canonicalKey('@' + keyCore + '.ed25519');
+        if (!ssbRef.isFeed(kcanon)) continue;
         const addr = msAddrFrom(host, port, kcanon);
         if (!pubs.find(x => x && canonicalKey(x.key) === kcanon)) {
           pubs.push({ host, port, key: kcanon });
@@ -12316,35 +12904,7 @@ router
     ctx.redirect(['/peers', '/graphos'].includes(returnTo) ? returnTo : '/peers');
   })
   .post("/peers/prune", koaBody(), async (ctx) => {
-    try {
-      const ssb = await cooler.open();
-      const connectedKeys = new Set();
-      try {
-        const livePeers = (ssb.peers && typeof ssb.peers === 'object') ? ssb.peers : {};
-        for (const k of Object.keys(livePeers)) {
-          const rpcs = livePeers[k];
-          if (Array.isArray(rpcs) && rpcs.length > 0) connectedKeys.add(canonicalKey(k));
-        }
-      } catch (_) {}
-      try {
-        const snapshot = (ssb.conn && typeof ssb.conn.dbPeers === 'function') ? await ssb.conn.dbPeers() : [];
-        for (const entry of (snapshot || [])) {
-          const data = Array.isArray(entry) ? entry[1] : entry;
-          const addr = Array.isArray(entry) ? entry[0] : null;
-          if (!data || !addr) continue;
-          const kc = data.key ? canonicalKey(data.key) : null;
-          if (kc && connectedKeys.has(kc)) continue;
-          try { ssb.conn.forget(addr); } catch (_) {}
-        }
-      } catch (_) {}
-      try {
-        const pubs = readJSON(gossipPath);
-        if (Array.isArray(pubs)) {
-          const kept = pubs.filter(g => g && g.key && connectedKeys.has(canonicalKey(g.key)));
-          if (kept.length !== pubs.length) writeJSON(gossipPath, kept);
-        }
-      } catch (_) {}
-    } catch (_) {}
+    try { await forgetPeers(await deadPeerKeys()); } catch (_) {}
     const returnTo = String((ctx.query && ctx.query.returnTo) || (ctx.request.body && ctx.request.body.returnTo) || '');
     ctx.redirect(['/peers', '/graphos'].includes(returnTo) ? returnTo : '/peers');
   })
@@ -12375,7 +12935,7 @@ router
           if (!data || !data.key) continue;
           let host = data.host, port = data.port;
           if ((!host || !port) && addr) {
-            const m = String(addr).match(/^net:([^:]+):(\d+)/);
+            const m = String(addr).match(/^(?:net|onion):([^:]+):(\d+)/);
             if (m) { host = host || m[1]; port = port || Number(m[2]); }
           }
           writePeer(host, port, data.key);
@@ -12401,7 +12961,7 @@ router
             if (!data || !data.key) continue;
             let host = data.host, port = data.port;
             if ((!host || !port) && addr) {
-              const m = String(addr).match(/^net:([^:]+):(\d+)/);
+              const m = String(addr).match(/^(?:net|onion):([^:]+):(\d+)/);
               if (m) { host = host || m[1]; port = port || Number(m[2]); }
             }
             writePeer(host, port, data.key);
@@ -12431,12 +12991,13 @@ router
     for (const line of raw.split(/\r?\n/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
-      const m = trimmed.match(/^net:([^:]+):(\d+)~shs:([A-Za-z0-9+/_\-]{43}=?)(?:\.ed25519)?$/);
+      const m = trimmed.match(/^(?:net|onion):([^:]+):(\d+)~shs:([A-Za-z0-9+/_\-]{43}=?)(?:\.ed25519)?$/);
       if (!m) continue;
       const host = m[1];
       const port = Number(m[2]);
       const keyCore = m[3].endsWith('=') ? m[3] : (m[3] + '=');
       const kcanon = canonicalKey('@' + keyCore + '.ed25519');
+      if (!ssbRef.isFeed(kcanon)) continue;
       const addr = msAddrFrom(host, port, kcanon);
       if (!pubs.find(x => x && canonicalKey(x.key) === kcanon)) {
         pubs.push({ host, port, key: kcanon });
@@ -12496,10 +13057,11 @@ router
     const v = String(ctx.request.body.ux || "").trim().toLowerCase();
     const aiNavEnabled = cfg.modules && cfg.modules.aiNavMod === 'on';
     const chatsEnabled = cfg.modules && cfg.modules.chatsMod === 'on';
-    const next = (v === "ainav" && aiNavEnabled) ? "ainav" : (v === "chats" && chatsEnabled) ? "chats" : v === "feed" ? "feed" : "blocks";
+    const phoneEnabled = !!(cfg.modules && cfg.modules.phoneMod !== 'off');
+    const next = (v === "ainav" && aiNavEnabled) ? "ainav" : (v === "chats" && chatsEnabled) ? "chats" : v === "feed" ? "feed" : (v === "phone" && phoneEnabled) ? "phone" : "blocks";
     cfg.ux = { ...(cfg.ux && typeof cfg.ux === 'object' ? cfg.ux : {}), current: next };
     saveConfig(cfg);
-    ctx.redirect(next === "ainav" ? "/" : next === "chats" ? "/chats" : next === "feed" ? "/feed" : "/settings");
+    ctx.redirect(next === "ainav" ? "/" : next === "chats" ? "/chats" : next === "feed" ? "/feed" : next === "phone" ? "/phone" : "/settings");
   })
   .post("/settings/lan-broadcasting", koaBody(), async (ctx) => {
     const enabled = !!(ctx.request.body && (ctx.request.body.lanBroadcasting === 'on' || ctx.request.body.lanBroadcasting === '1' || ctx.request.body.lanBroadcasting === 'true'));
@@ -12535,9 +13097,20 @@ router
   .post("/settings/wish", koaBody(), async (ctx) => {
     const cfg = getConfig();
     const v = String(ctx.request.body.wish || '').trim();
-    cfg.wish = ['mutuals', 'only-lan', 'local'].includes(v) ? v : 'whole';
+    cfg.wish = WISH_LEVELS.includes(v) ? v : 'whole';
     saveConfig(cfg);
     ctx.redirect("/settings#wish");
+  })
+  .post("/settings/phone", koaBody(), async (ctx) => {
+    const cfg = getConfig();
+    const choice = String(ctx.request.body.visibility || '');
+    const prev = cfg.phone || {};
+    cfg.phone = choice === 'dnd'
+      ? { ...prev, visibility: prev.visibility === 'mutuals' ? 'mutuals' : 'whole', dnd: true }
+      : { ...prev, visibility: choice === 'mutuals' ? 'mutuals' : 'whole', dnd: false };
+    saveConfig(cfg);
+    try { await syncPhoneVisibility(); } catch (_) {}
+    ctx.redirect("/settings#phone");
   })
   .post("/settings/inbox-bots", koaBody(), async (ctx) => {
     const cfg = getConfig();
@@ -12619,7 +13192,8 @@ router
   })
   .post('/transfers/opinions/:transferId/:category', koaBody(), async ctx => {
     if (!checkMod(ctx, 'transfersMod')) { ctx.redirect('/modules'); return; }
-    await transfersModel.createOpinion(ctx.params.transferId, ctx.params.category);
+    try { await transfersModel.createOpinion(ctx.params.transferId, ctx.params.category); }
+    catch (e) { return /already/i.test(String(e && e.message)) ? failWith(ctx, 'opinionAlreadyGiven') : actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, '/transfers', ['/transfers']));
   })
   .post("/settings/wallet", koaBody(), async (ctx) => {
@@ -12659,7 +13233,11 @@ router
     try { balance = await walletModel.getBalance(url, user, pass); } catch (error) { ctx.body = await walletErrorView(error); return; }
     if (action === 'confirm') {
       const v = await walletModel.validateSend(url, user, pass, dest, amt, fee);
-      try { ctx.body = v.isValid ? await walletSendConfirmView(balance, dest, amt, fee, walletOptions) : await walletSendFormView(balance, dest, amt, fee, { type: 'error', title: 'validation_errors', messages: v.errors }, null, walletOptions); }
+      if (!v.isValid) {
+        const ws = require('../views/main_views').i18n.walletStatusMessages || {};
+        ctx.state.inlineError = [ws.validation_errors, ...(v.errors || []).map(e => ws[e] || e)].filter(Boolean).join(': ');
+      }
+      try { ctx.body = v.isValid ? await walletSendConfirmView(balance, dest, amt, fee, walletOptions) : await walletSendFormView(balance, dest, amt, fee, null, null, walletOptions); }
       catch (error) { ctx.body = await walletErrorView(error); }
     } else if (action === 'send') {
       try {
@@ -12700,7 +13278,10 @@ router
         }
         ctx.body = await walletSendResultView(balance, dest, amt, txId, note);
       }
-      catch (error) { ctx.body = await walletErrorView(error); }
+      catch (error) {
+        ctx.state.inlineError = String(require('../views/main_views').i18n.walletSendFailed || '').replace('{reason}', String((error && error.message) || error || '').slice(0, 200));
+        ctx.body = await walletSendFormView(balance, dest, amt, fee, null, null, walletOptions);
+      }
     }
   });
 const routes = router.routes();
@@ -12725,13 +13306,13 @@ const middleware = [
   },
   async (ctx, next) => {
     await next();
-    const flash = ctx.method === 'GET' ? String(ctx.query.error || '').trim() : '';
+    const flash = String((ctx.state && ctx.state.inlineError) || (ctx.method === 'GET' ? ctx.query.error || '' : '')).trim();
     if (!flash || typeof ctx.body !== 'string' || !/html/.test(String(ctx.type || ''))) return;
     const { renderInlineError } = require('../views/main_views');
     const marker = '</section>';
     const at = ctx.body.indexOf(marker);
     if (at < 0) return;
-    const cleanUrl = ctx.path + (() => { const q = new URLSearchParams(ctx.querystring); q.delete('error'); const s = q.toString(); return s ? `?${s}` : ''; })();
+    const cleanUrl = ctx.method === 'GET' ? ctx.path + (() => { const q = new URLSearchParams(ctx.querystring); q.delete('error'); const s = q.toString(); return s ? `?${s}` : ''; })() : null;
     ctx.body = ctx.body.slice(0, at + marker.length) + renderInlineError(flash, cleanUrl) + ctx.body.slice(at + marker.length);
   },
   async (ctx, next) => {
@@ -12760,7 +13341,7 @@ const middleware = [
     if (migration && migration.running) { ctx.response.body = indexingView({ percent: migration.percent }); return; }
     const ssb = await cooler.open(), status = await ssb.status();
     const progress = typeof status.progress === 'number' && Number.isFinite(status.progress) ? Math.min(1, Math.max(0, status.progress)) : 1;
-    if (progress < 0.999) ctx.response.body = indexingView({ percent: Math.floor(progress * 1000) / 10 });
+    if (indexingLag(status) > INDEXING_LAG_BYTES) ctx.response.body = indexingView({ percent: Math.floor(progress * 1000) / 10 });
     else { try { await next(); } catch (err) {
       const { i18n } = require('../views/main_views');
       if (err.name === 'FileTooLargeError' || (err.message && err.message.includes('maxFileSize'))) {
@@ -12792,10 +13373,25 @@ const middleware = [
         } catch (_) {}
         try {
           const dataRes = await dataModel.listMatches('ALL');
-          const top = (dataRes.matches || [])[0] || null;
-          sharedState.setBestMatch(top ? { href: top.href, title: top.title || top.id, kind: top.kind, score: top.score } : null);
+          sharedState.setMatchPool((dataRes.matches || []).slice(0, 10).map(top => ({ href: top.href, title: top.title || top.id, kind: top.kind, score: top.score })));
+          const sections = new Map();
+          for (const m of dataRes.matches || []) {
+            if (!m || !m.href || !(Number(m.score) > 0)) continue;
+            const entry = { href: m.href, title: m.title || m.id, kind: m.kind, score: m.score };
+            for (const key of new Set([m.kind, String(m.href).split('/')[1]])) {
+              if (!key || key === 'author') continue;
+              const list = sections.get(key) || [];
+              if (list.length < 5) { list.push(entry); sections.set(key, list); }
+            }
+          }
+          sharedState.setSectionMatches(sections);
+          sharedState.nextBestMatch();
         } catch (_) {}
         try { await refreshDonatableAuthors(); } catch (_) {}
+        try { await refreshLanPeers(true); } catch (_) {}
+        try { await refreshPeerHealth(); } catch (_) {}
+        try { await syncPhoneVisibility(); } catch (_) {}
+        try { await refreshLiveRooms(); } catch (_) {}
         try { sharedState.setFeaturedEmergency(await emergenciesModel.featured()); } catch (_) {}
         try { await refreshInboxCount(); } catch (_) {}
         try { await refreshMentionsCount(); } catch (_) {}
@@ -12871,6 +13467,49 @@ const middleware = [
   },
 ];
 const app = http({ host, port, middleware, allowHost: config.allowHost });
+const startDesktopNotices = async () => {
+  const { notify: desktopNotify, i18nNow, displayName } = require('./desktopNotify');
+  const ssb = await cooler.open();
+  if (!ssb || !ssb.db || typeof ssb.db.onMsgAdded !== 'function') return;
+  const me = ssb.id;
+  let lastEmergency = null;
+  try { const f = await emergenciesModel.featured(); lastEmergency = f && f.id; } catch (_) {}
+  const nameFor = async (id) => { try { return displayName(id, await about.name(id)); } catch (_) { return String(id); } };
+  const isMutual = async (id) => { try { const rel = await friend.getRelationship(id); return !!(rel && rel.following && rel.followsMe); } catch (_) { return false; } };
+  ssb.db.onMsgAdded((ev) => {
+    const kvt = ev && ev.kvt;
+    const v = kvt && kvt.value;
+    if (!v || v.author === me || Date.now() - (Number(v.timestamp) || 0) > 15 * 60 * 1000) return;
+    (async () => {
+      const i18n = i18nNow();
+      const cfg = getConfig();
+      if (typeof v.content === 'string') {
+        let c = null;
+        try { const dec = ssb.private.unbox({ key: kvt.key, value: v, timestamp: kvt.timestamp }); c = dec && dec.value && dec.value.content; } catch (_) {}
+        if (!c || c.private !== true || !Array.isArray(c.to) || !c.to.includes(me)) return;
+        if (cfg.pmVisibility === 'mutuals' && !(await isMutual(v.author))) return;
+        if (c.type === 'pam') {
+          if (cfg.modules.phoneMod !== 'off') desktopNotify(i18n.phoneTitle, `${i18n.notifyNewPamFrom} ${await nameFor(v.author)}`);
+          return;
+        }
+        if (c.type !== 'post') return;
+        const bot = pmModel.botOf({ subject: String(c.subject || '') });
+        if (bot && pmModel.mutedBots(cfg).has(bot)) return;
+        desktopNotify(i18n.inbox, `${i18n.notifyNewPmFrom} ${bot || await nameFor(v.author)}`);
+        return;
+      }
+      const t = v.content && v.content.type;
+      if (typeof t === 'string' && t.startsWith('emergency') && cfg.modules.emergenciesMod === 'on') {
+        const f = await emergenciesModel.featured().catch(() => null);
+        if (!f || !f.id || f.id === lastEmergency) return;
+        lastEmergency = f.id;
+        if (sharedState.getDismissedEmergency && sharedState.getDismissedEmergency() === f.id) return;
+        desktopNotify(i18n.emergenciesTitle, f.title);
+      }
+    })().catch(() => {});
+  }, false);
+};
+if (!config.public) setTimeout(() => { phoneModel.start().catch(() => {}); startDesktopNotices().catch(() => {}); }, 3000);
 
 let pubEngineTimer = null;
 let pubAddressEnsured = false;

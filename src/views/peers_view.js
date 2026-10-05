@@ -1,12 +1,10 @@
-const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [], versions = {}, connectError = null }) => {
+const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [], versions = {}, paused = false }) => {
   const { form, button, div, h2, p, section, a, hr, input, label, br, span, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
   const { template, i18n } = require('./main_views');
 
-  const startButton = form({ action: "/settings/conn/start", method: "post" }, button({ type: "submit" }, i18n.startNetworking));
-  const restartButton = form({ action: "/settings/conn/restart", method: "post" }, button({ type: "submit" }, i18n.restartNetworking));
-  const stopButton = form({ action: "/settings/conn/stop", method: "post" }, button({ type: "submit" }, i18n.stopNetworking));
-  const syncButton = form({ action: "/settings/conn/sync", method: "post" }, button({ type: "submit" }, i18n.sync));
-  const connButtons = [startButton, restartButton, stopButton, syncButton];
+  const pauseButton = paused
+    ? form({ action: "/peers/resume", method: "post" }, button({ type: "submit", class: "peers-resume-btn" }, i18n.peersResume || 'Resume'))
+    : form({ action: "/peers/pause", method: "post" }, button({ type: "submit", class: "peers-pause-btn" }, i18n.peersPause || 'Pause'));
 
   const deduplicatePeers = (peers) => {
     const seen = new Set();
@@ -28,9 +26,11 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     return null;
   };
 
+  const overTor = (peerData) => /^onion:/i.test(String(peerData[0] || '')) || /\.onion$/i.test(String((peerData[1] || {}).host || ''));
   const renderPeerRow = (peerData) => {
     const peer = peerData[1];
     const { name, users, key } = peer;
+    const tor = overTor(peerData);
     const peerUrl = `/author/${encodeURIComponent(key)}`;
     const filteredUsers = (users || []).filter(u => u.id !== key);
     const userCount = Array.isArray(users) ? filteredUsers.length : null;
@@ -38,6 +38,9 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
       td({ 'data-label': i18n.peerHost || 'Pub' }, a({ href: peerUrl, class: "user-link" }, name || key.slice(0, 20) + '…')),
       td({ 'data-label': i18n.peersOasisId || 'Oasis ID' }, a({ href: peerUrl, class: 'user-link peer-key' }, key)),
       td({ 'data-label': i18n.peersOasisVersion || 'Version' }, String((versions || {})[key] || '—')),
+      td({ 'data-label': i18n.peersTorColumn }, tor
+        ? span({ class: 'ubi-tick-ok', title: i18n.peersTorYes }, '✓')
+        : span({ class: 'peer-tor-no', title: i18n.peersTorNo }, '—')),
       td({ 'data-label': i18n.peersReplicatedFeeds || 'Replicated' }, userCount == null ? '—' : String(userCount))
     );
   };
@@ -57,6 +60,7 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
         td({ class: 'card-label' }, i18n.peerHost || 'Pub'),
         td({ class: 'card-label' }, i18n.peersOasisId || 'Oasis ID'),
         td({ class: 'card-label' }, i18n.peersOasisVersion || 'Version'),
+        td({ class: 'card-label' }, i18n.peersTorColumn),
         td({ class: 'card-label' }, i18n.peersReplicatedFeeds || 'Replicated')
       ),
       ...peers.map(renderPeerRow)
@@ -85,9 +89,9 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
       )
     );
   });
-  const refreshButton = form({ action: "/peers/refresh", method: "post" }, button({ type: "submit" }, i18n.peerRefresh || 'Refresh'));
-  const pruneButton = form({ action: "/peers/prune", method: "post" }, button({ type: "submit" }, i18n.peerPruneIdle || 'Remove idle'));
-  const exportButton = form({ action: "/peers/export", method: "get" }, button({ type: "submit" }, i18n.peerExport || 'Export'));
+  const refreshButton = form({ action: "/peers/refresh", method: "post" }, button({ type: "submit", class: "filter-btn" }, i18n.peerRefresh || 'Refresh'));
+  const pruneButton = form({ action: "/peers/prune", method: "post" }, button({ type: "submit", class: "filter-btn" }, i18n.peerPruneIdle || 'Remove idle'));
+  const exportButton = form({ action: "/peers/export", method: "get" }, button({ type: "submit", class: "filter-btn" }, i18n.peerExport || 'Export'));
   const importForm = form(
     { action: "/peers/import", method: "post", enctype: "multipart/form-data", class: "peers-import-form" },
     label({ class: 'peers-import-label' }, i18n.peerImportTitle || 'Import peer list'),
@@ -101,7 +105,8 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
 
   const peersTechnicalBlock = div({ class: 'tags-header peers-technical-block' },
     h2(i18n.peerConnectionsTitle || 'Connections'),
-    div({ class: "conn-actions peers-conn-actions" }, refreshButton, pruneButton, exportButton),
+    div({ class: "peers-pause-row" }, pauseButton, p({ class: paused ? "peers-paused-note" : "peers-pause-hint" }, paused ? i18n.peersPausedNote : i18n.peersPauseHint)),
+    div({ class: "conn-actions peers-conn-actions filters" }, refreshButton, pruneButton, exportButton),
     technicalPeers.length
       ? table({ class: 'block-info-table' },
           tr(
@@ -126,10 +131,6 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
         h2(i18n.peers),
         p(i18n.peerConnectionsIntro)
       ),
-      connectError
-        ? div({ class: 'peers-connect-error' }, String(i18n.peersConnectFailed || 'Could not connect: {reason}').replace('{reason}', connectError))
-        : null,
-      div({ class: "conn-actions" }, ...connButtons),
       (onlineCount + discoveredCount + unknownCount) > 0
         ? div({ class: "peers-list" },
             div({ class: "tags-header" }, h2(`${i18n.online} (${onlineCount})`)),

@@ -39,6 +39,10 @@ const SAMPLES = {
     status: 'LOOKING FOR WORK', description: 'engineer',
     personalExperiences: 'a life', personalSkills: ['solder', 'weld'],
     createdAt: '2026-01-01T10:00:00Z'
+  }, {}],
+  pixelia: [{
+    title: 'Pixelia', width: 50, height: 200,
+    pixels: [{ x: 1, y: 1, color: '#ff0000', contributors_inhabitants: ['@a.ed25519'] }, { x: 50, y: 200, color: '#0000ff', contributors_inhabitants: ['@b.ed25519'] }]
   }, {}]
 };
 
@@ -51,6 +55,41 @@ describe('pdf: content documents', (t) => {
       eq(buf.subarray(0, 8).toString(), '%PDF-1.4', `${kind} starts with a PDF header`);
       ok(asText(buf).trimEnd().endsWith('%%EOF'), `${kind} ends with %%EOF`);
     }
+  });
+
+  const pixeliaImages = (buf) => {
+    const zlib = require('zlib');
+    const s = asText(buf);
+    const out = [];
+    for (const m of s.matchAll(/(\d+) 0 obj\n<< \/Type \/XObject \/Subtype \/Image \/Width (\d+) \/Height (\d+) \/ColorSpace \/DeviceRGB \/BitsPerComponent 8 \/Interpolate false \/Filter \/FlateDecode \/Length (\d+) >>\nstream\n/g)) {
+      const start = m.index + m[0].length;
+      const placed = s.match(new RegExp(`(\\d+) 0 0 (\\d+) [\\d.-]+ [\\d.-]+ cm\\n/Im${m[1]} Do`));
+      out.push({ w: Number(m[2]), h: Number(m[3]), rgb: zlib.inflateSync(buf.subarray(start, start + Number(m[4]))), shownW: placed ? Number(placed[1]) : 0 });
+    }
+    return out;
+  };
+  const cellAt = (img, cols, cx, cy) => {
+    const c = img.w / cols;
+    const o = (Math.floor((cy - 0.5) * c) * img.w + Math.floor((cx - 0.5) * c)) * 3;
+    return [...img.rgb.subarray(o, o + 3)].join(',');
+  };
+
+  t('the Pixelia PDF carries the painted canvas at a readable size, each cell in its colour', () => {
+    const imgs = pixeliaImages(buildContentPdf('pixelia', ...SAMPLES.pixelia, '@me.ed25519'));
+    ok(imgs.length > 1, 'a drawing taller than a page continues on the next pages');
+    const first = imgs[0];
+    const last = imgs[imgs.length - 1];
+    eq(cellAt(first, 50, 1, 1), '255,0,0', 'the first cell is red');
+    eq(cellAt(last, 50, 50, last.h / (last.w / 50)), '0,0,255', 'the last cell is blue');
+    notOk(['255,0,0', '0,0,255'].includes(cellAt(first, 50, 25, 10)), 'an unpainted cell keeps the empty canvas colour');
+    ok(first.shownW / 50 >= 8, 'each cell is printed big enough to be seen');
+  });
+
+  t('the whole Pixelia canvas is printed, never cropped to the painted part', () => {
+    const imgs = pixeliaImages(buildContentPdf('pixelia', { title: 'Pixelia', width: 50, height: 200, pixels: [{ x: 10, y: 10, color: '#00ff00' }] }, {}, null));
+    ok(imgs.every(img => img.w === imgs[0].w), 'every page keeps the full width of the canvas');
+    eq(imgs.reduce((sum, img) => sum + img.h / (img.w / 50), 0), 200, 'all the rows are printed, in order');
+    eq(cellAt(imgs[0], 50, 10, 10), '0,255,0', 'the painted cell keeps its place');
   });
 
   t('an unsupported kind is rejected instead of producing an empty file', () => {

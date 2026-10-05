@@ -40,7 +40,7 @@ exports.statsView = (stats, filter) => {
     'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project', 'industry', 'industryBlueprint',
     'image', 'torrent', 'file', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
-    'chat', 'chatMessage', 'pad', 'padEntry', 'wikiPage', 'emergency', 'emergencyConfirm', 'emergencyUpdate', 'mailingList', 'logisticsRoute', 'logisticsRating', 'podcast', 'podcastEpisode', 'podcastPlay', 'campaign', 'campaignSignature', 'campaignUpdate', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
+    'chat', 'chatMessage', 'pad', 'padEntry', 'room', 'roomMember', 'wikiPage', 'emergency', 'emergencyConfirm', 'emergencyUpdate', 'mailingList', 'logisticsRoute', 'logisticsRating', 'podcast', 'podcastEpisode', 'podcastPlay', 'campaign', 'campaignSignature', 'campaignUpdate', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
     'schoolCourse', 'schoolLesson', 'schoolEnroll', 'schoolCertificate',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
@@ -75,6 +75,8 @@ exports.statsView = (stats, filter) => {
     chatMessage: i18n.statsChatMessage,
     pad: i18n.statsPad,
     padEntry: i18n.statsPadEntry,
+    room: i18n.statsRoom,
+    roomMember: i18n.statsRoomMember,
     wikiPage: i18n.statsWiki,
     emergency: i18n.statsEmergency,
     emergencyConfirm: i18n.statsEmergencyConfirm,

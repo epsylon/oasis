@@ -5,9 +5,9 @@ const fs = require('fs');
 const { renderStyledText } = require("../backend/renderStyledText");
 const { template, i18n } = require('./main_views');
 
-const homedir = require('os').homedir();
-const gossipPath = path.join(homedir, ".ssb", "gossip.json");
+const gossipPath = path.join(require("../server/ssb_config").path, "gossip.json");
 const unfollowedPath = require("../configs/state-manager").statePath("gossip_unfollowed.json");
+const peerHealth = require("../models/peer_health");
 
 const encodePubLink = (key) => {
   let core = String(key).replace(/^@/, '').replace(/\.ed25519$/, '').replace(/-/g, '+').replace(/_/g, '/');
@@ -32,7 +32,8 @@ const deduplicateByHost = (list) => {
   });
 };
 
-const invitesView = ({ invitesEnabled, flash }) => {
+const invitesView = (opts = {}) => {
+  const { invitesEnabled } = opts;
   let pubs = [];
   let pubsValue = "false";
   let unfollowed = [];
@@ -61,7 +62,8 @@ const invitesView = ({ invitesEnabled, flash }) => {
     ? deduplicateByHost(pubs.filter(pubItem => !unfollowed.find(u => u.key === pubItem.key)))
     : [];
 
-  const hasError = (pubItem) => pubItem && (pubItem.error || (typeof pubItem.failure === 'number' && pubItem.failure > 0));
+  const deadKeys = opts.deadKeys instanceof Set ? opts.deadKeys : new Set();
+  const hasError = (pubItem) => !!(pubItem && deadKeys.has(peerHealth.canonicalKey(pubItem.key)));
 
   const sanitizeError = (err) => {
     if (!err) return i18n.genericError || 'Unknown error';
@@ -102,9 +104,6 @@ const invitesView = ({ invitesEnabled, flash }) => {
         p(description)
       )
     ),
-    flash === 'alreadyFederated'
-      ? section(div({ class: 'message-banner' }, p(i18n.invitesAlreadyFederated || 'You are already federated with this pub.')))
-      : null,
     section(
       div({ class: 'pubs-section' },
         h2(i18n.invitesPubsTitle),
@@ -226,6 +225,18 @@ const invitesView = ({ invitesEnabled, flash }) => {
           input({ name: 'code', type: 'text', placeholder: i18n.invitesPadInviteCodePlaceholder || 'Enter pad invite code', required: true }),
           br(),
           button({ type: 'submit' }, i18n.invitesPadJoinButton || 'Join Pad')
+        )
+      )
+    ),
+    section(
+      div({ class: 'invites-rooms', id: 'invites-rooms' },
+        h2(i18n.invitesRoomsTitle),
+        p(i18n.invitesRoomsHint),
+        form(
+          { action: '/rooms/join-code', method: 'post' },
+          input({ name: 'code', type: 'text', placeholder: i18n.invitesRoomInviteCodePlaceholder, required: true }),
+          br(),
+          button({ type: 'submit' }, i18n.invitesRoomJoinButton)
         )
       )
     ),

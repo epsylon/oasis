@@ -31,7 +31,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
     "report", "task", "event", "bookmark", "image", "audio", "video", "document", "torrent", "file",
-    "bankWallet", "bankClaim", "project", "job", "industry", "industryBlueprint", "forum", "vote", "contact", "map", "shop", "shopProduct", "chat", "pad", "schoolCourse", "wikiPage", "emergency", "mailingList", "logisticsRoute", "podcast", "podcastEpisode", "campaign", "all"
+    "bankWallet", "bankClaim", "project", "job", "industry", "industryBlueprint", "forum", "vote", "contact", "map", "shop", "shopProduct", "chat", "pad", "room", "schoolCourse", "wikiPage", "emergency", "mailingList", "logisticsRoute", "podcast", "podcastEpisode", "campaign", "all"
   ];
 
   const filterSelect = select(
@@ -94,6 +94,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'shopProduct': return `/shops/product/${encodeURIComponent(contentId)}`;
       case 'chat': return `/chats/${encodeURIComponent(contentId)}`;
       case 'pad': return `/pads/${encodeURIComponent(contentId)}`;
+      case 'room': return `/rooms/${encodeURIComponent(contentId)}`;
       case 'wikiPage': return `/wiki/${encodeURIComponent(contentId)}`;
       case 'emergency': return `/emergencies/${encodeURIComponent(contentId)}`;
       case 'mailingList': return `/mailing/${encodeURIComponent(contentId)}`;
@@ -243,9 +244,9 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         return content.url ? div({ class: 'search-video' },
           content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.videoTitleLabel + ':'), span({ class: 'card-value' }, content.title)) : null,
           content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null,
-          br(),
-          videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(content.url)}`, type: content.mimeType || 'video/mp4', width: '640', height: '360', preload: 'metadata' }),
-          br(),
+          div({ class: 'video-container' },
+            videoHyperaxe({ controls: true, src: `/blob/${encodeURIComponent(content.url)}`, type: content.mimeType || 'video/mp4', width: '640', height: '360', preload: 'metadata' })
+          ),
           content.tags && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
@@ -553,6 +554,11 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padDeadlineLabel || 'Deadline') + ':'), span({ class: 'card-value' }, content.deadline)) : null
         );
       }
+      case 'room':
+        return div({ class: 'search-room' },
+          content.title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.roomsTitle || 'Rooms') + ':'), span({ class: 'card-value' }, content.title)) : null,
+          content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null
+        );
       case 'gameScore':
         return div({ class: 'search-game' },
           content.game ? div({ class: 'game-row' },

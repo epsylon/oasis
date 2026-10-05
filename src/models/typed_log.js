@@ -159,6 +159,9 @@ const discoverContentTypes = () => {
     for (const m of src.matchAll(/\btype:\s*['"]([A-Za-z][\w-]*)['"]/g)) {
       if (!NON_MESSAGE_LITERALS.has(m[1])) found.add(m[1]);
     }
+    for (const m of src.matchAll(/\b(?:const|let)\s+(?:[A-Z][A-Z0-9_]*_)?TYPE\s*=\s*['"]([A-Za-z][\w-]*)['"]/g)) {
+      if (!NON_MESSAGE_LITERALS.has(m[1])) found.add(m[1]);
+    }
   }
   return Array.from(found).sort();
 };

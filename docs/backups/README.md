@@ -1,10 +1,10 @@
 # Oasis Backup & Restore Guide
 
-Everything you are in Oasis lives in two places on your device: the **secret key** (`~/.ssb/secret`), which *is* your identity, and the **log** (`~/.ssb`), which holds every message you and the people you follow have published, plus the blobs they reference. The key cannot be recovered by anyone if you lose it. 
+Everything you are in Oasis lives in two places on your device: the **secret key** (`~/.ssb/secret`), which *is* your identity, and the **log** (`~/.ssb`), which holds every message you and the inhabitants you support have published, plus the blobs they reference. The key cannot be recovered by anyone if you lose it. 
 
 The log can usually be rebuilt from the network, but only the parts other peers still keep. The **Backup** module (Tools › Backup) covers both.
 
-## The four tabs
+## The tabs
 
 | Tab | What it does | Where it works |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ The log can usually be rebuilt from the network, but only the parts other peers 
 | **FULL BACKUP** | Downloads an encrypted copy of the log and blobs (`oasis-backup-DATE.oasisbk`). | Only from the same device. |
 | **RESTORE BACKUP** | Imports an `.oasisbk` copy, or an `oasis.enc` key. | Anywhere. |
 
-Every password must be at least 32 characters long. The page offers a random one; keep it with the file, because nothing can open the file without it.
+Every password has a minimum length, shown on the page. The page also offers a random one; keep it with the file, because nothing can open the file without it.
 
 ## 1. Recovery kit
 
@@ -39,7 +39,7 @@ Importing a key marks that identity as already known on the device: no welcome m
 
 Either scope also carries everything Oasis keeps for you outside the log: the whole of `~/.ssb/oasis/` — the keyrings that open your tribes, chats and pads, your favourites, your agenda, the banking state, the linked Multiverse accounts. [What each of those files is](../devs/inventory.md). A restore writes them back in place, keeping any current one as `.before-restore`. Your identity is **not** in the file: `secret` travels on its own, through RECOVERY or EXPORT KEYS.
 
-The file is compressed and then encrypted with AES-256-GCM. Nothing inside is readable without the password. "Everything" copies can be large on a long-lived device; "only my content" is usually a few megabytes and is the right choice to carry your own feed to another device.
+The file is compressed and then encrypted with AES-256-GCM. Nothing inside is readable without the password. "Everything" copies can be large on a long-lived device; "only my content" is usually small and is the right choice to carry your own feed to another device.
 
 ## 4. Restore
 
@@ -82,4 +82,4 @@ Without a full backup, importing the key is still enough to get your identity ba
 - Both the key and the full backup are encrypted with the password you type; Oasis never stores that password. Losing it makes the file useless.
 - The file formats are Oasis' own (`OASIS1` for keys, `OASISBK1` for copies) and are readable by any Oasis on any platform, so a copy made on a phone restores on a desktop and vice versa.
 - On mobile, prefer **only my content** copies. They are small, and they are what you need to carry your feed anywhere.
-- A restore never publishes anything on your behalf and never touches other people's feeds beyond appending messages that were missing.
+- A restore never publishes anything on your behalf and never touches other inhabitants' feeds beyond appending messages that were missing.

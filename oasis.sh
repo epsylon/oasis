@@ -45,18 +45,17 @@ GUI options (forwarded to the backend):
   --no-open             Don't auto-open a browser tab on launch (useful on a VPS).
   --debug               Verbose logging.
 
-TEST commands (runs against an ISOLATED ~/.ssb):
-  ./oasis.sh test                 Run every suite (your real ~/.ssb is backed up first).
-  ./oasis.sh test -y              Same, skipping the confirmation prompt.
-  ./oasis.sh test --restore       Restore your original ~/.ssb when done (drops test data).
-  ./oasis.sh test --seed          After the tests, fill the test ~/.ssb with dummy content.
-  ./oasis.sh test dummy           Publish dummy content into the running instance (no tests).
-  ./oasis.sh test clean-all       Delete test reports and the test ~/.ssb, restore the backup.
+TEST commands (never touch your ~/.ssb; they use ~/.ssb-oasis-test or $OASIS_TEST_SSB):
+  ./oasis.sh test                 Run every suite in the test directory.
+  ./oasis.sh test --seed          After the tests, fill the test directory with dummy content.
+  ./oasis.sh test dummy           Only fill a fresh test directory with dummy content (no tests).
+  ./oasis.sh test clean-all       Delete the test reports and the test directory.
+  OASIS_NETWORK_PAUSED=1 ssb_path=~/.ssb-oasis-test ./oasis.sh   Open the test data offline.
 
 Examples:
   ./oasis.sh
   ./oasis.sh server --port=3000
-  ./oasis.sh test -y
+  ./oasis.sh test
   ./oasis.sh invite 100
   ./oasis.sh name "My PUB"
   ./oasis.sh announce mypub.example.com

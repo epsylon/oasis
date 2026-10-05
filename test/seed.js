@@ -41,6 +41,7 @@ async function step(name, fn) {
   const tribeCrypto    = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'tribes');
   const chatCrypto     = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'chats');
   const padCrypto      = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'pads');
+  const roomCrypto     = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'rooms');
   const mapCrypto      = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'maps');
   const calendarCrypto = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'calendars');
   const schoolCrypto   = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'school');
@@ -80,6 +81,7 @@ async function step(name, fn) {
   models.tribesContent = require(path.join(__dirname, '..', 'src', 'models', 'tribes_content_model'))({ cooler: sCooler, tribeCrypto, tribesModel });
   models.pads = require(path.join(__dirname, '..', 'src', 'models', 'pads_model'))({ cooler: sCooler, cipherModel: { encryptECB: x => x, decryptECB: x => x }, tribeCrypto, padCrypto, tribesModel });
   models.chats = require(path.join(__dirname, '..', 'src', 'models', 'chats_model'))({ cooler: sCooler, tribeCrypto, chatCrypto, tribesModel });
+  models.rooms = require(path.join(__dirname, '..', 'src', 'models', 'rooms_model'))({ cooler: sCooler, tribeCrypto, roomCrypto, tribesModel });
   models.calendars = require(path.join(__dirname, '..', 'src', 'models', 'calendars_model'))({ cooler: sCooler, tribeCrypto, calendarCrypto, tribesModel });
   models.maps = require(path.join(__dirname, '..', 'src', 'models', 'maps_model'))({ cooler: sCooler, tribeCrypto, mapCrypto, tribesModel });
   models.wiki = require(path.join(__dirname, '..', 'src', 'models', 'wiki_model'))({ cooler: sCooler, tribeCrypto, tribesModel });
@@ -194,6 +196,15 @@ async function step(name, fn) {
   console.log('\nSEED: standalone chats / pads / calendars / maps');
   const seedChat = await step('chat', () => models.chats.createChat(`Chat ${hash(2)}`, 'demo', null, 'general', 'OPEN', pickTags(2), null));
   const seedPad = await step('pad', () => models.pads.createPad(`Pad ${hash(2)}`, 'OPEN', futureISO(30), pickTags(2), null));
+  const seedRoom = await step('room (open)', () => models.rooms.createRoom({ title: `Plaza ${hash(2)}`, description: 'Open room to talk about the network, drop in any time.', status: 'OPEN', tags: pickTags(2) }));
+  await step('room (open, second)', () => models.rooms.createRoom({ title: `Assembly ${hash(2)}`, description: 'Weekly open assembly.', status: 'OPEN', tags: pickTags(1) }));
+  const inviteRoom = await step('room (invite-only)', () => models.rooms.createRoom({ title: `Backroom ${hash(2)}`, description: 'Invite-only room.', status: 'INVITE-ONLY', tags: pickTags(1) }));
+  if (inviteRoom && inviteRoom.key) {
+    const roomCode = await step('room open invitation', () => models.rooms.generateOpenInvite(inviteRoom.key));
+    if (roomCode) console.log(`    (room invite code: ${roomCode})`);
+  }
+  const closedRoom = await step('room (to close)', () => models.rooms.createRoom({ title: `Old room ${hash(2)}`, description: 'A room that was closed.', status: 'OPEN' }));
+  if (closedRoom && closedRoom.key) await step('close room', () => models.rooms.closeRoomById(closedRoom.key));
   const seedCalendar = await step('calendar', () => models.calendars.createCalendar({ title: `Cal ${hash(2)}`, status: 'OPEN', deadline: futureISO(60), tags: pickTags(2), firstDate: futureISO(10), firstDateLabel: 'first', firstNote: '', tribeId: null }));
   const seedMap = await step('map (SINGLE)', () => models.maps.createMap(40.4, -3.7, 'Madrid', 'SINGLE', pickTags(2), `Map ${hash(2)}`, null, 'Puerta del Sol — kilometre zero', null));
   const seedOpenMap = await step('map (OPEN)', () => models.maps.createMap(41.4, 2.2, 'Barcelona', 'OPEN', pickTags(2), `Region ${hash(2)}`, null, 'Sagrada Família — meeting point', null));
@@ -208,10 +219,12 @@ async function step(name, fn) {
   if (tribe && tribe.key) {
     await step('feed inside tribe', () => models.tribesContent.create(tribe.key, 'feed', { description: `tribe feed ${longHash()}` }));
     await step('event inside tribe', () => models.tribesContent.create(tribe.key, 'event', { title: `tribe event ${hash(2)}`, description: 'demo', date: futureISO(15) }));
+    await step('room inside tribe', () => models.rooms.createRoom({ title: `Tribe room ${hash(2)}`, description: 'Room for the tribe members.', tags: pickTags(1), tribeId: tribe.key }));
   }
   const priv = await step('private tribe', () => tribesModel.createTribe(`Secret ${hash(2)}`, 'private demo', null, '', pickTags(2), true, 'strict', null, 'OPEN', ''));
   if (priv && priv.key) {
     await step('feed inside private tribe', () => models.tribesContent.create(priv.key, 'feed', { description: `private demo ${longHash()}` }));
+    await step('room inside private tribe', () => models.rooms.createRoom({ title: `Secret room ${hash(2)}`, description: 'Room of the private tribe.', tribeId: priv.key }));
     const code = await step('generate invite', () => tribesModel.generateInvite(priv.key));
     if (code) console.log(`    (invite code: ${code})`);
   }
@@ -316,7 +329,7 @@ async function step(name, fn) {
 
   console.log('\nSEED: favorites');
   const contentFavorites = require(path.join(__dirname, '..', 'src', 'backend', 'content_favorites'));
-  for (const [kind, obj] of [['chats', seedChat], ['pads', seedPad], ['calendars', seedCalendar], ['wiki', seedWiki], ['emergencies', seedEmergency], ['mailing', seedMailing], ['logistics', seedRoute], ['podcasts', seedPodcast], ['campaigns', seedCampaign]]) {
+  for (const [kind, obj] of [['chats', seedChat], ['pads', seedPad], ['rooms', seedRoom], ['calendars', seedCalendar], ['wiki', seedWiki], ['emergencies', seedEmergency], ['mailing', seedMailing], ['logistics', seedRoute], ['podcasts', seedPodcast], ['campaigns', seedCampaign]]) {
     if (obj && obj.key) await step(`favorite ${kind}`, () => contentFavorites.addFavorite(kind, obj.key));
   }
 

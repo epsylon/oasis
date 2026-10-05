@@ -11,15 +11,16 @@ const validate = require('../../../src/server/node_modules/ssb-validate');
 const PASSWORD = 'p'.repeat(32);
 const SECRET = '{"curve":"ed25519","public":"aaa.ed25519","private":"bbb.ed25519","id":"@aaa.ed25519"}';
 const tmpRoot = path.join(os.tmpdir(), 'oasis-backup-tests');
-const realHomedir = os.homedir;
+const ssbConfig = require('../../../src/server/ssb_config');
+const realSsbPath = ssbConfig.path;
 const tmpFile = (name) => { fs.mkdirSync(tmpRoot, { recursive: true }); return path.join(tmpRoot, `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`); };
 
 async function withHome(fn) {
   const home = path.join(tmpRoot, 'h-' + Date.now() + '-' + Math.random().toString(36).slice(2));
   fs.mkdirSync(path.join(home, '.ssb'), { recursive: true });
   fs.writeFileSync(path.join(home, '.ssb', 'secret'), SECRET, { mode: 0o600 });
-  os.homedir = () => home;
-  try { return await fn(home); } finally { os.homedir = realHomedir; fs.rmSync(home, { recursive: true, force: true }); }
+  ssbConfig.path = path.join(home, '.ssb');
+  try { return await fn(home); } finally { ssbConfig.path = realSsbPath; fs.rmSync(home, { recursive: true, force: true }); }
 }
 
 const addBlob = (peer, text) => new Promise((resolve, reject) => {

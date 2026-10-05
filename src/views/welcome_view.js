@@ -1,9 +1,17 @@
 const fs = require("fs")
 const path = require("path")
-const { form, button, div, h2, p, section, a, span, select, option, label, input, textarea, img, strong } = require("../server/node_modules/hyperaxe")
+const { form, button, div, h2, p, section, a, span, select, option, label, input, textarea, img } = require("../server/node_modules/hyperaxe")
 const { template, i18n } = require("./main_views")
 const { renderRestoreStatus } = require("./backup_view")
 const { config } = require("../server/SSB_server.js")
+const { WIZARD_WORKFLOWS } = require("../models/workflows_model")
+
+const WISH_LEVELS = [
+  { value: "whole", name: "settingsWishWhole", hint: "welcomeWishHint_whole" },
+  { value: "mutuals", name: "settingsWishMutuals", hint: "welcomeWishHint_mutuals" },
+  { value: "only-lan", name: "settingsWishOnlyLan", hint: "welcomeWishHint_lan" },
+  { value: "local", name: "settingsWishLocal", hint: "welcomeWishHint_local" }
+]
 
 const FEED_TEXT_MIN = Number(config?.feed?.minLength ?? 1)
 const FEED_TEXT_MAX = Number(config?.feed?.maxLength ?? 280)
@@ -96,24 +104,25 @@ const stepContent = (key, lang, profile, status) => {
     }
   }
   if (key === "larp") return {
-    title: i18n.welcomeStepLarpTitle || "Join L.A.R.P.",
+    title: i18n.welcomeStepLarpTitle || "Join \"The Academy\"",
     text: i18n.welcomeStepLarpText || "Join our live action role playing game.",
     action: div({ class: "welcome-action" },
       form({ method: "POST", action: "/larp/join" },
         input({ type: "hidden", name: "house", value: "academia" }),
         input({ type: "hidden", name: "returnTo", value: "/welcome" }),
-        button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepLarpAction || "Join \"The Academy\"")
+        button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepLarpAction || "Join L.A.R.P.")
       )
     )
   }
   if (key === "ux") {
     let cfg = {}
     try { cfg = require("../configs/config-manager.js").getConfig() || {} } catch (_) {}
-    const cur = cfg.ux?.current === "ainav" ? "ainav" : cfg.ux?.current === "chats" ? "chats" : "blocks"
+    const cur = ["ainav", "chats", "feed", "phone"].includes(cfg.ux?.current) ? cfg.ux.current : "blocks"
     const chatsOn = cfg.modules?.chatsMod === "on"
     const aiOn = cfg.modules?.aiNavMod === "on"
+    const phoneOn = cfg.modules?.phoneMod !== "off"
     const uxCard = (value, title, image) => label({ class: "welcome-ux-option" },
-      input({ type: "radio", name: "ux", value, ...(value === "blocks" ? { checked: true } : {}) }),
+      input({ type: "radio", name: "ux", value, ...(value === cur ? { checked: true } : {}) }),
       img({ src: image, class: "welcome-ux-shot", alt: title }),
       span({ class: "welcome-ux-label" }, title)
     )
@@ -125,20 +134,52 @@ const stepContent = (key, lang, profile, status) => {
           uxCard("blocks", i18n.uxModeMenus || "Blocks", "/assets/images/ux-blocks.png"),
           aiOn ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null,
           chatsOn ? uxCard("chats", i18n.uxModeChats || "Conversations", "/assets/images/ux-chats.png") : null,
-          uxCard("feed", i18n.uxModeFeed || "Microblogging", "/assets/images/ux-feed.png")
+          uxCard("feed", i18n.uxModeFeed || "Microblogging", "/assets/images/ux-feed.png"),
+          phoneOn ? uxCard("phone", i18n.phoneTitle || "Phone", "/assets/images/ux-phone.png") : null
         ),
         div({ class: "welcome-action" },
-          button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepUxAction || "Use this view")
+          button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepUxAction || "Save View")
         )
       )
     }
   }
-  if (key === "backup") return {
-    title: i18n.welcomeStepBackupTitle || "Backup your ID",
-    text: i18n.welcomeStepBackupText || "Your identity is a key file on this device.",
-    extra: profile.id ? div({ class: "welcome-oasisid" }, a({ class: "user-link", href: `/author/${encodeURIComponent(profile.id)}` }, String(profile.id))) : null,
-    warning: i18n.welcomeStepBackupWarning || "IF YOU LOSE IT, NOBODY CAN RECOVER IT FOR YOU.",
-    action: linkAction("/backup", i18n.welcomeStepBackupAction || "Backup!")
+  if (key === "wish") {
+    const current = WISH_LEVELS.some(w => w.value === (status && status.wish)) ? status.wish : "whole"
+    return {
+      title: i18n.welcomeStepWishTitle || "What level of exposure do you want in your experience?",
+      text: i18n.welcomeStepWishText || "This is your WISH: it decides whose content reaches you.",
+      action: form({ method: "POST", action: "/welcome/wish", class: "welcome-choices-form" },
+        div({ class: "welcome-choices" },
+          WISH_LEVELS.map(w => label({ class: "welcome-choice" },
+            input({ type: "radio", name: "wish", value: w.value, ...(w.value === current ? { checked: true } : {}) }),
+            span({ class: "welcome-choice-name" }, i18n[w.name] || w.value),
+            span({ class: "welcome-choice-hint" }, i18n[w.hint] || "")
+          ))
+        ),
+        div({ class: "welcome-action" },
+          button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepWishAction || "Save my wish")
+        )
+      )
+    }
+  }
+  if (key === "workflow") {
+    const selected = status && WIZARD_WORKFLOWS.includes(status.workflow) ? status.workflow : "full"
+    return {
+      title: i18n.welcomeStepWorkflowTitle || "What's the use for OASIS you have in mind?",
+      text: i18n.welcomeStepWorkflowText || "Pick the configuration that fits you and only the useful modules stay on.",
+      action: form({ method: "POST", action: "/welcome/workflow", class: "welcome-choices-form" },
+        div({ class: "welcome-choices" },
+          WIZARD_WORKFLOWS.map(k => label({ class: "welcome-choice" },
+            input({ type: "radio", name: "workflow", value: k, ...(k === selected ? { checked: true } : {}) }),
+            span({ class: "welcome-choice-name" }, k === "full" ? (i18n.welcomeWorkflow_full || "Default") : (i18n[`workflow_${k}`] || k)),
+            span({ class: "welcome-choice-hint" }, i18n[`welcomeWorkflowHint_${k}`] || "")
+          ))
+        ),
+        div({ class: "welcome-action" },
+          button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepWorkflowAction || "Use this configuration")
+        )
+      )
+    }
   }
   return {
     title: i18n.welcomeStepGreetingTitle || "Send a \"Hello world!\"",
@@ -192,7 +233,7 @@ exports.welcomeView = async (status, currentLanguage, profile = {}) => {
         usable.map((key, idx) => {
           const done = steps[key] === true
           const content = stepContent(key, lang, profile || {}, status)
-          return div({ class: done ? "welcome-step welcome-step-done" : "welcome-step" },
+          return div({ id: `step-${key}`, class: done ? "welcome-step welcome-step-done" : "welcome-step" },
             div({ class: "welcome-step-head" },
               span({ class: "welcome-step-number" }, String(idx + 1)),
               h2({ class: "welcome-step-title" }, content.title),
@@ -200,7 +241,6 @@ exports.welcomeView = async (status, currentLanguage, profile = {}) => {
             ),
             content.text ? p({ class: "welcome-step-text" }, content.text) : null,
             content.extra || null,
-            content.warning ? p({ class: "welcome-step-warning" }, strong(content.warning)) : null,
             content.action,
             content.note ? p({ class: "welcome-step-note" }, content.note) : null
           )

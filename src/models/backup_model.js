@@ -45,6 +45,7 @@ const MODULE_GROUPS = [
   { key: 'forum', test: (t) => /^forum/i.test(t) },
   { key: 'chats', test: (t) => /^chat/i.test(t) },
   { key: 'pads', test: (t) => /^pad/i.test(t) },
+  { key: 'rooms', test: (t) => /^room/i.test(t) },
   { key: 'wiki', test: (t) => /^wiki/i.test(t) },
   { key: 'maps', test: (t) => /^map/i.test(t) },
   { key: 'tribes', test: (t) => /^tribe/i.test(t) },
@@ -108,7 +109,8 @@ const decryptBuffer = (data, password) => {
   return Buffer.concat([decipher.update(data.slice(o)), decipher.final()]);
 };
 
-const secretPathOf = () => path.join(os.homedir(), '.ssb', 'secret');
+const ssbDirOf = () => require('../server/ssb_config').path;
+const secretPathOf = () => path.join(ssbDirOf(), 'secret');
 
 const stateFile = () => require('../configs/state-manager').statePath('oasis-backup.json');
 const readState = () => {
@@ -241,7 +243,7 @@ module.exports = ({ cooler }) => {
       if (!fs.existsSync(filePath)) throw new Error('Encrypted file not found.');
       let decrypted;
       try { decrypted = decryptBuffer(fs.readFileSync(filePath), pw); } catch (_) { throw new Error('Wrong password or corrupt backup file.'); }
-      const ssbDir = path.join(os.homedir(), '.ssb');
+      const ssbDir = ssbDirOf();
       fs.mkdirSync(ssbDir, { recursive: true });
       const secretPath = path.join(ssbDir, 'secret');
       if (fs.existsSync(secretPath)) fs.copyFileSync(secretPath, path.join(ssbDir, 'secret.bak-' + new Date().toISOString().replace(/[:.]/g, '-')));

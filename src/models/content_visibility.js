@@ -21,6 +21,7 @@ const isContentVisibleTo = (type, c, viewer, author = null) => {
     case 'schoolCourse': return up(c.visibility) !== 'INVITE' || owner || arr(c.students).includes(viewer) || arr(c.invited).includes(viewer);
     case 'tribe': return c.isAnonymous === false || owner || arr(c.members).includes(viewer);
     case 'poll': return !c.chatId && !c.tribeId;
+    case 'room': return !c.tribeId && c.encrypted !== true;
     case 'curriculum': return up(c.visibility) !== 'HIDDEN' || owner;
     default: return !c.tribeId;
   }

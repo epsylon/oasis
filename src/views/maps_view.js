@@ -406,7 +406,7 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
   const mapsChip = (mode) => {
     if (mode === filter) return true;
     if (mode === "mine") return censusMp.some((x) => String(x.author) === String(userId));
-    if (mode === "recent") return censusMp.some((x) => (Date.parse(x.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (mode === "recent") return censusMp.length > 0;
     if (mode === "favorites") return censusMp.some((x) => x.isFavorite);
     return true;
   };

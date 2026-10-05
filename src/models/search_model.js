@@ -41,7 +41,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     'post', 'about', 'curriculum', 'tribe', 'transfer', 'feed',
     'votes', 'report', 'task', 'event', 'bookmark', 'document',
     'image', 'audio', 'video', 'torrent', 'file', 'market', 'bankWallet', 'bankClaim',
-    'project', 'job', 'housing', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad', 'poll', 'schoolCourse', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign'
+    'project', 'job', 'housing', 'industry', 'industryBlueprint', 'forum', 'vote', 'contact', 'pub', 'map', 'shop', 'shopProduct', 'chat', 'pad', 'room', 'poll', 'schoolCourse', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign'
   ];
 
   const getRelevantFields = (type, content) => {
@@ -119,6 +119,8 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
         return [content?.title, content?.description, content?.category, ...(content?.tags || []), content?.status, content?.author];
       case 'pad':
         return [content?.title, content?.status, content?.deadline, ...(content?.tags || []), content?.author];
+      case 'room':
+        return content?.encrypted === true ? [] : [content?.title, content?.description, content?.status, ...(content?.tags || []), content?.author];
       case 'wikiPage':
         return [content?.title, content?.body, content?.slug, ...(content?.tags || []), ...(content?.aliases || []), content?.author];
       case 'emergency':
@@ -308,6 +310,10 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
 
     if (t === 'pad') {
       return ['pad', author, norm(c.title), norm(c.deadline)].join('|');
+    }
+
+    if (t === 'room') {
+      return ['room', author, norm(c.rid || c.title), norm(c.createdAt)].join('|');
     }
 
     if (t === 'wikiPage') {

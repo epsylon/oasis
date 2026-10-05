@@ -27,6 +27,7 @@ const FILTER_KINDS = [
   { value: "pads", label: () => i18n.favoritesFilterPads },
   { value: "projects", label: () => i18n.favoritesFilterProjects },
   { value: "reports", label: () => i18n.favoritesFilterReports },
+  { value: "rooms", label: () => i18n.favoritesFilterRooms },
   { value: "shopProducts", label: () => i18n.favoritesFilterShopProducts },
   { value: "tasks", label: () => i18n.favoritesFilterTasks },
   { value: "torrents", label: () => i18n.favoritesFilterTorrents },

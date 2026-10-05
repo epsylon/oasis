@@ -45,7 +45,7 @@ const INTERNAL_PATHS = [
   'agenda','ai','audios','author','backup','banking','blockexplorer','blogs','bookmarks','calendars','campaigns',
   'chats','cipher','courts','cv','dev','docs','emergencies','events','favorites','feed','files','forum','games','graphos',
   'hashtag','housing','images','industry','inbox','inhabitants','invites','jobs','larp','logistics','logs','mailing',
-  'maps','market','melody','mentions','modules','multiverse','opinions','pads','parliament','peers','pixelia','pm',
+  'maps','market','melody','mentions','modules','multiverse','opinions','pads','parliament','rooms','peers','pixelia','pm',
   'podcasts','polls','popular','profile','projects','publish','reports','school','search','settings','shops','spread',
   'stats','tags','tasks','thread','torrents','transfers','trending','tribes','tribe','videos','votes','votations','wallet','wiki'
 ];

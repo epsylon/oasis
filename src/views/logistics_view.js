@@ -15,7 +15,6 @@ const PRICE_FILTERS = ["FREE", "ECO", "TIME"];
 const KINDS = ["TRIP", "SHIPMENT"];
 const MODES = ["OFFER", "REQUEST"];
 const RECURRENCES = ["NONE", "DAILY", "WEEKLY", "MONTHLY"];
-const RECENT_MS = 24 * 60 * 60 * 1000;
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const lbl = (prefix, v) => String(i18n[`logistics${prefix}${cap(v)}`] || v).toUpperCase();
@@ -71,7 +70,7 @@ const logisticsChipFor = (mode, census) => {
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(r => String(r.author) === String(userId));
   if (mode === "BOOKED") return census.some(r => !!r.myBooking);
-  if (mode === "RECENT") return census.some(r => r.lastActivityTs >= Date.now() - RECENT_MS);
+  if (mode === "RECENT") return census.length > 0;
   if (mode === "HISTORY") return census.some(r => r.closed && r.participated);
   if (mode === "TOP") return census.some(r => r.ratingCount > 0);
   if (mode === "TRIPS") return census.some(r => r.kind === "TRIP");

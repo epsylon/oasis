@@ -1,6 +1,6 @@
 # Oasis PUB Deployment Guide
 
-This guide walks you through deploying an **Oasis PUB** on a VPS using the Oasis launcher (`./oasis.sh server`). A PUB needs a static, publicly-reachable IP address and an open TCP port (default `8008`).
+This guide walks you through deploying an **Oasis PUB** on a VPS using the Oasis launcher (`./oasis.sh server`). A PUB needs an address inhabitants can reach: usually a static public IP or domain with an open TCP port (`8008` by default), or an onion address, which needs neither (see [`TOR.md`](./TOR.md)).
 
 ---
 
@@ -13,7 +13,7 @@ sudo apt-get update
 sudo apt-get install -y git curl build-essential
 ```
 
-Install Node.js (Oasis is tested on Node 22; older LTS versions also work for server-only mode):
+Install Node.js 22 or newer, as for any Oasis node:
 
 ```
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
@@ -27,32 +27,32 @@ nvm alias default 22
 
 ```
 cd ~
-git clone https://code.03c8.net/krakenslab/oasis oasis
+git clone https://code.03c8.net/KrakensLab/oasis oasis
 cd oasis
 ```
 
 ## 3) Install dependencies
 
-The `install.sh` script installs Node deps and applies the bundled patches. **You can skip the AI model download** — a PUB does not need it.
+`install.sh` links the packages Oasis ships in `src/base` and asks whether to install AI features. **Choose no AI features**: a PUB does not use them, and `./oasis.sh server` switches it off anyway.
 
 ```
-./install.sh
+OASIS_AI=none ./install.sh
 ```
-
-If the AI model download fails or you skipped it, that's fine. The PUB will run without it.
 
 ## 4) Configure the PUB
 
 Two example config files live in `docs/PUB/`:
 
 - [`server-config.json.example`](./server-config.json.example) — the Oasis Sbot config (cap, friends graph, gossip, incoming/outgoing ports). Goes into `src/configs/server-config.json`.
-- [`oasis-config.json.example`](./oasis-config.json.example) — the GUI/module config tuned for a PUB (AI/wallet/market/jobs/shops off; LAN broadcasting off). Goes into `src/configs/oasis-config.json` if you ever run the GUI on the same host.
+- [`oasis-config.json.example`](./oasis-config.json.example) — the Oasis config tuned for a PUB (AI/wallet/market/jobs/shops off; LAN broadcasting off). Goes into `src/configs/oasis-config.json`. The PUB reads it: modules and theme of the HUB, the media cache limit (step 17), the ECOin RPC for UBI (step 19) and the call relay (step 20).
+
+To make the PUB reachable as a Tor hidden service, as well or instead (optional), see [`TOR.md`](./TOR.md).
 
 Copy them:
 
 ```sh
 cp docs/PUB/server-config.json.example src/configs/server-config.json
-cp docs/PUB/oasis-config.json.example src/configs/oasis-config.json   # only if you run the GUI here
+cp docs/PUB/oasis-config.json.example src/configs/oasis-config.json
 ```
 
 The reference `server-config.json`:
@@ -121,13 +121,13 @@ The reference `server-config.json`:
 
 - **`autofollow.feeds`** — the upstream PUB(s) this node will automatically follow on first boot. The example seeds from `solarnethub.com`'s PUB (`@0qSCyK3xyL71X4qKkmf84Cb2riP6OeUqxCvbP2Z6HWs=.ed25519`), the default seed of the Oasis network. Once your PUB connects to it, gossip propagates the rest of the network's pub list. Replace this id only if you're bootstrapping from a different network root.
 
-Everything else is the standard PUB shape: `pub: true`, no LAN discovery, dunbar 300, two friend hops (see below), replication scheduler running on autostart, port `8008` open for SHS on every scope (device/local/public), and a `noauth` unix socket for the CLI.
+Everything else is the standard PUB shape: `pub: true`, no LAN discovery, the friends graph limits (`friends.dunbar` and `friends.hops`, see below), replication scheduler running on autostart, port `8008` open for SHS on every scope (device/local/public), and a `noauth` unix socket for the CLI.
 
-**How far a PUB replicates.** A PUB is a community, not an archive of the whole network. With `friends.hops` at `2` it stores the inhabitants that redeemed one of its invites (the PUB follows each of them) and the people they follow, which is what a small network needs today. `1` keeps only the members themselves and is the conservative choice once the network is large; `3` makes it carry most of the network and is only worth it on a large disk. Each extra hop multiplies the log, the blobs and the index rebuild time.
+**How far a PUB replicates.** A PUB is a community, not an archive of the whole network. With the example's `friends.hops` it stores the inhabitants that redeemed one of its invites (the PUB follows each of them) and the inhabitants they follow, which is what a young network needs. A lower value keeps only the members themselves and is the conservative choice once the network is large; a higher one makes it carry most of the network and is only worth it on a large disk. Each extra hop multiplies the log, the blobs and the index rebuild time.
 
-## 5) Launch the PUB (server-only)
+## 5) Launch the PUB (server mode)
 
-In server-only mode Oasis runs **only the Oasis Sbot**, not the web GUI or AI service. `aiMod` is forced off automatically when launched this way.
+`./oasis.sh server` runs the Oasis Sbot together with the read-only web HUB (`backend.js --public`, listening on all interfaces, no browser tab; see step 15). It never runs the AI: every launch switches `aiMod` and `aiNavMod` off in `src/configs/oasis-config.json`. Everything else in that file applies, together with `src/configs/server-config.json`.
 
 The repo ships a ready-to-use systemd unit at `docs/PUB/oasis-pub.service`. Copy it, edit the `YOUR_USER` placeholder, then enable it:
 
@@ -176,8 +176,8 @@ Example response:
 ## 9) Create invite codes
 
 ```
-./oasis.sh invite        # uses=1 (default)
-./oasis.sh invite 500    # uses=500 (open PUB)
+./oasis.sh invite        # single use (default)
+./oasis.sh invite <N>    # N uses, for an open PUB
 ```
 
 The output is a single-use (or N-use) invite code you can hand out. Clients redeem it in their `/invites` page.
@@ -208,15 +208,9 @@ ls -la ~/.ssb/                    # confirm db2/, blobs/, gossip.json, conn.json
 sudo journalctl -u oasis-pub -f   # tail service logs
 ```
 
-## 13) Disabling the AI module (only relevant if also running the GUI)
+## 13) The AI module
 
-`./oasis.sh server` does **not** load the GUI or AI service, so `oasis-config.json` is ignored in server-only mode. Only `server-config.json` matters.
-
-If you also run the GUI on the same VPS (`./oasis.sh` without `server`), set `aiMod` to `off` in `src/configs/oasis-config.json` to skip the AI model:
-
-```
-sed -i 's/"aiMod": *"on"/"aiMod": "off"/' src/configs/oasis-config.json
-```
+Nothing to do: `./oasis.sh server` sets `aiMod` and `aiNavMod` to `off` in `src/configs/oasis-config.json` every time it starts, so the PUB never loads the AI model, even if it was downloaded. The rest of `oasis-config.json` is read as usual.
 
 ## 14) Joining the Oasis network
 
@@ -228,49 +222,61 @@ The PUB also serves a read-only web HUB with the public content of the inhabitan
 
 ## 16) Upgrading a PUB to the ssb-db2 version
 
-Stop the PUB, copy `~/.ssb` somewhere safe, update the code and start it again: the first start migrates `~/.ssb/flume` into `~/.ssb/db2` on its own (a few seconds per thousand messages) and the HUB answers normally afterwards. Replication with inhabitants on either version keeps working, the wire protocol has not changed. Never start the previous version on the migrated folder: it would not see the log and could fork the PUB's own feed. A guard file left in `flume/` makes such a start fail on purpose.
+Stop the PUB, copy `~/.ssb` somewhere safe, update the code and start it again: the first start migrates `~/.ssb/flume` into `~/.ssb/db2` on its own (the larger the log, the longer it takes) and the HUB answers normally afterwards. Replication with inhabitants on either version keeps working, the wire protocol has not changed. Never start the previous version on the migrated folder: it would not see the log and could fork the PUB's own feed. A guard file left in `flume/` makes such a start fail on purpose.
 
 ## 17) Disk: media cache and snapshots
 
-**Media cache.** Every Oasis node keeps the blobs it downloads under a quota (Settings → Media cache, 2 GB by default) and removes the least recently opened ones when it is exceeded. A PUB is the place others fetch media from, so it is **unlimited by default**: `oasis-config.json` carries a separate `pubMaxMB` and the example ships it as `0`. If the disk fills up, set a limit in megabytes and restart; the PUB then keeps its own files and anything opened in the last day, and drops the rest oldest first every 6 hours (first pass 5 minutes after boot). Dropped blobs are fetched again from whoever still has them the next time someone opens them.
+**Media cache.** Every Oasis node keeps the blobs it downloads in a cache that is **unlimited by default** (Settings → Media cache); when a limit is set, the least recently opened ones are removed once it is exceeded. A PUB is the place others fetch media from, so it has its own limit: `oasis-config.json` carries a separate `pubMaxMB`, which the example leaves unlimited (`0`). If the disk fills up, set a limit in megabytes and restart; the PUB then keeps its own files and anything opened recently, and periodically drops the rest, oldest first. Dropped blobs are fetched again from whoever still has them the next time someone opens them.
 
 ```json
-"blobCache": { "maxMB": 2048, "pubMaxMB": 20480 }
+"blobCache": { "maxMB": 0, "pubMaxMB": <megabytes> }
 ```
 
-**Snapshots.** Two minutes after boot and then every 6 hours the PUB writes two files under `~/.ssb/oasis/content/`: `snapshot-recent.oasissn`, the complete feeds of the inhabitants active in the last 7 days, and `snapshot.oasissn`, every message it holds, most recently active feeds first. Feeds travel whole, because each message is validated against the previous one: private messages are included as the same ciphertext every peer already replicates, nothing is ever decrypted, and blobs are not included. It never touches the web: it travels only over the secret-handshake connection, through the `snapshot` sbot plugin, and the PUB hands it exclusively to feeds it follows, that is, to inhabitants who redeemed one of its invites. Nobody browsing the HUB can fetch it. When a newcomer accepts an invite, their Oasis joins the PUB and immediately pulls the recent snapshot in the background, so what is happening now is usable in seconds, then the full one, while ordinary replication keeps filling in whatever is newer; messages replication already brought are simply skipped. Feeds always arrive whole and in order, which is what the log requires. The file is a few MB per thousand messages and nothing is needed on your side.
+**Snapshots.** Shortly after boot, and then periodically, the PUB writes two files under `~/.ssb/oasis/content/`: `snapshot-recent.oasissn`, the complete feeds of the recently active inhabitants, and `snapshot.oasissn`, every message it holds, most recently active feeds first. Feeds travel whole, because each message is validated against the previous one: private messages are included as the same ciphertext every peer already replicates, nothing is ever decrypted, and blobs are not included. It never touches the web: it travels only over the secret-handshake connection, through the `snapshot` sbot plugin, and the PUB hands it exclusively to feeds it follows, that is, to inhabitants who redeemed one of its invites. Nobody browsing the HUB can fetch it. When a newcomer accepts an invite, their Oasis joins the PUB and immediately pulls the recent snapshot in the background, so what is happening now is usable almost at once, then the full one, while ordinary replication keeps filling in whatever is newer; messages replication already brought are simply skipped. Feeds always arrive whole and in order, which is what the log requires. Nothing is needed on your side.
 
 ## 18) Mirroring the AI models
 
-`install.sh` downloads the AI models from a list of mirrors rather than from one address, so the network does not depend on a single server. A PUB with a web server can be one of them: publish `oasis-42-1-chat.Q4_K_M.gguf.tar.gz` (3.8 GB) and `oasis-embeddings.tar.gz` (60 MB), unchanged, at the root of your domain or any path, and tell us the URL so it joins the built-in list; until then, your inhabitants can use it with `OASIS_MODEL_MIRRORS=https://pub.example.org`. The installer checks each package before using it, so a broken or partial copy is skipped, never installed.
+`install.sh` downloads the AI models from a list of mirrors rather than from one address, so the network does not depend on a single server. A PUB with a web server can be one of them: publish `oasis-42-1-chat.Q4_K_M.gguf.tar.gz` and `oasis-embeddings.tar.gz`, unchanged, at the root of your domain or any path, and tell us the URL so it joins the built-in list; until then, your inhabitants can use it with `OASIS_MODEL_MIRRORS=https://pub.example.org`. The installer checks each package before using it, so a broken or partial copy is skipped, never installed.
 
 ## 19) UBI: paying inhabitants from the PUB (ecoind)
 
 A PUB pays the Universal Basic Income (UBI) in ECOin when it runs `ecoind` next to Oasis. There is no switch: Oasis turns the UBI engine on by itself when both conditions hold on the same node:
 
-- `server-config.json` has `"pub": true` (the PUB shape from step 3);
+- `server-config.json` has `"pub": true` (the PUB shape from step 4);
 - `oasis-config.json` has a reachable ECOin RPC in `wallet` (`url`, `user`, `pass`), i.e. the same block a regular inhabitant fills in Settings → Wallet.
 
 ```json
 "wallet": { "url": "http://localhost:7474", "user": "<rpcuser>", "pass": "<rpcpassword>", "fee": "5" }
 ```
 
-Fund that wallet with the ECO to be distributed. On boot the PUB logs `[UBI] PUB engine on`, and then every 30 minutes it:
+Fund that wallet with the ECO to be distributed. On boot the PUB logs `[UBI] PUB engine on`, and then, periodically, it:
 
 1. computes the monthly epoch (pool, weights, allocations) from the network activity;
 2. pays the pending `ubiClaim` messages with `sendtoaddress` to the ECOin address each claimant published (Profile → Edit → Sensors → ECOIN Wallet), publishing a `ubiClaimResult` per payment;
-3. announces `pubAvailability` (available when the wallet balance covers at least one floor payment). The announcement is only republished when the state changes or every 12 hours, so the PUB feed is not flooded.
+3. announces `pubAvailability` (available when the wallet balance covers at least one floor payment). The announcement is only republished when the state changes or after a long while, so the PUB feed is not flooded.
 
-Inhabitants configure nothing: their Oasis reads the `pubAvailability` announcements it replicates, picks the available PUB with the newest announcement (announcements older than 3 days are ignored) and Banking → Overview shows which PUB it is connected to, when it was last seen, whether their ECOin address is published and whether this month's UBI has been claimed. The claim is a `ubiClaim` message addressed to that PUB; the payment lands in their wallet on the PUB's next tick.
+Inhabitants configure nothing: their Oasis reads the `pubAvailability` announcements it replicates, picks the available PUB with the newest announcement (stale announcements are ignored) and Banking → Overview shows which PUB it is connected to, when it was last seen, whether their ECOin address is published and whether this month's UBI has been claimed. The claim is a `ubiClaim` message addressed to that PUB; the payment lands in their wallet on the PUB's next tick.
 
 ### Funding the pool
 
-The pool is whatever the PUB wallet holds: 20 % of the balance above a 500 ECO reserve, at most 2000 ECO per month. It fills in three ways:
+The pool comes from the PUB wallet: each month, a share of the balance above a reserve, with a monthly cap (Banking → Rules shows the values). It fills in three ways:
 
 - **A transfer from you** to the PUB wallet address (Banking → Addresses on the PUB, or `getaccountaddress` on ecoind).
 - **Contributions from inhabitants**: Banking → UBI lists every PUB announcing UBI with its pool, its last announcement and its last UBI payment; *DONATE ECO!* opens their wallet with that PUB's address and the concept "OASIS UBI Fund"; the payment lands in Transfers under the UBI tab and the PUB confirms it automatically once ecoind sees the transaction.
-- **Rebalancing between PUBs**, automatic. A PUB whose available balance exceeds one month of pool sends part of the surplus to PUBs that announce *unavailable*. A PUB only receives when all of these hold: the donor PUB follows it (`./oasis.sh follow <feedId>` on the donor, the explicit trust list), it has published its ECOin address, at least 3 eligible inhabitants have claimed UBI from it this month, and, if it received before, it has paid out at least half of that in UBI transfers confirmed by their recipients. The amount is capped at 200 ECO per PUB and month and sized to the pending claims. So a PUB that is set up and left idle never earns anything.
+- **Rebalancing between PUBs**, automatic. A PUB whose available balance exceeds what a month of UBI needs sends part of the surplus to PUBs that announce *unavailable*. A PUB only receives when all of these hold: the donor PUB follows it (`./oasis.sh follow <feedId>` on the donor, the explicit trust list), it has published its ECOin address, enough eligible inhabitants have claimed UBI from it this month, and, if it received before, it has paid out a fair share of that in UBI transfers confirmed by their recipients. The amount is capped per PUB and month and sized to the pending claims. So a PUB that is set up and left idle never earns anything.
 
-Eligible claimants are feeds older than 30 days, with a published ECOin address and activity in the network. Claiming or publishing a wallet gives no karma. Taxes (ECO and ARCH) are not paid anywhere: they are deducted from the part of the UBI above the 1 ECO floor, and the floor itself is always paid.
+Eligible claimants are feeds past a grace period, with a published ECOin address and activity in the network. Claiming or publishing a wallet gives no karma. Taxes (ECO and ARCH) are not paid anywhere: they are deducted from the part of the UBI above the floor, and the floor itself is always paid.
 
 Diagnostics on the PUB console: `[ECOin RPC] pub … failed: …` when ecoind is unreachable or refuses a call, `[UBI] claim … skipped: …` when a claimant has no published address, the PUB wallet is empty or `sendtoaddress` fails, and `[UBI] paid …` for each payment. If ecoind is stopped the engine simply idles and announces *unavailable*; it resumes on the next tick once RPC answers again.
+
+## 20) Phone and Rooms: relaying encrypted calls
+
+Inhabitants call each other from **Phone**. When two of them cannot reach each other directly (different home networks), their calls go through a PUB they are both connected to, or through the PUB of the inhabitant being called. The PUB only passes the call along: the audio is end-to-end encrypted between the two inhabitants and the PUB never has the key. It relays only when one side is an inhabitant it follows. A joint call travels as one call between the caller and each inhabitant, so through a PUB it weighs as much as one relayed call per inhabitant.
+
+**Rooms** meet on the PUB their creator was connected to when the room was opened. The PUB forwards what each participant sends to the others in the room without being able to read it: the room key stays among the participants. Participants only send while they are active, so a room where few are active at once stays light even when many take part. The PUB hosts rooms opened by inhabitants it follows.
+
+Nothing has to be installed or opened: the relay runs inside Oasis over the connections the PUB already has, and it is on unless `oasis-config.json` says otherwise. To stop relaying calls and hosting rooms, set it off there:
+
+```json
+"phone": { "visibility": "whole", "dnd": false, "relay": false }
+```

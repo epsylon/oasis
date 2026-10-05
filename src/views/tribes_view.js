@@ -8,6 +8,7 @@ const { config } = require('../server/SSB_server.js');
 const { renderStyledText, safeExternalHref } = require('../backend/renderStyledText');
 const { renderMapLocationUrl, renderMapLocationGrid, renderMapLocationVisitLabel } = require("./maps_view");
 const opinion_categories = require('../backend/opinion_categories.js');
+const { renderTribeRoomsSection } = require('./rooms_view');
 
 const userId = config.keys.id;
 const isLarpHouseTribe = (t) => Array.isArray(t && t.tags) && t.tags.some(x => String(x).startsWith('larp-'));
@@ -173,14 +174,13 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
   const header = div({ class: 'tags-header module-header-line' }, h2(title), p(i18n.tribeDescription));
 
   const emptyMod = moduleIsEmpty(Array.isArray(tribes) ? tribes : [], filter || 'all', 'all', query.search);
-  const nowChip = Date.now();
   const tribeChip = (m) => {
     if (m === filter || m === 'all') return true;
     if (m === 'top' || m === 'gallery') return tribes.length > 0;
     if (m === 'mine') return tribes.some(t => t.author === userId);
     if (m === 'membership') return tribes.some(t => Array.isArray(t.members) && t.members.includes(userId));
     if (m === 'subtribes') return tribes.some(t => !!t.parentTribeId);
-    if (m === 'recent') return tribes.some(t => ((typeof t.createdAt === 'string' ? Date.parse(t.createdAt) : t.createdAt) || 0) >= nowChip - 86400000);
+    if (m === 'recent') return tribes.length > 0;
     return true;
   };
   const filters = emptyMod ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
@@ -407,7 +407,7 @@ const renderSectionNav = (tribe, section) => {
   const sections = [
     { items: firstGroup },
     { items: [{ key: 'votations', label: i18n.tribeSectionVotations }, { key: 'polls', label: i18n.pollsTitle }, { key: 'events', label: i18n.tribeSectionEvents }, { key: 'tasks', label: i18n.tribeSectionTasks }] },
-    { items: [{ key: 'feed', label: i18n.tribeSectionFeed }, { key: 'forum', label: i18n.tribeSectionForum }, { key: 'maps', label: i18n.tribeSectionMaps || 'MAPS' }, { key: 'torrents', label: i18n.tribeSectionTorrents || 'TORRENTS' }, { key: 'pads', label: i18n.tribeSectionPads || 'PADS' }, { key: 'wiki', label: i18n.tribeSectionWiki || 'WIKI' }, { key: 'chats', label: i18n.tribeSectionChats || 'CHATS' }, { key: 'calendars', label: i18n.tribeSectionCalendars || 'CALENDARS' }] },
+    { items: [{ key: 'feed', label: i18n.tribeSectionFeed }, { key: 'forum', label: i18n.tribeSectionForum }, { key: 'maps', label: i18n.tribeSectionMaps || 'MAPS' }, { key: 'torrents', label: i18n.tribeSectionTorrents || 'TORRENTS' }, { key: 'pads', label: i18n.tribeSectionPads || 'PADS' }, { key: 'wiki', label: i18n.tribeSectionWiki || 'WIKI' }, { key: 'chats', label: i18n.tribeSectionChats || 'CHATS' }, { key: 'rooms', label: i18n.tribeSectionRooms || 'ROOMS' }, { key: 'calendars', label: i18n.tribeSectionCalendars || 'CALENDARS' }] },
     { items: [{ key: 'images', label: i18n.tribeSectionImages || 'IMAGES' }, { key: 'audios', label: i18n.tribeSectionAudios || 'AUDIOS' }, { key: 'videos', label: i18n.tribeSectionVideos || 'VIDEOS' }, { key: 'documents', label: i18n.tribeSectionDocuments || 'DOCUMENTS' }, { key: 'files', label: i18n.tribeSectionFiles || 'FILES' }, { key: 'bookmarks', label: i18n.tribeSectionBookmarks || 'BOOKMARKS' }] },
     { items: [{ key: 'tags', label: i18n.tribeSectionTags || 'TAGS' }, { key: 'search', label: i18n.tribeSectionSearch }] },
   ];
@@ -1676,6 +1676,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
     case 'pads': sectionContent = renderTribePadsSection(tribe, sectionData); break;
     case 'wiki': sectionContent = renderTribeWikiSection(tribe, sectionData); break;
     case 'chats': sectionContent = renderTribeChatsSection(tribe, sectionData); break;
+    case 'rooms': sectionContent = renderTribeRoomsSection(tribe, sectionData.rooms, sectionData.occupancy, sectionData.live); break;
     case 'calendars': sectionContent = renderTribeCalendarsSection(tribe, sectionData); break;
     case 'governance': sectionContent = renderGovernance(tribe, sectionData); break;
     case 'trending': sectionContent = renderTribeTrendingSection(tribe, sectionData, query); break;

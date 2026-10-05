@@ -29,6 +29,7 @@ const KINDS = {
   files: { type: 'file', href: (id) => `/files/${encodeURIComponent(id)}` },
   chats: { type: 'chat', href: (id) => `/chats/${encodeURIComponent(id)}` },
   pads: { type: 'pad', href: (id) => `/pads/${encodeURIComponent(id)}` },
+  rooms: { type: 'room', href: (id) => `/rooms/${encodeURIComponent(id)}` },
   maps: { type: 'map', href: (id) => `/maps/${encodeURIComponent(id)}` },
   calendars: { type: 'calendar', href: (id) => `/calendars/${encodeURIComponent(id)}` },
   forum: { type: 'forum', href: (id) => `/forum/${encodeURIComponent(id)}` },

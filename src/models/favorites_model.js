@@ -15,7 +15,7 @@ const toTs = (d) => {
   return Number.isFinite(t) ? t : 0;
 };
 
-module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, chatsModel, calendarsModel, torrentsModel, filesModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel, pollsModel, schoolModel, wikiModel, emergenciesModel, mailingModel, logisticsModel, podcastsModel, campaignsModel }) => {
+module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, roomsModel, chatsModel, calendarsModel, torrentsModel, filesModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel, pollsModel, schoolModel, wikiModel, emergenciesModel, mailingModel, logisticsModel, podcastsModel, campaignsModel }) => {
   const kindConfig = {
     audios: {
       base: "/audios/",
@@ -44,6 +44,10 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     pads: {
       base: "/pads/",
       getById: getFn(padsModel, ["getPadById", "getById"])
+    },
+    rooms: {
+      base: "/rooms/",
+      getById: getFn(roomsModel, ["getRoomById"])
     },
     wiki: {
       base: "/wiki/",
@@ -147,7 +151,7 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
     }
   };
 
-  const kindOrder = ["audios", "blogs", "bookmarks", "calendars", "campaigns", "chats", "documents", "events", "files", "forum", "housing", "images", "jobs", "logistics", "mailing", "maps", "market", "pads", "podcasts", "polls", "projects", "reports", "school", "shopProducts", "shops", "emergencies", "tasks", "torrents", "transfers", "videos", "votes", "wiki"];
+  const kindOrder = ["audios", "blogs", "bookmarks", "calendars", "campaigns", "chats", "documents", "events", "files", "forum", "housing", "images", "jobs", "logistics", "mailing", "maps", "market", "pads", "podcasts", "polls", "projects", "reports", "rooms", "school", "shopProducts", "shops", "emergencies", "tasks", "torrents", "transfers", "videos", "votes", "wiki"];
 
   const hydrateKind = async (kind, ids) => {
     const cfg = kindConfig[kind];

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const pull = require('../server/node_modules/pull-stream');
 
-const STEPS = ['language', 'ux', 'profile', 'federation', 'larp', 'greeting', 'backup'];
+const STEPS = ['language', 'ux', 'profile', 'wish', 'workflow', 'federation', 'larp', 'greeting'];
 const FLAG = 'oasis-first-contact';
 const PENDING = 'welcome=pending';
 const DISMISSED = 'welcome=dismissed';
@@ -167,7 +167,7 @@ module.exports = ({ cooler, ssbPath } = {}) => {
 
     markStep(step) {
       if (!STEPS.includes(step)) return false;
-      if (step !== 'language' && step !== 'backup' && step !== 'ux') return true;
+      if (step !== 'language' && step !== 'workflow' && step !== 'wish' && step !== 'ux') return true;
       if (!isPending(dir())) return true;
       return appendMarker(dir(), `step=${step}`);
     },
@@ -193,7 +193,8 @@ module.exports = ({ cooler, ssbPath } = {}) => {
         federation: hasFederated(mine, messages),
         larp: hasJoinedLarp(messages),
         ux: flag.markers.has('step=ux'),
-        backup: flag.markers.has('step=backup'),
+        wish: flag.markers.has('step=wish'),
+        workflow: flag.markers.has('step=workflow'),
         greeting: hasGreeted(messages)
       };
       const profile = { id: mine, name: '', description: '', image: '' };

@@ -1,7 +1,7 @@
 const { div, h2, p, section, form, input, label, select, option, button, table, tr, td, hr, ul, li, a, br } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink} = require('./main_views');
+const { template, i18n, userLink, renderDocumentActions } = require('./main_views');
 
-exports.pixeliaView = (pixelArt, errorMessage) => {
+exports.pixeliaView = (pixelArt) => {
   const title = i18n.pixeliaTitle;
   const description = i18n.pixeliaDescription;
   const gridWidth = 50; 
@@ -67,7 +67,6 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
           button({ type: "submit", class: "filter-btn" }, String(i18n.paintButton).toUpperCase())
         )
       ),
-      errorMessage ? div({ class: "error-message" }, errorMessage) : null,
       div({ class: "total-pixels" },
         h2(`${i18n.totalPixels}: ${pixelArt.length}`)
       )
@@ -76,6 +75,7 @@ exports.pixeliaView = (pixelArt, errorMessage) => {
     section(
       div({ class: "main_content" },
         div({ class: "pixelia-grid-wrap" }, grid),
+        pixelArt.length > 0 ? renderDocumentActions('pixelia', null) : null,
         pixelArt.length > 0 ? 
         div({ class: "contributors" },
           h2(i18n.contributorsTitle),

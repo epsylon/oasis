@@ -210,7 +210,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === "top") return censusM.length > 0;
   if (mode === "gallery") return censusM.length > 0;
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-  if (mode === "recent") return censusM.some((x) => (Date.parse(x.createdAt || "") || Number(x.ts || 0)) >= Date.now() - 86400000);
+  if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;

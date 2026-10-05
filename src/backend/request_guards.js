@@ -63,7 +63,7 @@ const publicModeGuard = ({ isPublic, onBlocked }) => async (ctx, next) => {
   await next();
 };
 
-const buildCsp = (isClearnet) => (isClearnet
+const buildCsp = (isClearnet, { frames = false } = {}) => (isClearnet
   ? [
       "default-src 'self'",
       "script-src 'none'",
@@ -71,6 +71,7 @@ const buildCsp = (isClearnet) => (isClearnet
       "img-src 'self' data:",
       "media-src 'self' blob:",
       "connect-src 'self'",
+      "frame-src 'none'",
       "form-action 'self'",
       "object-src 'none'",
       "base-uri 'none'",
@@ -83,7 +84,7 @@ const buildCsp = (isClearnet) => (isClearnet
       "img-src 'self'",
       "media-src 'self' blob:",
       "worker-src 'self' blob:",
-      "frame-src 'self'",
+      frames ? "frame-src 'self'" : "frame-src 'none'",
       "form-action 'self'",
       "object-src 'none'",
       "base-uri 'none'",

@@ -335,7 +335,7 @@ const housingChip = (censusH, filter, x) => {
   if (m === filter) return true
   if (m === "TOP") return censusH.length > 0
   if (m === "MINE") return censusH.some(h => String(h.author) === String(userId))
-  if (m === "RECENT") return censusH.some(h => (Date.parse(h.createdAt || "") || 0) >= Date.now() - 86400000)
+  if (m === "RECENT") return censusH.length > 0
   if (m === "REQUESTED") return censusH.some(h => safeArr(h.requests).includes(userId))
   if (m === "SALE" || m === "RENT" || m === "COUCHSURFING") return censusH.some(h => String(h.housing_type || "").toUpperCase() === m)
   if (m === "OPEN" || m === "CLOSED") return censusH.some(h => String(h.status || "OPEN").toUpperCase() === m)

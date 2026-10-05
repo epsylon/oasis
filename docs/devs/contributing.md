@@ -17,51 +17,10 @@ able to start editing source code. There are a few useful commands you should
 know about:
 
 - **`./install.sh`**: Ensure that everything is in place (the packages ship in `src/base`; the installer only links them and, if you want AI, installs its stack).
-- **`cd test && node run.js`**: Ensure that all automated tests pass (`node run.js mods/<module>` runs one module's suite).
+- **`./oasis.sh test`**: Ensure that all automated tests pass. It runs them in a test directory of its own and never touches your `~/.ssb`; from `test/`, `ssb_path=<an empty scratch dir> node run.js mods/<module>` runs one module's suite.
 
 Please run the test suite before writing a commit, because if there are errors then
 maintainers won't be able to merge your patch. Please ask for help if the tests
 are giving you any trouble.
-
-**Note:** the pre-commit hook runs `cspell` and `prettier` on the staged files. You always
-have the option to disable pre-commit hooks with `git commit --no-verify`.
-
-## Frequently Failed Tests
-
-### Unknown word
-
-<!-- spell-checker:disable -->
-
-```
-/src/index.js:10:42 - Unknown word (Scuttlebtut)
-```
-
-<!-- spell-checker:enable -->
-
-If this word is a typo, please fix the typo. If this error is a mistake, and
-you're sure that this is a word, please add the word to `.cspell.json`.
-
-### Code style issues found
-
-```
-Checking formatting...
-src/index.js
-README.md
-Code style issues found in the above file(s). Forgot to run Prettier?
-```
-
-You can use `npx prettier --write <file>` to resolve inconsistent code style. Please remember to
-add those changes with `git add` or similar before you commit.
-
-## Tips
-
-### TypeScript opportunities
-
-If you're looking for places where TypeScript would enjoy more detail, you can
-run the TypeScript linter with `--noImplicitAny`:
-
-```sh
-npx tsc --allowJs --resolveJsonModule --lib es2018,dom --checkJs --noEmit --skipLibCheck --noImplicitAny src/index.js
-```
 
 [github-flow]: https://guides.github.com/introduction/flow/

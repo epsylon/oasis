@@ -23,7 +23,7 @@ Unlike a Telegram *bot*, this connects **your own account** (an MTProto user ses
 3. Telegram sends you a login code (in the Telegram app, or by SMS). Enter it and click **Verify**.
 4. If your account has **two-step verification**, Oasis asks for your cloud password next.
 
-That's it. Oasis opens your Multiverse page. From now on you'll find **Multiverse → Timelines** in the main menu (the menu entry only appears while at least one account — Mastodon or Telegram — is connected).
+That's it. Oasis opens your Multiverse page. From now on you'll find **Multiverse → Timelines** in the main menu (the entry only appears while at least one account — Mastodon, Telegram or PeerTube — is connected).
 
 To stop using it, go back to **Settings → Multiverse** and click **Disconnect** (this also logs the session out on Telegram's side).
 

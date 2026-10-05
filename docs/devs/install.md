@@ -14,75 +14,61 @@ Once Oasis is started in dev mode, visit [http://localhost:3000](http://localhos
 
 The backend restarts automatically (via [nodemon](https://nodemon.io)) whenever you save changes to `.js` or `.json` files in `src/backend/`, `src/models/`, `src/views/`, or `src/client/`. Static assets (`src/client/assets/`) do not trigger a restart. Page autoreload is not available because we avoid using JavaScript in the browser — reload the page manually to display your changes.
 
-## Two-process architecture
+## Process model
 
-Oasis runs as two cooperating Node processes:
+An Oasis node runs in one Node process, `backend.js` (the AI service, when AI is on, runs apart):
 
-- **`SSB_server.js`** — boots the local Secure Scuttlebutt sbot on ssb-db2 (gossip, EBT, friends, blobs, conn, LAN, invites) plus `db2_legacy.js`, which gives the models the classic `createLogStream` / `messagesByType` / `backlinks` / `private` surface over db2. Owns `~/.ssb`; a `flume/` log left by an older install is migrated into `db2/` once, before the sbot starts.
-- **`backend.js`** — Koa HTTP server that connects to the sbot through `ssb-client` and renders pages with hyperaxe. Serves `http://localhost:3000`.
+- **`backend.js`** — Koa HTTP server that renders pages with hyperaxe and serves `http://localhost:3000`.
+- **`SSB_server.js`** — the local Secure Scuttlebutt sbot on ssb-db2 (gossip, EBT, friends, blobs, conn, LAN, invites) plus `db2_legacy.js`, which gives the models the classic `createLogStream` / `messagesByType` / `backlinks` / `private` surface over db2. The backend runs it in the same process. It owns `~/.ssb`; a `flume/` log left by an older install is migrated into `db2/` once, before the sbot starts.
 
-The backend talks to the sbot over a local Unix socket. If you only restart the backend (the default in `npm run dev`), the sbot keeps running. If you change anything under `src/server/` or anything that holds an SSB handle inside a model, restart the sbot too (kill the `SSB_server.js` process and re-run `npm start`).
+The sbot also listens on a local Unix socket (`~/.ssb/socket`), which is how the PUB admin commands (`./oasis.sh whoami`, `invite`, …) reach a running node. Only one process can hold a `~/.ssb` open at a time. Because the sbot lives inside the backend, every restart of the backend restarts it too; nodemon does not watch `src/server/`, so restart `npm run dev` by hand after changing it.
 
 ## npm scripts
 
 Run these from `src/server/`:
 
-- **`npm start`** — boots the SSB sbot in the background, waits ~10 s, then starts the HTTP backend. Use this for an end-to-end local run.
-- **`npm run start:ssb`** — start only the SSB sbot.
-- **`npm run start:backend`** — start only the HTTP backend (assumes sbot is already running).
-- **`npm run dev`** — backend under nodemon watch (auto-restart on file change). Sbot is **not** watched.
+- **`npm run dev`** — backend (and its sbot) under nodemon watch.
+- **`npm run start:backend`** — the backend, without nodemon.
+- **`npm run start:ssb`** — the sbot alone, without the web interface.
+- **`npm start`** — `start:ssb` in the background, then `start:backend`.
 
-The launcher script at the repo root (`oasis.sh`) wraps these and detects whether to start in `server`, `pub`, or `gui` mode.
+For an ordinary run, use the launcher at the repo root instead: `./oasis.sh` (GUI, the default) or `./oasis.sh server` (PUB), which run `backend.js` directly; it also carries `./oasis.sh test` and the PUB admin commands.
 
 ## Tests
 
-Unit and integration tests live under `test/` at the repo root, grouped per module in `test/mods/`. Coverage spans **40+ modules** including tribes, feed, banking, parliament, courts, jobs, market, shops, media (audio/video/image/document/torrent), maps, pads, calendars, events, tasks, votes, transfers, reports, projects, opinions, activity, AI, CV, LARP, melody, and more.
+Unit and integration tests live under `test/` at the repo root, grouped per module in `test/mods/`.
 
-Run the full suite from the `oasis/` directory:
+Tests never use your `~/.ssb`: they run against a throwaway directory given in `ssb_path`. From `test/`:
 
 ```sh
-# All modules, each in a subprocess with safe ~/.ssb isolation
-bash test/run.sh
-
-# Same, but skip the confirmation prompt
-bash test/run.sh --yes
-
-# All modules in a single Node process (no isolation, faster but mixes state)
-node test/run.js
+# Every module
+ssb_path=<an empty scratch dir> node run.js
 
 # A single module
-node test/run.js mods/tribes
-node test/run.js mods/media/audios
-
-# Per-module shortcut (no isolation, fast iteration)
-bash test/mods/<module>/run.sh
+ssb_path=<an empty scratch dir> node run.js mods/tribes
+ssb_path=<an empty scratch dir> node run.js mods/media/audios
 ```
 
-`test/run.sh` moves your live `~/.ssb` to a timestamped backup (`~/.ssb-bak-YYYYMMDD_HHMMSS`) before the run and creates a fresh empty `~/.ssb` for the tests. **Stop any running Oasis instance first** — only one process can hold `~/.ssb` open at a time. Pass `--restore` to restore the original `~/.ssb` after the run finishes (CI uses this).
+`./oasis.sh test`, from the repo root, does the same for every module in a test directory of its own (`~/.ssb-oasis-test`, or the one in `OASIS_TEST_SSB`), recreated empty on every run, and writes a report to `test/results/`.
 
-What the tests cover, how to add a new module suite, and a record of bugs the test harness has caught are documented in [`test/README.md`](../../test/README.md). When you change a model, add or update its test under `test/mods/<module>/` so the change comes with a regression net.
+What the tests cover and how to add a new module suite are documented in [`test/README.md`](../../test/README.md). When you change a model, add or update its test under `test/mods/<module>/` so the change comes with a regression net.
 
 ## Useful commands while developing
 
 - **`./install.sh`** — link the packages shipped in `src/base` and, if you want AI features, install its stack. Never `npm install` inside `src/server` (see [`base.md`](./base.md)).
-- **`cd test && node run.js`** — run the whole test suite with the mock sbot; `node run.js mods/<module>` runs one module.
+- **`./oasis.sh test`** — run the whole test suite in its own test directory; from `test/`, `ssb_path=<an empty scratch dir> node run.js mods/<module>` runs one module.
 - **`npm run dev`** (from `src/server`) — backend under nodemon, fetched through `npx` the first time.
 
 ## Directory map (cheat sheet)
 
 - `src/server/` — SSB sbot entry, ssb-config, secret-stack plugin wiring, `db2_legacy.js`; its `node_modules` is a link to `src/base/node_modules`.
 - `src/base/` — the runtime packages Oasis ships in the repository (see [`base.md`](./base.md)).
-- `src/AI/` — the AI service and its own `package.json`; `src/AI/node_modules` is installed only when AI features are chosen.
+- `src/AI/` — the local LLM service (`ai_service.mjs` on port 4001), the context assembler and its own `package.json`; `src/AI/node_modules` is installed only when AI features are chosen.
 - `src/backend/` — Koa HTTP entry (`backend.js`), middleware, blob handler, URL renderer, sanitizer.
 - `src/models/` — per-module data access. Factory functions that receive `cooler` (and sometimes `tribeCrypto`, `tribesModel`) and return query/publish methods.
 - `src/views/` — hyperaxe view functions. Pure HTML builders.
-- `src/AI/` — local LLM service (`ai_service.mjs` on port 4001) and context assembler.
-- `src/configs/` — the application's own configuration: `oasis-config.json` (module toggles, themes, language), `server-config.json` (sbot), `snh-invite-code.json`, and the `*.js` helpers. No user data is kept here: everything a person accumulates lives under `~/.ssb/oasis/` (see [`inventory.md`](./inventory.md)), and `state-manager.js` is what resolves those paths.
+- `src/configs/` — the application's own configuration: `oasis-config.json` (module toggles, themes, language), `server-config.json` (sbot), `snh-invite-code.json`, and the `*.js` helpers. No personal data is kept here: everything an inhabitant accumulates lives under `~/.ssb/oasis/` (see [`inventory.md`](./inventory.md)), and `state-manager.js` is what resolves those paths.
 - `src/client/assets/` — CSS, theme files, translations (one `oasis_<lang>.js` file per language), static images.
-- `docs/` — user and developer documentation (this folder). [`inventory.md`](./inventory.md) explains every file in `~/.ssb`.
+- `docs/` — documentation for inhabitants and developers (this folder). [`inventory.md`](./inventory.md) explains every file in `~/.ssb`.
 - `test/` — test harness (`run.sh`, `run.js`, `seed.js`, `helpers/`) and per-module test suites in `mods/`.
-- `scripts/` — build helpers (`build-deb.sh`, node_modules patcher).
-
-## Pre-commit checks
-
-The pre-commit hook runs `cspell` and `prettier`. See [`contributing.md`](./contributing.md) for what to do when a check fails (typos go in `.cspell.json`; formatting with `npx prettier --write <file>`).
+- `scripts/` — build and admin helpers (`build-base.js`, `build-deb.sh`, `patch-node-modules.js`, `generate_shs.js`, and `oasis-pub.js` behind the PUB admin commands).

@@ -169,7 +169,7 @@ const eventChipFor = (currentFilter, censusEvents) => (mode) => {
   if (!Array.isArray(censusEvents)) return true;
   const pubE = (e) => normalizePrivacy(e.isPublic) === "public";
   if (mode === "mine") return censusEvents.some((e) => e.organizer === userId);
-  if (mode === "recent") return censusEvents.some((e) => pubE(e) && (Date.parse(e.createdAt || "") || 0) >= Date.now() - 86400000);
+  if (mode === "recent") return censusEvents.length > 0;
   if (mode === "today") return censusEvents.some((e) => pubE(e) && moment(e.date).isSame(moment(), "day"));
   if (mode === "week") return censusEvents.some((e) => pubE(e) && moment(e.date).isBetween(moment(), moment().add(7, "days"), null, "[]"));
   if (mode === "month") return censusEvents.some((e) => pubE(e) && moment(e.date).isBetween(moment(), moment().add(1, "month"), null, "[]"));
@@ -227,7 +227,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   const minCreate = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm");
 
   const ret = typeof returnTo === "string" && returnTo.startsWith("/events") ? returnTo : "/events?filter=mine";
-  const emptyMod = moduleIsEmpty(filtered, currentFilter, "all", params.q);
+  const emptyMod = moduleIsEmpty(censusEvents, currentFilter, "all", params.q);
   const pubE = (e) => normalizePrivacy(e.isPublic) === "public";
   const eventChipVisible = eventChipFor(currentFilter, censusEvents);
   const editPrivacy = normalizePrivacy(formData.isPublic);

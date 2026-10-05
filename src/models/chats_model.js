@@ -656,7 +656,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       list = list.map(c => ({ ...c, lastMsgAt: lastMsgAt.get(c.rootId) || 0, lastMineAt: lastMineAt.get(c.rootId) || 0 }))
 
       if (filter === "mine") list = list.filter(c => c.author === uid)
-      else if (filter === "recent") list = list.filter(c => new Date(c.createdAt).getTime() >= now - 86400000)
+      else if (filter === "recent") list = list.filter(c => Math.max(new Date(c.createdAt).getTime() || 0, Number(c.lastMsgAt || 0)) >= now - 86400000)
       else if (filter === "open") list = list.filter(c => c.status === "OPEN" || c.status === "INVITE-ONLY")
       else if (filter === "closed") list = list.filter(c => c.status === "CLOSED")
 

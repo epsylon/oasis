@@ -402,3 +402,27 @@ describe('security: replaces-overwrite hijack (CWE content spoofing)', (t) => {
   });
 
 });
+
+describe('security: LAN broadcasting switched off stays off', (t) => {
+  const { guardLan } = require('../../../src/server/lanRouter');
+  const fakeNode = (running) => ({ lan: { running, start() { this.running = true; }, stop() { this.running = false; } } });
+
+  t('nothing can make a node announce itself on the local network while the setting is off', () => {
+    let enabled = false;
+    const node = fakeNode(true);
+    guardLan(node, () => enabled);
+    notOk(node.lan.running, 'what was already broadcasting stops');
+    node.lan.start();
+    notOk(node.lan.running, 'later attempts to start it are ignored');
+    enabled = true;
+    node.lan.start();
+    ok(node.lan.running, 'switching the setting on lets it start again');
+  });
+
+  t('with the setting on, nothing changes', () => {
+    const node = fakeNode(false);
+    guardLan(node, () => true);
+    node.lan.start();
+    ok(node.lan.running);
+  });
+});

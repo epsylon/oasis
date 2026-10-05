@@ -16,7 +16,7 @@ Both `install.sh` and `oasis.sh` are plain POSIX `sh` scripts and executable, so
 
 The script detects your package manager (apt, pacman, dnf, zypper, apk, xbps or brew), installs `git`, `curl` and `tar`, installs Node.js 22 only if your system does not already have a recent enough one, links the packages Oasis ships in `src/base` and, if you want AI features, installs the AI stack and downloads the models.
 
-Oasis carries its own libraries in the repository (`src/base`), so a clone runs without asking npm or any registry for anything; `install.sh` only creates the `src/server/node_modules` link to it and checks that it loads. The AI stack (`node-llama-cpp`, embeddings) is the exception: it is 1.6 GB of binaries, installed in `src/AI/node_modules` only when you choose AI, from the exact versions pinned in `src/AI/package-lock.json`. See [`docs/devs/base.md`](../devs/base.md).
+Oasis carries its own libraries in the repository (`src/base`), so a clone runs without asking npm or any registry for anything; `install.sh` only creates the `src/server/node_modules` link to it and checks that it loads. The AI stack (`node-llama-cpp`, embeddings) is the exception: a large set of mostly native binaries, installed in `src/AI/node_modules` only when you choose AI, from the exact versions pinned in `src/AI/package-lock.json`. See [`docs/devs/base.md`](../devs/base.md).
 
 If you prefer to manage Node.js yourself (nvm, a distro package, a container), skip the system packages:
 
@@ -24,7 +24,7 @@ If you prefer to manage Node.js yourself (nvm, a distro package, a container), s
 
 To run it unattended, choose the AI option beforehand with `OASIS_AI=full`, `OASIS_AI=nav` or `OASIS_AI=none`.
 
-The AI models are fetched from a list of mirrors, tried in order until one answers with a sound package (the SolarNET.HuB server and the PUBs that host a copy). Put your own first with `OASIS_MODEL_MIRRORS=https://your.mirror/path`; the two package names are `oasis-42-1-chat.Q4_K_M.gguf.tar.gz` and `oasis-embeddings.tar.gz`. If no mirror answers, the installer finishes without AI and you can run it again later.
+The AI models are fetched from a list of mirrors, tried in order until one answers with a sound package (the SolarNET.HuB server and the PUBs that host a copy). Put your own first with `OASIS_MODEL_MIRRORS=https://your.mirror/path`; the packages are `oasis-42-1-chat.Q4_K_M.gguf.tar.gz` and `oasis-embeddings.tar.gz`. If no mirror answers, the installer finishes without AI and you can run it again later.
 
 ---
 

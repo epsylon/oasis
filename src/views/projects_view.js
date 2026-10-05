@@ -534,7 +534,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
     if (m === "APPLIED") return censusP.some(pr => String(pr.author) !== String(userId) && [pr.members, pr.participants, pr.applicants].some(l => Array.isArray(l) && l.includes(userId)));
     if (m === "ACTIVE" || m === "PAUSED" || m === "COMPLETED") return censusP.some(pr => String(pr.status || "ACTIVE").toUpperCase() === m);
     if (m === "FOLLOWING") return censusP.some(pr => Array.isArray(pr.followers) && pr.followers.includes(userId));
-    if (m === "RECENT") return censusP.some(pr => (Date.parse(pr.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "RECENT") return censusP.length > 0;
     if (m === "BACKERS") return censusP.some(pr => safeArr(pr.backers).length > 0);
     return true;
   };

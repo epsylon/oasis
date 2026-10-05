@@ -738,15 +738,11 @@ const flashText = (key) => {
   return "";
 };
 
-const flashBanner = (msgKey) =>
-  !msgKey ? null : div({ class: "flash-banner" }, p(flashText(msgKey) || msgKey));
-
 const renderAddresses = (data, userId) => {
   const rows = data.addresses || [];
   const search = data.search || "";
   const hasContent = rows.length > 0 || !!search;
   return div(
-    data.flash ? flashBanner(data.flash) : null,
     div({ class: "bank-summary" },
       h2(i18n.bankAddAddressTitle),
       form({ method: "POST", action: "/banking/addresses", class: "bank-form" },
@@ -904,4 +900,4 @@ const renderEpochView = (epoch, allocations, userId = "", data = {}) => {
   );
 };
 
-module.exports = { renderBankingView, renderSingleAllocationView, renderEpochView };
+module.exports = { renderBankingView, renderSingleAllocationView, renderEpochView, bankingFlashText: flashText };

@@ -53,6 +53,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `keys/tribes-keys.json` | The symmetric keys of the tribes you belong to — without them, tribe content cannot be read. |
 | `keys/chats-keys.json` | The same, for private chats. |
 | `keys/pads-keys.json` | The same, for pads. |
+| `keys/rooms-keys.json` | The same, for invite-only rooms. |
 | `keys/maps-keys.json` | The same, for private maps. |
 | `keys/calendars-keys.json` | The same, for private calendars. |
 | `keys/events-keys.json` | The same, for private events. |
@@ -65,6 +66,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `banking/banking-allocations.json` | The UBI payments this node has committed to, with their state and, once paid, the transaction id. Only fills up on a PUB. |
 | `banking/banking-epochs.json` | The monthly UBI epochs already closed by this node, with what was distributed in each. Only on a PUB. |
 | `banking/banking-eco-history.json` | Samples of the ECOin value, supply and inflation over time. This is what the Exchange charts draw. |
+| `banking/banking-funds-history.json` | Samples of your own ECOin wallet balance over time. This is what the funds chart of Banking › Overview draws. |
 | `banking/banking-ubi-paid.json` | On a PUB, the ledger of UBI already paid: one entry per inhabitant and month, with its transaction. It is what stops the same month being paid twice. |
 | `banking/banking-ubi-notice.json` | Which UBI payments BankingBot has already told you about, so it does not repeat itself. |
 | `banking/banking-confirm-notice.json` | The same, for contracts waiting for your confirmation. |
@@ -72,7 +74,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `content/follow_state.json` | Follow requests pending and accepted, with the moment of the last one. |
 | `content/agenda-config.json` | How you arranged your Agenda. |
 | `content/blob-access.json` | When each downloaded blob was last opened. The media cache (Settings → Media cache) uses it to decide what to drop first once the quota is exceeded. |
-| `content/snapshot.oasissn`, `content/snapshot-recent.oasissn` | Only on a PUB: the copies of its log (every feed whole, and the feeds active in the last 7 days; private messages as ciphertext) that newcomers receive over the SSB connection when they join, so they start in seconds. Rebuilt every 6 hours. |
+| `content/snapshot.oasissn`, `content/snapshot-recent.oasissn` | Only on a PUB: the copies of its log (every feed whole, and the recently active feeds; private messages as ciphertext) that newcomers receive over the SSB connection when they join, so they can start right away. Rebuilt periodically. |
 | `ai/AI-history.json` | Your conversation with the AI. It stays here; it is never published. |
 | `ai/AI-vectors.json` | Embeddings of the approved AI exchanges of the network, so 42 can pick the ones related to a question without recomputing them. Rebuilt on demand. |
 | `ai/AI-search-vectors.json` | Embeddings of public content titles and descriptions, used by the semantic part of Search. Rebuilt on demand. |
@@ -84,6 +86,10 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `flags/oasis-mentions-seen` | Which mentions you marked as read (their ids only), so the mentions counter only counts the rest. |
 | `flags/oasis-political-seen` | Which governance announcements have already been sent to you, so none is sent twice. |
 | `peers/gossip_unfollowed.json` | The pubs you stopped following, so they are not offered again. |
+| `peers/peer-health.json` | Since when each pub or peer has been failing to connect. A pub that keeps failing for long enough is shown as unreachable and hidden from the peer lists; as soon as it connects again it is removed from here. |
+| `peers/lan-peers.json` | The inhabitants this node has met on the local network. With the Wish set to Only LAN, you see content from them and from yourself. |
+| `phone/phone-history.json` | Your call history: who, when, direction, result and duration. It stays on this device. |
+| `phone/phone-seen.json` | Which missed calls and audio records you have already seen or played, so the PHONE counter only counts the rest. |
 
 A file with a `.before-restore` suffix next to any of these is the copy a restore kept of whatever was there before it wrote the one from the backup.
 

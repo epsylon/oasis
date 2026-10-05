@@ -5,7 +5,7 @@ that helps you follow interesting content and discover new ones.
 
   ![SNH](https://solarnethub.com/git/snh-oasis-logo3.jpg "SolarNET.HuB")
 
-Oasis redefines what it means to be connected in the modern world, giving people 
+Oasis redefines what it means to be connected in the modern world, giving its inhabitants 
 the ability to control their online presence and interactions without the need for centralized institutions.
 
 ----------
@@ -16,7 +16,7 @@ Main features of the Oasis interface are:
 
  +  Data manipulation is not permitted due to the use of BLOCKCHAIN technology.
  +  No browser JavaScript. Just pure HTML+CSS. A really secure frontend!.
- +  Use your favorite web browser to read and write messages to the people you care about.
+ +  Use your favorite web browser to read and write messages to the inhabitants you care about.
  +  Strong cryptography in every single point of the network.
  +  You are the center of your own distributed network. Online or offline, it works anywhere that you are.
  +  Initial identities are randomnly generated (no username or password required).
@@ -95,7 +95,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Jobs: Module to discover and manage jobs.	
  + L.A.R.P.: Module for the live-action role-playing layer.
  + Logistics: Discover and manage logistic plans.
- + Logs: Module to record (via AI assistant) your experiences.
+ + Logs: Module to keep a private diary of your experiences, written by hand or by the AI.
  + Mailing Lists: Discover and manage mailing lists.
  + Maps: Module to manage and share offline maps.
  + Market: Module to exchange goods or services.
@@ -105,11 +105,13 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Opinions: Module to discover and vote on opinions.	
  + Pads: Module to manage collaborative text editors.
  + Parliament: Module to elect governments and vote on laws.	
+ + Phone: Module to call other inhabitants with end-to-end encrypted voice calls (VoIP).
  + Pixelia: Module to draw on a collaborative grid.	
  + Podcasts: Module to publish podcast channels.
  + Polls: Module to ask the network and count the answers.
  + Projects: Module to explore, crowd-funding and manage projects.
  + Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.	
+ + Rooms: Module to discover and join encrypted rooms.
  + School: Module to exchange knowledge.
  + Shops: Module to manage and discover shops.	
  + Tags: Module to discover and explore taxonomy patterns (tags).	
@@ -158,13 +160,13 @@ Oasis contains its own cryptocurrency. With it, you can exchange items and servi
 
   ![SNH](https://solarnethub.com/git/oasis-tomatoes-example.png "SolarNET.HuB")
 
-You can also receive a -Universal Basic Income- if you contribute to the Tribes and their coordinated actions.
+You can also receive a -Universal Basic Income- for taking part in the network.
 
  + https://ecoin.03c8.net
  
 ## Banking
 
-Oasis contains its own UBI (Universal Basic Income), distributed weekly using ECOin, and calculated by our AI through positive and efficient participation and trust.
+Oasis contains its own UBI (Universal Basic Income), distributed monthly in ECOin by the PUBs and weighted by each inhabitant's participation and trust (karma), following public rules that anyone can read in Banking → Rules.
 
   ![SNH](https://solarnethub.com/git/oasis-banking.png "SolarNET.HuB")
   
@@ -196,7 +198,7 @@ And also of each inhabitant.
 
 ## L.A.R.P.
 
-Oasis contains a L.A.R.P. (real action role-playing) structured around 1+8 main houses. 
+Oasis contains a L.A.R.P. (real action role-playing) structured around a set of houses. 
 
   ![SNH](https://solarnethub.com/git/oasis-larp-schema.jpg "SolarNET.HuB")
 
@@ -216,11 +218,45 @@ Oasis bridges to the **Fediverse** and beyond. You can connect your other accoun
 
   ![SNH](https://solarnethub.com/git/oasis-fediverse.png "SolarNET.HuB")
 
-Connect your accounts from **Settings → Multiverse**, then open them from the **Multiverse** menu (shown only while an account is connected). Each network lives in its own space. See [docs/MULTIVERSE](docs/MULTIVERSE) for step-by-step guides.
+Connect your accounts from **Settings → Multiverse**, then open them from **Multiverse → Timelines** in the menu (shown only while an account is connected). Each network lives in its own space. See [docs/MULTIVERSE](docs/MULTIVERSE) for step-by-step guides.
 
  + Mastodon connect guide: [docs/MULTIVERSE/MASTODON/connect.md](docs/MULTIVERSE/MASTODON/connect.md)
  + Telegram connect guide: [docs/MULTIVERSE/TELEGRAM/connect.md](docs/MULTIVERSE/TELEGRAM/connect.md)
  + PeerTube connect guide: [docs/MULTIVERSE/PEERTUBE/connect.md](docs/MULTIVERSE/PEERTUBE/connect.md)
+
+----------
+
+## Phone
+
+Oasis contains its own telephone: voice calls between inhabitants, end-to-end encrypted, with no operator, server or account in between.
+
+ + Every inhabitant has a phone number, derived from their Oasis ID and shown on their profile. Dial it (or an Oasis ID) from **Phone**, or call from a profile.
+ + Call several inhabitants at once to make a joint call.
+ + When nobody answers, leave a Private Audio Message (PaM).
+ + Choose who can call you (everyone, or only mutual supporters) in **Settings → Phone**.
+ + **Do not disturb** is published on your profile as a chip and can be switched from your profile or from Settings; callers are told before anything rings.
+ + When two inhabitants cannot reach each other directly, the call is relayed by a PUB, which cannot listen to it.
+
+## Rooms
+
+Rooms are encrypted meeting places, under **Community → Rooms**, that inhabitants join and leave whenever they want.
+
+ + A room is OPEN or INVITE-ONLY (entered with an invite code); tribes and sub-tribes have rooms of their own.
+ + Each room has a phone number, and its creator chooses **Do not disturb** or **Switchboard**: with Switchboard, dialling the number from Phone enters the room.
+ + Everything is encrypted end to end: the PUB of the room's creator relays it without being able to read it.
+ + Mute yourself whenever you want.
+
+See [docs/phone/README.md](docs/phone/README.md) for both.
+
+----------
+
+## Logs
+
+**Logs** (in the **Personal** menu) is your private diary, encrypted to yourself. Write entries by hand or, with the AI module on, let 42 write them from your own recent actions in the network. Export them all, or a single one, as PDF.
+
+## PDF export
+
+Many content pages offer **Generate PDF** and **Share via PM** (the PDF travels encrypted, attached to a new private message): reports, votes, events, tasks, calendars, CVs, emergencies, campaigns, logistics routes, mailing lists, the Pixelia canvas and transfers (as smart contracts). Pads, wiki pages and school certificates can be downloaded as PDF too.
 
 ----------
   
@@ -238,6 +274,14 @@ So you'll need to know someone, or participate in a collective action that distr
 
  + https://wiki.solarnethub.com/socialnet/snh#finding_inhabitants
   
+----------
+
+## TOR
+
+PUBs can also be reached as Tor onion addresses, even a PUB with no public IP at all. With Tor running on your device and onion connections allowed, Oasis connects to them like to any other PUB, and the **TOR** column in **Peers** shows which peers are reachable over Tor.
+
+ + Tor guide: [docs/PUB/TOR.md](docs/PUB/TOR.md)
+
 ----------
 
 ## Architecture:
@@ -269,14 +313,14 @@ of any kind. Like a crypto transaction, SSB posts are censorship-resistant and a
 
   ![SNH](https://solarnethub.com/git/ssb-participants-perspective.png "SolarNET.HuB")
 
-In SSB each user hosts their own content and the content of the peers they follow, which provides fault tolerance and 
+In SSB each inhabitant hosts their own content and the content of the peers they follow, which provides fault tolerance and 
 eventual consistency. 
 
-A node never stores the whole network, only its neighbourhood: you, the inhabitants you follow and the ones they follow 
-(two hops, at most 300 feeds per hop). Media is kept in a cache with a quota you choose (Settings → Media cache, 2 GB by default); 
-what is dropped is fetched again when somebody opens it. A PUB keeps a snapshot of its public log and hands it, over the 
+A node never stores the whole network, only its neighbourhood: you, the inhabitants you follow and the ones they follow. 
+Media is kept in a cache you can limit (Settings → Media cache, unlimited by default); 
+what is dropped is fetched again when somebody opens it. A PUB keeps a snapshot of its log (private messages only as ciphertext) and hands it, over the 
 encrypted SSB connection and only to the inhabitants it follows, to whoever joins through it: the newcomer has the latest 
-content in seconds while replication completes the rest in the background. The real size of your log, your indexes and 
+content almost at once while replication completes the rest in the background. The real size of your log, your indexes and 
 your media is shown at any time under Stats.
 
 ----------
@@ -319,7 +363,7 @@ Review ['Roadmap'](https://wiki.solarnethub.com/project/roadmap#the_project_netw
 
 ## Translations:
 
-Oasis supports multiple languages. One way to contribute is to translate the interface into your language so other people in your region can use it more intuitively.
+Oasis supports multiple languages. One way to contribute is to translate the interface into your language so other inhabitants in your region can use it more intuitively.
 
  + https://wiki.solarnethub.com/socialnet/snh#choose_language
 

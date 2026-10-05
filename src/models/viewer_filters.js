@@ -21,6 +21,85 @@ const loadState = () => {
 };
 const saveState = (s) => writeJson(statePath, s);
 
+const lanPeersPath = require('../configs/state-manager').statePath('lan-peers.json');
+const FEED_ID = /^@[A-Za-z0-9+/]{43}=\.ed25519$/;
+let lanKnown = null;
+
+const canonicalFeedId = (key) => {
+  let k = String(key || '').trim();
+  if (!k) return null;
+  if (!k.startsWith('@')) k = '@' + k;
+  if (!k.endsWith('.ed25519')) k += '.ed25519';
+  return FEED_ID.test(k) ? k : null;
+};
+
+const isPrivateHost = (host) => {
+  const h = String(host || '').replace(/^\[|\]$/g, '').replace(/^::ffff:/i, '').toLowerCase();
+  if (!h) return false;
+  if (/^(10|127)\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h)) return true;
+  const m = h.match(/^172\.(\d+)\./);
+  if (m && Number(m[1]) >= 16 && Number(m[1]) <= 31) return true;
+  return h === '::1' || /^f[cd][0-9a-f]{0,2}:/.test(h) || /^fe[89ab][0-9a-f]?:/.test(h);
+};
+
+const hostOfAddress = (address) => {
+  const net = String(address || '').split('~')[0];
+  if (!net.startsWith('net:')) return '';
+  const hp = net.slice(4);
+  const i = hp.lastIndexOf(':');
+  return i > 0 ? hp.slice(0, i) : hp;
+};
+
+const lanKeysFromConn = (entries) => {
+  const out = [];
+  for (const e of entries || []) {
+    if (!Array.isArray(e) || !e[1]) continue;
+    const [address, data] = e;
+    const key = canonicalFeedId(data.key);
+    if (!key) continue;
+    if (data.type === 'lan' || data.inferredType === 'lan' || isPrivateHost(hostOfAddress(address))) out.push(key);
+  }
+  return out;
+};
+
+const lanPeers = () => {
+  if (!lanKnown) {
+    const list = readJson(lanPeersPath, []);
+    lanKnown = new Set((Array.isArray(list) ? list : []).map(canonicalFeedId).filter(Boolean));
+  }
+  return lanKnown;
+};
+
+const rememberLanPeers = (keys) => {
+  const set = lanPeers();
+  let changed = false;
+  for (const k of keys || []) {
+    const id = canonicalFeedId(k);
+    if (id && !set.has(id)) { set.add(id); changed = true; }
+  }
+  if (changed) writeJson(lanPeersPath, [...set]);
+  return changed;
+};
+
+const filterByWish = async (items, { wish, viewer, authorOf: author, isOwn, isMutual, lan } = {}) => {
+  if (!Array.isArray(items)) return items;
+  const own = (it) => !!(isOwn && isOwn(it, viewer));
+  if (wish === 'local') return items.filter(own);
+  if (wish === 'only-lan') {
+    const near = lan || new Set();
+    return items.filter(it => { const a = author(it); return !a || a === viewer || own(it) || near.has(a); });
+  }
+  if (wish === 'mutuals' && typeof isMutual === 'function') {
+    const out = [];
+    for (const it of items) {
+      const a = author(it);
+      if (!a || a === viewer || await isMutual(a)) out.push(it);
+    }
+    return out;
+  }
+  return items;
+};
+
 const wishMutualsOnly = () => getConfig().wish === 'mutuals';
 const pmMutualsOnly = () => getConfig().pmVisibility === 'mutuals';
 const isFrictionActive = () => wishMutualsOnly() || pmMutualsOnly();
@@ -127,4 +206,9 @@ module.exports = {
   applyMutualSupportFilter,
   canSendPmTo,
   authorOf,
+  isPrivateHost,
+  lanKeysFromConn,
+  lanPeers,
+  rememberLanPeers,
+  filterByWish,
 };

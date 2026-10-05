@@ -177,4 +177,30 @@ describe('conventions: the log is read by type, never by "the last N messages"',
     }
     eq(missing.size, 0, `published but unknown to the aggregators: ${[...missing].join(', ')}`);
   });
+
+  t('a message type named through a constant is discoverable as well', () => {
+    const { CONTENT_TYPES } = require('../../../src/models/typed_log');
+    const catalogue = new Set(CONTENT_TYPES);
+    const missing = new Set();
+    for (const f of sources()) {
+      const src = fs.readFileSync(f, 'utf8');
+      const consts = new Map([...src.matchAll(/\b(?:const|let)\s+([A-Z][A-Z0-9_]*)\s*=\s*['"]([A-Za-z][\w-]*)['"]/g)].map(m => [m[1], m[2]]));
+      for (const m of src.matchAll(/\btype:\s*([A-Z][A-Z0-9_]*)\b/g)) {
+        const name = consts.get(m[1]);
+        if (name && !catalogue.has(name)) missing.add(name);
+      }
+    }
+    eq(missing.size, 0, `published through a constant but unknown to the aggregators: ${[...missing].join(', ')}`);
+  });
+
+  t('the personal log only follows types that are published, each with its own sentence', () => {
+    const { CONTENT_TYPES } = require('../../../src/models/typed_log');
+    const src = fs.readFileSync(path.join(__dirname, '../../../src/models/logs_model.js'), 'utf8');
+    const followed = [...src.match(/const ACTION_TYPES = new Set\(\[([\s\S]*?)\]\)/)[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+    const phrased = new Set([...src.match(/const ACTION_PHRASES = \{([\s\S]*?)\n\};/)[1].matchAll(/^\s*'?([\w-]+)'?:/gm)].map(m => m[1]));
+    const unpublished = followed.filter(t => !CONTENT_TYPES.includes(t));
+    const silent = followed.filter(t => !phrased.has(t));
+    eq(unpublished.length, 0, `followed but never published: ${unpublished.join(', ')}`);
+    eq(silent.length, 0, `followed without a sentence: ${silent.join(', ')}`);
+  });
 });

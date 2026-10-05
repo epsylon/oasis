@@ -53,6 +53,22 @@ const inboxBadges = () => {
   const inboxCount = Number(sharedState.getInboxCount()) || 0;
   return [inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : ''];
 };
+const phoneOn = () => !config.public && getConfig().modules.phoneMod !== 'off';
+const renderCallButton = (feedId, { upper = false, cls = null, pam = false } = {}) => {
+  if (!phoneOn() || !feedId || String(feedId) === String(config.keys.id) || sharedState.isPubId(feedId)) return null;
+  if (pam) return a({ href: `/phone?filter=create&to=${encodeURIComponent(feedId)}`, class: cls || "filter-btn" }, `✆ ${i18n.phoneCallTooltip}`);
+  const label = upper ? String(i18n.phoneCallButton).toUpperCase() : i18n.phoneCallButton;
+  return form({ method: "POST", action: "/phone/call", class: "phone-action-form" },
+    input({ type: "hidden", name: "to", value: feedId }),
+    button({ type: "submit", class: cls || "filter-btn", title: i18n.phoneCallButton }, `✆ ${label}`)
+  );
+};
+exports.renderCallButton = renderCallButton;
+const renderPhoneTopLink = () => {
+  if (!phoneOn()) return null;
+  const n = Number(sharedState.getPhoneCount()) || 0;
+  return li(a({ href: "/phone" }, span({ class: "emoji" }, "✆"), nbsp, i18n.phoneTitle, n > 0 ? span({ class: 'inbox-badge' }, String(n)) : ''));
+};
 exports.userLinkLabel = userLinkLabel;
 
 const renderInviteQrCard = ({ qrDataUrl }) =>
@@ -275,6 +291,9 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
   const pmBtn = o.author && String(o.author) !== String(myId)
     ? a({ href: `/pm?recipients=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-pm', title: i18n.pmContentTooltip }, '✉')
     : null;
+  const callBtn = o.author && String(o.author) !== String(myId) && phoneOn() && !sharedState.isPubId(o.author)
+    ? a({ href: `/phone?filter=create&to=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-call', title: i18n.phoneCallTooltip }, '✆')
+    : null;
 
   const deleteBtn = o.deleteAction
     ? form({ method: 'POST', action: o.deleteAction, class: 'content-action-form' },
@@ -283,8 +302,8 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
       )
     : null;
 
-  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !deleteBtn && !donateBtn && !torrentBtn) return null;
-  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, torrentBtn, pinBtn, donateBtn, reportBtn, pmBtn, linkBtn, chainBtn, contentBtn);
+  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !callBtn && !deleteBtn && !donateBtn && !torrentBtn) return null;
+  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, torrentBtn, pinBtn, donateBtn, reportBtn, pmBtn, callBtn, linkBtn, chainBtn, contentBtn);
 };
 exports.renderContentActions = renderContentActions;
 
@@ -306,9 +325,10 @@ const renderRelationshipBlock = (relationship, feedId) => {
   const rel = relationship || {};
   if (rel.me) return span({ class: 'status you' }, i18n.relationshipYou);
   const actions = [];
+  const icons = { follow: '♥', unfollow: '✕', block: '⊘', unblock: '↺' };
   const addAction = (action) => actions.push(
     form({ action: `/${action}/${encodeURIComponent(feedId)}`, method: 'post' },
-      button({ type: 'submit', class: 'filter-btn' }, i18n[action])
+      button({ type: 'submit', class: 'filter-btn' }, `${icons[action]} ${i18n[action]}`)
     )
   );
   if (rel.following) addAction('unfollow');
@@ -403,9 +423,11 @@ const renderMobileCounters = () => {
   } catch (_) { return null; }
   const inbox = Number(sharedState.getInboxCount()) || 0;
   const mentions = Number(sharedState.getMentionsCount()) || 0;
-  if (inbox <= 0 && mentions <= 0) return null;
+  const phone = phoneOn() ? (Number(sharedState.getPhoneCount()) || 0) : 0;
+  if (inbox <= 0 && mentions <= 0 && phone <= 0) return null;
   return div({ class: 'mobile-counters' },
     inbox > 0 ? a({ href: '/inbox', class: 'mobile-counter', title: i18n.inbox }, '☂ ', String(inbox)) : null,
+    phone > 0 ? a({ href: '/phone', class: 'mobile-counter', title: i18n.phoneTitle }, '✆ ', String(phone)) : null,
     mentions > 0 ? a({ href: '/mentions', class: 'mobile-counter', title: i18n.mentions }, '✺ ', String(mentions)) : null
   );
 };
@@ -440,7 +462,7 @@ exports.errorView = errorView;
 exports.renderInlineError = (message, dismissHref) => section({ class: 'inline-error' },
   div({ class: 'tags-header inline-error-box' },
     p({ class: 'error-page-message' }, String(message || '')),
-    dismissHref ? a({ href: dismissHref, class: 'filter-btn' }, i18n.errorDismiss || 'OK') : null
+    dismissHref ? a({ href: dismissHref, class: 'inline-error-dismiss' }, i18n.errorDismiss || 'OK') : null
   )
 ).outerHTML;
 
@@ -1068,7 +1090,7 @@ const renderTagsLink = () => {
 const hasMultiverseAccount = () => {
   try {
     const store = JSON.parse(fs.readFileSync(require('../configs/state-manager').statePath('fediverse-accounts.json'), 'utf8'));
-    return !!(store && ((store.mastodon && store.mastodon.token) || (store.telegram && store.telegram.session)));
+    return !!(store && ((store.mastodon && store.mastodon.token) || (store.peertube && store.peertube.token) || (store.telegram && store.telegram.session)));
   } catch (_) {
     return false;
   }
@@ -1284,6 +1306,18 @@ const renderLogisticsLink = () => {
         emoji: "⇄",
         text: i18n.logisticsTitle,
         class: "logistics-link enabled"
+      })
+    : "";
+};
+
+const renderRoomsLink = () => {
+  const roomsMod = getConfig().modules.roomsMod === "on";
+  return roomsMod
+    ? navLink({
+        href: "/rooms",
+        emoji: "ꘒ",
+        text: i18n.roomsTitle,
+        class: "rooms-link enabled"
       })
     : "";
 };
@@ -1583,9 +1617,12 @@ const template = (titlePrefix, ...elements) => {
       const { getConfig } = require('../configs/config-manager.js');
       if (getConfig().ai?.suggestions === false) return null;
     } catch (_) {}
-    const suggestion = sharedState.getBestMatch ? sharedState.getBestMatch() : null;
+    let here = '';
+    try { here = (require('../models/typed_log').requestScope.getStore() || {}).path || ''; } catch (_) {}
+    const own = sharedState.getSectionMatch ? sharedState.getSectionMatch(here.split('/')[1] || '') : null;
+    const suggestion = (own && own.href !== here) ? own : (sharedState.getBestMatch ? sharedState.getBestMatch() : null);
     if (!suggestion || !suggestion.href) return null;
-    if (sharedState.getDismissedSuggestion && sharedState.getDismissedSuggestion() === suggestion.href) return null;
+    if (sharedState.isSuggestionDismissed && sharedState.isSuggestionDismissed(suggestion.href)) return null;
     const cap = compact ? 52 : 96;
     const t = String(suggestion.title || '').trim();
     const label = t.length > cap ? t.slice(0, cap) + '…' : t;
@@ -1595,8 +1632,63 @@ const template = (titlePrefix, ...elements) => {
       a({ href: suggestion.href, class: "update-banner-link" }, label),
       form(
         { method: "POST", action: "/ai/suggestion/dismiss", class: "welcome-banner-close" },
+        input({ type: "hidden", name: "href", value: suggestion.href }),
         button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
       )
+    );
+  };
+  const buildRoomBanner = (compact, here) => {
+    if (config.public || getConfig().modules.roomsMod !== 'on') return null;
+    const cls = compact ? "ai-suggestion-banner ai-suggestion-inline phone-banner" : "update-banner phone-banner";
+    const act = (action, label, kls) => form({ method: "POST", action, class: "phone-action-form" }, button({ type: "submit", class: kls }, label));
+    const room = sharedState.getPhoneRoom();
+    if (room && room.ref) {
+      const href = `/rooms/${encodeURIComponent(room.ref)}`;
+      if (here === href) return null;
+      return div({ class: cls },
+        span({ class: "update-banner-icon" }, "ꘒ"),
+        a({ href, class: "update-banner-link" }, `${i18n.roomBannerIn} · ${room.title} (${room.count}/${room.max})`),
+        a({ href, class: "tribe-action-btn" }, String(i18n.roomBackToRoom).toUpperCase()),
+        act("/rooms/leave", String(i18n.roomLeave).toUpperCase(), "tribe-action-btn danger-btn")
+      );
+    }
+    const liveRoom = (sharedState.getLiveRooms() || [])[0];
+    if (!liveRoom) return null;
+    const href = `/rooms/${encodeURIComponent(liveRoom.ref)}`;
+    if (here === href) return null;
+    return div({ class: cls },
+      span({ class: "update-banner-icon" }, "ꘒ"),
+      a({ href, class: "update-banner-link" }, `${i18n.roomBannerLive} · ${liveRoom.title} (${liveRoom.count}/${liveRoom.max})`),
+      act(`/rooms/join/${encodeURIComponent(liveRoom.ref)}`, String(i18n.roomJoin).toUpperCase(), "tribe-action-btn"),
+      form({ method: "POST", action: "/rooms/live/dismiss", class: "welcome-banner-close" },
+        input({ type: "hidden", name: "ref", value: liveRoom.ref }),
+        button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
+      )
+    );
+  };
+  const buildPhoneBanner = (compact) => {
+    let here = '';
+    try { here = (require('../models/typed_log').requestScope.getStore() || {}).path || ''; } catch (_) {}
+    const st = phoneOn() ? sharedState.getPhoneCall() : null;
+    if (!st) return buildRoomBanner(compact, here);
+    if (here === '/phone') return null;
+    const nameOf = (id) => nameCache.get(id) || String(id).slice(0, 10);
+    const name = st.group && Array.isArray(st.peers) ? st.peers.filter(p => p.phase !== 'gone').map(p => nameOf(p.id)).join(', ') : nameOf(st.peer);
+    const cls = compact ? "ai-suggestion-banner ai-suggestion-inline phone-banner" : "update-banner phone-banner";
+    const act = (action, label, kls) => form({ method: "POST", action, class: "phone-action-form" }, button({ type: "submit", class: kls }, label));
+    if (st.dir === 'in' && st.phase === 'incoming') {
+      return div({ class: cls },
+        span({ class: "update-banner-icon" }, "✆"),
+        a({ href: "/phone", class: "update-banner-link" }, `${name} ${i18n.phoneIsCalling}`),
+        act("/phone/accept", String(i18n.phoneAnswer).toUpperCase(), "tribe-action-btn"),
+        act("/phone/reject", String(i18n.phoneReject).toUpperCase(), "tribe-action-btn danger-btn")
+      );
+    }
+    return div({ class: cls },
+      span({ class: "update-banner-icon" }, "✆"),
+      a({ href: "/phone", class: "update-banner-link" }, `${i18n.phoneInProgress} · ${name}`),
+      a({ href: "/phone", class: "tribe-action-btn" }, String(i18n.phoneBackToCall).toUpperCase()),
+      act("/phone/hangup", String(i18n.phoneHangup).toUpperCase(), "tribe-action-btn danger-btn")
     );
   };
   const buildEmergencyBanner = (compact) => {
@@ -1608,7 +1700,7 @@ const template = (titlePrefix, ...elements) => {
       return renderEmergencyBanner(featured, { compact });
     } catch (_) { return null; }
   };
-  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : "blocks";
+  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : currentConfig.ux?.current === "phone" ? "phone" : "blocks";
   const themeLink = link({
     rel: "stylesheet",
     href: `/assets/themes/${theme}.css?v=${assetVersion()}`
@@ -1653,6 +1745,7 @@ const template = (titlePrefix, ...elements) => {
                   )
                 );
               })(),
+              renderPhoneTopLink(),
               navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
               navLink({ href: "/invites", emoji: "ꔮ", text: i18n.invites })
             )
@@ -1676,7 +1769,8 @@ const template = (titlePrefix, ...elements) => {
                   )
                 );
               })(),
-              (uxMode === "chats" || uxMode === "feed")
+              renderPhoneTopLink(),
+              (uxMode === "chats" || uxMode === "feed" || uxMode === "phone")
                 ? navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
                 : null
             )
@@ -1704,6 +1798,7 @@ const template = (titlePrefix, ...elements) => {
             ),
             buildAiSuggestion(true)
             ),
+            buildPhoneBanner(true),
             buildEmergencyBanner(true)
           );
         })(),
@@ -1716,7 +1811,7 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/peers", emoji: "⧖", text: i18n.peers })
             )
           )
-        ) : (uxMode === "chats" || uxMode === "feed") ? div(
+        ) : (uxMode === "chats" || uxMode === "feed" || uxMode === "phone") ? div(
           { class: "top-bar-right" },
           nav(
             ul(
@@ -1738,12 +1833,12 @@ const template = (titlePrefix, ...elements) => {
         )
       ),
       (() => {
-        const updateFlagPath = path.join(__dirname, '../server/.update_required');
-        if (fs.existsSync(updateFlagPath)) {
+        const updateInfo = (() => { try { return require('../backend/updater').readUpdateInfo(); } catch (_) { return null; } })();
+        if (updateInfo) {
           return div(
             { class: "update-banner" },
             span({ class: "update-banner-icon" }, "🛠️"),
-            span({ class: "update-banner-text" }, i18n.updateBannerText),
+            span({ class: "update-banner-text" }, updateInfo.version ? `${String(i18n.updateBannerText).replace(/[.。।!]\s*$/, '')}: v${updateInfo.version}` : i18n.updateBannerText),
             a({ href: "/settings", class: "update-banner-link" }, i18n.updateBannerAction)
           );
         }
@@ -1768,9 +1863,10 @@ const template = (titlePrefix, ...elements) => {
         }
       })(),
       (getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? null : buildAiSuggestion(false),
+      (getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? null : buildPhoneBanner(false),
       buildEmergencyBanner(false),
       div(
-        { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" ? "main-content chatsux-only" : "main-content" },
+        { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" || uxMode === "phone" ? "main-content chatsux-only" : "main-content" },
         uxMode !== "blocks" ? null : div(
           { class: "sidebar-left" },
           nav(
@@ -1904,6 +2000,7 @@ const template = (titlePrefix, ...elements) => {
                 renderPadsLink(),
                 renderWikiLink(),
                 renderMapsLink(),
+                renderRoomsLink(),
                 renderChatsLink()
               ),
               navGroup(
@@ -1981,6 +2078,7 @@ exports.ainavHomeView = ({ recentTags = [] } = {}) => {
                     )
                   );
                 })(),
+                renderPhoneTopLink(),
                 navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
                 navLink({ href: "/invites", emoji: "ꔮ", text: i18n.invites })
               )
@@ -3138,6 +3236,20 @@ const renderUserSensors = (u, opts = {}) => {
       isMe && u.ecoAddress ? a({ href: '/wallet', class: 'wallet-line-link' }, addressNode) : addressNode
     ));
   }
+  const phoneVisible = isMe || prefs.phone === 'whole' || prefs.phone === undefined || (prefs.phone === 'mutuals' && u.mutual === true);
+  if (phoneOn() && prefs.phone !== 'off' && phoneVisible && u.id && !sharedState.isPubId(u.id)) {
+    const number = require('../models/phone_number').phoneNumberOf(u.id);
+    const dnd = isMe ? !!(getConfig().phone || {}).dnd : prefs.phoneDnd === true;
+    if (number) items.push(div({ class: 'wallet-line phone-number-line' },
+      span({ class: 'wallet-line-head', title: i18n.profileVisibilityPhone }, span({ class: 'phone-number-icon' }, '✆')),
+      span({ class: 'wallet-address phone-number-value', title: i18n.profileVisibilityPhone }, number),
+      renderStateChip(dnd ? 'hidden' : 'mutuals', null, String(dnd ? i18n.phoneDnd : i18n.phoneOpen).toUpperCase()),
+      isMe ? form({ method: 'POST', action: '/phone/dnd', class: 'phone-dnd-form' },
+        input({ type: 'hidden', name: 'dnd', value: dnd ? '0' : '1' }),
+        button({ type: 'submit', class: 'tribe-action-btn' }, String(dnd ? i18n.phoneOpen : i18n.phoneDnd).toUpperCase())
+      ) : null
+    ));
+  }
   const sensorsBox = items.length ? div({ class: 'profile-sensors-box' }, ...items) : null;
   const larpNode = (show('larpSign') && u.larpHouse && u.larpHouse.key)
     ? a({ href: `/larp/${u.larpHouse.key}`, class: 'larp-sign-block', title: u.larpHouse.name }, img({ src: u.larpHouse.image || '/assets/larp/images/default.jpg', alt: u.larpHouse.name, class: 'larp-sign-large' }))
@@ -3199,7 +3311,8 @@ exports.authorView = async ({
     clearnet: rawPrefs.clearnet === true,
     fediverse: rawPrefs.fediverse === true,
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : '',
-    gpg:      rawPrefs.gpg      === true
+    gpg:      rawPrefs.gpg      === true,
+    phone:    rawPrefs.phone === 'mutuals' || rawPrefs.phone === 'off' ? rawPrefs.phone : 'whole'
   };
   const clearnetSubKeys = CLEARNET_MODULES.map(m => m.prefKey);
   const anySubClearnet = clearnetSubKeys.some(k => rawPrefs[k] === true);
@@ -3217,7 +3330,8 @@ exports.authorView = async ({
     isMe: isOwnProfile, fediverseConfigured, prefs, id: feedId,
     karmaScore, carbonGrams, deviceSource, activityBucket: lastActivityBucket,
     gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
-    larpHouse, stats
+    larpHouse, stats,
+    mutual: !!(relationship && relationship.following && relationship.followsMe)
   }, { relationshipNode: div({ class: "profile-side-relationship" }, relationshipBlock) });
 
   const sideColumn = div({ class: "tribe-side profile-side" },
@@ -3236,9 +3350,11 @@ exports.authorView = async ({
       : null,
     ...userSensors,
     div({ class: "profile-side-actions" },
-      isOwnProfile ? a({ href: `/profile/edit`, class: "filter-btn" }, i18n.editProfile) : null,
-      a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "filter-btn" }, i18n.viewLikes),
-      !isOwnProfile ? a({ href: `/pm?recipients=${encodeURIComponent(feedId)}`, class: "filter-btn" }, i18n.pmCreateButton) : null
+      isOwnProfile ? a({ href: `/profile/edit`, class: "filter-btn" }, `✎ ${i18n.editProfile}`) : null,
+      isOwnProfile ? a({ href: "/supporters", class: "filter-btn" }, `♥ ${i18n.viewSupporters}`) : null,
+      a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "filter-btn" }, `⟳ ${i18n.viewLikes}`),
+      !isOwnProfile ? a({ href: `/pm?recipients=${encodeURIComponent(feedId)}`, class: "filter-btn" }, `✉ ${i18n.pmCreateButton}`) : null,
+      !isOwnProfile ? renderCallButton(feedId, { pam: true }) : null
     )
   );
 
@@ -3531,11 +3647,6 @@ exports.INBOX_BOT_ORDER = INBOX_BOT_ORDER;
 exports.inboxBotLabel = inboxBotLabel;
 
 exports.privateView = async (messagesInput, filter, decrypted = null, notice = '', q = '') => {
-  const noticeText = notice === 'unavailable'
-    ? (i18n.fileShareUnavailable || 'This file is not available right now. Try again later.')
-    : notice === 'badkey'
-      ? (i18n.pmCrypterBadKey || 'Your shared key is incorrect!')
-      : ''
   const messagesRaw = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages
   const listTitles = (!Array.isArray(messagesInput) && messagesInput.listTitles && typeof messagesInput.listTitles === 'object') ? messagesInput.listTitles : {}
   const readKeys = new Set((!Array.isArray(messagesInput) && Array.isArray(messagesInput.readKeys)) ? messagesInput.readKeys.map(String) : [])
@@ -3640,24 +3751,24 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   }
 
   function actions({ key, replyId, subjectRaw, text, extra = null }) {
-    const stop = { onclick: 'event.stopPropagation()' }
     const subjectReply = /^(\s*RE:\s*)/i.test(subjectRaw || '') ? (subjectRaw || '') : `RE: ${subjectRaw || ''}`
     const isSelf = replyId === userId
     return div({ class: 'pm-actions' },
-      isSelf ? null : form({ method: 'GET', action: '/pm', class: 'pm-action-form', ...stop },
+      isSelf ? null : form({ method: 'GET', action: '/pm', class: 'pm-action-form' },
         input({ type: 'hidden', name: 'recipients', value: replyId }),
         input({ type: 'hidden', name: 'subject', value: subjectReply }),
         input({ type: 'hidden', name: 'quote', value: text || '' }),
         button({ type: 'submit', class: 'pm-btn reply-btn' }, i18n.pmReply.toUpperCase())
       ),
+      isSelf ? null : renderCallButton(replyId, { upper: true, cls: 'pm-btn' }),
       extra || null,
-      toUserKeys.has(String(key)) && !archivedKeys.has(String(key)) ? form({ method: 'POST', action: `/inbox/${readKeys.has(String(key)) ? 'unread' : 'read'}/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
+      toUserKeys.has(String(key)) && !archivedKeys.has(String(key)) ? form({ method: 'POST', action: `/inbox/${readKeys.has(String(key)) ? 'unread' : 'read'}/${encodeURIComponent(key)}`, class: 'pm-action-form' },
         button({ type: 'submit', class: 'pm-btn read-btn' }, String(readKeys.has(String(key)) ? i18n.inboxMarkUnread : i18n.inboxMarkRead).toUpperCase())
       ) : null,
-      toUserKeys.has(String(key)) ? form({ method: 'POST', action: `/inbox/${archivedKeys.has(String(key)) ? 'unarchive' : 'archive'}/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
+      toUserKeys.has(String(key)) ? form({ method: 'POST', action: `/inbox/${archivedKeys.has(String(key)) ? 'unarchive' : 'archive'}/${encodeURIComponent(key)}`, class: 'pm-action-form' },
         button({ type: 'submit', class: 'pm-btn archive-btn' }, String(archivedKeys.has(String(key)) ? i18n.inboxUnarchive : i18n.inboxArchive).toUpperCase())
       ) : null,
-      form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'pm-action-form', ...stop },
+      form({ method: 'POST', action: `/inbox/delete/${encodeURIComponent(key)}`, class: 'pm-action-form' },
         button({ type: 'submit', class: 'pm-btn delete-btn danger-btn' }, i18n.privateDelete.toUpperCase())
       )
     )
@@ -3730,7 +3841,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     flushQuote()
     const mdLinks = []
     const masked = parts.join('<br>')
-      .replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^)\s]+|\/[^)\s]+)\)/g, (match, label, href) => {
+      .replace(/\[([^\]\n]{1,120})\]\((https?:\/\/[^)\s]+|\/(?![\/\\])[^)\s]*)\)/g, (match, label, href) => {
         const idx = mdLinks.length
         const safeHref = String(href).replace(/"/g, '%22')
         const ext = /^https?:/.test(href) ? ' target="_blank" rel="noopener noreferrer"' : ''
@@ -3996,7 +4107,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     const subjectReply = /^(\s*RE:\s*)/i.test(subject || '') ? (subject || '') : `RE: ${subject || ''}`
     const canReply = !!info && info.status === 'ACTIVE'
     const replyForm = canReply
-      ? form({ method: 'POST', action: `${listHref}/message`, class: 'pm-action-form mailing-inbox-reply', onclick: 'event.stopPropagation()' },
+      ? form({ method: 'POST', action: `${listHref}/message`, class: 'pm-action-form mailing-inbox-reply' },
           input({ type: 'hidden', name: 'thread', value: String(content.thread || content.mid || '') }),
           input({ type: 'hidden', name: 'subject', value: subjectReply }),
           input({ type: 'hidden', name: 'returnTo', value: '/inbox?filter=mailing' }),
@@ -4130,7 +4241,6 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
         p(i18n.privateDescription),
         renderEncryptedChip(i18n)
       ),
-      noticeText ? div({ class: 'pm-form-error-msg' }, p('✗ ' + noticeText)) : null,
       div({ class: 'filters' },
         form({ method: 'GET', action: '/inbox' }, [
           ...(emptyInbox ? [] : [
@@ -4254,7 +4364,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
                   key: msg.key, replyId: fromResolved, subjectRaw, text: '',
                   extra: fsp.crypter
                     ? null
-                    : form({ method: 'GET', action: `/inbox/file/${encodeURIComponent(msg.key)}`, class: 'pm-action-form', onclick: 'event.stopPropagation()' },
+                    : form({ method: 'GET', action: `/inbox/file/${encodeURIComponent(msg.key)}`, class: 'pm-action-form' },
                         button({ type: 'submit', class: 'pm-btn pm-fileshare-download' }, (i18n.fileShareDownload || 'Download').toUpperCase())
                       )
                 })
@@ -4324,9 +4434,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
                 headerLine({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, msgKey: msg.key, msgSize, crypter: true }),
                 dec && typeof dec.text === 'string'
                   ? div({ class: 'message-text', innerHTML: sanitizeHtml(clickableLinks(dec.text)) })
-                  : dec && dec.error
-                    ? div({ class: 'pm-form-error-msg' }, p('✗ ' + i18n.pmCrypterBadKey))
-                    : null,
+                  : null,
                 dec && typeof dec.text === 'string'
                   ? null
                   : form({ method: 'POST', action: '/inbox/decrypt', class: 'pm-crypter-decrypt-form' },
@@ -4422,6 +4530,22 @@ exports.threadView = ({ messages, spreadMap = null }) => {
       ? `<script type="module" src="/js/pdf-viewer.js?v=102"></script>`
       : ""
   }`;
+};
+
+exports.supportersView = async ({ supporters, feed, name }) => {
+  const list = Array.isArray(supporters) ? supporters : [];
+  return template(
+    i18n.viewSupporters,
+    section(
+      div({ class: "tags-header module-header-line" },
+        h2(`${i18n.viewSupporters} (${list.length})`),
+        p(userLink(feed, name))
+      )
+    ),
+    list.length
+      ? section(div({ class: "supporters-list" }, ...list.map(id => span({ class: "pad-member-chip" }, userLink(id)))))
+      : p({ class: "no-content" }, i18n.no_results)
+  );
 };
 
 exports.likesView = async ({ messages, feed, name, spreadMap = null }) => {

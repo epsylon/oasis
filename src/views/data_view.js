@@ -22,6 +22,7 @@ const KIND_LABEL = {
   files: () => i18n.typeFile,
   chats: () => i18n.chatsTitle,
   pads: () => i18n.padsTitle,
+  rooms: () => i18n.roomsTitle,
   maps: () => i18n.mapTitle,
   calendars: () => i18n.calendarsTitle,
   forum: () => i18n.forumTitle,
@@ -53,7 +54,7 @@ const FILTER_COLUMNS = [
   ["INHABITANTS", "TRIBES"],
   ["VOTES", "EVENTS", "CALENDARS", "TASKS", "REPORTS", "EMERGENCIES", "MAILING", "CAMPAIGNS"],
   ["MARKET", "HOUSING", "JOBS", "PROJECTS", "INDUSTRY", "LOGISTICS"],
-  ["FORUM", "CHATS", "PADS", "WIKI", "MAPS", "SCHOOL"],
+  ["FORUM", "CHATS", "ROOMS", "PADS", "WIKI", "MAPS", "SCHOOL"],
   ["AUDIOS", "BOOKMARKS", "DOCUMENTS", "FILES", "IMAGES", "TORRENTS", "VIDEOS", "PODCASTS"]
 ];
 

@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -69,11 +69,11 @@ const buildReturnTo = (filter, params = {}) => {
 
 const renderPmButton = (recipientId) =>
   recipientId && String(recipientId) !== String(userId)
-    ? form(
+    ? [form(
         { method: "GET", action: "/pm" },
         input({ type: "hidden", name: "recipients", value: recipientId }),
         button({ type: "submit", class: "filter-btn" }, i18n.privateMessage)
-      )
+      ), renderCallButton(recipientId, { pam: true })]
     : null
 
 const renderTags = (tags = []) => {
@@ -460,7 +460,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
     if (m === filter) return true;
     if (m === "TOP") return censusJ.length > 0;
     if (m === "MINE") return censusJ.some(j => String(j.author) === String(userId));
-    if (m === "RECENT") return censusJ.some(j => (Date.parse(j.createdAt || "") || 0) >= Date.now() - 86400000);
+    if (m === "RECENT") return censusJ.length > 0;
     if (m === "APPLIED") return censusJ.some(j => safeArr(j.subscribers).includes(userId));
     if (m === "REMOTE") return censusJ.some(j => String(j.location || "").toLowerCase() === "remote");
     if (m === "PRESENCIAL") return censusJ.some(j => String(j.location || "").toLowerCase() === "presencial");
@@ -600,7 +600,8 @@ const renderCandidates = (candidates, jobId) => {
               input({ type: 'hidden', name: 'subject', value: `${i18n.jobsTitle || 'Job'}: ${job.title || ''}`.slice(0, 150) }),
               input({ type: 'hidden', name: 'text', value: `${i18n.jobsCandidatesPmBody || 'Hi, I think your profile matches my job opening'}: /jobs/${jobId}` }),
               button({ type: 'submit', class: 'filter-btn' }, i18n.pmCreateButton || 'Send PM')
-            )
+            ),
+            renderCallButton(c.id, { pam: true })
           )
         )
       ))

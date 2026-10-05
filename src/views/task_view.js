@@ -180,7 +180,7 @@ const taskChipFor = (currentFilter, visible) => (mode) => {
   if (mode === currentFilter) return true;
   if (!Array.isArray(visible)) return true;
   if (mode === "mine") return visible.some((t) => t.author === userId);
-  if (mode === "recent") return visible.some((t) => (Date.parse(t.createdAt || "") || 0) >= Date.now() - 86400000);
+  if (mode === "recent") return visible.length > 0;
   if (mode === "assigned") return visible.some((t) => safeArray(t.assignees).includes(userId));
   if (mode === "open") return visible.some((t) => normalizeStatus(t.status) === "OPEN");
   if (mode === "in-progress") return visible.some((t) => normalizeStatus(t.status) === "IN-PROGRESS");

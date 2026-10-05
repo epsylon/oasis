@@ -103,5 +103,7 @@ describe('security: which requests the HTTP layer trusts', (t) => {
     ok(app.includes("frame-ancestors 'none'") && hub.includes("frame-ancestors 'none'"), 'never framed by others');
     ok(app.includes("object-src 'none'") && app.includes("base-uri 'none'"), 'no plugins, no base hijack');
     ok(app.includes("form-action 'self'"), 'forms only post to this node');
+    ok(app.includes("frame-src 'none'") && hub.includes("frame-src 'none'"), 'no page embeds frames');
+    ok(guards.buildCsp(false, { frames: true }).includes("frame-src 'self'"), 'only an explicit exception embeds its own pages');
   });
 });

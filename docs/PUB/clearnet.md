@@ -65,14 +65,14 @@ server {
 }
 ```
 
-Now you can launch OASIS, this way: 
+Then launch the PUB allowing your domain (with the systemd unit of the [deploy guide](./deploy.md), add these options to its `ExecStart` line):
 
 ```
-./oasis.sh --public --no-open --host=0.0.0.0 --port=3000 --allow-host=<your_domain.org>
+./oasis.sh server --port=3000 --allow-host=<your_domain.org>
 ```
 
 ## Notes
 
-- Public mode also redacts, in the rest of the interface, the content of people who have not opted in, so the PUB can be browsed safely.
+- Public mode also redacts, in the rest of the interface, the content of inhabitants who have not opted in, so the PUB can be browsed safely.
 - The HUB reads the replicated log on each request. On a large PUB a caching proxy in front of `/c` keeps it snappy.
 - Themes follow the PUB's own `oasis-config.json`; the example config in this folder is a good starting point.

@@ -27,6 +27,7 @@ const { printMetadata } = require('./ssb_metadata');
     return `${m[1].replace(/^::ffff:/, '')}:${m[2]}`;
   };
   const logRejection = (peer) => {
+    if (!(process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true')) return;
     const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
     realErr.call(console, `[${ts}] REJECTED    ${peer} (wrong SHS cap)`);
   };
@@ -52,6 +53,10 @@ const { printMetadata } = require('./ssb_metadata');
 })();
 
 require('ssb-plugins').loadUserPlugins(SecretStack({ caps }), config);
+
+try {
+  if (require('../configs/config-manager.js').getConfig().networkPaused === true || process.env.OASIS_NETWORK_PAUSED === '1') config.conn = { ...(config.conn || {}), autostart: false };
+} catch (_) {}
 
 const Server = SecretStack({ caps })
   .use(require('ssb-db2/core'))
@@ -80,7 +85,9 @@ const Server = SecretStack({ caps })
   .use(require('ssb-onion'))
   .use(require('ssb-unix-socket'))
   .use(require('ssb-no-auth'))
-  .use(require('./snapshot_plugin'));
+  .use(require('./snapshot_plugin'))
+  .use(require('./phone_module'))
+  .use(require('./network_pause'));
 
 if (!config.pub) {
   Server.use(require('ssb-lan'));

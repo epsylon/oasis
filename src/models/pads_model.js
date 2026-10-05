@@ -739,7 +739,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     async joinByInvite(code) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
-      const pads = await this.listAll()
+      const pads = await collectPads(buildIndex(await readAll(ssbClient)))
       let matchedPad = null
       let matchedInvite = null
       for (const p of pads) {

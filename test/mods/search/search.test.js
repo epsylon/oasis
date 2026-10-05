@@ -92,3 +92,61 @@ describe('search: WISH only-LAN filter (config + persistence)', (t) => {
     saveConfig(cfg);
   });
 });
+
+describe('search: what each Wish level lets through', (t) => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-wish-'));
+  const load = () => {
+    const prev = process.env.OASIS_STATE_DIR;
+    process.env.OASIS_STATE_DIR = stateDir;
+    const file = require.resolve('../../../src/models/viewer_filters');
+    delete require.cache[file];
+    const mod = require(file);
+    if (prev === undefined) delete process.env.OASIS_STATE_DIR; else process.env.OASIS_STATE_DIR = prev;
+    return mod;
+  };
+  const id = (c) => `@${c.repeat(43)}=.ed25519`;
+  const me = id('M'), near = id('N'), friend = id('F'), stranger = id('S');
+  const items = [{ author: me }, { author: near }, { author: friend }, { value: { author: stranger } }];
+  const opts = (filters, wish) => ({
+    wish, viewer: me,
+    authorOf: (it) => it.author || (it.value && it.value.author) || null,
+    isOwn: (it, v) => (it.author || (it.value && it.value.author)) === v,
+    isMutual: async (a) => a === friend,
+    lan: new Set([near])
+  });
+  const authors = (list) => list.map(it => it.author || it.value.author);
+
+  t('the whole network lets everything through', async () => {
+    const f = load();
+    eq((await f.filterByWish(items, opts(f, 'whole'))).length, items.length);
+  });
+
+  t('local, mutual support and only LAN each keep your own content plus their circle', async () => {
+    const f = load();
+    eq(authors(await f.filterByWish(items, opts(f, 'local'))).join(','), me);
+    eq(authors(await f.filterByWish(items, opts(f, 'mutuals'))).join(','), [me, friend].join(','));
+    eq(authors(await f.filterByWish(items, opts(f, 'only-lan'))).join(','), [me, near].join(','));
+  });
+
+  t('peers count as local network by their type or a private address, never by a public one', () => {
+    const f = load();
+    const keys = f.lanKeysFromConn([
+      ['net:192.168.1.20:8008~shs:x', { key: id('A') }],
+      ['net:[fe80::2]:8008~shs:x', { key: id('B') }],
+      ['net:203.0.113.9:8008~shs:x', { key: id('C'), inferredType: 'lan' }],
+      ['net:203.0.113.10:8008~shs:x', { key: id('D'), type: 'pub' }],
+      ['net:pub.example.org:8008~shs:x', { key: id('E') }]
+    ]);
+    eq(keys.join(','), [id('A'), id('B'), id('C')].join(','));
+  });
+
+  t('peers met on the local network are remembered after a restart', () => {
+    load().rememberLanPeers([near, 'not-an-id']);
+    const again = load();
+    ok(again.lanPeers().has(near), 'the peer is still known');
+    eq(again.lanPeers().size, 1, 'invalid ids are ignored');
+  });
+});

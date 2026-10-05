@@ -1,4 +1,4 @@
-const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span, img, strong } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span, img, strong, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe");
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
@@ -29,7 +29,7 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, fediverseAccount, fediverseError, telegramAccount = null, telegramLogin = null, telegramError = "", peertubeAccount = null, peertubeError = "", verification = null, rebuild = null }) => {
+const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, fediverseAccount, telegramAccount = null, telegramLogin = null, peertubeAccount = null, verification = null, rebuild = null }) => {
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -41,13 +41,14 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
   const walletFee = currentConfig.wallet.fee;
   const currentWish = ['mutuals', 'only-lan', 'local'].includes(currentConfig.wish) ? currentConfig.wish : 'whole';
   const currentPmVisibility = currentConfig.pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
+  const currentPhone = currentConfig.phone && typeof currentConfig.phone === 'object' ? currentConfig.phone : {};
 
   const themeElements = [
-    option({ value: "Dark-SNH", ...(theme === "Dark-SNH" ? true : undefined ? { selected: true } : {})}, "Dark-SNH"),
-    option({ value: "Clear-SNH", ...(theme === "Clear-SNH" ? true : undefined ? { selected: true } : {})}, "Clear-SNH"),
-    option({ value: "Purple-SNH", ...(theme === "Purple-SNH" ? true : undefined ? { selected: true } : {})}, "Purple-SNH"),
-    option({ value: "Matrix-SNH", ...(theme === "Matrix-SNH" ? true : undefined ? { selected: true } : {})}, "Matrix-SNH"),
-    option({ value: "OasisMobile", ...(theme === "OasisMobile" ? true : undefined ? { selected: true } : {})}, "Oasis-Mobile")
+    option({ value: "Dark-SNH", ...(theme === "Dark-SNH" ? { selected: true } : {})}, "Dark-SNH"),
+    option({ value: "Clear-SNH", ...(theme === "Clear-SNH" ? { selected: true } : {})}, "Clear-SNH"),
+    option({ value: "Purple-SNH", ...(theme === "Purple-SNH" ? { selected: true } : {})}, "Purple-SNH"),
+    option({ value: "Matrix-SNH", ...(theme === "Matrix-SNH" ? { selected: true } : {})}, "Matrix-SNH"),
+    option({ value: "OasisMobile", ...(theme === "OasisMobile" ? { selected: true } : {})}, "Oasis-Mobile")
   ];
 
   const activeWorkflow = currentWorkflow(currentConfig) || '';
@@ -81,12 +82,33 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
     button({ type: "submit" }, i18n.rebuildName)
   );
 
-  const updateFlagPath = path.join(__dirname, '../server/.update_required');
-  let updateButton = null;
-  if (fs.existsSync(updateFlagPath)) {
-    updateButton = form(
-      { action: "/update", method: "post" },
-      button({ type: "submit" }, i18n.updateit)
+  const updateInfo = (() => { try { return require('../backend/updater').readUpdateInfo(); } catch (_) { return null; } })();
+  let updatePanel = null;
+  if (updateInfo) {
+    const d = updateInfo.details || {};
+    const day = (iso) => String(iso || '').slice(0, 10);
+    const versionLine = (v, c) => `${v || '?'}${c ? ` · ${c.hash} · ${day(c.date)}` : ''}`;
+    const row = (name, ...value) => tr(td({ class: "tribe-info-label" }, name), td({ class: "tribe-info-value" }, ...value));
+    updatePanel = section({ id: "update" },
+      div({ class: "torrent-download update-panel" },
+        div({ class: "torrent-oasis torrent-detail-section" },
+          h3({ class: "torrent-section-title" }, i18n.notifyUpdateLabel),
+          table({ class: "tribe-info-table torrent-file-info" },
+            row(i18n.updateInstalledLabel, versionLine(updateInfo.installedVersion, d.installed)),
+            row(i18n.updateAvailableLabel, versionLine(updateInfo.version, d.available)),
+            Array.isArray(d.commits) && d.commits.length
+              ? row(i18n.updateChangesLabel, ul({ class: "update-changes" },
+                  ...d.commits.map(c => li(`${day(c.date)} · ${c.subject}`)),
+                  d.count > d.commits.length ? li(`+${d.count - d.commits.length}`) : null))
+              : null,
+            d.files ? row(i18n.updateFilesLabel, `${d.files} · +${d.insertions} −${d.deletions}`) : null,
+            d.origin ? row(i18n.updateOriginLabel, span({ class: "bank-address-code" }, d.origin)) : null
+          ),
+          form({ action: "/update", method: "post" },
+            button({ type: "submit", class: "filter-btn" }, `\u2B07 OASIS${updateInfo.version ? ` ${updateInfo.version}` : ''}`)
+          )
+        )
+      )
     );
   }
 
@@ -95,10 +117,10 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
     section(
       div({ class: "tags-header module-header-line" },
         h2(i18n.settings),
-        p(i18n.settingsDescription),
-        updateButton
+        p(i18n.settingsDescription)
       )
     ),
+    updatePanel,
     section({ id: "language" },
       div({ class: "tags-header" },
         h2(i18n.language),
@@ -135,7 +157,8 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
           (() => {
             const aiNavEnabled = currentConfig.modules && currentConfig.modules.aiNavMod === 'on';
             const chatsEnabled = currentConfig.modules && currentConfig.modules.chatsMod === 'on';
-            const cur = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : "blocks";
+            const phoneEnabled = !!(currentConfig.modules && currentConfig.modules.phoneMod !== 'off');
+            const cur = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : currentConfig.ux?.current === "phone" ? "phone" : "blocks";
             const uxCard = (value, title, image) => label({ class: "welcome-ux-option" },
               input({ type: "radio", name: "ux", value, ...(cur === value ? { checked: true } : {}) }),
               img({ src: image, class: "welcome-ux-shot", alt: title }),
@@ -145,7 +168,8 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
               uxCard("blocks", i18n.uxModeMenus || "Blocks", "/assets/images/ux-blocks.png"),
               aiNavEnabled ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null,
               chatsEnabled ? uxCard("chats", i18n.uxModeChats || "Conversations", "/assets/images/ux-chats.png") : null,
-              uxCard("feed", i18n.uxModeFeed || "Microblogging", "/assets/images/ux-feed.png")
+              uxCard("feed", i18n.uxModeFeed || "Microblogging", "/assets/images/ux-feed.png"),
+              phoneEnabled ? uxCard("phone", i18n.phoneTitle || "Phone", "/assets/images/ux-phone.png") : null
             );
           })(),
           button({ type: "submit" }, i18n.saveSettings)
@@ -274,8 +298,7 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
           br(), br(),
           button({ type: "submit" }, i18n.saveSettings),
           blobCache.maxMB > 0 ? button({ type: "submit", formaction: "/settings/blob-cache/collect", class: "blob-cache-clean-btn" }, i18n.settingsBlobCacheCleanNow) : null
-        ),
-        p({ class: "blob-cache-note" }, i18n.settingsBlobCacheNote)
+        )
       )
     ) : null,
     section({ id: "replication" },
@@ -328,13 +351,28 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
         form(
           { action: "/settings/pm-visibility", method: "POST" },
           select({ name: "pmVisibility" },
-            option({ value: "whole", ...(currentPmVisibility === "whole" ? true : undefined ? { selected: true } : {})}, i18n.settingsPmVisibilityWhole),
-            option({ value: "mutuals", ...(currentPmVisibility === "mutuals" ? true : undefined ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals)
+            option({ value: "whole", ...(currentPmVisibility === "whole" ? { selected: true } : {})}, i18n.settingsPmVisibilityWhole),
+            option({ value: "mutuals", ...(currentPmVisibility === "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals)
           ), br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
         )
       )
     ),
+    modOn('phone') ? section({ id: "phone" },
+      div({ class: "tags-header" },
+        h2(i18n.phoneTitle),
+        p(i18n.phoneSettingsDesc),
+        form(
+          { action: "/settings/phone", method: "POST" },
+          select({ name: "visibility" },
+            option({ value: "whole", ...(!currentPhone.dnd && currentPhone.visibility !== "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityWhole),
+            option({ value: "mutuals", ...(!currentPhone.dnd && currentPhone.visibility === "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals),
+            option({ value: "dnd", ...(currentPhone.dnd ? { selected: true } : {})}, i18n.phoneDnd)
+          ), br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ) : null,
     modOn('inbox') ? section({ id: "inbox-bots" },
       div({ class: "tags-header" },
         h2(i18n.settingsInboxBotsTitle),
@@ -388,7 +426,6 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
         h2(i18n.fediverseSettingsTitle),
         div({ class: "fediverse-network" },
           h3("Mastodon"),
-          fediverseError ? p({ class: "fediverse-error" }, i18n[fediverseError] || i18n.fediverseError) : "",
           fediverseAccount
             ? (() => {
                 const host = String(fediverseAccount.instance || "").replace(/^https?:\/\//, "");
@@ -414,7 +451,6 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
         ),
         div({ class: "fediverse-network" },
           h3("Telegram"),
-          telegramError ? p({ class: "fediverse-error" }, i18n[telegramError] || i18n.telegramErrConnect) : "",
           telegramAccount
             ? form(
                 { action: "/settings/telegram/disconnect", method: "POST" },
@@ -456,7 +492,6 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
         ,
         div({ class: "fediverse-network" },
           h3("PeerTube"),
-          peertubeError ? p({ class: "fediverse-error" }, i18n[peertubeError] || i18n.peertubeErrConnect) : "",
           peertubeAccount
             ? form(
                 { action: "/settings/peertube/disconnect", method: "POST" },

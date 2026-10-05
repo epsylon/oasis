@@ -30,6 +30,22 @@ describe('pads: standalone create + list', (t) => {
   });
 });
 
+describe('pads: single-use invitation', (t) => {
+  t('a guest who cannot read the pad yet can redeem a single-use code once', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('pads').createPad('Private', 'INVITE-ONLY', '2026-12-31', [], null);
+    const code = await A.use('pads').generateInvite(r.key);
+    B.setActor();
+    ok(await B.use('pads').joinByInvite(code), 'B joins with the code');
+    ok((await B.use('pads').listAll({ filter: 'all', viewerId: B.keypair.id })).some(p => p.title === 'Private'), 'and can read the pad');
+    C.setActor();
+    let reused = false;
+    try { await C.use('pads').joinByInvite(code); } catch (_) { reused = true; }
+    ok(reused, 'the same code does not work twice');
+  });
+});
+
 describe('pads: open (multi-use) invitation', (t) => {
   t('open invitation is multi-use and only one at a time', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);

@@ -1,6 +1,6 @@
 # Maintaining
 
-Please read the [contract](./contract) that defines the maintainer role in this
+Please read the [contract](./contract.md) that defines the maintainer role in this
 project. In short:
 
 - Please merge any patches that reduce the number of problems in this project.
@@ -15,14 +15,14 @@ project. In short:
 ### Checking out a patch
 
 If you want to check out pull request number 42 and you're comfortable running
-the code on your local device.
+the code on your local device, from a clone whose `origin` is
+`https://code.03c8.net/KrakensLab/oasis.git`:
 
 ```sh
-remote="https://code.03c8.net/krakenlabs/oasis.git"
-git fetch "$remote"
-git reset --hard $remote master
-git pull "$remote" pull/42/head
-(cd test && node run.js) && ./oasis.sh
+git fetch origin
+git reset --hard origin/master
+git pull origin pull/42/head
+./oasis.sh test && ./oasis.sh
 ```
 
 No need to add their fork as a remote.

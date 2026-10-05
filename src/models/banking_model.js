@@ -747,6 +747,8 @@ function basePointsFor(action) {
   else if (t === "shop" || t === "shopproduct") return 6;
   else if (t === "shop-purchase") return 2;
   else if (t === "pad" || t === "padentry") return 3;
+  else if (t === "room") return 3;
+  else if (t === "roommember") return 1;
   else if (t === "calendar" || t === "calendarnote" || t === "calendardate") return 3;
   else if (t === "chat") return 1;
   else if (t === "gamescore") return 2;
@@ -1468,7 +1470,7 @@ async function getLastPublishedTimestamp(userId) {
   }
 
   async function listUbiPubsDetailed() {
-    const pubs = await listUbiPubs();
+    const pubs = (await listUbiPubs()).filter(p => isValidEcoinAddress(p.address));
     if (!pubs.length) return [];
     const ssb = await openSsb();
     const { transfers } = ssb ? await readUbiLedger(ssb) : { transfers: [] };

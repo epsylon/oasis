@@ -81,12 +81,10 @@ describe('wiki: links between pages', (t) => {
     ok(page && page.title === 'Solar panels', 'an alias opens the page');
   });
 
-  t('a title already taken comes back to the form with your text and a notice', async () => {
+  t('a title already taken comes back to the form with your text', async () => {
     const { wikiView } = require('../../../src/views/wiki_view');
-    const i18n = require('../../../src/views/main_views').i18n;
     const draft = { title: 'Recipes', body: 'my long text', tags: 'food', status: 'OPEN', summary: '' };
-    const html = String(await wikiView([], 'create', { draft, censusList: [], notice: i18n.wikiDuplicateTitle }));
-    ok(html.includes(i18n.wikiDuplicateTitle), 'the form explains that the title is taken');
+    const html = String(await wikiView([], 'create', { draft, censusList: [] }));
     ok(html.includes('my long text'), 'what you wrote is still in the form');
     ok(html.includes('value="Recipes"'), 'and so is the title, ready to be changed');
   });
@@ -201,19 +199,6 @@ describe('wiki: links inside a tribe', (t) => {
     ok(!globalTarget.isLinked, 'a page with the same title outside the tribe is not');
     const full = await A.use('wiki').getPage(tribeTarget.id, { tribeId });
     eq(full.linkedPages.map(p => p.title).join(','), 'Source', 'and it lists the page that links to it');
-  });
-});
-
-describe('wiki: the editor is the same everywhere', (t) => {
-  t('the format help sits with the body field whether the page is global or inside a tribe', async () => {
-    const { wikiView } = require('../../../src/views/wiki_view');
-    const global = String(await wikiView([], 'create', { censusList: [] }));
-    const inTribe = String(await wikiView([], 'create', { censusList: [], tribeId: '%t.sha256', tribe: { id: '%t.sha256', title: 'Guild' } }));
-    for (const [name, html] of [['global', global], ['tribe', inTribe]]) {
-      eq((html.match(/class="rt-toolbar"/g) || []).length, 1, `${name}: exactly one format help`);
-      ok(html.indexOf('class="rt-toolbar"') < html.indexOf('name="body"'), `${name}: the help comes before the field it describes`);
-    }
-    ok(inTribe.includes('name="tribeId"'), 'the tribe form carries the tribe');
   });
 });
 

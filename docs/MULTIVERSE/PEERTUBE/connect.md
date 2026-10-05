@@ -18,7 +18,7 @@ Oasis registers itself with the instance the way the official clients do (OAuth)
 1. In Oasis, open **Settings** and find the **Multiverse** section (the **PeerTube** box).
 2. Enter the **instance address**, your **username** and your **password**, then click **Connect it**.
 
-Oasis opens your Multiverse page. From now on you'll find **Multiverse** in the main menu (the entry only appears while at least one account — Mastodon, Telegram or PeerTube — is connected).
+Oasis opens your Multiverse page. From now on you'll find **Multiverse → Timelines** in the main menu (the entry only appears while at least one account — Mastodon, Telegram or PeerTube — is connected).
 
 To stop using it, go back to **Settings → Multiverse** and click **Disconnect** (this also revokes the session on the instance).
 
@@ -26,7 +26,7 @@ To stop using it, go back to **Settings → Multiverse** and click **Disconnect*
 
 ## 3) Using it
 
-Open **Multiverse → PeerTube**:
+Open **Multiverse → Timelines → PeerTube**:
 
 - **Subscriptions**: the newest videos of the channels you follow. Click a video to watch it.
 - **My videos**: what you have uploaded, with its privacy and processing state.

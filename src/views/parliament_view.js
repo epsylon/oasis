@@ -25,7 +25,7 @@ const seatClass = (seat, mode) => {
 };
 
 const thresholdMarker = (positions, count, cls, label) => {
-  if (!count || count <= 0 || count > positions.length) return '';
+  if (!count || count <= 0 || count > positions.length) return null;
   const p = positions[count - 1];
   const q = positions[Math.min(positions.length - 1, count)];
   const angle = (p.angle + q.angle) / 2;
@@ -33,11 +33,31 @@ const thresholdMarker = (positions, count, cls, label) => {
   const cy = HEMI_H - 20;
   const inner = 40;
   const outer = Math.min(HEMI_W / 2 - 16, HEMI_H - 60) + 14;
-  const x1 = cx + inner * Math.cos(angle), y1 = cy - inner * Math.sin(angle);
-  const x2 = cx + outer * Math.cos(angle), y2 = cy - outer * Math.sin(angle);
-  const tx = cx + (outer + 12) * Math.cos(angle), ty = cy - (outer + 12) * Math.sin(angle);
-  const anchor = angle > Math.PI / 2 + 0.2 ? 'end' : (angle < Math.PI / 2 - 0.2 ? 'start' : 'middle');
-  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" class="hemi-threshold ${cls}" /><text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${anchor}" class="hemi-threshold-label ${cls}">${hemiEsc(label)}: ${count}</text>`;
+  return {
+    angle, cls, text: `${label}: ${count}`,
+    x1: cx + inner * Math.cos(angle), y1: cy - inner * Math.sin(angle),
+    x2: cx + outer * Math.cos(angle), y2: cy - outer * Math.sin(angle),
+    tx: cx + (outer + 12) * Math.cos(angle), ty: cy - (outer + 12) * Math.sin(angle),
+    anchor: angle > Math.PI / 2 + 0.2 ? 'end' : (angle < Math.PI / 2 - 0.2 ? 'start' : 'middle')
+  };
+};
+
+const LABEL_LINE = 14;
+const renderMarkers = (markers) => {
+  const list = markers.filter(Boolean);
+  const placed = [];
+  for (const m of list.slice().sort((a, b) => a.ty - b.ty)) {
+    let ty = m.ty;
+    while (placed.some(o => Math.abs(o.ty - ty) < LABEL_LINE && Math.abs(o.tx - m.tx) < 160)) ty += LABEL_LINE;
+    placed.push({ ...m, ty });
+  }
+  const drawn = new Set();
+  return placed.map(m => {
+    const key = `${m.x2.toFixed(1)},${m.y2.toFixed(1)}`;
+    const line = drawn.has(key) ? '' : `<line x1="${m.x1.toFixed(1)}" y1="${m.y1.toFixed(1)}" x2="${m.x2.toFixed(1)}" y2="${m.y2.toFixed(1)}" class="hemi-threshold ${m.cls}" />`;
+    drawn.add(key);
+    return `${line}<text x="${m.tx.toFixed(1)}" y="${m.ty.toFixed(1)}" text-anchor="${m.anchor}" class="hemi-threshold-label ${m.cls}">${hemiEsc(m.text)}</text>`;
+  }).join('');
 };
 
 const hemicycleSvg = (data, mode) => {
@@ -54,7 +74,10 @@ const hemicycleSvg = (data, mode) => {
   }).join('');
   const t = data.thresholds || {};
   const scale = (n) => Math.ceil(Number(n || 0) / unit);
-  const markers = mode === 'houses' ? '' : thresholdMarker(positions, scale(t.quorum), 'hemi-threshold-quorum', i18n.parliamentSeatsQuorum) + thresholdMarker(positions, scale(t.pass), 'hemi-threshold-pass', i18n.parliamentSeatsPass);
+  const markers = mode === 'houses' ? '' : renderMarkers([
+    thresholdMarker(positions, scale(t.quorum), 'hemi-threshold-quorum', i18n.parliamentSeatsQuorum),
+    thresholdMarker(positions, scale(t.pass), 'hemi-threshold-pass', i18n.parliamentSeatsPass)
+  ]);
   return `<svg viewBox="0 0 ${HEMI_W} ${HEMI_H}" xmlns="http://www.w3.org/2000/svg" class="hemicycle-svg" preserveAspectRatio="xMidYMid meet" role="img">${circles}${markers}</svg>`;
 };
 

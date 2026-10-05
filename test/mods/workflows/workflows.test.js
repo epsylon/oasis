@@ -44,14 +44,30 @@ describe('workflows: presets of theme and modules', (t) => {
   });
 });
 
-describe('workflows: rendering', (t) => {
-  t('settings offers the workflows and hides what is turned off', () => {
-    const { settingsView } = require('../../../src/views/settings_view');
-    const i18n = require('../../../src/views/main_views').i18n;
+describe('workflows: the welcome guide', (t) => {
+  t('full experience comes first and every option resolves to a configuration', () => {
+    eq(workflows.WIZARD_WORKFLOWS[0], 'full');
+    for (const k of workflows.WIZARD_WORKFLOWS) ok(workflows.wizardWorkflow(k), `${k} can be applied`);
+    eq(workflows.wizardWorkflow('nonsense'), null, 'unknown choices change nothing');
+  });
 
-    const page = String(settingsView({ version: '1.0.0', aiPrompt: '', fediverseAccount: null, fediverseError: '' }));
-    ok(page.includes('/settings/workflow'), 'the workflow form is there');
-    notOk(page.includes('/settings/pub-id'), 'the PUB wallet is gone');
-    notOk(page.includes('>false<'), 'no falsy value leaked into the html');
+  t('full experience turns every module on and keeps the look and home page', () => {
+    const cfg = { themes: { current: 'Clear-SNH' }, homePage: 'feed', modules: modulesConfigFor(['feed', 'chats']) };
+    workflows.applyWorkflow(cfg, workflows.wizardWorkflow('full'));
+    ok(workflows.ALL_MODULES.every(m => cfg.modules[`${m}Mod`] === 'on'), 'everything is on');
+    eq(cfg.themes.current, 'Clear-SNH');
+    eq(cfg.homePage, 'feed');
+  });
+
+  t('a configuration turns on exactly its modules and brings its look and home page', () => {
+    const cfg = { themes: { current: 'Dark-SNH' }, homePage: 'feed', modules: modulesConfigFor(workflows.ALL_MODULES) };
+    const activists = workflows.wizardWorkflow('activists');
+    workflows.applyWorkflow(cfg, activists);
+    const on = workflows.ALL_MODULES.filter(m => cfg.modules[`${m}Mod`] === 'on');
+    eq(on.join(','), workflows.modulesOf(activists).join(','));
+    eq(cfg.themes.current, activists.theme);
+    eq(cfg.homePage, activists.homePage);
+    eq(workflows.currentWorkflow(cfg), 'activists', 'and it is recognised afterwards');
   });
 });
+

@@ -22,6 +22,7 @@ const DEFAULT = {
   mailing: [],
   maps: [],
   pads: [],
+  rooms: [],
   podcasts: [],
   polls: [],
   projects: [],
