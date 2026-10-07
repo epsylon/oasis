@@ -54,18 +54,50 @@ const isDead = ({ key, failures = 0, now = Date.now() } = {}) => {
   return Math.max(observed, Number(failures) * RETRY_CAP_MS) >= DEAD_AFTER_MS;
 };
 
+const addressOf = (item) => {
+  const m = Array.isArray(item) ? String(item[0] || '').match(/^(?:net|onion):([^:~]+):(\d+)/) : null;
+  if (m) return `${m[1]}:${m[2]}`;
+  const data = Array.isArray(item) ? item[1] : item;
+  return data && data.host ? `${data.host}:${Number(data.port) || 8008}` : null;
+};
 const failuresByKey = (...sources) => {
-  const out = new Map();
+  const byKey = new Map();
   for (const list of sources) {
     for (const item of list || []) {
       const data = Array.isArray(item) ? item[1] : item;
       const id = data && canonicalKey(data.key);
       if (!id) continue;
       const f = Number(data.failure) || 0;
-      if (f > (out.get(id) || 0)) out.set(id, f);
+      const e = byKey.get(id) || { any: 0, addrs: new Map() };
+      const where = addressOf(item);
+      if (where) e.addrs.set(where, Math.max(e.addrs.get(where) || 0, f));
+      else e.any = Math.max(e.any, f);
+      byKey.set(id, e);
     }
   }
+  const out = new Map();
+  for (const [id, e] of byKey) out.set(id, e.addrs.size ? Math.min(...[...e.addrs.values()].map(f => Math.max(f, e.any))) : e.any);
   return out;
 };
 
-module.exports = { canonicalKey, observe, isDead, failuresByKey, DEAD_AFTER_MS };
+const classifyNetError = (err, address = '') => {
+  const msg = `${(err && err.code) || ''} ${(err && err.message) || err || ''}`.toLowerCase();
+  const onion = /\.onion/i.test(String(address || ''));
+  if (msg.includes('network paused')) return 'paused';
+  if (onion && /only know|could not connect to/.test(msg)) return 'tor';
+  if (/127\.0\.0\.1:9[01]50/.test(msg) || (onion && /econnrefused|socks/.test(msg) && !/ttl|hostunreachable|host unreachable|general/.test(msg))) return 'tor';
+  if (/shs\.client: (error when expecting server to accept challenge|server responded with invalid challenge)|application cap/.test(msg)) return 'keys';
+  if (/shs\.client: (server hung up when we sent hello|the server's response accepting)/.test(msg)) return 'identity';
+  if (/econnrefused/.test(msg)) return 'refused';
+  if (/enotfound|eai_again|getaddrinfo/.test(msg)) return 'notfound';
+  if (/enetunreach|ehostunreach|ehostdown|enetdown|hostunreachable|host unreachable|networkunreachable/.test(msg)) return 'unreachable';
+  if (/timed? ?out|etimedout|ttl/.test(msg)) return 'timeout';
+  if (/econnreset|epipe|hung up|aborted|closed/.test(msg)) return 'dropped';
+  return 'other';
+};
+const NET_REASON_KEYS = {
+  paused: 'peerErrPaused', tor: 'peerErrTor', keys: 'peerErrKeys', identity: 'peerErrIdentity', refused: 'peerErrRefused',
+  notfound: 'peerErrNotFound', unreachable: 'peerErrUnreachable', timeout: 'peerErrTimeout', dropped: 'peerErrDropped', other: 'peerErrOther', silent: 'peerErrSilent'
+};
+
+module.exports = { canonicalKey, observe, isDead, failuresByKey, classifyNetError, NET_REASON_KEYS, DEAD_AFTER_MS };

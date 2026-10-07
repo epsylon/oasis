@@ -106,3 +106,19 @@ describe('campaigns: goals, signatures and status', (t) => {
     eq(cp.opinions.interesting, 1); eq(cp.opinionCount, 1); eq(cp.opinions_inhabitants[0], B.keypair.id);
   });
 });
+
+describe('campaigns: the public web page', (t) => {
+  t('carries the promoter text and updates, never who signed nor what they wrote', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('campaigns').createCampaign({ title: 'Clean beach', text: 'Join the cleanup', category: 'ENVIRONMENT', goal: 10 });
+    await A.use('campaigns').addUpdate(r.key, 'First bags collected');
+    await signBy(B, r.key, 'Count me in from the north shore');
+    A.setActor();
+    const cp = await A.use('campaigns').getCampaignById(r.key);
+    const page = String(await require('../../../src/views/campaigns_view').clearnetCampaignView(cp));
+    ok(page.includes('Join the cleanup') && page.includes('First bags collected'), 'the promoter content is published');
+    notOk(page.includes('north shore'), 'no signature text');
+    notOk(page.includes(B.keypair.id), 'no signer');
+  });
+});

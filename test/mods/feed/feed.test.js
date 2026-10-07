@@ -63,6 +63,29 @@ describe('feed: author can delete own feeds', (t) => {
   });
 });
 
+describe('feed: deleted comments are not counted', (t) => {
+  t('the comment counter drops when its author deletes a comment', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('feed').createFeed('feed con comentarios', []);
+    B.setActor();
+    await B.use('feed').addComment(r.key, 'primero');
+    await B.use('feed').addComment(r.key, 'segundo');
+    const before = await B.use('feed').getComments(r.key);
+    eq(before.length, 2, 'two comments before');
+    const ssbB = await B.cooler.open();
+    const gone = before.find(c => c.value.content.text === 'segundo');
+    await new Promise((res, rej) => ssbB.publish({ type: 'tombstone', target: gone.key, deletedAt: new Date().toISOString(), author: ssbB.id }, e => e ? rej(e) : res()));
+    A.setActor();
+    const feeds = await A.use('feed').listFeeds('ALL');
+    const mine = feeds.find(m => (m.value?.content?.text || '') === 'feed con comentarios');
+    eq(mine.value.content.commentCount, 1, 'the list counts only the remaining comment');
+    const single = await A.use('feed').getFeedById(r.key);
+    eq(single.value.content.commentCount, 1, 'the detail counts only the remaining comment');
+    eq((await A.use('feed').getComments(r.key)).length, 1, 'only one comment is shown');
+  });
+});
+
 describe('feed: content author can delete forged copies', (t) => {
   t('a tombstone from the declared content author hides a copy signed by someone else', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);

@@ -178,6 +178,6 @@ describe('blogs: preview before publishing', (t) => {
     ok(html.includes('<strong>bold</strong>'), 'the body is rendered, not raw markdown');
     ok(html.includes('value="my subject"'), 'and the subject stays in the field');
     ok(html.includes('a **bold** body'), 'and the body stays in the textarea');
-    notOk(html.includes('checked'), 'the comment choice is kept as well');
+    notOk(/name="allowComments" value="1"[^>]*checked/.test(html), 'the comment choice is kept as well');
   });
 });

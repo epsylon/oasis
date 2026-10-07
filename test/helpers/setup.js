@@ -10,7 +10,9 @@ process.env.OASIS_TEST = '1';
 const configManager = require('../../src/configs/config-manager.js');
 const realGetConfig = configManager.getConfig;
 let testConfig = null;
-configManager.getConfig = () => ({ ...(testConfig || realGetConfig()), wallet: { url: '', user: '', pass: '', fee: '5' } });
+let testWallet = null;
+configManager.getConfig = () => ({ ...(testConfig || realGetConfig()), wallet: testWallet || { url: '', user: '', pass: '', fee: '5' } });
+const setTestWallet = (wallet) => { testWallet = wallet || null; };
 configManager.saveConfig = (cfg) => { testConfig = JSON.parse(JSON.stringify(cfg || {})); };
 process.env.OASIS_BANKING_DIR = bankingStoreDir;
 const stateDir = path.join(tmpRoot, 'state');
@@ -219,4 +221,4 @@ function makeNetworkAndPeer() {
   return { network, peer };
 }
 
-module.exports = { makePeer, makeNetworkAndPeer, makeNetwork, generateKeypair, fresh, realConfig };
+module.exports = { makePeer, makeNetworkAndPeer, makeNetwork, generateKeypair, fresh, realConfig, setTestWallet };

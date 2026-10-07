@@ -212,7 +212,7 @@ footer a:hover {
 
 
 
-a.user-link {
+a.user-link, button.user-link {
   background-color: #FFA500; 
   color: #000;
   padding: 8px 16px;
@@ -226,14 +226,14 @@ a.user-link {
   font-size: 0.8em; 
 }
 
-a.user-link:hover {
+a.user-link:hover, button.user-link:hover {
   background-color: #FFD700; 
   border-color: #FFD700; 
   color: #000; 
   cursor: pointer; 
 }
 
-a.user-link:focus {
+a.user-link:focus, button.user-link:focus {
   background-color: #007B9F; 
   border-color: #007B9F; 
   color: #fff;
@@ -739,7 +739,7 @@ h3 { font-size: 1em !important; }
 }
 
 .graphos-node-label-me {
-  fill: #ffa500 !important;
+  fill: #5dade2 !important;
 }
 
 .graphos-legend {
@@ -2027,6 +2027,7 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 }
 
 .mailing-archive-meta > .user-link,
+.mailing-archive-meta > .room-join-form:first-child,
 .mailing-archive-meta > .forum-category {
   flex: 0 0 100% !important;
 }

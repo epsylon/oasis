@@ -585,10 +585,16 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     const memberships = await listAllMemberships();
     return new Promise((resolve) => {
       const posts = [];
+      const tombs = new Map();
       pull(
         client.createLogStream({ reverse: true }),
         pull.drain((m) => {
           const c = m && m.value && m.value.content;
+          if (c && c.type === 'tombstone' && typeof c.target === 'string') {
+            if (!tombs.has(c.target)) tombs.set(c.target, new Set());
+            tombs.get(c.target).add(m.value.author);
+            return;
+          }
           if (!c || c.type !== 'larpHousePost') return;
           if (c.house !== houseKey) return;
           const author = m.value.author;
@@ -602,8 +608,9 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
             ts: m.value.timestamp || 0
           });
         }, () => {
-          posts.sort((a, b) => b.ts - a.ts);
-          resolve(posts);
+          const shown = posts.filter(post => !(tombs.get(post.id) && tombs.get(post.id).has(post.author)));
+          shown.sort((a, b) => b.ts - a.ts);
+          resolve(shown);
         })
       );
     });

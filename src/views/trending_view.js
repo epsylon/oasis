@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
@@ -22,7 +22,7 @@ const filterButton = (mode, currentFilter) =>
 const voteLabelFor = (cat) =>
   i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat;
 
-const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new Map()) => {
+const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new Map(), params = {}) => {
   const c = item.value.content;
   const created = moment(item.value.timestamp).format("YYYY/MM/DD HH:mm");
 
@@ -233,7 +233,10 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     podcast: 'podcasts',
     podcastEpisode: 'podcasts/episode',
     campaign: 'campaigns',
-    logisticsRoute: 'logistics'
+    logisticsRoute: 'logistics',
+    poll: 'polls',
+    schoolCourse: 'school/course',
+    industryBlueprint: 'industry/blueprint'
   };
   const detailHref = detailPaths[c.type]
     ? `/${detailPaths[c.type]}/${encodeURIComponent(item.key)}`
@@ -247,7 +250,17 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
         span({ class: 'pm-exposition-text' }, String(i18n['type' + String(c.type || '').charAt(0).toUpperCase() + String(c.type || '').slice(1)] || c.type || '').toUpperCase())
       ),
-      renderContentActions(item.key, detailHref, { spread: spreadMap.get(item.key) || null, author: item.value.author })
+      renderContentActions(item.key, detailHref, {
+        spread: spreadMap.get(item.key) || null,
+        author: item.value.author,
+        reportTitle: c.title || c.question || c.concept || '',
+        ...(CONTENT_TORRENTABLE.has(c.type) && typeof c.url === 'string' && c.url.startsWith('&')
+          ? { torrentFrom: { blobId: c.url, name: c.title || c.fileName || '' } }
+          : {}),
+        ...(CONTENT_FAV_KIND[c.type]
+          ? { favKind: CONTENT_FAV_KIND[c.type], isFavorite: params.favIndex instanceof Map ? params.favIndex.get(String(item.key)) === CONTENT_FAV_KIND[c.type] : false, returnTo: params.returnTo }
+          : {})
+      })
     ),
     div(
       { class: 'card-section trending-card-body' },
@@ -280,7 +293,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
   );
 };
 
-exports.trendingView = (items, filter, categories = opinionCategories, spreadMap = new Map(), q = '', allItems = null) => {
+exports.trendingView = (items, filter, categories = opinionCategories, spreadMap = new Map(), q = '', allItems = null, params = {}) => {
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
@@ -331,7 +344,8 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
         Object.values(item.value.content.opinions || {}).reduce((s, n) => s + (n || 0), 0),
         categories,
         seenDocumentTitles,
-        spreadMap
+        spreadMap,
+        { favIndex: params.favIndex, returnTo: `/trending?filter=${encodeURIComponent(filter)}` }
       )
     )
     .filter(Boolean);

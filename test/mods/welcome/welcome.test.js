@@ -54,6 +54,24 @@ describe('welcome: it only greets a brand new node', (t) => {
   });
 });
 
+describe('welcome: the guide opens itself on the first visit', (t) => {
+  t('a fresh node wants the guide opened once, and never again after it was shown', () => {
+    const { onboarding, peer } = setup();
+    ok(onboarding.begin(peer.keypair.id));
+    ok(onboarding.shouldOpen(), 'the first visit goes to the guide');
+    ok(onboarding.markOpened());
+    notOk(onboarding.shouldOpen(), 'the next visit lands on the home page');
+    ok(onboarding.isVisible(), 'while the reminder stays until the guide is closed or completed');
+  });
+
+  t('a closed guide never opens itself', () => {
+    const { onboarding, peer } = setup();
+    onboarding.begin(peer.keypair.id);
+    onboarding.dismiss();
+    notOk(onboarding.shouldOpen());
+  });
+});
+
 describe('welcome: nothing is mandatory', (t) => {
   t('it can be closed straight away without doing any step', async () => {
     const { onboarding, peer, dir } = setup();

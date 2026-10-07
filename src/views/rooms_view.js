@@ -1,6 +1,6 @@
-const { div, h2, p, section, button, form, a, span, br, textarea, input, select, option, img, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
-const { renderEncryptedChip, renderTransportChip } = require("./clearnet_view")
+const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction } = require("./main_views")
+const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -13,6 +13,10 @@ const safeArr = (v) => (Array.isArray(v) ? v : [])
 const roomHref = (room) => `/rooms/${encodeURIComponent(room.rootId)}`
 const occOf = (params, room) => (params && params.occupancy && params.occupancy.get(room.rootId)) || null
 const modeLabel = (f) => String(i18n[`roomFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f).toUpperCase()
+const ROOM_REACH = ["OPEN", "INVITE-ONLY"]
+const roomReachLabel = (s) => s === "INVITE-ONLY" ? i18n.roomStatusInviteOnly : i18n.roomStatusOpen
+const clearnetEligible = (room) => !!room && !room.tribeId && !room.encrypted && room.type === "OPEN" && String(room.status || "").toUpperCase() === "OPEN" && !room.isClosed
+const roomClearnetHref = (room) => clearnetItemHref("rooms", room.title, room.rootId)
 
 const renderRoomStatusChip = (room) => {
   const s = room.isClosed ? "CLOSED" : room.type
@@ -22,17 +26,23 @@ const renderRoomStatusChip = (room) => {
   return renderStateChip(variant, icon, label)
 }
 
-const renderRoomNumberChip = (room) => room.number
-  ? span({ class: "room-number-chip", title: room.line === "SWITCHBOARD" ? i18n.roomNumberHint : i18n.roomLineDndError }, renderStateChip("whole", "✆", room.number))
-  : null
+const renderRoomNumberChip = (room, occ, inside) => {
+  if (!room.number) return null
+  if (room.line === "SWITCHBOARD" && !inside && occ && Number(occ.count) > 0) return renderPhoneChip(room.number, i18n.roomNumberHint)
+  return span({ title: room.line !== "SWITCHBOARD" ? i18n.roomLineDndError : inside ? i18n.roomYouAreIn : i18n.roomNobodyInside }, renderStateChip("whole", "✆", room.number))
+}
+const renderRoomLineChip = (room) => room.isClosed || String(room.author) === String(userId)
+  ? null
+  : renderStateChip(room.line === "SWITCHBOARD" ? "mutuals" : "hidden", null, String(room.line === "SWITCHBOARD" ? i18n.roomLineSwitchboard : i18n.phoneDnd).toUpperCase())
 
 const renderLiveChip = (occ) => occ && occ.count > 0 ? renderStateChip("mutuals", "●", `${i18n.roomLiveChip} ${occ.count}/${occ.max || ROOM_MAX}`) : null
 
-const roomChips = (room, occ) => [
+const roomChips = (room, occ, inside = false) => [
   renderRoomStatusChip(room),
   renderEncryptedChip(i18n),
   room.type === "OPEN" && !room.tribeId ? renderTransportChip(i18n) : null,
-  renderRoomNumberChip(room),
+  renderRoomNumberChip(room, occ, inside),
+  renderRoomLineChip(room),
   renderLiveChip(occ),
   renderLifespanChip(room.lifetime, i18n)
 ].filter(Boolean)
@@ -55,13 +65,15 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
 
 const renderCover = (room, cls) => room.image ? img({ loading: "lazy", src: `/blob/${encodeURIComponent(room.image)}`, class: cls, alt: "" }) : null
 
+const roomIsFull = (occ) => !!occ && occ.count >= ((occ && occ.max) || ROOM_MAX)
+
 const joinForm = (room, occ, cls = "tribe-action-btn") => {
   const max = (occ && occ.max) || ROOM_MAX
   const count = occ ? occ.count : null
   const full = count !== null && count >= max
   return form({ method: "POST", action: `/rooms/join/${encodeURIComponent(room.rootId)}`, class: "room-join-form" },
     button({ type: "submit", class: cls, ...(full ? { disabled: true } : {}) },
-      full ? String(i18n.roomFull).toUpperCase() : `${String(i18n.roomJoin).toUpperCase()}${count !== null ? ` (${count}/${max})` : ""}`)
+      String(full ? i18n.roomFull : i18n.roomJoin).toUpperCase())
   )
 }
 
@@ -72,14 +84,16 @@ const renderRoomItem = (room, params = {}) => {
   return li({ class: "mailing-archive-item room-item" },
     div({ class: "emergency-update-head mailing-archive-head" },
       div({ class: "mailing-archive-meta" },
-        a({ href: roomHref(room), class: "user-link" }, room.title || "—"),
+        canJoin && !roomIsFull(occ)
+          ? form({ method: "POST", action: `/rooms/join/${encodeURIComponent(room.rootId)}`, class: "room-join-form" },
+              button({ type: "submit", class: "user-link room-title-join", title: i18n.roomJoin }, room.title || "—"))
+          : a({ href: roomHref(room), class: "user-link" }, room.title || "—"),
         span({ class: "card-label activity-update-counts mailing-counts" }, `👥: ${safeArr(room.members).length}`),
-        ...roomChips(room, occ),
-        inside
-          ? a({ href: roomHref(room), class: "room-join-btn" }, String(i18n.roomBackToRoom).toUpperCase())
-          : (canJoin ? joinForm(room, occ, "room-join-btn") : null)
+        ...roomChips(room, occ, inside),
+        room.clearnet === true && clearnetEligible(room) ? renderReachChip(true, i18n, roomClearnetHref(room)) : null,
+        inside ? renderStateChip("whole", "ꘒ", String(i18n.roomYouAreIn).toUpperCase()) : null
       ),
-      renderContentActions(room.rootId, roomHref(room), { spread: (params.spreadMap && params.spreadMap.get(room.rootId)) || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, reportTitle: room.title })
+      renderContentActions(room.rootId, roomHref(room), { spread: (params.spreadMap && params.spreadMap.get(room.rootId)) || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, reportTitle: room.title, deleteAction: String(room.author) === String(userId) ? contentDeleteAction("room", room.rootId) : undefined })
     )
   )
 }
@@ -87,27 +101,41 @@ const renderRoomItem = (room, params = {}) => {
 const renderRoomForm = (room, params = {}) => {
   const tribeId = String(params.tribeId || "")
   const isEdit = !!room
+  const draft = isEdit ? room : (params.draft || {})
+  const reachRaw = String(params.reach || draft.status || "").toUpperCase()
+  const reach = ROOM_REACH.includes(reachRaw) ? reachRaw : "OPEN"
+  const withReach = !isEdit && !tribeId
+  const showClearnet = isEdit ? clearnetEligible(room) : (withReach && reach === "OPEN")
   return div({ class: "div-center audio-form" },
     h2(isEdit ? i18n.roomUpdateSectionTitle : i18n.roomCreateSectionTitle),
+    withReach
+      ? [
+          form({ method: "GET", action: "/rooms" },
+            input({ type: "hidden", name: "filter", value: "create" }),
+            label(i18n.roomTypeLabel), br(),
+            div({ class: "apply-row" },
+              select({ name: "status", class: "report-category-select" },
+                ...ROOM_REACH.map(s => option({ value: s, ...(reach === s ? { selected: true } : {}) }, roomReachLabel(s)))
+              ),
+              button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
+            )
+          ),
+          hr({ class: "form-sep" }),
+          h2({ class: "report-category-fixed" }, roomReachLabel(reach))
+        ]
+      : null,
     form({ method: "POST", action: isEdit ? `/rooms/update/${encodeURIComponent(room.rootId)}` : "/rooms/create", enctype: "multipart/form-data" },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
+      withReach ? input({ type: "hidden", name: "status", value: reach }) : null,
       span(i18n.title || "Title"), br(),
-      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.roomTitlePlaceholder, value: isEdit ? room.title : "" }), br(),
+      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.roomTitlePlaceholder, value: draft.title || "" }), br(),
       span(i18n.roomDescriptionLabel), br(),
-      textarea({ name: "description", rows: 4, maxlength: "1000", placeholder: i18n.roomDescriptionPlaceholder }, isEdit ? room.description : ""), br(),
+      textarea({ name: "description", rows: 4, maxlength: "1000", placeholder: i18n.roomDescriptionPlaceholder }, draft.description || ""), br(),
       span(i18n.uploadMedia), br(),
       input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
-      isEdit || tribeId
-        ? null
-        : [
-            span(i18n.roomTypeLabel), br(),
-            select({ name: "status" },
-              option({ value: "OPEN", selected: true }, i18n.roomStatusOpen),
-              option({ value: "INVITE-ONLY" }, i18n.roomStatusInviteOnly)
-            ), br(), br()
-          ],
       span(i18n.roomTagsLabel), br(),
-      input({ type: "text", name: "tags", placeholder: i18n.tagsPlaceholder, value: isEdit ? safeArr(room.tags).join(", ") : "" }), br(),
+      input({ type: "text", name: "tags", placeholder: i18n.tagsPlaceholder, value: safeArr(draft.tags).join(", ") }), br(),
+      showClearnet ? renderClearnetSelector(draft.clearnet === true || String(draft.clearnet || "") === "1", i18n) : null,
       button({ type: "submit", class: "create-button" }, isEdit ? i18n.roomUpdate : i18n.roomCreate)
     )
   )
@@ -186,7 +214,7 @@ const renderLivePanel = (room, live, occ) => {
       muted ? span({ class: "room-peer-muted" }, String(i18n.roomMuted).toUpperCase()) : null
     )
     return div({ class: "phone-call-panel room-live-panel" },
-      head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), renderLiveChip({ count: live.count, max: live.max }))),
+      head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null)),
       live.secure ? null : p({ class: "room-waiting" }, i18n.roomWaitingKey),
       div({ class: "phone-contacts" },
         who(userId, live.speaking && !live.muted, live.muted, true),
@@ -207,6 +235,8 @@ exports.singleRoomView = async (room, params = {}) => {
   const live = params.live && params.live.ref === room.rootId ? params.live : null
   const occ = params.occ || null
   const canJoin = !restricted && !room.isClosed && params.available !== false
+  const canClearnet = clearnetEligible(room)
+  const isClearnet = canClearnet && room.clearnet === true
 
   const inviteActions = isAuthor && room.type === "INVITE-ONLY" && !room.tribeId && !room.isClosed
     ? [
@@ -241,19 +271,20 @@ exports.singleRoomView = async (room, params = {}) => {
           input({ type: "hidden", name: "filter", value: "edit" }),
           input({ type: "hidden", name: "id", value: room.rootId }),
           button({ type: "submit", class: "update-btn" }, i18n.roomUpdate)
-        ),
-        form({ method: "POST", action: `/rooms/delete/${encodeURIComponent(room.rootId)}` },
-          button({ type: "submit", class: "delete-btn" }, i18n.roomDelete)
         )
       ].filter(Boolean)
     : []
 
   const side = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(room.rootId, null, { spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title })
+      renderContentActions(room.rootId, roomHref(room), { spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title, deleteAction: isAuthor ? contentDeleteAction("room", room.rootId) : undefined })
     ),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, restricted ? i18n.roomStatusInviteOnly : (room.title || "—"))),
-    div({ class: "card-chips-row" }, ...roomChips(room, live ? { count: live.count, max: live.max } : occ)),
+    div({ class: "card-chips-row" },
+      ...roomChips(room, live ? { count: live.count, max: live.max } : occ, !!live),
+      canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? roomClearnetHref(room) : null) : null,
+      isAuthor && canClearnet ? renderClearnetSwitch("rooms", room.rootId, isClearnet) : null
+    ),
     restricted ? null : renderCover(room, "tribe-detail-image"),
     restricted || !room.description ? null : p({ class: "tribe-side-description" }, ...renderStyledText(room.description)),
     table({ class: "tribe-info-table jobs-info-table" },
@@ -322,6 +353,33 @@ exports.renderTribeRoomsSection = (tribe, rooms, occupancy, live) => {
     head,
     ul({ class: "mailing-archive" }, ...items.map(r => renderRoomItem(r, { occupancy, live })))
   )
+}
+
+exports.clearnetRoomView = async (room) => {
+  const { escapeHtml: esc, renderKindTag, renderClearnetPage } = require("./clearnet_view")
+  const name = room.title || i18n.cnKindRoom
+  const extraCss = `
+.cn-room-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700;word-break:break-word}
+.cn-room-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.cn-room-number{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--fg);border-radius:10px;padding:4px 12px;font-size:16px;font-weight:600;color:var(--fg);background:var(--bg-sub)}
+.cn-room-number .pm-exposition-icon{font-size:18px;line-height:1}
+.cn-room-number .pm-exposition-text{line-height:1;letter-spacing:1px;font-family:monospace}
+`
+  const body = `
+  <h1 class="cn-room-title">${esc(name)}</h1>
+  <div class="cn-room-meta">
+    ${renderKindTag("room")}
+    ${room.number ? `<span class="pm-exposition-chip pm-exposition-whole cn-room-number"><span class="pm-exposition-icon">✆</span><span class="pm-exposition-text">${esc(room.number)}</span></span>` : ""}
+  </div>
+`
+  return renderClearnetPage({
+    title: `${name} | Oasis`,
+    ogTitle: name,
+    ogDescription: "",
+    extraCss,
+    body,
+    hubFeedId: room.author || null
+  })
 }
 
 exports.roomModesFromCensus = (census, me, occupancy) => {

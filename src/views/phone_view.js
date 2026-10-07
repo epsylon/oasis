@@ -1,14 +1,14 @@
 const { div, h2, p, section, button, form, input, span, audio, table, tr, td, th, br, a } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderCallButton } = require("./main_views");
+const { template, i18n, userLink, userLinkLabel, renderCallButton, liveClock, renderStateChip } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
 const { phoneNumberOf } = require("../models/phone_number");
 const moment = require("../server/node_modules/moment");
 
-const PAM_MAX_MS = 120000;
+const PAM_MAX_MS = require('../server/phone_module').VOICEMAIL_MAX_MS;
 
 const clock = (ms) => {
   const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 
 const postButton = (action, label, danger = false, fields = {}) =>
@@ -39,12 +39,12 @@ const renderCallPanel = (st, now) => {
   if (st.dir === 'in' && st.phase === 'incoming') {
     body = [line(...who, ' ', i18n.phoneIsCalling), actions(postButton('/phone/accept', i18n.phoneAnswer), postButton('/phone/reject', i18n.phoneReject, true))];
   } else if (st.phase === 'calling') {
-    body = [line(i18n.phoneCalling, ' ', ...who, ' ', span({ class: 'phone-call-clock' }, clock(now - st.startedAt))), actions(postButton('/phone/hangup', i18n.phoneHangup, true))];
+    body = [line(st.reached ? i18n.phoneCalling : i18n.phoneConnecting, ' ', ...who, ' ', span({ class: 'phone-call-clock' }, liveClock(st.startedAt))), actions(postButton('/phone/hangup', i18n.phoneHangup, true))];
   } else if (st.phase === 'connecting' || st.phase === 'connected') {
     const inCall = st.group ? linkList(st.peers.filter(x => x.phase === 'connected').map(x => x.id)) : who;
     const ringing = st.group ? st.peers.filter(x => x.phase === 'calling').map(x => x.id) : [];
     body = [
-      line(i18n.phoneInCall, ' ', ...inCall, ' ', span({ class: 'phone-call-clock' }, clock(now - (st.answeredAt || st.startedAt)))),
+      line(i18n.phoneInCall, ' ', ...inCall, ' ', span({ class: 'phone-call-clock' }, liveClock(st.answeredAt || st.startedAt))),
       ringing.length ? div({ class: 'phone-call-ringing' }, i18n.phoneCalling, ' ', ...linkList(ringing)) : null,
       actions(
         st.muted ? postButton('/phone/mute', i18n.phoneUnmute, false, { mute: 0 }) : postButton('/phone/mute', i18n.phoneMute, false, { mute: 1 }),
@@ -52,8 +52,8 @@ const renderCallPanel = (st, now) => {
       )
     ];
   } else if (st.phase === 'recording' || st.phase === 'recorded') {
-    const elapsed = st.phase === 'recorded' ? PAM_MAX_MS : Math.min(PAM_MAX_MS, now - (st.recordingStartedAt || now));
-    body = [line(i18n.phoneRecording, ' ', ...who, ' ', span({ class: 'phone-call-clock' }, `${clock(elapsed)} / ${clock(PAM_MAX_MS)}`)), actions(postButton('/phone/pam/send', i18n.phoneSendPam), postButton('/phone/pam/cancel', i18n.phoneCancel, true))];
+    const elapsed = st.phase === 'recorded' ? clock(PAM_MAX_MS) : liveClock(st.recordingStartedAt || now, { max: PAM_MAX_MS });
+    body = [line(i18n.phoneRecording, ' ', ...who, ' ', span({ class: 'phone-call-clock' }, elapsed, ` / ${clock(PAM_MAX_MS)}`)), p({ class: 'phone-pam-hint' }, st.why === 'busy' ? i18n.phoneLeaveMessageBusy : st.why === 'unreachable' ? i18n.phoneLeaveMessageUnreachable : i18n.phoneLeaveMessage), actions(postButton('/phone/pam/send', i18n.phoneSendPam), postButton('/phone/pam/cancel', i18n.phoneCancel, true))];
   } else {
     return null;
   }
@@ -68,6 +68,8 @@ const renderCallPanel = (st, now) => {
   );
 };
 
+const dndChip = () => renderStateChip('hidden', null, String(i18n.phoneDnd).toUpperCase());
+
 const renderNumberChooser = (compose) =>
   div({ class: 'phone-number-chooser' },
     p(String(i18n.phoneNumberChoose || '').replace('{number}', compose.number || '')),
@@ -75,7 +77,7 @@ const renderNumberChooser = (compose) =>
       ...(compose.candidates || []).map(c => div({ class: 'phone-contact' },
         userLink(c.id),
         span({ class: 'date-link' }, c.id),
-        postButton('/phone/call', `✆ ${i18n.phoneCallButton}`, false, { to: c.to, compose: 1 })
+        c.dnd ? dndChip() : postButton('/phone/call', `✆ ${i18n.phoneCallButton}`, false, { to: c.to, compose: 1 })
       )),
       ...(compose.rooms || []).map(r => div({ class: 'phone-contact' },
         a({ href: `/rooms/${encodeURIComponent(r.id)}`, class: 'user-link' }, r.title || i18n.roomsTitle),
@@ -95,11 +97,11 @@ const renderCompose = (compose) => {
   const full = recipients.length >= max;
   const keep = () => [input({ type: 'hidden', name: 'filter', value: 'create' }), input({ type: 'hidden', name: 'to', value: compose.to || '' })];
   const key = (value, label, cls = 'phone-key', extra = {}) => button({ type: 'submit', name: 'key', value, class: cls, ...extra }, label);
-  const callTo = [...recipients, dial].filter(Boolean).join(',');
   return section(
+    section({ class: 'phone-flash-anchor' }),
     div({ class: 'pm-form phone-compose' },
       compose.choose && ((compose.candidates || []).length || (compose.rooms || []).length) ? renderNumberChooser(compose) : null,
-      form({ method: 'GET', action: '/phone', class: 'phone-dialer' },
+      form({ method: 'GET', action: '/phone', class: 'phone-dialer', id: 'phone-dialer' },
         ...keep(),
         key('add', `+ ${i18n.phoneDialAdd}`, 'phone-dial-add', full ? { disabled: true } : {}),
         div({ class: 'phone-screen' },
@@ -126,10 +128,8 @@ const renderCompose = (compose) => {
           ))
         ) : null
       ),
-      form({ method: 'POST', action: '/phone/call', class: 'phone-dial-call' },
-        input({ type: 'hidden', name: 'compose', value: '1' }),
-        input({ type: 'hidden', name: 'to', value: callTo }),
-        button({ type: 'submit', class: 'pm-btn', ...(callTo ? {} : { disabled: true }) }, `✆ ${String(i18n.phoneCallButton).toUpperCase()}`)
+      div({ class: 'phone-dial-call' },
+        button({ type: 'submit', form: 'phone-dialer', formaction: '/phone/call', formmethod: 'post', name: 'compose', value: '1', class: 'pm-btn' }, `✆ ${String(i18n.phoneCallButton).toUpperCase()}`)
       )
     )
   );
@@ -181,7 +181,7 @@ const renderLatest = (latest, canCall, history = []) =>
             span({ class: 'phone-dir', title: c.dir === 'out' ? i18n.phoneOutgoing : i18n.phoneIncoming }, c.dir === 'out' ? '↗' : '↙'),
             userLink(c.id),
             span({ class: 'date-link' }, moment(c.startedAt).format('YYYY/MM/DD HH:mm')),
-            canCall ? renderCallButton(c.id) : null,
+            c.dnd ? dndChip() : canCall ? renderCallButton(c.id) : null,
             deleteCalls(history.filter(h => peersOf(h).includes(c.id)).map(h => h.id))
           ))
         )

@@ -4,11 +4,12 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty } = require('./main_views');
-const { renderEncryptedChip: renderForumEncryptedChip } = require('./clearnet_view');
+const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
 const { renderStyledHtml } = require('../backend/renderStyledText');
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
+const { TEXT_CAP } = require('../backend/long_text');
 
 const userId = config.keys.id;
 
@@ -30,6 +31,7 @@ const ALL_CATS = [...CAT_BLOCK1, ...CAT_BLOCK2, ...CAT_BLOCK3];
 
 const catKey = (c) => 'forumCat' + String(c || '').replace(/\./g,'').replace(/[\s-]/g,'').toUpperCase();
 const catLabel = (c) => i18n[catKey(c)] || c;
+const tribeCatLabel = (c) => i18n['tribeForumCat' + String(c || '').charAt(0) + String(c || '').slice(1).toLowerCase()] || c;
 
 const Z = 1.96;
 function wilsonScore(pos, neg) {
@@ -43,7 +45,7 @@ function getFilteredForums(filter, forums) {
   const now = Date.now();
   if (filter === 'mine')    return forums.filter(f => f.author === userId);
   if (filter === 'recent')  return forums.filter(f => new Date(f.createdAt).getTime() >= now - 86400000);
-  if (filter === 'top')     return forums.slice().sort((a,b) => b.score - a.score);
+  if (filter === 'top')     return forums.filter(f => !f.tribeOrigin).sort((a,b) => b.score - a.score);
   if (ALL_CATS.includes(filter))
     return forums.filter(f => f.category === filter);
   return forums;
@@ -81,32 +83,33 @@ const renderVotes = (target, score, forumId) =>
     )
   );
 
-const renderForumForm = () =>
+const renderForumForm = (draft = null) =>
   div({ class: 'forum-form' },
     form({ action: '/forum/create', method: 'POST', enctype: 'multipart/form-data' },
       label(i18n.forumCategoryLabel), br(),
       select({ name: 'category', required: true },
-        ALL_CATS.map(cat => option({ value: cat }, catLabel(cat)))
+        ALL_CATS.map(cat => option({ value: cat, ...(draft && draft.category === cat ? { selected: true } : {}) }, catLabel(cat)))
       ), br(), br(),
       label(i18n.eventPrivacyLabel), br(),
       select({ name: 'isPublic', id: 'isPublic' },
-        option({ value: 'public', selected: true }, i18n.eventPublic),
-        option({ value: 'private' }, i18n.eventPrivate)
+        option({ value: 'public', ...(draft && draft.isPrivate ? {} : { selected: true }) }, i18n.eventPublic),
+        option({ value: 'private', ...(draft && draft.isPrivate ? { selected: true } : {}) }, i18n.eventPrivate)
       ), br(), br(),
       label(i18n.forumTitleLabel), br(),
       input({
         type: 'text',
         name: 'title', maxlength: '100',
         required: true,
-        placeholder: i18n.forumTitlePlaceholder
+        placeholder: i18n.forumTitlePlaceholder,
+        value: draft ? String(draft.title || '') : ''
       }), br(), br(),
       label(i18n.forumMessageLabel), br(),
-      textarea({ maxlength: "5000",
+      textarea({ maxlength: String(TEXT_CAP),
         name: 'text',
         required: true,
         rows: 4,
         placeholder: i18n.forumMessagePlaceholder
-      }), br(), br(),
+      }, draft ? String(draft.text || '') : ''), br(), br(),
       label(i18n.uploadMedia), br(),
       input({ type: 'file', name: 'blob' }), br(), br(),
       button({ type: 'submit' }, i18n.forumCreateButton)
@@ -162,13 +165,13 @@ const renderThread = (nodes, level = 0, forumId) => {
             enctype: 'multipart/form-data'
           },
             input({ type: 'hidden', name: 'parentId', value: m.key }),
-            textarea({ maxlength: "5000",
+            textarea({ maxlength: String(TEXT_CAP),
               name: 'message',
               rows: 2,
               required: true,
               placeholder: i18n.forumMessagePlaceholder,
               class: 'comment-textarea'
-            }),
+            }, draftFor(m.key)),
             div({ class: 'comment-file-upload' }, input({ type: 'file', name: 'blob' })),
             button({ type: 'submit', class: 'forum-send-btn' }, i18n.tribeForumReply)
           )
@@ -191,11 +194,21 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
   if (!visibleForums.length) return div({ class: 'tribe-grid' }, p(i18n.noForums));
   return ul({ class: 'mailing-archive' },
     ...visibleForums.map(f => {
-      const ownerActions = currentFilter === 'mine' && f.author === userId
-        ? form({ method: 'POST', action: `/forum/delete/${encodeURIComponent(f.key)}`, class: 'forum-delete-form' },
-            button({ type: 'submit', class: 'delete-btn' }, i18n.forumDeleteButton)
+      if (f.tribeOrigin) {
+        return li({ class: 'mailing-archive-item' },
+          div({ class: 'emergency-update-head mailing-archive-head' },
+            div({ class: 'mailing-archive-meta' },
+              a({ href: f.tribeOrigin.href, class: 'user-link' }, f.title || '—'),
+              ALL_CATS.includes(f.category)
+                ? a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(f.category)}` }, `[${catLabel(f.category)}]`)
+                : (f.category ? span({ class: 'forum-category' }, `[${tribeCatLabel(f.category)}]`) : null),
+              span({ class: 'card-label activity-update-counts mailing-counts' }, `👥: ${f.participants?.length || 1} · 💬 ${Math.max(0, (f.messagesCount || 1) - 1)}`),
+              renderLifespanChip(f.lifetime, i18n),
+              renderTribeOriginChip(f.tribeOrigin)
+            )
           )
-        : null;
+        );
+      }
       return li({ class: 'mailing-archive-item' },
         div({ class: 'emergency-update-head mailing-archive-head' },
           div({ class: 'mailing-archive-meta' },
@@ -209,13 +222,8 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
               ? renderStateChip('mutuals', '✉', i18n.subscriptionOn)
               : (f.subscriptionIn === false ? renderStateChip('closed', '✉', i18n.subscriptionOff) : null)
           ),
-          renderContentActions(f.key, forumHref(f), { spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title })
-        ),
-        ownerActions
-          ? div({ class: 'emergency-update-head mailing-archive-row' },
-              div({ class: 'tribe-side-actions emergency-update-actions' }, ownerActions)
-            )
-          : null
+          renderContentActions(f.key, forumHref(f), { spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title, deleteAction: f.author === userId ? `/forum/delete/${encodeURIComponent(f.key)}` : null })
+        )
       );
     })
   );
@@ -265,7 +273,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
             )
           ),
       currentFilter === 'create'
-        ? renderForumForm()
+        ? renderForumForm(params.draft || null)
         : renderForumList(
           getFilteredForums(currentFilter || 'all', forums),
           currentFilter,
@@ -275,7 +283,11 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
   );
 };
 
-exports.singleForumView = async (forum, messagesData, currentFilter) => {
+let replyDraft = null;
+const draftFor = (parentId) => replyDraft && String(replyDraft.parentId || '') === String(parentId || '') ? String(replyDraft.message || '') : '';
+
+exports.singleForumView = async (forum, messagesData, currentFilter, replyId = null, params = {}) => {
+  replyDraft = params.draft || null;
   const CAT_I18N_MAP_UP = ALL_CATS.reduce((m,c)=>{ m[c]=(catLabel(c)||c).toUpperCase(); return m; },{});
   const isForumOwner = String(forum.author) === String(userId);
   const sharesForum = isForumOwner || (forum.participants || []).includes(userId);
@@ -308,12 +320,13 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
         )),
         div({ class: 'forum-main-col' },
           div({ class: 'card-header activity-card-header' },
-            renderContentActions(forum.key, null, {
+            renderContentActions(forum.key, forumHref(forum), {
               author: forum.author,
               favKind: 'forum',
               isFavorite: forum.isFavorite,
-              spread: null,
-              reportTitle: forum.title
+              spread: params.spreads || null,
+              reportTitle: forum.title,
+              deleteAction: isForumOwner ? `/forum/delete/${encodeURIComponent(forum.key)}` : null
             })
           ),
           div({ class: 'forum-header-row' },
@@ -351,10 +364,6 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
               : null,
             (forum.isPrivate && forum.author !== userId)
               ? a({ class: 'tribe-action-btn', href: '/invites#invites-forums' }, i18n.tribeEnterInvite)
-              : null,
-            (forum.author === userId)
-              ? form({ method: 'POST', action: `/forum/delete/${encodeURIComponent(forum.key)}`, class: 'forum-delete-form' },
-                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.forumDeleteButton))
               : null
           ),
           (forum.subscription && sharesForum)
@@ -395,13 +404,13 @@ exports.singleForumView = async (forum, messagesData, currentFilter) => {
           class: 'new-message-form',
           enctype: 'multipart/form-data'
         },
-          textarea({ maxlength: "5000",
+          textarea({ maxlength: String(TEXT_CAP),
             name: 'message',
             rows: 4,
             required: true,
             placeholder: i18n.forumMessagePlaceholder,
             class: 'new-message-textarea'
-          }), br(),
+          }, draftFor(null)), br(),
           label(i18n.uploadMedia), br(),
           input({ type: 'file', name: 'blob' }), br(),
           button({ type: 'submit', class: 'forum-send-btn' }, i18n.forumSendButton)

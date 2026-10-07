@@ -3,11 +3,11 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
-const { renderMapLocationVisitLabel } = require("./maps_view");
+const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
 const { renderZoomableImage } = require("./gallery_view");
 
 const userId = config.keys.id;
@@ -51,27 +51,15 @@ const renderImageOwnerActions = (filter, imgObj, params = {}) => {
   const isAuthor = String(imgObj.author) === String(userId);
   const hasOpinions = Object.keys(imgObj.opinions || {}).length > 0;
 
-  if (!isAuthor) return [];
+  if (!isAuthor || hasOpinions) return [];
 
-  const items = [];
-  if (!hasOpinions) {
-    items.push(
-      form(
-        { method: "GET", action: `/images/edit/${encodeURIComponent(imgObj.key)}` },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        button({ class: "update-btn", type: "submit" }, i18n.imageUpdateButton)
-      )
-    );
-  }
-  items.push(
+  return [
     form(
-      { method: "POST", action: `/images/delete/${encodeURIComponent(imgObj.key)}` },
+      { method: "GET", action: `/images/edit/${encodeURIComponent(imgObj.key)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.imageDeleteButton)
+      button({ class: "update-btn", type: "submit" }, i18n.imageUpdateButton)
     )
-  );
-
-  return items;
+  ];
 };
 
 const renderImageList = exports.renderImageList = (images, filter, params = {}) => {
@@ -87,16 +75,18 @@ const renderImageList = exports.renderImageList = (images, filter, params = {}) 
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(imgObj.key, `/images/${encodeURIComponent(imgObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(imgObj.key)) || params.spreads || null, author: imgObj.author, favKind: 'images', torrentFrom: { blobId: imgObj.url, name: imgObj.title }, isFavorite: imgObj.isFavorite, reportTitle: imgObj.title })
+            imgObj.tribeOrigin
+              ? renderContentActions(null, imgObj.tribeOrigin.href)
+              : renderContentActions(imgObj.key, `/images/${encodeURIComponent(imgObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(imgObj.key)) || params.spreads || null, author: imgObj.author, favKind: 'images', torrentFrom: { blobId: imgObj.url, name: imgObj.title }, isFavorite: imgObj.isFavorite, reportTitle: imgObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction("image", imgObj.key) : null })
           ),
           div(
             { class: "card-section image-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(title) : null, renderLicenseChip(imgObj.license)),
+            div({ class: "shop-title-row" }, title ? h2(title) : null, imgObj.tribeOrigin ? renderTribeOriginChip(imgObj.tribeOrigin) : imgObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('images', imgObj.title, imgObj.key)) : null, renderLicenseChip(imgObj.license)),
             imgObj.lifetime ? div({ class: "card-chips-row" },
               imgObj.lifetime ? renderLifespanChip(imgObj.lifetime, i18n) : null
             ) : null,
             renderImageMedia(imgObj, filter, params),
-            renderEngagement(imgObj.key,
+            imgObj.tribeOrigin ? null : renderEngagement(imgObj.key,
               renderOpinionsVoting('/images/opinions', imgObj.key, imgObj.opinions, returnTo, imgObj.opinions_inhabitants),
               renderCommentsLink({ href: `/images/${encodeURIComponent(imgObj.key)}`, count: commentCount })
             ),
@@ -166,6 +156,8 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
       br(),
       ...renderLicenseSelect(imageToEdit?.license, i18n),
       br(),
+      renderClearnetSelector(filter === "edit" ? !!imageToEdit?.clearnet : false, i18n),
+      br(),
       button({ type: "submit" }, filter === "edit" ? i18n.imageUpdateButton : i18n.imageCreateButton)
     )
   );
@@ -207,7 +199,7 @@ const renderImageCommentsSection = (imageKey, comments = [], returnTo = null) =>
 const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusM)) return true;
-  if (mode === "top") return censusM.length > 0;
+  if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "gallery") return censusM.length > 0;
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "recent") return censusM.length > 0;
@@ -234,12 +226,6 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
       div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.imageDescription)
-      ,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetImages);
-          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
-        })()
       ),
       div(
         { class: "filters" },
@@ -309,8 +295,8 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(imageObj.title);
-  const { renderReachChip } = require('./clearnet_view');
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetImages);
+  const isAuthor = String(imageObj.author) === String(userId);
+  const isClearnet = !!imageObj.clearnet;
 
   const chips = [
     renderLifespanChip(imageObj.lifetime, i18n),
@@ -324,8 +310,9 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   const tagsNode = renderTags(imageObj.tags);
 
   const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(imageObj.key, null, {
+    renderContentActions(imageObj.key, `/images/${encodeURIComponent(imageObj.key)}`, {
       author: imageObj.author,
+      deleteAction: String(imageObj.author) === String(userId) ? contentDeleteAction("image", imageObj.key) : null,
       favKind: 'images', torrentFrom: { blobId: imageObj.url, name: imageObj.title },
       isFavorite: imageObj.isFavorite,
       spread: params.spreads || null,
@@ -337,7 +324,8 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   const imageSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, clearnetItemHref('images', imageObj.title, imageObj.key)),
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('images', imageObj.title, imageObj.key) : null),
+      isAuthor ? renderClearnetSwitch('images', imageObj.rootId || imageObj.key, isClearnet) : null,
       renderLicenseChip(imageObj.license)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
@@ -345,7 +333,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
       ? p({ class: "tribe-side-description" }, ...renderStyledText(imageObj.description))
       : null,
     tagsNode,
-    renderMapLocationVisitLabel(imageObj.mapUrl),
+    renderMapEmbed(params.mapData, imageObj.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 

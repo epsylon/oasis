@@ -218,6 +218,16 @@ function makeNode(network, keypair, opts = {}) {
         });
         return pull.values(opts && opts.reverse ? matches.slice().reverse() : matches);
       }
+    },
+    friends: {
+      isFollowing({ source, dest } = {}, cb) {
+        let following = false;
+        for (const m of network.log) {
+          const c = m.value && m.value.content;
+          if (c && c.type === 'contact' && m.value.author === source && c.contact === dest) following = c.following === true;
+        }
+        cb(null, following);
+      }
     }
   };
   return node;

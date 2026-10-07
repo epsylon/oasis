@@ -1,7 +1,8 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -23,6 +24,8 @@ const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
 }
 
 const userId = config.keys.id
+const MARKET_REACH = ["PUBLIC", "HIDDEN"]
+const marketReachLabel = (v) => v === "HIDDEN" ? (i18n.visibilityHidden || "Hidden") : (i18n.visibilityPublic || "Public")
 
 const parseBidEntry = (raw) => {
   const s = String(raw || "").trim()
@@ -179,13 +182,6 @@ const renderMarketOwnerActions = (item, returnTo) => {
       )
     )
   }
-  out.push(
-    form(
-      { method: "POST", action: `/market/delete/${encodeURIComponent(item.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.marketActionsDelete)
-    )
-  )
   if (canChange) {
     out.push(
       form(
@@ -202,17 +198,6 @@ const renderMarketOwnerActions = (item, returnTo) => {
     )
   }
   return out
-}
-
-const renderMarketTopbar = (item, returnTo) => {
-  const left = []
-  const right = item && String(item.seller) === String(userId) ? renderMarketOwnerActions(item, returnTo) : []
-  const leftNode = left.length ? div({ class: "bookmark-topbar-left transfer-topbar-left" }, ...left) : null
-  const rightNode = right.length ? div({ class: "bookmark-actions transfer-actions" }, ...right) : null
-  const children = []
-  if (leftNode) children.push(leftNode)
-  if (rightNode) children.push(rightNode)
-  return children.length ? div({ class: "bookmark-topbar transfer-topbar-single" }, ...children) : null
 }
 
 const marketChipFor = (filter, list) => (mode) => {
@@ -305,11 +290,15 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
 
   const isFormMode = filter === "create" || filter === "edit"
   const spreadWarning = filter === "edit" ? await renderSpreadEditWarning(itemEdit && (itemEdit.id || itemEdit.key)) : null
+  const reachRaw = String(params.reach || "").toUpperCase()
+  const ownReach = String(itemEdit.visibility || "").toUpperCase()
+  const reach = MARKET_REACH.includes(reachRaw) ? reachRaw : (MARKET_REACH.includes(ownReach) ? ownReach : "PUBLIC")
+  const prefillKeys = ["industry", "title", "description", "price", "tags", "stock"]
 
   return template(
     title,
     section(
-      div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription), renderWalletChip(), (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetMarket === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })()),
+      div({ class: "tags-header module-header-line" }, h2(i18n.marketTitle), p(i18n.marketDescription), renderWalletChip()),
       div(
         { class: "filters" },
         form(
@@ -377,8 +366,26 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
             { class: "market-form" },
             spreadWarning,
             form(
+              { method: "GET", action: filter === "edit" ? `/market/edit/${encodeURIComponent(itemEdit.id)}` : "/market" },
+              filter === "edit" ? null : input({ type: "hidden", name: "filter", value: "create" }),
+              ...(filter === "edit" ? [] : prefillKeys.filter((k) => params[k]).map((k) => input({ type: "hidden", name: k, value: params[k] }))),
+              label(i18n.visibilityLabel || "Visibility"),
+              br(),
+              div({ class: "apply-row" },
+                select(
+                  { name: "visibility", class: "report-category-select" },
+                  option({ value: "PUBLIC", ...(reach === "PUBLIC" ? { selected: true } : {})}, i18n.visibilityPublic || "Public"),
+                  option({ value: "HIDDEN", ...(reach === "HIDDEN" ? { selected: true } : {})}, i18n.visibilityHidden || "Hidden")
+                ),
+                button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
+              )
+            ),
+            hr({ class: "form-sep" }),
+            h2({ class: "report-category-fixed" }, marketReachLabel(reach)),
+            form(
               { action: filter === "edit" ? `/market/update/${encodeURIComponent(itemEdit.id)}` : "/market/create", method: "POST", enctype: "multipart/form-data" },
               input({ type: "hidden", name: "returnTo", value: "/market?filter=mine" }),
+              input({ type: "hidden", name: "visibility", value: reach }),
               ((itemEdit && itemEdit.industry) || params.industry) ? input({ type: "hidden", name: "industry", value: (itemEdit && itemEdit.industry) || params.industry }) : null,
               label(i18n.marketItemType),
               br(),
@@ -424,15 +431,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: itemEdit?.mapUrl || "" }),
               br(),
               br(),
-              label(i18n.visibilityLabel || "Visibility"),
-              br(),
-              select(
-                { name: "visibility" },
-                option({ value: "PUBLIC", ...((itemEdit?.visibility || "PUBLIC") === "PUBLIC" ? { selected: true } : {})}, i18n.visibilityPublic || "Public"),
-                option({ value: "HIDDEN", ...(itemEdit?.visibility === "HIDDEN" ? { selected: true } : {})}, i18n.visibilityHidden || "Hidden")
-              ),
-              br(),
-              br(),
+              ...(reach === "PUBLIC" ? [renderClearnetSelector(itemEdit.clearnet === true || String(itemEdit.clearnet || "") === "1", i18n), br()] : []),
               label(i18n.marketItemPrice),
               br(),
               input({ type: "number", name: "price", id: "price", value: (itemEdit && itemEdit.price) || params.price || "", required: true, step: "0.000001", min: "0.000001" }),
@@ -465,7 +464,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                 name: "includesShipping",
                 value: "1",
                 class: "meme-checkbox",
-                ...(itemEdit && itemEdit.includesShipping ? { checked: true } : {})
+                ...(itemEdit && [true, "1", "on", "true"].includes([].concat(itemEdit.includesShipping).pop()) ? { checked: true } : {})
               }),
               br(),br(),
               button({ type: "submit" }, filter === "edit" ? i18n.marketUpdateButton : i18n.marketCreateButton)
@@ -475,34 +474,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
             { class: "market-grid" },
             filtered.length > 0
               ? filtered.map((item) => {
-                  const polls = Array.isArray(item.auctions_poll) ? item.auctions_poll : []
-                  const parsedBids = polls.map(parseBidEntry).filter(Boolean).sort((a, b) => new Date(b.time) - new Date(a.time))
-                  const myBid = item.item_type === "auction" ? parsedBids.some((b) => b.bidder === userId) : false
-                  const maxStock = item.initialStock || item.stockMax || item.stock || 1
-                  const stockLeft = Number(item.stock || 0)
                   const isOwner = String(item.seller) === String(userId)
-
-                  const actionNodesRaw = isOwner
-                    ? renderMarketOwnerActions(item, "/market?filter=mine")
-                    : [
-                        item.status !== "SOLD" && item.status !== "DISCARDED" && item.item_type === "auction"
-                          ? form(
-                              { method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
-                              input({ type: "hidden", name: "returnTo", value: returnTo }),
-                              input({ type: "number", name: "bidAmount", step: "0.000001", min: "0.000001", placeholder: i18n.marketYourBid, required: true }),
-                              br(),
-                              button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
-                            )
-                          : null,
-                        item.status === "FOR SALE" && item.item_type !== "auction" && !isOwner && stockLeft > 0
-                          ? form(
-                              { method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
-                              input({ type: "hidden", name: "returnTo", value: "/inbox?filter=sent" }),
-                              input({ type: "hidden", name: "buyerId", value: userId }),
-                              button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
-                            )
-                          : null
-                      ].filter(Boolean)
 
                   return div({ class: "tribe-card market-tribe-card" },
                     div({ class: "tribe-card-image-wrapper" },
@@ -512,7 +484,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                     ),
                     div({ class: "card-header activity-card-header" },
                       span(),
-                      renderContentActions(item.id, `/market/${encodeURIComponent(item.id)}`, { spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title })
+                      renderContentActions(item.id, `/market/${encodeURIComponent(item.id)}`, { spread: (params.spreadMap && params.spreadMap.get(item.id)) || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, deleteAction: isOwner ? contentDeleteAction('market', item.id) : undefined })
                     ),
                     div({ class: "tribe-card-body" },
                       div({ class: "shop-title-row" },
@@ -525,7 +497,8 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                         item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
                         item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
                         item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
-                        renderLifespanChip(item.lifetime, i18n)
+                        renderLifespanChip(item.lifetime, i18n),
+                        item.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref("market", item.title, item.id)) : null
                       ),
                       div({ class: "price-chip" }, `${item.price} ECO`)
                     )
@@ -546,7 +519,6 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
   const maxPrice = params.maxPrice
   const sort = params.sort || "recent"
   const returnTo = params.returnTo || buildReturnTo(filter, q, minPrice, maxPrice, sort)
-  const topbar = renderMarketTopbar(item, returnTo)
   const stockLeft = Number(item.stock || 0)
   const showBuy = item.status === "FOR SALE" && item.item_type !== "auction" && String(item.seller) !== String(userId) && stockLeft > 0
   const maxStock = item.initialStock || item.stockMax || item.stock || 1
@@ -580,7 +552,9 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
       ),
       (() => {
         const isHidden = String(item.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN'
+        const isClearnet = !!item.clearnet
         const chips = [
+          renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("market", item.title, item.id) : null),
           isHidden ? renderVisibilityChip("HIDDEN", i18n) : null,
           renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
           item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
@@ -621,25 +595,18 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
             })()
           : null
 
-        const marketActions = []
-        if (String(item.seller) === String(userId)) {
-          marketActions.push(form({ method: "GET", action: `/market/edit/${encodeURIComponent(item.id)}` },
-            button({ type: "submit", class: "update-btn" }, i18n.marketUpdateButton || "Update")
-          ))
-          marketActions.push(form({ method: "POST", action: `/market/delete/${encodeURIComponent(item.id)}` },
-            button({ type: "submit", class: "delete-btn" }, i18n.marketDeleteButton || "Delete")
-          ))
-        }
+        const marketActions = String(item.seller) === String(userId) ? renderMarketOwnerActions(item, `/market/${encodeURIComponent(item.id)}`) : []
 
         const itemSide = div({ class: "tribe-side" },
           div({ class: "card-header activity-card-header" },
-            renderContentActions(item.id, null, { spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title })
+            renderContentActions(item.id, `/market/${encodeURIComponent(item.id)}`, { spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo: `/market/${encodeURIComponent(item.id)}`, deleteAction: String(item.seller) === String(userId) ? contentDeleteAction('market', item.id) : undefined })
           ),
           div({ class: "shop-title-row" },
             h2({ class: "tribe-card-title" }, item.title)
           ),
           renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
           chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+          String(item.seller) === String(userId) ? renderClearnetSwitch("market", item.rootId || item.id, isClearnet) : null,
           renderMediaBlob(item.image, "/assets/images/default-market.png"),
           div({ class: "price-chip" }, `${item.price} ECO`),
           renderStockBar(item.stock, maxStock),

@@ -77,7 +77,7 @@ const WORKFLOWS = [
     homePage: 'activity',
     modules: [...GOVERNANCE, ...OFFICE,
       'forum', 'chats', 'rooms', 'feed', 'blogs', 'opinions', 'pads', 'wiki', 'docs', 'images', 'videos', 'audios', 'podcasts',
-      'files', 'torrents', 'maps', 'cipher', 'fediverse', 'projects', 'logistics',
+      'files', 'torrents', 'maps', 'bookmarks', 'graphos', 'melody', 'cipher', 'fediverse', 'projects', 'logistics',
       'invites', 'tags', 'trending', 'backup']
   },
   {

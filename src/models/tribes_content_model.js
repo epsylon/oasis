@@ -3,12 +3,28 @@ const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const tribeLogLimit = Math.max(logLimit, 100000);
 const { readTyped } = require('./typed_log');
+const longText = require('../backend/long_text');
 const TRIBE_LOG_TYPES = ['tribe', 'tribe-msg', 'tribe-keys-distrib', 'tribe-invite-msg', 'tribe-invite-tombstone', 'tribe-open-invite-tombstone', 'tombstone', 'contact'];
 
 const VALID_CONTENT_TYPES = ['event', 'task', 'report', 'votation', 'forum', 'forum-reply', 'market', 'job', 'project', 'media', 'feed', 'pixelia'];
 const categories = require('../backend/opinion_categories');
 const VALID_STATUSES = ['OPEN', 'CLOSED', 'IN-PROGRESS'];
 const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const EXPOSURE_TYPE = 'tribeExposure';
+const REACH_LEVELS = ['tribe', 'oasis', 'clearnet'];
+const REACH_RANK = { tribe: 0, oasis: 1, clearnet: 2 };
+const SNAPSHOT_FIELDS = ['contentType', 'title', 'description', 'status', 'date', 'location', 'price', 'salary', 'priority', 'options', 'category', 'tags', 'image', 'mediaType', 'license', 'url', 'deadline', 'goal', 'createdAt', 'updatedAt'];
+const snapshotOf = (item, replies = []) => {
+  const out = {};
+  for (const f of SNAPSHOT_FIELDS) {
+    const v = item[f];
+    if (v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length)) continue;
+    out[f] = v;
+  }
+  out.author = item.author;
+  if (item.contentType === 'forum') out.replies = (replies || []).map(r => ({ author: r.author, description: r.description || '', createdAt: r.createdAt || null }));
+  return out;
+};
 
 module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb;
@@ -35,6 +51,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     );
   };
 
+  const publishContent = async (rootId, body) => {
+    const publishChunk = (c) => wrapAndPublishContent(rootId, { k: longText.CHUNK_TYPE, rootId, text: c.text, index: c.index, total: c.total, group: c.group });
+    const sealed = await longText.chunkContent(body, 'description', { maxBytes: longText.CONTENT_BYTES.sealed, extra: { rootId }, publish: publishChunk });
+    return wrapAndPublishContent(rootId, sealed);
+  };
+
   const decodeContentMsgs = async (msgs, opts) => {
     const fpIdx = tribeCrypto.buildFingerprintIndex();
     const targetRootId = opts && opts.rootId ? opts.rootId : null;
@@ -42,6 +64,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const allowedFps = targetRootId ? fingerprintsForRoot(targetRootId) : null;
 
     const content = new Map();
+    const chunks = new Map();
     const tombRequests = [];
     const collabMsgs = [];
 
@@ -57,6 +80,11 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
       if (b.k === 'tombstone') {
         tombRequests.push({ target: b.target, author: m.value.author });
+        continue;
+      }
+      if (b.k === longText.CHUNK_TYPE) {
+        const ch = longText.chunkOf(m.value.author, b);
+        if (ch) chunks.set(m.key, ch);
         continue;
       }
       if (b.k === 'tc-collab') {
@@ -117,7 +145,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const lb = tipNode.body;
       const a = collabByRoot.get(root) || EMPTY;
 
-      const item = { id: contentTip, ...body, author: tipNode.author, _ts: tipNode.ts };
+      const item = { id: contentTip, ...body, description: longText.joinText(body.description, body.chunks, longText.lookupIn(chunks), tipNode.author), author: tipNode.author, _ts: tipNode.ts, originId: root };
 
       const voteAuthors = new Set(); const votes = {};
       const legacyVotes = lb.votes && typeof lb.votes === 'object' ? lb.votes : {};
@@ -154,7 +182,23 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     return { items, tipOf, tombstoned };
   };
 
+  const chainIsPublic = async (tribeId) => {
+    let cur;
+    try { cur = await tribesModel.getTribeById(tribeId); } catch (_) { return false; }
+    const seen = new Set();
+    while (cur) {
+      if (cur.isAnonymous) return false;
+      if (!cur.parentTribeId) return true;
+      if (seen.has(cur.parentTribeId)) return false;
+      seen.add(cur.parentTribeId);
+      try { cur = await tribesModel.getTribeById(cur.parentTribeId); } catch (_) { return false; }
+    }
+    return false;
+  };
+
   return {
+    chainIsPublic,
+
     async create(tribeId, contentType, data) {
       if (!VALID_CONTENT_TYPES.includes(contentType)) throw new Error('Invalid content type');
       if (data.status && !VALID_STATUSES.includes(data.status)) throw new Error('Invalid status. Must be OPEN, CLOSED, or IN-PROGRESS');
@@ -198,7 +242,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         createdAt: now,
         updatedAt: now
       };
-      return wrapAndPublishContent(rootId, body);
+      return publishContent(rootId, body);
     },
 
     async update(contentId, data, existing) {
@@ -244,7 +288,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         createdAt: existing.createdAt,
         updatedAt: now
       };
-      return wrapAndPublishContent(rootId, body);
+      return publishContent(rootId, body);
     },
 
     async deleteById(contentId) {
@@ -344,6 +388,103 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (!item) throw new Error('Content not found');
       if (Array.isArray(item.opinions_inhabitants) && item.opinions_inhabitants.includes(userId)) throw new Error('Already voted');
       return wrapAndPublishContent(item.rootId, { k: 'tc-collab', sub: 'opinion', rootId: item.rootId, target: item.id, category });
+    },
+
+    reachLevels: REACH_LEVELS,
+
+    async publishExposure(item, level, replies = []) {
+      if (!REACH_LEVELS.includes(level)) throw new Error('Invalid level');
+      if (!item || !item.rootId) throw new Error('Content not found');
+      const client = await openSsb();
+      const publish = (c) => new Promise((resolve, reject) => client.publish(c, (err, r) => err ? reject(err) : resolve(r)));
+      const content = {
+        type: EXPOSURE_TYPE,
+        tribeId: item.rootId,
+        origin: item.originId || item.id,
+        contentType: item.contentType,
+        level,
+        item: null,
+        at: new Date().toISOString()
+      };
+      if (level !== 'tribe') {
+        const { replies: snapReplies, ...snapshot } = snapshotOf(item, replies);
+        const budget = longText.CONTENT_BYTES.plain - longText.contentBytes(content);
+        const sealed = await longText.chunkContent(snapshot, 'description', { maxBytes: budget, publish });
+        if (Array.isArray(snapReplies)) {
+          sealed.replies = snapReplies.slice();
+          while (sealed.replies.length && longText.contentBytes({ ...content, item: sealed }) > longText.CONTENT_BYTES.plain) sealed.replies.pop();
+        }
+        content.item = sealed;
+      }
+      return publish(content);
+    },
+
+    async exposureState({ ignorePrivacy = false } = {}) {
+      const client = await openSsb();
+      const msgs = await readTyped(client, [EXPOSURE_TYPE, longText.CHUNK_TYPE], { limit: tribeLogLimit });
+      const lookup = longText.lookupIn(longText.indexChunks(msgs));
+      const byOrigin = new Map();
+      for (const m of msgs) {
+        const c = m && m.value && m.value.content;
+        if (!c || c.type !== EXPOSURE_TYPE || typeof c.origin !== 'string' || typeof c.tribeId !== 'string' || !REACH_LEVELS.includes(c.level)) continue;
+        if (!byOrigin.has(c.origin)) byOrigin.set(c.origin, []);
+        byOrigin.get(c.origin).push({ by: m.value.author, ts: Number(m.value.timestamp) || 0, c });
+      }
+      const memberCache = new Map();
+      const isMember = async (author, tribeId) => {
+        const k = `${tribeId}|${author}`;
+        if (!memberCache.has(k)) memberCache.set(k, await tribesModel.isTribeMember(author, tribeId).catch(() => false));
+        return memberCache.get(k);
+      };
+      const everCache = new Map();
+      const wasMember = async (author, tribeId) => {
+        const k = `${tribeId}|${author}`;
+        if (!everCache.has(k)) everCache.set(k, await tribesModel.wasEverMember(author, tribeId).catch(() => false));
+        return everCache.get(k);
+      };
+      const privacyCache = new Map();
+      const isPrivate = async (tribeId) => {
+        if (!privacyCache.has(tribeId)) privacyCache.set(tribeId, !(await chainIsPublic(tribeId)));
+        return privacyCache.get(tribeId);
+      };
+      const state = new Map();
+      for (const [origin, list] of byOrigin) {
+        list.sort((a, b) => (b.ts - a.ts) || (REACH_RANK[a.c.level] - REACH_RANK[b.c.level]));
+        let chosen = null;
+        for (const e of list) {
+          if (await isMember(e.by, e.c.tribeId)) { chosen = e; break; }
+          if (e.c.level === 'tribe' && await wasMember(e.by, e.c.tribeId)) { chosen = e; break; }
+        }
+        if (!chosen) continue;
+        const priv = await isPrivate(chosen.c.tribeId);
+        const level = !ignorePrivacy && priv ? 'tribe' : chosen.c.level;
+        state.set(origin, { origin, tribeId: chosen.c.tribeId, contentType: chosen.c.contentType, level, item: level === 'tribe' || !chosen.c.item ? null : longText.resolveField(chosen.c.item, 'description', chosen.by, lookup), by: chosen.by, ts: chosen.ts });
+      }
+      return state;
+    },
+
+    async levelOf(item, state = null) {
+      const st = state || await this.exposureState();
+      const e = st.get(item && (item.originId || item.id));
+      return e ? e.level : 'tribe';
+    },
+
+    async listExposed(tribeId, contentType = null, minLevel = 'oasis', state = null) {
+      const rootId = await tribesModel.getRootId(tribeId).catch(() => tribeId);
+      const st = state || await this.exposureState();
+      const out = [];
+      for (const e of st.values()) {
+        if (e.tribeId !== rootId || !e.item || REACH_RANK[e.level] < REACH_RANK[minLevel]) continue;
+        const base = { ...e.item, id: e.origin, originId: e.origin, rootId, reach: e.level, exposedBy: e.by, _ts: e.ts, attendees: [], assignees: [], votes: {}, opinions: {}, opinions_inhabitants: [], refeeds: 0, refeeds_inhabitants: [] };
+        if (contentType === 'forum-reply') {
+          if (e.item.contentType !== 'forum') continue;
+          (e.item.replies || []).forEach((r, i) => out.push({ id: `${e.origin}:${i}`, originId: `${e.origin}:${i}`, rootId, contentType: 'forum-reply', parentId: e.origin, description: r.description, author: r.author, createdAt: r.createdAt, reach: e.level, attendees: [], assignees: [], votes: {}, opinions: {}, opinions_inhabitants: [], refeeds_inhabitants: [] }));
+          continue;
+        }
+        if (contentType && e.item.contentType !== contentType) continue;
+        out.push(base);
+      }
+      return out.sort((a, b) => (Date.parse(b.updatedAt || b.createdAt) || b._ts || 0) - (Date.parse(a.updatedAt || a.createdAt) || a._ts || 0));
     },
 
     async getThread(forumId) {

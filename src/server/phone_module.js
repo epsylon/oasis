@@ -8,9 +8,9 @@ const Pushable = require('./node_modules/pull-pushable');
 const sodium = require('./node_modules/chloride');
 const ssbKeys = require('./node_modules/ssb-keys');
 
-const RING_MS = 10000;
+const RING_MS = 20000;
 const PAM_WARN_MS = 10000;
-const VOICEMAIL_MAX_MS = 120000;
+const VOICEMAIL_MAX_MS = 60000;
 const RATE = 8000;
 const FRAME_BYTES = 320;
 const MAX_BACKLOG = 4000;
@@ -75,7 +75,21 @@ const wavFile = (pcm) => {
   return Buffer.concat([h, pcm]);
 };
 
+const connectingCycle = () => {
+  const n = RATE * 2;
+  const buf = Buffer.alloc(n * 2);
+  let seed = 0x2545f491;
+  let lp = 0;
+  for (let i = 0; i < n; i++) {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    lp += (((seed >>> 8) / 0x800000) - 1 - lp) * 0.08;
+    const env = Math.sin(Math.PI * i / n);
+    buf.writeInt16LE(Math.round(lp * 9000 * env * env), i * 2);
+  }
+  return buf;
+};
 const toneCycle = (kind) => {
+  if (kind === 'connecting') return connectingCycle();
   const segs = kind === 'ring'
     ? [{ ms: 1000, freq: (k) => (Math.floor(k / (RATE / 20)) % 2 ? 1250 : 1000) }, { ms: 2000 }]
     : [{ ms: 1500, freq: () => 425 }, { ms: 3000 }];
@@ -120,6 +134,7 @@ const systemAudio = () => {
           p.stdin.write(buf);
           return true;
         },
+        end() { try { p.stdin.end(); } catch (_) {} },
         stop() { try { p.stdin.end(); p.kill('SIGTERM'); } catch (_) {} }
       };
     }
@@ -127,7 +142,7 @@ const systemAudio = () => {
 };
 let audioFactory = systemAudio;
 
-const BEEP_MS = 400;
+const BEEP_MS = 700;
 const playBeep = (audio, count = 1) => {
   const on = (count > 1 ? 150 : BEEP_MS) * RATE / 1000;
   const gap = 150 * RATE / 1000;
@@ -137,12 +152,13 @@ const playBeep = (audio, count = 1) => {
     const start = b * (on + gap);
     for (let k = 0; k < on; k++) {
       phase += 2 * Math.PI * 1000 / RATE;
-      pcm.writeInt16LE(Math.round(Math.sin(phase) * 6000), (start + k) * 2);
+      pcm.writeInt16LE(Math.round(Math.sin(phase) * 9000), (start + k) * 2);
     }
   }
   const player = audio.player();
   player.write(pcm);
-  setTimeout(() => player.stop(), pcm.length / (RATE * 2) * 1000 + 300);
+  if (typeof player.end === 'function') player.end();
+  else setTimeout(() => player.stop(), pcm.length / (RATE * 2) * 1000 + 300);
 };
 
 const startTone = (audio, kind) => {
@@ -167,6 +183,36 @@ const clampPcm = (acc) => {
   return out;
 };
 
+let OpusScript = null;
+try { OpusScript = require('opusscript'); } catch (_) {}
+const OPUS_TAG = 0xf0;
+const OPUS_BITRATE = 16000;
+const makeEncoder = (codec) => {
+  if (codec !== 'opus' || !OpusScript) return { encode: ulawEncode, free() {} };
+  let enc = null;
+  return {
+    encode(pcm) {
+      try {
+        if (!enc) { enc = new OpusScript(RATE, 1, OpusScript.Application.VOIP); try { enc.encoderCTL(4002, OPUS_BITRATE); } catch (_) {} }
+        return Buffer.concat([Buffer.from([OPUS_TAG]), enc.encode(pcm, pcm.length >> 1)]);
+      } catch (_) { return ulawEncode(pcm); }
+    },
+    free() { if (enc) { try { enc.delete(); } catch (_) {} enc = null; } }
+  };
+};
+const makeDecoder = () => {
+  let dec = null;
+  return {
+    decode(buf) {
+      if (buf.length === FRAME_BYTES / 2 || buf[0] !== OPUS_TAG || !OpusScript) return ulawDecode(buf);
+      try {
+        if (!dec) dec = new OpusScript(RATE, 1, OpusScript.Application.VOIP);
+        return Buffer.from(dec.decode(buf.subarray(1)));
+      } catch (_) { return Buffer.alloc(FRAME_BYTES); }
+    },
+    free() { if (dec) { try { dec.delete(); } catch (_) {} dec = null; } }
+  };
+};
 const ctrlFrame = (obj) => Buffer.concat([Buffer.from([K_CTRL]), Buffer.from(JSON.stringify(obj))]);
 const levelOf = (pcm) => {
   const n = pcm.length >> 1;
@@ -235,11 +281,11 @@ module.exports = {
     ring: 'async', answer: 'async', hangup: 'async', audio: 'duplex', relay: 'async', relayAudio: 'duplex',
     call: 'async', accept: 'async', reject: 'async', end: 'async', mute: 'async', dismiss: 'async',
     recordStop: 'async', recordCancel: 'async',
-    roomHub: 'duplex', roomInfo: 'async', roomJoin: 'async', roomLeave: 'async', roomMute: 'async', roomCount: 'async',
-    roomState: 'sync', roomToken: 'sync', roomHubFor: 'sync',
+    roomHub: 'duplex', roomInfo: 'async', roomAdmits: 'async', roomJoin: 'async', roomLeave: 'async', roomMute: 'async', roomCount: 'async',
+    roomState: 'sync', roomToken: 'sync', roomHubFor: 'async',
     state: 'sync', available: 'sync', pubs: 'sync', events: 'source'
   },
-  permissions: { anonymous: { allow: ['ring', 'answer', 'hangup', 'audio', 'relay', 'relayAudio', 'roomHub', 'roomInfo'] } },
+  permissions: { anonymous: { allow: ['ring', 'answer', 'hangup', 'audio', 'relay', 'relayAudio', 'roomHub', 'roomInfo', 'roomAdmits'] } },
   init(server, config) {
     const keys = config.keys;
     const audio = audioFactory(server);
@@ -261,6 +307,8 @@ module.exports = {
     const voicemailMaxMs = Number(policy().voicemailMaxMs) > 0 ? Number(policy().voicemailMaxMs) : VOICEMAIL_MAX_MS;
     const pamWarnMs = Number(policy().pamWarnMs) > 0 ? Number(policy().pamWarnMs) : PAM_WARN_MS;
     const roomMax = Number(policy().roomMax) > 0 ? Math.min(ROOM_MAX, Number(policy().roomMax)) : ROOM_MAX;
+    const codecsOffered = () => (OpusScript && policy().opus !== false ? ['opus'] : []);
+    const pickCodec = (offer) => (codecsOffered().includes('opus') && Array.isArray(offer) && offer.includes('opus') ? 'opus' : 'ulaw');
     const relation = (method, source, dest, done) => {
       const friends = server.friends;
       if (!friends || typeof friends[method] !== 'function') return done(false);
@@ -339,7 +387,8 @@ module.exports = {
       id: call.id, peer: call.peer, dir: call.dir, phase: call.phase,
       startedAt: call.startedAt, answeredAt: call.answeredAt || 0, ringUntil: call.ringUntil || 0,
       muted: !!call.muted, recordingStartedAt: call.recordingStartedAt || 0,
-      ...(call.group ? { group: true, peers: call.legs.map(l => ({ id: l.peer, phase: l.phase })) } : {})
+      reached: call.group ? call.legs.some(l => l.reached) : !!call.reached, why: call.why || '', codec: call.codec || '',
+      ...(call.group ? { group: true, peers: call.legs.map(l => ({ id: l.peer, phase: l.phase, reached: !!l.reached })) } : {})
     } : null;
     const changed = () => emit({ type: 'state', state: snapshot() });
     const stopTone = (c) => { if (c.tone) { c.tone.stop(); c.tone = null; } };
@@ -348,7 +397,7 @@ module.exports = {
       const max = voicemailMaxMs * RATE * 2 / 1000;
       c.rec = { chunks: [], bytes: 0 };
       c.phase = 'recording';
-      c.recordingStartedAt = Date.now() + BEEP_MS + 100;
+      c.recordingStartedAt = Date.now() + BEEP_MS + 400;
       playBeep(audio);
       c.recDelay = setTimeout(() => {
         if (call !== c || c.phase !== 'recording') return;
@@ -368,7 +417,7 @@ module.exports = {
           emit({ type: 'recordLimit', id: c.id });
         }, voicemailMaxMs);
         changed();
-      }, BEEP_MS + 100);
+      }, BEEP_MS + 400);
     };
     const finish = (outcome) => {
       const c = call;
@@ -381,6 +430,7 @@ module.exports = {
       if (c.group) {
         for (const leg of c.legs) { clearTimeout(leg.timer); if (leg.out) { try { leg.out.end(); } catch (_) {} } }
         if (c.mixer) c.mixer.stop();
+        for (const leg of c.legs) { if (leg.enc) leg.enc.free(); if (leg.dec) leg.dec.free(); }
       }
       emit({ type: 'ended', call: { id: c.id, peer: c.peer, ...(c.group ? { peers: c.legs.map(l => l.peer) } : {}), dir: c.dir, startedAt: c.startedAt, answeredAt: c.answeredAt || 0, endedAt: Date.now(), outcome } });
       changed();
@@ -416,11 +466,12 @@ module.exports = {
       const claimed = payload && isFeedId(payload.from) ? payload.from : direct;
       return { sender: claimed, via: claimed && direct && claimed !== direct ? direct : null };
     };
+    const netFirst = (entries) => entries.slice().sort((x, y) => (/^onion:/.test(String(x && x[0])) ? 1 : 0) - (/^onion:/.test(String(y && y[0])) ? 1 : 0));
     const reach = (id, done) => {
       const now = liveRpc(id);
       if (now) return done(now);
       let entries = [];
-      try { entries = server.conn.query().peersAll(); } catch (_) {}
+      try { entries = netFirst(server.conn.query().peersAll()); } catch (_) {}
       const hit = entries.find(e => Array.isArray(e) && e[0] && e[1] && e[1].key === id);
       if (!hit) return done(null);
       try {
@@ -435,7 +486,7 @@ module.exports = {
         server.friends.hops({ start: target, max: 1 }, (err, hops) => {
           if (err || !hops) return done([]);
           let entries = [];
-          try { entries = server.conn.dbPeers().concat(server.conn.query().peersAll()); } catch (_) {}
+          try { entries = netFirst(server.conn.dbPeers().concat(server.conn.query().peersAll())); } catch (_) {}
           const seen = new Set();
           done(entries
             .filter(e => Array.isArray(e) && e[0] && e[1] && e[1].type === 'pub' && hops[e[1].key] === 1 && !liveRpc(e[1].key) && !seen.has(e[1].key) && seen.add(e[1].key))
@@ -445,11 +496,12 @@ module.exports = {
       } catch (_) { done([]); }
     };
 
-    const ringPaths = (holder, target, req, alive) => {
+    const ringPaths = (holder, target, req, alive, onReached, legacy = false) => {
       reach(target, (rpc) => {
         if (!alive() || !rpc) return;
         holder.paths.push(null);
-        sendVia(null, target, 'ring', req);
+        if (legacy) onReached();
+        sendVia(null, target, 'ring', req, (err) => { if (!err && alive()) onReached(); });
       });
       for (const via of relayCandidates(target)) {
         holder.paths.push(via);
@@ -470,10 +522,50 @@ module.exports = {
     const ringRequest = (callId, eph, target) => {
       const ts = Date.now();
       const ephPk = b64(eph.publicKey);
-      return { callId, from: server.id, to: target, ephPk, ts, sig: signParts(keys, ['ring', callId, ephPk, target, ts]) };
+      return { callId, from: server.id, to: target, ephPk, ts, sig: signParts(keys, ['ring', callId, ephPk, target, ts]), codecs: codecsOffered() };
     };
 
     const legOf = (c, callId) => (c && c.group ? c.legs.find(l => l.id === callId) || null : null);
+    const toVoicemail = (c, why) => {
+      if (call !== c || c.phase !== 'calling') return;
+      clearTimeout(c.timer);
+      stopTone(c);
+      if (why !== 'busy') notifyHangup(c);
+      c.why = why;
+      startRecording(c);
+      changed();
+    };
+    const reachedCall = (c) => {
+      if (call !== c || c.phase !== 'calling' || c.reached) return;
+      c.reached = true;
+      c.ringUntil = Date.now() + ringMs;
+      stopTone(c);
+      c.tone = startTone(audio, 'ringback');
+      clearTimeout(c.timer);
+      c.timer = setTimeout(() => toVoicemail(c, 'noanswer'), ringMs);
+      changed();
+    };
+    const reachedLeg = (c, leg) => {
+      if (call !== c || leg.phase !== 'calling' || leg.reached) return;
+      leg.reached = true;
+      clearTimeout(leg.timer);
+      leg.timer = setTimeout(() => { if (call === c && leg.phase === 'calling') dropLeg(c, leg, true); }, ringMs);
+      if (c.phase === 'calling' && !c.ringing) { stopTone(c); c.ringing = true; c.tone = startTone(audio, 'ringback'); c.ringUntil = Date.now() + ringMs; }
+      changed();
+    };
+    const ringingAck = (c, req, from, cb) => {
+      const target = c && c.group ? legOf(c, req.callId) : c;
+      if (!target || c.dir !== 'out' || target.phase !== 'calling' || from !== target.peer || req.callId !== target.id) return cb(new Error('no-call'));
+      if (Math.abs(Date.now() - Number(req.ts)) > CLOCK_SKEW_MS || !verifyParts(from, ['ringing', req.callId, req.ringing, server.id, req.ts], req.sig)) return cb(new Error('rejected'));
+      cb(null, true);
+      if (req.ringing === 'busy') {
+        if (c.group) { target.reached = true; return dropLeg(c, target, false); }
+        c.reached = true;
+        return toVoicemail(c, 'busy');
+      }
+      if (c.group) reachedLeg(c, target);
+      else reachedCall(c);
+    };
     const hangupLeg = (leg) => {
       const ts = Date.now();
       const payload = { callId: leg.id, from: server.id, ts, sig: signParts(keys, ['hangup', leg.id, leg.peer, ts]) };
@@ -491,6 +583,8 @@ module.exports = {
       clearTimeout(leg.timer);
       leg.phase = 'gone';
       if (leg.out) { try { leg.out.end(); } catch (_) {} leg.out = null; }
+      if (leg.enc) leg.enc.free();
+      if (leg.dec) leg.dec.free();
       leg.queue = [];
       settleGroup(c);
     };
@@ -514,7 +608,7 @@ module.exports = {
             const acc = new Int32Array(samples);
             if (!c.muted) mixInto(acc, mic);
             heard.forEach((f, j) => { if (f && j !== i) mixInto(acc, f); });
-            leg.out.push(leg.seal(ulawEncode(clampPcm(acc))));
+            leg.out.push(leg.seal(leg.enc.encode(clampPcm(acc))));
           });
         }
       });
@@ -523,27 +617,29 @@ module.exports = {
     const startLegMedia = (c, leg, duplex) => {
       const open = opener(leg.keys.b2a);
       leg.seal = sealer(leg.keys.a2b);
+      leg.enc = makeEncoder(leg.codec);
+      leg.dec = makeDecoder();
       leg.out = Pushable(() => {});
       leg.queue = [];
       pull(leg.out, duplex.sink);
       pull(duplex.source, pull.drain((frame) => {
         const plain = open(Buffer.isBuffer(frame) ? frame : Buffer.from(frame || []));
         if (!plain || leg.phase !== 'connected') return;
-        leg.queue.push(ulawDecode(plain));
+        leg.queue.push(leg.dec.decode(plain));
         if (leg.queue.length > MIX_QUEUE) leg.queue.shift();
       }, () => { if (call === c) dropLeg(c, leg, false); }));
       startMixer(c);
     };
-    const groupCall = (targets, cb) => {
+    const groupCall = (targets, legacy, cb) => {
       const startedAt = Date.now();
       const c = { id: nodeCrypto.randomBytes(16).toString('hex'), peer: targets[0], dir: 'out', group: true, phase: 'calling', startedAt, ringUntil: startedAt + ringMs, legs: [] };
       call = c;
-      c.tone = startTone(audio, 'ringback');
+      c.tone = startTone(audio, 'connecting');
       for (const peer of targets) {
         const leg = { id: nodeCrypto.randomBytes(16).toString('hex'), peer, phase: 'calling', eph: sodium.crypto_box_keypair(), paths: [], via: null, queue: [] };
         c.legs.push(leg);
         leg.timer = setTimeout(() => { if (call === c && leg.phase === 'calling') dropLeg(c, leg, true); }, ringMs);
-        ringPaths(leg, peer, ringRequest(leg.id, leg.eph, peer), () => call === c && leg.phase === 'calling');
+        ringPaths(leg, peer, ringRequest(leg.id, leg.eph, peer), () => call === c && leg.phase === 'calling', () => reachedLeg(c, leg), legacy.has(peer));
       }
       changed();
       cb(null, snapshot());
@@ -556,6 +652,7 @@ module.exports = {
       const path = via ? liveRpc(via) : liveRpc(from);
       if (!path) return cb(new Error('no-connection'));
       leg.keys = deriveKeys(leg.eph.secretKey, calleePk, leg.id, Buffer.from(leg.eph.publicKey), calleePk);
+      leg.codec = pickCodec([req.codec]);
       clearTimeout(leg.timer);
       leg.via = via;
       leg.phase = 'connected';
@@ -572,6 +669,8 @@ module.exports = {
       const open = opener(role === 'out' ? c.keys.b2a : c.keys.a2b);
       const out = Pushable(() => {});
       const player = audio.player();
+      const enc = makeEncoder(c.codec);
+      const dec = makeDecoder();
       let pending = Buffer.alloc(0);
       const capture = audio.capture((pcm) => {
         if (call !== c || c.phase !== 'connected') return;
@@ -579,14 +678,14 @@ module.exports = {
         while (pending.length >= FRAME_BYTES) {
           const frame = pending.subarray(0, FRAME_BYTES);
           pending = pending.subarray(FRAME_BYTES);
-          if (!c.muted) out.push(seal(ulawEncode(frame)));
+          if (!c.muted) out.push(seal(enc.encode(frame)));
         }
       });
       const sink = pull.drain((frame) => {
         const plain = open(Buffer.isBuffer(frame) ? frame : Buffer.from(frame || []));
-        if (plain) player.write(ulawDecode(plain));
+        if (plain) player.write(dec.decode(plain));
       }, () => { if (call === c) finish('ended'); });
-      c.media = { stop() { try { out.end(); } catch (_) {} capture.stop(); player.stop(); } };
+      c.media = { stop() { try { out.end(); } catch (_) {} capture.stop(); player.stop(); enc.free(); dec.free(); } };
       if (!duplex) return { source: out, sink };
       pull(out, duplex.sink);
       pull(duplex.source, sink);
@@ -687,6 +786,7 @@ module.exports = {
       trimKeys(r);
       r.kid = kid;
       r.sealer = sealer(key);
+      sendCodecs(r);
     };
     const newRoomKey = (r) => useKey(r, nodeCrypto.randomBytes(4).toString('hex'), nodeCrypto.randomBytes(32));
     const sendRoomKey = (r, slot) => {
@@ -697,7 +797,9 @@ module.exports = {
       const sealed = seal({ rid: r.rid, kid: r.kid, key: b64(key), from: server.id, ts, sig: signParts(keys, ['roomkey', r.rid, r.kid, p.id, ts]) }, p.id);
       if (sealed) r.out.push(Buffer.concat([Buffer.from([K_KEY, slot]), Buffer.from(sealed)]));
     };
-    const peerEntry = (id) => ({ id, queue: [], openers: new Map(), heardAt: 0, mutedAt: 0 });
+    const peerEntry = (id) => ({ id, queue: [], openers: new Map(), heardAt: 0, mutedAt: 0, dec: null, opus: false, greeted: false });
+    const dropPeer = (r, slot) => { const p = r.peers.get(slot); if (p && p.dec) p.dec.free(); r.peers.delete(slot); };
+    const sendCodecs = (r) => { if (r.out && r.sealer && codecsOffered().length) sendRoomData(r, { t: 'codecs', codecs: codecsOffered() }); };
     const onRoomCtrl = (r, msg) => {
       if (msg.t === 'hello' && r.slot === null) {
         r.slot = Number(msg.slot);
@@ -713,13 +815,14 @@ module.exports = {
         if (r.ready) return r.ready(null);
       } else if (msg.t === 'join' && isFeedId(msg.id)) {
         const slot = Number(msg.slot);
+        dropPeer(r, slot);
         r.peers.set(slot, peerEntry(msg.id));
         r.order = r.order.filter(s => s !== slot).concat(slot);
         if (!r.static && keeperSlot(r) === r.slot) sendRoomKey(r, slot);
       } else if (msg.t === 'leave') {
         const slot = Number(msg.slot);
         const wasKeeper = keeperSlot(r) === slot;
-        r.peers.delete(slot);
+        dropPeer(r, slot);
         r.order = r.order.filter(s => s !== slot);
         if (!r.static && keeperSlot(r) === r.slot && (wasKeeper || !r.kid)) {
           newRoomKey(r);
@@ -759,7 +862,8 @@ module.exports = {
       const p = r.peers.get(slot);
       const plain = openRoomFrame(r, p, payload);
       if (!plain) return;
-      p.queue.push(ulawDecode(plain));
+      if (!p.dec) p.dec = makeDecoder();
+      p.queue.push(p.dec.decode(plain));
       if (p.queue.length > MIX_QUEUE) p.queue.shift();
       p.heardAt = Date.now();
       p.mutedAt = 0;
@@ -770,6 +874,11 @@ module.exports = {
       if (!plain) return;
       let msg = null;
       try { msg = JSON.parse(plain.toString('utf8')); } catch (_) {}
+      if (msg && msg.t === 'codecs') {
+        p.opus = Array.isArray(msg.codecs) && msg.codecs.includes('opus');
+        if (!p.greeted) { p.greeted = true; sendCodecs(r); }
+        return;
+      }
       if (!msg || msg.t !== 'mute') return;
       p.mutedAt = msg.on ? Date.now() : 0;
     };
@@ -808,7 +917,9 @@ module.exports = {
           if (r.muted && r.sealer && Date.now() - (r.beaconAt || 0) >= MUTE_BEACON_MS) sendRoomData(r, { t: 'mute', on: true });
           if (r.muted || !r.sealer || !voiced) continue;
           r.sentAt = Date.now();
-          r.out.push(Buffer.concat([Buffer.from([K_AUDIO]), Buffer.from(r.kid, 'hex'), r.sealer(ulawEncode(mic))]));
+          const opus = r.peers.size > 0 && [...r.peers.values()].every(p => p.opus);
+          if (opus && !r.enc) r.enc = makeEncoder('opus');
+          r.out.push(Buffer.concat([Buffer.from([K_AUDIO]), Buffer.from(r.kid, 'hex'), r.sealer(opus ? r.enc.encode(mic) : ulawEncode(mic))]));
         }
       });
       r.media = { stop() { capture.stop(); player.stop(); } };
@@ -824,6 +935,8 @@ module.exports = {
       room = null;
       clearTimeout(r.timer);
       if (r.media) r.media.stop();
+      if (r.enc) { r.enc.free(); r.enc = null; }
+      for (const p of r.peers.values()) if (p.dec) p.dec.free();
       try { r.out.end(); } catch (_) {}
       if (outcome) emit({ type: 'roomEnded', room: { rid: r.rid, ref: r.ref, title: r.title, joinedAt: r.joinedAt, endedAt: Date.now(), outcome } });
       roomChanged();
@@ -843,7 +956,7 @@ module.exports = {
         const req = opened(raw);
         const { sender: from, via } = senderOf(this, req);
         reply(null, true);
-        if (!audio || !from || from === server.id || !req || typeof req !== 'object') return;
+        if (!from || from === server.id || !req || typeof req !== 'object') return;
         const { callId, to, ephPk, ts, sig } = req;
         if (!/^[0-9a-f]{32}$/.test(String(callId)) || to !== server.id || Math.abs(Date.now() - Number(ts)) > CLOCK_SKEW_MS) return;
         const remotePk = ephKey(ephPk);
@@ -853,21 +966,33 @@ module.exports = {
           if (!via && call.phase === 'incoming' && call.peer === from) call.via = null;
           return;
         }
-        if (!firstSeen(callId) || call || room) return;
+        if (!firstSeen(callId)) return;
+        const ack = (state) => {
+          const at = Date.now();
+          sendVia(directRings.has(callId) ? null : via, from, 'answer', { callId, from: server.id, ringing: state, ts: at, sig: signParts(keys, ['ringing', callId, state, from, at]) });
+        };
         allowedCaller(from, (ok) => {
-          if (!ok || call || room) return;
+          if (!ok || !audio) return ack('ringing');
+          if (call || room) {
+            ack('busy');
+            const at = Date.now();
+            emit({ type: 'ended', call: { id: callId, peer: from, dir: 'in', startedAt: at, answeredAt: 0, endedAt: at, outcome: 'missed' } });
+            return;
+          }
           const startedAt = Date.now();
-          call = { id: callId, peer: from, dir: 'in', phase: 'incoming', startedAt, ringUntil: startedAt + ringMs, remotePk, via: directRings.has(callId) ? null : via };
+          call = { id: callId, peer: from, dir: 'in', phase: 'incoming', startedAt, ringUntil: startedAt + ringMs, remotePk, via: directRings.has(callId) ? null : via, codec: pickCodec(req.codecs) };
           call.tone = startTone(audio, 'ring');
           call.timer = setTimeout(() => { if (call && call.id === callId && call.phase === 'incoming') finish('missed'); }, ringMs);
           changed();
           emit({ type: 'incoming', id: callId, peer: from });
+          ack('ringing');
         });
       },
       answer(raw, cb) {
         const req = opened(raw);
         const { sender: from, via } = senderOf(this, req);
         const c = call;
+        if (req && (req.ringing === 'ringing' || req.ringing === 'busy')) return ringingAck(c, req, from, cb);
         if (c && c.group) return groupAnswer(c, req, from, via, cb);
         if (!c || c.dir !== 'out' || c.phase !== 'calling' || from !== c.peer || !req || req.callId !== c.id) return cb(new Error('no-call'));
         const calleePk = ephKey(req.ephPk);
@@ -875,6 +1000,7 @@ module.exports = {
         const path = via ? liveRpc(via) : liveRpc(from);
         if (!path) return cb(new Error('no-connection'));
         c.keys = deriveKeys(c.eph.secretKey, calleePk, c.id, Buffer.from(c.eph.publicKey), calleePk);
+        c.codec = pickCodec([req.codec]);
         clearTimeout(c.timer);
         stopTone(c);
         c.via = via;
@@ -959,28 +1085,24 @@ module.exports = {
         return { source: remote.source, sink: remote.sink };
       },
 
-      call(target, cb) {
+      call(target, opts, cb) {
+        if (typeof opts === 'function') { cb = opts; opts = {}; }
+        const legacy = new Set(Array.isArray(opts && opts.legacy) ? opts.legacy : []);
         if (!audio) return cb(new Error('unavailable'));
         const targets = [...new Set(Array.isArray(target) ? target : [target])];
         if (!targets.length || targets.length > GROUP_MAX || targets.some(t => !isFeedId(t) || t === server.id)) return cb(new Error('invalid'));
         if (call || room) return cb(new Error('busy'));
-        if (targets.length > 1) return groupCall(targets, cb);
+        if (targets.length > 1) return groupCall(targets, legacy, cb);
         target = targets[0];
         const id = nodeCrypto.randomBytes(16).toString('hex');
         const eph = sodium.crypto_box_keypair();
         const startedAt = Date.now();
         const c = { id, peer: target, dir: 'out', phase: 'calling', startedAt, ringUntil: startedAt + ringMs, eph, paths: [], via: null };
         call = c;
-        c.tone = startTone(audio, 'ringback');
-        c.timer = setTimeout(() => {
-          if (call !== c || c.phase !== 'calling') return;
-          stopTone(c);
-          notifyHangup(c);
-          startRecording(c);
-          changed();
-        }, ringMs);
+        c.tone = startTone(audio, 'connecting');
+        c.timer = setTimeout(() => toVoicemail(c, 'unreachable'), ringMs);
         changed();
-        ringPaths(c, target, ringRequest(id, eph, target), () => call === c && c.phase === 'calling');
+        ringPaths(c, target, ringRequest(id, eph, target), () => call === c && c.phase === 'calling', () => reachedCall(c), legacy.has(target));
         cb(null, snapshot());
       },
       accept(cb) {
@@ -995,7 +1117,7 @@ module.exports = {
         changed();
         const ts = Date.now();
         const ephPk = b64(eph.publicKey);
-        sendVia(c.via || null, c.peer, 'answer', { callId: c.id, from: server.id, ephPk, ts, sig: signParts(keys, ['answer', c.id, ephPk, c.peer, ts]) }, (err) => {
+        sendVia(c.via || null, c.peer, 'answer', { callId: c.id, from: server.id, ephPk, ts, sig: signParts(keys, ['answer', c.id, ephPk, c.peer, ts]), codec: c.codec }, (err) => {
           if (call !== c) return;
           if (err) return finish('failed');
           if (c.phase === 'connecting') { c.phase = 'connected'; changed(); }
@@ -1056,6 +1178,11 @@ module.exports = {
         const r = hubRooms.get(String((opts && opts.rid) || ''));
         cb(null, { count: r ? r.members.size : 0, max: roomMax });
       },
+      roomAdmits(opts, cb) {
+        const from = this && this.id;
+        if (!from) return cb(null, false);
+        relayAllowed(from, from, (ok) => cb(null, !!ok));
+      },
       roomJoin(opts, cb) {
         if (!audio) return cb(new Error('unavailable'));
         if (call || room) return cb(new Error('busy'));
@@ -1100,7 +1227,12 @@ module.exports = {
         const live = liveRpc(opts.hub);
         if (live) return viaRpc(live);
         if (typeof opts.address === 'string' && opts.address) {
-          try { return server.conn.connect(opts.address, (err, rpc) => viaRpc(!err && rpc && rpc.phone ? rpc : liveRpc(opts.hub))); } catch (_) {}
+          try {
+            return server.conn.connect(opts.address, (err, rpc) => {
+              const got = !err && rpc && rpc.phone ? rpc : liveRpc(opts.hub);
+              return got ? viaRpc(got) : reach(opts.hub, viaRpc);
+            });
+          } catch (_) {}
         }
         reach(opts.hub, viaRpc);
       },
@@ -1128,16 +1260,30 @@ module.exports = {
       },
       roomState() { return roomSnapshot(); },
       roomToken(rid) { return RID.test(String(rid || '')) ? signParts(keys, ['room', String(rid)]) : null; },
-      roomHubFor() {
+      roomHubFor(cb) {
+        const done = typeof cb === 'function' ? cb : () => {};
         let entries = [];
-        try { entries = server.conn.query().peersAll(); } catch (_) {}
-        for (const id of knownPubs()) {
+        try { entries = netFirst(server.conn.query().peersAll()); } catch (_) {}
+        const ranked = typeof server.oasisPeerRank === 'function' ? (id) => server.oasisPeerRank([null, { key: id }]) : () => 0;
+        const candidates = knownPubs().filter(id => { const rpc = liveRpc(id); return rpc && rpc.phone && typeof rpc.phone.roomHub === 'function'; }).sort((x, y) => ranked(y) - ranked(x));
+        const admits = (id, next) => {
           const rpc = liveRpc(id);
-          if (!rpc || typeof rpc.phone.roomHub !== 'function') continue;
-          const hit = entries.find(e => Array.isArray(e) && e[0] && e[1] && e[1].key === id);
-          return { key: id, address: hit ? hit[0] : '' };
-        }
-        return { key: server.id, address: '' };
+          const byGraph = () => relation('isFollowing', id, server.id, next);
+          if (!rpc || typeof rpc.phone.roomAdmits !== 'function') return byGraph();
+          let settled = false;
+          const finishAsk = (fn) => { if (settled) return; settled = true; clearTimeout(t); fn(); };
+          const t = setTimeout(() => finishAsk(() => next(false)), ROOM_PEEK_MS);
+          try { rpc.phone.roomAdmits({}, (err, ok) => finishAsk(err ? byGraph : () => next(!!ok))); } catch (_) { finishAsk(byGraph); }
+        };
+        const pick = (i) => {
+          if (i >= candidates.length) return done(null, { key: server.id, address: '' });
+          admits(candidates[i], (ok) => {
+            if (!ok) return pick(i + 1);
+            const hit = entries.find(e => Array.isArray(e) && e[0] && e[1] && e[1].key === candidates[i]);
+            done(null, { key: candidates[i], address: hit ? hit[0] : '' });
+          });
+        };
+        pick(0);
       },
       state() { return snapshot(); },
       available() { return !!audio; },

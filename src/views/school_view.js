@@ -1,11 +1,12 @@
-const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress } = require("../server/node_modules/hyperaxe")
+const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, renderStyledHtml } = require("../backend/renderStyledText")
 const nameCache = require("../backend/nameCache")
 const { sanitizeHtml } = require("../backend/sanitizeHtml")
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const renderMd = (text) => div({ class: "styled-text", innerHTML: sanitizeHtml(renderStyledHtml(String(text || ""))) })
 
 const userId = config.keys.id
@@ -13,6 +14,10 @@ const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v || "").trim()
 const isFree = (course) => !(Number(course.price) > 0)
 const isProtected = (course) => !isFree(course) || course.visibility === "INVITE"
+const clearnetEligible = (course) => course.visibility === "PUBLIC" && isFree(course) && !course.encrypted
+const COURSE_TYPES = ["OPEN", "PAID", "INVITE"]
+const courseTypeOf = (course) => COURSE_TYPES.includes(String(course.courseType || "").toUpperCase()) ? String(course.courseType).toUpperCase() : (course.visibility === "INVITE" ? "INVITE" : (Number(course.price) > 0 ? "PAID" : "OPEN"))
+const courseTypeLabel = (v) => v === "INVITE" ? i18n.schoolTypeInvite : (v === "PAID" ? i18n.schoolTypePaid : i18n.schoolTypeOpen)
 const sumCats = (opinions = {}, cats = []) => (cats || []).reduce((sum, cat) => sum + (Number((opinions || {})[cat]) || 0), 0)
 const renderStarRating = (opinions, voterCount) => {
   const pos = sumCats(opinions, opinionCategories.positive)
@@ -69,6 +74,7 @@ const renderCourseChips = (course, subscription = null) =>
       ? renderStateChip("closed", "✗", i18n.schoolClosed)
       : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
     renderPriceChip(course),
+    course.clearnet === true && clearnetEligible(course) ? renderReachChip(true, i18n, clearnetItemHref('school', course.title, course.id)) : null,
     subscription
       ? (subscription.in
           ? renderStateChip("mutuals", "\u2709", i18n.subscriptionOn)
@@ -78,7 +84,20 @@ const renderCourseChips = (course, subscription = null) =>
 
 const renderCourseCard = (course, filter, params = {}) => {
   const url = `/school/course/${encodeURIComponent(course.id)}`
+  const isOwn = String(course.author) === String(userId)
   return div({ class: "tribe-card" },
+    div({ class: "card-header activity-card-header" },
+      span(),
+      renderContentActions(course.id, url, {
+        spread: (params.spreadMap && params.spreadMap.get(course.id)) || null,
+        author: course.author,
+        favKind: 'school',
+        isFavorite: course.isFavorite,
+        reportTitle: course.title,
+        returnTo: buildReturnTo(filter, params),
+        deleteAction: isOwn ? contentDeleteAction('schoolCourse', course.id) : undefined
+      })
+    ),
     div({ class: "tribe-card-image-wrapper" },
       a({ href: url },
         renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-card-hero-image' })
@@ -99,11 +118,29 @@ const renderCourseCard = (course, filter, params = {}) => {
   )
 }
 
-const renderCourseForm = (filter, course = {}) => {
+const renderCourseForm = (filter, course = {}, params = {}) => {
   const isEdit = filter === "edit"
+  const reachRaw = String(params.reach || "").toUpperCase()
+  const reach = COURSE_TYPES.includes(reachRaw) ? reachRaw : courseTypeOf(course)
   return div({ class: "create-tribe-form" },
     h2(isEdit ? i18n.schoolUpdateSectionTitle : i18n.schoolCreateSectionTitle),
+    form({ method: "GET", action: "/school" },
+      input({ type: "hidden", name: "filter", value: isEdit ? "edit" : "create" }),
+      isEdit ? input({ type: "hidden", name: "courseId", value: course.id || "" }) : null,
+      label(i18n.schoolCourseType), br(),
+      div({ class: "apply-row" },
+        select({ name: "courseType", class: "report-category-select" },
+          option({ value: "OPEN", ...(reach === "OPEN" ? { selected: true } : {}) }, i18n.schoolTypeOpen),
+          option({ value: "PAID", ...(reach === "PAID" ? { selected: true } : {}) }, i18n.schoolTypePaid),
+          option({ value: "INVITE", ...(reach === "INVITE" ? { selected: true } : {}) }, i18n.schoolTypeInvite)
+        ),
+        button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
+      )
+    ),
+    hr({ class: "form-sep" }),
+    h2({ class: "report-category-fixed" }, courseTypeLabel(reach)),
     form({ action: isEdit ? `/school/update/${encodeURIComponent(course.id || "")}` : "/school/create", method: "POST", enctype: "multipart/form-data" },
+      input({ type: "hidden", name: "courseType", value: reach }),
       label(i18n.title), br,
       input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolCourseTitlePlaceholder, value: course.title || "" }), br(),
       label(i18n.description), br,
@@ -111,18 +148,18 @@ const renderCourseForm = (filter, course = {}) => {
       label(i18n.blogImage), br,
       input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
       label(i18n.schoolTags), br,
-      input({ type: "text", name: "tags", placeholder: i18n.schoolTagsPlaceholder, value: safeArr(course.tags).join(", ") }), br,
-      label(i18n.schoolCourseType), br,
-      (() => {
-        const current = course.visibility === "INVITE" ? "INVITE" : (Number(course.price) > 0 ? "PAID" : "OPEN")
-        return select({ name: "courseType" },
-          option({ value: "OPEN", ...(current === "OPEN" ? { selected: true } : {}) }, i18n.schoolTypeOpen),
-          option({ value: "PAID", ...(current === "PAID" ? { selected: true } : {}) }, i18n.schoolTypePaid),
-          option({ value: "INVITE", ...(current === "INVITE" ? { selected: true } : {}) }, i18n.schoolTypeInvite)
-        )
-      })(), br(), br(),
-      label(i18n.schoolPrice), br,
-      input({ type: "number", name: "price", step: "0.000001", min: "0", value: course.price && Number(course.price) > 0 ? course.price : "0" }), renderEcoValueChip(), br(), br(),
+      input({ type: "text", name: "tags", placeholder: i18n.schoolTagsPlaceholder, value: Array.isArray(course.tags) ? course.tags.join(", ") : (course.tags || "") }), br,
+      ...(reach === "PAID"
+        ? [
+            label(i18n.schoolPrice), br,
+            input({ type: "number", name: "price", step: "0.000001", min: "0.000001", required: true, value: course.price && Number(course.price) > 0 ? course.price : "" }), renderEcoValueChip(), br(), br()
+          ]
+        : reach === "INVITE"
+          ? [
+              label(i18n.schoolPrice), br,
+              input({ type: "number", name: "price", step: "0.000001", min: "0", value: course.price && Number(course.price) > 0 ? course.price : "0" }), renderEcoValueChip(), br(), br()
+            ]
+          : [input({ type: "hidden", name: "price", value: "0" })]),
       label(i18n.schoolStartDate), br,
       input({ type: "datetime-local", name: "startDate", min: moment().format("YYYY-MM-DDTHH:mm"), value: course.startDate ? moment(course.startDate).format("YYYY-MM-DDTHH:mm") : "" }), br(),
       isEdit
@@ -134,6 +171,7 @@ const renderCourseForm = (filter, course = {}) => {
             ), br()
           )
         : null,
+      reach === "OPEN" && clearnetEligible({ ...course, visibility: "PUBLIC", price: "0" }) ? renderClearnetSelector(course.clearnet === true || String(course.clearnet || "") === "1", i18n) : null,
       br(),
       button({ type: "submit" }, isEdit ? i18n.schoolUpdate : i18n.schoolCreate)
     )
@@ -150,7 +188,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
 
   return template(
     title,
-    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.schoolDescription), renderWalletChip(), (() => { const { renderReachChip } = require('./clearnet_view'); return params && params.viewerPrefs ? renderReachChip(params.viewerPrefs.clearnetSchool === true, i18n, `/c/inhabitant/${encodeURIComponent((params && params.viewerId) || '')}`) : null; })())),
+    section(div({ class: "tags-header module-header-line" }, h2(title), p(i18n.schoolDescription), renderWalletChip())),
     section(renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null)),
     !isForm && !emptyMod
       ? section(
@@ -173,7 +211,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
       : null,
     section(
       isForm
-        ? renderCourseForm(filter, filter === "edit" ? (courseToEdit || {}) : {})
+        ? renderCourseForm(filter, filter === "edit" ? (courseToEdit || {}) : (params.draft || {}), params)
         : div({ class: "tribe-grid" },
             list.length
               ? list.map(course => renderCourseCard(course, filter, params))
@@ -349,6 +387,8 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
   const isStudent = course.students.includes(userId)
   const myPending = safeArr(course.pending).find(p => p.author === userId) || null
   const isPaid = !isFree(course)
+  const canClearnet = clearnetEligible(course)
+  const isClearnet = canClearnet && !!course.clearnet
   lessons = safeArr(lessons)
   certificates = safeArr(certificates)
   const myCompleted = lessons.filter(lesson => lesson.completed).length
@@ -356,7 +396,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
 
   const courseSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(course.id, null, { spread: params.spreads || null, author: course.author, favKind: 'school', isFavorite: course.isFavorite, returnTo, reportTitle: course.title })
+      renderContentActions(course.id, returnTo, { spread: params.spreads || null, author: course.author, favKind: 'school', isFavorite: course.isFavorite, returnTo, reportTitle: course.title, deleteAction: isTeacher ? contentDeleteAction('schoolCourse', course.id) : undefined })
     ),
     h2({ class: "tribe-card-title" }, course.title),
     renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
@@ -366,6 +406,8 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
         ? renderStateChip("closed", "✗", i18n.schoolClosed)
         : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
       renderPriceChip(course),
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('school', course.title, course.id) : null),
+      isTeacher && canClearnet ? renderClearnetSwitch('school', course.rootId || course.id, isClearnet) : null,
       courseApproved ? renderStateChip("mutuals", "🎓", i18n.schoolApproved) : null,
       params.subscription && (isTeacher || isStudent)
         ? ((isTeacher || params.subscription.subscribed === true)
@@ -497,9 +539,6 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
             input({ type: "hidden", name: "filter", value: "edit" }),
             input({ type: "hidden", name: "courseId", value: course.id }),
             button({ type: "submit", class: "tribe-action-btn" }, i18n.chatUpdate)
-          ),
-          form({ method: "POST", action: `/school/delete/${encodeURIComponent(course.id)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
           )
         )
       : null,
@@ -794,7 +833,12 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
 
   const lessonSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(lesson.id, courseUrl, { author: course.author, reportTitle: lesson.title || course.title })
+      renderContentActions(lesson.id, lessonUrl, {
+        author: lesson.author || course.author,
+        reportTitle: lesson.title || course.title,
+        returnTo: courseUrl,
+        deleteAction: String(lesson.author || course.author) === String(userId) ? `/school/lesson/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` : undefined
+      })
     ),
     h2({ class: "tribe-card-title" }, a({ href: courseUrl }, course.title)),
     renderCourseChips(course),
@@ -827,10 +871,6 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
           form({ method: "GET", action: lessonUrl },
             input({ type: "hidden", name: "edit", value: "1" }),
             button({ type: "submit", class: "tribe-action-btn" }, i18n.chatUpdate)
-          ),
-          form({ method: "POST", action: `/school/lesson/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` },
-            input({ type: "hidden", name: "returnTo", value: courseUrl }),
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
           )
         )
       : null

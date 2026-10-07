@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const crypto = require('crypto');
 const { readTyped } = require('./typed_log');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const longText = require('../backend/long_text');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -56,6 +57,7 @@ module.exports = ({ cooler, subscriptionsModel = null }) => {
     const lists = [];
     const leaves = [];
     const posts = [];
+    const chunks = new Map();
     const tombClaims = new Map();
     const authorByKey = new Map();
     for (const m of raw) {
@@ -75,6 +77,11 @@ module.exports = ({ cooler, subscriptionsModel = null }) => {
         tombClaims.set(c.target, set);
         continue;
       }
+      if (c.type === longText.CHUNK_TYPE) {
+        const ch = longText.chunkOf(v.author, c);
+        if (ch) chunks.set(k, ch);
+        continue;
+      }
       authorByKey.set(k, v.author);
       if (c.type === LIST_TYPE) lists.push({ key: k, author: v.author, ts, c });
       else if (c.type === LEAVE_TYPE && c.list) leaves.push({ key: k, author: v.author, ts, list: String(c.list) });
@@ -88,7 +95,7 @@ module.exports = ({ cooler, subscriptionsModel = null }) => {
       const orig = authorByKey.get(target);
       for (const a of authors) if (a === orig || a === me) { tombed.add(target); break; }
     }
-    return { lists, leaves, posts: posts.filter(p => !tombed.has(p.key)), tombed };
+    return { lists, leaves, posts: posts.filter(p => !tombed.has(p.key)), tombed, chunks };
   };
 
   const buildIndex = (publicMsgs, priv) => {
@@ -162,7 +169,7 @@ module.exports = ({ cooler, subscriptionsModel = null }) => {
     }
     const out = Array.from(seen.values()).map(p => ({
       key: p.key, mid: p.c.mid ? String(p.c.mid) : p.key, list: String(p.c.list),
-      author: p.author, subject: safeText(p.c.subject), text: safeText(p.c.text),
+      author: p.author, subject: safeText(p.c.subject), text: safeText(longText.joinText(p.c.text, p.c.chunks, longText.lookupIn(priv.chunks), p.author)),
       thread: p.c.thread ? String(p.c.thread) : (p.c.mid ? String(p.c.mid) : p.key),
       sentAt: p.c.sentAt || new Date(p.ts).toISOString(), ts: Date.parse(p.c.sentAt || '') || p.ts
     }));
@@ -354,11 +361,14 @@ module.exports = ({ cooler, subscriptionsModel = null }) => {
         mid,
         thread: threadId || mid
       };
+      const sendBatch = async (recps) => {
+        const sealed = await longText.chunkContent({ ...content, to: recps }, 'text', { maxBytes: longText.CONTENT_BYTES.boxed, extra: { private: true }, publish: (c) => publishPrivate(ssbClient, c, recps) });
+        return publishPrivate(ssbClient, sealed, recps);
+      };
       const out = [];
-      if (!others.length) out.push(await publishPrivate(ssbClient, { ...content, to: [me] }, [me]));
+      if (!others.length) out.push(await sendBatch([me]));
       for (let i = 0; i < others.length; i += BATCH) {
-        const recps = uniq([me, ...others.slice(i, i + BATCH)]);
-        out.push(await publishPrivate(ssbClient, { ...content, to: recps }, recps));
+        out.push(await sendBatch(uniq([me, ...others.slice(i, i + BATCH)])));
       }
       return { key: out[0].key, mid, thread: content.thread, batches: out.length };
     },

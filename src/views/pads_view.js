@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -112,7 +112,7 @@ const renderPadCard = (pad, filter, spreadInfo) => {
   return div({ class: "tribe-card" },
     div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(pad.rootId || pad.key, `/pads/${encodeURIComponent(pad.rootId)}`, { spread: spreadInfo || null, author: pad.author, favKind: 'pads', isFavorite: pad.isFavorite, reportTitle: pad.title })
+      renderContentActions(pad.rootId || pad.key, `/pads/${encodeURIComponent(pad.rootId)}`, { spread: spreadInfo || null, author: pad.author, favKind: 'pads', isFavorite: pad.isFavorite, reportTitle: pad.title, deleteAction: String(pad.author) === String(userId) ? contentDeleteAction('pad', pad.rootId || pad.key) : undefined })
     ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
@@ -284,11 +284,6 @@ exports.singlePadView = async (pad, entries, params) => {
           input({ type: "hidden", name: "id", value: pad.rootId }),
           button({ type: "submit", class: "update-btn" }, i18n.padUpdate || "Update")
         )
-      : null,
-    isAuthor
-      ? form({ method: "POST", action: `/pads/delete/${encodeURIComponent(pad.rootId)}` },
-          button({ type: "submit", class: "delete-btn" }, i18n.padDelete || "Delete")
-        )
       : null
   ].filter(Boolean)
 
@@ -296,13 +291,14 @@ exports.singlePadView = async (pad, entries, params) => {
     div({ class: "tribe-side-actions wiki-actions-top pad-actions-top" },
       span({ class: "wiki-actions-left" },
         div({ class: "card-header activity-card-header" },
-          renderContentActions(pad.rootId, null, {
+          renderContentActions(pad.rootId, returnTo, {
             author: pad.author,
             favKind: 'pads',
             isFavorite: pad.isFavorite,
             spread: (params && params.spreads) || null,
             returnTo,
-            reportTitle: pad.title
+            reportTitle: pad.title,
+            deleteAction: isAuthor ? contentDeleteAction('pad', pad.rootId) : undefined
           })
         )
       ),

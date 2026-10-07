@@ -1,8 +1,9 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf, renderZoomableImage } = require("./gallery_view");
+const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -53,11 +54,6 @@ const renderTaskOwnerActions = (task, returnTo) => {
       { method: "GET", action: `/tasks/edit/${encodeURIComponent(task.id)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ type: "submit", class: "update-btn" }, i18n.taskUpdateButton)
-    ),
-    form(
-      { method: "POST", action: `/tasks/delete/${encodeURIComponent(task.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "delete-btn" }, i18n.taskDeleteButton)
     ),
   ];
 };
@@ -132,8 +128,10 @@ const renderTaskItem = (task, filter, spreadInfo) => {
   const currentFilter = filter || "all";
   const assignees = safeArray(task.assignees);
   const isPrivate = String(task.isPublic || "").toUpperCase() === "PRIVATE";
+  const isAuthor = String(task.author) === String(userId);
+  const origin = task.tribeOrigin || null;
 
-  const cover = imagesOf(task)[0]
+  const cover = origin ? null : imagesOf(task)[0]
   const heroNode = cover
     ? div({ class: "tribe-card-image-wrapper" },
         a({ href: `/tasks/${encodeURIComponent(task.id)}` },
@@ -152,24 +150,25 @@ const renderTaskItem = (task, filter, spreadInfo) => {
     isPrivate ? renderPrivacyChip(true, i18n) : null,
     renderTaskStatusChip(task.status),
     renderTaskPriorityChip(task.priority),
-    renderLifespanChip(task.lifetime, i18n)
+    renderLifespanChip(task.lifetime, i18n),
+    origin ? renderTribeOriginChip(origin) : null
   ].filter(Boolean);
 
 
   return div({ class: "tribe-card task-card" },
-    div({ class: "card-header activity-card-header" },
+    origin ? null : div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(task.id, `/tasks/${encodeURIComponent(task.id)}`, { spread: spreadInfo || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title })
+      renderContentActions(task.id, `/tasks/${encodeURIComponent(task.id)}`, { spread: spreadInfo || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, returnTo: `/tasks?filter=${encodeURIComponent(currentFilter)}`, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined })
     ),
     heroNode,
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: `/tasks/${encodeURIComponent(task.id)}` }, task.title || i18n.tasksTitle)
+          a({ href: origin ? origin.href : `/tasks/${encodeURIComponent(task.id)}` }, task.title || i18n.tasksTitle)
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      div({ class: "tribe-card-members" },
+      origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
       )
     )
@@ -411,7 +410,7 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
 
   const taskSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(task.id, null, { spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title })
+      renderContentActions(task.id, `/tasks/${encodeURIComponent(task.id)}`, { spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, task.title)

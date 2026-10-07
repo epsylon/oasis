@@ -133,7 +133,7 @@ EMB_DIR="$MODEL_DIR/embeddings"
 EMB_TAR="oasis-embeddings.tar.gz"
 EMB_FILE="$EMB_DIR/onnx/model_quantized.onnx"
 CONFIG_PATH="../configs/oasis-config.json"
-MODEL_MIRRORS="${OASIS_MODEL_MIRRORS:-} https://solarnethub.com/code/models https://pub.4ndr0m3d4.xyz"
+MODEL_MIRRORS="${OASIS_MODEL_MIRRORS:-} https://solarnethub.com/code/models https://4ndr0m3d4.xyz"
 
 download_package() {
     local name="$1" out="$2" base url

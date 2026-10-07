@@ -154,6 +154,7 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
     larpSign: raw.larpSign === true,
     gpg:      raw.gpg      === true,
     phone:    raw.phone === 'mutuals' || raw.phone === 'off' ? raw.phone : 'whole',
+    phoneDnd: raw.phoneDnd === true,
     clearnet: hasClearnet,
     fediverse: raw.fediverse === true,
     fediverseHandle: typeof raw.fediverseHandle === 'string' ? raw.fediverseHandle : ''
@@ -377,6 +378,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
     larpSign: rawPrefs.larpSign === true,
     gpg:      rawPrefs.gpg      === true,
     phone:    rawPrefs.phone === 'mutuals' || rawPrefs.phone === 'off' ? rawPrefs.phone : 'whole',
+    phoneDnd: rawPrefs.phoneDnd === true,
     clearnet: rawPrefs.clearnet === true || clearnetSubKeys.some(k => rawPrefs[k] === true),
     fediverse: rawPrefs.fediverse === true,
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : ''
@@ -444,13 +446,14 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
                     const raw = (m.value?.content?.text || '').replace(/<br\s*\/?>/g, '');
                     const parts = stripAndCollectImgs(raw);
                     const tid = msgIdOf(m);
-                    const visitBtn = tid
-                      ? form({ method: 'GET', action: `/thread/${encodeURIComponent(tid)}#${encodeURIComponent(tid)}` },
-                          button({ type:'submit', class:'filter-btn' }, i18n.visitContent)
+                    const actions = tid
+                      ? div({ class: 'card-header activity-card-header' },
+                          span(),
+                          renderContentActions(tid, `/thread/${encodeURIComponent(tid)}#${encodeURIComponent(tid)}`, { author: m.value?.author, reportTitle: parts.clean })
                         )
                       : null;
                     return div({ class: 'post' },
-                      visitBtn,
+                      actions,
                       parts.clean && parts.clean.trim() ? p(...renderStyledText(parts.clean)) : null,
                       ...(parts.imgs || []).map(src => renderZoomableImage(src, { imgClass: 'post-image', alt: 'image' }))
                     );

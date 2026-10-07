@@ -279,21 +279,21 @@ header {
 
 
 
-a.user-link {
+a.user-link, button.user-link {
   background-color: #FFD600;
   color: #3C1360;
   border-color: #FFD600;
   transition: background-color 0.3s, color 0.3s, border-color 0.3s;
 }
 
-a.user-link:hover {
+a.user-link:hover, button.user-link:hover {
   background-color: #FFB600;
   border-color: #FFB600;
   color: #3C1360;
   cursor: pointer;
 }
 
-a.user-link:focus {
+a.user-link:focus, button.user-link:focus {
   background-color: #9A2F2F;
   border-color: #9A2F2F;
   color: #E5E5E5;
@@ -337,7 +337,7 @@ a.user-link:focus {
 .stats-kpi-value { color: #FFEEDB !important; }
 .carbon-bar-note, .carbon-bar-formula { color: #FFEEDB !important; }
 .graphos-node-label { fill: #FFEEDB !important; }
-.graphos-node-label-me { fill: #ffa500 !important; }
+.graphos-node-label-me { fill: #5dade2 !important; }
 .graphos-legend { color: #FFEEDB !important; }
 /* Blockexplorer */
 .blockchain-view { background-color: #2D0B47 !important; color: #FFEEDB !important; }
@@ -389,3 +389,37 @@ a.user-link:focus {
 .tribe-parent-image { border-color: #B86ADE !important; }
 .tribe-parent-box { background: #3C1360 !important; }
 .trending-card.own-content { box-shadow: inset 3px 0 0 #B86ADE; }
+.map-stage { background: #2a0640 !important; border-color: #9B1C96 !important; }
+.map-label-country { fill: #E5E5E5; stroke: #2a0640; }
+.map-place-dot { fill: #ffffff; stroke: #2a0640; }
+.map-place-capital { fill: #B86ADE; }
+.map-place-label { fill: #E5E5E5; stroke: #2a0640; }
+.map-pin-focus .map-pin-body, .map-cluster-dot { fill: #B86ADE; }
+.map-pin-focus .map-pin-label-bg { stroke: #B86ADE; }
+.map-pins-layer a:hover .map-pin-body, .map-pins a:hover .map-pin-body { fill: #B86ADE; }
+.map-cluster-ring { fill: rgba(184, 106, 222, 0.28); }
+.map-pick-ring, .map-pick-cross { stroke: #B86ADE; }
+.map-scale-text { stroke: #2a0640; }
+.map-attrib { fill: #9B7CAA; }
+.map-ctrl { background: rgba(43, 10, 70, 0.9) !important; color: #E5E5E5 !important; border-color: #9B1C96 !important; }
+.map-ctrl:hover { background: #B86ADE !important; color: #000000 !important; border-color: #B86ADE !important; }
+.map-ctrl-off:hover { background: rgba(43, 10, 70, 0.9) !important; color: #E5E5E5 !important; border-color: #9B1C96 !important; }
+.map-pick-cell, .map-pick-cell:hover { border: 0 !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+.map-pick-cell { background: transparent !important; }
+.map-pick-cell:hover { background: rgba(184, 106, 222, 0.22) !important; outline-color: rgba(184, 106, 222, 0.7); }
+.map-place-result, .map-center-link { color: #E5E5E5 !important; border-color: #9B1C96 !important; }
+.map-place-result:hover, .map-center-link:hover { background: #B86ADE !important; color: #000000 !important; border-color: #B86ADE !important; }
+.map-picked { background: #3C1360 !important; color: #E5E5E5 !important; }
+.map-picked-near { color: #C8C8C8 !important; }
+.map-markers-list .map-marker-row { border-color: #5A1A85 !important; }
+.map-markers-list .map-marker-row--focus { background: rgba(184, 106, 222, 0.1) !important; box-shadow: inset 3px 0 0 #B86ADE !important; }
+.map-marker-row--focus .map-marker-idx { background: #B86ADE !important; color: #000000 !important; }
+.map-marker-label { color: #B86ADE !important; }
+.map-marker-date { color: #C8C8C8 !important; }
+.map-popup-pointer { fill: #3C1360; stroke: #9B1C96; }
+.map-stage .map-popup-card { background: #3C1360; border-color: #9B1C96; color: #E5E5E5; }
+.map-stage .map-popup-text { color: #E5E5E5; }
+.map-popup-coords { color: #ffffff; }
+.map-stage .map-popup-meta { color: #C8C8C8; }
+.map-popup-close { color: #C8C8C8; }
+.map-popup-close:hover { color: #B86ADE; }

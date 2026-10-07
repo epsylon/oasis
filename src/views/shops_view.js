@@ -1,16 +1,19 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td } = require("../server/node_modules/hyperaxe")
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const opinionCategories = require("../backend/opinion_categories")
-const { renderReachChip, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderRichText: cnRichText, renderKindTag: cnKindTag } = require("./clearnet_view")
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderRichText: cnRichText, renderKindTag: cnKindTag } = require("./clearnet_view")
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v || "").trim()
+const clearnetEligible = (shop) => String(shop.visibility || "").toUpperCase() !== "CLOSED" && !shop.encrypted
+const SHOP_REACH = ["OPEN", "CLOSED"]
+const shopReachLabel = (v) => v === "CLOSED" ? i18n.shopClosed : i18n.shopOpen
 const voteSum = (opinions = {}) => Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)
 const sumCats = (opinions = {}, cats = []) => (cats || []).reduce((s, c) => s + (Number((opinions || {})[c]) || 0), 0)
 const renderStarRating = (opinions, voterCount) => {
@@ -69,7 +72,7 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
 
   return div({ class: "tribe-card" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(shop.key, `/shops/${encodeURIComponent(shop.key)}`, { spread: params.spreadMap && params.spreadMap.get(shop.key) || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title })
+      renderContentActions(shop.key, `/shops/${encodeURIComponent(shop.key)}`, { spread: params.spreadMap && params.spreadMap.get(shop.key) || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined })
     ),
     div({ class: "tribe-card-image-wrapper" },
       a({ href: `/shops/${encodeURIComponent(shop.key)}` },
@@ -85,6 +88,7 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
           ? renderStateChip("closed", "✗", i18n.shopClosed)
           : renderStateChip("mutuals", "✓", i18n.shopOpen),
         renderLifespanChip(shop.lifetime, i18n),
+        shop.clearnet === true && clearnetEligible(shop) ? renderReachChip(true, i18n, clearnetItemHref('shops', shop.title, shop.key)) : null,
         shop.subscriptionIn === true
           ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
           : (shop.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
@@ -96,13 +100,16 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
   )
 }
 
-const renderProductCard = (product, shopId, returnTo) => {
+const renderProductCard = (product, shopId, returnTo, params = {}) => {
   const isAuthor = String(product.author) === String(userId)
   const stock = Number(product.stock) || 0
   const voterCount = safeArr(product.opinions_inhabitants).length
   const productUrl = `/shops/product/${encodeURIComponent(product.key)}?shopId=${encodeURIComponent(shopId)}`
 
   return div({ class: "shop-product-card" },
+    div({ class: "card-header activity-card-header" },
+      renderContentActions(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { spread: params.spreadMap && params.spreadMap.get(product.key) || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, reportTitle: product.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined })
+    ),
     product.image ? div({ class: "shop-product-media" }, a({ href: productUrl }, renderMediaBlob(product.image))) : null,
     div({ class: "shop-product-body" },
       product.shopTitle ? p(a({ href: `/shops/${encodeURIComponent(shopId)}`, class: "user-link" }, product.shopTitle)) : null,
@@ -139,11 +146,31 @@ const renderCommentsSection = (parentId, returnTo, comments = []) => {
 const renderShopForm = (filter, shop = {}, params = {}) => {
   const isEdit = filter === "edit"
   const returnTo = safeText(params.returnTo) || buildReturnTo("all")
+  const reachRaw = String(params.reach || "").toUpperCase()
+  const ownReach = String(shop.visibility || "").toUpperCase()
+  const reach = SHOP_REACH.includes(reachRaw) ? reachRaw : (SHOP_REACH.includes(ownReach) ? ownReach : "OPEN")
+  const showClearnet = isEdit ? clearnetEligible(shop) : reach === "OPEN" && clearnetEligible({ ...shop, visibility: reach })
   return div({ class: "create-tribe-form" },
     h2(isEdit ? i18n.shopUpdateSectionTitle : i18n.shopCreateSectionTitle),
     isEdit ? (params.spreadWarning || null) : null,
+    ...(isEdit ? [] : [
+      form({ method: "GET", action: "/shops" },
+        input({ type: "hidden", name: "filter", value: "create" }),
+        label(i18n.shopVisibility), br(),
+        div({ class: "apply-row" },
+          select({ name: "visibility", class: "report-category-select" },
+            option({ value: "OPEN", ...(reach === "OPEN" ? { selected: true } : {}) }, i18n.shopOpen),
+            option({ value: "CLOSED", ...(reach === "CLOSED" ? { selected: true } : {}) }, i18n.shopClosed)
+          ),
+          button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
+        )
+      ),
+      hr({ class: "form-sep" }),
+      h2({ class: "report-category-fixed" }, shopReachLabel(reach))
+    ]),
     form({ action: isEdit ? `/shops/update/${encodeURIComponent(shop.key || "")}` : "/shops/create", method: "POST", enctype: "multipart/form-data" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
+      isEdit ? null : input({ type: "hidden", name: "visibility", value: reach }),
       label(i18n.title || "Title"), br,
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.shopTitlePlaceholder || "Name of your shop", value: shop.title || "" }), br(),
       label(i18n.shopShortDescription), br,
@@ -159,14 +186,8 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       label(i18n.mapLocationTitle || "Map Location"), br,
       input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: shop.mapUrl || "" }), br,
       label(i18n.shopTags), br,
-      input({ type: "text", name: "tags", placeholder: i18n.shopTagsPlaceholder || "Enter tags separated by commas", value: safeArr(shop.tags).join(", ") }), br,
-      isEdit ? null : label(i18n.shopVisibility),
-      isEdit ? null : br,
-      isEdit ? null : select({ name: "visibility" },
-        option({ value: "OPEN", ...((shop.visibility || "OPEN") === "OPEN" ? { selected: true } : {})}, i18n.shopOpen),
-        option({ value: "CLOSED", ...(shop.visibility === "CLOSED" ? { selected: true } : {})}, i18n.shopClosed)
-      ),
-      isEdit ? null : br(),
+      input({ type: "text", name: "tags", placeholder: i18n.shopTagsPlaceholder || "Enter tags separated by commas", value: Array.isArray(shop.tags) ? shop.tags.join(", ") : (shop.tags || "") }), br,
+      showClearnet ? renderClearnetSelector(shop.clearnet === true || String(shop.clearnet || "") === "1", i18n) : null,
       br(),
       button({ type: "submit" }, isEdit ? i18n.shopUpdate : i18n.shopCreate)
     )
@@ -241,11 +262,11 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
       : null,
     section(
       isForm
-        ? renderShopForm(filter, filter === "edit" ? (shopToEdit || {}) : {}, params)
+        ? renderShopForm(filter, filter === "edit" ? (shopToEdit || {}) : (params.draft || {}), params)
         : isProducts
           ? div({ class: "shop-products-grid" },
               list.length
-                ? list.map(prod => renderProductCard(prod, prod.shopId, buildReturnTo(filter, { q })))
+                ? list.map(prod => renderProductCard(prod, prod.shopId, buildReturnTo(filter, { q }), params))
                 : p(i18n.shopNoProducts)
             )
           : div({ class: "tribe-grid" },
@@ -261,12 +282,13 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
   const q = safeText(params.q || "")
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q })
   const isAuthor = String(shop.author) === String(userId)
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetShops === true)
+  const canClearnet = clearnetEligible(shop)
+  const isClearnet = canClearnet && !!shop.clearnet
   products = safeArr(products)
 
   const shopSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(shop.key, null, { spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title })
+      renderContentActions(shop.key, `/shops/${encodeURIComponent(shop.key)}`, { spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, shop.title || i18n.shopUntitled)
@@ -277,7 +299,8 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         : renderStateChip("mutuals", "✓", i18n.shopOpen),
       shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
       renderLifespanChip(shop.lifetime, i18n),
-      renderReachChip(isClearnet, i18n, clearnetItemHref('shops', shop.title, shop.rootId || shop.key)),
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('shops', shop.title, shop.key) : null),
+      isAuthor && canClearnet ? renderClearnetSwitch('shops', shop.rootId || shop.key, isClearnet) : null,
       shop.subscription
         ? ((isAuthor || shop.subscription.subscribed === true)
             ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
@@ -369,9 +392,6 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       ? div({ class: "tribe-side-actions owner-actions" },
           form({ method: "GET", action: `/shops/edit/${encodeURIComponent(shop.key)}` },
             button({ type: "submit", class: "tribe-action-btn" }, i18n.shopUpdate)
-          ),
-          form({ method: "POST", action: `/shops/delete/${encodeURIComponent(shop.key)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.shopDelete)
           )
         )
       : null,
@@ -388,7 +408,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       : null,
     div({ class: "shop-products-grid" },
       products.length
-        ? products.map(prod => renderProductCard(prod, shop.rootId || shop.key, returnTo))
+        ? products.map(prod => renderProductCard(prod, shop.rootId || shop.key, `/shops/${encodeURIComponent(shop.key)}`, params))
         : p(i18n.shopNoProducts)
     )
   )
@@ -413,7 +433,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
 
   const productSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(product.key, null, { spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title })
+      renderContentActions(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled)
@@ -448,10 +468,6 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
             input({ type: "hidden", name: "shopId", value: product.shopId }),
             input({ type: "hidden", name: "returnTo", value: returnTo }),
             button({ class: "tribe-action-btn", type: "submit" }, i18n.shopUpdate)
-          ),
-          form({ method: "POST", action: `/shops/product/delete/${encodeURIComponent(product.key)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ class: "tribe-action-btn danger-btn", type: "submit" }, i18n.shopDelete)
           )
         )
       : null

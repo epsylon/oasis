@@ -206,7 +206,11 @@ const renderPostsBlock = (posts, house, canPost) => {
     stream.length === 0
       ? p({ class: 'empty' }, i18n.larpPostsEmpty || 'No posts yet.')
       : div({ class: 'larp-posts-list' },
-          stream.map(entry => div({ class: 'larp-post' },
+          stream.map(entry => div({ class: entry.post.author === userId ? 'larp-post own-comment' : 'larp-post' },
+            entry.post.author === userId && entry.post.id
+              ? form({ method: 'POST', action: `/larp/post/delete/${encodeURIComponent(entry.post.id)}`, class: 'comment-delete-form' },
+                  button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.chatDelete }, '✕'))
+              : null,
             div({ class: 'larp-post-head' },
               userLink(entry.post.author),
               span({ class: 'larp-post-time' }, moment(entry.post.createdAt).format('YYYY/MM/DD HH:mm'))

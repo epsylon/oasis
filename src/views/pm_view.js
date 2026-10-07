@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, input, textarea, br, label, pre, span, strong, a, select, option, datalist } = require("../server/node_modules/hyperaxe");
+const { TEXT_CAP } = require('../backend/long_text');
 const { template, i18n } = require('./main_views');
 const { getConfig } = require('../configs/config-manager.js');
 
@@ -63,7 +64,7 @@ exports.pmView = async (initialRecipients = '', initialSubject = '', initialText
             br(),
             label({ for: "text" }, i18n.pmText),
             br(),
-            textarea({ name: "text", rows: "6", cols: "50", id: "pm-text", maxlength: "7000", placeholder: i18n.pmTextPlaceholder || '' }, initialText),
+            textarea({ name: "text", rows: "6", cols: "50", id: "pm-text", maxlength: String(TEXT_CAP), placeholder: i18n.pmTextPlaceholder || '' }, initialText),
             div({ class: "pm-crypter-row" },
               label({ for: "pm-crypter" },
                 input({ type: "checkbox", name: "crypter", value: "1", id: "pm-crypter", ...(crypterPreview ? { checked: true } : {}) }),

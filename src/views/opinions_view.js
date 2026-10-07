@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, CONTENT_FAV_KIND, CONTENT_TORRENTABLE } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText, renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
@@ -29,6 +29,7 @@ const detailHref = (type, key) => {
     case 'shopProduct': return `/shops/product/${encodeURIComponent(key)}`;
     case 'housing': return `/housing/${encodeURIComponent(key)}`;
     case 'market': return `/market/${encodeURIComponent(key)}`;
+    case 'schoolCourse': return `/school/course/${encodeURIComponent(key)}`;
     case 'podcast': return `/podcasts/${encodeURIComponent(key)}`;
     case 'podcastEpisode': return `/podcasts/episode/${encodeURIComponent(key)}`;
     case 'campaign': return `/campaigns/${encodeURIComponent(key)}`;
@@ -343,7 +344,7 @@ const renderContentHtml = (content, key) => {
   }
 };
 
-exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems = null) => {
+exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems = null, params = {}) => {
   const presentCats = new Set();
   for (const it of (Array.isArray(allItems) ? allItems : items)) {
     const ops = (it.value?.content || {}).opinions || {};
@@ -387,7 +388,17 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           span({ class: 'pm-exposition-chip pm-exposition-whole' },
             span({ class: 'pm-exposition-text' }, String(c.type || '').toUpperCase())
           ),
-          renderContentActions(key, detailHref(c.type, key), { spread: spreadMap.get(key) || null, author: item.value.author })
+          renderContentActions(key, detailHref(c.type, key), {
+            spread: spreadMap.get(key) || null,
+            author: item.value.author,
+            reportTitle: c.title || c.question || c.concept || c.name || '',
+            ...(CONTENT_TORRENTABLE.has(c.type) && typeof c.url === 'string' && c.url.startsWith('&')
+              ? { torrentFrom: { blobId: c.url, name: c.title || c.fileName || '' } }
+              : {}),
+            ...(CONTENT_FAV_KIND[c.type]
+              ? { favKind: CONTENT_FAV_KIND[c.type], isFavorite: params.favIndex instanceof Map ? params.favIndex.get(String(key)) === CONTENT_FAV_KIND[c.type] : false, returnTo: `/opinions?filter=${encodeURIComponent(filter)}` }
+              : {})
+          })
         ),
         div(
           { class: 'card-section opinions-card-body' },

@@ -17,12 +17,12 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
-const { renderMapLocationVisitLabel } = require("./maps_view");
+const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
 
 const userId = config.keys.id;
 
@@ -83,13 +83,6 @@ const renderAudioOwnerActions = (filter, audioObj, params = {}) => {
       )
     );
   }
-  items.push(
-    form(
-      { method: "POST", action: `/audios/delete/${encodeURIComponent(audioObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.audioDeleteButton)
-    )
-  );
 
   return items;
 };
@@ -116,14 +109,16 @@ const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) 
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(audioObj.key, `/audios/${encodeURIComponent(audioObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads || null, author: audioObj.author, favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title }, isFavorite: audioObj.isFavorite, reportTitle: audioObj.title })
+            audioObj.tribeOrigin
+              ? renderContentActions(null, audioObj.tribeOrigin.href)
+              : renderContentActions(audioObj.key, `/audios/${encodeURIComponent(audioObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads || null, author: audioObj.author, favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title }, isFavorite: audioObj.isFavorite, reportTitle: audioObj.title, deleteAction: isOwn ? contentDeleteAction('audio', audioObj.key) : undefined, returnTo })
           ),
           div(
             { class: "card-section audio-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(title) : null, renderLicenseChip(audioObj.license)),
+            div({ class: "shop-title-row" }, title ? h2(title) : null, audioObj.tribeOrigin ? renderTribeOriginChip(audioObj.tribeOrigin) : audioObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('audios', audioObj.title, audioObj.key)) : null, renderLicenseChip(audioObj.license)),
             audioObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(audioObj.lifetime, i18n)) : null,
             renderAudioPlayer(audioObj),
-            renderEngagement(audioObj.key,
+            audioObj.tribeOrigin ? null : renderEngagement(audioObj.key,
               renderOpinionsVoting('/audios/opinions', audioObj.key, audioObj.opinions, returnTo, audioObj.opinions_inhabitants),
               renderCommentsLink({ href: `/audios/${encodeURIComponent(audioObj.key)}`, count: commentCount })
             ),
@@ -192,6 +187,8 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       br(),
       ...renderLicenseSelect(audioToEdit?.license, i18n),
       br(),
+      renderClearnetSelector(filter === "edit" ? !!audioToEdit?.clearnet : false, i18n),
+      br(),
       button({ type: "submit" }, filter === "edit" ? i18n.audioUpdateButton : i18n.audioCreateButton)
     )
   );
@@ -200,11 +197,11 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
 const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusM)) return true;
-  if (mode === "top") return censusM.length > 0;
+  if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
-  if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
+  if (mode === "bcs") return censusM.some((x) => !x.tribeOrigin && String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;
 };
 
@@ -226,12 +223,6 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
       div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.audioDescription)
-      ,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetAudios);
-          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
-        })()
       ),
       div(
         { class: "filters" },
@@ -297,8 +288,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
 
   const title = safeText(audioObj.title);
   const isAuthor = String(audioObj.author) === String(userId);
-  const { renderReachChip } = require('./clearnet_view');
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetAudios);
+  const isClearnet = !!audioObj.clearnet;
 
   const chips = [
     renderLifespanChip(audioObj.lifetime, i18n),
@@ -318,20 +308,22 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   const tagsNode = renderTags(audioObj.tags);
 
   const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(audioObj.key, null, {
+    renderContentActions(audioObj.key, `/audios/${encodeURIComponent(audioObj.key)}`, {
       author: audioObj.author,
       favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title },
       isFavorite: audioObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
-      reportTitle: audioObj.title
+      reportTitle: audioObj.title,
+      deleteAction: isAuthor ? contentDeleteAction('audio', audioObj.key) : undefined
     })
   );
 
   const audioSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, clearnetItemHref('audios', audioObj.title, audioObj.key)),
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('audios', audioObj.title, audioObj.key) : null),
+      isAuthor ? renderClearnetSwitch('audios', audioObj.rootId || audioObj.key, isClearnet) : null,
       renderLicenseChip(audioObj.license)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
@@ -339,7 +331,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       ? p({ class: "tribe-side-description" }, ...renderStyledText(audioObj.description))
       : null,
     tagsNode,
-    renderMapLocationVisitLabel(audioObj.mapUrl),
+    renderMapEmbed(params.mapData, audioObj.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 

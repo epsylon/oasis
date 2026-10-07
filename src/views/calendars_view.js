@@ -1,12 +1,17 @@
-const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
+const { div, h2, h3, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty } = require("./main_views")
-const { renderMapLocationVisitLabel } = require("./maps_view")
-const { renderEncryptedChip } = require("./clearnet_view")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views")
+const { renderMapEmbed } = require("./maps_view")
+const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 
 const userId = config.keys.id
+const CAL_REACH = ["OPEN", "CLOSED"]
+const calReachLabel = (s) => s === "CLOSED" ? (i18n.calendarStatusClosed || "CLOSED") : (i18n.calendarStatusOpen || "OPEN")
+const hasPublicInvite = (cal) => Array.isArray(cal.invites) && cal.invites.some(i => i && typeof i === "object" && i.public === true)
+const clearnetEligible = (cal) => !!cal && !cal.tribeId && !cal.encrypted && String(cal.status || "").toUpperCase() === "OPEN" && !cal.isClosed && (!cal.contentEncrypted || hasPublicInvite(cal))
+const calClearnetHref = (cal) => clearnetItemHref("calendars", cal.title, cal.rootId)
 
 const renderNoteText = (text) => renderStyledText(String(text || ""))
 
@@ -46,13 +51,14 @@ const renderCalendarCard = (cal, spreadInfo) => {
     renderCalendarStatusChip(cal),
     renderEncryptedChip(i18n),
     renderLifespanChip(cal.lifetime, i18n),
+    cal.clearnet === true && clearnetEligible(cal) ? renderReachChip(true, i18n, calClearnetHref(cal)) : null,
     cal.subscriptionIn === true
       ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
       : (cal.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
   return div({ class: "tribe-card" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(cal.rootId, href, { spread: spreadInfo || null, author: cal.author, favKind: 'calendars', isFavorite: cal.isFavorite, reportTitle: cal.title })
+      renderContentActions(cal.rootId, href, { spread: spreadInfo || null, author: cal.author, favKind: 'calendars', isFavorite: cal.isFavorite, reportTitle: cal.title, deleteAction: String(cal.author) === String(userId) ? contentDeleteAction('calendar', cal.rootId) : undefined })
     ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
@@ -94,6 +100,11 @@ const renderIntervalBlock = (bounds = {}, current = "", until = "") => {
 const renderCreateForm = (calendarToEdit, params) => {
   const isEdit = !!calendarToEdit
   const tribeId = (params && params.tribeId) || ""
+  const draft = isEdit ? calendarToEdit : ((params && params.draft) || {})
+  const reachRaw = String((params && params.reach) || draft.status || "").toUpperCase()
+  const reach = CAL_REACH.includes(reachRaw) ? reachRaw : "OPEN"
+  const showClearnet = reach === "OPEN" && !tribeId && clearnetEligible({ ...(isEdit ? calendarToEdit : {}), status: reach, isClosed: false })
+  const asLocal = (v) => v ? moment(v).format("YYYY-MM-DDTHH:mm") : ""
   const now = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm")
   const deadlineMax = calendarToEdit && calendarToEdit.deadline
     ? moment(calendarToEdit.deadline).format("YYYY-MM-DDTHH:mm")
@@ -103,41 +114,51 @@ const renderCreateForm = (calendarToEdit, params) => {
   return div({ class: "div-center audio-form" },
     h2(sectionTitle),
     (params && params.spreadWarning) || null,
+    form({ method: "GET", action: "/calendars" },
+      input({ type: "hidden", name: "filter", value: isEdit ? "edit" : "create" }),
+      isEdit ? input({ type: "hidden", name: "id", value: calendarToEdit.rootId }) : null,
+      tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
+      label(i18n.calendarTypeLabel), br(),
+      div({ class: "apply-row" },
+        select({ name: "status", class: "report-category-select" },
+          ...CAL_REACH.map(s => option({ value: s, ...(reach === s ? { selected: true } : {}) }, calReachLabel(s)))
+        ),
+        button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
+      )
+    ),
+    hr({ class: "form-sep" }),
+    h2({ class: "report-category-fixed" }, calReachLabel(reach)),
     form({ method: "POST", action },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
+      input({ type: "hidden", name: "status", value: reach }),
       span(i18n.calendarTitleLabel || "Title"), br(),
-      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.calendarTitlePlaceholder || "Calendar title...", value: calendarToEdit ? calendarToEdit.title : "" }),
-      br(), br(),
-      span(i18n.calendarTypeLabel), br(),
-      select({ name: "status", required: true },
-        option({ value: "OPEN", ...((!calendarToEdit || calendarToEdit.status === "OPEN") ? { selected: true } : {}) }, i18n.calendarStatusOpen || "OPEN"),
-        option({ value: "CLOSED", ...((calendarToEdit && calendarToEdit.status === "CLOSED") ? { selected: true } : {}) }, i18n.calendarStatusClosed || "CLOSED")
-      ),
+      input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.calendarTitlePlaceholder || "Calendar title...", value: draft.title || "" }),
       br(), br(),
       span(i18n.calendarDeadlineLabel || "Deadline"), br(),
-      input({ type: "datetime-local", name: "deadline", required: true, min: now, value: calendarToEdit && calendarToEdit.deadline ? moment(calendarToEdit.deadline).format("YYYY-MM-DDTHH:mm") : "" }),
+      input({ type: "datetime-local", name: "deadline", required: true, min: now, value: asLocal(draft.deadline) }),
       br(), br(),
       span(i18n.calendarTagsLabel || "Tags"), br(),
-      input({ type: "text", name: "tags", placeholder: i18n.calendarTagsPlaceholder || "Enter tags separated by commas", value: calendarToEdit && Array.isArray(calendarToEdit.tags) ? calendarToEdit.tags.join(", ") : "" }),
+      input({ type: "text", name: "tags", placeholder: i18n.calendarTagsPlaceholder || "Enter tags separated by commas", value: Array.isArray(draft.tags) ? draft.tags.join(", ") : "" }),
       br(), br(),
       span(i18n.mapLocationTitle || "Map Location"), br(),
-      input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: (calendarToEdit && calendarToEdit.mapUrl) || "" }),
+      input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: draft.mapUrl || "" }),
       br(), br(),
       !isEdit
         ? [
             span(i18n.calendarFirstDateLabel || "Date"), br(),
-            input({ type: "datetime-local", name: "firstDate", required: true, min: now, max: deadlineMax || undefined }),
+            input({ type: "datetime-local", name: "firstDate", required: true, min: now, max: deadlineMax || undefined, ...(draft.firstDate ? { value: asLocal(draft.firstDate) } : {}) }),
             br(), br(),
             span(i18n.calendarFormDescription || "Description"), br(),
-            input({ type: "text", name: "firstDateLabel", placeholder: i18n.calendarDatePlaceholder || "Describe this date..." }),
+            input({ type: "text", name: "firstDateLabel", placeholder: i18n.calendarDatePlaceholder || "Describe this date...", value: draft.firstDateLabel || "" }),
             br(), br(),
             span(i18n.calendarFirstNoteLabel || "Notes"), br(),
-            textarea({ maxlength: "5000", name: "firstNote", rows: "3", placeholder: i18n.calendarNotePlaceholder || "Add a note..." }),
+            textarea({ maxlength: "5000", name: "firstNote", rows: "3", placeholder: i18n.calendarNotePlaceholder || "Add a note..." }, draft.firstNote || ""),
             br(), br(),
-            renderIntervalBlock({ min: now, max: deadlineMax || undefined }),
+            renderIntervalBlock({ min: now, max: deadlineMax || undefined }, draft.interval || "", asLocal(draft.intervalDeadline)),
             br(), br()
           ]
         : null,
+      showClearnet ? renderClearnetSelector(draft.clearnet === true || String(draft.clearnet || "") === "1", i18n) : null,
       button({ type: "submit", class: "create-button" }, isEdit ? (i18n.calendarUpdate || "Update") : (i18n.calendarCreate || "Create Calendar"))
     )
   )
@@ -247,10 +268,14 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     : null
 
   const subscriptionIn = isAuthor || (calendar.subscription && calendar.subscription.subscribed === true)
+  const canClearnet = clearnetEligible(calendar)
+  const isClearnet = canClearnet && calendar.clearnet === true
   const detailChips = [
     renderCalendarStatusChip(calendar),
     renderEncryptedChip(i18n),
     renderLifespanChip(calendar.lifetime, i18n),
+    canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? calClearnetHref(calendar) : null) : null,
+    isAuthor && canClearnet ? renderClearnetSwitch("calendars", calendar.rootId, isClearnet) : null,
     (isAuthor || isParticipant)
       ? renderStateChip(subscriptionIn ? "mutuals" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff)
       : null
@@ -267,6 +292,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
       tr(td({ class: "tribe-info-value", colspan: "4" }, userLink(calendar.author)))
     ),
     tags,
+    renderMapEmbed(params && params.mapData, calendar.mapUrl),
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${calendar.participants.length}`)
     ),
@@ -324,9 +350,6 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
             input({ type: "hidden", name: "filter", value: "edit" }),
             input({ type: "hidden", name: "id", value: calendar.rootId }),
             button({ type: "submit", class: "tribe-action-btn" }, i18n.calendarUpdate || "Update")
-          ),
-          form({ method: "POST", action: `/calendars/delete/${encodeURIComponent(calendar.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.calendarDelete || "Delete")
           )
         )
       : null,
@@ -422,13 +445,14 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
 
   const calMain = div({ class: "tribe-main" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(calendar.rootId, null, {
+      renderContentActions(calendar.rootId, shareUrl, {
         author: calendar.author,
         favKind: 'calendars',
         isFavorite: calendar.isFavorite,
         spread: (params && params.spreads) || null,
         returnTo: shareUrl,
-        reportTitle: calendar.title
+        reportTitle: calendar.title,
+        deleteAction: isAuthor ? contentDeleteAction('calendar', calendar.rootId) : undefined
       })
     ),
 
@@ -449,6 +473,57 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     ),
     section(div({ class: "tribe-details" }, calSide, calMain))
   )
+}
+
+exports.clearnetCalendarView = async (calendar, dates, notesByDate = {}) => {
+  const { escapeHtml: esc, renderRichText, renderKindTag, renderTagChips, renderClearnetPage } = require("./clearnet_view")
+  const name = calendar.title || i18n.calendarTitle
+  const fmt = (v) => esc(moment(v).format("YYYY/MM/DD HH:mm"))
+  const entries = []
+  const byKey = new Map()
+  for (const d of Array.isArray(dates) ? dates : []) {
+    if (!byKey.has(d.key)) {
+      const entry = { key: d.key, label: d.label || "", when: [] }
+      byKey.set(d.key, entry)
+      entries.push(entry)
+    }
+    byKey.get(d.key).when.push(d.date)
+  }
+  const entriesHtml = entries.map(e => {
+    const notes = (notesByDate[e.key] || []).filter(n => n && String(n.text || "").trim())
+    return `<div class="cn-cal-entry">
+      ${e.label ? `<div class="cn-cal-entry-label">${esc(e.label)}</div>` : ""}
+      <div class="cn-cal-dates">${e.when.map(w => `<span class="cn-detail">📅 ${fmt(w)}</span>`).join("")}</div>
+      ${notes.map(n => `<p class="cn-cal-note">${renderRichText(n.text)}</p>`).join("")}
+    </div>`
+  }).join("")
+  const extraCss = `
+.cn-cal-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700;word-break:break-word}
+.cn-cal-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.cn-cal-entry{border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin:12px 0;background:var(--bg-elev)}
+.cn-cal-entry-label{color:var(--fg);font-weight:600;font-size:16px;margin-bottom:8px;word-break:break-word}
+.cn-cal-dates{display:flex;flex-wrap:wrap;gap:6px}
+.cn-cal-note{color:var(--fg-soft);line-height:1.5;margin:10px 0 0 0;word-break:break-word}
+.cn-cal-empty{color:var(--fg-dim)}
+`
+  const body = `
+  <h1 class="cn-cal-title">${esc(name)}</h1>
+  <div class="cn-cal-meta">
+    ${renderKindTag("calendar")}
+    ${calendar.deadline ? `<span class="cn-detail">⏳ ${esc(i18n.calendarDeadlineLabel || "Deadline")}: ${fmt(calendar.deadline)}</span>` : ""}
+  </div>
+  ${renderTagChips(calendar.tags)}
+  <hr class="cn-sep"/>
+  ${entriesHtml || `<p class="cn-cal-empty">${esc(i18n.calendarNoDates || "No dates added yet.")}</p>`}
+`
+  return renderClearnetPage({
+    title: `${name} | Oasis`,
+    ogTitle: name,
+    ogDescription: "",
+    extraCss,
+    body,
+    hubFeedId: calendar.author || null
+  })
 }
 
 exports.renderIntervalBlock = renderIntervalBlock

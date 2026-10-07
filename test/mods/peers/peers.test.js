@@ -56,6 +56,100 @@ describe('peers: a pub that stopped working', (t) => {
   });
 });
 
+describe('peers: a pub with more than one address', (t) => {
+  t('a pub that fails over one address but works over another is not failing', () => {
+    const m = load();
+    const f = m.failuresByKey(
+      [{ key: id('F'), host: 'abcdefghij.onion', port: 8008, failure: 40 }],
+      [['onion:abcdefghij.onion:8008~shs:x', { key: id('F'), failure: 40 }], ['net:pub.example:8008~shs:x', { key: id('F'), failure: 0 }]]
+    );
+    eq(f.get(id('F')), 0, 'the working address wins');
+    const g = m.failuresByKey([['onion:abcdefghij.onion:8008~shs:x', { key: id('G'), failure: 40 }], ['net:pub.example:8008~shs:x', { key: id('G'), failure: 12 }]]);
+    eq(g.get(id('G')), 12, 'when every address fails, the least failing one counts');
+    m.restoreEnv();
+  });
+});
+
+describe('peers: why a pub cannot be reached', (t) => {
+  t('network and handshake failures are told apart instead of shown raw', () => {
+    const m = load();
+    const { classifyNetError } = m;
+    const err = (message, code) => Object.assign(new Error(message), code ? { code } : {});
+    eq(classifyNetError(err('connect ECONNREFUSED 127.0.0.1:9050', 'ECONNREFUSED'), 'onion:abcdefghij.onion:8008~shs:x'), 'tor', 'an onion address without a local Tor');
+    eq(classifyNetError(err('shs.client: error when expecting server to accept challenge (phase 1).\npossibly the server is busy, does not speak shs or uses a different application cap')), 'keys', 'another network key');
+    eq(classifyNetError(err('shs.client: server hung up when we sent hello (phase 3).\nPossibly we dailed a wrong number, or the server does not wish to talk to us.')), 'identity', 'another identity, or not welcome');
+    eq(classifyNetError(err('connect ECONNREFUSED 10.0.0.5:8008', 'ECONNREFUSED'), 'net:10.0.0.5:8008~shs:x'), 'refused');
+    eq(classifyNetError(err('getaddrinfo ENOTFOUND pub.example', 'ENOTFOUND')), 'notfound');
+    eq(classifyNetError(err('connect EHOSTUNREACH 10.0.0.5:8008', 'EHOSTUNREACH')), 'unreachable');
+    eq(classifyNetError(err('connect ETIMEDOUT 10.0.0.5:8008', 'ETIMEDOUT')), 'timeout');
+    eq(classifyNetError(err('network paused')), 'paused');
+    eq(classifyNetError(err('something nobody expected')), 'other');
+    eq(classifyNetError(err('could not connect to:onion:abcdefghij.onion:8008~shs:x, only know:net~shs'), 'onion:abcdefghij.onion:8008~shs:x'), 'tor', 'no way to reach onion addresses here');
+    m.restoreEnv();
+  });
+});
+
+describe('peers: a pub that answers on another address', (t) => {
+  t('when one address of a pub fails, its other known address is tried once', async () => {
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    const Pushable = require('../../../src/server/node_modules/pull-pushable');
+    const pausePlugin = require('../../../src/server/network_pause');
+    const events = Pushable();
+    const tried = [];
+    const key = id('T');
+    const core = key.slice(1, -8);
+    const netAddr = `net:pub.example:8008~shs:${core}`;
+    const onionAddr = `onion:abcdefghij.onion:8008~shs:${core}`;
+    const server = {
+      id: id('S'), peers: {},
+      conn: { hub: () => ({ listen: () => events }), dbPeers: () => [[netAddr, { key }], [onionAddr, { key }]], connect: (addr, data, cb) => { tried.push(addr); cb && cb(); } }
+    };
+    const api = pausePlugin.init(server);
+    await new Promise(r => setTimeout(r, 1300));
+    events.push({ type: 'connecting-failed', address: netAddr, key, details: Object.assign(new Error('getaddrinfo ENOTFOUND pub.example'), { code: 'ENOTFOUND' }) });
+    await new Promise(r => setTimeout(r, 50));
+    eq(tried[0], onionAddr, 'the onion address is tried when the normal one does not resolve');
+    eq(api.lastErrors()[key].reason, 'notfound', 'and the failure is remembered with its reason');
+    events.push({ type: 'connecting-failed', address: onionAddr, key, details: new Error('connect ECONNREFUSED 127.0.0.1:9050') });
+    await new Promise(r => setTimeout(r, 50));
+    eq(tried.length, 1, 'it does not bounce back and forth right away');
+    events.end();
+  });
+});
+
+describe('peers: which pubs come first', (t) => {
+  t('up-to-date pubs that replicate what you follow are preferred, outdated ones go last', async () => {
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    const pausePlugin = require('../../../src/server/network_pause');
+    const own = require('../../../src/server/package.json').version;
+    const [maj, min] = own.split('.').map(Number);
+    const me = id('M'), fresh = id('N'), similar = id('P'), old = id('Q'), silent = id('R'), stranger = id('U');
+    const friendsOf = (...ids) => Object.fromEntries(ids.map(k => [k, 1]));
+    const graph = {
+      [me]: friendsOf(id('a'), id('b'), id('c')),
+      [fresh]: friendsOf(id('x'), id('y'), id('z'), id('w')),
+      [similar]: friendsOf(id('a'), id('b')),
+      [old]: friendsOf(id('a'), id('b'), id('c')),
+      [silent]: friendsOf(id('a'))
+    };
+    const msg = (author, version) => ({ value: { author, timestamp: Date.now(), content: { type: 'oasisVersion', version } } });
+    const server = {
+      id: me, peers: {},
+      messagesByType: () => pull.values([msg(fresh, own), msg(similar, own), msg(old, `${maj}.${Math.max(0, min - 1)}.0`)]),
+      friends: { graph: (cb) => cb(null, graph) },
+      conn: { hub: () => ({ listen: () => pull.empty() }), dbPeers: () => [] }
+    };
+    pausePlugin.init(server);
+    await new Promise(r => setTimeout(r, 100));
+    const order = [old, stranger, silent, fresh, similar].sort((a, b) => server.oasisPeerRank([null, { key: b }]) - server.oasisPeerRank([null, { key: a }]));
+    eq(order[0], similar, 'an up-to-date pub replicating what you follow comes first');
+    eq(order[1], fresh, 'then other up-to-date pubs');
+    eq(order[2], stranger, 'then pubs we know nothing about');
+    ok(order.indexOf(old) > order.indexOf(stranger) && order.indexOf(silent) > order.indexOf(stranger), 'outdated pubs, and those that never announce a version, go last');
+    ok(server.oasisPeerRank([null, { key: old }]) > server.oasisPeerRank([null, { key: silent }]), 'among outdated ones, the one sharing more of what you follow first');
+  });
+});
+
 describe('peers: pausing the network', (t) => {
   const crypto = require('crypto');
   const SecretStack = require('../../../src/server/node_modules/secret-stack');

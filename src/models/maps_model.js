@@ -341,6 +341,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
     for (const [mapId, raws] of idx.rawMarkers.entries()) {
       const list = [];
       for (const r of raws) {
+        if (idx.tomb.has(r.key)) continue;
         let c = r.c;
         if (c.encryptedPayload && tribeCrypto && tribesModel) {
           const dec = await tribeCrypto.decryptFromTribe(c, tribesModel);
@@ -359,6 +360,15 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       }
       idx.markers.set(mapId, list);
     }
+  };
+
+  const markersFor = (idx, tipId, rootId) => {
+    const seen = new Set();
+    return safeArr(idx.markers.get(tipId)).concat(safeArr(idx.markers.get(rootId))).filter((mk) => {
+      if (seen.has(mk.key)) return false;
+      seen.add(mk.key);
+      return true;
+    });
   };
 
 
@@ -381,6 +391,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       invites: Array.isArray(c.invites) ? c.invites : [],
       tribeId: c.tribeId || null,
       encrypted: !!undec,
+      contentEncrypted: !!(c.encryptedPayload || c._decrypted === true),
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       markers: markerList.filter((mk) => !mk.tombstoned)
@@ -393,7 +404,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       if (idx.tomb.has(tipId)) continue;
       const node = idx.nodes.get(tipId);
       if (!node) continue;
-      const markerList = safeArr(idx.markers.get(tipId)).concat(safeArr(idx.markers.get(rootId)));
+      const markerList = markersFor(idx, tipId, rootId);
       items.push(buildMap(node, rootId, viewerId, markerList, idx.resolveMembers(rootId)));
     }
     return items;
@@ -584,7 +595,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
 
       if (effectiveTribeId) {
         updated = await encryptIfTribe(updated);
-      } else if (mType !== "SINGLE") {
+      } else if (mType !== "OPEN") {
         updated = encryptStandalone(updated, rootId);
       }
 
@@ -620,6 +631,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
 
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(unwrapForIndex(messages));
+      await decryptIndexNodes(idx);
 
       let tipId = mapId;
       while (idx.forward.has(tipId)) tipId = idx.forward.get(tipId);
@@ -658,6 +670,24 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
 
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)));
+      });
+    },
+
+    async deleteMarker(markerId) {
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const msg = await getMsg(ssbClient, markerId);
+      if (!msg || !msg.content) throw new Error("Marker not found");
+      let c = msg.content;
+      if (c.encryptedPayload && tribeCrypto && tribesModel) {
+        const dec = await tribeCrypto.decryptFromTribe(c, tribesModel);
+        if (dec && !dec._undecryptable) c = dec;
+      }
+      if (c.type !== "mapMarker" && !c.encryptedPayload) throw new Error("Marker not found");
+      if (msg.author !== userId) throw new Error("Not the author");
+      const tombstone = await tombFor(markerId, c.tribeId, userId);
+      return new Promise((resolve, reject) => {
+        ssbClient.publish(tombstone, (err, res) => (err ? reject(err) : resolve(res)));
       });
     },
 
@@ -718,11 +748,11 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
           const dec = await tribeCrypto.decryptFromTribe(c, tribesModel);
           c = dec && !dec._undecryptable ? { ...dec, _decrypted: true } : { ...c, _decrypted: false };
         }
-        const markerList = safeArr(idx.markers.get(tip)).concat(safeArr(idx.markers.get(root)));
+        const markerList = markersFor(idx, tip, root);
         return buildMap({ key: tip, ts: msg.timestamp || 0, c, author: msg.author }, root, viewer, markerList, idx.resolveMembers(root));
       }
 
-      const markerList = safeArr(idx.markers.get(tip)).concat(safeArr(idx.markers.get(root)));
+      const markerList = markersFor(idx, tip, root);
       const map = buildMap(node, root, viewer, markerList, idx.resolveMembers(root));
       return mapCollab.fold(map, collectMaps(idx, viewer));
     },

@@ -1,5 +1,6 @@
 const pull = require('../server/node_modules/pull-stream');
 const util = require('../server/node_modules/util');
+const longText = require('../backend/long_text');
 
 const fs = require('fs');
 
@@ -63,7 +64,7 @@ const privateCacheFor = (ssb, userId) => {
   if (!byUser) { byUser = new Map(); privateCaches.set(ssb, byUser); }
   let c = byUser.get(userId);
   if (!c) {
-    c = { lastTs: 0, seen: new Set(), posts: new Map(), pams: new Map(), tombClaims: new Map(), authorByKey: new Map(), recpsByKey: new Map(), version: 0 };
+    c = { lastTs: 0, seen: new Set(), posts: new Map(), pams: new Map(), chunks: new Map(), tombClaims: new Map(), authorByKey: new Map(), recpsByKey: new Map(), version: 0 };
     byUser.set(userId, c);
   }
   return c;
@@ -136,7 +137,8 @@ module.exports = ({ cooler }) => {
     async sendMessage(recipients = [], subject = '', text = '', crypter = false, ref = '') {
       const ssbClient = await openSsb();
       const recps = uniqueRecps([userId, ...recipients]);
-      const content = {
+      const publishAsync = util.promisify(ssbClient.private.publish);
+      const content = await longText.chunkContent({
         type: 'post',
         from: userId,
         to: recps,
@@ -146,8 +148,7 @@ module.exports = ({ cooler }) => {
         private: true,
         ...(ref ? { ref: String(ref) } : {}),
         ...(crypter ? { crypter: true } : {})
-      };
-      const publishAsync = util.promisify(ssbClient.private.publish);
+      }, 'text', { maxBytes: longText.CONTENT_BYTES.boxed, extra: { private: true }, publish: (c) => publishAsync(c, recps) });
       return publishAsync(content, recps);
     },
 
@@ -256,6 +257,11 @@ module.exports = ({ cooler }) => {
           cache.tombClaims.set(c.target, set);
           continue;
         }
+        if (c.type === longText.CHUNK_TYPE) {
+          const ch = longText.chunkOf(v.author, c);
+          if (ch) cache.chunks.set(k, ch);
+          continue;
+        }
         cache.authorByKey.set(k, v.author);
         if (c.type === 'post' || c.type === 'pam') {
           const to = Array.isArray(c.to) ? c.to : [];
@@ -272,7 +278,12 @@ module.exports = ({ cooler }) => {
       }
       cache.version += raw.length ? 1 : 0;
       const tombed = tombedKeys(cache, userId);
-      return Array.from(cache.posts.values()).filter(m => m && m.key && (includeDeleted || !tombed.has(m.key)));
+      const lookup = longText.lookupIn(cache.chunks);
+      return Array.from(cache.posts.values())
+        .filter(m => m && m.key && (includeDeleted || !tombed.has(m.key)))
+        .map(m => longText.hasChunks(m.value.content)
+          ? { ...m, value: { ...m.value, content: longText.resolveField(m.value.content, 'text', m.value.author, lookup) } }
+          : m);
     },
 
     async listPams() {

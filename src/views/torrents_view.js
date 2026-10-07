@@ -1,7 +1,8 @@
 const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td, progress, strong } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -48,13 +49,6 @@ const renderTorrentOwnerActions = (filter, torrentObj, params = {}) => {
       )
     );
   }
-  items.push(
-    form(
-      { method: "POST", action: `/torrents/delete/${encodeURIComponent(torrentObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.torrentDeleteButton)
-    )
-  );
 
   return items;
 };
@@ -103,30 +97,43 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
       th(i18n.seedsLabel),
       th(i18n.seedAction),
       th(""),
+      th(""),
       th("")
     ),
     torrents.map((t) =>
       tr(
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
         td(userLink(t.author)),
-        td(t.title || ""),
+        td(t.title || "", t.tribeOrigin ? renderTribeOriginChip(t.tribeOrigin) : t.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('torrents', t.title, t.key)) : null),
         td(formatSize(t.size)),
-        td({ class: "torrent-spread-cell" }, renderTorrentSeeds(t, params.spreadMap)),
-        td({ class: "torrent-spread-cell" }, renderTorrentSpread(t, params.spreadMap)),
+        td({ class: "torrent-spread-cell" }, t.tribeOrigin ? "" : renderTorrentSeeds(t, params.spreadMap)),
+        td({ class: "torrent-spread-cell" }, t.tribeOrigin ? "" : renderTorrentSpread(t, params.spreadMap)),
         td(
-          form(
-            { method: "GET", action: `/torrents/${encodeURIComponent(t.key)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            input({ type: "hidden", name: "filter", value: filter || "all" }),
-            params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
-            params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
-            button({ type: "submit", class: "filter-btn" }, i18n.torrentDetailsButton)
-          )
+          t.tribeOrigin
+            ? a({ href: t.tribeOrigin.href, class: "filter-btn" }, i18n.torrentDetailsButton)
+            : form(
+                { method: "GET", action: `/torrents/${encodeURIComponent(t.key)}` },
+                input({ type: "hidden", name: "returnTo", value: returnTo }),
+                input({ type: "hidden", name: "filter", value: filter || "all" }),
+                params.q ? input({ type: "hidden", name: "q", value: params.q }) : null,
+                params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
+                button({ type: "submit", class: "filter-btn" }, i18n.torrentDetailsButton)
+              )
         ),
         td(
           t.url && t.url.startsWith("&")
             ? div({ class: "torrent-card-actions" }, renderTorrentSourceDownload(t.key, t.source), renderTorrentDownload(torrentDownloadHref(t.url, t.title)))
             : ""
+        ),
+        td(
+          t.tribeOrigin ? "" : renderContentActions(t.key, `/torrents/${encodeURIComponent(t.key)}`, {
+            author: t.author,
+            favKind: 'torrents',
+            isFavorite: t.isFavorite,
+            returnTo,
+            reportTitle: t.title,
+            deleteAction: String(t.author) === String(userId) ? contentDeleteAction('torrent', t.key) : undefined
+          })
         )
       )
     )
@@ -138,6 +145,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
   const tribeId = safeText(params.tribeId || "");
   const fromBlob = filter === "edit" ? "" : safeText(params.fromBlob || "");
   const fromName = safeText(params.fromName || "");
+  const clearnetAllowed = !tribeId && !torrentToEdit?.tribeId && !torrentToEdit?.encrypted && !torrentToEdit?.cipher;
   return div(
     { class: "div-center audio-form" },
     params.spreadWarning || null,
@@ -183,6 +191,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
       }),
       br(),
       br(),
+      ...(clearnetAllowed ? [renderClearnetSelector(filter === "edit" ? !!torrentToEdit?.clearnet : false, i18n), br()] : []),
       button({ type: "submit" }, filter === "edit" ? i18n.torrentUpdateButton : i18n.torrentCreateButton)
     )
   );
@@ -260,7 +269,7 @@ const renderOasisDownload = (torrentObj, params = {}) => {
 const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusM)) return true;
-  if (mode === "top") return censusM.length > 0;
+  if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
@@ -286,12 +295,6 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
       div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.torrentsDescription)
-      ,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetTorrents);
-          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
-        })()
       ),
       div(
         { class: "filters" },
@@ -359,8 +362,10 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(torrentObj.title);
-  const { renderReachChip, renderEncryptedChip, renderTransportChip } = require('./clearnet_view');
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetTorrents);
+  const { renderEncryptedChip, renderTransportChip } = require('./clearnet_view');
+  const isAuthor = String(torrentObj.author) === String(userId);
+  const clearnetAllowed = !torrentObj.tribeId && !torrentObj.encrypted && !torrentObj.cipher;
+  const isClearnet = !!torrentObj.clearnet;
 
   const chips = [
     renderLifespanChip(torrentObj.lifetime, i18n),
@@ -374,14 +379,15 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   const tagsNode = renderTags(torrentObj.tags);
 
   const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(torrentObj.key, null, {
+    renderContentActions(torrentObj.key, `/torrents/${encodeURIComponent(torrentObj.key)}`, {
       spreadTitle: i18n.seedAction,
       author: torrentObj.author,
       favKind: 'torrents',
       isFavorite: torrentObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
-      reportTitle: torrentObj.title
+      reportTitle: torrentObj.title,
+      deleteAction: String(torrentObj.author) === String(userId) ? contentDeleteAction('torrent', torrentObj.key) : undefined
     })
   );
 
@@ -389,7 +395,8 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
       torrentObj.tribeId && torrentObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
-      torrentObj.tribeId ? null : renderReachChip(isClearnet, i18n, clearnetItemHref('torrents', torrentObj.title, torrentObj.key))
+      clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('torrents', torrentObj.title, torrentObj.key) : null) : null,
+      clearnetAllowed && isAuthor ? renderClearnetSwitch('torrents', torrentObj.rootId || torrentObj.key, isClearnet) : null
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(torrentObj.description)

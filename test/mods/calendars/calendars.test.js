@@ -190,6 +190,52 @@ describe('calendars: personal calendars are readable by their author', (t) => {
   });
 });
 
+describe('calendars: open calendars are readable without joining', (t) => {
+  t('a non-member reads the dates and notes of an open calendar, each credited to the feed that signed it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const cal = await A.use('calendars').createCalendar({ title: 'Fair', status: 'OPEN', deadline: DEADLINE, tags: [], firstDate: FIRST_DATE, firstDateLabel: 'Opening', firstNote: 'bring seeds' });
+    const root = await A.use('calendars').resolveRootId(cal.key);
+    B.setActor();
+    const ssbB = await B.cooler.open();
+    await new Promise((res, rej) => ssbB.publish({ type: 'calendarDate', calendarId: root, date: new Date(MID_DATE).toISOString(), label: 'Claimed', author: A.keypair.id, createdAt: new Date().toISOString() }, e => e ? rej(e) : res()));
+    const dates = await B.use('calendars').getDatesForCalendar(root);
+    const opening = dates.find(d => d.label === 'Opening');
+    ok(opening && opening.date, 'the date of the author is decrypted for a non-member');
+    eq(opening.author, A.keypair.id);
+    eq((dates.find(d => d.label === 'Claimed') || {}).author, B.keypair.id, 'a date claiming another author is credited to its signer');
+    const notes = await B.use('calendars').getNotesForDate(root, opening.key);
+    ok(notes.some(n => n.text === 'bring seeds'), 'the note of the author is readable too');
+  });
+
+  t('a closed calendar stays unreadable for a non-member', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const cal = await A.use('calendars').createCalendar({ title: 'Inner', status: 'CLOSED', deadline: DEADLINE, tags: [], firstDate: FIRST_DATE, firstDateLabel: 'Secret', firstNote: '' });
+    B.setActor();
+    const dates = await B.use('calendars').getDatesForCalendar(cal.key).catch(() => []);
+    ok(!dates.some(d => d.label === 'Secret'), 'nothing of a closed calendar leaks');
+    ok(dates.every(d => d.date), 'and no undecryptable entry is listed');
+  });
+
+  t('closing an open calendar keeps what comes after away from non-members', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const cal = await A.use('calendars').createCalendar({ title: 'Was open', status: 'OPEN', deadline: DEADLINE, tags: [], firstDate: FIRST_DATE, firstDateLabel: 'Before', firstNote: '' });
+    const root = await A.use('calendars').resolveRootId(cal.key);
+    B.setActor();
+    ok((await B.use('calendars').getDatesForCalendar(root)).some(d => d.label === 'Before'), 'while open, a non-member reads it');
+    A.setActor();
+    await A.use('calendars').updateCalendarById(root, { status: 'CLOSED' });
+    await A.use('calendars').addDate(root, MID_DATE, 'After', null, null, null, null);
+    B.setActor();
+    const dates = await B.use('calendars').getDatesForCalendar(root).catch(() => []);
+    ok(!dates.some(d => d.label === 'After'), 'a date added after closing stays private');
+    const list = await B.use('calendars').listAll({ filter: 'all', viewerId: B.keypair.id });
+    ok(!list.some(c => c.title === 'Was open'), 'and the closed calendar is no longer offered to non-members');
+  });
+});
+
 describe('calendars: recurrence', (t) => {
   const day = (n) => new Date(Date.now() + n * 86400000).toISOString();
 

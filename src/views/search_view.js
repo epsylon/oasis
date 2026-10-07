@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderContentActions } = require('./main_views');
+const { template, i18n, userLink, renderContentActions, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -17,7 +17,7 @@ const industryStatusLabel = (status) => {
 };
 
 
-const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, resultCount = "10" }) => {
+const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, resultCount = "10", spreadMap = null, favIndex = null }) => {
   const searchInput = input({
     id: "search_query",
     name: "query",
@@ -65,8 +65,10 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'votes': return `/votes/${encodeURIComponent(contentId)}`;
       case 'transfer': return `/transfers/${encodeURIComponent(contentId)}`;
       case 'tribe': return `/tribe/${encodeURIComponent(contentId)}`;
-      case 'about': return content && (content.about || content.author) ? `/inhabitant/${encodeURIComponent(content.about || content.author)}` : '#';
-      case 'curriculum': return content && content.author ? `/inhabitant/${encodeURIComponent(content.author)}` : '#';
+      case 'about': return content && (content.about || content.author) ? `/inhabitant/${encodeURIComponent(content.about || content.author)}` : null;
+      case 'curriculum': return content && content.author ? `/inhabitant/${encodeURIComponent(content.author)}` : null;
+      case 'feed': return `/feed/${encodeURIComponent(contentId)}`;
+      case 'poll': return `/polls/${encodeURIComponent(contentId)}`;
       case 'image': return `/images/${encodeURIComponent(contentId)}`;
       case 'audio': return `/audios/${encodeURIComponent(contentId)}`;
       case 'video': return `/videos/${encodeURIComponent(contentId)}`;
@@ -84,9 +86,9 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'industry': return `/industry/${encodeURIComponent(contentId)}`;
       case 'industryBlueprint': return `/industry/blueprint/${encodeURIComponent(contentId)}`;
       case 'forum': return `/forum/${encodeURIComponent(contentId)}`;
-      case 'vote': return content && content.vote && content.vote.link ? `/thread/${encodeURIComponent(content.vote.link)}#${encodeURIComponent(content.vote.link)}` : '#';
-      case 'contact': return content && content.contact ? `/author/${encodeURIComponent(content.contact)}` : '#';
-      case 'pub': return '#';
+      case 'vote': return content && content.vote && content.vote.link ? `/thread/${encodeURIComponent(content.vote.link)}#${encodeURIComponent(content.vote.link)}` : null;
+      case 'contact': return content && content.contact ? `/author/${encodeURIComponent(content.contact)}` : null;
+      case 'pub': return null;
       case 'bankWallet': return `/banking`;
       case 'bankClaim': return `/banking`;
       case 'map': return `/maps/${encodeURIComponent(contentId)}`;
@@ -105,7 +107,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'torrent': return `/torrents/${encodeURIComponent(contentId)}`;
       case 'file': return `/files/${encodeURIComponent(contentId)}`;
       case 'gameScore': return content && content.game ? `/games/${encodeURIComponent(content.game)}` : '/games';
-      default: return '#';
+      default: return null;
     }
   };
 
@@ -634,7 +636,17 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
                   span({ class: 'pm-exposition-text' }, String(content.type || '').toUpperCase())
                 )
               ),
-              renderContentActions(contentId, getViewDetailsActionForSearch(content.type, contentId, content))
+              renderContentActions(contentId, getViewDetailsActionForSearch(content.type, contentId, content), {
+                author: msg.value.author,
+                reportTitle: content.title || content.question || content.concept || '',
+                spread: CONTENT_SPREADABLE.has(content.type) ? ((spreadMap instanceof Map && spreadMap.get(contentId)) || null) : undefined,
+                ...(CONTENT_TORRENTABLE.has(content.type) && typeof content.url === 'string' && content.url.startsWith('&')
+                  ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
+                  : {}),
+                ...(CONTENT_FAV_KIND[content.type]
+                  ? { favKind: CONTENT_FAV_KIND[content.type], isFavorite: favIndex instanceof Map ? favIndex.get(String(contentId)) === CONTENT_FAV_KIND[content.type] : false, returnTo: `/search?query=${encodeURIComponent(hashtag ? `#${hashtag}` : String(query || ''))}` }
+                  : {})
+              })
             ),
             div({ class: 'card-section search-card-body' },
               contentHtml,

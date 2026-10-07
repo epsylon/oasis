@@ -1,6 +1,6 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { getConfig } = require('../configs/config-manager.js');
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -118,11 +118,6 @@ const renderOwnerActions = (transfer, returnTo) => {
       { method: "GET", action: `/transfers/edit/${encodeURIComponent(transfer.id)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ type: "submit", class: "update-btn" }, i18n.transfersUpdateButton)
-    ),
-    form(
-      { method: "POST", action: `/transfers/delete/${encodeURIComponent(transfer.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "delete-btn" }, i18n.transfersDeleteButton)
     )
   ]
 }
@@ -185,11 +180,12 @@ const generateTransferCard = (transfer, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params)
 
   const isOwn = transfer.from && String(transfer.from) === String(userId)
+  const canDelete = isOwn && String(transfer.status || "").toUpperCase() === "UNCONFIRMED" && !isExpired && confirmedCount < required
   return div({ class: "trending-card transfer-card" + (isOwn ? " own-content" : "") },
     div(
       { class: "card-header activity-card-header" },
       span(),
-      renderContentActions(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, { spread: params.spreadMap && params.spreadMap.get(transfer.id) || null, author: transfer.from, favKind: 'transfers', isFavorite: transfer.isFavorite, reportTitle: transfer.concept })
+      renderContentActions(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, { spread: params.spreadMap && params.spreadMap.get(transfer.id) || null, author: transfer.from, favKind: 'transfers', isFavorite: transfer.isFavorite, reportTitle: transfer.concept, returnTo, deleteAction: canDelete ? contentDeleteAction('transfer', transfer.id) : undefined })
     ),
     div({ class: "card-section transfer-card-body" },
       div({ class: "shop-title-row" },
@@ -485,11 +481,8 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ type: "submit", class: "update-btn" }, i18n.transfersUpdateButton)
     ))
-    sideActions.push(form({ method: "POST", action: `/transfers/delete/${encodeURIComponent(transfer.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "delete-btn" }, i18n.transfersDeleteButton)
-    ))
   }
+  const canDelete = canEdit && !isExpired && confirmedCount < required
   const exportActions = div({ class: "doc-export-actions" },
     form({ method: "GET", action: `/transfers/contract/${encodeURIComponent(transfer.id)}`, class: "transfer-contract-form" },
       button({ type: "submit", class: "filter-btn" }, i18n.transfersExportContract)
@@ -514,13 +507,14 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
 
   const transferSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(transfer.id, null, {
+      renderContentActions(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, {
         spread: params.spreads || null,
         author: transfer.from,
         favKind: 'transfers',
         isFavorite: transfer.isFavorite,
         returnTo,
-        reportTitle: transfer.concept
+        reportTitle: transfer.concept,
+        deleteAction: canDelete ? contentDeleteAction('transfer', transfer.id) : undefined
       })
     ),
     div({ class: "shop-title-row" },

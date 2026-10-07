@@ -95,9 +95,10 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
 
   const CALENDAR_TYPES = ["calendar", "calendarDate", "calendarNote", "calendarParticipant", "calendarReminderSent", "tribe-keys", "tombstone"]
 
-  const readAll = async (ssbClient) => readTyped(ssbClient, CALENDAR_TYPES, { limit: logLimit, withWindow: true })
+  const readAll = async (ssbClient) => unwrapForIndex(await readTyped(ssbClient, CALENDAR_TYPES, { limit: logLimit, withWindow: true }))
 
   const tribeHelpers = tribeCrypto ? tribeCrypto.createHelpers(tribesModel) : null
+  const unwrapForIndex = (msgs) => tribeHelpers ? tribeHelpers.unwrapMessagesForKind(msgs, CALENDAR_TYPES) : msgs
   const encryptIfTribe = tribeHelpers ? tribeHelpers.encryptIfTribe : async (c) => c
   const decryptIfTribe = tribeHelpers ? tribeHelpers.decryptIfTribe : async (c) => c
   const assertReadable = tribeHelpers ? tribeHelpers.assertReadable : () => {}
@@ -273,7 +274,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       tribeId: c.tribeId || null,
-      encrypted: !!undec
+      encrypted: !!undec,
+      contentEncrypted: !!(c.encryptedPayload || c._decrypted === true)
     }
   }
 
@@ -498,6 +500,11 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         updatedAt: new Date().toISOString(),
         replaces: tipId
       }
+      const closing = !item.content.tribeId && String(oldDec.status || "OPEN").toUpperCase() === "OPEN" && updated.status === "CLOSED"
+      if (closing) {
+        updated.invites = updated.invites.filter(inv => !(inv && typeof inv === "object" && inv.public === true))
+        try { await rotateCalendarKey(rootId, (updated.participants || []).filter(p => p !== userId)) } catch (_) {}
+      }
       if (item.content.tribeId) updated = await encryptIfTribe(updated)
       else updated = encryptStandalone(updated, rootId)
       const result = await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
@@ -640,6 +647,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const rootId = await this.resolveRootId(calendarId)
       const cal = await this.getCalendarById(rootId)
       const calDeadline = cal && cal.deadline ? cal.deadline : ""
+      const pubKey = cal ? tryDecryptPublicInviteKey(cal.invites) : null
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const authorByKey = new Map()
@@ -666,19 +674,18 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
             dec = r && !r._undecryptable ? r : c
             if (r && r._undecryptable) continue
           } else {
-            const keys = lookupKeys(c.calendarId)
-            if (keys && keys.length) {
-              const r = tribeCrypto.decryptContent(c, keys.map(k => [k]))
-              dec = r && !r._undecryptable ? r : c
-              if (r && r._undecryptable) continue
-            }
+            const keys = [...(lookupKeys(c.calendarId) || []), ...(pubKey ? [pubKey] : [])]
+            if (!keys.length) continue
+            const r = tribeCrypto.decryptContent(c, keys.map(k => [k]))
+            if (!r || r._undecryptable) continue
+            dec = r
           }
         }
         const baseEntry = {
           key: m.key,
           calendarId: dec.calendarId || c.calendarId,
           label: dec.label || "",
-          author: dec.author || v.author,
+          author: v.author || dec.author,
           createdAt: dec.createdAt || new Date(v.timestamp || 0).toISOString()
         }
         const hasInterval = !!(dec.intervalWeekly || dec.intervalMonthly || dec.intervalYearly)
@@ -794,6 +801,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         }
       }
       const notes = []
+      let pubKey
       for (const m of messages) {
         const v = m.value || {}
         const c = v.content
@@ -802,7 +810,14 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         if (c.calendarId !== rootId || c.dateId !== dateId) continue
         let dec = c
         if (c.encryptedPayload) {
-          const r = await decryptScoped(c, rootId)
+          let r = await decryptScoped(c, rootId)
+          if ((!r || r._undecryptable) && !c.tribeId && tribeCrypto) {
+            if (pubKey === undefined) {
+              const cal = await this.getCalendarById(rootId).catch(() => null)
+              pubKey = cal ? tryDecryptPublicInviteKey(cal.invites) : null
+            }
+            if (pubKey) r = tribeCrypto.decryptContent(c, [[pubKey]])
+          }
           if (r && !r._undecryptable) dec = r
           else continue
         }
@@ -811,7 +826,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
           calendarId: dec.calendarId || c.calendarId,
           dateId: dec.dateId || c.dateId,
           text: dec.text || "",
-          author: dec.author || v.author,
+          author: v.author || dec.author,
           createdAt: dec.createdAt || new Date(v.timestamp || 0).toISOString()
         })
       }

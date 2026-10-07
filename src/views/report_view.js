@@ -1,7 +1,8 @@
 const { hr, div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
+const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const moment = require("../server/node_modules/moment");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -272,27 +273,29 @@ const renderReportCategoryChip = (category) => {
 
 const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => {
   const confirmations = Array.isArray(report.confirmations) ? report.confirmations : [];
+  const origin = report.tribeOrigin || null;
 
   const chips = [
     renderReportStatusChip(report.status),
     renderReportSeverityChip(report.severity),
-    renderReportCategoryChip(report.category),
-    renderLifespanChip(report.lifetime, i18n)
+    origin && !report.category ? null : renderReportCategoryChip(report.category),
+    renderLifespanChip(report.lifetime, i18n),
+    origin ? renderTribeOriginChip(origin) : null
   ].filter(Boolean);
 
   return div({ class: "tribe-card report-card" },
-    div({ class: "card-header activity-card-header" },
+    origin ? null : div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(report.id, `/reports/${encodeURIComponent(report.id)}`, { spread: spreadInfo || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false })
+      renderContentActions(report.id, `/reports/${encodeURIComponent(report.id)}`, { spread: spreadInfo || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, deleteAction: String(report.author) === String(userId) ? contentDeleteAction('report', report.id) : undefined })
     ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: `/reports/${encodeURIComponent(report.id)}` }, report.title || i18n.reportsTitle)
+          a({ href: origin ? origin.href : `/reports/${encodeURIComponent(report.id)}` }, report.title || i18n.reportsTitle)
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      div({ class: "tribe-card-members" },
+      origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
       )
     )
@@ -325,6 +328,8 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
     filtered = filtered.filter((r) => new Date(r.createdAt).getTime() >= dayAgoReports);
   } else if (filter === "confirmed") {
     filtered = filtered.filter((r) => Array.isArray(r.confirmations) && r.confirmations.includes(userId));
+  } else if (filter === "top") {
+    filtered = filtered.filter((r) => !r.tribeOrigin);
   } else if (CATEGORY_BY_FILTER[filter]) {
     const wanted = CATEGORY_BY_FILTER[filter];
     filtered = filtered.filter((r) => normU(r.category) === wanted);
@@ -537,9 +542,6 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
     ownerActions.push(form({ method: "GET", action: `/reports/edit/${encodeURIComponent(report.id)}` },
       button({ type: "submit", class: "tribe-action-btn" }, i18n.reportsUpdateButton)
     ));
-    ownerActions.push(form({ method: "POST", action: `/reports/delete/${encodeURIComponent(report.id)}` },
-      button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.reportsDeleteButton)
-    ));
   }
 
   const tagsNode = report.tags && report.tags.length
@@ -560,7 +562,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
 
   const reportSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(report.id, null, { spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false })
+      renderContentActions(report.id, `/reports/${encodeURIComponent(report.id)}`, { spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, returnTo: `/reports/${encodeURIComponent(report.id)}`, deleteAction: isAuthor ? contentDeleteAction('report', report.id) : undefined })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, report.title)

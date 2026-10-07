@@ -1,10 +1,10 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref } = require('./main_views');
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 const { roomNumberOf } = require('../models/phone_number');
 
 const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent','file']);
-const TORRENTABLE_TYPES = new Set(['audio','video','image','document','file']);
+const TORRENTABLE_TYPES = CONTENT_TORRENTABLE;
 const OPINION_ROUTES = {
   feed:        (id) => `/feed/opinions/${encodeURIComponent(id)}`,
   bookmark:    (id) => `/bookmarks/opinions/${encodeURIComponent(id)}`,
@@ -22,6 +22,7 @@ const { letterOf } = require('./polls_view');
 const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const { renderZoomableImage } = require('./gallery_view');
+const { renderTribeOriginChip } = require('./clearnet_view');
 
 const MEDIA_MD_RE = /!?\[(?:image|video|audio|pdf|torrent)[^\]]*\]\(\s*&[^)\s]+\s*\)/g
 const stripMediaMarkdown = (text) => String(text || '').replace(MEDIA_MD_RE, '').replace(/\n{3,}/g, '\n\n').trim()
@@ -230,12 +231,48 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
 }
 
 exports.renderActionCards = renderActionCards;
-const SPREADABLE_TYPES = new Set([
-  'post', 'audio', 'video', 'image', 'document', 'torrent', 'file', 'bookmark',
-  'event', 'calendar', 'task', 'votes', 'vote', 'market', 'shop', 'shopProduct',
-  'project', 'transfer', 'housing', 'job', 'report', 'industry', 'industryBuild', 'industryBlueprint',
-  'chat', 'chatMessage', 'pad', 'padEntry', 'room', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign', 'forum', 'map', 'poll', 'blog', 'schoolCourse', 'feed'
-]);
+const SPREADABLE_TYPES = CONTENT_SPREADABLE;
+
+const TRIBE_OPENED_TYPE = { event: 'typeEvent', task: 'typeTask', votation: 'typeVotes', forum: 'typeForum', feed: 'typeFeed', report: 'typeReport', image: 'typeImage', audio: 'typeAudio', video: 'typeVideo', document: 'typeDocument', bookmark: 'typeBookmark', torrent: 'typeTorrent' };
+const TRIBE_OPENED_FILTER = { event: 'event', task: 'task', votation: 'votes', forum: 'forum', feed: 'feed', report: 'report', image: 'image', audio: 'audio', video: 'video', document: 'document', bookmark: 'bookmark', torrent: 'torrent' };
+const tribeOpenedKey = (action) => {
+  const c = (action && action.content) || {};
+  return c.contentType === 'media' ? String(c.mediaType || '') : String(c.contentType || '');
+};
+const openedIn = (action, filter) => !!action && action.type === 'tribeOpened' && TRIBE_OPENED_FILTER[tribeOpenedKey(action)] === filter;
+
+const renderTribeOpenedCard = (action, date, authorName) => {
+  const c = action.content || {};
+  const origin = c.tribeOrigin || {};
+  const key = tribeOpenedKey(action);
+  const label = String(i18n[TRIBE_OPENED_TYPE[key]] || key || '').toUpperCase();
+  const blob = typeof c.image === 'string' && c.image.startsWith('&') ? `/blob/${encodeURIComponent(c.image)}` : null;
+  const media = !blob ? null
+    : c.mediaType === 'video' ? videoHyperaxe({ controls: true, class: 'post-video', src: blob, preload: 'metadata' })
+    : c.mediaType === 'audio' ? audioHyperaxe({ controls: true, class: 'post-audio', src: blob })
+    : c.mediaType === 'image' ? renderZoomableImage(blob, { imgClass: 'post-image' })
+    : null;
+  const bookmarkHref = c.mediaType === 'bookmark' ? safeExternalHref(c.url) : '';
+  return div({ class: 'trending-card' },
+    div({ class: 'card-header activity-card-header' },
+      div({ class: 'card-chips-row' },
+        span({ class: 'pm-exposition-chip pm-exposition-whole' }, span({ class: 'pm-exposition-text' }, label)),
+        renderTribeOriginChip(origin)
+      )
+    ),
+    div({ class: 'card-section' },
+      c.title ? h2(origin.href ? a({ href: origin.href }, c.title) : c.title) : null,
+      c.description ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(String(c.description).slice(0, 600))) : null,
+      c.date || c.location ? p({ class: 'post-text' }, [c.date, c.location].filter(Boolean).join(' · ')) : null,
+      media,
+      bookmarkHref ? a({ href: bookmarkHref, target: '_blank', rel: 'noopener noreferrer' }, c.url) : null
+    ),
+    p({ class: 'card-footer' },
+      span({ class: 'date-link' }, `${date}`),
+      userLink(action.author, authorName)
+    )
+  );
+};
 
 function renderActionCards(actions, userId, allActions, spreadMap = new Map(), extras = {}) {
   const all = Array.isArray(allActions) ? allActions : actions;
@@ -334,6 +371,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
   const cards = items.map(action => {
     const date = action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : "";
     const type = action.type || 'unknown';
+    if (type === 'tribeOpened') return renderTribeOpenedCard(action, date, (action.authorNames && action.authorNames[action.author]) || getProfile(action.author).name);
     let skip = false;
     let headerText;
     if (type.startsWith('parliament')) {
@@ -361,6 +399,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       headerText = `[${String(i18n.typeCampaign || 'CAMPAIGN').toUpperCase()} · ${String(i18n.emergencyLastUpdate || 'LAST UPDATE').toUpperCase()}]`;
     } else if (type === 'podcastEpisode') {
       headerText = `[${String(i18n.typePodcast || 'PODCAST').toUpperCase()} · ${String(i18n.typePodcastEpisode || 'EPISODE').toUpperCase()}]`;
+    } else if (type === 'larpHousePost') {
+      headerText = `[${String(i18n.typeLarp || 'L.A.R.P.').toUpperCase()}]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -826,7 +866,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                     )
                 ),
                 renderContentActions(threadId, baseHref, {
-                  author: action.author,
+                  author: c.rootAuthor || (root && root.author) || action.author,
+                  reportTitle: titleText,
                   spread: spreadMap.get(threadId) || null,
                   ...favOptsFor(rootType, threadId, extras)
                 })
@@ -869,7 +910,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                     )
                 ),
                 renderContentActions(chatRoot, href, {
-                  author: action.author,
+                  author: c.chatAuthor || action.author,
                   reportTitle: chatTitle,
                   spread: spreadMap.get(chatRoot) || null,
                   ...favOptsFor('chat', chatRoot, extras)
@@ -1261,7 +1302,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section' },
           div({ class: 'card-field activity-room-title' },
             roomKey ? a({ href: `/rooms/${encodeURIComponent(roomKey)}`, class: 'card-value user-link' }, roomTitle || roomKey) : span({ class: 'card-value' }, roomTitle || ''),
-            roomNumber ? renderStateChip('whole', '✆', roomNumber) : ''
+            roomNumber ? renderPhoneChip(roomNumber, content.line === 'SWITCHBOARD' ? i18n.roomNumberHint : i18n.roomLineDndError) : ''
           ),
           content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, String(content.description).slice(0, 200))) : ''
         )
@@ -1853,7 +1894,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ...(TORRENTABLE_TYPES.has(type) && content && typeof content.url === 'string' && content.url.startsWith('&')
             ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
             : {}),
-          ...favOptsFor(type, msgId, extras)
+          ...favOptsFor(type, msgId, extras),
+          deleteAction: isOwn ? activityDeleteAction(type, action, content, msgId, userId) : undefined
         })
       ),
       ...cardBody,
@@ -1905,15 +1947,19 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
   return filteredCards;
 }
 
-const FAV_KIND_BY_TYPE = {
-  image: 'images', audio: 'audios', video: 'videos', document: 'documents',
-  bookmark: 'bookmarks', torrent: 'torrents', file: 'files', event: 'events', task: 'tasks',
-  report: 'reports', votes: 'votes', poll: 'polls', market: 'market',
-  housing: 'housing', job: 'jobs', project: 'projects', shop: 'shops',
-  chat: 'chats', chatThread: 'chats', pad: 'pads', room: 'rooms', calendar: 'calendars',
-  map: 'maps', forum: 'forum', transfer: 'transfers', post: 'blogs',
-  wikiPage: 'wiki', emergency: 'emergencies', mailingList: 'mailing', logisticsRoute: 'logistics',
-  podcast: 'podcasts', podcastEpisode: 'podcasts', campaign: 'campaigns', campaignUpdate: 'campaigns'
+const FAV_KIND_BY_TYPE = CONTENT_FAV_KIND;
+
+const activityDeleteAction = (type, action, content, msgId, userId) => {
+  const c = content || {};
+  if (c.author && String(c.author) !== String(userId)) return undefined;
+  if (type === 'transfer') {
+    const required = c.from === c.to ? 1 : 2;
+    const confirmed = Array.isArray(c.confirmedBy) ? c.confirmedBy.length : 0;
+    const dl = c.deadline ? moment(c.deadline) : null;
+    const expired = dl && dl.isValid() ? dl.isBefore(moment()) : false;
+    if (String(c.status || '').toUpperCase() !== 'UNCONFIRMED' || expired || confirmed >= required) return undefined;
+  }
+  return contentDeleteAction(type, type === 'forum' ? safeMsgId(c.key || action.tipId || action.id) : msgId);
 };
 
 const favOptsFor = (type, id, extras = {}) => {
@@ -2077,7 +2123,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     campaign:   ['campaign', 'campaignUpdate'],
     industry:   ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation']
   };
-  const ALLOWED_TYPES = new Set();
+  const ALLOWED_TYPES = new Set(['tribeOpened']);
   for (const { type } of activityTypes) {
     if (FILTER_META.has(type)) continue;
     if (GROUP_SUBTYPES[type]) GROUP_SUBTYPES[type].forEach(t => ALLOWED_TYPES.add(t));
@@ -2095,7 +2141,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   } else if (filter === 'banking') {
     filteredActions = [];
   } else if (filter === 'tribe') {
-    filteredActions = actions.filter(action => action.type === 'tribe');
+    filteredActions = actions.filter(action => action.type === 'tribe' || action.type === 'tribeOpened');
   } else if (filter === 'larp') {
     filteredActions = actions.filter(action => action.type === 'larpHousePost');
   } else if (filter === 'inhabitants') {
@@ -2108,9 +2154,9 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
       return t === 'courtscase' || t === 'courtsnomination' || t === 'courtsnominationvote';
     });
   } else if (filter === 'task') {
-    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment'));
+    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment' || openedIn(action, 'task')));
   } else if (filter === 'torrent') {
-    filteredActions = actions.filter(action => action.type === 'torrent');
+    filteredActions = actions.filter(action => action.type === 'torrent' || openedIn(action, 'torrent'));
   } else if (filter === 'file') {
     filteredActions = actions.filter(action => action.type === 'file');
   } else if (filter === 'chat') {
@@ -2135,6 +2181,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action =>
       (action.type === filter
         || filter === 'all'
+        || openedIn(action, filter)
         || (filter === 'shop' && action.type === 'shopProduct')
         || (filter === 'votes' && action.type === 'poll'))
       && action.type !== 'tombstone');

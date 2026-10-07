@@ -29,6 +29,7 @@ const ADDR_PATH = stateFile("wallet-addresses.json");
 const BOOK_PATH = stateFile("banking-address-book.json");
 const ECO_HISTORY_PATH = stateFile("banking-eco-history.json");
 const UBI_PAID_PATH = stateFile("banking-ubi-paid.json");
+const REBALANCE_PENDING_PATH = stateFile("banking-rebalance-pending.json");
 const FUNDS_HISTORY_PATH = stateFile("banking-funds-history.json");
 const ECO_HISTORY_MIN_GAP_MS = 5 * 60 * 1000;
 
@@ -224,7 +225,9 @@ function logRpcFailure(method, kind, reason) {
   if (kind === "pub") console.warn(`[ECOin RPC] ${kind} ${method} failed: ${reason}`);
 }
 
-async function rpcCall(method, params, kind = "user") {
+const RPC_TIMEOUT_MS = { sendtoaddress: 120000, listtransactions: 30000, gettransaction: 15000 };
+const ENGINE_RPC_TIMEOUT_MS = 20000;
+async function rpcCall(method, params, kind = "user", timeoutMs = 0) {
   const cfg = getWalletCfg(kind);
   if (!cfg?.url) {
     return null;
@@ -236,7 +239,7 @@ async function rpcCall(method, params, kind = "user") {
     headers.authorization = "Basic " + Buffer.from(`${cfg.user}:${cfg.pass}`).toString("base64");
   }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 1500);
+  const timer = setTimeout(() => controller.abort(), timeoutMs || RPC_TIMEOUT_MS[method] || 1500);
   try {
     const res = await fetch(cfg.url, {
       method: "POST",
@@ -267,9 +270,50 @@ async function rpcCall(method, params, kind = "user") {
   }
 }
 
-async function safeGetBalance(kind = "user") {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function listWalletSends(kind = "pub") {
+  for (const account of ["*", ""]) {
+    const list = await rpcCall("listtransactions", [account, 1000, 0], kind);
+    if (Array.isArray(list)) return list.filter(t => t && t.category === "send");
+  }
+  return null;
+}
+
+const sameAmount = (a, b) => Math.abs(Math.abs(Number(a)) - Math.abs(Number(b))) <= 0.000001;
+
+function sendMatches(t, { address, amount, comment, sinceMs, amountIfNoComment }) {
+  if (!t || t.address !== address || typeof t.txid !== "string") return false;
+  const at = Number(t.time || t.timereceived || 0) * 1000;
+  if (sinceMs && at && at < sinceMs - 5 * 60 * 1000) return false;
+  if (amount !== undefined && amount !== null && !sameAmount(t.amount, amount)) return false;
+  if (comment) {
+    if (typeof t.comment === "string") { if (t.comment !== comment) return false; }
+    else if (amountIfNoComment !== undefined && amountIfNoComment !== null && !sameAmount(t.amount, amountIfNoComment)) return false;
+  }
+  return true;
+}
+
+async function findWalletSend(match, kind = "pub", sends = null) {
+  const list = sends || await listWalletSends(kind);
+  if (!list) return undefined;
+  const hit = list.find(t => sendMatches(t, match) && !(match.exclude && match.exclude.has(t.txid)));
+  return hit ? hit.txid : null;
+}
+
+async function sendVerified(address, amount, comment, kind = "pub") {
+  const sinceMs = Date.now();
+  const txid = await rpcCall("sendtoaddress", [address, amount, comment], kind);
+  if (typeof txid === "string" && txid) return { txid };
+  await sleep(3000);
+  const found = await findWalletSend({ address, amount, comment, sinceMs }, kind);
+  if (typeof found === "string") return { txid: found, recovered: true };
+  return { txid: null, unknown: found === undefined };
+}
+
+async function safeGetBalance(kind = "user", timeoutMs = 0) {
   try {
-    const r = await rpcCall("getbalance", [], kind);
+    const r = await rpcCall("getbalance", [], kind, timeoutMs);
     return Number(r) || 0;
   } catch {
     return 0;
@@ -360,6 +404,11 @@ const REBALANCE_PAYOUT_RATIO = 0.5;
 const REBALANCE_CONCEPT = "OASIS UBI Rebalance";
 const UBI_PAYMENT_CONCEPT = "UBI - ";
 const UBI_PAYMENT_PREFIXES = ["UBI - ", "OASIS UBI Payment"];
+const UBI_SEND_COMMENT = "OASIS UBI Payment";
+const UBI_TAKEOVER_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+const UBI_TAKEOVER_MARGIN_MS = 12 * 60 * 60 * 1000;
+const UBI_MAX_ATTEMPTS = 6;
+const UBI_RETRY_AFTER_MS = 60 * 60 * 1000;
 const isUbiPayoutConcept = (c) => UBI_PAYMENT_PREFIXES.some(p => String(c || "").startsWith(p));
 const TXID_RE = /\b([0-9a-f]{64})\b/i;
 const OWN_SCORE_CAP = 200;
@@ -1149,7 +1198,7 @@ async function getLastPublishedTimestamp(userId) {
   }
 
   async function computeEpoch({ epochId, userId, rules = DEFAULT_RULES }) {
-    const pubBal = await safeGetBalance("pub");
+    const pubBal = await safeGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
     const pv = computePoolVars(pubBal, rules);
     const addresses = await listAddressesMerged();
     const pubIds = await knownPubIds();
@@ -1236,7 +1285,7 @@ async function getLastPublishedTimestamp(userId) {
     if (claimerId && allocation.to !== claimerId) throw new Error("This allocation is not for you.");
     const addr = await getUserAddress(allocation.to);
     if (!addr || !isValidEcoinAddress(addr)) throw new Error("No valid ECOin address registered.");
-    const txid = await rpcCall("sendtoaddress", [addr, allocation.amount, "OASIS UBI Payment"], "pub");
+    const { txid } = await sendVerified(addr, allocation.amount, UBI_SEND_COMMENT, "pub");
     if (!txid) throw new Error("RPC sendtoaddress failed. Check PUB wallet configuration.");
     await transfersRepo.markClosed(transferId, txid);
     const epochId = String((allocation.tags || []).find(t => String(t).startsWith("epoch:")) || "").replace(/^epoch:/, "") || epochIdNow();
@@ -1670,7 +1719,7 @@ async function getLastPublishedTimestamp(userId) {
 
   async function publishPubAvailability() {
     if (!isPubNode()) return;
-    const balance = await safeGetBalance("pub");
+    const balance = await safeGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
     const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user ?? 1);
     const available = Number(balance) >= floor;
     const ssb = await openSsb();
@@ -2113,6 +2162,27 @@ async function getLastPublishedTimestamp(userId) {
     return Number((floorUbi + Math.max(0, surplus - tax)).toFixed(6));
   }
 
+  const previousEpochId = () => {
+    const d = new Date();
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() - 1);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const epochStartMs = (eid) => {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(eid || ""));
+    return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, 1) : 0;
+  };
+
+  function claimPaidByMe(claim, me, defaultPubId, nowMs) {
+    const addressed = claim.pubId || defaultPubId;
+    const age = nowMs - (Number(claim._ts) || nowMs);
+    if (addressed === me) return me === defaultPubId || age < UBI_TAKEOVER_AFTER_MS;
+    if (!defaultPubId || me !== defaultPubId) return false;
+    const eid = claim.epochId || "";
+    return age >= UBI_TAKEOVER_AFTER_MS + UBI_TAKEOVER_MARGIN_MS && (eid === epochIdNow() || eid === previousEpochId());
+  }
+
   async function processPendingClaims() {
     if (!isPubNode()) return;
     const ssb = await openSsb();
@@ -2128,7 +2198,7 @@ async function getLastPublishedTimestamp(userId) {
             const key = ubiPaidKey(msg.value.content.epochId || "", msg.value.author);
             if (seenClaims.has(key)) return;
             seenClaims.add(key);
-            claims.push({ ...msg.value.content, _author: msg.value.author });
+            claims.push({ ...msg.value.content, _author: msg.value.author, _ts: Number(msg.value.timestamp) || Date.parse(msg.value.content.claimedAt || "") || 0 });
           }
         },
           err => err ? reject(err) : resolve()));
@@ -2146,27 +2216,64 @@ async function getLastPublishedTimestamp(userId) {
           err => err ? reject(err) : resolve()));
     });
     const epochId = epochIdNow();
+    const me = config.keys.id;
+    const defaultPubId = getDefaultPubId();
+    const nowMs = Date.now();
+    const attributed = new Set(results.map(r => r.txid).filter(Boolean));
+    for (const e of Object.values(readUbiPaidLedger())) if (e && e.txid) attributed.add(e.txid);
+    let sends = null;
+    const walletSends = async () => { if (!sends) sends = await listWalletSends("pub"); return sends; };
+
+    const settlePaid = async ({ claim, claimantId, claimEpoch, paidKey, txid, amount, address, recovered }) => {
+      settleUbiPayment(paidKey, { txid, amount, address, paidAt: new Date().toISOString(), error: undefined });
+      attributed.add(txid);
+      processedEpochUser.add(paidKey);
+      if (sends) sends.push({ category: "send", address, amount: -Number(amount), txid, comment: UBI_SEND_COMMENT, time: Math.floor(Date.now() / 1000) });
+      try {
+        const open = (await transfersRepo.listByTag(`epoch:${claimEpoch}`)).find(a => a.to === claimantId && (a.status === "UNCLAIMED" || a.status === "UNCONFIRMED"));
+        if (open) await transfersRepo.markClosed(open.id, txid);
+      } catch (_) {}
+      console.log(`[UBI] ${recovered ? "found payment of" : "paid"} ${amount} ECO to ${claimantId.slice(0, 12)}… (${claimEpoch}) tx ${txid}`);
+      const allocationId = claim.allocationId || `claim:${claimEpoch}:${claimantId}`;
+      await publishUbiClaimResult(allocationId, claimEpoch, txid, claimantId, amount);
+      await publishBankClaim({ amount, epochId: claimEpoch, allocationId, txid });
+      await publishUbiTransfer({ to: claimantId, amount, epochId: claimEpoch, txid });
+    };
+
     for (const claim of claims) {
       const claimantId = claim._author;
-      if (!claimantId || claimantId === config.keys.id || pubIds.has(claimantId)) continue;
+      if (!claimantId || claimantId === me || pubIds.has(claimantId)) continue;
       const claimEpoch = claim.epochId || epochId;
       const paidKey = ubiPaidKey(claimEpoch, claimantId);
       if (processedEpochUser.has(paidKey)) continue;
+      if (!claimPaidByMe(claim, me, defaultPubId, nowMs)) continue;
       const ledgerEntry = readUbiPaidLedger()[paidKey];
-      if (ledgerEntry) {
-        if (ledgerEntry.error) console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… skipped: a previous payment did not complete (${ledgerEntry.error})`);
-        continue;
-      }
+      if (ledgerEntry && ledgerEntry.txid) continue;
       if (refused.has(`${claimEpoch}:${claimantId}`)) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… skipped: refused by the inhabitant`); continue; }
       try {
+        let attempts = 0;
+        if (ledgerEntry) {
+          attempts = Number(ledgerEntry.attempts) || 1;
+          const lastAt = Date.parse(ledgerEntry.lastAttemptAt || ledgerEntry.startedAt || "") || 0;
+          if (attempts >= UBI_MAX_ATTEMPTS) continue;
+          if (claimEpoch !== epochIdNow() && claimEpoch !== previousEpochId()) continue;
+          if (nowMs - lastAt < UBI_RETRY_AFTER_MS) continue;
+          const prevAddress = ledgerEntry.address || await getUserAddress(claimantId).catch(() => null);
+          if (prevAddress && ledgerEntry.amount) {
+            const list = await walletSends();
+            if (!list) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… waiting: the wallet does not answer, the previous attempt cannot be checked`); continue; }
+            const found = await findWalletSend({ address: prevAddress, amount: ledgerEntry.amount, sinceMs: lastAt || epochStartMs(claimEpoch), exclude: attributed }, "pub", list);
+            if (found) { await settlePaid({ claim, claimantId, claimEpoch, paidKey, txid: found, amount: ledgerEntry.amount, address: prevAddress, recovered: true }); continue; }
+          }
+        }
         const eligibility = await isEligibleClaimant(claimantId);
         if (!eligibility.ok) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… skipped: ${eligibility.reason}`); continue; }
         const addr = eligibility.address;
-        const pubBal = await safeGetBalance("pub");
+        const pubBal = await safeGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
         if (pubBal <= 0) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… skipped: PUB wallet balance is 0`); continue; }
         const pv = computePoolVars(pubBal, DEFAULT_RULES);
         const addresses = await listAddressesMerged();
-        const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address) && a.id !== config.keys.id && !pubIds.has(a.id));
+        const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address) && a.id !== me && !pubIds.has(a.id));
         const karmaScore = eligibility.score;
         const wMin = DEFAULT_RULES.caps.w_min;
         const wMax = DEFAULT_RULES.caps.w_max;
@@ -2175,30 +2282,23 @@ async function getLastPublishedTimestamp(userId) {
         const ecoTax = await getUserEcoinTax(claimantId).catch(() => 0);
         const archTax = await getUserArchTax(claimantId).catch(() => 0);
         const amount = ubiAmountFor({ pool: pv.pool, userW, totalW, score: karmaScore, ecoTax, archTax });
-        if (!reserveUbiPayment(paidKey)) continue;
+        const list = await walletSends();
+        if (!list) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… waiting: the wallet does not answer`); continue; }
+        const earlier = await findWalletSend({ address: addr, comment: UBI_SEND_COMMENT, amountIfNoComment: amount, sinceMs: epochStartMs(claimEpoch), exclude: attributed }, "pub", list);
+        if (earlier) { await settlePaid({ claim, claimantId, claimEpoch, paidKey, txid: earlier, amount, address: addr, recovered: true }); continue; }
+        if (ledgerEntry) settleUbiPayment(paidKey, { attempts: attempts + 1, lastAttemptAt: new Date().toISOString(), amount, address: addr, error: undefined });
+        else {
+          if (!reserveUbiPayment(paidKey)) continue;
+          settleUbiPayment(paidKey, { attempts: 1, lastAttemptAt: new Date().toISOString(), amount, address: addr });
+        }
         processedEpochUser.add(paidKey);
-        let txid = null;
-        try {
-          txid = await rpcCall("sendtoaddress", [addr, amount, "OASIS UBI Payment"], "pub");
-        } catch (err) {
-          settleUbiPayment(paidKey, { error: (err && err.message) || String(err), amount });
-          console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… not paid: sendtoaddress failed`);
+        const sent = await sendVerified(addr, amount, UBI_SEND_COMMENT, "pub");
+        if (!sent.txid) {
+          settleUbiPayment(paidKey, { error: sent.unknown ? "the wallet did not answer" : "sendtoaddress failed" });
+          console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… not paid yet: ${sent.unknown ? "the wallet did not answer, it will be checked again" : "sendtoaddress failed, it will be retried"}`);
           continue;
         }
-        if (!txid) {
-          settleUbiPayment(paidKey, { error: "sendtoaddress returned no txid", amount });
-          console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… not paid: sendtoaddress failed`);
-          continue;
-        }
-        settleUbiPayment(paidKey, { txid, amount, paidAt: new Date().toISOString() });
-        try {
-          const open = (await transfersRepo.listByTag(`epoch:${claimEpoch}`)).find(a => a.to === claimantId && (a.status === "UNCLAIMED" || a.status === "UNCONFIRMED"));
-          if (open) await transfersRepo.markClosed(open.id, txid);
-        } catch (_) {}
-        console.log(`[UBI] paid ${amount} ECO to ${claimantId.slice(0, 12)}… (${claimEpoch}) tx ${txid}`);
-        await publishUbiClaimResult(claim.allocationId || `claim:${claimEpoch}:${claimantId}`, claimEpoch, txid, claimantId, amount);
-        await publishBankClaim({ amount, epochId: claimEpoch, allocationId: claim.allocationId || `claim:${claimEpoch}:${claimantId}`, txid });
-        await publishUbiTransfer({ to: claimantId, amount, epochId: claimEpoch, txid });
+        await settlePaid({ claim, claimantId, claimEpoch, paidKey, txid: sent.txid, amount, address: addr, recovered: sent.recovered });
       } catch (err) { console.warn(`[UBI] claim by ${String(claimantId).slice(0, 12)}… failed after payment: ${(err && err.message) || err}`); }
     }
   }
@@ -2232,7 +2332,7 @@ async function getLastPublishedTimestamp(userId) {
     if (!ssb || !ssb.publish) return [];
     const me = config.keys.id;
     const epochId = epochIdNow();
-    const myBal = await safeGetBalance("pub");
+    const myBal = await safeGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
     const pv = computePoolVars(myBal, DEFAULT_RULES);
     let surplus = pv.available - (DEFAULT_RULES.capPerEpoch ?? 2000);
     if (surplus <= 0) return [];
@@ -2241,9 +2341,30 @@ async function getLastPublishedTimestamp(userId) {
     const { transfers, confirms, claims } = await readUbiLedger(ssb);
     const confirmedBy = (t) => confirms.get(t.key) || new Set();
     const sent = [];
+    const recorded = new Set(transfers.map(t => t.txid).filter(Boolean));
+    const pendingAll = () => { const raw = readJson(REBALANCE_PENDING_PATH, {}); return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}; };
+    const setPending = (key, value) => { const all = pendingAll(); if (value) all[key] = value; else delete all[key]; writeJson(REBALANCE_PENDING_PATH, all); };
+    const record = async (pub, amount, txid, claimantsCount) => {
+      const now = new Date().toISOString();
+      const content = { type: "transfer", from: me, to: pub.pubId, concept: `${REBALANCE_CONCEPT} · ${epochId}`, amount: Number(amount).toFixed(6), category: "ECONOMIC", createdAt: now, updatedAt: now, deadline: null, confirmedBy: [me], status: "UNCONFIRMED", tags: ["UBI", "REBALANCE", `epoch:${epochId}`], opinions: {}, opinions_inhabitants: [], txid };
+      await new Promise((resolve, reject) => ssb.publish(content, (err, msg) => err ? reject(err) : resolve(msg)));
+      recorded.add(txid);
+      surplus -= Number(amount);
+      console.log(`[UBI] rebalanced ${amount} ECO to PUB ${pub.pubId.slice(0, 12)}…${claimantsCount ? ` (${claimantsCount} claimants)` : ""} tx ${txid}`);
+      sent.push({ pubId: pub.pubId, amount: Number(amount), txid });
+    };
     for (const pub of pubs) {
       const tag = pub.pubId.slice(0, 12);
       try {
+        const pendingKey = `${epochId}:${pub.pubId}`;
+        const pending = pendingAll()[pendingKey];
+        if (pending) {
+          const list = await listWalletSends("pub");
+          if (!list) { console.warn(`[UBI] rebalance to ${tag}… waiting: the wallet does not answer, the previous attempt cannot be checked`); continue; }
+          const found = await findWalletSend({ address: pending.address, amount: pending.amount, comment: REBALANCE_CONCEPT, sinceMs: Date.parse(pending.startedAt || "") || 0, exclude: recorded }, "pub", list);
+          if (found) { await record(pub, pending.amount, found, 0); setPending(pendingKey, null); continue; }
+          setPending(pendingKey, null);
+        }
         if (!(await isFollowing(ssb, me, pub.pubId))) { console.warn(`[UBI] rebalance to ${tag}… skipped: this PUB does not follow it`); continue; }
         const address = pub.address || await getUserAddress(pub.pubId).catch(() => null);
         if (!address || !isValidEcoinAddress(address)) { console.warn(`[UBI] rebalance to ${tag}… skipped: no ECOin address`); continue; }
@@ -2261,14 +2382,15 @@ async function getLastPublishedTimestamp(userId) {
         const need = Math.min(REBALANCE_MAX_PER_EPOCH, claimants.size * DEFAULT_RULES.caps.cap_user_epoch) - (Number(pub.balance) || 0);
         const amount = Number(Math.min(surplus, need, REBALANCE_MAX_PER_EPOCH - sentThisEpoch).toFixed(6));
         if (!(amount >= 1)) { console.warn(`[UBI] rebalance to ${tag}… skipped: nothing needed this epoch`); continue; }
-        const txid = await rpcCall("sendtoaddress", [address, amount, REBALANCE_CONCEPT], "pub");
-        if (!txid) { console.warn(`[UBI] rebalance to ${tag}… skipped: sendtoaddress failed`); continue; }
-        surplus -= amount;
-        const now = new Date().toISOString();
-        const content = { type: "transfer", from: me, to: pub.pubId, concept: `${REBALANCE_CONCEPT} · ${epochId}`, amount: amount.toFixed(6), category: "ECONOMIC", createdAt: now, updatedAt: now, deadline: null, confirmedBy: [me], status: "UNCONFIRMED", tags: ["UBI", "REBALANCE", `epoch:${epochId}`], opinions: {}, opinions_inhabitants: [], txid };
-        await new Promise((resolve, reject) => ssb.publish(content, (err, msg) => err ? reject(err) : resolve(msg)));
-        console.log(`[UBI] rebalanced ${amount} ECO to PUB ${tag}… (${claimants.size} claimants) tx ${txid}`);
-        sent.push({ pubId: pub.pubId, amount, txid });
+        setPending(pendingKey, { address, amount, startedAt: new Date().toISOString() });
+        const result = await sendVerified(address, amount, REBALANCE_CONCEPT, "pub");
+        if (!result.txid) {
+          if (!result.unknown) setPending(pendingKey, null);
+          console.warn(`[UBI] rebalance to ${tag}… not sent: ${result.unknown ? "the wallet did not answer, it will be checked next time" : "sendtoaddress failed"}`);
+          continue;
+        }
+        await record(pub, amount, result.txid, claimants.size);
+        setPending(pendingKey, null);
       } catch (err) { console.warn(`[UBI] rebalance to ${tag}… failed: ${(err && err.message) || err}`); }
       if (surplus < 1) break;
     }

@@ -14,9 +14,12 @@ const isLocalPath = (value) => {
   return true;
 };
 
+const SHARED_RETURN_PAGES = ['/activity', '/agenda', '/search', '/trending', '/favorites', '/opinions', '/mentions', '/melody', '/author', '/inhabitant', '/tribe'];
+const isSharedReturnPage = (rt) => SHARED_RETURN_PAGES.some(p => rt === p || (rt.startsWith(p) && /^[?#/]/.test(rt.slice(p.length))));
 const safeReturnTo = (ctx, fallback, allowedPrefixes) => {
   const rt = ctx?.request?.body?.returnTo || ctx?.query?.returnTo;
   if (!isLocalPath(rt)) return fallback;
+  if (isSharedReturnPage(rt)) return rt;
   return Array.isArray(allowedPrefixes) && allowedPrefixes.some(p => rt.startsWith(p)) ? rt : fallback;
 };
 

@@ -300,7 +300,7 @@ module.exports = ({ cooler }) => {
         }
 
         if (ac.action === "comment") {
-          commentCount++;
+          if (!idx.tombstoned.has(a.key)) commentCount++;
           continue;
         }
       }
@@ -402,7 +402,7 @@ module.exports = ({ cooler }) => {
         refeeds++;
         if (ac.author || a?.value?.author) refeedsInhabitants.push(ac.author || a.value.author);
       }
-      if (ac.type === "feed-action" && ac.action === "comment") {
+      if (ac.type === "feed-action" && ac.action === "comment" && !idx.tombstoned.has(a.key)) {
         commentCount++;
       }
     }
@@ -417,7 +417,7 @@ module.exports = ({ cooler }) => {
     const currentId = idx.resolve(feedId);
     const actions = idx.actionsByRoot.get(currentId) || [];
     return actions
-      .filter(a => a?.value?.content?.type === "feed-action" && a?.value?.content?.action === "comment")
+      .filter(a => a?.value?.content?.type === "feed-action" && a?.value?.content?.action === "comment" && !idx.tombstoned.has(a.key))
       .sort((a, b) => (a?.value?.timestamp || 0) - (b?.value?.timestamp || 0));
   };
 

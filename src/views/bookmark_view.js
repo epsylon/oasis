@@ -2,7 +2,8 @@ const { form, button, div, h2, p, section, input, label, textarea, br, a, span, 
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -20,30 +21,6 @@ const buildReturnTo = (filter, params = {}) => {
   if (q) parts.push(`q=${encodeURIComponent(q)}`);
   if (sort) parts.push(`sort=${encodeURIComponent(sort)}`);
   return `/bookmarks?${parts.join("&")}`;
-};
-
-const renderBookmarkActions = (filter, bookmark, params = {}) => {
-  const returnTo = buildReturnTo(filter, params);
-  const isAuthor = String(bookmark.author) === String(userId);
-  const hasOpinions = Object.keys(bookmark.opinions || {}).length > 0;
-
-  return isAuthor
-    ? div(
-        { class: "bookmark-actions" },
-        !hasOpinions
-          ? form(
-              { method: "GET", action: `/bookmarks/edit/${encodeURIComponent(bookmark.id)}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              button({ class: "update-btn", type: "submit" }, i18n.bookmarkUpdateButton)
-            )
-          : null,
-        form(
-          { method: "POST", action: `/bookmarks/delete/${encodeURIComponent(bookmark.id)}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ class: "delete-btn", type: "submit" }, i18n.bookmarkDeleteButton)
-        )
-      )
-    : null;
 };
 
 const renderBookmarkCommentsSection = (bookmarkId, rootId, comments = [], returnTo = null) => {
@@ -89,21 +66,24 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
           : i18n.noUrl;
 
         const isOwn = bookmark.author && String(bookmark.author) === String(userId);
+        const reachChip = bookmark.tribeOrigin ? renderTribeOriginChip(bookmark.tribeOrigin) : bookmark.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id)) : null;
         return div(
           { class: "trending-card bookmark-card" + (isOwn ? " own-content" : "") },
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, { spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, author: bookmark.author, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title })
+            bookmark.tribeOrigin
+              ? renderContentActions(null, bookmark.tribeOrigin.href)
+              : renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, { spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, author: bookmark.author, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title, deleteAction: isOwn ? contentDeleteAction('bookmark', bookmark.id) : undefined, returnTo })
           ),
           div(
             { class: "card-section bookmark-card-body" },
             h2({ class: "bookmark-title" }, bookmark.url ? urlLink : (bookmark.title || "")),
-            bookmark.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(bookmark.lifetime, i18n)) : null,
+            bookmark.lifetime || reachChip ? div({ class: "card-chips-row" }, renderLifespanChip(bookmark.lifetime, i18n), reachChip) : null,
             bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null,
             renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
             br,
-            renderEngagement(bookmark.id,
+            bookmark.tribeOrigin ? null : renderEngagement(bookmark.id,
               renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
               renderCommentsLink({ href: `/bookmarks/${encodeURIComponent(bookmark.id)}`, count: commentCount })
             ),
@@ -187,6 +167,8 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
       }),
       br(),
       br(),
+      renderClearnetSelector(filter === "edit" ? !!bookmarkToEdit.clearnet : false, i18n),
+      br(),
       button({ type: "submit" }, filter === "edit" ? i18n.bookmarkUpdateButton : i18n.bookmarkCreateButton)
     )
   );
@@ -195,7 +177,7 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
 const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusM)) return true;
-  if (mode === "top") return censusM.length > 0;
+  if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
@@ -219,13 +201,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
   return template(
     title,
     section(
-      div({ class: "tags-header module-header-line" }, h2(title), p(i18n.bookmarkDescription),
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetBookmarks);
-          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
-        })()
-      ),
+      div({ class: "tags-header module-header-line" }, h2(title), p(i18n.bookmarkDescription)),
       div(
         { class: "filters" },
         form(
@@ -280,8 +256,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
 
   const isAuthor = String(bookmark.author) === String(userId);
   const hasOpinions = Object.keys(bookmark.opinions || {}).length > 0;
-  const { renderReachChip } = require('./clearnet_view');
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetBookmarks);
+  const isClearnet = !!bookmark.clearnet;
 
   const lastVisit = bookmark.lastVisit ? moment(bookmark.lastVisit) : null;
   const lastVisitTxt =
@@ -306,32 +281,27 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
       button({ class: "update-btn", type: "submit" }, i18n.bookmarkUpdateButton)
     ));
   }
-  if (isAuthor) {
-    sideActions.push(form(
-      { method: "POST", action: `/bookmarks/delete/${encodeURIComponent(bookmark.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.bookmarkDeleteButton)
-    ));
-  }
 
   const tagsNode = renderTags(bookmark.tags);
 
   const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(bookmark.id, null, {
+    renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, {
       author: bookmark.author,
       favKind: 'bookmarks',
       isFavorite: bookmark.isFavorite,
       spread: params.spreads || null,
       returnTo,
-      reportTitle: bookmark.title
+      reportTitle: bookmark.title,
+      deleteAction: isAuthor ? contentDeleteAction('bookmark', bookmark.id) : undefined
     })
   );
 
   const bookmarkSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, bookmark.url ? urlLink : (bookmark.title || "")),
-      renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`)
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id) : null)
     ),
+    isAuthor ? renderClearnetSwitch("bookmarks", bookmark.rootId || bookmark.id, isClearnet) : null,
     bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null,
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(bookmark.description)

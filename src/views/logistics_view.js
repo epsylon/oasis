@@ -1,7 +1,7 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
-const { renderMapLocationVisitLabel } = require("./maps_view");
+const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -89,7 +89,7 @@ const renderRouteCard = (route, params = {}) =>
   div({ class: `tribe-card logistics-card logistics-${route.kind.toLowerCase()}` },
     div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(route.id, routeHref(route), { author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: (params.spreadMap && params.spreadMap.get(route.id)) || null })
+      renderContentActions(route.id, routeHref(route), { author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: (params.spreadMap && params.spreadMap.get(route.id)) || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null })
     ),
     div({ class: "tribe-card-body" },
       renderCover(route),
@@ -311,8 +311,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
   const zones = Array.isArray(params.zones) ? params.zones : [];
   const ownerActions = route.isOwner
     ? [
-        form({ method: "GET", action: "/logistics" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: route.id }), button({ type: "submit", class: "update-btn" }, i18n.logisticsUpdate)),
-        form({ method: "POST", action: `/logistics/delete/${encodeURIComponent(route.id)}` }, button({ type: "submit", class: "delete-btn" }, i18n.logisticsDelete))
+        form({ method: "GET", action: "/logistics" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: route.id }), button({ type: "submit", class: "update-btn" }, i18n.logisticsUpdate))
       ]
     : [];
   const capacity = route.kind === "TRIP"
@@ -320,7 +319,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
     : [route.size ? { label: i18n.logisticsSizeLabel, value: route.size } : null, route.weight ? { label: i18n.logisticsWeightLabel, value: route.weight } : null].filter(Boolean);
   const side = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(route.id, null, { author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null })
+      renderContentActions(route.id, href, { author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null })
     ),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title)),
     div({ class: "card-chips-row" }, kindChip(route), modeChip(route), statusChip(route), priceChip(route)),
@@ -356,7 +355,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
       )
     ),
     countersBlock(route),
-    renderMapLocationVisitLabel(route.mapUrl),
+    renderMapEmbed(params.mapData, route.mapUrl),
     route.orderRef
       ? div({ class: "tribe-side-actions" }, form({ method: "GET", action: route.orderRef }, button({ type: "submit", class: "tribe-action-btn" }, `🛍 ${String(i18n.logisticsOrderLink).toUpperCase()}`)))
       : null,

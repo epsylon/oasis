@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, img, input, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
 const { safeExternalHref } = require("../backend/renderStyledText");
-const { template, i18n, userLink, renderContentActions, renderModuleStats } = require('./main_views');
+const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
@@ -36,7 +36,18 @@ function getViewDetailsAction(item) {
   }
 }
 
-const renderAgendaItem = (item, userId, filter) => {
+const agendaDeleteAction = (item) => {
+  if (item.type === 'transfer') {
+    const required = item.from === item.to ? 1 : 2;
+    const confirmed = Array.isArray(item.confirmedBy) ? item.confirmedBy.length : 0;
+    const dl = item.deadline ? moment(item.deadline) : null;
+    const expired = dl && dl.isValid() ? dl.isBefore(moment()) : false;
+    return String(item.status || '').toUpperCase() === 'UNCONFIRMED' && !expired && confirmed < required ? contentDeleteAction('transfer', item.id) : undefined;
+  }
+  return contentDeleteAction(item.type, item.id);
+};
+
+const renderAgendaItem = (item, userId, filter, extras = {}) => {
   const fmt = d => moment(d).format('YYYY/MM/DD HH:mm:ss');
   const author = item.seller || item.organizer || item.from || item.author || '';
 
@@ -231,12 +242,22 @@ const renderAgendaItem = (item, userId, filter) => {
   }
 
   const isOwn = author && String(author) === String(userId);
+  const favKind = CONTENT_FAV_KIND[item.type];
+  const favIndex = extras.favIndex instanceof Map ? extras.favIndex : null;
+  const spreadMap = extras.spreadMap instanceof Map ? extras.spreadMap : null;
   return div({ class: 'trending-card agenda-card' + (isOwn ? ' own-content' : '') },
     div({ class: 'card-header activity-card-header' },
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
         span({ class: 'pm-exposition-text' }, String(item.type || '').toUpperCase())
       ),
-      renderContentActions(item.id, getViewDetailsAction(item))
+      renderContentActions(item.id, getViewDetailsAction(item), {
+        author,
+        reportTitle: item.title || item.name || item.concept || '',
+        spread: CONTENT_SPREADABLE.has(item.type) ? ((spreadMap && spreadMap.get(item.id)) || null) : undefined,
+        ...(favKind ? { favKind, isFavorite: item.isFavorite === true || (!!favIndex && [item.rootId, item.id].some(id => id && favIndex.get(String(id)) === favKind)) } : {}),
+        returnTo: `/agenda?filter=${encodeURIComponent(filter || 'all')}`,
+        deleteAction: isOwn ? agendaDeleteAction(item) : undefined
+      })
     ),
     div({ class: 'card-section agenda-card-body' },
       actionButton,
@@ -248,7 +269,7 @@ const renderAgendaItem = (item, userId, filter) => {
   );
 };
 
-exports.agendaView = async (data, filter, q = '') => {
+exports.agendaView = async (data, filter, q = '', extras = {}) => {
   const { items = [], counts: _c = {} } = data || {};
   const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, calendars: 0, housing: 0, discarded: 0, ..._c };
   const emptyAgenda = Number(counts.all || 0) === 0 && !String(q || '').trim();
@@ -301,7 +322,7 @@ exports.agendaView = async (data, filter, q = '') => {
       ),
       div({ class: 'agenda-list' },
         items.length
-          ? items.map(item => renderAgendaItem(item, userId, filter))
+          ? items.map(item => renderAgendaItem(item, userId, filter, extras || {}))
           : p(i18n.agendaNoItems)
       )
     )

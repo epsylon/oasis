@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
+const longText = require('../backend/long_text');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
@@ -59,7 +60,17 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     return ssb;
   };
 
-  const FORUM_TYPES = ['forum', 'forum-invite', 'forum-invite-tombstone', 'forum-open-invite', 'forum-open-invite-tombstone', 'tribe-keys', 'vote', 'tombstone'];
+  const FORUM_TYPES = ['forum', 'forum-invite', 'forum-invite-tombstone', 'forum-open-invite', 'forum-open-invite-tombstone', 'tribe-keys', 'vote', 'tombstone', longText.CHUNK_TYPE];
+
+  const chunkIndexOf = (msgs) => longText.indexChunks(
+    msgs.filter(m => m.value && m.value.content && m.value.content.type === longText.CHUNK_TYPE),
+    (c) => {
+      if (!c || !c.encryptedPayload) return c;
+      const dec = decryptForumContent(c, null);
+      return dec && !dec._undecryptable ? dec : null;
+    }
+  );
+  const fullText = (idx, c, author) => longText.joinText(c && c.text, c && c.chunks, longText.lookupIn(idx), author);
 
   const readForumLog = async () => {
     const ssbClient = await openSsb();
@@ -160,15 +171,14 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
         votes_inhabitants: [],
         isPrivate: isPrivateFlag
       };
-      let content = plainContent;
       let forumKey = null;
-      if (isPrivateFlag && ownCrypto && tribeCrypto) {
-        forumKey = ownCrypto.generateTribeKey();
-        content = tribeCrypto.encryptContent(plainContent, [forumKey], true);
-      }
-      const result = await new Promise((resolve, reject) =>
-        ssbClient.publish(content, (err, res) => err ? reject(err) : resolve(res))
+      if (isPrivateFlag && ownCrypto && tribeCrypto) forumKey = ownCrypto.generateTribeKey();
+      const seal = (c) => forumKey ? tribeCrypto.encryptContent(c, [forumKey], true) : c;
+      const publish = (c) => new Promise((resolve, reject) =>
+        ssbClient.publish(seal(c), (err, res) => err ? reject(err) : resolve(res))
       );
+      const content = await longText.chunkContent(plainContent, 'text', { maxBytes: forumKey ? longText.CONTENT_BYTES.sealed : longText.CONTENT_BYTES.plain, publish });
+      const result = await publish(content);
       if (forumKey) {
         ownCrypto.setKey(result.key, forumKey, 1);
         try {
@@ -200,14 +210,17 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
         votes_inhabitants: []
       };
       if (parentId) content.branch = parentId;
+      let key = null;
       if (isPrivate && ownCrypto && tribeCrypto) {
-        const key = lookupKey(forumId);
+        key = lookupKey(forumId);
         if (!key) throw new Error('Missing forum key — cannot reply to encrypted forum');
-        content = tribeCrypto.encryptContent(content, [key], true);
       }
-      return new Promise((resolve, reject) =>
-        ssbClient.publish(content, (err, res) => err ? reject(err) : resolve(res))
+      const seal = (c) => key ? tribeCrypto.encryptContent(c, [key], true) : c;
+      const publish = (c) => new Promise((resolve, reject) =>
+        ssbClient.publish(seal(c), (err, res) => err ? reject(err) : resolve(res))
       );
+      content = await longText.chunkContent(content, 'text', { maxBytes: key ? longText.CONTENT_BYTES.sealed : longText.CONTENT_BYTES.plain, publish });
+      return publish(content);
     },
 
     generateInvite: async (forumId) => {
@@ -348,6 +361,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const ssbClient = await openSsb();
       const msgs = await readForumLog();
       const deleted = buildValidatedTombstoneSet(msgs);
+      const chunkIdx = chunkIndexOf(msgs);
       const decode = (m) => {
         const c = m.value && m.value.content;
         if (!c) return null;
@@ -360,7 +374,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const forums = msgs
         .map(m => ({ m, c: decode(m) }))
         .filter(({ m, c }) => c && c.type === 'forum' && !c.root && !deleted.has(m.key))
-        .map(({ m, c }) => ({ ...c, key: m.key }));
+        .map(({ m, c }) => ({ ...c, key: m.key, text: fullText(chunkIdx, c, m.value.author) }));
       const forumsWithVotes = await Promise.all(
         forums.map(async f => {
           const { positives, negatives } = await aggregateVotes(ssbClient, f.key);
@@ -378,12 +392,12 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
           if (!decReply || decReply._undecryptable || decReply.type !== 'forum' || !decReply.root) return;
           if (deleted.has(m.key)) return;
           repliesByRoot[decReply.root] = repliesByRoot[decReply.root] || [];
-          repliesByRoot[decReply.root].push({ key: m.key, text: decReply.text, author: decReply.author, timestamp: m.value.timestamp });
+          repliesByRoot[decReply.root].push({ key: m.key, text: fullText(chunkIdx, decReply, m.value.author), author: decReply.author, timestamp: m.value.timestamp });
           return;
         }
         if (cRaw.type === 'forum' && root && !deleted.has(m.key)) {
           repliesByRoot[root] = repliesByRoot[root] || [];
-          repliesByRoot[root].push({ key: m.key, text: cRaw.text, author: cRaw.author, timestamp: m.value.timestamp });
+          repliesByRoot[root].push({ key: m.key, text: fullText(chunkIdx, cRaw, m.value.author), author: cRaw.author, timestamp: m.value.timestamp });
         }
       });
       const final = await Promise.all(
@@ -453,6 +467,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const participants = Array.from(new Set(replyAuthors.concat(base.author).filter(Boolean)));
       return {
         ...base,
+        text: fullText(chunkIndexOf(msgs), base, original.value.author),
         key: id,
         positiveVotes: positives,
         negativeVotes: negatives,
@@ -465,6 +480,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const ssbClient = await openSsb();
       const msgs = await readForumLog();
       const deleted = buildValidatedTombstoneSet(msgs);
+      const chunkIdx = chunkIndexOf(msgs);
       const decodeReply = (m) => {
         const c = m.value && m.value.content;
         if (!c || c.type !== 'forum') return null;
@@ -481,7 +497,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
         .filter(r => r && !deleted.has(r.m.key))
         .map(({ c, m }) => ({
           key: m.key,
-          text: c.text,
+          text: fullText(chunkIdx, c, m.value.author),
           author: c.author,
           timestamp: m.value.timestamp,
           parent: c.branch || null

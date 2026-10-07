@@ -449,6 +449,22 @@ module.exports = ({ cooler, tribeCrypto }) => {
       return out;
     },
 
+    async wasEverMember(userId, tribeId) {
+      if (!userId || !tribeId) return false;
+      const idx = await buildTribeIndex();
+      let root = tribeId;
+      while (idx.parent.has(root)) root = idx.parent.get(root);
+      for (const entry of idx.tribes.values()) {
+        let r = entry.id;
+        while (idx.parent.has(r)) r = idx.parent.get(r);
+        if (r !== root) continue;
+        if (entry.author === userId) return true;
+        const members = entry.content && Array.isArray(entry.content.members) ? entry.content.members : [];
+        if (members.includes(userId)) return true;
+      }
+      return false;
+    },
+
     async isTribeMember(userId, tribeId) {
       if (!userId || !tribeId) return false;
       try {

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -89,7 +89,8 @@ const renderChatCard = (chat, filter, params = {}) => {
         favKind: 'chats',
         isFavorite: chat.isFavorite,
         returnTo: buildReturnTo(filter, params),
-        reportTitle: chat.title
+        reportTitle: chat.title,
+        deleteAction: String(chat.author) === String(userId) ? contentDeleteAction('chat', chat.key) : undefined
       })
     ),
     div({ class: "tribe-card-image-wrapper" },
@@ -395,7 +396,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   ].filter(Boolean)
   const chatSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(chat.key, null, { spread: params.spreads || null, author: chat.author, favKind: 'chats', isFavorite: chat.isFavorite, returnTo: params.returnTo, reportTitle: chat.title })
+      renderContentActions(chat.key, `/chats/${encodeURIComponent(chat.key)}`, { spread: params.spreads || null, author: chat.author, favKind: 'chats', isFavorite: chat.isFavorite, returnTo: params.returnTo, reportTitle: chat.title, deleteAction: isAuthor ? contentDeleteAction('chat', chat.key) : undefined })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, chat.title || i18n.chatUntitled)
@@ -482,9 +483,6 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
     !isAuthor ? null : div({ class: "tribe-side-actions owner-actions" },
       form({ method: "GET", action: `/chats/edit/${encodeURIComponent(chat.key)}` },
         button({ type: "submit", class: "tribe-action-btn" }, i18n.chatUpdate)
-      ),
-      form({ method: "POST", action: `/chats/delete/${encodeURIComponent(chat.key)}` },
-        button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.chatDelete)
       )
     ),
     !isMember && chat.status === "INVITE-ONLY"

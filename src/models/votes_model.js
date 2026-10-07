@@ -9,6 +9,14 @@ const { readTyped } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const MIN_VOTE_DAYS = 7;
 
+const INSTITUTIONAL_VOTE_TAG = /^(gov|govMethod|courtsCase|courtsMethod):/;
+const isVoteLocked = (v) => !!v && (
+  (parseInt(v.totalVotes || 0, 10) || 0) > 0
+  || Object.values(v.opinions || {}).some(n => (Number(n) || 0) > 0)
+  || (Array.isArray(v.tags) && v.tags.some(t => INSTITUTIONAL_VOTE_TAG.test(String(t))))
+);
+const lockedError = () => Object.assign(new Error('Vote locked'), { code: 'VOTE_LOCKED' });
+
 module.exports = ({ cooler }) => {
   let ssb;
   const openSsb = async () => {
@@ -218,6 +226,7 @@ module.exports = ({ cooler }) => {
         ssbClient.get(tipId, (err, msg) => (err || !msg ? rej(new Error('Vote not found')) : res(msg)))
       );
       if (!vote.content || vote.content.createdBy !== userId) throw new Error('Not the author');
+      if (isVoteLocked(vote.content) || isVoteLocked(await this.getVoteById(id).catch(() => null))) throw lockedError();
       const tombstone = {
         type: 'tombstone',
         target: tipId,
@@ -244,7 +253,7 @@ module.exports = ({ cooler }) => {
       if (c.createdBy !== userId) throw new Error('Not the author');
       const agg = await this.getVoteById(id);
       const aggTotalVotes = agg ? (parseInt(agg.totalVotes || 0, 10) || 0) : 0;
-      if (agg && Object.keys(agg.opinions || {}).some(k => (agg.opinions[k] || 0) > 0)) throw new Error('Cannot edit vote after it has received opinions.');
+      if (isVoteLocked(c) || isVoteLocked(agg)) throw lockedError();
 
       let newDeadline = c.deadline;
       if (deadline != null && deadline !== '') {
@@ -389,4 +398,4 @@ module.exports = ({ cooler }) => {
     }
   };
 };
-
+module.exports.isVoteLocked = isVoteLocked;

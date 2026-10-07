@@ -1,6 +1,7 @@
-const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td } = require("../server/node_modules/hyperaxe")
+const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views")
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
+const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderMediaThumb, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -27,6 +28,10 @@ const MAX_IMAGES = 8
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v || "").trim()
+const clearnetEligible = (item) => String(item.status || "OPEN").toUpperCase() === "OPEN" && String(item.visibility || "PUBLIC").toUpperCase() === "PUBLIC" && !item.encrypted && !item.tribeId
+const housingClearnetHref = (item) => clearnetItemHref("housing", item.title, item.rootId || item.id)
+const HOUSING_REACH = ["PUBLIC", "HIDDEN"]
+const housingReachLabel = (v) => v === "HIDDEN" ? (i18n.visibilityHidden || "Hidden") : (i18n.visibilityPublic || "Public")
 
 const parseNum = (v) => {
   const n = parseFloat(String(v ?? "").replace(",", "."))
@@ -135,10 +140,6 @@ const renderOwnerActions = (item, returnTo) => {
     form({ method: "GET", action: `/housing/edit/${encodeURIComponent(item.id)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ class: "update-btn", type: "submit" }, i18n.housingUpdateButton)
-    ),
-    form({ method: "POST", action: `/housing/delete/${encodeURIComponent(item.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.housingDeleteButton)
     )
   ]
 }
@@ -161,6 +162,7 @@ const renderRequestToggle = (item, returnTo) => {
 const renderHousingList = (items, filter, params = {}) => {
   const list = safeArr(items)
   if (!list.length) return p(i18n.housingNoItems)
+  const returnTo = buildReturnTo(filter, params)
 
   return div({ class: "housing-grid" },
     list.map((item) => {
@@ -173,13 +175,14 @@ const renderHousingList = (items, filter, params = {}) => {
         renderTypeChip(item),
         renderStatusChip(item.status),
         requested ? renderRequestedChip() : null,
-        renderLifespanChip(item.lifetime, i18n)
+        renderLifespanChip(item.lifetime, i18n),
+        item.clearnet === true && clearnetEligible(item) ? renderReachChip(true, i18n, housingClearnetHref(item)) : null
       ].filter(Boolean)
 
       return div({ class: "trending-card housing-card" + (isOwn ? " own-content" : "") },
         div({ class: "card-header activity-card-header" },
           span(),
-          renderContentActions(item.id, `/housing/${encodeURIComponent(item.id)}`, { spread: params.spreadMap && params.spreadMap.get(item.id) || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title })
+          renderContentActions(item.id, `/housing/${encodeURIComponent(item.id)}`, { spread: params.spreadMap && params.spreadMap.get(item.id) || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, deleteAction: isOwn ? contentDeleteAction("housing", item.id) : null })
         ),
         div({ class: "card-section housing-card-body" },
           clip || (cover && isVideoEntry(cover))
@@ -224,17 +227,36 @@ const renderHousingList = (items, filter, params = {}) => {
   )
 }
 
-const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, spreadWarning = null) => {
+const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, spreadWarning = null, params = {}) => {
   const isEdit = mode === "edit"
   const type = String(item.housing_type || "").toLowerCase()
+  const reachRaw = String(params.reach || "").toUpperCase()
+  const ownReach = String(item.visibility || "").toUpperCase()
+  const reach = HOUSING_REACH.includes(reachRaw) ? reachRaw : (HOUSING_REACH.includes(ownReach) ? ownReach : "PUBLIC")
+  const showClearnet = reach === "PUBLIC" && clearnetEligible({ ...item, visibility: reach })
   return div({ class: "div-center housing-form" },
+    isEdit ? spreadWarning : null,
+    form({ method: "GET", action: isEdit ? `/housing/edit/${encodeURIComponent(item.id)}` : "/housing" },
+      isEdit ? null : input({ type: "hidden", name: "filter", value: "CREATE" }),
+      label(i18n.visibilityLabel || "Visibility"),
+      br(),
+      div({ class: "apply-row" },
+        select({ name: "visibility", class: "report-category-select" },
+          option({ value: "PUBLIC", ...(reach === "PUBLIC" ? { selected: true } : {}) }, i18n.visibilityPublic || "Public"),
+          option({ value: "HIDDEN", ...(reach === "HIDDEN" ? { selected: true } : {}) }, i18n.visibilityHidden || "Hidden")
+        ),
+        button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
+      )
+    ),
+    hr({ class: "form-sep" }),
+    h2({ class: "report-category-fixed" }, housingReachLabel(reach)),
     form({
       action: isEdit ? `/housing/update/${encodeURIComponent(item.id)}` : "/housing/create",
       method: "POST",
       enctype: "multipart/form-data"
     },
       input({ type: "hidden", name: "returnTo", value: "/housing?filter=MINE" }),
-      isEdit ? spreadWarning : null,
+      input({ type: "hidden", name: "visibility", value: reach }),
       label(i18n.housingType),
       br(),
       select({ name: "housing_type", required: true },
@@ -317,14 +339,7 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       input({ type: "text", name: "tags", placeholder: i18n.tagsPlaceholder, value: Array.isArray(item.tags) ? item.tags.join(", ") : (item.tags || "") }),
       br(),
       br(),
-      label(i18n.visibilityLabel || "Visibility"),
-      br(),
-      select({ name: "visibility" },
-        option({ value: "PUBLIC", ...((item.visibility || "PUBLIC") === "PUBLIC" ? { selected: true } : {})}, i18n.visibilityPublic || "Public"),
-        option({ value: "HIDDEN", ...(item.visibility === "HIDDEN" ? { selected: true } : {})}, i18n.visibilityHidden || "Hidden")
-      ),
-      br(),
-      br(),
+      ...(showClearnet ? [renderClearnetSelector(item.clearnet === true || String(item.clearnet || "") === "1", i18n), br()] : []),
       button({ type: "submit" }, isEdit ? i18n.housingUpdateButton : i18n.housingCreateButton)
     )
   )
@@ -378,7 +393,7 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
     ),
     section(
       isForm
-        ? renderHousingForm(filter === "EDIT" ? (Array.isArray(items) ? items[0] : items) || {} : (params.draft || {}), filter === "EDIT" ? "edit" : "create", Number(params.maxImages) > 0 ? Number(params.maxImages) : MAX_IMAGES, await renderSpreadEditWarning(filter === "EDIT" ? ((Array.isArray(items) ? items[0] : items) || {}).id : null))
+        ? renderHousingForm(filter === "EDIT" ? (Array.isArray(items) ? items[0] : items) || {} : (params.draft || {}), filter === "EDIT" ? "edit" : "create", Number(params.maxImages) > 0 ? Number(params.maxImages) : MAX_IMAGES, await renderSpreadEditWarning(filter === "EDIT" ? ((Array.isArray(items) ? items[0] : items) || {}).id : null), params)
         : section(
             emptyMod ? null : div({ class: "housing-search activity-filter-chips activity-toolbar-row" },
               renderModuleStatsBy(items, it => String(it.status || '').toUpperCase(), [{ value: 'OPEN', label: i18n.housingFilterOpen }, { value: 'CLOSED', label: i18n.housingFilterClosed }]),
@@ -416,6 +431,8 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
   const isAuthor = String(item.author) === String(userId)
   const requested = safeArr(item.requests).includes(userId)
   const voters = safeArr(item.opinions_inhabitants)
+  const canClearnet = clearnetEligible(item)
+  const isClearnet = canClearnet && !!item.clearnet
 
   const chips = [
     item.visibility === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
@@ -423,7 +440,9 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     renderStatusChip(item.status),
     requested ? renderRequestedChip() : null,
     renderLifespanChip(item.lifetime, i18n),
-    renderEcoTax(item.msgSize, item.id)
+    renderEcoTax(item.msgSize, item.id),
+    renderReachChip(isClearnet, i18n, isClearnet ? housingClearnetHref(item) : null),
+    isAuthor && canClearnet ? renderClearnetSwitch("housing", item.rootId || item.id, isClearnet) : null
   ].filter(Boolean)
 
   const sideActions = []
@@ -451,7 +470,7 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
   const cover = imagesOf(item)[0]
   const housingSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(item.id, null, { spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title })
+      renderContentActions(item.id, `/housing/${encodeURIComponent(item.id)}`, { spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, deleteAction: isAuthor ? contentDeleteAction("housing", item.id) : null })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, safeText(item.title) || i18n.housingTitle)
@@ -503,4 +522,62 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
       div({ class: "tribe-details" }, housingSide, housingMain)
     )
   )
+}
+
+exports.clearnetHousingView = async (item, params = {}) => {
+  const { escapeHtml: esc, renderRichText, renderKindTag, renderTagChips, blobUrl: cnBlob, renderClearnetPage } = require("./clearnet_view")
+  const title = esc(item.title || i18n.housingTitle)
+  const point = params.mapPoint || null
+  const media = imagesOf(item).map(entry => ({ src: cnBlob(entry), video: isVideoEntry(entry) })).filter(m => m.src)
+  const clip = cnBlob(item.video)
+  if (clip && !media.some(m => m.src === clip)) media.push({ src: clip, video: true })
+  const cover = (media.find(m => !m.video) || {}).src || null
+  const day = (v) => moment(v).format("YYYY/MM/DD")
+  const rows = [
+    [i18n.housingProperty, i18n["housingProperty" + String(item.property_type || "").toUpperCase()] || ""],
+    [i18n.housingRooms, item.rooms > 0 ? String(item.rooms) : ""],
+    [i18n.housingSize, item.size > 0 ? `${item.size} m²` : ""],
+    [i18n.housingCapacity, item.capacity > 0 ? String(item.capacity) : ""],
+    [i18n.housingAvailableFrom, item.availableFrom ? day(item.availableFrom) : ""],
+    [i18n.housingAvailableTo, item.availableTo ? day(item.availableTo) : ""]
+  ].filter(([, v]) => v)
+  const textSection = (heading, text) => safeText(text) ? `<div class="cn-housing-section"><h2>${esc(heading)}</h2><div class="cn-housing-text">${renderRichText(text)}</div></div>` : ""
+  const extraCss = `
+.cn-housing-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700}
+.cn-housing-meta{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.cn-housing-meta-item{background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;padding:8px 14px;font-size:14px;color:var(--fg-soft);display:inline-flex;align-items:center;gap:6px}
+.cn-housing-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:0 0 20px 0}
+.cn-housing-gallery img,.cn-housing-gallery video{width:100%;height:auto;display:block;border:1px solid var(--border);border-radius:6px;background:#000}
+.cn-housing-info{border-collapse:collapse;margin:0 0 20px 0}
+.cn-housing-info td{padding:6px 14px 6px 0;font-size:14px;color:var(--fg-soft);border-bottom:1px solid var(--border)}
+.cn-housing-info td:first-child{color:var(--fg-dim);text-transform:uppercase;letter-spacing:1px;font-size:12px}
+.cn-housing-section h2{color:var(--fg);font-size:18px;text-transform:uppercase;letter-spacing:2px;margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.cn-housing-text{color:var(--fg-soft);line-height:1.6;font-size:15px;word-break:break-word}
+`
+  const body = `
+  <h1 class="cn-housing-title">${title}</h1>
+  <div class="cn-housing-meta">
+    <span class="cn-housing-meta-item">${renderKindTag("housing")}</span>
+    <span class="cn-housing-meta-item">${esc(i18n["housingType" + String(item.housing_type || "").toUpperCase()] || item.housing_type || "")}</span>
+    ${safeText(item.place) ? `<span class="cn-housing-meta-item">📍 ${esc(item.place)}</span>` : ""}
+    ${point ? `<a class="cn-housing-meta-item" href="geo:${point.lat},${point.lng}">⌖ ${point.title ? `${esc(point.title)} · ` : ""}${point.lat}, ${point.lng}</a>` : ""}
+    ${item.createdAt ? `<span class="cn-housing-meta-item">📅 ${esc(day(item.createdAt))}</span>` : ""}
+    <span class="cn-price">${esc(priceLabel(item))}</span>
+  </div>
+  <hr class="cn-sep"/>
+  ${media.length ? `<div class="cn-housing-gallery">${media.map(m => m.video ? `<video controls preload="metadata" src="${m.src}"></video>` : `<img src="${m.src}" alt="${title}" loading="lazy"/>`).join("")}</div>` : ""}
+  ${rows.length ? `<table class="cn-housing-info">${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}
+  ${textSection(i18n.housingDescription, item.description)}
+  ${textSection(i18n.housingRules, item.rules)}
+  ${renderTagChips(item.tags)}
+`
+  return renderClearnetPage({
+    title: `${item.title || i18n.housingTitle} | Oasis`,
+    ogTitle: item.title || i18n.housingTitle,
+    ogDescription: item.description || "",
+    ogImage: cover,
+    extraCss,
+    body,
+    hubFeedId: item.author || null
+  })
 }

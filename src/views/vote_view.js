@@ -1,8 +1,9 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
+const { renderTribeOriginChip } = require("./clearnet_view");
 
 const userId = config.keys.id;
 const VOTE_QUORUM = 2;
@@ -37,9 +38,12 @@ const statusLabel = (s) => {
   return up;
 };
 
-const renderVoteOwnerActions = (v, returnTo, mode) => {
-  const showUpdateButton = mode === "mine" && !Object.keys(v.opinions || {}).length;
-  const showDeleteButton = mode === "mine";
+const { isVoteLocked } = require("../models/votes_model");
+const isVoteAuthor = (v) => !!(v && v.createdBy && String(v.createdBy) === String(userId));
+const canModifyVote = (v) => isVoteAuthor(v) && !isVoteLocked(v);
+
+const renderVoteOwnerActions = (v, returnTo) => {
+  const showUpdateButton = canModifyVote(v);
 
   const actions = [];
   if (showUpdateButton) {
@@ -48,15 +52,6 @@ const renderVoteOwnerActions = (v, returnTo, mode) => {
         { method: "GET", action: `/votes/edit/${encodeURIComponent(v.id)}` },
         input({ type: "hidden", name: "returnTo", value: returnTo }),
         button({ class: "update-btn", type: "submit" }, i18n.voteUpdateButton)
-      )
-    );
-  }
-  if (showDeleteButton) {
-    actions.push(
-      form(
-        { method: "POST", action: `/votes/delete/${encodeURIComponent(v.id)}` },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        button({ class: "delete-btn", type: "submit" }, i18n.voteDeleteButton)
       )
     );
   }
@@ -99,31 +94,33 @@ const renderVoteListItem = (v, voteOptionsDefault, activeFilter, spreadInfo) => 
   }, {});
   const totalVotesNum = typeof v.totalVotes === "number" ? v.totalVotes : parseInt(String(v.totalVotes || "0"), 10) || 0;
   const outcome = computeVoteOutcome(baseCounts, voteOptions, totalVotesNum);
+  const origin = v.tribeOrigin || null;
   const chips = [
     renderVoteStatusChip(v.status),
-    renderLifespanChip(v.lifetime, i18n)
+    renderLifespanChip(v.lifetime, i18n),
+    origin ? renderTribeOriginChip(origin) : null
   ].filter(Boolean);
   const returnTo = `/votes?filter=${encodeURIComponent(activeFilter || "all")}`;
   const totalOpinions = Object.values(v.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
-  const isOwn = v.createdBy && String(v.createdBy) === String(userId);
+  const isOwn = isVoteAuthor(v);
 
   return div({ class: "trending-card vote-card" + (isOwn ? " own-content" : "") },
-    div({ class: "card-header activity-card-header" },
+    origin ? null : div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`, { spread: spreadInfo || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question })
+      renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`, { spread: spreadInfo || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, returnTo, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined })
     ),
     div({ class: "card-section vote-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: `/votes/${encodeURIComponent(v.id)}` }, v.question || i18n.votationsTitle)
+          a({ href: origin ? origin.href : `/votes/${encodeURIComponent(v.id)}` }, v.question || i18n.votationsTitle)
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       v.deadline ? p({ class: "time-chip" }, moment(v.deadline).format("YYYY/MM/DD HH:mm")) : null,
-      div({ class: "tribe-card-members" },
+      origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
       ),
-      div({ class: `job-meta-line vote-outcome vote-outcome-${outcome.variant}` }, `${i18n.voteResults || "Results"}: ${outcome.text}`)
+      origin ? null : div({ class: `job-meta-line vote-outcome vote-outcome-${outcome.variant}` }, `${i18n.voteResults || "Results"}: ${outcome.text}`)
     )
   );
 };
@@ -146,7 +143,7 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
   ].filter(Boolean);
 
   const sideActions = [];
-  for (const a of renderVoteOwnerActions(v, returnTo, mode || "")) sideActions.push(a);
+  for (const a of renderVoteOwnerActions(v, returnTo)) sideActions.push(a);
 
   const cleanTags = (Array.isArray(v.tags) ? v.tags : []).filter((t) => t && !String(t).includes(":"));
   const tagsNode = cleanTags.length
@@ -166,7 +163,7 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
 
   const voteSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(v.id, null, { spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question })
+      renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`, { spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, v.question)

@@ -102,7 +102,7 @@ The reference `server-config.json`:
     "outgoing": {
       "net": [{ "transform": "shs" }],
       "tunnel": [],
-      "onion": [],
+      "onion": [{ "transform": "shs" }],
       "ws": []
     }
   }
@@ -121,7 +121,7 @@ The reference `server-config.json`:
 
 - **`autofollow.feeds`** — the upstream PUB(s) this node will automatically follow on first boot. The example seeds from `solarnethub.com`'s PUB (`@0qSCyK3xyL71X4qKkmf84Cb2riP6OeUqxCvbP2Z6HWs=.ed25519`), the default seed of the Oasis network. Once your PUB connects to it, gossip propagates the rest of the network's pub list. Replace this id only if you're bootstrapping from a different network root.
 
-Everything else is the standard PUB shape: `pub: true`, no LAN discovery, the friends graph limits (`friends.dunbar` and `friends.hops`, see below), replication scheduler running on autostart, port `8008` open for SHS on every scope (device/local/public), and a `noauth` unix socket for the CLI.
+Everything else is the standard PUB shape: `pub: true`, no LAN discovery, the friends graph limits (`friends.dunbar` and `friends.hops`, see below), replication scheduler running on autostart, port `8008` open for SHS on every scope (device/local/public), and a `noauth` unix socket for the CLI. The `onion` outgoing entry lets the PUB reach other PUBs that only have an onion address when a local Tor is running; without Tor it changes nothing, and nobody is forced to use Tor (see [`TOR.md`](./TOR.md)).
 
 **How far a PUB replicates.** A PUB is a community, not an archive of the whole network. With the example's `friends.hops` it stores the inhabitants that redeemed one of its invites (the PUB follows each of them) and the inhabitants they follow, which is what a young network needs. A lower value keeps only the members themselves and is the conservative choice once the network is large; a higher one makes it carry most of the network and is only worth it on a large disk. Each extra hop multiplies the log, the blobs and the index rebuild time.
 
@@ -218,7 +218,7 @@ The default seed PUB at `solarnethub.com` is included in `autofollow.feeds` abov
 
 ## 15) Clearnet HUB
 
-The PUB also serves a read-only web HUB with the public content of the inhabitants it replicates. See [`clearnet.md`](./clearnet.md) for the URLs and the reverse proxy setup.
+The PUB also serves a read-only web HUB with the items its inhabitants chose to publish on the CLEARNET (each item is created as OASIS or CLEARNET by its author), plus the public pages of the public tribes. See [`clearnet.md`](./clearnet.md) for the URLs and the reverse proxy setup.
 
 ## 16) Upgrading a PUB to the ssb-db2 version
 
@@ -252,10 +252,14 @@ A PUB pays the Universal Basic Income (UBI) in ECOin when it runs `ecoind` next 
 Fund that wallet with the ECO to be distributed. On boot the PUB logs `[UBI] PUB engine on`, and then, periodically, it:
 
 1. computes the monthly epoch (pool, weights, allocations) from the network activity;
-2. pays the pending `ubiClaim` messages with `sendtoaddress` to the ECOin address each claimant published (Profile → Edit → Sensors → ECOIN Wallet), publishing a `ubiClaimResult` per payment;
+2. pays the pending `ubiClaim` messages addressed to it with `sendtoaddress` to the ECOin address each claimant published (Profile → Edit → Sensors → ECOIN Wallet), publishing a `ubiClaimResult` per payment;
 3. announces `pubAvailability` (available when the wallet balance covers at least one floor payment). The announcement is only republished when the state changes or after a long while, so the PUB feed is not flooded.
 
-Inhabitants configure nothing: their Oasis reads the `pubAvailability` announcements it replicates, picks the available PUB with the newest announcement (stale announcements are ignored) and Banking → Overview shows which PUB it is connected to, when it was last seen, whether their ECOin address is published and whether this month's UBI has been claimed. The claim is a `ubiClaim` message addressed to that PUB; the payment lands in their wallet on the PUB's next tick.
+**Who pays a claim.** A claim is paid only by the PUB it was addressed to. The network's default PUB (the one in the built-in invite code) also takes over the claims of the current and the previous month that another PUB has left unpaid for days; once that time has passed, the PUB the claim was addressed to no longer pays it.
+
+**One payment per claim.** The PUB keeps a ledger of the claims it has paid and checks its wallet before paying. If the wallet does not answer, the claim waits for a later tick; an attempt that fails is retried later. The rebalances between PUBs follow the same rule.
+
+Inhabitants configure nothing: their Oasis reads the `pubAvailability` announcements it replicates, prefers the network's default PUB while it announces *available* and otherwise picks the available PUB with the newest announcement (stale announcements are ignored). Banking → Overview shows which PUB it is connected to, when it was last seen, whether their ECOin address is published and whether this month's UBI has been claimed. The claim is a `ubiClaim` message addressed to that PUB; the payment lands in their wallet on the PUB's next tick. An inhabitant can also refuse this month's UBI; a refused claim is never paid.
 
 ### Funding the pool
 
@@ -267,7 +271,7 @@ The pool comes from the PUB wallet: each month, a share of the balance above a r
 
 Eligible claimants are feeds past a grace period, with a published ECOin address and activity in the network. Claiming or publishing a wallet gives no karma. Taxes (ECO and ARCH) are not paid anywhere: they are deducted from the part of the UBI above the floor, and the floor itself is always paid.
 
-Diagnostics on the PUB console: `[ECOin RPC] pub … failed: …` when ecoind is unreachable or refuses a call, `[UBI] claim … skipped: …` when a claimant has no published address, the PUB wallet is empty or `sendtoaddress` fails, and `[UBI] paid …` for each payment. If ecoind is stopped the engine simply idles and announces *unavailable*; it resumes on the next tick once RPC answers again.
+Diagnostics on the PUB console: `[ECOin RPC] pub … failed: …` when ecoind is unreachable or refuses a call, `[UBI] claim … skipped: …` when a claimant has no published address, refused the UBI or the PUB wallet is empty, `[UBI] claim … waiting: …` when the wallet does not answer, `[UBI] claim … not paid yet: …` when `sendtoaddress` failed and will be retried, `[UBI] paid …` for each payment and `[UBI] found payment of …` when the wallet already holds it. Rebalances log in the same way (`[UBI] rebalanced …`, `[UBI] rebalance to … skipped/waiting/not sent`). If ecoind is stopped the engine simply idles and announces *unavailable*; it resumes on the next tick once RPC answers again.
 
 ## 20) Phone and Rooms: relaying encrypted calls
 

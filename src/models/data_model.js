@@ -99,9 +99,10 @@ const opinionsTotalOf = (c) => {
   return total;
 };
 
+const excerpt = (s) => String(s || '').replace(/!?\[[^\]]*\]\([^)]*\)/g, ' ').replace(/[#*_>`~|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90);
 const titleOf = (kind, c, author) => {
-  if (kind === 'inhabitants') return c.name || author || '';
-  return c.title || c.name || c.question || c.concept || '';
+  if (kind === 'inhabitants') return c.name || '';
+  return c.title || c.name || c.question || c.concept || c.subject || excerpt(typeof c.text === 'string' ? c.text : '') || excerpt(typeof c.description === 'string' ? c.description : '') || '';
 };
 
 const jaccard = (a, b) => {
@@ -176,6 +177,7 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
       const entry = {
         id: node.key,
         kind: node.kind,
+        ctype: KINDS[node.kind] ? KINDS[node.kind].type : '',
         author: node.c.author || node.author,
         title: titleOf(node.kind, node.c, node.c.author || node.author),
         terms,
@@ -224,7 +226,7 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
   const MAX_PAIRS = 300;
 
   const strip = (n) => ({
-    id: n.id, kind: n.kind, author: n.author, title: n.title,
+    id: n.id, kind: n.kind, ctype: n.ctype, author: n.author, title: n.title,
     href: n.href, createdAt: n.createdAt, ts: n.ts
   });
 

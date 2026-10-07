@@ -384,3 +384,184 @@ describe('banking: an inhabitant can withdraw a published address', (t) => {
     eq(await B.use('banking').getUserAddress(A.keypair.id), 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42B', 'a fresh address is picked up again');
   });
 });
+
+describe('banking: a PUB pays each UBI claim once, and only its own', (t) => {
+  const http = require('http');
+  const crypto = require('crypto');
+  const fs = require('fs');
+  const path = require('path');
+  const { realConfig, setTestWallet } = require('../../helpers/setup');
+  const epochNow = () => new Date().toISOString().slice(0, 7);
+  const publish = (peer, content) => new Promise((res, rej) => peer.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const randomAddress = () => 'E' + Array.from(crypto.randomBytes(33), b => B58[b % B58.length]).join('');
+  const ledgerPath = () => path.join(process.env.OASIS_BANKING_DIR, 'banking-ubi-paid.json');
+
+  const fakeWallet = (opts = {}) => new Promise((resolve) => {
+    const state = { sends: [...(opts.preload || [])], dropAnswers: opts.dropAnswers || 0, failSends: opts.failSends || 0, sendCalls: 0 };
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        const { method, params } = JSON.parse(body || '{}');
+        const reply = (result, error = null) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ result, error, id: 'oasis' })); };
+        if (method === 'getbalance') return reply(opts.balance ?? 1000);
+        if (method === 'listtransactions') return reply(state.sends.slice());
+        if (method === 'sendtoaddress') {
+          state.sendCalls += 1;
+          if (state.failSends > 0) { state.failSends -= 1; return reply(null, { code: -6, message: 'Insufficient funds' }); }
+          const txid = crypto.randomBytes(32).toString('hex');
+          state.sends.push({ category: 'send', address: params[0], amount: -Number(params[1]), comment: params[2], txid, time: Math.floor(Date.now() / 1000) });
+          if (state.dropAnswers > 0) { state.dropAnswers -= 1; req.socket.destroy(); return; }
+          return reply(txid);
+        }
+        return reply(null, { code: -32601, message: 'Method not found' });
+      });
+    });
+    server.listen(0, '127.0.0.1', () => resolve({ url: `http://127.0.0.1:${server.address().port}`, state, close: () => new Promise(r => server.close(r)) }));
+  });
+
+  const backdated = async (ms, fn) => {
+    const realNow = Date.now;
+    Date.now = () => realNow() - ms;
+    try { return await fn(); } finally { Date.now = realNow; }
+  };
+
+  const makeClaimant = async (net, address = randomAddress()) => {
+    const A = makePeer(net);
+    await backdated(40 * 86400000, () => publish(A, { type: 'post', text: 'an old hello' }));
+    for (let i = 0; i < 3; i++) await publish(A, { type: 'post', text: `still here ${i}` });
+    await publish(A, { type: 'wallet', coin: 'ECO', address });
+    return { A, address };
+  };
+
+  const claim = (A, pubId, ageMs = 0) => backdated(ageMs, () => publish(A, { type: 'ubiClaim', pubId, epochId: epochNow(), claimedAt: new Date(Date.now()).toISOString() }));
+
+  const runAsPub = async (P, wallet, fn) => {
+    const prevPub = realConfig.pub;
+    realConfig.pub = true;
+    setTestWallet({ url: wallet.url, user: 'u', pass: 'p', fee: '5' });
+    P.setActor();
+    try { return await fn(P.use('banking')); } finally { realConfig.pub = prevPub; setTestWallet(null); }
+  };
+
+  const results = (peer, userId) => new Promise((resolve) => {
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    const out = [];
+    pull(peer.node.messagesByType({ type: 'ubiClaimResult' }),
+      pull.drain(m => { const c = m.value && m.value.content; if (c && c.userId === userId) out.push(c); }, () => resolve(out)));
+  });
+
+  t('a PUB pays a claim addressed to it exactly once, however many times it runs', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const { A, address } = await makeClaimant(net);
+    await claim(A, P.keypair.id);
+    const wallet = await fakeWallet();
+    try {
+      await runAsPub(P, wallet, async (bank) => { await bank.processPendingClaims(); await bank.processPendingClaims(); });
+      eq(wallet.state.sends.filter(s => s.address === address).length, 1, 'one payment reaches the inhabitant');
+      eq((await results(P, A.keypair.id)).length, 1, 'and one payment result is published');
+    } finally { await wallet.close(); }
+  });
+
+  t('a PUB leaves alone a fresh claim addressed to another PUB', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const Other = makePeer(net);
+    const { A, address } = await makeClaimant(net);
+    await claim(A, Other.keypair.id);
+    const wallet = await fakeWallet();
+    try {
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sendCalls, 0, 'nothing is sent');
+      eq(wallet.state.sends.filter(s => s.address === address).length, 0);
+    } finally { await wallet.close(); }
+  });
+
+  t('when the wallet sends but its answer is lost, the payment is found and not repeated', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const { A, address } = await makeClaimant(net);
+    await claim(A, P.keypair.id);
+    const wallet = await fakeWallet({ dropAnswers: 1 });
+    try {
+      await runAsPub(P, wallet, async (bank) => { await bank.processPendingClaims(); await bank.processPendingClaims(); });
+      const paid = wallet.state.sends.filter(s => s.address === address);
+      eq(paid.length, 1, 'a single payment went out');
+      const res = await results(P, A.keypair.id);
+      eq(res.length, 1, 'the payment is recorded');
+      eq(res[0].txid, paid[0].txid, 'with the txid the wallet really used');
+    } finally { await wallet.close(); }
+  });
+
+  t('a payment that failed is retried later, once the wallet shows nothing went out', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const { A, address } = await makeClaimant(net);
+    await claim(A, P.keypair.id);
+    const wallet = await fakeWallet({ failSends: 1 });
+    try {
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sends.filter(s => s.address === address).length, 0, 'the first attempt sent nothing');
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sendCalls, 1, 'it is not retried straight away');
+      const key = `${epochNow()}:${A.keypair.id}`;
+      const ledger = JSON.parse(fs.readFileSync(ledgerPath(), 'utf8'));
+      ledger[key].lastAttemptAt = new Date(Date.now() - 2 * 3600000).toISOString();
+      fs.writeFileSync(ledgerPath(), JSON.stringify(ledger));
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sends.filter(s => s.address === address).length, 1, 'later it is paid once');
+      eq((await results(P, A.keypair.id)).length, 1);
+    } finally { await wallet.close(); }
+  });
+
+  t('a UBI payment already in the wallet this month is recorded instead of paid again', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const address = randomAddress();
+    const { A } = await makeClaimant(net, address);
+    await claim(A, P.keypair.id);
+    const txid = 'b'.repeat(64);
+    const wallet = await fakeWallet({ preload: [{ category: 'send', address, amount: -3, comment: 'OASIS UBI Payment', txid, time: Math.floor(Date.now() / 1000) - 60 }] });
+    try {
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sendCalls, 0, 'nothing new is sent');
+      const res = await results(P, A.keypair.id);
+      eq(res.length, 1);
+      eq(res[0].txid, txid, 'the earlier payment is the one recorded');
+    } finally { await wallet.close(); }
+  });
+
+  t('a rebalance whose answer is lost is recorded once and not sent again', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const Q = makePeer(net);
+    const qAddress = randomAddress();
+    await publish(Q, { type: 'pubAvailability', coin: 'ECO', available: false, balance: 0, address: qAddress, timestamp: Date.now() });
+    await publish(P, { type: 'contact', contact: Q.keypair.id, following: true });
+    for (let i = 0; i < 3; i++) { const { A } = await makeClaimant(net); await claim(A, Q.keypair.id); }
+    const wallet = await fakeWallet({ balance: 100000, dropAnswers: 1 });
+    const transfersToQ = () => new Promise((resolve) => {
+      const pull = require('../../../src/server/node_modules/pull-stream');
+      let n = 0;
+      pull(P.node.messagesByType({ type: 'transfer' }), pull.drain(m => { const c = m.value && m.value.content; if (c && c.to === Q.keypair.id) n += 1; }, () => resolve(n)));
+    });
+    try {
+      await runAsPub(P, wallet, async (bank) => { await bank.rebalanceUbiPools(); await bank.rebalanceUbiPools(); });
+      eq(wallet.state.sends.filter(s => s.address === qAddress).length, 1, 'a single rebalance went out');
+      eq(await transfersToQ(), 1, 'and it is recorded once');
+    } finally { await wallet.close(); }
+  });
+
+  t('the default PUB takes over a claim another PUB left unpaid for days, but not a fresh one', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const Other = makePeer(net);
+    const fresh = await makeClaimant(net);
+    const stale = await makeClaimant(net);
+    await claim(fresh.A, Other.keypair.id);
+    await claim(stale.A, Other.keypair.id, 4 * 86400000);
+    const realRead = fs.readFileSync;
+    fs.readFileSync = function (p, ...rest) {
+      if (String(p).endsWith('snh-invite-code.json')) return JSON.stringify({ code: `pub.example:8008:${P.keypair.id}~invite` });
+      return realRead.call(this, p, ...rest);
+    };
+    const wallet = await fakeWallet();
+    try {
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sends.filter(s => s.address === fresh.address).length, 0, 'a fresh claim stays with its PUB');
+      eq(wallet.state.sends.filter(s => s.address === stale.address).length, 1, 'an old unpaid one is paid by the default PUB');
+    } finally { fs.readFileSync = realRead; await wallet.close(); }
+  });
+});

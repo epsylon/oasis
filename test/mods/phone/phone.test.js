@@ -2,7 +2,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { eq, ok } = require('../../helpers/assert');
+const { eq, ok, notOk } = require('../../helpers/assert');
 const SecretStack = require('../../../src/server/node_modules/secret-stack');
 const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
 const phone = require('../../../src/server/phone_module');
@@ -29,7 +29,7 @@ const speak = (id, value, frames = 5) => {
 };
 const heard = (id, value) => devices.get(id).played.some(b => b.length >= 320 && Math.abs(b.readInt16LE(0) - value) < value * 0.05 && Math.abs(b.readInt16LE(318) - value) < value * 0.05);
 
-const BEEP_BYTES = 8000 * 0.4 * 2;
+const BEEP_BYTES = 8000 * 0.7 * 2;
 const DOUBLE_BEEP_BYTES = 8000 * 0.45 * 2;
 const makeNode = (prefs = {}) => {
   phone.setAudioFactory(fakeAudio);
@@ -39,7 +39,7 @@ const makeNode = (prefs = {}) => {
   const keys = ssbKeys.generate();
   const node = SecretStack({ caps })
     .use(phone)
-    .call(null, { path: dir, keys, port, host: '127.0.0.1', phone: { ringMs: 1500, voicemailMaxMs: 3000, ...prefs }, connections: { incoming: { net: [{ scope: 'device', transform: 'shs', port, host: '127.0.0.1' }] }, outgoing: { net: [{ transform: 'shs' }] } } });
+    .call(null, { path: dir, keys, port, host: '127.0.0.1', phone: { ringMs: 1500, voicemailMaxMs: 3000, opus: false, ...prefs }, connections: { incoming: { net: [{ scope: 'device', transform: 'shs', port, host: '127.0.0.1' }] }, outgoing: { net: [{ transform: 'shs' }] } } });
   node.__dir = dir;
   node.__port = port;
   node.__keys = keys;
@@ -62,6 +62,14 @@ const link = async (a, b) => {
 };
 const asP = (fn, ...args) => new Promise((resolve, reject) => fn(...args, (err, v) => err ? reject(err) : resolve(v)));
 const ended = (n) => n.__events.filter(e => e.type === 'ended').map(e => e.call);
+const speakTone = (id, amp, frames = 25) => {
+  const pcm = Buffer.alloc(320 * frames);
+  for (let i = 0; i < pcm.length / 2; i++) pcm.writeInt16LE(Math.round(Math.sin(2 * Math.PI * 400 * i / 8000) * amp), i * 2);
+  for (const mic of devices.get(id).mics) mic(pcm);
+};
+const rms = (buf) => { let e = 0; const n = buf.length >> 1; for (let i = 0; i < n; i++) { const v = buf.readInt16LE(i * 2); e += v * v; } return n ? Math.sqrt(e / n) : 0; };
+const hearsTone = (id, amp) => devices.get(id).played.some(b => b.length >= 320 && rms(b) > amp * 0.55);
+const peak = (buf) => { let m = 0; for (let i = 0; i + 1 < buf.length; i += 2) m = Math.max(m, Math.abs(buf.readInt16LE(i))); return m; };
 
 phone.setAudioFactory(fakeAudio);
 
@@ -85,6 +93,7 @@ describe('phone: a call between two nodes', (t) => {
       await asP(a.phone.call, b.id);
       eq(a.phone.state().phase, 'calling');
       ok(await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming'), 'the callee rings');
+      ok(await waitFor(() => a.phone.state().reached), 'the caller learns that the call reached the other side');
       eq(b.phone.state().peer, a.id, 'and sees who is calling');
       await asP(b.phone.accept);
       ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'connected' && b.phone.state() && b.phone.state().phase === 'connected'), 'both sides are connected');
@@ -131,6 +140,7 @@ describe('phone: the caller always sees the same thing', (t) => {
       await sleep(300);
       eq(a.phone.state().phase, 'calling', 'rejecting tells the caller nothing');
       ok(await waitFor(() => a.phone.state().phase === 'recording', 4000), 'after the ringing time it is just no answer: leave a message');
+      eq(a.phone.state().why, 'noanswer');
       eq(ended(b)[0].outcome, 'rejected');
     } finally { await closeNode(a); await closeNode(b); }
   });
@@ -142,18 +152,68 @@ describe('phone: the caller always sees the same thing', (t) => {
       await asP(a.phone.call, b.id);
       await sleep(400);
       eq(b.phone.state(), null, 'nothing rings');
+      ok(a.phone.state().reached, 'for the caller it rings as usual');
       ok(await waitFor(() => a.phone.state().phase === 'recording', 4000), 'the caller only sees no answer');
+      eq(a.phone.state().why, 'noanswer');
       eq(b.__events.filter(e => e.type === 'incoming').length, 0, 'and nothing is recorded on the callee side');
     } finally { await closeNode(a); await closeNode(b); }
   });
 
-  t('an unreachable person looks exactly the same', async () => {
+  t('a call that reaches nobody stays connecting, without ringing, and ends in a message', async () => {
     const a = makeNode();
     try {
       await asP(a.phone.call, '@' + crypto.randomBytes(32).toString('base64') + '.ed25519');
       eq(a.phone.state().phase, 'calling');
-      ok(await waitFor(() => a.phone.state().phase === 'recording', 4000));
+      await sleep(300);
+      notOk(a.phone.state().reached, 'it is still connecting');
+      ok(devices.get(a.id).played.length > 0 && devices.get(a.id).played.every(b => peak(b) < 3000), 'only a soft connecting sound plays, no ringing tone');
+      ok(await waitFor(() => a.phone.state().phase === 'recording', 4000), 'then a message can be left');
+      eq(a.phone.state().why, 'unreachable', 'saying the person could not be reached');
     } finally { await closeNode(a); }
+  });
+
+  t('a person on an older Oasis that never confirms still gets the usual ringing once reached', async () => {
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, b);
+      await asP(a.phone.call, b.id, { legacy: [b.id] });
+      ok(a.phone.state().reached, 'it rings straight away');
+      ok(await waitFor(() => devices.get(a.id).played.some(b => peak(b) > 5000)), 'with the ringing tone');
+      ok(await waitFor(() => a.phone.state().phase === 'recording', 4000));
+      eq(a.phone.state().why, 'noanswer', 'and ends as an ordinary no answer');
+    } finally { await closeNode(a); await closeNode(b); }
+  });
+
+  t('an older Oasis that cannot be reached does not pretend to ring', async () => {
+    const a = makeNode();
+    try {
+      const old = '@' + crypto.randomBytes(32).toString('base64') + '.ed25519';
+      await asP(a.phone.call, old, { legacy: [old] });
+      await sleep(300);
+      notOk(a.phone.state().reached, 'it is still connecting');
+      ok(devices.get(a.id).played.length > 0 && devices.get(a.id).played.every(b => peak(b) < 3000), 'without a ringing tone');
+      ok(await waitFor(() => a.phone.state().phase === 'recording', 4000));
+      eq(a.phone.state().why, 'unreachable', 'and says the person could not be reached');
+    } finally { await closeNode(a); }
+  });
+
+  t('someone already on a call answers busy, and the call shows up as missed for them', async () => {
+    const a = makeNode(); const b = makeNode(); const c = makeNode();
+    try {
+      await link(b, c);
+      await link(a, b);
+      await asP(c.phone.call, b.id);
+      await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming');
+      await asP(b.phone.accept);
+      ok(await waitFor(() => c.phone.state() && c.phone.state().phase === 'connected'), 'B is talking with C');
+      await asP(a.phone.call, b.id);
+      ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'recording', 1200), 'A hears busy straight away and can leave a message');
+      eq(a.phone.state().why, 'busy');
+      eq(b.phone.state().peer, c.id, 'B\'s call goes on');
+      ok(await waitFor(() => ended(b).some(e => e.peer === a.id && e.outcome === 'missed')), 'and B sees a missed call from A');
+      await asP(a.phone.recordCancel);
+      await asP(c.phone.end);
+    } finally { await closeNode(a); await closeNode(b); await closeNode(c); }
   });
 
   t('a forged ring signed by someone else is ignored', async () => {
@@ -167,6 +227,39 @@ describe('phone: the caller always sees the same thing', (t) => {
       await asP(rpc.phone.ring, { callId: 'ab'.repeat(16), to: b.id, ephPk: crypto.randomBytes(32).toString('base64'), ts, sig });
       await sleep(300);
       eq(b.phone.state(), null);
+    } finally { await closeNode(a); await closeNode(b); }
+  });
+});
+
+describe('phone: Opus', (t) => {
+  t('two up-to-date nodes talk with Opus, both ways', async () => {
+    const a = makeNode({ opus: true }); const b = makeNode({ opus: true });
+    try {
+      await link(a, b);
+      await asP(a.phone.call, b.id);
+      await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming');
+      await asP(b.phone.accept);
+      ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'connected' && b.phone.state().phase === 'connected'), 'connected');
+      eq(a.phone.state().codec, 'opus', 'the caller uses Opus');
+      eq(b.phone.state().codec, 'opus', 'and so does the callee');
+      ok(await waitFor(async () => { speakTone(a.id, 12000); await sleep(60); return hearsTone(b.id, 12000); }), 'B hears A');
+      ok(await waitFor(async () => { speakTone(b.id, 12000); await sleep(60); return hearsTone(a.id, 12000); }), 'A hears B');
+      await asP(a.phone.end);
+    } finally { await closeNode(a); await closeNode(b); }
+  });
+
+  t('with a node that has no Opus the call falls back to the old codec and still works', async () => {
+    const a = makeNode({ opus: true }); const b = makeNode({ opus: false });
+    try {
+      await link(a, b);
+      await asP(a.phone.call, b.id);
+      await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming');
+      await asP(b.phone.accept);
+      ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'connected' && b.phone.state().phase === 'connected'));
+      eq(a.phone.state().codec, 'ulaw', 'both agree on the old codec');
+      ok(await waitFor(async () => { speak(a.id, 9000); await sleep(40); return heard(b.id, 9000); }), 'B hears A');
+      ok(await waitFor(async () => { speak(b.id, 5000); await sleep(40); return heard(a.id, 5000); }), 'A hears B');
+      await asP(a.phone.end);
     } finally { await closeNode(a); await closeNode(b); }
   });
 });
@@ -217,13 +310,12 @@ describe('phone: calls through a pub', (t) => {
       ok(!(a.peers[b.id] && a.peers[b.id].length), 'A and B have no direct connection');
       await asP(a.phone.call, b.id);
       ok(await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming'), 'B rings through the pub');
+      ok(await waitFor(() => a.phone.state().reached), 'and A learns through the pub that B has the call');
       eq(b.phone.state().peer, a.id, 'and sees who is really calling, not the pub');
       await asP(b.phone.accept);
       ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'connected' && b.phone.state() && b.phone.state().phase === 'connected'), 'both are connected');
-      speak(a.id, 8000);
-      speak(b.id, 4000);
-      ok(await waitFor(() => heard(b.id, 8000)), 'B hears A through the pub');
-      ok(await waitFor(() => heard(a.id, 4000)), 'A hears B through the pub');
+      ok(await waitFor(async () => { speak(a.id, 8000); await sleep(40); return heard(b.id, 8000); }), 'B hears A through the pub');
+      ok(await waitFor(async () => { speak(b.id, 4000); await sleep(40); return heard(a.id, 4000); }), 'A hears B through the pub');
       eq(pub.phone.state(), null, 'the pub is not part of the call');
       await asP(b.phone.end);
       ok(await waitFor(() => !a.phone.state()), 'hanging up reaches A through the pub');
@@ -328,10 +420,8 @@ describe('phone: calls through a pub', (t) => {
       eq(b.phone.state().peer, a.id);
       await asP(b.phone.accept);
       ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'connected' && b.phone.state().phase === 'connected'), 'the answer found its way back');
-      speak(a.id, 7500);
-      speak(b.id, 3500);
-      ok(await waitFor(() => heard(b.id, 7500)), 'B hears A across both pubs');
-      ok(await waitFor(() => heard(a.id, 3500)), 'A hears B across both pubs');
+      ok(await waitFor(async () => { speak(a.id, 7500); await sleep(40); return heard(b.id, 7500); }), 'B hears A across both pubs');
+      ok(await waitFor(async () => { speak(b.id, 3500); await sleep(40); return heard(a.id, 3500); }), 'A hears B across both pubs');
       await asP(a.phone.end);
       ok(await waitFor(() => !b.phone.state()), 'hanging up crosses both pubs too');
     } finally { await closeNode(a); await closeNode(b); await closeNode(p); await closeNode(q); }

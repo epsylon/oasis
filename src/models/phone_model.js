@@ -74,7 +74,7 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile }) => {
   const subscribe = async () => {
     if (subscribed) return;
     const ph = await phone();
-    if (!ph) return;
+    if (!ph || subscribed) return;
     subscribed = true;
     pull(ph.events(), pull.drain((ev) => {
       if (!ev) return;
@@ -93,7 +93,13 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile }) => {
         writeJson(historyFile, h.slice(0, HISTORY_MAX));
         refreshCount();
       }
-    }, () => { subscribed = false; }));
+    }, () => {
+      subscribed = false;
+      const retry = setTimeout(() => { subscribe().catch(() => {}); }, 5000);
+      if (retry.unref) retry.unref();
+    }));
+    try { sharedState.setPhoneCall((await rpcValue(ph.state)) || null); } catch (_) {}
+    try { if (typeof ph.roomState === 'function') sharedState.setPhoneRoom((await rpcValue(ph.roomState)) || null); } catch (_) {}
   };
 
   const act = async (method, ...args) => {
@@ -172,11 +178,11 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile }) => {
       const ph = await phone();
       return ph ? rpcValue(ph.state) : null;
     },
-    async call(to) {
+    async call(to, opts = {}) {
       await refreshPubs();
       const list = Array.isArray(to) ? to : [to];
       if (list.some(isPub)) throw new Error('pub');
-      return act('call', list.length === 1 ? list[0] : list);
+      return act('call', list.length === 1 ? list[0] : list, { legacy: Array.isArray(opts.legacy) ? opts.legacy : [] });
     },
     accept: () => act('accept'),
     reject: () => act('reject'),

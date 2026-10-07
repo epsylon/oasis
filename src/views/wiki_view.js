@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
 const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow } = require("./main_views");
-const { renderEncryptedChip, renderReachChip, renderLicenseChip, renderLicenseSelect } = require("./clearnet_view");
+const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
 const moment = require("../server/node_modules/moment");
@@ -67,10 +67,10 @@ const renderDiff = (oldText, newText) =>
     )
   );
 
-const reachChip = (page, params = {}) =>
-  page.tribeId || !params.authorPrefs
+const reachChip = (page) =>
+  page.tribeId || page.encrypted
     ? null
-    : renderReachChip(params.authorPrefs.clearnetWiki === true, i18n, clearnetItemHref('wiki', page.title, page.id));
+    : renderReachChip(!!page.clearnet, i18n, page.clearnet ? clearnetItemHref('wiki', page.title, page.id) : null);
 
 const statusChip = (page) =>
   renderStateChip(page.editPolicy === "author" ? "closed" : "open", "", page.editPolicy === "author" ? i18n.wikiStatusClosed : i18n.wikiStatusOpen);
@@ -91,12 +91,12 @@ const renderPageCard = (page, params = {}) => {
   return div({ class: "tribe-card wiki-card" },
     div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(page.id, href, { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: (params.spreadMap && params.spreadMap.get(page.id)) || null })
+      renderContentActions(page.id, href, { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: (params.spreadMap && params.spreadMap.get(page.id)) || null, deleteAction: !page.tribeId && String(page.author) === String(userId) ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined })
     ),
     div({ class: "tribe-card-body" },
       page.image ? a({ href }, img({ loading: 'lazy', class: "wiki-card-cover", src: `/blob/${encodeURIComponent(page.image)}`, alt: page.title || "" })) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href }, page.title || "—"))),
-      div({ class: "card-chips-row" }, ...pageChips(page), renderLicenseChip(page.license))
+      div({ class: "card-chips-row" }, ...pageChips(page), page.clearnet === true ? reachChip(page) : null, renderLicenseChip(page.license))
     )
   );
 };
@@ -166,6 +166,7 @@ const renderForm = (page, params = {}) => {
       label(i18n.wikiTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.wikiTagsPlaceholder, value: tagsValue }), br(),
       canLicense ? renderLicenseSelect(licenseValue, i18n) : null,
+      !tribeId && canLicense ? renderClearnetSelector(draft ? draft.clearnet === true : !!(page && page.clearnet), i18n) : null,
       br(),
       button({ type: "submit", class: "filter-btn", formaction: "/wiki/preview", formmethod: "POST" }, i18n.wikiPreview),
       " ",
@@ -174,11 +175,10 @@ const renderForm = (page, params = {}) => {
   );
 };
 
-const renderHeader = (tribe = null, params = {}) =>
+const renderHeader = (tribe = null) =>
   div({ class: "tags-header module-header-line" },
     h2(tribe ? `${i18n.wikiTitle} · ${tribe.title}` : i18n.wikiTitle),
-    p(i18n.wikiDescription),
-    tribe || !params.viewerPrefs ? null : renderReachChip(params.viewerPrefs.clearnetWiki === true, i18n, `/c/inhabitant/${encodeURIComponent(params.viewerId || '')}`)
+    p(i18n.wikiDescription)
   );
 
 exports.wikiView = async (pages, filter = "all", params = {}) => {
@@ -222,7 +222,7 @@ exports.wikiChangesView = async (changes, params = {}) => {
   const census = Array.isArray(params.censusList) ? params.censusList : [];
   return template(
     i18n.wikiTitle,
-    section(renderHeader(params.tribe || null, params), renderFilters("changes", "", { ...params, emptyMod: census.length === 0 }, census)),
+    section(renderHeader(params.tribe || null), renderFilters("changes", "", { ...params, emptyMod: census.length === 0 }, census)),
     section(
       div({ class: "tags-header" }, h2(i18n.wikiChanges)),
       list.length
@@ -279,7 +279,7 @@ exports.wikiHistoryView = async (page, params = {}) => {
   const census = Array.isArray(params.censusList) ? params.censusList : [];
   return template(
     page.title,
-    section(renderHeader(params.tribe || null, params), renderFilters("all", "", { ...params, emptyMod: census.length === 0 }, census)),
+    section(renderHeader(params.tribe || null), renderFilters("all", "", { ...params, emptyMod: census.length === 0 }, census)),
     section(
       div({ class: "tags-header" }, h2(i18n.wikiHistory)),
       div({ class: "wiki-history" }, ...versions.map((v, i) => versionRow(page, v, page.versions.length - 1 - i, page.tipId, tribeId)))
@@ -299,9 +299,10 @@ exports.wikiPageView = async (page, params = {}) => {
   const subscriptionNodes = params.subscription
     ? renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base, inline: true, compact: true })
     : null;
-  const barChips = [reachChip(page, params), statusChip(page)].filter(Boolean);
+  const barChips = [reachChip(page), statusChip(page)].filter(Boolean);
   const actions = div({ class: "tribe-side-actions wiki-actions-top" },
     span({ class: "wiki-actions-left" }, ...barChips),
+    page.isOwner && !tribeId && !page.encrypted ? renderClearnetSwitch("wiki", page.rootId || page.id, !!page.clearnet) : null,
     ...(subscriptionNodes && subscriptionNodes.length ? subscriptionNodes : []),
     page.canEdit && !version
       ? form({ method: "GET", action: "/wiki" },
@@ -315,8 +316,8 @@ exports.wikiPageView = async (page, params = {}) => {
       button({ type: "submit", class: "update-btn" }, `${i18n.wikiHistory} (${page.versionCount})`)),
     form({ method: "GET", action: `/wiki/${encodeURIComponent(page.id)}/pdf` },
       button({ type: "submit", class: "update-btn" }, i18n.generatePdf)),
-    page.isOwner
-      ? form({ method: "POST", action: `/wiki/delete/${encodeURIComponent(page.id)}` }, tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null, button({ type: "submit", class: "delete-btn" }, i18n.wikiDelete))
+    page.isOwner && tribeId
+      ? form({ method: "POST", action: `/wiki/delete/${encodeURIComponent(page.id)}` }, input({ type: "hidden", name: "tribeId", value: tribeId }), button({ type: "submit", class: "delete-btn" }, i18n.wikiDelete))
       : null
   );
   let diffBlock = null;
@@ -330,12 +331,12 @@ exports.wikiPageView = async (page, params = {}) => {
   }
   return template(
     page.title,
-    section(renderHeader(params.tribe || null, params), renderFilters("all", "", { ...params, emptyMod: census.length === 0 }, census)),
+    section(renderHeader(params.tribe || null), renderFilters("all", "", { ...params, emptyMod: census.length === 0 }, census)),
     section(
       div({ class: "trending-card wiki-page" },
         div({ class: "card-header activity-card-header" },
           span(),
-          renderContentActions(page.id, base, { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: params.spread || null })
+          renderContentActions(page.id, base, { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: params.spread || null, deleteAction: page.isOwner && !tribeId ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined })
         ),
         div({ class: "card-section" },
           actions,

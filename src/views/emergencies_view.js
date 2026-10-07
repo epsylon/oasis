@@ -1,7 +1,8 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, video: videoHyperaxe, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
-const { renderMapLocationVisitLabel } = require("./maps_view");
+const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -21,6 +22,7 @@ const baseLabel = (f) => String(i18n[`emergencyFilter${f.charAt(0) + f.slice(1).
 const severityChip = (emergency) => span({ class: `emergency-severity emergency-severity-${String(emergency.severity || "UNVERIFIED").toLowerCase()}` }, `${sevLabel(emergency.severity)} · ${emergency.confirmationCount || 0}`);
 const statusChip = (emergency) => renderStateChip(emergency.status === "ACTIVE" ? "mutuals" : "closed", "", statusLabel(emergency.status));
 const categoryChip = (emergency) => renderStateChip("neutral", "", catLabel(emergency.category));
+const clearnetEligible = (emergency) => String(emergency.status || "ACTIVE").toUpperCase() === "ACTIVE" && !emergency.tribeId && !emergency.encrypted;
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
   ? div({ class: "card-tags" }, ...tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`)))
@@ -32,13 +34,13 @@ const renderEmergencyCard = (emergency, params = {}) =>
   div({ class: `tribe-card emergency-card emergency-card-${String(emergency.severity || "UNVERIFIED").toLowerCase()}` },
     div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(emergency.id, emergencyHref(emergency), { author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: (params.spreadMap && params.spreadMap.get(emergency.id)) || null })
+      renderContentActions(emergency.id, emergencyHref(emergency), { author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: (params.spreadMap && params.spreadMap.get(emergency.id)) || null, deleteAction: String(emergency.author) === String(userId) ? contentDeleteAction("emergency", emergency.id) : undefined })
     ),
     div({ class: "tribe-card-body" },
       emergency.media && emergency.media.kind === "image" ? a({ href: emergencyHref(emergency) }, img({ loading: 'lazy', class: "emergency-card-cover", src: `/blob/${encodeURIComponent(emergency.media.blobId)}`, alt: emergency.title || "" })) : null,
       emergency.media && emergency.media.kind === "video" ? videoHyperaxe({ class: "emergency-card-cover", src: `/blob/${encodeURIComponent(emergency.media.blobId)}`, controls: true, preload: "metadata" }) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: emergencyHref(emergency) }, emergency.title || "—"))),
-      div({ class: "card-chips-row" }, severityChip(emergency), statusChip(emergency), categoryChip(emergency)),
+      div({ class: "card-chips-row" }, severityChip(emergency), statusChip(emergency), categoryChip(emergency), emergency.clearnet === true && clearnetEligible(emergency) ? renderReachChip(true, i18n, clearnetItemHref("emergencies", emergency.title, emergency.id)) : null),
       emergency.expiresAt ? p({ class: "job-meta-line" }, `${i18n.emergencyExpiresAt}: ${moment(emergency.expiresAt).format("YYYY/MM/DD HH:mm")}`) : null
     )
   );
@@ -94,6 +96,7 @@ const renderForm = (emergency, params = {}) =>
       ), br(), br(),
       label(i18n.emergencyTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.emergencyTagsPlaceholder, value: emergency ? emergency.tags.join(", ") : "" }), br(), br(),
+      ...(!emergency || clearnetEligible(emergency) ? [renderClearnetSelector(!!emergency && emergency.clearnet === true, i18n), br()] : []),
       button({ type: "submit", class: "create-button" }, emergency ? i18n.emergencyUpdate : i18n.emergencyCreate)
     )
   );
@@ -133,6 +136,8 @@ exports.emergenciesView = async (emergencies, filter = "ALL", params = {}) => {
 
 exports.singleEmergencyView = async (emergency, params = {}) => {
   const isAuthor = String(emergency.author) === String(userId);
+  const canClearnet = clearnetEligible(emergency);
+  const isClearnet = canClearnet && !!emergency.clearnet;
   const confirmed = Array.isArray(emergency.confirmations) && emergency.confirmations.includes(userId);
   const href = emergencyHref(emergency);
   const census = Array.isArray(params.censusList) ? params.censusList : [];
@@ -146,17 +151,20 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
     ? [
         (emergency.confirmationCount || 0) > 0
           ? null
-          : form({ method: "GET", action: "/emergencies" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: emergency.id }), button({ type: "submit", class: "update-btn" }, i18n.emergencyUpdate)),
-        form({ method: "POST", action: `/emergencies/delete/${encodeURIComponent(emergency.id)}` }, button({ type: "submit", class: "delete-btn" }, i18n.emergencyDelete))
+          : form({ method: "GET", action: "/emergencies" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: emergency.id }), button({ type: "submit", class: "update-btn" }, i18n.emergencyUpdate))
       ].filter(Boolean)
     : [];
   const updates = Array.isArray(emergency.updates) ? emergency.updates : [];
   const side = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(emergency.id, null, { author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: params.spread || null })
+      renderContentActions(emergency.id, href, { author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: params.spread || null, returnTo: href, deleteAction: isAuthor ? contentDeleteAction("emergency", emergency.id) : undefined })
     ),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, emergency.title)),
-    div({ class: "card-chips-row" }, severityChip(emergency), statusChip(emergency), categoryChip(emergency)),
+    div({ class: "card-chips-row" },
+      severityChip(emergency), statusChip(emergency), categoryChip(emergency),
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("emergencies", emergency.title, emergency.id) : null),
+      isAuthor && canClearnet ? renderClearnetSwitch("emergencies", emergency.rootId || emergency.id, isClearnet) : null
+    ),
     table({ class: "tribe-info-table jobs-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.createdAtLabel || "Created at"),
@@ -175,7 +183,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.emergencyConfirmations}: ${emergency.confirmationCount || 0}`)
     ),
-    renderMapLocationVisitLabel(emergency.mapUrl),
+    renderMapEmbed(params.mapData, emergency.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     isAuthor && emergency.status !== "EXPIRED"
       ? div({ class: "tribe-side-actions housing-status-row" },
@@ -251,4 +259,50 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
     section(renderHeader(), renderFilters("ALL", "", census, census.length === 0)),
     section(div({ class: "tribe-details" }, side, main))
   );
+};
+
+exports.clearnetEmergencyView = async (emergency, params = {}) => {
+  const { escapeHtml: esc, renderRichText, renderKindTag, renderTagChips, blobUrl: cnBlob, renderClearnetPage } = require("./clearnet_view");
+  const title = esc(emergency.title || i18n.emergencyLabel);
+  const desc = renderRichText(emergency.text || "");
+  const severity = String(emergency.severity || "UNVERIFIED").toUpperCase();
+  const point = params.mapPoint || null;
+  const cover = emergency.media && emergency.media.kind === "image" ? cnBlob(emergency.media.blobId) : null;
+  const updates = (Array.isArray(emergency.updates) ? emergency.updates : []).filter(u => String(u.author) === String(emergency.author));
+  const fmtDate = (v) => esc(moment(v).format("YYYY/MM/DD HH:mm"));
+  const extraCss = `
+.cn-emergency-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700}
+.cn-emergency-meta{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.cn-emergency-meta-item{background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;padding:8px 14px;font-size:14px;color:var(--fg-soft);display:inline-flex;align-items:center;gap:6px}
+.cn-emergency-severity-medium,.cn-emergency-severity-high{border-color:var(--fg);color:var(--fg);font-weight:700}
+.cn-emergency-desc{color:var(--fg-soft);line-height:1.6;font-size:15px;margin:0 0 20px 0;word-break:break-word}
+.cn-emergency-update{border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin:12px 0;background:var(--bg-elev)}
+.cn-emergency-update-date{color:var(--fg-dim);font-size:12px;margin-bottom:6px}
+.cn-emergency-update-text{color:var(--fg-soft);line-height:1.5;word-break:break-word}
+`;
+  const body = `
+  <h1 class="cn-emergency-title">${title}</h1>
+  <div class="cn-emergency-meta">
+    <span class="cn-emergency-meta-item">${renderKindTag("emergency")}</span>
+    <span class="cn-emergency-meta-item cn-emergency-severity-${severity.toLowerCase()}">⚠ ${esc(sevLabel(severity))}</span>
+    <span class="cn-emergency-meta-item">✓ ${esc(i18n.emergencyConfirmations)}: ${Number(emergency.confirmationCount) || 0}</span>
+    <span class="cn-emergency-meta-item">${esc(catLabel(String(emergency.category || "NEIGHBORHOOD")))}</span>
+    ${emergency.createdAt ? `<span class="cn-emergency-meta-item">📅 ${fmtDate(emergency.createdAt)}</span>` : ""}
+    ${emergency.expiresAt ? `<span class="cn-emergency-meta-item">⏳ ${esc(i18n.emergencyExpiresAt)}: ${fmtDate(emergency.expiresAt)}</span>` : ""}
+    ${point ? `<a class="cn-emergency-meta-item" href="geo:${point.lat},${point.lng}">📍 ${point.title ? `${esc(point.title)} · ` : ""}${point.lat}, ${point.lng}</a>` : ""}
+  </div>
+  <hr class="cn-sep"/>
+  ${desc ? `<div class="cn-emergency-desc">${desc}</div>` : ""}
+  ${updates.length ? `<h2 class="cn-section">${esc(String(i18n.emergencyUpdatesTitle || "").replace(/[:：]\s*$/, ""))}</h2>${updates.map(u => `<div class="cn-emergency-update"><div class="cn-emergency-update-date">${fmtDate(u.updatedAt || u.createdAt)}</div><div class="cn-emergency-update-text">${renderRichText(u.text || "")}</div></div>`).join("")}` : ""}
+  ${renderTagChips(emergency.tags)}
+`;
+  return renderClearnetPage({
+    title: `${emergency.title || i18n.emergencyLabel} | Oasis`,
+    ogTitle: emergency.title || i18n.emergencyLabel,
+    ogDescription: String(emergency.text || "").replace(/!?\[[^\]]*\]\(\s*&[^)\s]+\s*\)/g, "").trim(),
+    ogImage: cover,
+    extraCss,
+    body,
+    hubFeedId: emergency.author || null
+  });
 };

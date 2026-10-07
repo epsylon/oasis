@@ -1,7 +1,8 @@
 const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td, progress, strong } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderFileDownloads } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderFileDownloads, contentDeleteAction } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -36,27 +37,15 @@ const renderFileOwnerActions = (filter, fileObj, params = {}) => {
   const isAuthor = String(fileObj.author) === String(userId);
   const hasOpinions = Object.keys(fileObj.opinions || {}).length > 0;
 
-  if (!isAuthor) return [];
+  if (!isAuthor || hasOpinions) return [];
 
-  const items = [];
-  if (!hasOpinions) {
-    items.push(
-      form(
-        { method: "GET", action: `/files/edit/${encodeURIComponent(fileObj.key)}` },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        button({ class: "update-btn", type: "submit" }, i18n.fileUpdateButton)
-      )
-    );
-  }
-  items.push(
+  return [
     form(
-      { method: "POST", action: `/files/delete/${encodeURIComponent(fileObj.key)}` },
+      { method: "GET", action: `/files/edit/${encodeURIComponent(fileObj.key)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.fileDeleteButton)
+      button({ class: "update-btn", type: "submit" }, i18n.fileUpdateButton)
     )
-  );
-
-  return items;
+  ];
 };
 
 const renderFileCommentsSection = (fileId, comments = [], returnTo = null) => {
@@ -109,7 +98,7 @@ const renderFileTable = exports.renderFileTable = (files, filter, params = {}) =
       tr(
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
         td(userLink(t.author)),
-        td(t.title || ""),
+        td(t.title || "", t.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('files', t.title, t.key)) : null),
         td(formatSize(t.size)),
         td({ class: "torrent-spread-cell" }, renderFileSeeds(t, params.spreadMap)),
         td({ class: "torrent-spread-cell" }, renderFileSpread(t, params.spreadMap)),
@@ -136,6 +125,7 @@ const renderFileTable = exports.renderFileTable = (files, filter, params = {}) =
 const renderFileForm = (filter, fileId, fileToEdit, params = {}) => {
   const returnTo = safeText(params.returnTo) || buildReturnTo("all", params);
   const tribeId = safeText(params.tribeId || "");
+  const clearnetAllowed = !tribeId && !fileToEdit?.tribeId && !fileToEdit?.encrypted && !fileToEdit?.cipher;
   return div(
     { class: "div-center audio-form" },
     params.spreadWarning || null,
@@ -170,6 +160,7 @@ const renderFileForm = (filter, fileId, fileToEdit, params = {}) => {
       }),
       br(),
       br(),
+      ...(clearnetAllowed ? [renderClearnetSelector(filter === "edit" ? !!fileToEdit?.clearnet : false, i18n), br()] : []),
       button({ type: "submit" }, filter === "edit" ? i18n.fileUpdateButton : i18n.fileCreateButton)
     )
   );
@@ -204,12 +195,6 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
       div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.filesDescription)
-      ,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetFiles);
-          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
-        })()
       ),
       div(
         { class: "filters" },
@@ -274,8 +259,10 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(fileObj.title);
-  const { renderReachChip, renderEncryptedChip, renderTransportChip } = require('./clearnet_view');
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetFiles);
+  const { renderEncryptedChip, renderTransportChip } = require('./clearnet_view');
+  const isAuthor = String(fileObj.author) === String(userId);
+  const clearnetAllowed = !fileObj.tribeId && !fileObj.encrypted && !fileObj.cipher;
+  const isClearnet = !!fileObj.clearnet;
 
   const chips = [
     renderLifespanChip(fileObj.lifetime, i18n),
@@ -289,9 +276,10 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
   const tagsNode = renderTags(fileObj.tags);
 
   const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(fileObj.key, null, {
+    renderContentActions(fileObj.key, `/files/${encodeURIComponent(fileObj.key)}`, {
       spreadTitle: i18n.seedAction,
       author: fileObj.author,
+      deleteAction: String(fileObj.author) === String(userId) ? contentDeleteAction("file", fileObj.key) : null,
       favKind: 'files',
       torrentFrom: { blobId: fileObj.url, name: fileObj.fileName || fileObj.title },
       isFavorite: fileObj.isFavorite,
@@ -305,7 +293,8 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
       fileObj.tribeId && fileObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
-      fileObj.tribeId ? null : renderReachChip(isClearnet, i18n, clearnetItemHref('files', fileObj.title, fileObj.key))
+      clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('files', fileObj.title, fileObj.key) : null) : null,
+      clearnetAllowed && isAuthor ? renderClearnetSwitch('files', fileObj.rootId || fileObj.key, isClearnet) : null
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(fileObj.description)

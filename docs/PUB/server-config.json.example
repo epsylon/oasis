@@ -58,7 +58,11 @@
         }
       ],
       "tunnel": [],
-      "onion": [],
+      "onion": [
+        {
+          "transform": "shs"
+        }
+      ],
       "ws": []
     }
   }

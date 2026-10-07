@@ -1,11 +1,12 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 
 const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null
@@ -38,6 +39,7 @@ const FILTERS = [
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v || "").trim()
+const clearnetEligible = (pr) => String(pr.status || "").toUpperCase() !== "CANCELLED"
 
 const toNum = (v) => {
   const s = v === null || v === undefined ? "" : String(v)
@@ -404,6 +406,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
       const chips = [
         renderProjectStatusChip(pr.status),
         renderLifespanChip(pr.lifetime, i18n),
+        pr.clearnet === true && clearnetEligible(pr) ? renderReachChip(true, i18n, clearnetItemHref('projects', pr.title, pr.id || pr.key)) : null,
         pr.subscriptionIn === true
           ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
           : (pr.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
@@ -414,7 +417,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
         div(
           { class: "card-header activity-card-header" },
           span(),
-          renderContentActions(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { spread: spreadMap.get(pr.id || pr.key) || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title })
+          renderContentActions(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { spread: spreadMap.get(pr.id || pr.key) || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, deleteAction: isOwn ? contentDeleteAction('project', pr.id || pr.key) : undefined })
         ),
         div({ class: "card-section project-card-body" },
           heroNode,
@@ -509,6 +512,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       input({ type: "datetime-local", name: "milestoneDueDate", min: nowLocal, max: milestoneMax }),
       br(),
       br(),
+      !isEdit || clearnetEligible(pr) ? renderClearnetSelector(isEdit ? !!pr.clearnet : false, i18n) : null,
       button({ type: "submit" }, isEdit ? i18n.projectUpdateButton : i18n.projectCreateButton)
     )
   )
@@ -522,8 +526,6 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
   const f = String(filter || "ALL").toUpperCase()
   const filterObj = FILTERS.find((x) => x.key === f) || FILTERS[0]
   const sectionTitle = i18n[filterObj.title] || i18n.projectAllTitle
-  const { renderReachChip: renderReachChipProjects } = require('./clearnet_view');
-  const viewerClearnetProjects = !!(params.viewerPrefs && params.viewerPrefs.clearnetProjects);
   const emptyMod = moduleIsEmpty(Array.isArray(projectsOrForm) ? projectsOrForm : [], f, "ALL", params.q);
   const censusP = Array.isArray(params.censusList) ? params.censusList : (Array.isArray(projectsOrForm) ? projectsOrForm : []);
   const projChip = (x) => {
@@ -544,8 +546,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
     section(
       div({ class: "tags-header module-header-line" },
         h2(sectionTitle),
-        p(i18n.projectsDescription),
-        renderReachChipProjects(viewerClearnetProjects, i18n)
+        p(i18n.projectsDescription)
       ),
       div(
         { class: "filters" },
@@ -587,6 +588,8 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
   const isFollower = safeArr(pr.followers).includes(userId)
 
   const statusUpper = String(pr.status || "ACTIVE").toUpperCase()
+  const canClearnet = clearnetEligible(pr)
+  const isClearnet = canClearnet && !!pr.clearnet
   const pctRaw = toNum(pr.progress)
   const pct = clamp(Math.round(Number.isFinite(pctRaw) ? pctRaw : 0), 0, 100)
   const goal = Math.max(0, toNum(pr.goal) || 0)
@@ -600,6 +603,8 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     isFollower ? renderStateChip("whole", "★", i18n.projectFollowing || "FOLLOWING") : null,
     renderLifespanChip(pr.lifetime, i18n),
     renderEcoTax(pr.msgSize, pr.id || pr.key),
+    renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('projects', pr.title, pr.id || pr.key) : null),
+    isAuthor && canClearnet ? renderClearnetSwitch('projects', pr.rootId || pr.id || pr.key, isClearnet) : null,
     pr.subscription
       ? ((isAuthor || pr.subscription.subscribed === true)
           ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
@@ -624,10 +629,6 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     sideActions.push(form({ method: "GET", action: `/projects/edit/${encodeURIComponent(pr.id)}` },
       button({ class: "tribe-action-btn", type: "submit" }, i18n.projectUpdateButton)
     ))
-    sideActions.push(form({ method: "POST", action: `/projects/delete/${encodeURIComponent(pr.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.projectDeleteButton)
-    ))
     sideActions.push(form(
       { method: "POST", action: `/projects/status/${encodeURIComponent(pr.id)}`, class: "project-control-form project-control-form--status" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -650,7 +651,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
 
   const projectSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(pr.id || pr.key, null, { spread: params.spreads || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title })
+      renderContentActions(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { spread: params.spreads || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, returnTo: `/projects/${encodeURIComponent(pr.id)}`, deleteAction: isAuthor ? contentDeleteAction('project', pr.id || pr.key) : undefined })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, pr.title)

@@ -91,24 +91,24 @@ const readTyped = async (ssbClient, types, opts = {}) => {
     return all;
   }
   const cache = cacheFor(ssbClient);
-  if (!cache.seen) cache.seen = new Set();
   const wanted = new Set(types);
 
   const logTail = (await collectStream(ssbClient.createLogStream({ reverse: true, limit: LOG_TAIL_PROBE }))).reverse();
-  const tailChanged = logTail.some((m) => m && m.key && !cache.seen.has(m.key));
-  const allWarm = types.every((type) => { const e = cache.types.get(type); return e && e.warm; })
-    && (!opts.withWindow || (cache.window && cache.window.warm));
+  const tipKey = logTail.length ? logTail[logTail.length - 1].key : null;
+  const upToDate = (e) => !!e && e.warm && e.tip === tipKey;
+  const allWarm = types.every((type) => upToDate(cache.types.get(type)))
+    && (!opts.withWindow || upToDate(cache.window));
 
-  const entries = (tailChanged || !allWarm)
+  const entries = !allWarm
     ? await Promise.all(types.map((type) => syncType(ssbClient, cache, type, limit)))
     : types.map((type) => cache.types.get(type));
   const windowEntry = opts.withWindow
-    ? ((tailChanged || !allWarm) ? await syncWindow(ssbClient, cache, limit) : cache.window)
+    ? (!allWarm ? await syncWindow(ssbClient, cache, limit) : cache.window)
     : null;
+  for (const e of [...entries, windowEntry]) if (e && e.warm) e.tip = tipKey;
 
   for (const m of logTail) {
     if (!m || !m.key || !m.value) continue;
-    cache.seen.add(m.key);
     const t = m.value.content && m.value.content.type;
     if (typeof t === 'string' && wanted.has(t)) {
       const entry = cache.types.get(t);
@@ -142,7 +142,7 @@ const NON_MESSAGE_LITERALS = new Set([
   'hidden', 'submit', 'text', 'file', 'number', 'checkbox', 'radio', 'password', 'date', 'datetime-local', 'time', 'url', 'email', 'search', 'button', 'reset',
   'png', 'jpeg', 'jpg', 'gif', 'svg', 'webp', 'pdf', 'zip', 'json', 'html', 'error', 'meta', 'msg', 'blob', 'peer', 'inhabitant', 'chatThread', 'taskAssignment'
 ]);
-const CORE_TYPES = ['post', 'about', 'contact', 'vote', 'pub', 'tombstone', 'file'];
+const CORE_TYPES = ['post', 'about', 'contact', 'vote', 'pub', 'tombstone', 'file', 'textChunk'];
 
 const discoverContentTypes = () => {
   const fs = require('fs');

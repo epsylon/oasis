@@ -121,3 +121,19 @@ describe('emergencies: updates can be edited, confirmed and deleted', (t) => {
     eq((await A.use('emergencies').getEmergencyById(r.key)).updates.length, 0);
   });
 });
+
+describe('emergencies: the public web page', (t) => {
+  t('carries the author notice and updates, never who confirmed them', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('emergencies').createEmergency({ title: 'Gas leak', text: 'Avoid the square', category: 'SECURITY' });
+    const u = await A.use('emergencies').addUpdate(r.key, 'Firefighters on site');
+    await confirmBy(B, r.key);
+    await B.use('emergencies').confirmUpdate(u.key);
+    A.setActor();
+    const em = await A.use('emergencies').getEmergencyById(r.key);
+    const page = String(await require('../../../src/views/emergencies_view').clearnetEmergencyView(em));
+    ok(page.includes('Avoid the square') && page.includes('Firefighters on site'), 'the author content is published');
+    notOk(page.includes(B.keypair.id), 'no confirmer');
+  });
+});

@@ -567,3 +567,18 @@ describe('housing: privacy of a hidden place', (t) => {
     eq((await B.use('housing').getHousingById(res.key)).ratedByViewer, true);
   });
 });
+
+describe('housing: the public web page', (t) => {
+  t('carries the place as the owner published it, never who requested it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const res = await create(A, { rules: 'No parties' });
+    B.setActor(); await B.use('housing').requestHousing(res.key);
+    A.setActor();
+    const item = await A.use('housing').getHousingById(res.key);
+    ok(item.requests.includes(B.keypair.id), 'the owner knows who asked');
+    const page = String(await require('../../../src/views/housing_view').clearnetHousingView(item));
+    ok(page.includes('Two rooms next to the river') && page.includes('No parties') && page.includes('Lavapiés'), 'the listing is published');
+    notOk(page.includes(B.keypair.id), 'no requester');
+  });
+});

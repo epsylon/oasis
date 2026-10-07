@@ -2,8 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { plainText } = require('./renderStyledText');
+const { MAP_W, MAP_H, makeView, fitView, toScreen, tileCoverage } = require('../maps/map_renderer');
 
 const LOGO_PATH = path.join(__dirname, '..', 'client', 'assets', 'images', 'snh-oasis.jpg');
+const TILES_DIR = path.join(__dirname, '..', 'maps', 'tiles');
 
 const WIN_ANSI_HIGH = {
   '\u20AC': '\x80', '\u201A': '\x82', '\u0192': '\x83', '\u201E': '\x84',
@@ -135,6 +137,64 @@ const rasterXObject = (raster) => {
   return { w: raster.w, h: raster.h, dict: `<< /Type /XObject /Subtype /Image /Width ${raster.w} /Height ${raster.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Interpolate false /Filter /FlateDecode /Length ${compressed.length} >>`, stream: compressed };
 };
 
+const jpegXObject = (buf) => {
+  if (!Buffer.isBuffer(buf) || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
+  const dims = readJpegDims(buf);
+  if (!dims) return null;
+  return { w: dims.w, h: dims.h, dict: `<< /Type /XObject /Subtype /Image /Width ${dims.w} /Height ${dims.h} /ColorSpace ${dims.c === 1 ? '/DeviceGray' : '/DeviceRGB'} /BitsPerComponent 8 /Filter /DCTDecode /Length ${buf.length} >>`, stream: buf };
+};
+
+const tileXObject = (t) => {
+  try { return jpegXObject(fs.readFileSync(path.join(TILES_DIR, String(t.z), `${t.x}_${t.y}.jpg`))); } catch (_) { return null; }
+};
+
+const MAP_PIN_R = 4.5;
+const MAP_LABEL_MAX = 28;
+
+const mapBlock = (pins) => {
+  const pts = (Array.isArray(pins) ? pins : []).filter(p => p && isFinite(Number(p.lat)) && isFinite(Number(p.lng)));
+  if (!pts.length) return null;
+  const fit = fitView(pts, { singleZoom: 8 });
+  const view = makeView(fit.lat, fit.lng, fit.zoom);
+  const tiles = tileCoverage(view).map(t => ({ ...t, xo: tileXObject(t) })).filter(t => t.xo);
+  if (!tiles.length) return null;
+  const marks = pts.map(p => {
+    const s = toScreen(view, Number(p.lat), Number(p.lng));
+    const line = String(p.label || '').split(/\r?\n/)[0].trim();
+    return { x: s.x, y: s.y, main: !!p.main, label: line.length > MAP_LABEL_MAX ? line.slice(0, MAP_LABEL_MAX - 1) + '…' : line };
+  });
+  return { kind: 'map', w: MAP_W, h: MAP_H, zoom: view.zoom, tiles, pins: marks };
+};
+
+const circlePath = (cx, cy, r) => {
+  const k = 0.5523 * r;
+  return `${cx + r} ${cy} m ${cx + r} ${cy + k} ${cx + k} ${cy + r} ${cx} ${cy + r} c ${cx - k} ${cy + r} ${cx - r} ${cy + k} ${cx - r} ${cy} c ${cx - r} ${cy - k} ${cx - k} ${cy - r} ${cx} ${cy - r} c ${cx + k} ${cy - r} ${cx + r} ${cy - k} ${cx + r} ${cy} c`;
+};
+
+const mapContent = (ln, x0, y0, box, tileIds) => {
+  const s = box.w / ln.w;
+  const f = v => Math.round(v * 100) / 100;
+  const parts = [`q ${f(x0)} ${f(y0)} ${f(box.w)} ${f(box.h)} re W n`];
+  for (const t of ln.tiles) {
+    parts.push(`q ${f(t.size * s + 0.5)} 0 0 ${f(t.size * s + 0.5)} ${f(x0 + t.sx * s)} ${f(y0 + (ln.h - t.sy - t.size) * s)} cm /Im${tileIds.get(t)} Do Q`);
+  }
+  const at = p => ({ x: x0 + p.x * s, y: y0 + (ln.h - p.y) * s });
+  for (const p of ln.pins) {
+    const c = at(p);
+    parts.push(`q ${p.main ? '0.95 0.55 0' : '0.85 0.15 0.15'} rg 1 1 1 RG 1 w ${circlePath(f(c.x), f(c.y), MAP_PIN_R)} h B Q`);
+  }
+  for (const p of ln.pins) {
+    if (!p.label) continue;
+    const c = at(p);
+    const tw = p.label.length * 4.2;
+    parts.push(`q 1 1 1 rg ${f(c.x + MAP_PIN_R + 2)} ${f(c.y - 5)} ${f(tw + 4)} 10 re f Q`);
+    parts.push(`BT /F1 7 Tf 0 0 0 rg ${f(c.x + MAP_PIN_R + 4)} ${f(c.y - 2.5)} Td (${escapePdf(p.label)}) Tj ET`);
+  }
+  parts.push(`q 0.4 0.4 0.4 RG 0.5 w ${f(x0)} ${f(y0)} ${f(box.w)} ${f(box.h)} re S Q`);
+  parts.push('Q');
+  return parts.join('\n');
+};
+
 const flattenSections = (sections) => {
   const lines = [];
   for (const s of Array.isArray(sections) ? sections : []) {
@@ -143,6 +203,9 @@ const flattenSections = (sections) => {
       const xo = s.raster ? rasterXObject(s.raster) : imageXObject(s.buffer);
       if (xo) lines.push({ kind: 'image', xo, caption: s.caption || '', maxW: s.maxW, maxH: s.maxH });
       else if (s.caption) lines.push({ kind: 'kv', text: `[image: ${s.caption}]` });
+    } else if (s.kind === 'map') {
+      const block = mapBlock(s.pins);
+      if (block) lines.push(block);
     } else if (s.kind === 'kv') {
       const txt = `${s.label}: ${s.value == null ? '' : s.value}`;
       for (const w of wrap(txt, 82)) lines.push({ kind: 'kv', text: w });
@@ -185,7 +248,11 @@ function buildDocumentPdf({ title, issuedToLabel, issuedTo, sections, license = 
     const scale = Math.min(1, (ln.maxW || maxImgW) / ln.xo.w, (ln.maxH || maxImgH) / ln.xo.h);
     return { w: Math.round(ln.xo.w * scale), h: Math.round(ln.xo.h * scale) };
   };
-  const heightOf = (ln) => ln.kind === 'image' ? imageBox(ln).h + lineH : lineH;
+  const mapBox = (ln) => {
+    const scale = Math.min(1, (pageW - 2 * marginX) / ln.w);
+    return { w: Math.round(ln.w * scale), h: Math.round(ln.h * scale) };
+  };
+  const heightOf = (ln) => ln.kind === 'image' ? imageBox(ln).h + lineH : ln.kind === 'map' ? mapBox(ln).h + lineH : lineH;
 
   const bodyHeight = bodyTop - bodyBottom;
   const pages = [];
@@ -215,6 +282,10 @@ function buildDocumentPdf({ title, issuedToLabel, issuedTo, sections, license = 
 
   const imageIds = new Map();
   for (const ln of lines) {
+    if (ln.kind === 'map') {
+      for (const t of ln.tiles) imageIds.set(t, addObj({ dict: t.xo.dict, stream: t.xo.stream }));
+      continue;
+    }
     if (ln.kind !== 'image') continue;
     const id = addObj({ dict: ln.xo.dict, stream: ln.xo.stream });
     imageIds.set(ln, id);
@@ -259,6 +330,10 @@ function buildDocumentPdf({ title, issuedToLabel, issuedTo, sections, license = 
       } else if (ln.kind === 'image') {
         const box = imageBox(ln);
         parts.push(`q\n${box.w} 0 0 ${box.h} ${marginX} ${y - box.h + lineH - 4} cm\n/Im${imageIds.get(ln)} Do\nQ`);
+        y -= box.h;
+      } else if (ln.kind === 'map') {
+        const box = mapBox(ln);
+        parts.push(mapContent(ln, marginX, y - box.h + lineH - 4, box, imageIds));
         y -= box.h;
       }
       y -= lineH;
@@ -843,7 +918,52 @@ const pixeliaSections = (canvas) => {
   return out;
 };
 
+const mapPins = (item) => [{
+  lat: item.lat, lng: item.lng, main: true,
+  label: txt(item.markerLabel) || txt(item.description) || txt(item.title) || 'Marker',
+  image: txt(item.image), author: item.author, createdAt: item.createdAt
+}].concat(asList(item.markers).map(mk => ({ lat: mk.lat, lng: mk.lng, main: false, label: txt(mk.label), image: txt(mk.image), author: mk.author, createdAt: mk.createdAt })));
+
+const mapSections = (item, extra = {}) => {
+  const names = (extra && extra.names) || {};
+  const images = (extra && extra.images) || {};
+  const who = id => names[id] ? `${names[id]} (${id})` : txt(id);
+  const coords = (lat, lng) => `${(Number(lat) || 0).toFixed(4)}, ${(Number(lng) || 0).toFixed(4)}`;
+  const out = [];
+  out.push({ kind: 'title', text: txt(item.title) || '-' });
+  out.push({ kind: 'blank' });
+  out.push({ kind: 'kv', label: 'Type', value: txt(item.mapType).toUpperCase() });
+  out.push({ kind: 'kv', label: 'Location', value: coords(item.lat, item.lng) });
+  out.push({ kind: 'kv', label: 'Author', value: who(item.author) });
+  out.push({ kind: 'kv', label: 'Created', value: fmtDate(item.createdAt) });
+  if (item.updatedAt && item.updatedAt !== item.createdAt) out.push({ kind: 'kv', label: 'Updated', value: fmtDate(item.updatedAt) });
+  pushTags(out, item);
+  if (txt(item.description)) {
+    out.push({ kind: 'blank' });
+    out.push({ kind: 'section', text: 'DESCRIPTION' });
+    out.push({ kind: 'blank' });
+    out.push({ kind: 'text', text: String(item.description).replace(/\r\n/g, '\n') });
+  }
+  const pins = mapPins(item);
+  out.push({ kind: 'blank' });
+  out.push({ kind: 'section', text: 'MAP' });
+  out.push({ kind: 'blank' });
+  out.push({ kind: 'map', pins });
+  out.push({ kind: 'blank' });
+  out.push({ kind: 'section', text: `MARKERS (${pins.length})` });
+  pins.forEach((p, i) => {
+    out.push({ kind: 'blank' });
+    out.push({ kind: 'kv', label: i === 0 ? 'Main marker' : `Marker ${i}`, value: p.label });
+    out.push({ kind: 'kv', label: 'Coordinates', value: coords(p.lat, p.lng) });
+    out.push({ kind: 'kv', label: 'Author', value: who(p.author) });
+    if (p.createdAt) out.push({ kind: 'kv', label: 'Date', value: fmtDate(p.createdAt) });
+    if (p.image && images[p.image]) out.push({ kind: 'image', buffer: images[p.image], caption: p.label, maxW: 200, maxH: 140 });
+  });
+  return out;
+};
+
 const BUILDERS = {
+  maps: { title: 'OASIS - Map', sections: mapSections, name: item => item.title },
   wiki: { title: 'OASIS - Wiki', sections: wikiSections, name: item => item.title },
   pads: { title: 'OASIS - Pad', sections: padSections, name: item => item.title },
   campaigns: { title: 'OASIS - Campaign', sections: campaignSections, name: item => item.title },

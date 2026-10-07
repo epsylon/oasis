@@ -1,5 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, details, summary, ul, li, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderContentActions, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { TEXT_CAP } = require('../backend/long_text');
+const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderContentActions, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const { renderStyledText } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -68,7 +69,7 @@ const renderArchiveItem = (list, params = {}) =>
         renderOpenClosedChip(list.listType, i18n),
         statusChip(list)
       ),
-      renderContentActions(list.id, listHref(list), { author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: (params.spreadMap && params.spreadMap.get(list.id)) || null })
+      renderContentActions(list.id, listHref(list), { author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: (params.spreadMap && params.spreadMap.get(list.id)) || null, deleteAction: String(list.author) === String(userId) ? contentDeleteAction("mailingList", list.id) : null })
     ),
     subscribeForm(list, "/mailing")
       ? div({ class: "emergency-update-head mailing-archive-row" },
@@ -222,16 +223,18 @@ const renderHistory = (list, history, mode) => {
 
 const renderCompose = (list, params) => {
   const parent = params.replyTo ? (list.history || []).find(m => m.mid === params.replyTo || m.key === params.replyTo) : null;
-  const subject = parent ? (/^\s*RE:/i.test(parent.subject) ? parent.subject : `RE: ${parent.subject}`) : "";
+  const draft = params.draft || null;
+  const subject = draft ? String(draft.subject || "") : parent ? (/^\s*RE:/i.test(parent.subject) ? parent.subject : `RE: ${parent.subject}`) : "";
+  const thread = parent ? parent.thread : draft ? String(draft.thread || "") : "";
   return div({ class: "div-center audio-form mailing-compose", id: "compose" },
     h2(parent ? i18n.mailingReplyTitle : i18n.mailingWriteTitle),
     form({ method: "POST", action: `/mailing/${encodeURIComponent(list.id)}/message` },
-      parent ? input({ type: "hidden", name: "thread", value: parent.thread }) : null,
+      thread ? input({ type: "hidden", name: "thread", value: thread }) : null,
       params.returnTo ? input({ type: "hidden", name: "returnTo", value: params.returnTo }) : null,
       label(i18n.pmSubject), br(),
       input({ type: "text", name: "subject", maxlength: "150", placeholder: i18n.pmSubjectHint, value: subject }), br(), br(),
       label(i18n.pmText), br(),
-      textarea({ name: "text", rows: 8, maxlength: "7000", required: true, autofocus: true, placeholder: parent ? parent.text.split("\n").map(l => `> ${l}`).join("\n") : i18n.mailingTextPlaceholder }), br(), br(),
+      textarea({ name: "text", rows: 8, maxlength: String(TEXT_CAP), required: true, autofocus: true, placeholder: parent ? parent.text.split("\n").map(l => `> ${l}`).join("\n") : i18n.mailingTextPlaceholder }, draft ? String(draft.text || "") : ""), br(), br(),
       button({ type: "submit", class: "create-button" }, i18n.mailingSend)
     )
   );
@@ -257,13 +260,12 @@ exports.singleMailingView = async (list, params = {}) => {
   const sideActions = [subscribeForm(list, href)].filter(Boolean);
   const ownerActions = isAuthor
     ? [
-        form({ method: "GET", action: "/mailing" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: list.id }), button({ type: "submit", class: "update-btn" }, i18n.mailingUpdate)),
-        form({ method: "POST", action: `/mailing/delete/${encodeURIComponent(list.id)}` }, button({ type: "submit", class: "delete-btn" }, i18n.mailingDelete))
+        form({ method: "GET", action: "/mailing" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: list.id }), button({ type: "submit", class: "update-btn" }, i18n.mailingUpdate))
       ]
     : [];
   const side = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(list.id, null, { author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null })
+      renderContentActions(list.id, href, { author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null, deleteAction: isAuthor ? contentDeleteAction("mailingList", list.id) : null })
     ),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, list.title)),
     div({ class: "card-chips-row" }, renderOpenClosedChip(list.listType, i18n), statusChip(list)),

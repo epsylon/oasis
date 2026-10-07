@@ -1,25 +1,25 @@
 # Oasis HUB Clearnet Guide
 
-A PUB launched with `./oasis.sh server` does two things: it replicates the network, and it serves a **read-only web HUB** with the public content of the inhabitants it replicates. Guests reach it from the clearnet with a normal browser: they can read, listen and watch, but never write. Every POST is blocked in this mode.
+A PUB launched with `./oasis.sh server` does two things: it replicates the network, and it serves a **read-only web HUB** with the content its inhabitants chose to publish on the CLEARNET. Guests reach it from the clearnet with a normal browser: they can read, listen and watch, but never write. Every POST is blocked in this mode.
 
 ## What is served
 
 | URL | Content |
 | --- | --- |
-| `/c` (alias `/clearnet`) | Global HUB: every public item of every inhabitant who enabled Clearnet, with type filters, search and a row of inhabitant links. |
-| `/c/inhabitant/<feedId>` | One inhabitant's HUB: avatar, description, QR and their public items. |
-| `/c/audios/<id>`, `/c/blog/<key>`, `/c/documents/<id>`, `/c/events/<id>`, `/c/feed/<id>`, `/c/files/<id>`, `/c/images/<id>`, `/c/jobs/<id>`, `/c/market/<id>`, `/c/podcasts/<id>`, `/c/projects/<id>`, `/c/school/<id>`, `/c/shops/<id>`, `/c/torrents/<id>`, `/c/videos/<id>`, `/c/wiki/<id>` | Detail pages, one per module. |
+| `/c` (alias `/clearnet`) | Global HUB: every CLEARNET item of every inhabitant the PUB replicates, with type filters, search, a row of inhabitant links and the public tribes. |
+| `/c/inhabitant/<feedId>` | One inhabitant's HUB: avatar, description, QR and the items that inhabitant put on the CLEARNET. |
+| `/c/tribe/<slug>` | The public page of a tribe: its cover, description and the tribe content its members opened to the CLEARNET. |
+| `/c/audios/<id>`, `/c/blog/<key>`, `/c/calendars/<id>`, `/c/campaigns/<id>`, `/c/documents/<id>`, `/c/emergencies/<id>`, `/c/events/<id>`, `/c/feed/<id>`, `/c/files/<id>`, `/c/housing/<id>`, `/c/images/<id>`, `/c/jobs/<id>`, `/c/maps/<id>`, `/c/market/<id>`, `/c/podcasts/<id>`, `/c/projects/<id>`, `/c/rooms/<id>`, `/c/school/<id>`, `/c/shops/<id>`, `/c/torrents/<id>`, `/c/videos/<id>`, `/c/wiki/<id>` | Detail pages, one per module. Links use a readable slug built from the title; the raw id works too. |
 | `/c/blob/<blobId>` | Media files referenced by the pages above. |
+| `/c/qr/<feedId>` | The QR code of an inhabitant's HUB. |
+| `/c/sitemap.xml` | Every public page: the HUB, the public tribes, each inhabitant's HUB and each item. |
+| `/c/rss/<module>` | An RSS feed of the latest CLEARNET items of one module (for example `/c/rss/blog`, `/c/rss/podcasts`). |
 
-Only content whose inhabitant opted in is ever listed or served. Nothing else of the replicated log is exposed.
+Only items placed on the CLEARNET are ever listed or served. Nothing else of the replicated log is exposed through the HUB.
 
 ## What an inhabitant has to do
 
-Nothing on the PUB side. In their own Oasis, under **Profile → Edit**, the inhabitant turns on the modules they want to expose in the **Clearnet** block. Turning on any of them is what makes that inhabitant public; turning them all off takes them off the HUB again.
-
-Those preferences travel with the feed, so every PUB that replicates the inhabitant applies them.
-
-Because of that, any replicating PUB can be used to share a link. 
+Nothing on the PUB side. Every publishable item in Oasis is created as **OASIS** (visible to the inhabitants of Oasis only) or **CLEARNET** (also published on these public pages). The author chooses when creating the item and can switch it later from the item's own page; a form that also asks whether the item is private asks first where it is published. The choice travels with the feed, so every PUB that replicates the inhabitant applies it, and any replicating PUB can be used to share a link.
 
 If `pub.example.org` replicates you, your podcast is reachable at:
 
@@ -27,7 +27,13 @@ If `pub.example.org` replicates you, your podcast is reachable at:
 https://pub.example.org/c/podcasts/<id>
 ```
 
-No configuration is needed on the inhabitant side beyond the visibility switches.
+Private, hidden, closed, invite-only, paid or tribe content can never be CLEARNET. An item that is later hidden, closed or made private leaves the CLEARNET, and it does not come back on its own when it is reopened: its author has to switch it again.
+
+Modules with a CLEARNET choice: audios, videos, images, documents, files, torrents, bookmarks, blogs, feed, wiki, podcasts, market, shops, school, jobs, events, projects, rooms, maps, calendars, emergencies, campaigns and housing. Some of them only when the item is open to everyone: rooms (only OPEN rooms; the public page shows just the room's name and its number, nothing to click), maps (open maps, with the markers of every contributor), calendars (open), emergencies (active), campaigns (open) and housing (public).
+
+Content of a **public tribe** has its own reach level, chosen by its members: TRIBE, OASIS or CLEARNET. What they open to the CLEARNET is served on the tribe's page under `/c/tribe/…` and listed in the HUB with the public tribes. Private tribes never appear.
+
+Public pages show what the author published, never what other inhabitants added to it: confirmations, signatures, requests, attendees, votes and comments stay inside Oasis.
 
 ## Exposing it on the web
 
@@ -73,6 +79,6 @@ Then launch the PUB allowing your domain (with the systemd unit of the [deploy g
 
 ## Notes
 
-- Public mode also redacts, in the rest of the interface, the content of inhabitants who have not opted in, so the PUB can be browsed safely.
-- The HUB reads the replicated log on each request. On a large PUB a caching proxy in front of `/c` keeps it snappy.
+- The HUB reads the replicated log and keeps a short-lived index of the CLEARNET items; a change made by an inhabitant shows up once the PUB has replicated it. On a large PUB a caching proxy in front of `/c` keeps it snappy.
+- `/robots.txt` disallows crawlers on the whole site; `/c/sitemap.xml` is there for the search engines you point at the HUB yourself.
 - Themes follow the PUB's own `oasis-config.json`; the example config in this folder is a good starting point.

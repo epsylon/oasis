@@ -243,21 +243,21 @@ footer a {
 
 
 
-a.user-link {
+a.user-link, button.user-link {
   background-color: #00FF00;
   color: #000000;
   border-color: #00FF00;
   transition: background-color 0.3s, color 0.3s, border-color 0.3s;
 }
 
-a.user-link:hover {
+a.user-link:hover, button.user-link:hover {
   background-color: #000000;
   border-color: #00FF00;
   color: #00FF00;
   cursor: pointer;
 }
 
-a.user-link:focus {
+a.user-link:focus, button.user-link:focus {
   background-color: #00FF00;
   border-color: #00FF00;
   color: #000000;
@@ -301,7 +301,7 @@ a.user-link:focus {
 .stats-kpi-value { color: #00FF00 !important; }
 .carbon-bar-note, .carbon-bar-formula { color: #00FF00 !important; }
 .graphos-node-label { fill: #00FF00 !important; }
-.graphos-node-label-me { fill: #ffa500 !important; font-weight: bold !important; }
+.graphos-node-label-me { fill: #5dade2 !important; font-weight: bold !important; }
 .graphos-legend { color: #00FF00 !important; }
 .graphos-edge { stroke: #003300 !important; }
 /* Blockexplorer */
@@ -373,3 +373,43 @@ nav, .sidebar-left nav, .sidebar-right nav, .sidebar-left ul, .sidebar-right ul 
 .ai-nav-result-card a:hover { background: #00FF00 !important; color: #000000 !important; }
 .ai-nav-query { color: #00FF00 !important; }
 .trending-card.own-content { box-shadow: inset 3px 0 0 #00FF00; }
+.map-stage { background: #000000 !important; border-color: #00FF00 !important; }
+.map-label-country { fill: #00FF00; stroke: #000000; }
+.map-place-dot { fill: #00FF00; stroke: #000000; }
+.map-place-capital { fill: #66FF66; }
+.map-place-label { fill: #00FF00; stroke: #000000; }
+.map-pin-body { fill: #00aa00; stroke: #00FF00; }
+.map-pin-main .map-pin-body { fill: #00FF00; stroke: #000000; }
+.map-pin-focus .map-pin-body { fill: #ffffff; stroke: #00FF00; }
+.map-pin-eye { fill: #000000; }
+.map-pin-label-bg { fill: rgba(0, 0, 0, 0.9); stroke: #00FF00; }
+.map-pin-focus .map-pin-label-bg { stroke: #ffffff; }
+.map-pin-label { fill: #00FF00; }
+.map-pins-layer a:hover .map-pin-body, .map-pins a:hover .map-pin-body { fill: #ffffff; }
+.map-cluster-ring { fill: rgba(0, 255, 0, 0.25); }
+.map-cluster-dot { fill: #00FF00; stroke: #000000; }
+.map-pick-ring, .map-pick-cross { stroke: #00FF00; }
+.map-scale-line { stroke: #00FF00; }
+.map-scale-text { fill: #00FF00; stroke: #000000; }
+.map-attrib { fill: #008800; }
+.map-ctrl { background: rgba(0, 0, 0, 0.9) !important; color: #00FF00 !important; border-color: #00FF00 !important; }
+.map-ctrl:hover { background: #00FF00 !important; color: #000000 !important; }
+.map-ctrl-off:hover { background: rgba(0, 0, 0, 0.9) !important; color: #00FF00 !important; }
+.map-pick-cell:hover { background: rgba(0, 255, 0, 0.18); outline-color: rgba(0, 255, 0, 0.7); }
+.map-place-result, .map-center-link { color: #00FF00 !important; border-color: #00FF00 !important; }
+.map-place-result:hover, .map-center-link:hover { background: #00FF00 !important; color: #000000 !important; }
+.map-picked { background: #050505 !important; color: #00FF00 !important; }
+.map-picked-near { color: #00CC00 !important; }
+.map-markers-list .map-marker-row { border-color: #003300 !important; }
+.map-markers-list .map-marker-row--focus { background: rgba(0, 255, 0, 0.08) !important; box-shadow: inset 3px 0 0 #00FF00 !important; }
+.map-marker-idx { background: #004400 !important; color: #00FF00 !important; }
+.map-marker-idx--main, .map-marker-row--focus .map-marker-idx { background: #00FF00 !important; color: #000000 !important; }
+.map-marker-label { color: #00FF00 !important; }
+.map-marker-date { color: #00AA00 !important; }
+.map-popup-pointer { fill: #000000; stroke: #00FF00; }
+.map-stage .map-popup-card { background: #000000; border-color: #00FF00; color: #00FF00; }
+.map-stage .map-popup-text { color: #00FF00; }
+.map-popup-coords { color: #66FF66; }
+.map-stage .map-popup-meta { color: #00AA00; }
+.map-popup-close { color: #00AA00; }
+.map-popup-close:hover { color: #ffffff; }

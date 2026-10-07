@@ -43,7 +43,15 @@ const SAMPLES = {
   pixelia: [{
     title: 'Pixelia', width: 50, height: 200,
     pixels: [{ x: 1, y: 1, color: '#ff0000', contributors_inhabitants: ['@a.ed25519'] }, { x: 50, y: 200, color: '#0000ff', contributors_inhabitants: ['@b.ed25519'] }]
-  }, {}]
+  }, {}],
+  maps: [{
+    key: '%map.sha256', rootId: '%map.sha256', title: 'Public atlas', description: 'Places we **care** about', mapType: 'OPEN',
+    lat: 40.4, lng: -3.7, markerLabel: 'HQ', tags: ['city'], author: '@me.ed25519', createdAt: '2026-01-01T10:00:00Z',
+    markers: [
+      { key: '%mk1.sha256', lat: 41, lng: 2, label: 'Marker of the author', image: '', author: '@me.ed25519', createdAt: '2026-01-02T10:00:00Z' },
+      { key: '%mk2.sha256', lat: 39, lng: -0.4, label: 'Marker of a member', image: '&img.sha256', author: '@a.ed25519', createdAt: '2026-01-03T10:00:00Z' }
+    ]
+  }, { names: { '@a.ed25519': 'Ada' }, images: {} }]
 };
 
 describe('pdf: content documents', (t) => {
@@ -90,6 +98,28 @@ describe('pdf: content documents', (t) => {
     ok(imgs.every(img => img.w === imgs[0].w), 'every page keeps the full width of the canvas');
     eq(imgs.reduce((sum, img) => sum + img.h / (img.w / 50), 0), 200, 'all the rows are printed, in order');
     eq(cellAt(imgs[0], 50, 10, 10), '0,255,0', 'the painted cell keeps its place');
+  });
+
+  t('the map PDF embeds one JPEG tile per covered tile of the fitted view and lists every marker', () => {
+    const { fitView, makeView, tileCoverage } = require('../../../src/maps/map_renderer');
+    const [item, extra] = SAMPLES.maps;
+    const pins = [{ lat: item.lat, lng: item.lng }].concat(item.markers.map(mk => ({ lat: mk.lat, lng: mk.lng })));
+    const fit = fitView(pins, { singleZoom: 8 });
+    const covered = tileCoverage(makeView(fit.lat, fit.lng, fit.zoom)).length;
+    const buf = buildContentPdf('maps', item, extra, '@me.ed25519');
+    const text = asText(buf);
+    eq(buf.subarray(0, 4).toString(), '%PDF', 'starts with a PDF header');
+    const jpegs = (text.match(/\/Subtype \/Image [^>]*\/Filter \/DCTDecode/g) || []).length;
+    ok(covered > 0, 'the fitted view covers at least one tile');
+    eq(jpegs, covered + 1, `one DCTDecode XObject per tile plus the logo (tiles: ${covered})`);
+    eq((text.match(/ re W n/g) || []).length, 1, 'the tiles are drawn inside one clipped map rectangle');
+    ok(text.includes('Public atlas'), 'title present');
+    ok(text.includes('Main marker: HQ'), 'the map location is the main marker');
+    ok(text.includes('Marker of the author') && text.includes('Marker of a member'), 'every marker label listed');
+    ok(text.includes('Ada \\(@a.ed25519\\)'), 'a known author is named');
+    ok(text.includes('Coordinates: 41.0000, 2.0000'), 'marker coordinates listed');
+    ok(text.includes('Places we care about'), 'description printed as plain text');
+    eq(pdfFilename('maps', item), 'oasis-maps-public-atlas.pdf', 'filename follows the map title');
   });
 
   t('an unsupported kind is rejected instead of producing an empty file', () => {

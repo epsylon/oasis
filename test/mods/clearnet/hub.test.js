@@ -49,3 +49,46 @@ describe('clearnet: two items with the same title never share a public link', (t
     ok(clearnetSlugFor('Assembly', '%e1mnopqr.sha256') !== clearnetSlugFor('Assembly', '%e2stuvwx.sha256'));
   });
 });
+
+describe('clearnet: long lists are served in pages', (t) => {
+  const A = '@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=.ed25519';
+  const many = (n, make) => Array.from({ length: n }, (_, i) => make(i));
+  const cards = (html) => (String(html).match(/class="cn-hub-card"/g) || []).length;
+  const pager = (html) => String(html).match(/<div class="cn-pager">[\s\S]*?<\/div>/);
+
+  t('the hub shows one page at a time, keeps the filters in the page links and clamps out-of-range pages', async () => {
+    const { clearnetHubView } = require('../../../src/views/main_views');
+    const { CLEARNET_PAGE_SIZE } = require('../../../src/views/clearnet_view');
+    const items = { jobs: many(250, i => ({ id: `%j${i}.sha256`, title: `Job ${i}`, snippet: 'work', ts: i, author: A })) };
+    const first = String(await clearnetHubView({ authors: [], items }));
+    eq(cards(first), CLEARNET_PAGE_SIZE, 'the first page is capped');
+    const p1 = pager(first);
+    ok(p1 && !/page=1\b/.test(p1[0]) && /href="\/c\?page=2"/.test(p1[0]), 'page one offers next but no previous');
+    const third = String(await clearnetHubView({ authors: [], items, page: 3 }));
+    eq(cards(third), 50, 'the last page holds the remainder');
+    const p3 = pager(third);
+    ok(p3 && /href="\/c\?page=2"/.test(p3[0]) && !/page=4/.test(p3[0]), 'the last page offers previous but no next');
+    eq(cards(String(await clearnetHubView({ authors: [], items, page: 99 }))), 50, 'an out-of-range page lands on the last one');
+    eq(cards(String(await clearnetHubView({ authors: [], items, page: 'x' }))), CLEARNET_PAGE_SIZE, 'a bogus page lands on the first one');
+    const filtered = String(await clearnetHubView({ authors: [], items, filterType: 'jobs', query: 'work' }));
+    ok(/href="\/c\?type=jobs&amp;q=work&amp;page=2"/.test(filtered), 'the page links keep the type and the query');
+    ok(!pager(String(await clearnetHubView({ authors: [], items: { jobs: items.jobs.slice(0, 5) } }))), 'a short list has no pager');
+  });
+
+  t('the inhabitant page and the public tribe page paginate the same way', async () => {
+    const { clearnetInhabitantView } = require('../../../src/views/main_views');
+    const { clearnetTribeView } = require('../../../src/views/tribes_view');
+    const { CLEARNET_PAGE_SIZE } = require('../../../src/views/clearnet_view');
+    const items = { events: many(250, i => ({ id: `%e${i}.sha256`, title: `Event ${i}`, snippet: 'x', ts: i, author: A })) };
+    eq(cards(String(await clearnetInhabitantView({ feedId: A, name: 'Alice', items }))), CLEARNET_PAGE_SIZE);
+    const third = String(await clearnetInhabitantView({ feedId: A, name: 'Alice', items, filterType: 'events', page: 3 }));
+    eq(cards(third), 50);
+    ok(new RegExp(`href="/c/inhabitant/${encodeURIComponent(A).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\?type=events&amp;page=2"`).test(third), 'the inhabitant page links keep the type');
+    const tribeItems = many(250, i => ({ id: `%t${i}.sha256`, contentType: 'forum', title: `Topic ${i}`, description: 'x', author: A, createdAt: i }));
+    const tribeCards = (html) => (String(html).match(/class="cn-tribe-item"/g) || []).length;
+    eq(tribeCards(String(await clearnetTribeView({ tribe: { title: 'Seeds' }, items: tribeItems, slug: 'seeds-abc' }))), CLEARNET_PAGE_SIZE);
+    const tribeThird = String(await clearnetTribeView({ tribe: { title: 'Seeds' }, items: tribeItems, slug: 'seeds-abc', page: 3 }));
+    eq(tribeCards(tribeThird), 50);
+    ok(/href="\/c\/tribe\/seeds-abc\?page=2"/.test(tribeThird), 'the tribe page links point back to the same tribe');
+  });
+});

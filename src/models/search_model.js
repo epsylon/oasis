@@ -3,6 +3,7 @@ const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
+const longText = require('../backend/long_text');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
@@ -416,6 +417,14 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
         if (!dec) dec = tryDecryptStandalone(c);
         if (!dec) { latestByKey.delete(k); continue; }
         msg.value.content = { ...c, ...dec, encryptedPayload: undefined };
+      }
+    }
+
+    const chunkLookup = longText.lookupIn(longText.indexChunks(messages));
+    for (const [k, msg] of Array.from(latestByKey.entries())) {
+      const c = msg?.value?.content;
+      if ((c?.type === 'post' || c?.type === 'forum') && longText.hasChunks(c)) {
+        latestByKey.set(k, { ...msg, value: { ...msg.value, content: longText.resolveField(c, 'text', msg.value.author, chunkLookup) } });
       }
     }
 

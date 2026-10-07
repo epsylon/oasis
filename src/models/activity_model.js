@@ -1,4 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
+const longText = require('../backend/long_text');
 const ssbRef = require('../server/node_modules/ssb-ref');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildVoteTally } = require('../backend/vote_tally');
@@ -57,6 +58,7 @@ function inferType(c = {}) {
 }
 
 const HIDDEN_ENVELOPE_TYPES = new Set([
+  'textChunk',
   'aiExchange',
   'tribe-keys-distrib',
   'tribe-keys',
@@ -68,7 +70,6 @@ const HIDDEN_ENVELOPE_TYPES = new Set([
   'larpJoinHouse',
   'larpLeaveLarp',
   'larpTestAttempt',
-  'larpHousePost',
   'larpHouseInvite',
   'larpHouseInviteRedeem',
   'larpHouseTribeAnchor',
@@ -86,7 +87,7 @@ const HIDDEN_ENVELOPE_TYPES = new Set([
   'courts-key'
 ]);
 
-module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }) => {
+module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, larpModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb };
 
@@ -163,7 +164,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       const prev = stateByRoot.get(root);
       if (prev && !((isTip && !prev.isTip) || (isTip === prev.isTip && (a.ts || 0) >= prev.ts))) continue;
       const cc = a.content || {};
-      stateByRoot.set(root, { ts: a.ts || 0, isTip, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || ''), members: Array.isArray(cc.members) ? cc.members.length : 0 });
+      stateByRoot.set(root, { ts: a.ts || 0, isTip, owner: cc.author || a.author || null, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || ''), members: Array.isArray(cc.members) ? cc.members.length : 0 });
     }
     const msgsByRoot = new Map();
     for (const a of idToAction.values()) {
@@ -184,7 +185,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       const val = await getMsg(ssbClient, root);
       const cc = val && val.content;
       if (cc && typeof cc === 'object' && cc.type === 'chat') {
-        stateByRoot.set(root, { ts: 0, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || ''), members: Array.isArray(cc.members) ? cc.members.length : 0 });
+        stateByRoot.set(root, { ts: 0, owner: cc.author || val.author || null, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || ''), members: Array.isArray(cc.members) ? cc.members.length : 0 });
       } else {
         stateByRoot.set(root, null);
       }
@@ -203,6 +204,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         content: {
           type: 'chatThread',
           chatRoot: root,
+          chatAuthor: info.owner || null,
           title: info.title || '',
           description: info.description || '',
           members: Math.max(info.members || 0, new Set(asc.map(m => m.author)).size),
@@ -269,6 +271,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       }
 
       const tombstoned = buildValidatedTombstoneSet(results);
+      const chunkLookup = longText.lookupIn(longText.indexChunks(results));
       const parentOf = new Map();
       const idToAction = new Map();
       const rawById = new Map();
@@ -290,6 +293,20 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
       }
       const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
       const accessibleTribeIds = await buildAccessibleTribeIds();
+      let larpWall = null;
+      if (larpModel && results.some(m => m && m.value && m.value.content && m.value.content.type === 'larpHousePost')) {
+        try {
+          const s = await openSsb();
+          larpWall = {
+            mine: await larpModel.getUserHouse(s.id).catch(() => null),
+            governing: typeof larpModel.getGoverningHouseKey === 'function' ? larpModel.getGoverningHouseKey() : null,
+            members: await larpModel.listAllMemberships().catch(() => new Map())
+          };
+        } catch (_) { larpWall = null; }
+      }
+      const larpPostVisible = (author, house) => !!larpWall && !!house
+        && (larpWall.members.get(author) || 'academia') === house
+        && (house === 'academia' || house === larpWall.governing || house === larpWall.mine);
 
       for (const msg of results) {
         const k = msg.key;
@@ -298,6 +315,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
         if (!c) continue;
         if (typeof c === 'string' && c.endsWith('.box')) continue;
         if (c.type && HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
+        if (c.type === 'larpHousePost' && !larpPostVisible(v.author, String(c.house || '').toLowerCase())) continue;
         if (typeof c.type === 'string' && /e2ee/i.test(c.type)) continue;
         if (c.type === 'contact') continue;
         if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
@@ -327,6 +345,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel }
           } catch (_) {}
         }
         if (!isContentSane(c)) continue;
+        if ((c.type === 'post' || c.type === 'forum') && longText.hasChunks(c)) c = longText.resolveField(c, 'text', v?.author, chunkLookup);
+        if (c.type === 'about' && !c.name && !c.description && !c.image) continue;
         const ts = v?.timestamp || Number(c?.timestamp || 0) || (c?.updatedAt ? Date.parse(c.updatedAt) : 0) || 0;
         idToAction.set(k, { id: k, author: v?.author, ts, type: inferType(c), content: c });
         rawById.set(k, msg);

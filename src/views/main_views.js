@@ -54,6 +54,7 @@ const inboxBadges = () => {
   return [inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : ''];
 };
 const phoneOn = () => !config.public && getConfig().modules.phoneMod !== 'off';
+const PHONE_PAM_MAX_MS = require('../server/phone_module').VOICEMAIL_MAX_MS;
 const renderCallButton = (feedId, { upper = false, cls = null, pam = false } = {}) => {
   if (!phoneOn() || !feedId || String(feedId) === String(config.keys.id) || sharedState.isPubId(feedId)) return null;
   if (pam) return a({ href: `/phone?filter=create&to=${encodeURIComponent(feedId)}`, class: cls || "filter-btn" }, `✆ ${i18n.phoneCallTooltip}`);
@@ -64,6 +65,22 @@ const renderCallButton = (feedId, { upper = false, cls = null, pam = false } = {
   );
 };
 exports.renderCallButton = renderCallButton;
+const pad2 = (n) => String(n).padStart(2, '0');
+const liveClock = (fromMs, { max = 0 } = {}) => {
+  const from = Number(fromMs) || Date.now();
+  const e = Math.max(0, Math.floor((Date.now() - from) / 1000));
+  const roll = (cls, labels) => span({ class: 'live-clock-win' }, span({ class: `live-clock-roll ${cls}` }, ...labels.map(l => span(l))));
+  if (max > 0) {
+    const cap = Math.floor(max / 1000);
+    return span({ class: 'live-clock' }, roll('live-clock-once', Array.from({ length: 60 }, (_, i) => { const v = Math.min(cap, e + i); return `${pad2(Math.floor(v / 60))}:${pad2(v % 60)}`; })));
+  }
+  const m = Math.floor(e / 60), sec = e % 60;
+  return span({ class: 'live-clock' },
+    roll(`live-clock-min lc-d${sec}`, Array.from({ length: 60 }, (_, i) => `${pad2(m + i)}:`)),
+    roll('live-clock-sec', Array.from({ length: 60 }, (_, i) => pad2((sec + i) % 60)))
+  );
+};
+exports.liveClock = liveClock;
 const renderPhoneTopLink = () => {
   if (!phoneOn()) return null;
   const n = Number(sharedState.getPhoneCount()) || 0;
@@ -111,6 +128,14 @@ const renderStateChip = (variant, icon, text) =>
     icon ? span({ class: "pm-exposition-icon" }, icon) : null,
     span({ class: "pm-exposition-text" }, String(text || ""))
   );
+
+const renderPhoneCallForm = (to, inner, title) => !phoneOn() || !to
+  ? inner
+  : form({ method: 'POST', action: '/phone/call', class: 'phone-chip-form' },
+      input({ type: 'hidden', name: 'to', value: String(to) }),
+      button({ type: 'submit', class: 'phone-chip-btn', title: title || i18n.phoneCallButton }, inner));
+const renderPhoneChip = (number, title) => number ? renderPhoneCallForm(number, renderStateChip('whole', '✆', number), title) : null;
+exports.renderPhoneChip = renderPhoneChip;
 
 const renderOpenClosedChip = (status, i18nObj) => {
   const s = String(status || "").toUpperCase();
@@ -173,7 +198,7 @@ exports.clearnetShortId = clearnetShortId;
 exports.clearnetSlugFor = clearnetSlugFor;
 const clearnetItemHref = (modulePath, title, id) => `/c/${modulePath}/${encodeURIComponent(clearnetSlugFor(title, id))}`;
 exports.clearnetItemHref = clearnetItemHref;
-const CLEARNET_PATHS = { blogs: 'blog', wiki: 'wiki', market: 'market', audios: 'audios', videos: 'videos', images: 'images', documents: 'documents', bookmarks: 'bookmarks', events: 'events', feed: 'feed', jobs: 'jobs', podcasts: 'podcasts', projects: 'projects', torrents: 'torrents', files: 'files', shops: 'shops' };
+const CLEARNET_PATHS = { blogs: 'blog', wiki: 'wiki', market: 'market', audios: 'audios', videos: 'videos', images: 'images', documents: 'documents', bookmarks: 'bookmarks', events: 'events', feed: 'feed', jobs: 'jobs', podcasts: 'podcasts', projects: 'projects', torrents: 'torrents', files: 'files', shops: 'shops', emergencies: 'emergencies', campaigns: 'campaigns', housing: 'housing' };
 let clearnetBaseCache = null;
 const clearnetBase = () => {
   if (clearnetBaseCache !== null) return clearnetBaseCache;
@@ -284,7 +309,7 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
   const reportHref = blockId
     ? `/reports?filter=create&category=CONTENT&title=${encodeURIComponent(String(o.reportTitle || blockId).slice(0, 120))}&description=${encodeURIComponent(`${viewHref || blockId}`)}`
     : null;
-  const reportBtn = o.report !== false && reportHref
+  const reportBtn = o.report !== false && reportHref && !(o.author && String(o.author) === String(myId))
     ? a({ href: reportHref, class: 'btn-singleview btn-report', title: i18n.reportContent }, '⚑')
     : null;
 
@@ -297,15 +322,46 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
 
   const deleteBtn = o.deleteAction
     ? form({ method: 'POST', action: o.deleteAction, class: 'content-action-form' },
-        o.returnTo ? input({ type: 'hidden', name: 'returnTo', value: o.returnTo }) : null,
+        o.returnTo && o.returnTo !== viewHref ? input({ type: 'hidden', name: 'returnTo', value: o.returnTo }) : null,
         button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.chatDelete }, '✕')
       )
     : null;
 
   if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !callBtn && !deleteBtn && !donateBtn && !torrentBtn) return null;
-  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, torrentBtn, pinBtn, donateBtn, reportBtn, pmBtn, callBtn, linkBtn, chainBtn, contentBtn);
+  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, donateBtn, pmBtn, callBtn, torrentBtn, linkBtn, chainBtn, contentBtn);
 };
 exports.renderContentActions = renderContentActions;
+const CONTENT_FAV_KIND = {
+  image: 'images', audio: 'audios', video: 'videos', document: 'documents',
+  bookmark: 'bookmarks', torrent: 'torrents', file: 'files', event: 'events', task: 'tasks',
+  report: 'reports', votes: 'votes', poll: 'polls', market: 'market',
+  housing: 'housing', job: 'jobs', project: 'projects', shop: 'shops', shopProduct: 'shopProducts',
+  chat: 'chats', chatThread: 'chats', pad: 'pads', room: 'rooms', calendar: 'calendars',
+  map: 'maps', forum: 'forum', transfer: 'transfers', post: 'blogs', schoolCourse: 'school',
+  wikiPage: 'wiki', emergency: 'emergencies', mailingList: 'mailing', logisticsRoute: 'logistics',
+  podcast: 'podcasts', podcastEpisode: 'podcasts', campaign: 'campaigns'
+};
+const CONTENT_SPREADABLE = new Set([
+  'post', 'audio', 'video', 'image', 'document', 'torrent', 'file', 'bookmark',
+  'event', 'calendar', 'task', 'votes', 'vote', 'market', 'shop', 'shopProduct',
+  'project', 'transfer', 'housing', 'job', 'report', 'industry', 'industryBuild', 'industryBlueprint',
+  'chat', 'chatMessage', 'pad', 'padEntry', 'room', 'wikiPage', 'emergency', 'mailingList', 'logisticsRoute', 'podcast', 'podcastEpisode', 'campaign', 'forum', 'map', 'poll', 'blog', 'schoolCourse', 'feed'
+]);
+const CONTENT_TORRENTABLE = new Set(['audio', 'video', 'image', 'document', 'file']);
+const CONTENT_DELETE_ROUTE = {
+  audio: 'audios', video: 'videos', image: 'images', document: 'documents', bookmark: 'bookmarks',
+  torrent: 'torrents', file: 'files', event: 'events', task: 'tasks', report: 'reports', votes: 'votes',
+  poll: 'polls', market: 'market', housing: 'housing', job: 'jobs', project: 'projects', shop: 'shops',
+  shopProduct: 'shops/product', chat: 'chats', pad: 'pads', room: 'rooms', calendar: 'calendars', map: 'maps', mapMarker: 'maps/marker',
+  forum: 'forum', transfer: 'transfers', emergency: 'emergencies', mailingList: 'mailing',
+  logisticsRoute: 'logistics', podcast: 'podcasts', podcastEpisode: 'podcasts/episode', campaign: 'campaigns',
+  feed: 'feed', schoolCourse: 'school', tribe: 'tribes', blog: 'blogs'
+};
+const contentDeleteAction = (type, id) => CONTENT_DELETE_ROUTE[type] && id ? `/${CONTENT_DELETE_ROUTE[type]}/delete/${encodeURIComponent(id)}` : undefined;
+exports.CONTENT_FAV_KIND = CONTENT_FAV_KIND;
+exports.CONTENT_SPREADABLE = CONTENT_SPREADABLE;
+exports.CONTENT_TORRENTABLE = CONTENT_TORRENTABLE;
+exports.contentDeleteAction = contentDeleteAction;
 
 const renderDocumentActions = (kind, id, leadingNodes = []) => {
   const base = id ? `/${kind}/${encodeURIComponent(id)}` : `/${kind}`;
@@ -458,6 +514,36 @@ const errorView = ({ title, message, backHref }) => {
   );
 };
 exports.errorView = errorView;
+
+const keepTextView = ({ title, action, fields = [], hidden = [], enctype = null, backHref = null }) => {
+  const formAttrs = { method: 'POST', action };
+  if (enctype) formAttrs.enctype = enctype;
+  return exports.template(
+    title || i18n.errorPageTitle || 'Error',
+    section(
+      div({ class: 'tags-header' },
+        h2(title || ''),
+        form(formAttrs,
+          ...hidden.map(h => input({ type: 'hidden', name: h.name, value: String(h.value == null ? '' : h.value) })),
+          ...fields.map(f => {
+            const attrs = { name: f.name, id: f.name };
+            if (f.maxlength) attrs.maxlength = String(f.maxlength);
+            if (f.required) attrs.required = true;
+            const value = String(f.value == null ? '' : f.value);
+            const control = f.type === 'textarea'
+              ? textarea({ ...attrs, rows: f.rows || 10 }, value)
+              : input({ ...attrs, type: 'text', value });
+            return [label({ for: f.name }, f.label || f.name), br(), control, br(), br()];
+          }).flat(),
+          button({ type: 'submit', class: 'create-button' }, i18n.keepTextRetry),
+          ' ',
+          backHref ? a({ href: backHref, class: 'filter-btn' }, i18n.goBack || 'Go back') : null
+        )
+      )
+    )
+  );
+};
+exports.keepTextView = keepTextView;
 
 exports.renderInlineError = (message, dismissHref) => section({ class: 'inline-error' },
   div({ class: 'tags-header inline-error-box' },
@@ -1637,59 +1723,76 @@ const template = (titlePrefix, ...elements) => {
       )
     );
   };
-  const buildRoomBanner = (compact, here) => {
+  const bannerAct = (action, label, kls, fields = {}) => form({ method: "POST", action, class: "phone-action-form" },
+    ...Object.entries(fields).map(([k, v]) => input({ type: "hidden", name: k, value: String(v) })),
+    button({ type: "submit", class: kls }, String(label).toUpperCase()));
+  const bannerCls = () => "update-banner phone-banner";
+  const bannerChip = (icon, value) => span({ class: "pm-exposition-chip pm-exposition-whole phone-banner-chip" },
+    span({ class: "pm-exposition-icon" }, icon),
+    span({ class: "pm-exposition-text" }, value));
+  const buildRoomBanner = (here) => {
     if (config.public || getConfig().modules.roomsMod !== 'on') return null;
-    const cls = compact ? "ai-suggestion-banner ai-suggestion-inline phone-banner" : "update-banner phone-banner";
-    const act = (action, label, kls) => form({ method: "POST", action, class: "phone-action-form" }, button({ type: "submit", class: kls }, label));
     const room = sharedState.getPhoneRoom();
     if (room && room.ref) {
       const href = `/rooms/${encodeURIComponent(room.ref)}`;
       if (here === href) return null;
-      return div({ class: cls },
-        span({ class: "update-banner-icon" }, "ꘒ"),
-        a({ href, class: "update-banner-link" }, `${i18n.roomBannerIn} · ${room.title} (${room.count}/${room.max})`),
-        a({ href, class: "tribe-action-btn" }, String(i18n.roomBackToRoom).toUpperCase()),
-        act("/rooms/leave", String(i18n.roomLeave).toUpperCase(), "tribe-action-btn danger-btn")
+      return div({ class: bannerCls() },
+        span({ class: "phone-banner-dot" }),
+        a({ href, class: "update-banner-link" }, room.title),
+        bannerChip("👥", `${room.count}/${room.max}`),
+        room.joinedAt ? bannerChip("◷", liveClock(room.joinedAt)) : null,
+        bannerAct("/rooms/mute", room.muted ? i18n.phoneUnmute : i18n.phoneMute, "tribe-action-btn", { mute: room.muted ? 0 : 1 }),
+        bannerAct("/rooms/leave", i18n.roomLeave, "tribe-action-btn danger-btn")
       );
     }
     const liveRoom = (sharedState.getLiveRooms() || [])[0];
     if (!liveRoom) return null;
     const href = `/rooms/${encodeURIComponent(liveRoom.ref)}`;
     if (here === href) return null;
-    return div({ class: cls },
-      span({ class: "update-banner-icon" }, "ꘒ"),
-      a({ href, class: "update-banner-link" }, `${i18n.roomBannerLive} · ${liveRoom.title} (${liveRoom.count}/${liveRoom.max})`),
-      act(`/rooms/join/${encodeURIComponent(liveRoom.ref)}`, String(i18n.roomJoin).toUpperCase(), "tribe-action-btn"),
+    return div({ class: bannerCls() },
+      span({ class: "phone-banner-dot" }),
+      a({ href, class: "update-banner-link" }, liveRoom.title),
+      bannerChip("👥", `${liveRoom.count}/${liveRoom.max}`),
+      bannerAct(`/rooms/join/${encodeURIComponent(liveRoom.ref)}`, i18n.roomJoin, "tribe-action-btn"),
       form({ method: "POST", action: "/rooms/live/dismiss", class: "welcome-banner-close" },
         input({ type: "hidden", name: "ref", value: liveRoom.ref }),
         button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
       )
     );
   };
-  const buildPhoneBanner = (compact) => {
+  const buildPhoneBanner = () => {
     let here = '';
     try { here = (require('../models/typed_log').requestScope.getStore() || {}).path || ''; } catch (_) {}
     const st = phoneOn() ? sharedState.getPhoneCall() : null;
-    if (!st) return buildRoomBanner(compact, here);
+    if (!st) return buildRoomBanner(here);
     if (here === '/phone') return null;
     const nameOf = (id) => nameCache.get(id) || String(id).slice(0, 10);
     const name = st.group && Array.isArray(st.peers) ? st.peers.filter(p => p.phase !== 'gone').map(p => nameOf(p.id)).join(', ') : nameOf(st.peer);
-    const cls = compact ? "ai-suggestion-banner ai-suggestion-inline phone-banner" : "update-banner phone-banner";
-    const act = (action, label, kls) => form({ method: "POST", action, class: "phone-action-form" }, button({ type: "submit", class: kls }, label));
-    if (st.dir === 'in' && st.phase === 'incoming') {
-      return div({ class: cls },
-        span({ class: "update-banner-icon" }, "✆"),
-        a({ href: "/phone", class: "update-banner-link" }, `${name} ${i18n.phoneIsCalling}`),
-        act("/phone/accept", String(i18n.phoneAnswer).toUpperCase(), "tribe-action-btn"),
-        act("/phone/reject", String(i18n.phoneReject).toUpperCase(), "tribe-action-btn danger-btn")
-      );
-    }
-    return div({ class: cls },
-      span({ class: "update-banner-icon" }, "✆"),
-      a({ href: "/phone", class: "update-banner-link" }, `${i18n.phoneInProgress} · ${name}`),
-      a({ href: "/phone", class: "tribe-action-btn" }, String(i18n.phoneBackToCall).toUpperCase()),
-      act("/phone/hangup", String(i18n.phoneHangup).toUpperCase(), "tribe-action-btn danger-btn")
+    const shell = (text, ...rest) => div({ class: bannerCls() },
+      span({ class: "phone-banner-dot" }),
+      a({ href: "/phone", class: "update-banner-link" }, text),
+      ...rest
     );
+    if (st.dir === 'in' && st.phase === 'incoming') {
+      return shell(`${name} ${i18n.phoneIsCalling}`,
+        bannerAct("/phone/accept", i18n.phoneAnswer, "tribe-action-btn"),
+        bannerAct("/phone/reject", i18n.phoneReject, "tribe-action-btn danger-btn"));
+    }
+    if (st.phase === 'calling') {
+      return shell(`${st.reached ? i18n.phoneCalling : i18n.phoneConnecting} ${name}`,
+        bannerChip("◷", liveClock(st.startedAt)),
+        bannerAct("/phone/hangup", i18n.phoneHangup, "tribe-action-btn danger-btn"));
+    }
+    if (st.phase === 'recording' || st.phase === 'recorded') {
+      return shell(`${i18n.phoneRecording} ${name}`,
+        st.phase === 'recorded' ? null : bannerChip("●", liveClock(st.recordingStartedAt, { max: PHONE_PAM_MAX_MS })),
+        bannerAct("/phone/pam/send", i18n.phoneSendPam, "tribe-action-btn"),
+        bannerAct("/phone/pam/cancel", i18n.phoneCancel, "tribe-action-btn danger-btn"));
+    }
+    return shell(name,
+      bannerChip("◷", liveClock(st.answeredAt || st.startedAt)),
+      bannerAct("/phone/mute", st.muted ? i18n.phoneUnmute : i18n.phoneMute, "tribe-action-btn", { mute: st.muted ? 0 : 1 }),
+      bannerAct("/phone/hangup", i18n.phoneHangup, "tribe-action-btn danger-btn"));
   };
   const buildEmergencyBanner = (compact) => {
     try {
@@ -1798,7 +1901,6 @@ const template = (titlePrefix, ...elements) => {
             ),
             buildAiSuggestion(true)
             ),
-            buildPhoneBanner(true),
             buildEmergencyBanner(true)
           );
         })(),
@@ -1852,7 +1954,7 @@ const template = (titlePrefix, ...elements) => {
             { class: "update-banner welcome-banner" },
             span({ class: "update-banner-icon" }, "🌴"),
             span({ class: "update-banner-text" }, i18n.welcomeBannerText),
-            a({ href: "/welcome", class: "update-banner-link" }, i18n.welcomeBannerAction),
+            a({ href: "/welcome", class: "create-button welcome-banner-start" }, i18n.welcomeBannerAction),
             form(
               { method: "POST", action: "/welcome/dismiss", class: "welcome-banner-close" },
               button({ type: "submit", class: "welcome-banner-close-btn" }, "✕")
@@ -1863,7 +1965,7 @@ const template = (titlePrefix, ...elements) => {
         }
       })(),
       (getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? null : buildAiSuggestion(false),
-      (getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? null : buildPhoneBanner(false),
+      buildPhoneBanner(),
       buildEmergencyBanner(false),
       div(
         { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" || uxMode === "phone" ? "main-content chatsux-only" : "main-content" },
@@ -2851,32 +2953,6 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
           input({ type: "hidden", name: "fediverseHandle", value: fediverseHandleValue })
         ),
         br(),
-        div({ class: "prefs-card" },
-          div({ class: "tags-header module-header-line" },
-            h2(i18n.clearnetSectionTitle || 'Clearnet'),
-            p({ class: "prefs-help" }, i18n.profileClearnetHelp || 'Modules that can be accessed from outside Oasis.')
-          ),
-          pillRows([
-              ['clearnetAudios',    i18n.profileClearnetAudiosLabel    || 'Audios'],
-              ['clearnetPosts',     i18n.profileClearnetPostsLabel     || 'Blogs'],
-              ['clearnetBookmarks', i18n.profileClearnetBookmarksLabel || 'Bookmarks'],
-              ['clearnetDocuments', i18n.profileClearnetDocumentsLabel || 'Documents'],
-              ['clearnetEvents',    i18n.profileClearnetEventsLabel    || 'Events'],
-              ['clearnetFeed',      i18n.profileClearnetFeedLabel      || 'Feed'],
-              ['clearnetImages',    i18n.profileClearnetImagesLabel    || 'Images'],
-              ['clearnetJobs',      i18n.profileClearnetJobsLabel      || 'Jobs'],
-              ['clearnetMarket',    i18n.profileClearnetMarketLabel    || 'Market'],
-              ['clearnetPodcasts',  i18n.profileClearnetPodcastsLabel  || 'Podcasts'],
-              ['clearnetProjects',  i18n.profileClearnetProjectsLabel  || 'Projects'],
-              ['clearnetSchool',    i18n.profileClearnetSchoolLabel    || 'School'],
-              ['clearnetShops',     i18n.profileClearnetShopsLabel     || 'Shops'],
-              ['clearnetTorrents',  i18n.profileClearnetTorrentsLabel  || 'Torrents'],
-              ['clearnetFiles',  i18n.profileClearnetFilesLabel  || 'Files'],
-              ['clearnetVideos',    i18n.profileClearnetVideosLabel    || 'Videos'],
-              ['clearnetWiki',      i18n.profileClearnetWikiLabel      || 'Wikis']
-          ])
-        ),
-        br(),
         button(
           {
             type: "submit",
@@ -2936,14 +3012,20 @@ const CLEARNET_MODULES = [
   { key: 'audios',    label: 'Audios',    kind: 'audio', labelKey: 'audiosLabel',    prefKey: 'clearnetAudios' },
   { key: 'posts',     label: 'Blogs',     kind: 'blog', labelKey: 'blogTitle',     prefKey: 'clearnetPosts',     modulePath: 'blog' },
   { key: 'bookmarks', label: 'Bookmarks', kind: 'bookmark', labelKey: 'bookmarksLabel', prefKey: 'clearnetBookmarks' },
+  { key: 'calendars', label: 'Calendars', kind: 'calendar', labelKey: 'calendarsTitle', prefKey: 'clearnetCalendars' },
+  { key: 'campaigns', label: 'Campaigns', kind: 'campaign', labelKey: 'campaignsTitle', prefKey: 'clearnetCampaigns' },
   { key: 'documents', label: 'Documents', kind: 'document', labelKey: 'docsLabel', prefKey: 'clearnetDocuments' },
+  { key: 'emergencies', label: 'Emergencies', kind: 'emergency', labelKey: 'emergenciesTitle', prefKey: 'clearnetEmergencies' },
   { key: 'events',    label: 'Events',    kind: 'event', labelKey: 'eventsLabel',    prefKey: 'clearnetEvents' },
   { key: 'feed',      label: 'Feed',      kind: 'feed', labelKey: 'feedTitle',     prefKey: 'clearnetFeed' },
+  { key: 'housing',   label: 'Housing',   kind: 'housing', labelKey: 'housingTitle',  prefKey: 'clearnetHousing' },
   { key: 'images',    label: 'Images',    kind: 'image', labelKey: 'imagesLabel',    prefKey: 'clearnetImages' },
   { key: 'jobs',      label: 'Jobs',      kind: 'job', labelKey: 'modulesJobsLabel',      prefKey: 'clearnetJobs' },
+  { key: 'maps',      label: 'Maps',      kind: 'map', labelKey: 'mapTitle',      prefKey: 'clearnetMaps' },
   { key: 'market',    label: 'Market',    kind: 'market', labelKey: 'marketTitle',   prefKey: 'clearnetMarket' },
   { key: 'podcasts',  label: 'Podcasts',  kind: 'podcast', labelKey: 'podcastsTitle',  prefKey: 'clearnetPodcasts' },
   { key: 'projects',  label: 'Projects',  kind: 'project', labelKey: 'projectsTitle',  prefKey: 'clearnetProjects' },
+  { key: 'rooms',     label: 'Rooms',     kind: 'room', labelKey: 'roomsTitle',    prefKey: 'clearnetRooms' },
   { key: 'school',    label: 'School',    kind: 'course', labelKey: 'schoolTitle',   prefKey: 'clearnetSchool' },
   { key: 'shops',     label: 'Shops',     kind: 'shop', labelKey: 'shopsTitle',     prefKey: 'clearnetShops' },
   { key: 'torrents',  label: 'Torrents',  kind: 'torrent', labelKey: 'torrentsLabel',  prefKey: 'clearnetTorrents' },
@@ -2982,8 +3064,8 @@ audio.cn-hub-player{background:transparent;height:36px}
 .cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
 `;
 
-const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '', query = '', showAuthor = false }) => {
-  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips, kindLabel } = require('./clearnet_view');
+const buildClearnetHub = ({ items = {}, filterBase, filterType = '', query = '', showAuthor = false, page = 1 }) => {
+  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips, kindLabel, paginateClearnet, renderClearnetPager } = require('./clearnet_view');
   const renderHubItem = (modulePath, it) => {
     const blob = cnBlob(it.image);
     const href = clearnetItemHref(modulePath, it.title, it.id);
@@ -3005,12 +3087,16 @@ const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '
       ...(Array.isArray(it.details) ? it.details : []).map(d => `<span class="cn-detail">${esc(String(d))}</span>`),
       it.price ? `<span class="cn-price">${esc(String(it.price))} ECO</span>` : ''
     ].filter(Boolean).join('');
+    const author = showAuthor && it.feedId
+      ? `<a class="cn-hub-author" href="/c/inhabitant/${encodeURIComponent(it.feedId)}">${esc(it.authorName || String(it.feedId).slice(1, 9))}</a>`
+      : '';
     return `<div class="cn-hub-card">
       <a class="cn-hub-cover" href="${href}" aria-label="${it.title ? title : kind}"></a>
       ${blob ? `<img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/>` : ''}
       <div class="cn-hub-body">
         ${kind ? `<div class="cn-hub-kind">${kind}</div>` : ''}
         ${it.title ? `<div class="cn-hub-title">${title}</div>` : ''}
+        ${author}
         ${player}
         ${snippet ? `<div class="cn-hub-snippet">${snippet}${raw.length > 300 ? '…' : ''}</div>` : ''}
         ${chipRow ? `<div class="cn-hub-details">${chipRow}</div>` : ''}
@@ -3022,7 +3108,6 @@ const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '
   const matches = (it) => !q || [it.title, it.snippet, it.meta, ...(Array.isArray(it.tags) ? it.tags.map(t => `#${t}`) : [])].some(v => String(v || '').toLowerCase().includes(q));
   const allItems = [];
   for (const m of CLEARNET_MODULES) {
-    if (prefs && !prefs[m.prefKey]) continue;
     for (const it of (items[m.key] || [])) {
       if (!matches(it)) continue;
       allItems.push({ ...it, modulePath: m.modulePath || m.key, kind: kindLabel(m.kind), _moduleKey: m.key });
@@ -3039,19 +3124,31 @@ const buildClearnetHub = ({ items = {}, prefs = null, filterBase, filterType = '
       return `<a class="cn-filter-btn${activeFilter === m.key ? ' active' : ''}" href="${filterBase}?type=${m.key}${qs}">${esc(cnModuleLabel(m))} (${count})</a>`;
     }).join('')}
   </div>`;
+  const paged = paginateClearnet(visibleItems, page);
+  const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter, q: query }, page: paged.page, pages: paged.pages });
   const sections = visibleItems.length
-    ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${visibleItems.length})</h2><div class="cn-hub-grid">${visibleItems.map(it => renderHubItem(it.modulePath, it)).join('')}</div>`
+    ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${visibleItems.length})</h2><div class="cn-hub-grid">${paged.items.map(it => renderHubItem(it.modulePath, it)).join('')}</div>${pager}`
     : (allItems.length ? `${filterButtons}<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
-  return { sections, total: allItems.length, visible: visibleItems.length };
+  return { sections, total: allItems.length, visible: visibleItems.length, page: paged.page, pages: paged.pages };
 };
 
-exports.clearnetHubView = async ({ authors = [], items = {}, filterType = '', query = '' }) => {
-  const { escapeHtml: esc, renderClearnetPage } = require('./clearnet_view');
-  const hub = buildClearnetHub({ items, filterBase: '/c', filterType, query, showAuthor: true });
-  const extraCss = CLEARNET_HUB_CSS + `
+exports.clearnetHubView = async ({ authors = [], items = {}, tribes = [], filterType = '', query = '', page = 1 }) => {
+  const { escapeHtml: esc, renderClearnetPage, blobUrl: cnBlob, renderRichText, CLEARNET_PAGER_CSS } = require('./clearnet_view');
+  const hub = buildClearnetHub({ items, filterBase: '/c', filterType, query, page });
+  const extraCss = CLEARNET_HUB_CSS + CLEARNET_PAGER_CSS + `
 `;
+  const q = String(query || '').trim().toLowerCase();
+  const shownTribes = (filterType || hub.page > 1) ? [] : (tribes || []).filter(t => !q || [t.title, t.description].some(v => String(v || '').toLowerCase().includes(q)));
+  const tribesBlock = shownTribes.length
+    ? `<h2 class="cn-section">${esc(i18n.tribesTitle)} (${shownTribes.length})</h2><div class="cn-hub-grid">${shownTribes.map(t => {
+        const img = cnBlob(t.image);
+        const href = `/c/tribe/${encodeURIComponent(clearnetSlugFor(t.title, t.id))}`;
+        return `<div class="cn-hub-card"><a class="cn-hub-cover" href="${href}" aria-label="${esc(t.title)}"></a>${img ? `<img class="cn-hub-thumb" src="${img}" alt="" loading="lazy"/>` : ''}<div class="cn-hub-body"><div class="cn-hub-kind">${esc(i18n.tribesTitle)}</div><a class="cn-hub-title" href="${href}">${esc(t.title || i18n.cnUntitled)}</a>${t.description ? `<div class="cn-hub-snippet">${renderRichText(String(t.description).slice(0, 300))}</div>` : ''}<div class="cn-hub-meta">${esc(i18n.cnPublicContent)}: ${Number(t.count) || 0}</div></div></div>`;
+      }).join('')}</div>`
+    : '';
   const body = `
-  ${hub.total ? hub.sections : `<div class="cn-empty-content">${esc(i18n.cnHubEmpty)}</div>`}
+  ${tribesBlock}
+  ${hub.total ? hub.sections : (tribesBlock ? '' : `<div class="cn-empty-content">${esc(i18n.cnHubEmpty)}</div>`)}
 `;
   return renderClearnetPage({
     title: `${i18n.cnHubTitle} | Oasis`,
@@ -3063,8 +3160,8 @@ exports.clearnetHubView = async ({ authors = [], items = {}, filterType = '', qu
   });
 };
 
-exports.clearnetInhabitantView = async ({ feedId, name, description, image, prefs, items = {}, query = '', filterType = '' }) => {
-  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips, renderClearnetPage, kindLabel } = require('./clearnet_view');
+exports.clearnetInhabitantView = async ({ feedId, name, description, image, prefs, items = {}, query = '', filterType = '', page = 1 }) => {
+  const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips, renderClearnetPage, kindLabel, paginateClearnet, renderClearnetPager, CLEARNET_PAGER_CSS } = require('./clearnet_view');
   const blobAvatarUrl = cnBlob(image);
   const avatarSrc = blobAvatarUrl || '/assets/images/default-avatar.png';
   const qrSrc = feedId ? `/c/qr/${encodeURIComponent(feedId)}` : null;
@@ -3116,17 +3213,19 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   const filterBase = `/c/inhabitant/${encodeURIComponent(feedId)}`;
   const filterButtons = `<div class="cn-filter-row">
     <a class="cn-filter-btn${activeFilter ? '' : ' active'}" href="${filterBase}">${esc(i18n.all)} (${allItems.length})</a>
-    ${moduleDef.filter(m => prefs && prefs[m.prefKey] && (items[m.key] || []).length).map(m => {
+    ${moduleDef.filter(m => (items[m.key] || []).length).map(m => {
       const isActive = activeFilter === m.key;
       const count = (items[m.key] || []).length;
       return `<a class="cn-filter-btn${isActive ? ' active' : ''}" href="${filterBase}?type=${m.key}">${esc(cnModuleLabel(m))} (${count})</a>`;
     }).join('')}
   </div>`;
+  const paged = paginateClearnet(visibleItems, page);
+  const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter }, page: paged.page, pages: paged.pages });
   const sections = totalCount
-    ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${totalCount})</h2><div class="cn-hub-grid">${visibleItems.map(it => renderHubItem(it.modulePath, it)).join('')}</div>`
+    ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${totalCount})</h2><div class="cn-hub-grid">${paged.items.map(it => renderHubItem(it.modulePath, it)).join('')}</div>${pager}`
     : (allItems.length ? `${filterButtons}<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
   const noResults = `<div class="cn-empty-content">${esc(i18n.cnInhabitantEmpty)}</div>`;
-  const extraCss = `
+  const extraCss = CLEARNET_PAGER_CSS + `
 .cn-profile{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-bottom:24px}
 .cn-avatar{width:160px;height:160px;border-radius:8px;border:3px solid var(--fg);object-fit:cover;background:#000;flex:0 0 auto}
 .cn-profile-body{flex:1 1 280px;min-width:0}
@@ -3242,7 +3341,9 @@ const renderUserSensors = (u, opts = {}) => {
     const dnd = isMe ? !!(getConfig().phone || {}).dnd : prefs.phoneDnd === true;
     if (number) items.push(div({ class: 'wallet-line phone-number-line' },
       span({ class: 'wallet-line-head', title: i18n.profileVisibilityPhone }, span({ class: 'phone-number-icon' }, '✆')),
-      span({ class: 'wallet-address phone-number-value', title: i18n.profileVisibilityPhone }, number),
+      isMe || dnd
+        ? span({ class: 'wallet-address phone-number-value', title: isMe ? i18n.profileVisibilityPhone : i18n.phoneRecipientRefuses }, number)
+        : renderPhoneCallForm(u.id, span({ class: 'wallet-address phone-number-value' }, number), i18n.phoneCallButton),
       renderStateChip(dnd ? 'hidden' : 'mutuals', null, String(dnd ? i18n.phoneDnd : i18n.phoneOpen).toUpperCase()),
       isMe ? form({ method: 'POST', action: '/phone/dnd', class: 'phone-dnd-form' },
         input({ type: 'hidden', name: 'dnd', value: dnd ? '0' : '1' }),
@@ -3312,7 +3413,8 @@ exports.authorView = async ({
     fediverse: rawPrefs.fediverse === true,
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : '',
     gpg:      rawPrefs.gpg      === true,
-    phone:    rawPrefs.phone === 'mutuals' || rawPrefs.phone === 'off' ? rawPrefs.phone : 'whole'
+    phone:    rawPrefs.phone === 'mutuals' || rawPrefs.phone === 'off' ? rawPrefs.phone : 'whole',
+    phoneDnd: rawPrefs.phoneDnd === true
   };
   const clearnetSubKeys = CLEARNET_MODULES.map(m => m.prefKey);
   const anySubClearnet = clearnetSubKeys.some(k => rawPrefs[k] === true);
@@ -4111,7 +4213,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
           input({ type: 'hidden', name: 'thread', value: String(content.thread || content.mid || '') }),
           input({ type: 'hidden', name: 'subject', value: subjectReply }),
           input({ type: 'hidden', name: 'returnTo', value: '/inbox?filter=mailing' }),
-          textarea({ name: 'text', rows: 2, maxlength: '7000', required: true, placeholder: i18n.mailingReplyPlaceholder || 'Reply to the list...', class: 'mailing-inbox-reply-text' }),
+          textarea({ name: 'text', rows: 2, maxlength: String(require('../backend/long_text').TEXT_CAP), required: true, placeholder: i18n.mailingReplyPlaceholder || 'Reply to the list...', class: 'mailing-inbox-reply-text' }),
           button({ type: 'submit', class: 'pm-btn reply-btn' }, String(i18n.mailingReplyToList || 'Reply to list').toUpperCase())
         )
       : null

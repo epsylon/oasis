@@ -7,6 +7,7 @@ const FLAG = 'oasis-first-contact';
 const PENDING = 'welcome=pending';
 const DISMISSED = 'welcome=dismissed';
 const DONE = 'welcome=done';
+const OPENED = 'welcome=opened';
 
 const ssbPathOf = (given) => {
   if (given) return given;
@@ -174,6 +175,16 @@ module.exports = ({ cooler, ssbPath } = {}) => {
 
     dismiss() {
       return appendMarker(dir(), DISMISSED, true);
+    },
+
+    shouldOpen() {
+      const target = dir();
+      if (!isPending(target)) return false;
+      return !readFlag(target).markers.has(OPENED);
+    },
+
+    markOpened() {
+      return appendMarker(dir(), OPENED, true);
     },
 
     isVisible() {

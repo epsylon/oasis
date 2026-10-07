@@ -1,4 +1,4 @@
-const { a, br, div, input, option, select, span, strong } = require("../server/node_modules/hyperaxe");
+const { a, br, div, input, option, select, span, strong, form, button, label } = require("../server/node_modules/hyperaxe");
 const { renderStyledHtml } = require('../backend/renderStyledText');
 const sharedState = require('../configs/shared-state');
 const cnPkg = (() => { try { return require('../server/package.json'); } catch (_) { return {}; } })();
@@ -60,7 +60,7 @@ const renderTagChips = (tags) => {
   return `<div class="cn-tags">${chips}</div>`;
 };
 
-const KIND_KEYS = { audio: 'cnKindAudio', blog: 'cnKindBlog', bookmark: 'cnKindBookmark', document: 'cnKindDocument', event: 'cnKindEvent', feed: 'cnKindFeed', image: 'cnKindImage', job: 'cnKindJob', market: 'cnKindMarket', podcast: 'cnKindPodcast', project: 'cnKindProject', course: 'cnKindCourse', shop: 'cnKindShop', torrent: 'cnKindTorrent', file: 'cnKindFile', video: 'cnKindVideo', wiki: 'cnKindWiki' };
+const KIND_KEYS = { audio: 'cnKindAudio', blog: 'cnKindBlog', bookmark: 'cnKindBookmark', document: 'cnKindDocument', event: 'cnKindEvent', feed: 'cnKindFeed', image: 'cnKindImage', job: 'cnKindJob', market: 'cnKindMarket', podcast: 'cnKindPodcast', project: 'cnKindProject', course: 'cnKindCourse', shop: 'cnKindShop', torrent: 'cnKindTorrent', file: 'cnKindFile', video: 'cnKindVideo', wiki: 'cnKindWiki', emergency: 'emergencyLabel', campaign: 'campaignLabel', housing: 'housingTitle', room: 'cnKindRoom', map: 'cnKindMap', calendar: 'calendarTitle' };
 const kindLabel = (kind) => cnText(KIND_KEYS[String(kind || '').toLowerCase()], String(kind || ''));
 const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(kindLabel(kind).toUpperCase())}]</span>`;
 
@@ -90,6 +90,22 @@ const blobUrl = (v) => {
   return id ? `/c/blob/${encodeURIComponent(id)}` : null;
 };
 
+const renderClearnetSelector = (on = false, i18nObj = {}) =>
+  div({ class: 'clearnet-choice' },
+    div({ class: 'clearnet-choice-options' },
+      label({ class: 'clearnet-choice-option' }, input({ type: 'radio', name: 'clearnet', value: '0', ...(on ? {} : { checked: true }) }), renderReachChip(false, i18nObj)),
+      label({ class: 'clearnet-choice-option' }, input({ type: 'radio', name: 'clearnet', value: '1', ...(on ? { checked: true } : {}) }), renderReachChip(true, i18nObj))
+    )
+  );
+
+const renderClearnetSwitch = (kind, id, on = false) => id
+  ? form({ method: 'POST', action: `/clearnet/item/${encodeURIComponent(id)}`, class: 'clearnet-switch' },
+      input({ type: 'hidden', name: 'kind', value: kind }),
+      button({ type: 'submit', name: 'on', value: '0', class: on ? 'clearnet-switch-btn' : 'clearnet-switch-btn active', ...(on ? {} : { disabled: true }) }, 'OASIS'),
+      button({ type: 'submit', name: 'on', value: '1', class: on ? 'clearnet-switch-btn active' : 'clearnet-switch-btn', ...(on ? { disabled: true } : {}) }, 'CLEARNET')
+    )
+  : null;
+
 const renderReachChip = (isClearnet, i18nObj = {}, href = null) => {
   const icon = isClearnet ? '🌐' : '🏝';
   const label = isClearnet
@@ -104,6 +120,15 @@ const renderReachChip = (isClearnet, i18nObj = {}, href = null) => {
   }
   return chip;
 };
+
+const renderTribeOriginChip = (origin) => origin && origin.title
+  ? a({ href: origin.tribeHref || origin.href, class: 'pm-exposition-chip-link' },
+      span({ class: 'pm-exposition-chip pm-exposition-tribe' },
+        span({ class: 'pm-exposition-icon' }, 'ꖥ'),
+        span({ class: 'pm-exposition-text' }, origin.title)
+      )
+    )
+  : null;
 
 const fediverseProfileUrl = (handle) => {
   const h = String(handle || '').trim().replace(/^@/, '');
@@ -384,6 +409,34 @@ const renderClearnetNotFound = () => {
   });
 };
 
+const CLEARNET_PAGE_SIZE = 100;
+const CLEARNET_PAGER_CSS = `
+.cn-pager{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin:24px 0 8px 0}
+.cn-pager-info{color:var(--fg-dim);font-size:12px;margin-right:4px}
+.cn-pager-btn{display:inline-block;padding:6px 14px;background:var(--bg-elev);color:var(--fg-soft);border:1px solid var(--border);border-radius:14px;font-size:13px;text-decoration:none;transition:border-color .15s ease,color .15s ease,background .15s ease}
+.cn-pager-btn:hover{border-color:var(--fg);color:var(--fg);text-decoration:none}
+`;
+const paginateClearnet = (list, page) => {
+  const all = Array.isArray(list) ? list : [];
+  const pages = Math.max(1, Math.ceil(all.length / CLEARNET_PAGE_SIZE));
+  const current = Math.min(pages, Math.max(1, parseInt(page, 10) || 1));
+  return { items: all.slice((current - 1) * CLEARNET_PAGE_SIZE, current * CLEARNET_PAGE_SIZE), page: current, pages, total: all.length };
+};
+const renderClearnetPager = ({ base, params = {}, page, pages }) => {
+  if (!(pages > 1)) return '';
+  const href = (n) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v) q.set(k, String(v));
+    if (n > 1) q.set('page', String(n));
+    const s = q.toString();
+    return escapeHtml(s ? `${base}?${s}` : base);
+  };
+  const info = cnText('cnPageOf', 'Page {page} of {pages}').replace('{page}', String(page)).replace('{pages}', String(pages));
+  const prev = page > 1 ? `<a class="cn-pager-btn" href="${href(page - 1)}">${escapeHtml(cnText('cnPrevPage', '← Previous'))}</a>` : '';
+  const next = page < pages ? `<a class="cn-pager-btn" href="${href(page + 1)}">${escapeHtml(cnText('cnNextPage', 'Next →'))}</a>` : '';
+  return `<div class="cn-pager"><span class="cn-pager-info">${escapeHtml(info)}</span>${prev}${next}</div>`;
+};
+
 const renderClearnetMediaView = ({ kind, item }) => {
   const blob = blobUrl(item.url);
   const title = escapeHtml(item.title || cnText('cnUntitled', 'Untitled'));
@@ -504,6 +557,9 @@ module.exports = {
   blobIdOf,
   blobUrl,
   renderReachChip,
+  renderTribeOriginChip,
+  renderClearnetSelector,
+  renderClearnetSwitch,
   renderFediverseReach,
   renderContentStats,
   renderEncryptedChip,
@@ -519,5 +575,9 @@ module.exports = {
   renderClearnetSearchForm,
   renderClearnetPage,
   renderClearnetNotFound,
+  CLEARNET_PAGE_SIZE,
+  CLEARNET_PAGER_CSS,
+  paginateClearnet,
+  renderClearnetPager,
   renderClearnetMediaView
 };

@@ -226,21 +226,21 @@ footer a:hover {
 
 
 
-a.user-link {
+a.user-link, button.user-link {
   background-color: #FFD600;
   color: #FFFFFF;
   border-color: #FFD600;
   transition: background-color 0.3s, color 0.3s, border-color 0.3s;
 }
 
-a.user-link:hover {
+a.user-link:hover, button.user-link:hover {
   background-color: #FFD600;
   border-color: #FFD600;
   color: #FFFFFF;
   cursor: pointer;
 }
 
-a.user-link:focus {
+a.user-link:focus, button.user-link:focus {
   background-color: #9A2F2F;
   border-color: #9A2F2F;
   color: #FFFFFF;
@@ -293,7 +293,7 @@ a.user-link:focus {
 .stats-kpi-value { color: #007BFF !important; }
 .carbon-bar-note, .carbon-bar-formula { color: #007BFF !important; }
 .graphos-node-label { fill: #2C2C2C !important; }
-.graphos-node-label-me { fill: #cc7700 !important; }
+.graphos-node-label-me { fill: #1f6391 !important; }
 .data-best-label { color: #cc7700 !important; }
 .data-best-card { background: #FFF3E0 !important; border: 1px solid rgba(204, 119, 0, .4) !important; }
 .graphos-legend { color: #2C2C2C !important; }
@@ -363,3 +363,45 @@ a.user-link:focus {
 .chat-topic-active { background: #FFF3E0 !important; }
 .chat-topic-title { color: #2D2D2D !important; }
 .chat-workspace-empty { border-color: #DDD !important; }
+.map-viewer, .map-stage div, .map-hero, .map-toolbar, .map-toolbar div, .map-place-results, .map-markers-list, .map-markers-list div, .map-detail-grid, .map-card-thumb .map-viewer { background: transparent !important; border: 0 !important; }
+.map-pick-cell, .map-pick-cell:hover { border: 0 !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+.map-pick-cell { background: transparent !important; }
+.map-pick-cell:hover { background: rgba(255, 111, 0, 0.18) !important; }
+.map-ctrl, .map-place-result { padding: 0 !important; border-radius: 6px !important; box-shadow: none !important; }
+.map-place-result { padding: 4px 10px !important; border-radius: 14px !important; }
+.map-stage { background: #cfe0ec !important; border: 1px solid #E0E0E0 !important; }
+.map-marker-row { border-bottom: 1px solid #E0E0E0 !important; }
+.map-label-country { fill: #4a4a4a; stroke: #ffffff; }
+.map-place-dot { fill: #333333; stroke: #ffffff; }
+.map-place-capital { fill: #E65100; }
+.map-place-label { fill: #222222; stroke: #ffffff; }
+.map-pin-label-bg { fill: rgba(255, 255, 255, 0.92); stroke: rgba(0, 0, 0, 0.3); }
+.map-pin-label { fill: #222222; }
+.map-pin-focus .map-pin-body, .map-cluster-dot { fill: #FF6F00; }
+.map-pin-focus .map-pin-label-bg { stroke: #FF6F00; }
+.map-cluster-ring { fill: rgba(255, 111, 0, 0.25); }
+.map-pick-ring, .map-pick-cross { stroke: #FF6F00; }
+.map-pins-layer a:hover .map-pin-body, .map-pins a:hover .map-pin-body { fill: #FF6F00; }
+.map-scale-line { stroke: #333333; }
+.map-scale-text { fill: #333333; stroke: #ffffff; }
+.map-attrib { fill: #777777; }
+.map-ctrl { background: rgba(255, 255, 255, 0.92) !important; color: #FF6F00 !important; border-color: #cccccc !important; }
+.map-ctrl:hover { background: #FF6F00 !important; color: #ffffff !important; border-color: #FF6F00 !important; }
+.map-ctrl-off:hover { background: rgba(255, 255, 255, 0.92) !important; color: #FF6F00 !important; border-color: #cccccc !important; }
+.map-pick-cell:hover { background: rgba(255, 111, 0, 0.18); outline-color: rgba(255, 111, 0, 0.7); }
+.map-place-result, .map-center-link { color: #FF6F00 !important; border-color: #cccccc !important; }
+.map-place-result:hover, .map-center-link:hover { background: #FF6F00 !important; color: #ffffff !important; border-color: #FF6F00 !important; }
+.map-picked { background: #F0F0F0 !important; color: #FF6F00 !important; }
+.map-picked-near { color: #555555 !important; }
+.map-markers-list .map-marker-row--focus { background: rgba(255, 111, 0, 0.08) !important; box-shadow: inset 3px 0 0 #FF6F00 !important; }
+.map-marker-row--focus .map-marker-idx { background: #FF6F00 !important; color: #ffffff !important; }
+.map-marker-label { color: #E65100 !important; }
+.map-marker-date { color: #777777 !important; }
+.map-marker-coords { color: #222222 !important; }
+.map-popup-pointer { fill: #ffffff; stroke: #cccccc; }
+.map-stage .map-popup-card { background: #ffffff !important; border: 1px solid #cccccc !important; color: #222222; }
+.map-stage .map-popup-text { color: #333333; }
+.map-popup-coords { color: #222222; }
+.map-stage .map-popup-meta { color: #777777; }
+.map-popup-close { color: #777777; }
+.map-popup-close:hover { color: #FF6F00; }

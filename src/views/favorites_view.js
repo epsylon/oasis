@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, a, span, img } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink, renderContentActions, renderModuleStats } = require("./main_views");
+const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_TORRENTABLE } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -9,6 +9,8 @@ const userId = config.keys.id;
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 const safeText = (v) => String(v || "").trim();
+
+const TORRENTABLE_KINDS = new Set(Object.keys(CONTENT_FAV_KIND).filter((t) => CONTENT_TORRENTABLE.has(t)).map((t) => CONTENT_FAV_KIND[t]));
 
 const FILTER_KINDS = [
   { value: "audios", label: () => i18n.favoritesFilterAudios },
@@ -121,7 +123,7 @@ const renderImagePreview = (item) => {
   );
 };
 
-const renderFavoriteCard = (item, filter) => {
+const renderFavoriteCard = (item, filter, spreadMap = null) => {
   const returnTo = buildReturnTo(filter);
 
   const title = safeText(item.title) || safeText(item.name) || safeText(item.category) || safeText(item.url) || "";
@@ -139,7 +141,12 @@ const renderFavoriteCard = (item, filter) => {
           span({ class: 'pm-exposition-text' }, String(item.kind || '').toUpperCase())
         )
       ),
-      renderContentActions(item.favId, item.viewHref)
+      renderContentActions(item.favId, item.viewHref, {
+        author: item.author,
+        spread: (spreadMap && spreadMap.get(item.favId)) || null,
+        reportTitle: title,
+        ...(TORRENTABLE_KINDS.has(item.kind) && typeof item.url === "string" && item.url.startsWith("&") ? { torrentFrom: { blobId: item.url, name: item.title } } : {})
+      })
     ),
     div(
       { class: "card-section favorites-card-body" },
@@ -173,7 +180,7 @@ const renderFavoriteCard = (item, filter) => {
   );
 };
 
-exports.favoritesView = async (items, filter = "all", counts = {}, q = "") => {
+exports.favoritesView = async (items, filter = "all", counts = {}, q = "", params = {}) => {
   const c = counts || {};
   const total = typeof c.all === "number" ? c.all : safeArr(items).length;
   const emptyFav = total === 0 && !String(q || "").trim();
@@ -214,7 +221,7 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "") => {
           )
         )
       ),
-      div({ class: "bookmark-list" }, safeArr(items).length ? safeArr(items).map((it) => renderFavoriteCard(it, filter)) : p(i18n.favoritesNoItems))
+      div({ class: "bookmark-list" }, safeArr(items).length ? safeArr(items).map((it) => renderFavoriteCard(it, filter, params.spreadMap)) : p(i18n.favoritesNoItems))
     )
   );
 };

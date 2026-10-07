@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
@@ -105,7 +105,7 @@ const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls") => {
   return div({ class: "tribe-card poll-card" + (isOwn ? " own-content" : "") },
     div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(poll.id, href, { spread: spreadInfo || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, reportTitle: poll.question })
+      renderContentActions(poll.id, href, { spread: spreadInfo || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined })
     ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
@@ -262,24 +262,19 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
         a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
     : null;
 
-  const ownerActions = isOwn
+  const ownerActions = isOwn && poll.totalVoters === 0 && poll.status === "OPEN"
     ? div({ class: "tribe-side-actions" },
-        poll.totalVoters === 0 && poll.status === "OPEN"
-          ? form({ method: "GET", action: "/polls" },
-              input({ type: "hidden", name: "filter", value: "EDIT" }),
-              input({ type: "hidden", name: "id", value: poll.id }),
-              button({ type: "submit", class: "update-btn" }, i18n.pollUpdateButton)
-            )
-          : null,
-        form({ method: "POST", action: `/polls/delete/${encodeURIComponent(poll.id)}` },
-          button({ type: "submit", class: "delete-btn" }, i18n.pollDeleteButton)
+        form({ method: "GET", action: "/polls" },
+          input({ type: "hidden", name: "filter", value: "EDIT" }),
+          input({ type: "hidden", name: "id", value: poll.id }),
+          button({ type: "submit", class: "update-btn" }, i18n.pollUpdateButton)
         )
       )
     : null;
 
   const pollSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(poll.id, null, { spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question })
+      renderContentActions(poll.id, href, { spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined })
     ),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question)),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,

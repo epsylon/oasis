@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
+const longText = require('../backend/long_text');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const OPINION_TYPE = 'blogOpinion';
@@ -10,7 +11,7 @@ module.exports = ({ cooler, isPublic = false }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  const BLOG_TYPES = ['post', OPINION_TYPE, 'tombstone'];
+  const BLOG_TYPES = ['post', OPINION_TYPE, 'tombstone', longText.CHUNK_TYPE];
 
   const getAllMessages = async (ssbClient) => readTyped(ssbClient, BLOG_TYPES, { limit: logLimit });
 
@@ -20,6 +21,7 @@ module.exports = ({ cooler, isPublic = false }) => {
 
   const buildIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages);
+    const chunks = longText.indexChunks(messages);
     const posts = new Map();
     const commentsByRoot = new Map();
     const opinionsByRoot = new Map();
@@ -49,7 +51,7 @@ module.exports = ({ cooler, isPublic = false }) => {
       }
     }
 
-    return { tomb, posts, commentsByRoot, opinionsByRoot };
+    return { tomb, posts, commentsByRoot, opinionsByRoot, chunks };
   };
 
   const buildBlog = (node, idx) => {
@@ -60,7 +62,7 @@ module.exports = ({ cooler, isPublic = false }) => {
       key: node.key,
       author: node.author,
       subject: typeof c.contentWarning === 'string' ? c.contentWarning : '',
-      text: c.text || '',
+      text: longText.joinText(c.text || '', c.chunks, longText.lookupIn(idx.chunks), node.author),
       mentions: Array.isArray(c.mentions) ? c.mentions : [],
       allowComments: c.allowComments !== false,
       createdAt: new Date(node.ts).toISOString(),
@@ -121,14 +123,26 @@ module.exports = ({ cooler, isPublic = false }) => {
       const body = String(text || '').trim();
       if (!body) throw new Error('Blog text is required');
       const ssbClient = await openSsb();
-      const content = {
+      const publish = (c) => new Promise((res, rej) => ssbClient.publish(c, (err, msg) => err ? rej(err) : res(msg)));
+      const content = await longText.chunkContent({
         type: 'post',
         text: body,
         allowComments: allowComments !== false,
         ...(Array.isArray(mentions) && mentions.length ? { mentions } : {}),
         ...(String(subject || '').trim() ? { contentWarning: String(subject).trim() } : {})
-      };
-      return new Promise((res, rej) => ssbClient.publish(content, (err, msg) => err ? rej(err) : res(msg)));
+      }, 'text', { publish });
+      return publish(content);
+    },
+
+    async deleteBlogById(id) {
+      if (isPublic) throw new Error('Not available in public mode');
+      const ssbClient = await openSsb();
+      const userId = ssbClient.id;
+      const msg = await new Promise((res, rej) => ssbClient.get(id, (err, m) => (err || !m || !m.content) ? rej(new Error('Blog not found')) : res(m)));
+      if (!isRootPost(msg.content)) throw new Error('Blog not found');
+      if (msg.author !== userId) throw new Error('Not the author');
+      const content = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
+      return new Promise((res, rej) => ssbClient.publish(content, (err, result) => err ? rej(err) : res(result)));
     },
 
     async createOpinion(id, category) {

@@ -71,14 +71,10 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   app.use(mount("/assets", assets));
   app.use(mount("/c/assets", assets));
 
-  const maptiles = new Koa();
-  maptiles.use(koaStatic(join(__dirname, "..", "maps", "tiles")));
-  app.use(mount("/maptiles", maptiles));
-
-  const mapcache = new Koa();
-  mapcache.use(koaStatic(join(__dirname, "..", "maps", "cache")));
-  app.use(mount("/mapcache", mapcache));
-
+  const mapTiles = new Koa();
+  mapTiles.use(koaStatic(join(__dirname, "..", "maps", "tiles"), { maxage: 30 * 24 * 60 * 60 * 1000, immutable: true }));
+  app.use(mount("/maptiles", mapTiles));
+  app.use(mount("/c/maptiles", mapTiles));
 
   const gamesStatic = new Koa();
   gamesStatic.use(koaStatic(join(__dirname, "..", "games")));
@@ -123,7 +119,7 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
   middleware.forEach((m) => app.use(m));
 
-  const server = app.listen({ host, port });
+  const server = require("http").createServer({ maxHeaderSize: 256 * 1024 }, app.callback()).listen({ host, port });
 
   try { require("../backend/updater.js").getRemoteVersion().catch(() => {}); } catch (_) {}
 

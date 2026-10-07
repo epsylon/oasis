@@ -2,6 +2,7 @@
 
 const { buildValidatedTombstoneSet } = require("./tombstone_validator");
 const { readTyped } = require("./typed_log");
+const longText = require("../backend/long_text");
 const debug = require("../server/node_modules/debug")("oasis");
 const { isRoot, isReply: isComment } = require("../server/node_modules/ssb-thread-schema");
 const lodash = require("../server/node_modules/lodash");
@@ -321,6 +322,8 @@ models.about = {
       larpSign: result.larpSign === true,
       gpg:      result.gpg      !== false,
       phone:    result.phone === 'mutuals' || result.phone === 'off' ? result.phone : 'whole',
+      phoneDnd: result.phoneDnd === true,
+      clearnetSince: typeof result.clearnetSince === 'string' ? result.clearnetSince : '',
       clearnet: result.clearnet === true,
       fediverse: result.fediverse === true,
       fediverseHandle: typeof result.fediverseHandle === 'string' ? result.fediverseHandle : '',
@@ -1291,7 +1294,24 @@ const post = {
         return msg;
       })
     );
-    return fullMessages;
+    const gone = new Set();
+    await Promise.all(fullMessages.map((m) => new Promise((resolve) => {
+      if (!m || !m.key) return resolve();
+      try {
+        pull(
+          ssb.backlinks.read({ query: [{ $filter: { dest: m.key } }], meta: true }),
+          pull.filter(t => t && t.value && t.value.content && t.value.content.type === 'tombstone' && t.value.content.target === m.key && t.value.author === (m.value && m.value.author)),
+          pull.collect((err, ts) => { if (!err && ts && ts.length) gone.add(m.key); resolve(); })
+        );
+      } catch (_) { resolve(); }
+    })));
+    const chunkIdx = longText.indexChunks(await readTyped(ssb, [longText.CHUNK_TYPE], { limit: logLimit }));
+    const lookup = longText.lookupIn(chunkIdx);
+    return fullMessages
+      .filter(m => !(m && gone.has(m.key)))
+      .map(m => m && m.value && longText.hasChunks(m.value.content)
+        ? { ...m, value: { ...m.value, content: longText.resolveField(m.value.content, "text", m.value.author, lookup) } }
+        : m);
   },
   likes: async ({ feed }, customOptions = {}) => {
       const ssb = await cooler.open();
@@ -1853,13 +1873,15 @@ const post = {
   },
    publish: async (options) => {
       const ssb = await cooler.open();
-      const body = { type: "post", ...options };
-      return new Promise((resolve, reject) => {
-        ssb.publish(body, (err, msg) => {
+      const publish = (content) => new Promise((resolve, reject) => {
+        ssb.publish(content, (err, msg) => {
           if (err) reject(err);
           else resolve(msg);
         });
       });
+      const body = { type: "post", ...options };
+      const content = typeof body.text === "string" && !body.recps ? await longText.chunkContent(body, "text", { publish }) : body;
+      return publish(content);
     },
     publishFediverseHandle: async (handle) => {
       const ssb = await cooler.open();
@@ -1886,6 +1908,7 @@ const post = {
           gpg:      r.gpg      !== false,
           phone:    r.phone === 'mutuals' || r.phone === 'off' ? r.phone : 'whole',
           phoneDnd: !!(getConfig().phone || {}).dnd,
+          ...(typeof r.clearnetSince === 'string' && r.clearnetSince ? { clearnetSince: r.clearnetSince } : {}),
           clearnet: r.clearnet === true,
           fediverse: r.fediverse === true,
           fediverseHandle: typeof r.fediverseHandle === 'string' ? r.fediverseHandle : '',

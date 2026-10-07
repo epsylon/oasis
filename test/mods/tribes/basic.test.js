@@ -140,3 +140,114 @@ describe('tribes: invariants', (t) => {
     eq(chain[0], r.key);
   });
 });
+
+describe('tribes: content stays in the tribe unless a member opens it', (t) => {
+  const setup = async ({ isPrivate = false } = {}) => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net); const X = makePeer(net);
+    A.setActor();
+    const r = await A.use('tribes').createTribe('Commons', 'd', null, '', [], isPrivate, 'strict', null, 'OPEN', '');
+    const code = await A.use('tribes').generateInvite(r.key);
+    B.setActor();
+    await B.use('tribes').joinByInvite(code);
+    A.setActor();
+    const created = await A.use('tribesContent').create(r.key, 'event', { title: 'Picnic', description: 'bring food', date: '2099-01-01', attendees: [A.keypair.id] });
+    const item = await A.use('tribesContent').getById(created.key);
+    return { net, A, B, X, tribeId: r.key, item };
+  };
+  const seenBy = async (peer, tribeId) => { peer.setActor(); return peer.use('tribesContent').listExposed(tribeId, null, 'oasis'); };
+
+  t('an outsider sees nothing until a member opens it, then only a clean copy', async () => {
+    const { A, X, tribeId, item } = await setup();
+    eq((await seenBy(X, tribeId)).length, 0, 'nothing leaves the tribe by default');
+    A.setActor();
+    await A.use('tribesContent').publishExposure(item, 'oasis');
+    const seen = await seenBy(X, tribeId);
+    eq(seen.length, 1);
+    eq(seen[0].title, 'Picnic');
+    eq(seen[0].reach, 'oasis');
+    deepEq(seen[0].attendees, [], 'who attends is not copied out');
+  });
+
+  t('moving it back to TRIBE hides it again, whoever of the members does it', async () => {
+    const { A, B, X, tribeId, item } = await setup();
+    A.setActor();
+    await A.use('tribesContent').publishExposure(item, 'clearnet');
+    eq((await seenBy(X, tribeId)).length, 1);
+    B.setActor();
+    await B.use('tribesContent').publishExposure(item, 'tribe');
+    eq((await seenBy(X, tribeId)).length, 0);
+  });
+
+  t('moving it back to TRIBE reaches an outsider even after a burst of other messages', async () => {
+    const { A, B, X, tribeId, item } = await setup();
+    A.setActor();
+    await A.use('tribesContent').publishExposure(item, 'oasis');
+    eq((await seenBy(X, tribeId)).length, 1);
+    B.setActor();
+    await B.use('tribesContent').publishExposure(item, 'tribe');
+    A.setActor();
+    for (let i = 0; i < 30; i++) await A.use('tribesContent').create(tribeId, 'feed', { description: `note ${i}` });
+    X.setActor();
+    await X.use('tribesContent').listByTribe(tribeId, 'feed');
+    eq((await seenBy(X, tribeId)).length, 0);
+  });
+
+  t('an outsider cannot open tribe content', async () => {
+    const { X, tribeId, item } = await setup();
+    X.setActor();
+    await X.use('tribesContent').publishExposure(item, 'oasis');
+    eq((await seenBy(X, tribeId)).length, 0);
+  });
+
+  t('what an expelled member opened stops counting', async () => {
+    const { A, B, X, tribeId, item } = await setup();
+    B.setActor();
+    await B.use('tribesContent').publishExposure(item, 'oasis');
+    eq((await seenBy(X, tribeId)).length, 1);
+    A.setActor();
+    await A.use('tribes').updateTribeMembers(tribeId, [A.keypair.id]);
+    eq((await seenBy(X, tribeId)).length, 0);
+  });
+
+  t('a close made by a member who then leaves still holds', async () => {
+    const { A, B, X, tribeId, item } = await setup();
+    A.setActor();
+    await A.use('tribesContent').publishExposure(item, 'oasis');
+    eq((await seenBy(X, tribeId)).length, 1);
+    B.setActor();
+    await B.use('tribesContent').publishExposure(item, 'tribe');
+    eq((await seenBy(X, tribeId)).length, 0);
+    A.setActor();
+    await A.use('tribes').updateTribeMembers(tribeId, [A.keypair.id]);
+    eq((await seenBy(X, tribeId)).length, 0, 'the content does not reopen when the closer leaves');
+  });
+
+  t('an outsider who was never a member cannot close content', async () => {
+    const { A, X, tribeId, item } = await setup();
+    A.setActor();
+    await A.use('tribesContent').publishExposure(item, 'oasis');
+    X.setActor();
+    await X.use('tribesContent').publishExposure(item, 'tribe');
+    eq((await seenBy(X, tribeId)).length, 1, 'a stranger cannot hide what a member opened');
+  });
+
+  t('a public sub-tribe inside a private tribe cannot open its content either', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const X = makePeer(net);
+    A.setActor();
+    const parent = await A.use('tribes').createTribe('Hidden', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const sub = await A.use('tribes').createTribe('Open corner', '', null, '', [], false, 'strict', parent.key, 'OPEN', '');
+    const created = await A.use('tribesContent').create(sub.key, 'feed', { description: 'hello' });
+    const item = await A.use('tribesContent').getById(created.key);
+    await A.use('tribesContent').publishExposure(item, 'oasis');
+    eq((await seenBy(X, sub.key)).length, 0);
+  });
+
+  t('content of a private tribe never leaves it', async () => {
+    const { A, X, tribeId, item } = await setup({ isPrivate: true });
+    A.setActor();
+    await A.use('tribesContent').publishExposure(item, 'clearnet');
+    eq((await seenBy(X, tribeId)).length, 0);
+  });
+});

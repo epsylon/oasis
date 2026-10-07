@@ -43,7 +43,7 @@ const makeNode = (prefs = {}) => {
   const keys = ssbKeys.generate();
   const node = SecretStack({ caps })
     .use(phone)
-    .call(null, { path: dir, keys, port, host: '127.0.0.1', phone: { ringMs: 1500, ...prefs }, connections: { incoming: { net: [{ scope: 'device', transform: 'shs', port, host: '127.0.0.1' }] }, outgoing: { net: [{ transform: 'shs' }] } } });
+    .call(null, { path: dir, keys, port, host: '127.0.0.1', phone: { ringMs: 1500, opus: false, ...prefs }, connections: { incoming: { net: [{ scope: 'device', transform: 'shs', port, host: '127.0.0.1' }] }, outgoing: { net: [{ transform: 'shs' }] } } });
   node.__dir = dir;
   node.__port = port;
   node.__keys = keys;
@@ -68,6 +68,12 @@ const roomFor = (owner, hub, extra = {}) => {
   const rid = crypto.randomBytes(16).toString('hex');
   return { rid, owner: owner.id, token: owner.phone.roomToken(rid), hub: hub.id, address: '', ref: '%room', title: 'Room', ...extra };
 };
+const speakTone = (id, amp, frames = 25) => {
+  const pcm = Buffer.alloc(320 * frames);
+  for (let i = 0; i < pcm.length / 2; i++) pcm.writeInt16LE(Math.round(Math.sin(2 * Math.PI * 400 * i / 8000) * amp), i * 2);
+  for (const mic of devices.get(id).mics) mic(pcm);
+};
+const rms = (buf) => { let e = 0; const n = buf.length >> 1; for (let i = 0; i < n; i++) { const v = buf.readInt16LE(i * 2); e += v * v; } return n ? Math.sqrt(e / n) : 0; };
 const count = (n) => (n.phone.roomState() || {}).count || 0;
 const secure = (n) => !!(n.phone.roomState() || {}).secure;
 const joinError = async (n, room) => { try { await asP(n.phone.roomJoin, room); return null; } catch (e) { return e.message; } };
@@ -97,6 +103,23 @@ describe('rooms: meeting on a pub', (t) => {
       ok(await waitFor(() => count(a) === 1), 'leaving is seen by the others');
       ok(b.__events.some(e => e.type === 'roomEnded' && e.room.outcome === 'left'), 'the one who leaves gets the room in its history');
     } finally { await closeAll(a, b, pub); }
+  });
+
+  t('when everyone inside has Opus the room uses it, and anyone without it keeps the old codec for all', async () => {
+    const pub = makeNode({ relayOpen: true, opus: true });
+    const a = makeNode({ opus: true }); const b = makeNode({ opus: true }); const c = makeNode({ opus: false });
+    try {
+      await link(a, pub); await link(b, pub); await link(c, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room);
+      await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b)), 'both hold the room key');
+      ok(await waitFor(async () => { speakTone(a.id, 12000); await listen(b.id, 3); return devices.get(b.id).played.some(buf => buf.length >= 320 && rms(buf) > 6000); }), 'B hears A over Opus');
+      await asP(c.phone.roomJoin, room);
+      ok(await waitFor(() => secure(c) && count(a) === 3), 'a third one without Opus gets in');
+      ok(await waitFor(async () => { speak(a.id, 8000); await listen(c.id, 3); return heard(c.id, 8000); }), 'and hears A, who switched back to the old codec');
+      ok(await waitFor(async () => { speak(c.id, 4000); await listen(a.id, 3); return heard(a.id, 4000); }), 'A hears the newcomer too');
+    } finally { await closeAll(a, b, c, pub); }
   });
 
   t('silence and a muted microphone send nothing', async () => {
@@ -195,6 +218,24 @@ describe('rooms: limits and refusals', (t) => {
       eq(await joinError(a, roomFor(a, off)), 'refused', 'a pub with relaying off refuses');
       eq(await joinError(a, roomFor(a, b)), 'unreachable', 'an unreachable meeting point is reported as such');
     } finally { await closeAll(a, b, open, strict, off); }
+  });
+
+  t('a new room is placed on a pub that admits its creator, or on the creator\'s own node', async () => {
+    const strict = makeNode();
+    const open = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, strict);
+      eq((await asP(a.phone.roomHubFor)).key, a.id, 'with only a pub that would refuse, the creator holds the room');
+      await link(a, open);
+      const hub = await asP(a.phone.roomHubFor);
+      eq(hub.key, open.id, 'a pub that admits the creator is preferred over one that refuses');
+      const room = roomFor(a, open);
+      eq((await asP(a.phone.roomJoin, room)).count, 1, 'and the creator gets in');
+      await link(b, open);
+      await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => count(a) === 2 && count(b) === 2), 'others follow the creator in');
+    } finally { await closeAll(a, b, strict, open); }
   });
 
   t('the creator\'s own node can hold the room, and nobody rings while inside', async () => {

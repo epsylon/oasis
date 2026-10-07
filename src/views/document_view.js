@@ -3,8 +3,8 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -35,30 +35,6 @@ const renderTags = (tags) => {
     : null;
 };
 
-const renderDocumentActions = (filter, doc, params = {}) => {
-  const returnTo = buildReturnTo(filter, params);
-  const isAuthor = String(doc.author) === String(userId);
-  const hasOpinions = Object.keys(doc.opinions || {}).length > 0;
-
-  return isAuthor
-    ? div(
-        { class: "bookmark-actions" },
-        !hasOpinions
-          ? form(
-              { method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
-              input({ type: "hidden", name: "returnTo", value: returnTo }),
-              button({ class: "update-btn", type: "submit" }, i18n.documentUpdateButton)
-            )
-          : null,
-        form(
-          { method: "POST", action: `/documents/delete/${encodeURIComponent(doc.key)}` },
-          input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ class: "delete-btn", type: "submit" }, i18n.documentDeleteButton)
-        )
-      )
-    : null;
-};
-
 const renderDocumentCommentsSection = (documentKey, rootId, comments = [], returnTo = null) => {
   return renderSharedCommentsSection({
     action: `/documents/${encodeURIComponent(documentKey)}/comments`,
@@ -82,16 +58,18 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title })
+            doc.tribeOrigin
+              ? renderContentActions(null, doc.tribeOrigin.href)
+              : renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title, deleteAction: isOwn ? contentDeleteAction('document', doc.key) : undefined, returnTo })
           ),
           div(
             { class: "card-section document-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(title) : null, renderLicenseChip(doc.license)),
+            div({ class: "shop-title-row" }, title ? h2(title) : null, doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null, renderLicenseChip(doc.license)),
             doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
             doc?.url
               ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
               : p(i18n.documentNoFile),
-            renderEngagement(doc.key,
+            doc.tribeOrigin ? null : renderEngagement(doc.key,
               renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
               renderCommentsLink({ href: `/documents/${encodeURIComponent(doc.key)}`, count: commentCount })
             ),
@@ -153,6 +131,8 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       br(),
       ...renderLicenseSelect(docToEdit?.license, i18n),
       br(),
+      renderClearnetSelector(filter === "edit" ? !!docToEdit?.clearnet : false, i18n),
+      br(),
       button({ type: "submit" }, filter === "edit" ? i18n.documentUpdateButton : i18n.documentCreateButton)
     )
   );
@@ -161,7 +141,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
 const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusM)) return true;
-  if (mode === "top") return censusM.length > 0;
+  if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
@@ -187,12 +167,6 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
       div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.documentDescription)
-      ,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetDocuments);
-          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
-        })()
       ),
       div(
         { class: "filters" },
@@ -255,8 +229,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   const pdfId = safeDomId("pdf-container-", doc.key);
   const isAuthor = String(doc.author) === String(userId);
   const hasOpinions = Object.keys(doc.opinions || {}).length > 0;
-  const { renderReachChip } = require('./clearnet_view');
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetDocuments);
+  const isClearnet = !!doc.clearnet;
 
   const chips = [
     renderLifespanChip(doc.lifetime, i18n),
@@ -271,31 +244,26 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
       button({ class: "update-btn", type: "submit" }, i18n.documentUpdateButton)
     ));
   }
-  if (isAuthor) {
-    sideActions.push(form(
-      { method: "POST", action: `/documents/delete/${encodeURIComponent(doc.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.documentDeleteButton)
-    ));
-  }
 
   const tagsNode = renderTags(doc.tags);
 
   const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(doc.key, null, {
+    renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, {
       author: doc.author,
       favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title },
       isFavorite: doc.isFavorite,
       spread: params.spreads || null,
-      returnTo,
-      reportTitle: doc.title
+      returnTo: buildReturnTo(filter, { q, sort }),
+      reportTitle: doc.title,
+      deleteAction: isAuthor ? contentDeleteAction('document', doc.key) : undefined
     })
   );
 
   const docSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, clearnetItemHref('documents', doc.title, doc.key)),
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('documents', doc.title, doc.key) : null),
+      isAuthor ? renderClearnetSwitch('documents', doc.rootId || doc.key, isClearnet) : null,
       renderLicenseChip(doc.license)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,

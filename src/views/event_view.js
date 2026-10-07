@@ -1,12 +1,13 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view");
+const { renderReachChip, renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 
 const userId = config.keys.id;
 
@@ -39,6 +40,8 @@ const normalizeEventStatus = (v) => {
   return up || "OPEN";
 };
 
+const clearnetEligible = (e) => normalizeEventStatus(e.status) !== "CLOSED" && normalizePrivacy(e.isPublic) === "public" && !e.encrypted;
+
 const eventStatusLabel = (v) => {
   const st = normalizeEventStatus(v);
   if (st === "OPEN") return i18n.eventStatusOpen;
@@ -56,11 +59,6 @@ const renderEventOwnerActions = (e, returnTo) => {
       { method: "GET", action: `/events/edit/${encodeURIComponent(e.id)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ type: "submit", class: "update-btn" }, i18n.eventUpdateButton)
-    ),
-    form(
-      { method: "POST", action: `/events/delete/${encodeURIComponent(e.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "delete-btn" }, i18n.eventDeleteButton)
     )
   ];
   if (normalizePrivacy(e.isPublic) === "private") {
@@ -122,6 +120,7 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
   const isPrivate = normalizePrivacy(e.isPublic) === "private";
   const isAttending = attendees.includes(userId);
   const price = parseFloat(e.price || 0);
+  const origin = e.tribeOrigin || null;
 
   const chips = [
     renderPrivacyChip(isPrivate, i18n),
@@ -129,24 +128,26 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
     e.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
     isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
     renderLifespanChip(e.lifetime, i18n),
-    e.subscriptionIn === true
+    !origin && e.clearnet === true && clearnetEligible(e) ? renderReachChip(true, i18n, clearnetItemHref('events', e.title, e.id)) : null,
+    origin ? null : e.subscriptionIn === true
       ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
-      : (e.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
+      : (e.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null),
+    origin ? renderTribeOriginChip(origin) : null
   ].filter(Boolean);
 
   const dateText = e.date ? moment(e.date).format("YYYY/MM/DD HH:mm") : "";
 
   const isOwn = e.organizer && String(e.organizer) === String(userId);
   return div({ class: "trending-card event-card" + (isOwn ? " own-content" : "") },
-    div(
+    origin ? null : div(
       { class: "card-header activity-card-header" },
       span(),
-      renderContentActions(e.id, `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`, { spread: spreadInfo || null, author: e.organizer || e.author, favKind: 'events', isFavorite: e.isFavorite, reportTitle: e.title })
+      renderContentActions(e.id, `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`, { spread: spreadInfo || null, author: e.organizer || e.author, favKind: 'events', isFavorite: e.isFavorite, reportTitle: e.title, deleteAction: isOwn ? contentDeleteAction('event', e.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` })
     ),
     div({ class: "card-section event-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: `/events/${encodeURIComponent(e.id)}` }, e.title || i18n.eventsTitle)
+          a({ href: origin ? origin.href : `/events/${encodeURIComponent(e.id)}` }, e.title || i18n.eventsTitle)
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
@@ -157,7 +158,7 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
       price > 0
         ? div({ class: "price-chip" }, `${price.toFixed(6)} ECO`)
         : null,
-      div({ class: "tribe-card-members" },
+      origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
       )
     )
@@ -181,8 +182,6 @@ const eventChipFor = (currentFilter, censusEvents) => (mode) => {
 exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   const list = Array.isArray(events) ? events : [events];
   const currentFilter = filter || "all";
-  const { renderReachChip: renderReachChipEvents } = require('./clearnet_view');
-  const viewerClearnetEvents = !!(params.viewerPrefs && params.viewerPrefs.clearnetEvents);
 
   const title = i18n.eventsTitle;
 
@@ -230,7 +229,9 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   const emptyMod = moduleIsEmpty(censusEvents, currentFilter, "all", params.q);
   const pubE = (e) => normalizePrivacy(e.isPublic) === "public";
   const eventChipVisible = eventChipFor(currentFilter, censusEvents);
-  const editPrivacy = normalizePrivacy(formData.isPublic);
+  const reachRaw = String(params.reach || "").toLowerCase();
+  const editPrivacy = reachRaw === "public" || reachRaw === "private" ? reachRaw : normalizePrivacy(formData.isPublic);
+  const showClearnet = editPrivacy === "public" && clearnetEligible({ ...formData, isPublic: editPrivacy });
   const editInterval = formData.interval
     || (formData.intervalWeekly ? "weekly" : formData.intervalMonthly ? "monthly" : formData.intervalYearly ? "yearly" : "");
   const editIntervalUntil = (formData.recurrenceUntil || formData.intervalDeadline)
@@ -242,8 +243,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
     section(
       div({ class: "tags-header module-header-line" },
         h2(i18n.eventsTitle),
-        p(i18n.eventsDescription),
-        renderReachChipEvents(viewerClearnetEvents, i18n)
+        p(i18n.eventsDescription)
       ),
       div(
         { class: "filters" },
@@ -281,12 +281,30 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
             { class: "event-form" },
             spreadWarning,
             form(
+              { method: "GET", action: currentFilter === "edit" ? `/events/edit/${encodeURIComponent(eventId)}` : "/events" },
+              currentFilter === "edit" ? null : input({ type: "hidden", name: "filter", value: "create" }),
+              typeof returnTo === "string" && returnTo.startsWith("/events") ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
+              label(i18n.eventPrivacyLabel),
+              br(),
+              div({ class: "apply-row" },
+                select(
+                  { name: "isPublic", class: "report-category-select" },
+                  opt("public", editPrivacy !== "private", i18n.eventPublic),
+                  opt("private", editPrivacy === "private", i18n.eventPrivate)
+                ),
+                button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
+              )
+            ),
+            hr({ class: "form-sep" }),
+            h2({ class: "report-category-fixed" }, privacyLabel(editPrivacy)),
+            form(
               {
                 action: currentFilter === "edit" ? `/events/update/${encodeURIComponent(eventId)}` : "/events/create",
                 method: "POST",
                 enctype: "multipart/form-data"
               },
               input({ type: "hidden", name: "returnTo", value: ret }),
+              input({ type: "hidden", name: "isPublic", value: editPrivacy }),
               label(i18n.eventTitleLabel),
               br(),
               input({
@@ -364,15 +382,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 renderIntervalBlock({ min: minCreate }, editInterval, editIntervalUntil)
               ),
               br(),
-              label(i18n.eventPrivacyLabel),
-              br(),
-              select(
-                { name: "isPublic", id: "isPublic" },
-                opt("public", editPrivacy !== "private", i18n.eventPublic),
-                opt("private", editPrivacy === "private", i18n.eventPrivate)
-              ),
-              br(),
-              br(),
+              showClearnet ? renderClearnetSelector(formData.clearnet === true || String(formData.clearnet || "") === "1", i18n) : null,
               ...(currentFilter === "create" ? [
                 input({ type: "hidden", name: "addToCalendar", value: "0" }),
                 label(i18n.eventAddToCalendar || "Add to Calendar"),
@@ -425,8 +435,8 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     );
   }
 
-  const { renderReachChip, renderEncryptedChip } = require('./clearnet_view');
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetEvents && normalizeEventStatus(event.status) !== 'CLOSED' && normalizePrivacy(event.isPublic) === 'public');
+  const canClearnet = clearnetEligible(event);
+  const isClearnet = canClearnet && !!event.clearnet;
   const isPrivate = normalizePrivacy(event.isPublic) === 'private';
   const isEncrypted = !!event.encrypted || isPrivate;
   const isAttending = attendees.includes(userId);
@@ -439,7 +449,8 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   const chips = [
     renderPrivacyChip(isPrivate, i18n),
     renderEventStatusChip(event.status),
-    isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n, clearnetItemHref('events', event.title, event.id)),
+    isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('events', event.title, event.id) : null),
+    isOrganizer && canClearnet ? renderClearnetSwitch('events', event.rootId || event.id, isClearnet) : null,
     isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
     renderLifespanChip(event.lifetime, i18n),
     renderEcoTax(event.msgSize, event.id),
@@ -495,7 +506,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
 
   const eventSide = div({ class: "tribe-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(event.id, null, { spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title })
+      renderContentActions(event.id, returnToSelf, { spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, event.title)

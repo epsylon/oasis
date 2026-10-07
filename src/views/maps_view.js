@@ -1,17 +1,21 @@
-const { form, button, div, h2, h3, p, section, input, label, br, a, span, textarea, select, option, img, strong, table, tr, td } =
+const { form, button, div, h2, h3, p, section, input, label, br, hr, a, span, textarea, select, option, img, strong, table, tr, td } =
   require("../server/node_modules/hyperaxe");
-const { renderStyledText } = require("../backend/renderStyledText");
+const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/renderStyledText");
 
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderInviteQrCard, renderModuleStats, moduleIsEmpty } = require("./main_views");
-const { renderEncryptedChip } = require("./clearnet_view");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
-const { renderMapWithPins, renderZoomedMapWithPins, getViewportBounds, latLngToPx, pxToLatLng, MAP_W, MAP_H, getMaxTileZoom } = require("../maps/map_renderer");
-const { sanitizeHtml } = require('../backend/sanitizeHtml');
+const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
+const { searchPlaces, nearestPlace } = require("../maps/map_data");
 
 const userId = config.keys.id;
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 const safeText = (v) => String(v || "").trim();
+const MAP_REACH = ["SINGLE", "OPEN", "CLOSED"];
+const mapReachLabel = (t) => t === "OPEN" ? i18n.mapTypeOpen : t === "CLOSED" ? i18n.mapTypeClosed : i18n.mapTypeSingle;
+const clearnetEligible = (m) => !!m && !m.tribeId && !m.encrypted && !m.contentEncrypted && String(m.mapType || "").toUpperCase() === "OPEN";
+const mapClearnetHref = (m) => clearnetItemHref("maps", m.title, m.rootId || m.key);
 
 const buildReturnTo = (filter, params = {}) => {
   const f = safeText(filter || "all");
@@ -29,120 +33,103 @@ const renderTags = (tags) => {
 };
 
 let areaCounter = 0;
+const lastOf = (v) => (Array.isArray(v) ? v[v.length - 1] : v);
+const numOrNull = (v) => { const n = parseFloat(lastOf(v)); return isFinite(n) ? n : null; };
+const isBlob = (v) => !!v && String(v).startsWith("&");
+const blobSrc = (image, base) => (isBlob(image) ? `${base}/blob/${encodeURIComponent(image)}` : "");
 
-const buildAreas = (clickUrl, latParam = "lat", lngParam = "lng", viewport = null, anchor = "") => {
-  const GRID = 16;
-  const cellW = MAP_W / GRID;
-  const cellH = MAP_H / GRID;
-  const areas = [];
-  for (let gy = 0; gy < GRID; gy++) {
-    for (let gx = 0; gx < GRID; gx++) {
-      let c;
-      if (viewport) {
-        const lat = viewport.latMax - (gy + 0.5) / GRID * (viewport.latMax - viewport.latMin);
-        const lng = viewport.lngMin + (gx + 0.5) / GRID * (viewport.lngMax - viewport.lngMin);
-        c = { lat: Math.round(lat * 10000) / 10000, lng: Math.round(lng * 10000) / 10000 };
-      } else {
-        const cx = Math.round(gx * cellW + cellW / 2);
-        const cy = Math.round(gy * cellH + cellH / 2);
-        c = pxToLatLng(cx, cy);
-      }
-      const x1 = Math.round(gx * cellW);
-      const y1 = Math.round(gy * cellH);
-      const x2 = Math.round((gx + 1) * cellW);
-      const y2 = Math.round((gy + 1) * cellH);
-      areas.push(`<area shape="rect" coords="${x1},${y1},${x2},${y2}" href="${clickUrl}${latParam}=${c.lat}&amp;${lngParam}=${c.lng}${anchor}" alt="${c.lat},${c.lng}">`);
-    }
+const buildQuery = (params) => Object.entries(params || {})
+  .filter(([, v]) => v !== undefined && v !== null && String(v) !== "")
+  .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+  .join("&");
+
+const viewHrefFor = (basePath, baseParams, anchor = "#map") => (target, extra = {}) => {
+  const q = buildQuery({ ...baseParams, ...extra, view: target ? viewParam(target) : undefined });
+  return `${basePath}${q ? "?" + q : ""}${anchor}`;
+};
+
+const navText = () => ({ zoomIn: i18n.mapZoomIn, zoomOut: i18n.mapZoomOut, fit: i18n.mapFitMarkers, pan: i18n.mapPanLabel });
+
+const viewForPlace = (hit) => {
+  if (!hit) return null;
+  if (hit.kind === "country" && Array.isArray(hit.bbox)) {
+    const b = hit.bbox;
+    const f = fitView([{ lat: b[1], lng: b[0] }, { lat: b[3], lng: b[2] }], { maxZoom: 7, pad: 40 });
+    return makeView(f.lat, f.lng, f.zoom);
   }
-  return areas;
+  return makeView(hit.lat, hit.lng, MAX_ZOOM);
+};
+
+const placeLabel = (hit) => hit.country ? `${hit.name}, ${hit.country}` : hit.name;
+
+const nearText = (lat, lng) => {
+  const near = nearestPlace(lat, lng);
+  return near ? `${i18n.mapNear} ${near.name}, ${near.country}` : "";
+};
+
+const pickedSpot = (lat, lng) => {
+  const la = numOrNull(lat), lo = numOrNull(lng);
+  if (la === null || lo === null) return p({ class: "map-pick-hint" }, i18n.mapPickHint);
+  const near = nearText(la, lo);
+  return div({ class: "map-picked" },
+    span({ class: "map-coord-pin" }, "📍"),
+    strong(`${la.toFixed(4)}, ${lo.toFixed(4)}`),
+    near ? span({ class: "map-picked-near" }, near) : null);
 };
 
 const renderMap = (markers, clickUrl, mainIdx, opts = {}) => {
   areaCounter++;
-  const mapName = `m${areaCounter}`;
-  const latParam = opts.latParam || "lat";
-  const lngParam = opts.lngParam || "lng";
   const pinLabels = opts.pinLabels || [];
   const pinImages = opts.pinImages || [];
-  const pfx = opts.pinPrefix || `pin${areaCounter}`;
-  const zoom = parseInt(opts.zoom) || 2;
-  const centerLat = typeof opts.centerLat === "number" ? opts.centerLat : 0;
-  const centerLng = typeof opts.centerLng === "number" ? opts.centerLng : 0;
-
-  const pinList = safeArr(markers).filter((m) => m && typeof m.lat === "number" && typeof m.lng === "number");
-  const useZoom = zoom > 2;
-  const mapFile = useZoom
-    ? renderZoomedMapWithPins(centerLat, centerLng, zoom, pinList, mainIdx)
-    : (pinList.length > 0 ? renderMapWithPins(pinList, mainIdx) : null);
-  const imgSrc = mapFile ? `/mapcache/${mapFile}` : "/assets/images/worldmap-z2.png";
-  const viewport = useZoom && clickUrl ? getViewportBounds(centerLat, centerLng, zoom) : null;
-
-  const useMap = clickUrl || pinLabels.length > 0;
-  const mapTag = useMap ? mapName : "";
-
-  let gridAreasHtml = "";
-  if (clickUrl) {
-    const clickUrlWithZoom = zoom > 2 && !/[?&]zoom=/.test(clickUrl) ? `${clickUrl}zoom=${zoom}&` : clickUrl;
-    gridAreasHtml = buildAreas(clickUrlWithZoom, latParam, lngParam, viewport, typeof opts.anchor === "string" ? opts.anchor : "").join("");
+  const pinHrefs = opts.pinHrefs || [];
+  const base = opts.publicBase || "";
+  const focus = Number.isInteger(opts.focus) ? opts.focus : -1;
+  const main = mainIdx || 0;
+  const pins = safeArr(markers)
+    .filter((m) => m && numOrNull(m.lat) !== null && numOrNull(m.lng) !== null)
+    .map((m, i) => ({
+      lat: numOrNull(m.lat),
+      lng: numOrNull(m.lng),
+      label: pinLabels[i] !== undefined ? pinLabels[i] : (m.label || ""),
+      image: blobSrc(pinImages[i] !== undefined ? pinImages[i] : m.image, base),
+      href: pinHrefs[i] || m.href || null,
+      title: m.title || "",
+      main: i === main,
+      focus: i === focus
+    }));
+  if (opts.pick && numOrNull(opts.pick.lat) !== null && numOrNull(opts.pick.lng) !== null) {
+    pins.push({ lat: numOrNull(opts.pick.lat), lng: numOrNull(opts.pick.lng), pick: true });
   }
-  let popupAreasHtml = "";
-  let popupsHtml = "";
-  if (pinLabels.length > 0) {
-    const vp = useZoom ? getViewportBounds(centerLat, centerLng, zoom) : null;
-    pinList.forEach((m, i) => {
-      const lbl = pinLabels[i] || "";
-      let px;
-      if (vp) {
-        px = {
-          x: ((m.lng - vp.lngMin) / (vp.lngMax - vp.lngMin)) * MAP_W,
-          y: ((vp.latMax - m.lat) / (vp.latMax - vp.latMin)) * MAP_H
-        };
-      } else {
-        px = latLngToPx(m.lat, m.lng);
-      }
-      const escaped = lbl.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const withLinks = escaped.replace(/https?:\/\/[^\s&"<>]+/g, (url) => {
-        const clean = url.replace(/&amp;/g, "&");
-        return `<a href="${clean}" class="map-popup-link" target="_blank" rel="noopener">${url}</a>`;
-      }).replace(/\n/g, "<br>");
-      const scale = Math.pow(2, Math.max(0, zoom - getMaxTileZoom()));
-      const halfW = Math.max(26, 26 * scale);
-      const pinTop = Math.max(48, 48 * scale);
-      const pinFoot = Math.max(10, 10 * scale);
-      const x1 = Math.max(0, px.x - halfW);
-      const y1 = Math.max(0, px.y - pinTop);
-      const x2 = Math.min(MAP_W, px.x + halfW);
-      const y2 = Math.min(MAP_H, px.y + pinFoot);
-      const popupId = `${pfx}_${i}`;
-      const latStr = typeof m.lat === "number" ? m.lat.toFixed(4) : "";
-      const lngStr = typeof m.lng === "number" ? m.lng.toFixed(4) : "";
-      const imgBlobId = pinImages[i] && String(pinImages[i]).startsWith("&") ? pinImages[i] : "";
-      const imgHtml = imgBlobId ? `<img src="/blob/${encodeURIComponent(imgBlobId)}" class="map-popup-img" alt="">` : "";
-      popupAreasHtml += `<area shape="rect" coords="${x1},${y1},${x2},${y2}" title="${escaped}" alt="${escaped}" href="#${popupId}">`;
-      popupsHtml += `<div id="${popupId}" class="map-popup-anchor"><div class="map-popup"><div class="map-popup-box"><a href="#${pfx}_map" class="map-popup-close">&#x2715;</a>${imgHtml}<div class="map-popup-label">${sanitizeHtml(withLinks)}</div><div class="map-popup-coords">${latStr}, ${lngStr}</div></div></div></div>`;
-    });
-  }
-  const mapHtml = useMap ? `<map name="${mapTag}">${popupAreasHtml}${gridAreasHtml}</map>` : "";
-  const useAttr = useMap ? ` usemap="#${mapTag}"` : "";
-
-  const mapWrapHtml = `<div class="map-wrap"><img src="${imgSrc}" class="map-img" alt="map"${useAttr}>${mapHtml}</div>`;
-  const viewerEl = div({ class: "map-viewer" }, { innerHTML: mapWrapHtml });
-  if (!popupsHtml) return viewerEl;
-  return div({ class: "map-zone" }, div({ class: "map-popup-container", id: `${pfx}_map`, innerHTML: popupsHtml }), viewerEl);
+  const view = opts.view || resolveView({ zoom: opts.zoom, clat: opts.centerLat, clng: opts.centerLng }, pins.filter((x) => !x.pick), { singleZoom: opts.singleZoom || 8 });
+  const html = renderMapHtml(view, pins, {
+    id: opts.id || `map${areaCounter}`,
+    thumb: !!opts.thumb,
+    publicBase: base,
+    nav: opts.nav || null,
+    pick: opts.pickForm ? { form: opts.pickForm, action: opts.pickAction, name: opts.pickName || "pick" } : null,
+    clickUrl: clickUrl || null,
+    latParam: opts.latParam,
+    lngParam: opts.lngParam,
+    anchor: typeof opts.anchor === "string" ? opts.anchor : "",
+    viewHref: opts.viewHref || null,
+    popup: opts.popup || null,
+    clusterTitle: i18n.mapClusterTitle,
+    text: navText()
+  });
+  return div({ class: opts.thumb ? "map-viewer map-viewer-thumb" : "map-viewer", innerHTML: html });
 };
 
-const renderCoordPreview = (lat, lng) => {
-  if (!lat && !lng) return null;
-  return span({ class: "map-coord-inline" },
-    span({ class: "map-coord-pin" }, "📍"),
-    strong(`${lat}, ${lng}`));
+const renderPlaceResults = (hits, toEl) => {
+  if (!hits) return null;
+  if (!hits.length) return span({ class: "map-place-none" }, i18n.mapNoPlaces);
+  return div({ class: "map-place-results" }, hits.map((h) => toEl(h)));
 };
 
 const renderLocalEmbed = (lat, lng) => {
   const la = parseFloat(lat) || 0;
   const lo = parseFloat(lng) || 0;
   if (!la && !lo) return null;
-  return renderMap([{ lat: la, lng: lo }], null, 0);
+  return renderMap([{ lat: la, lng: lo }], null, 0, { zoom: MIN_ZOOM, centerLat: la, centerLng: lo });
 };
 
 const renderMapUrl = (mapObj) =>
@@ -157,10 +144,7 @@ const renderMapOwnerActions = (filter, mapObj, params = {}) => {
   const actions = [
     form({ method: "GET", action: `/maps/edit/${encodeURIComponent(mapObj.key)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.mapUpdateButton)),
-    form({ method: "POST", action: `/maps/delete/${encodeURIComponent(mapObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.mapDeleteButton))
+      button({ class: "update-btn", type: "submit" }, i18n.mapUpdateButton))
   ];
   const invitable = !mapObj.tribeId && mapObj.mapType === "CLOSED";
   if (invitable) {
@@ -185,8 +169,8 @@ const renderMapOwnerActions = (filter, mapObj, params = {}) => {
   return actions;
 };
 
-const renderFilters = (filter, q, emptyMod = false, chip = null) =>
-  div({ class: "filters" },
+const renderFilters = (filter, q, emptyMod = false, chip = null, search = null) =>
+  div({ class: search ? "filters activity-filter-chips activity-toolbar-row" : "filters" },
     form({ method: "GET", action: "/maps", class: "ui-toolbar ui-toolbar--filters" },
       input({ type: "hidden", name: "q", value: q || "" }),
       ...(emptyMod ? [] : [
@@ -195,33 +179,66 @@ const renderFilters = (filter, q, emptyMod = false, chip = null) =>
       button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterAll).toUpperCase()),
       ...(!chip || chip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterFavorites).toUpperCase())] : []),
       ]),
-      button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.mapCreateButton)));
+      button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.mapCreateButton)),
+    search);
 
 const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
   const returnFilter = filter === "create" ? "all" : params.filter || "all";
   const returnTo = safeText(params.returnTo) || buildReturnTo(returnFilter, params);
-  const latVal = params.lat !== undefined ? String(params.lat) : String(mapToEdit?.lat || "");
-  const lngVal = params.lng !== undefined ? String(params.lng) : String(mapToEdit?.lng || "");
+  const picked = parsePick(params.pick);
+  const latVal = picked ? String(picked.lat) : (params.lat !== undefined ? String(lastOf(params.lat)) : String(mapToEdit?.lat || ""));
+  const lngVal = picked ? String(picked.lng) : (params.lng !== undefined ? String(lastOf(params.lng)) : String(mapToEdit?.lng || ""));
   const titleVal = params.title || mapToEdit?.title || "";
   const descVal = params.description || mapToEdit?.description || "";
   const markerLabelVal = params.markerLabel !== undefined ? params.markerLabel : (mapToEdit?.markerLabel || "");
   const tagsValue = params.tags !== undefined ? params.tags : safeArr(mapToEdit?.tags).join(", ");
-  const mapTypeVal = params.mapType || mapToEdit?.mapType || "SINGLE";
-  const maxTileZoom = getMaxTileZoom();
-  const zoomVal = parseInt(params.zoom) || 2;
-  const cleanUrl = `/maps?filter=create${params.tribeId ? '&tribeId=' + encodeURIComponent(params.tribeId) : ''}`;
+  const isEdit = filter === "edit";
+  const reachRaw = String(params.reach || params.mapType || "").toUpperCase();
+  const mapTypeVal = MAP_REACH.includes(reachRaw) ? reachRaw : (mapToEdit?.mapType || "SINGLE");
+  const showClearnet = mapTypeVal === "OPEN" && !params.tribeId && clearnetEligible({ ...(mapToEdit || {}), mapType: mapTypeVal });
+  const clearnetOn = params.clearnet !== undefined ? String(params.clearnet) === "1" : mapToEdit?.clearnet === true;
+  const stepAction = isEdit ? `/maps/edit/${encodeURIComponent(mapId)}` : "/maps";
+  const cleanUrl = isEdit
+    ? `${stepAction}?mapType=${encodeURIComponent(mapTypeVal)}`
+    : `/maps?filter=create&mapType=${encodeURIComponent(mapTypeVal)}${params.tribeId ? '&tribeId=' + encodeURIComponent(params.tribeId) : ''}`;
   const pickerMarkers = latVal && lngVal ? [{ lat: parseFloat(latVal), lng: parseFloat(lngVal) }] : [];
+  const placeQ = safeText(lastOf(params.place));
+  const placeHits = placeQ ? searchPlaces(placeQ, 5) : null;
+  const explicitView = parseView(params.view);
+  const prevView = Array.isArray(params.view) ? parseView(params.view[0]) : null;
+  const view = explicitView
+    ? makeView(explicitView.lat, explicitView.lng, explicitView.zoom)
+    : (placeHits && placeHits.length ? viewForPlace(placeHits[0]) : resolveView({ zoom: params.zoom, clat: prevView ? prevView.lat : undefined, clng: prevView ? prevView.lng : undefined }, pickerMarkers, { singleZoom: 8 }));
+  const zoomVal = view.zoom;
+  const formId = "map-main-form";
+  const nav = { form: formId, action: stepAction };
+  const keptKeys = ["lat", "lng", "zoom", "view", "title", "description", "markerLabel", "tags"];
 
   return div({ class: "div-center audio-form" },
     params.spreadWarning || null,
-    h2(filter === "edit" ? i18n.mapUpdateButton : i18n.mapCreateButton),
+    h2(isEdit ? i18n.mapUpdateButton : i18n.mapCreateButton),
+    form({ method: "GET", action: stepAction },
+      isEdit ? null : input({ type: "hidden", name: "filter", value: "create" }),
+      params.tribeId ? input({ type: "hidden", name: "tribeId", value: params.tribeId }) : null,
+      isEdit && safeText(params.returnTo) ? input({ type: "hidden", name: "returnTo", value: safeText(params.returnTo) }) : null,
+      ...keptKeys.filter((k) => params[k] !== undefined && String(lastOf(params[k])) !== "").map((k) => input({ type: "hidden", name: k, value: String(lastOf(params[k])) })),
+      label(i18n.mapTypeLabel), br(),
+      div({ class: "apply-row" },
+        select({ name: "mapType", class: "report-category-select" },
+          ...MAP_REACH.map((t) => option({ value: t, ...(mapTypeVal === t ? { selected: true } : {}) }, mapReachLabel(t)))),
+        button({ type: "submit", class: "create-button" }, i18n.apply || "Apply"))),
+    hr({ class: "form-sep" }),
+    h2({ class: "report-category-fixed" }, mapReachLabel(mapTypeVal)),
     form({
-        action: filter === "edit" ? `/maps/update/${encodeURIComponent(mapId)}` : "/maps/create",
+        id: formId,
+        action: isEdit ? `/maps/update/${encodeURIComponent(mapId)}` : "/maps/create",
         method: "POST",
         enctype: "multipart/form-data"
       },
         input({ type: "hidden", name: "returnTo", value: returnTo }),
-        input({ type: "hidden", name: "filter", value: "create" }),
+        isEdit ? null : input({ type: "hidden", name: "filter", value: "create" }),
+        input({ type: "hidden", name: "mapType", value: mapTypeVal }),
+        input({ type: "hidden", name: "view", value: viewParam(view) }),
         params.tribeId ? input({ type: "hidden", name: "tribeId", value: params.tribeId }) : null,
         label(i18n.title || "Title"), br(),
         input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.mapTitlePlaceholder || "Map title", value: titleVal }),
@@ -232,12 +249,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         label(i18n.mapTagsLabel), br(),
         input({ type: "text", name: "tags", placeholder: i18n.mapTagsPlaceholder, value: tagsValue }),
         br(), br(),
-        label(i18n.mapTypeLabel), br(),
-        select({ name: "mapType" },
-          option({ value: "SINGLE", ...(mapTypeVal === "SINGLE" ? { selected: true } : {}) }, i18n.mapTypeSingle),
-          option({ value: "OPEN", ...(mapTypeVal === "OPEN" ? { selected: true } : {}) }, i18n.mapTypeOpen),
-          option({ value: "CLOSED", ...(mapTypeVal === "CLOSED" ? { selected: true } : {}) }, i18n.mapTypeClosed)),
-        br(), br(),
+        showClearnet ? renderClearnetSelector(clearnetOn, i18n) : null,
         label(i18n.mapMarkerLabelField), br(),
         textarea({ maxlength: "5000", name: "markerLabel", placeholder: i18n.mapMarkerLabelPlaceholder, rows: "3" }, markerLabelVal),
         br(), br(),
@@ -251,91 +263,136 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         input({ type: "text", name: "lng", placeholder: i18n.mapLngPlaceholder, value: lngVal }),
         br(), br(),
         div({ class: "map-form-row" },
-          button({ type: "submit", attrs: { formmethod: "GET" }, formaction: "/maps", class: "filter-btn" }, i18n.mapAddMarkerButton || "Add Marker"),
+          button({ type: "submit", attrs: { formmethod: "GET" }, formaction: stepAction, class: "filter-btn" }, i18n.mapAddMarkerButton || "Add Marker"),
           a({ href: cleanUrl, class: "filter-btn" }, i18n.mapCleanMarkerButton || "Clean Marker")),
-        renderCoordPreview(latVal, lngVal),
-        br(),
-        label(i18n.mapZoomLabel || "Zoom"), br(),
-        select({ name: "zoom" },
-          [2, 3, 4, 5, 6, 7, 8].map(z =>
-            option({ value: String(z), ...(zoomVal === z ? { selected: true } : {}) }, String(z)))),
-        br(), br(),
-        button({ type: "submit", attrs: { formmethod: "GET" }, formaction: "/maps", class: "filter-btn" }, i18n.mapApplyZoom || "Apply Zoom"),
+        pickedSpot(latVal, lngVal),
+        div({ class: "map-toolbar" },
+          div({ class: "map-place-search" },
+            input({ type: "text", name: "place", value: placeQ, placeholder: i18n.mapPlaceSearchPlaceholder, class: "filter-box__input" }),
+            button({ type: "submit", attrs: { formmethod: "GET" }, formaction: stepAction, name: "view", value: "", class: "filter-btn" }, i18n.mapSearchButton))),
+        renderPlaceResults(placeHits, (h) => {
+          const v = viewForPlace(h);
+          return button({ type: "submit", attrs: { formmethod: "GET" }, formaction: stepAction, name: "view", value: viewParam(v), class: "map-place-result" },
+            span(h.name), h.country ? span({ class: "map-place-result-country" }, h.country) : null);
+        }),
         div({ class: "map-form-map-slot" },
-          renderMap(pickerMarkers, null, 0, { zoom: zoomVal, centerLat: parseFloat(latVal) || 0, centerLng: parseFloat(lngVal) || 0 })),
-        button({ type: "submit", class: "create-button" }, filter === "edit" ? i18n.mapUpdateButton : i18n.mapCreateButton)));
+          renderMap(pickerMarkers, null, 0, { view, id: "map", nav, pickForm: formId, pickAction: stepAction })),
+        button({ type: "submit", class: "create-button" }, isEdit ? i18n.mapUpdateButton : i18n.mapCreateButton)));
 };
 
-const renderMarkerForm = (mapObj, returnTo, params = {}, tribeMembers = []) => {
-  if (mapObj.mapType === "SINGLE") return null;
-  if (mapObj.mapType === "CLOSED" && String(mapObj.author) !== String(userId)) return null;
-  if (mapObj.mapType === "OPEN" && mapObj.tribeId && !tribeMembers.includes(userId)) return null;
-  const mkLat = params.mkLat || "";
-  const mkLng = params.mkLng || "";
-  const zoomVal = parseInt(params.zoom) || 2;
+const MARKER_FORM_ID = "add-marker-form";
 
-  const existingMarkers = [{ lat: mapObj.lat, lng: mapObj.lng }].concat(
-    safeArr(mapObj.markers).map((m) => ({ lat: m.lat, lng: m.lng })));
-  if (mkLat && mkLng) existingMarkers.push({ lat: parseFloat(mkLat), lng: parseFloat(mkLng) });
+const canAddMarkers = (mapObj, tribeMembers = []) => {
+  if (mapObj.mapType === "SINGLE") return false;
+  if (mapObj.mapType === "CLOSED" && String(mapObj.author) !== String(userId)) return false;
+  if (mapObj.mapType === "OPEN" && mapObj.tribeId && !safeArr(tribeMembers).includes(userId)) return false;
+  return true;
+};
 
-  const pinLabels = [mapObj.markerLabel || mapObj.description || mapObj.title || ""].concat(
-    safeArr(mapObj.markers).map((m) => m.label || ""));
+const allMarkersOf = (mapObj) => [{
+  key: mapObj.key,
+  lat: mapObj.lat,
+  lng: mapObj.lng,
+  label: mapObj.markerLabel || mapObj.description || mapObj.title || i18n.mapMarkerDefault,
+  image: mapObj.image || "",
+  author: mapObj.author,
+  createdAt: mapObj.createdAt,
+  root: true
+}].concat(safeArr(mapObj.markers).map((m) => ({ ...m, root: false })));
 
-  const mkCleanUrl = `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(params.filter || "all")}`;
-  const clickUrl = `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(params.filter || "all")}&zoom=${zoomVal}&`;
+const firstLine = (s, n = 140) => {
+  const line = String(s || "").split(/\r?\n/)[0].trim();
+  return line.length > n ? line.slice(0, n - 1) + "…" : line;
+};
+
+const renderMarkerForm = (mapObj, returnTo, params = {}, tribeMembers = [], ctx = {}) => {
+  if (!canAddMarkers(mapObj, tribeMembers)) return null;
+  const mkLat = ctx.mkLat || "";
+  const mkLng = ctx.mkLng || "";
+  const base = `/maps/${encodeURIComponent(mapObj.key)}`;
+  const filter = params.filter || "all";
+  const viewVal = ctx.view ? viewParam(ctx.view) : "";
+  const mkCleanUrl = `${base}?${buildQuery({ filter, view: viewVal, focus: ctx.focus >= 0 ? ctx.focus : undefined })}#add-marker`;
   return div({ class: "map-marker-form", id: "add-marker" },
     h3(i18n.mapAddMarkerTitle),
-    form({ method: "POST", action: `/maps/${encodeURIComponent(mapObj.key)}/marker`, class: "map-form", enctype: "multipart/form-data" },
-      returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,    
+    form({ id: MARKER_FORM_ID, method: "POST", action: `${base}/marker`, class: "map-form", enctype: "multipart/form-data" },
+      returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
+      input({ type: "hidden", name: "filter", value: filter }),
+      viewVal ? input({ type: "hidden", name: "view", value: viewVal }) : null,
+      ctx.focus >= 0 ? input({ type: "hidden", name: "focus", value: String(ctx.focus) }) : null,
+      pickedSpot(mkLat, mkLng),
       label(i18n.mapMarkerLabelField),
       textarea({ maxlength: "5000", name: "label", placeholder: i18n.mapMarkerLabelPlaceholder, rows: "3" }, params.mkMarkerLabel || ""),
       label(i18n.markerImageLabel || "Marker Image"),
       input({ type: "file", name: "image", accept: "image/*" }),
-      br(),br(),
+      br(), br(),
       label(i18n.mapMarkerLatLabel),
       input({ type: "text", name: "mkLat", placeholder: i18n.mapLatPlaceholder, value: String(mkLat) }),
       label(i18n.mapMarkerLngLabel),
       input({ type: "text", name: "mkLng", placeholder: i18n.mapLngPlaceholder, value: String(mkLng) }),
-      div({ class: "map-form-row" },
-        button({ type: "submit", attrs: { formmethod: "GET" }, formaction: `/maps/${encodeURIComponent(mapObj.key)}`, class: "filter-btn" }, i18n.mapAddMarkerButton || "Add Marker"),
-        a({ href: mkCleanUrl, class: "filter-btn" }, i18n.mapCleanMarkerButton || "Clean Marker")),
-      renderCoordPreview(mkLat, mkLng),
-      label(i18n.mapZoomLabel || "Zoom"),
-      select({ name: "zoom" },
-        [2, 3, 4, 5, 6, 7, 8].map(z =>
-          option({ value: String(z), ...(zoomVal === z ? { selected: true } : {}) }, String(z)))),
-      br(),br(),
-      button({ type: "submit", attrs: { formmethod: "GET" }, formaction: `/maps/${encodeURIComponent(mapObj.key)}`, class: "filter-btn" }, i18n.mapApplyZoom || "Apply Zoom"),
-      div({ class: "map-form-map-slot" },
-        renderMap(existingMarkers, clickUrl, 0, { latParam: "mkLat", lngParam: "mkLng", pinLabels, pinPrefix: `mk${areaCounter}`, anchor: "#add-marker", zoom: zoomVal, centerLat: parseFloat(mkLat) || parseFloat(mapObj.lat) || 0, centerLng: parseFloat(mkLng) || parseFloat(mapObj.lng) || 0 })),
-      button({ type: "submit", class: "create-button" }, i18n.mapAddMarkerButton)));
+      div({ class: "map-form-row map-form-actions" },
+        button({ type: "submit", class: "create-button" }, i18n.mapAddMarkerButton),
+        a({ href: mkCleanUrl, class: "filter-btn" }, i18n.mapClearPick))));
 };
 
-const renderMarkersList = (markers, mapObj) => {
-  const allMarkers = [];
-  if (mapObj) {
-    allMarkers.push({
-      lat: mapObj.lat,
-      lng: mapObj.lng,
-      label: mapObj.markerLabel || mapObj.description || mapObj.title || i18n.mapMarkerDefault,
-      author: mapObj.author,
-      createdAt: mapObj.createdAt
-    });
-  }
-  allMarkers.push(...safeArr(markers));
+const popupNotes = (s, n = 600) => {
+  const text = String(s || "").trim();
+  if (text.length <= n) return text;
+  const cut = text.slice(0, n);
+  return cut.slice(0, Math.max(cut.lastIndexOf(" "), n - 40)) + "…";
+};
+
+const renderPinPopup = (mk, i, ctx = {}) => {
+  const lat = numOrNull(mk.lat) === null ? 0 : numOrNull(mk.lat);
+  const lng = numOrNull(mk.lng) === null ? 0 : numOrNull(mk.lng);
+  const base = ctx.publicBase || "";
+  const notes = ctx.notesHtml ? ctx.notesHtml(popupNotes(mk.label)) : renderStyledHtml(popupNotes(mk.label));
+  const own = !ctx.readOnly && !mk.root && mk.key && String(mk.author) === String(userId);
+  const parts = [
+    `<div class="map-popup-head"><span class="map-marker-idx${mk.root ? " map-marker-idx--main" : ""}">${mk.root ? "★" : i}</span>` +
+      (ctx.closeHref ? `<a class="map-popup-close" href="${escapeHtml(ctx.closeHref)}">×</a>` : "") + `</div>`,
+    isBlob(mk.image) ? `<img class="map-popup-img" src="${escapeHtml(blobSrc(mk.image, base))}" alt=""/>` : "",
+    notes ? `<div class="map-popup-text">${notes}</div>` : "",
+    `<span class="map-popup-coords">${lat.toFixed(4)}, ${lng.toFixed(4)}</span>`,
+    `<div class="map-popup-meta">` + (ctx.readOnly ? "" : userLink(mk.author).outerHTML) +
+      (mk.createdAt ? `<span class="map-popup-date">${escapeHtml(moment(mk.createdAt).fromNow())}</span>` : "") + `</div>`,
+    `<div class="map-popup-actions">` +
+      (ctx.centerHref ? `<a class="map-center-link" href="${escapeHtml(ctx.centerHref)}">${escapeHtml(i18n.mapCenterHere)}</a>` : "") +
+      (own ? form({ method: "POST", action: contentDeleteAction('mapMarker', mk.key) },
+        ctx.returnTo ? input({ type: "hidden", name: "returnTo", value: ctx.returnTo }) : null,
+        button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.mapDeleteMarker }, "✕")).outerHTML : "") + `</div>`
+  ];
+  return parts.join("");
+};
+
+const renderMarkersList = (markers, mapObj, ctx = {}) => {
+  const allMarkers = mapObj ? allMarkersOf({ ...mapObj, markers }) : safeArr(markers);
   if (!allMarkers.length) return null;
+  const focus = Number.isInteger(ctx.focus) ? ctx.focus : -1;
+  const base = ctx.publicBase || "";
   return div({ class: "map-markers-list" },
-    h3(i18n.mapMarkersTitle),
-    br(),
-    div(allMarkers.flatMap((mk, i) => [
-      ...(i > 0 ? [br()] : []),
-        div({ class: "map-marker-info" },
-          span({ class: "map-marker-dot" }, "ꔌ"),
-          span({ class: "map-marker-coords" }, `${(typeof mk.lat === 'number' ? mk.lat : 0).toFixed(4)}, ${(typeof mk.lng === 'number' ? mk.lng : 0).toFixed(4)}`),
-          span({ class: "map-marker-meta" },
-            userLink(mk.author),
-            ` · ${moment(mk.createdAt).fromNow()}`))
-    ])));
+    h3(`${i18n.mapMarkersTitle} (${allMarkers.length})`),
+    div(allMarkers.map((mk, i) => {
+      const lat = numOrNull(mk.lat) === null ? 0 : numOrNull(mk.lat);
+      const lng = numOrNull(mk.lng) === null ? 0 : numOrNull(mk.lng);
+      const centerHref = ctx.viewHref ? ctx.viewHref({ zoom: MAX_ZOOM, lat, lng }, { focus: i }) : null;
+      const own = !ctx.readOnly && !mk.root && mk.key && String(mk.author) === String(userId);
+      return div({ class: "map-marker-row" + (i === focus ? " map-marker-row--focus" : ""), id: `marker-${i}` },
+        span({ class: "map-marker-idx" + (mk.root ? " map-marker-idx--main" : "") }, mk.root ? "★" : String(i)),
+        div({ class: "map-marker-body" },
+          div({ class: "map-marker-text" },
+            firstLine(mk.label) ? span({ class: "map-marker-label" }, firstLine(mk.label)) : null,
+            span({ class: "map-marker-coords" }, `${lat.toFixed(4)}, ${lng.toFixed(4)}`),
+            span({ class: "map-marker-meta" },
+              ctx.readOnly ? null : userLink(mk.author),
+              mk.createdAt ? span({ class: "map-marker-date" }, moment(mk.createdAt).fromNow()) : null)),
+          isBlob(mk.image) ? img({ src: blobSrc(mk.image, base), class: "map-marker-thumb", alt: "" }) : null),
+        div({ class: "map-marker-actions" },
+          centerHref ? a({ href: centerHref, class: "map-center-link" }, i18n.mapCenterHere) : null,
+          own ? form({ method: "POST", action: contentDeleteAction('mapMarker', mk.key) },
+            ctx.returnTo ? input({ type: "hidden", name: "returnTo", value: ctx.returnTo }) : null,
+            button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.mapDeleteMarker }, "✕")) : null));
+    })));
 };
 
 const renderMapCard = (mapObj, filter, params = {}) => {
@@ -344,13 +401,12 @@ const renderMapCard = (mapObj, filter, params = {}) => {
 
   const thumbMarkers = [{ lat: mapObj.lat, lng: mapObj.lng }].concat(
     safeArr(mapObj.markers).map((m) => ({ lat: m.lat, lng: m.lng })));
-  const thumbFile = renderMapWithPins(thumbMarkers, 0);
-  const thumbSrc = thumbFile ? `/mapcache/${thumbFile}` : "/assets/images/worldmap-z2.png";
 
   const chips = [
     renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase()),
     renderEncryptedChip(i18n),
-    renderLifespanChip(mapObj.lifetime, i18n)
+    renderLifespanChip(mapObj.lifetime, i18n),
+    mapObj.clearnet === true && clearnetEligible(mapObj) ? renderReachChip(true, i18n, mapClearnetHref(mapObj)) : null
   ].filter(Boolean);
 
   const isOwn = mapObj.author && String(mapObj.author) === String(userId);
@@ -358,10 +414,10 @@ const renderMapCard = (mapObj, filter, params = {}) => {
   return div({ class: "tribe-card" + (isOwn ? " own-content" : "") },
     div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(mapObj.key, href, { spread: params.spreadMap && params.spreadMap.get(mapObj.key) || null, author: mapObj.author, favKind: 'maps', isFavorite: mapObj.isFavorite, reportTitle: mapObj.title })
+      renderContentActions(mapObj.key, href, { spread: params.spreadMap && params.spreadMap.get(mapObj.key) || null, author: mapObj.author, favKind: 'maps', isFavorite: mapObj.isFavorite, reportTitle: mapObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('map', mapObj.key) : undefined })
     ),
-    div({ class: "tribe-card-image-wrapper" },
-      a({ href }, img({ src: thumbSrc, class: "tribe-card-hero-image", alt: "map" }))
+    div({ class: "tribe-card-image-wrapper map-card-thumb" },
+      a({ href }, renderMap(thumbMarkers, null, 0, { thumb: true, singleZoom: 5 }))
     ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
@@ -433,24 +489,43 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q });
   const ownerActions = renderMapOwnerActions(filter, mapObj, { q });
   const tribeMembers = safeArr(params.tribeMembers);
-  const zoomVal = parseInt(params.zoom) || 8;
+  const canClearnet = clearnetEligible(mapObj);
+  const isClearnet = canClearnet && mapObj.clearnet === true;
 
-  const allMarkers = [{ lat: mapObj.lat, lng: mapObj.lng }].concat(
-    safeArr(mapObj.markers).map((m) => ({ lat: m.lat, lng: m.lng })));
+  const base = `/maps/${encodeURIComponent(mapObj.key)}`;
+  const allMarkers = allMarkersOf(mapObj);
+  const focusRaw = parseInt(lastOf(params.focus));
+  const focus = Number.isInteger(focusRaw) && focusRaw >= 0 && focusRaw < allMarkers.length ? focusRaw : -1;
+  const picked = parsePick(params.pick);
+  const mkLat = picked ? String(picked.lat) : safeText(lastOf(params.mkLat));
+  const mkLng = picked ? String(picked.lng) : safeText(lastOf(params.mkLng));
+  const placeQ = safeText(lastOf(params.place));
+  const placeHits = placeQ ? searchPlaces(placeQ, 5) : null;
+  const explicitView = parseView(params.view);
+  const view = explicitView
+    ? makeView(explicitView.lat, explicitView.lng, explicitView.zoom)
+    : (placeHits && placeHits.length ? viewForPlace(placeHits[0]) : resolveView({ zoom: params.zoom, clat: params.clat, clng: params.clng }, allMarkers, { singleZoom: 8 }));
+  const baseParams = { filter, q, mkLat: mkLat || undefined, mkLng: mkLng || undefined, focus: focus >= 0 ? focus : undefined };
+  const viewHref = viewHrefFor(base, baseParams, "#map");
+  const pinHrefs = allMarkers.map((m, i) => viewHref({ zoom: view.zoom, lat: m.lat, lng: m.lng }, { focus: i }));
+  const canAdd = canAddMarkers(mapObj, tribeMembers);
+  const pageReturnTo = viewHref(view);
+  const popup = focus >= 0 ? renderPinPopup(allMarkers[focus], focus, {
+    closeHref: viewHrefFor(base, { ...baseParams, focus: undefined }, "#map")(view),
+    centerHref: viewHref({ zoom: MAX_ZOOM, lat: allMarkers[focus].lat, lng: allMarkers[focus].lng }, { focus }),
+    returnTo: pageReturnTo
+  }) : null;
 
-  const pinLabels = [mapObj.markerLabel || mapObj.description || mapObj.title || ""].concat(
-    safeArr(mapObj.markers).map((m) => m.label || ""));
-  const pinImages = [mapObj.image || ""].concat(safeArr(mapObj.markers).map((m) => m.image || ""));
-
-  const mapSide = div({ class: "tribe-side" },
+  const mapSide = div({ class: "tribe-side map-detail-side" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(mapObj.key, null, {
+      renderContentActions(mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, {
         author: mapObj.author,
         favKind: 'maps',
         isFavorite: mapObj.isFavorite,
         spread: params.spreads || null,
         returnTo,
-        reportTitle: mapObj.title
+        reportTitle: mapObj.title,
+        deleteAction: String(mapObj.author) === String(userId) ? contentDeleteAction('map', mapObj.key) : undefined
       })
     ),
     div({ class: "shop-title-row" },
@@ -459,7 +534,9 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
     div({ class: "card-chips-row" },
       renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase()),
       renderEncryptedChip(i18n),
-      renderLifespanChip(mapObj.lifetime, i18n)
+      renderLifespanChip(mapObj.lifetime, i18n),
+      canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? mapClearnetHref(mapObj) : null) : null,
+      canClearnet && String(mapObj.author) === String(userId) ? renderClearnetSwitch("maps", mapObj.rootId || mapObj.key, isClearnet) : null
     ),
     safeText(mapObj.description) ? p({ class: "tribe-side-description" }, ...renderStyledText(safeText(mapObj.description))) : null,
     table({ class: "tribe-info-table jobs-info-table" },
@@ -488,34 +565,189 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
           a({ class: "tribe-action-btn", href: "/invites#invites-maps" }, i18n.tribeEnterInvite)
         )
       : null,
+    renderDocumentActions('maps', mapObj.key),
     ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null
   );
 
-  const mapMain = div({ class: "tribe-main" },
+  const hiddenState = (withView) => [
+    input({ type: "hidden", name: "filter", value: filter }),
+    q ? input({ type: "hidden", name: "q", value: q }) : null,
+    mkLat && mkLng ? input({ type: "hidden", name: "mkLat", value: mkLat }) : null,
+    mkLat && mkLng ? input({ type: "hidden", name: "mkLng", value: mkLng }) : null,
+    focus >= 0 ? input({ type: "hidden", name: "focus", value: String(focus) }) : null,
+    withView ? input({ type: "hidden", name: "clat", value: String(view.lat) }) : null,
+    withView ? input({ type: "hidden", name: "clng", value: String(view.lng) }) : null
+  ];
+
+  const placeSearch = form({ method: "GET", action: base, class: "filter-box" },
+    ...hiddenState(false),
+    input({ type: "text", name: "place", value: placeQ, placeholder: i18n.mapPlaceSearchPlaceholder, class: "filter-box__input" }),
+    div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.mapSearchButton)));
+
+  const mapHero = div({ class: "map-hero" },
+    renderPlaceResults(placeHits, (h) => a({ href: viewHref(viewForPlace(h)), class: "map-place-result" },
+      span(h.name), h.country ? span({ class: "map-place-result-country" }, h.country) : null)),
     renderMapUrl(mapObj),
-    renderMap(allMarkers, null, 0, { pinLabels, pinImages, pinPrefix: `detail${areaCounter}`, zoom: zoomVal, centerLat: parseFloat(mapObj.lat) || 0, centerLng: parseFloat(mapObj.lng) || 0 }),
-    form({ method: "GET", action: `/maps/${encodeURIComponent(mapObj.key)}` },
-      label(i18n.mapZoomLabel || "Zoom"),
-      br(),
-      select({ name: "zoom" },
-        [2, 3, 4, 5, 6, 7, 8].map(z =>
-          option({ value: String(z), ...(zoomVal === z ? { selected: true } : {}) }, String(z)))),
-      br(), br(),
-      button({ type: "submit", class: "filter-btn" }, i18n.mapApplyZoom || "Apply Zoom")),
-    renderMarkersList(mapObj.markers, mapObj),
+    renderMap(allMarkers, null, 0, {
+      id: "map",
+      view,
+      focus,
+      pinHrefs,
+      popup,
+      nav: { href: viewHref },
+      viewHref,
+      pick: mkLat && mkLng ? { lat: mkLat, lng: mkLng } : null,
+      pickForm: canAdd ? MARKER_FORM_ID : null,
+      pickAction: base
+    }));
+
+  const mapMain = div({ class: "tribe-main map-detail-main" },
+    renderMarkersList(mapObj.markers, mapObj, { focus, view, viewHref, returnTo: pageReturnTo }),
     p({ class: "card-footer" },
       span({ class: "date-link" }, `${moment(mapObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
       userLink(mapObj.author),
       mapObj.updatedAt && mapObj.updatedAt !== mapObj.createdAt
         ? span({ class: "votations-comment-date" }, ` · ${i18n.mapUpdatedAt}: ${moment(mapObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
         : null),
-    renderMarkerForm(mapObj, returnTo, params, tribeMembers)
+    renderMarkerForm(mapObj, returnTo, { ...params, filter }, tribeMembers, { mkLat, mkLng, view, focus })
   );
 
   return template(mapObj.title || i18n.mapTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.mapTitle), p(i18n.mapDescription))),
-    section(renderFilters(filter, q)),
-    section(div({ class: "tribe-details" }, mapSide, mapMain)));
+    section(renderFilters(filter, q, false, null, placeSearch)),
+    section(mapHero, div({ class: "tribe-details map-detail-grid" }, mapSide, mapMain)));
+};
+
+exports.clearnetMapView = async (mapObj, params = {}) => {
+  const { escapeHtml: esc, renderRichText, renderKindTag, renderTagChips, renderClearnetPage } = require("./clearnet_view");
+  const base = clearnetItemHref("maps", mapObj.title, mapObj.rootId || mapObj.key);
+  const allMarkers = allMarkersOf(mapObj);
+  const focusRaw = parseInt(lastOf(params.focus));
+  const focus = Number.isInteger(focusRaw) && focusRaw >= 0 && focusRaw < allMarkers.length ? focusRaw : -1;
+  const explicitView = parseView(params.view);
+  const view = explicitView
+    ? makeView(explicitView.lat, explicitView.lng, explicitView.zoom)
+    : resolveView({ zoom: params.zoom, clat: params.clat, clng: params.clng }, allMarkers, { singleZoom: 8 });
+  const viewHref = viewHrefFor(base, { focus: focus >= 0 ? focus : undefined }, "#map");
+  const pinHrefs = allMarkers.map((m, i) => viewHref({ zoom: view.zoom, lat: m.lat, lng: m.lng }, { focus: i }));
+  const popup = focus >= 0 ? renderPinPopup(allMarkers[focus], focus, {
+    readOnly: true,
+    publicBase: "/c",
+    notesHtml: renderRichText,
+    closeHref: viewHrefFor(base, {}, "#map")(view),
+    centerHref: viewHref({ zoom: MAX_ZOOM, lat: allMarkers[focus].lat, lng: allMarkers[focus].lng }, { focus })
+  }) : null;
+  const mapHtml = renderMap(allMarkers, null, 0, { id: "map", view, focus, pinHrefs, popup, nav: { href: viewHref }, viewHref, publicBase: "/c" }).outerHTML;
+  const name = mapObj.title || i18n.cnKindMap;
+  const desc = renderRichText(mapObj.description || "");
+  const coord = (v) => (typeof v === "number" ? v : parseFloat(v) || 0).toFixed(4);
+  const extraCss = `
+.cn-map-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700;word-break:break-word}
+.cn-map-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+.cn-map-desc{color:var(--fg-soft);line-height:1.6;margin:16px 0}
+.map-viewer{width:100%}
+.map-stage{position:relative;width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;line-height:0}
+.map-svg{display:block;width:100%;height:auto;font-family:inherit}
+.map-pins-layer{position:absolute;top:0;left:0;width:100%;height:100%;z-index:4;pointer-events:none}
+.map-pins-layer a{pointer-events:auto}
+.map-ocean{fill:#a7c6de}
+.map-tile{image-rendering:auto}
+.map-grat{fill:none;stroke:rgba(255,255,255,.4);stroke-width:.6}
+.map-border{fill:none;stroke:rgba(72,52,32,.65);stroke-width:.8;stroke-linejoin:round}
+.map-lake{fill:none;stroke:rgba(36,86,128,.7);stroke-width:.7;stroke-linejoin:round}
+.map-state{fill:none;stroke:rgba(72,52,32,.5);stroke-width:.6;stroke-dasharray:3 2}
+.map-coast{fill:none;stroke:rgba(36,86,128,.75);stroke-width:.8;stroke-linejoin:round}
+.map-label-country{fill:#262c31;font-size:14px;font-weight:600;letter-spacing:.6px;text-anchor:middle;paint-order:stroke;stroke:rgba(255,255,255,.85);stroke-width:3px;stroke-linejoin:round}
+.map-place-dot{fill:#1f252a;stroke:#fff;stroke-width:1}
+.map-place-capital{fill:#d35400}
+.map-place-label{fill:#1f252a;font-size:12px;paint-order:stroke;stroke:rgba(255,255,255,.85);stroke-width:3px;stroke-linejoin:round}
+.map-place-label-capital{font-weight:700}
+.map-pin-body{fill:#3498db;stroke:#fff;stroke-width:1.5}
+.map-pin-main .map-pin-body{fill:#e74c3c}
+.map-pin-focus .map-pin-body{fill:var(--accent);stroke-width:2.2}
+.map-pin-eye{fill:#fff}
+.map-pin-label-bg{fill:var(--bg-elev);stroke:var(--border);stroke-width:.8}
+.map-pin-focus .map-pin-label-bg{stroke:var(--accent);stroke-width:1.2}
+.map-pin-label{fill:var(--fg);font-size:12px;font-weight:700;text-anchor:middle}
+.map-pin-img-frame{fill:#fff}
+.map-pins-layer a:hover .map-pin-body,.map-pins a:hover .map-pin-body{fill:var(--accent)}
+.map-cluster-ring{fill:var(--bg-elev);opacity:.7}
+.map-cluster-dot{fill:var(--accent);stroke:#fff;stroke-width:1.6}
+.map-cluster-count{fill:#000;font-size:13px;font-weight:700;text-anchor:middle}
+.map-scale-line{fill:none;stroke:#1f252a;stroke-width:1.6}
+.map-scale-text{fill:#1f252a;font-size:11px;font-weight:600;paint-order:stroke;stroke:rgba(255,255,255,.85);stroke-width:3px}
+.map-attrib{fill:#3b434a;font-size:9px;text-anchor:end;paint-order:stroke;stroke:rgba(255,255,255,.75);stroke-width:2px}
+.map-controls{position:absolute;z-index:3;display:flex;flex-direction:column;gap:4px;line-height:1}
+.map-controls-zoom{top:10px;left:10px}
+.map-controls-pan{top:10px;right:10px;display:grid;grid-template-columns:repeat(3,30px);grid-template-rows:repeat(3,30px);gap:2px}
+.map-ctrl{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;background:var(--bg-elev);color:var(--accent);border:1px solid var(--border);border-radius:6px;text-decoration:none;font-size:17px;font-weight:700;font-family:inherit;box-sizing:border-box}
+.map-ctrl:hover{background:var(--accent);color:var(--bg);border-color:var(--accent);text-decoration:none}
+.map-ctrl-off{opacity:.35}
+.map-ctrl-off:hover{background:var(--bg-elev);color:var(--accent);border-color:var(--border)}
+.cn-map-marker{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:8px 6px;border-bottom:1px solid var(--border);color:var(--fg-soft)}
+.cn-map-marker--focus{background:var(--bg-sub);box-shadow:inset 3px 0 0 var(--accent)}
+.cn-map-marker-idx{min-width:24px;height:24px;border-radius:50%;background:#3498db;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.cn-map-marker-idx--main{background:#e74c3c}
+.cn-map-marker--focus .cn-map-marker-idx{background:var(--accent);color:#000}
+.cn-map-marker-thumb{width:48px;height:48px;object-fit:cover;border-radius:4px}
+.cn-map-marker-text{flex:1;min-width:160px;display:flex;flex-direction:column;gap:2px}
+.cn-map-marker-coords{font-family:monospace;color:var(--fg);font-size:13px}
+.cn-map-marker-label{word-break:break-word;color:var(--fg)}
+.cn-map-marker-date{font-size:12px;color:var(--fg-dim)}
+.cn-map-center{color:var(--accent);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;white-space:nowrap;margin-left:auto}
+.cn-map-center:hover{background:var(--accent);color:var(--bg);text-decoration:none}
+.map-popup{pointer-events:auto}
+.map-popup-pointer{fill:var(--bg-elev);stroke:var(--border);stroke-width:1}
+.map-popup-wrap{height:100%;display:flex;flex-direction:column;justify-content:flex-end;line-height:1.35}
+.map-popup--below .map-popup-wrap{justify-content:flex-start}
+.map-popup-card{background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--fg);font-size:13px;box-sizing:border-box;max-height:100%;overflow:hidden;display:flex;flex-direction:column;gap:6px;text-align:left}
+.map-popup-card>*{flex-shrink:0}
+.map-popup-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.map-popup-head .map-marker-idx{min-width:24px;height:24px;border-radius:50%;background:#3498db;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.map-popup-head .map-marker-idx--main{background:#e74c3c}
+.map-popup-close{color:var(--fg-dim);text-decoration:none;font-size:20px;line-height:1}
+.map-popup-close:hover{color:var(--accent);text-decoration:none}
+.map-popup-img{width:100%;max-height:120px;object-fit:cover;border-radius:4px;display:block}
+.map-popup-text{color:var(--fg);word-break:break-word;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.map-popup-text img{max-width:100%;max-height:100px}
+.map-popup-coords{font-family:monospace;font-size:12px;color:var(--fg-soft)}
+.map-popup-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--fg-dim)}
+.map-popup-actions{display:flex;gap:6px;align-items:center}
+.map-popup-actions .cn-map-center,.map-popup-actions .map-center-link{margin-left:0;color:var(--accent);text-decoration:none;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+`;
+  const markerRow = (mk, i) => {
+    const centerHref = viewHref({ zoom: MAX_ZOOM, lat: numOrNull(mk.lat) || 0, lng: numOrNull(mk.lng) || 0 }, { focus: i });
+    const label = firstLine(mk.label);
+    return `<div class="cn-map-marker${i === focus ? " cn-map-marker--focus" : ""}" id="marker-${i}">` +
+      `<span class="cn-map-marker-idx${mk.root ? " cn-map-marker-idx--main" : ""}">${mk.root ? "★" : i}</span>` +
+      (isBlob(mk.image) ? `<img class="cn-map-marker-thumb" src="${esc(blobSrc(mk.image, "/c"))}" alt=""/>` : "") +
+      `<span class="cn-map-marker-text">${label ? `<span class="cn-map-marker-label">${esc(label)}</span>` : ""}` +
+      `<span class="cn-map-marker-coords">${coord(mk.lat)}, ${coord(mk.lng)}</span>` +
+      (mk.createdAt ? `<span class="cn-map-marker-date">${esc(moment(mk.createdAt).format("YYYY/MM/DD"))}</span>` : "") +
+      `</span><a class="cn-map-center" href="${esc(centerHref)}">${esc(i18n.mapCenterHere)}</a></div>`;
+  };
+  const body = `
+  <h1 class="cn-map-title">${esc(name)}</h1>
+  <div class="cn-map-meta">
+    ${renderKindTag("map")}
+    ${mapObj.createdAt ? `<span class="cn-detail">📅 ${esc(moment(mapObj.createdAt).format("YYYY/MM/DD"))}</span>` : ""}
+    <span class="cn-detail">📍 ${coord(mapObj.lat)}, ${coord(mapObj.lng)}</span>
+  </div>
+  ${desc ? `<p class="cn-map-desc">${desc}</p>` : ""}
+  ${renderTagChips(mapObj.tags)}
+  <hr class="cn-sep"/>
+  ${mapHtml}
+  <h2 class="cn-section">${esc(i18n.mapMarkersTitle || "Markers")} (${allMarkers.length})</h2>
+  ${allMarkers.map(markerRow).join("")}
+`;
+  return renderClearnetPage({
+    title: `${name} | Oasis`,
+    ogTitle: name,
+    ogDescription: mapObj.description || "",
+    extraCss,
+    body,
+    hubFeedId: mapObj.author || null
+  });
 };
 
 exports.renderMapLocationUrl = (mapUrl) => {
@@ -553,14 +785,6 @@ exports.renderMapEmbedWithZoom = (mapData, mapUrl, detailUrl, zoom) => {
   return div({ class: "map-embed-section" },
     span({ class: "card-label" }, (i18n.mapLocationTitle || "Map Location") + ":"),
     renderMap([{ lat: la, lng: lo }], null, 0, { zoom: zoomVal, centerLat: la, centerLng: lo }),
-    form({ method: "GET", action: detailUrl },
-      label(i18n.mapZoomLabel || "Zoom"),
-      br(),
-      select({ name: "zoom" },
-        [2, 3, 4, 5, 6, 7, 8].map(z =>
-          option({ value: String(z), ...(zoomVal === z ? { selected: true } : {}) }, String(z)))),
-      br(), br(),
-      button({ type: "submit", class: "filter-btn" }, i18n.mapApplyZoom || "Apply Zoom")),
     mapUrl ? div({ class: "map-embed-url" },
       a({ href: mapUrl, class: "map-location-link" }, mapUrl)) : null);
 };
@@ -568,5 +792,5 @@ exports.renderMapEmbedWithZoom = (mapData, mapUrl, detailUrl, zoom) => {
 exports.renderMapLocationGrid = (lat, lng) => {
   if (lat === undefined || lng === undefined) return null;
   return div({ class: "map-location-embed" },
-    renderMap([{ lat: parseFloat(lat) || 0, lng: parseFloat(lng) || 0 }], null, 0));
+    renderMap([{ lat: parseFloat(lat) || 0, lng: parseFloat(lng) || 0 }], null, 0, { zoom: MIN_ZOOM, centerLat: parseFloat(lat) || 0, centerLng: parseFloat(lng) || 0 }));
 };

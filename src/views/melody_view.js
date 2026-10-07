@@ -2,7 +2,7 @@
 
 const { div, h2, p, section, audio, source, span, a, form, input, button, br, textarea, label } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderEcoTax } = require("./main_views");
+const { template, i18n, userLink, renderEcoTax, renderContentActions } = require("./main_views");
 
 const renderSequenceList = (sequence, availableIds = null) => {
   if (!sequence || sequence.length === 0) {
@@ -97,27 +97,31 @@ const renderBcsList = (bcsAudios) => {
     return p({ class: "empty" }, i18n.melodyAllEmpty || "No BCS compositions from other inhabitants yet.");
   }
   return div({ class: "melody-bcs-list" },
-    bcsAudios.map(a => div({ class: "melody-bcs-card" },
+    bcsAudios.map(item => div({ class: "melody-bcs-card" },
+      div({ class: "card-header activity-card-header" },
+        span(),
+        renderContentActions(item.key, `/audios/${encodeURIComponent(item.key)}`, { author: item.author, favKind: 'audios', isFavorite: item.isFavorite, torrentFrom: { blobId: item.url, name: item.title }, reportTitle: item.title })
+      ),
       div({ class: "melody-bcs-head" },
-        a.title ? h2({ class: "melody-bcs-title" }, a.title) : null,
+        item.title ? h2({ class: "melody-bcs-title" }, item.title) : null,
         div({ class: "melody-bcs-meta" },
-          userLink(a.author),
-          span({ class: "melody-bcs-date" }, moment(a.createdAt).format("YYYY/MM/DD HH:mm"))
+          userLink(item.author),
+          span({ class: "melody-bcs-date" }, moment(item.createdAt).format("YYYY/MM/DD HH:mm"))
         )
       ),
-      a.url
+      item.url
         ? div({ class: "audio-container melody-bcs-player" },
-            audio({ controls: true, preload: "metadata", src: `/blob/${encodeURIComponent(a.url)}` }),
-            form({ method: "GET", action: `/melody/transcode/${encodeURIComponent(a.key)}`, class: "audio-transcode-form" },
+            audio({ controls: true, preload: "metadata", src: `/blob/${encodeURIComponent(item.url)}` }),
+            form({ method: "GET", action: `/melody/transcode/${encodeURIComponent(item.key)}`, class: "audio-transcode-form" },
               button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
             )
           )
         : div({ class: "melody-bcs-actions" },
-            form({ method: "GET", action: `/melody/transcode/${encodeURIComponent(a.key)}`, class: "audio-transcode-form" },
+            form({ method: "GET", action: `/melody/transcode/${encodeURIComponent(item.key)}`, class: "audio-transcode-form" },
               button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
             )
           ),
-      a.description ? p({ class: "melody-bcs-desc" }, a.description) : null
+      item.description ? p({ class: "melody-bcs-desc" }, item.description) : null
     ))
   );
 };

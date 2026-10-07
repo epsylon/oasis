@@ -18,11 +18,11 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { renderLicenseChip, renderLicenseSelect } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
-const { renderMapLocationVisitLabel } = require("./maps_view");
+const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
 
 const userId = config.keys.id;
 
@@ -78,13 +78,6 @@ const renderVideoOwnerActions = (filter, videoObj, params = {}) => {
       )
     );
   }
-  items.push(
-    form(
-      { method: "POST", action: `/videos/delete/${encodeURIComponent(videoObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "delete-btn", type: "submit" }, i18n.videoDeleteButton)
-    )
-  );
 
   return items;
 };
@@ -111,14 +104,16 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
           div(
             { class: "card-header activity-card-header" },
             span(),
-            renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads || null, author: videoObj.author, favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title }, isFavorite: videoObj.isFavorite, reportTitle: videoObj.title })
+            videoObj.tribeOrigin
+              ? renderContentActions(null, videoObj.tribeOrigin.href)
+              : renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads || null, author: videoObj.author, favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title }, isFavorite: videoObj.isFavorite, reportTitle: videoObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('video', videoObj.key) : undefined })
           ),
           div(
             { class: "card-section video-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(title) : null, renderLicenseChip(videoObj.license)),
+            div({ class: "shop-title-row" }, title ? h2(title) : null, videoObj.tribeOrigin ? renderTribeOriginChip(videoObj.tribeOrigin) : videoObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('videos', videoObj.title, videoObj.key)) : null, renderLicenseChip(videoObj.license)),
             videoObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(videoObj.lifetime, i18n)) : null,
             renderVideoPlayer(videoObj),
-            renderEngagement(videoObj.key,
+            videoObj.tribeOrigin ? null : renderEngagement(videoObj.key,
               renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants),
               renderCommentsLink({ href: `/videos/${encodeURIComponent(videoObj.key)}`, count: commentCount })
             ),
@@ -188,6 +183,8 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
       br(),
       ...renderLicenseSelect(videoToEdit?.license, i18n),
       br(),
+      renderClearnetSelector(filter === "edit" ? !!videoToEdit?.clearnet : false, i18n),
+      br(),
       button({ type: "submit" }, filter === "edit" ? i18n.videoUpdateButton : i18n.videoCreateButton)
     )
   );
@@ -196,7 +193,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
 const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusM)) return true;
-  if (mode === "top") return censusM.length > 0;
+  if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
@@ -222,12 +219,6 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
       div({ class: "tags-header module-header-line" },
         h2(title),
         p(i18n.videoDescription)
-      ,
-        (() => {
-          const { renderReachChip } = require('./clearnet_view');
-          const isClearnet = !!(params.viewerPrefs && params.viewerPrefs.clearnetVideos);
-          return renderReachChip(isClearnet, i18n, `/c/inhabitant/${encodeURIComponent(userId)}`);
-        })()
       ),
       div(
         { class: "filters" },
@@ -292,8 +283,8 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(videoObj.title);
-  const { renderReachChip } = require('./clearnet_view');
-  const isClearnet = !!(params.authorPrefs && params.authorPrefs.clearnetVideos);
+  const isAuthor = String(videoObj.author) === String(userId);
+  const isClearnet = !!videoObj.clearnet;
 
   const chips = [
     renderLifespanChip(videoObj.lifetime, i18n),
@@ -307,20 +298,22 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   const tagsNode = renderTags(videoObj.tags);
 
   const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(videoObj.key, null, {
+    renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`, {
       author: videoObj.author,
       favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title },
       isFavorite: videoObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
-      reportTitle: videoObj.title
+      reportTitle: videoObj.title,
+      deleteAction: String(videoObj.author) === String(userId) ? contentDeleteAction('video', videoObj.key) : undefined
     })
   );
 
   const videoSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, clearnetItemHref('videos', videoObj.title, videoObj.key)),
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('videos', videoObj.title, videoObj.key) : null),
+      isAuthor ? renderClearnetSwitch('videos', videoObj.rootId || videoObj.key, isClearnet) : null,
       renderLicenseChip(videoObj.license)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
@@ -328,7 +321,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       ? p({ class: "tribe-side-description" }, ...renderStyledText(videoObj.description))
       : null,
     tagsNode,
-    renderMapLocationVisitLabel(videoObj.mapUrl),
+    renderMapEmbed(params.mapData, videoObj.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 

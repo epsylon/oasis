@@ -174,6 +174,43 @@ if (fs.existsSync(ssbGossipPath)) {
   log('ssb-gossip patch skipped: file not found');
 }
 
+// === Patch ssb-conn (the scheduler prefers up-to-date peers that replicate what we follow) ===
+const connSchedulerPath = path.resolve(__dirname, '../src/server/node_modules/ssb-conn/lib/conn-scheduler.js');
+if (fs.existsSync(connSchedulerPath)) {
+  const data = fs.readFileSync(connSchedulerPath, 'utf8');
+  const best = "            .z((peers) => typeof this.ssb.oasisPeerRank === 'function' ? peers.sort((a, b) => this.ssb.oasisPeerRank(b) - this.ssb.oasisPeerRank(a)) : peers)\n";
+  const worst = "                .z((peers) => typeof this.ssb.oasisPeerRank === 'function' ? peers.sort((a, b) => this.ssb.oasisPeerRank(a) - this.ssb.oasisPeerRank(b)) : peers)\n";
+  const connectAnchor = "            .z(sortByCooldownAscending)\n            .z(take(freeSlots))";
+  const rotateAnchor = "                .z(sortByOldestConnection)\n                .z(take(1))";
+  if (data.includes('this.ssb.oasisPeerRank')) {
+    log('ssb-conn scheduler already patched');
+  } else if (data.includes(connectAnchor) && data.includes(rotateAnchor)) {
+    fs.writeFileSync(connSchedulerPath, data
+      .replace(connectAnchor, "            .z(sortByCooldownAscending)\n" + best + "            .z(take(freeSlots))")
+      .replace(rotateAnchor, "                .z(sortByOldestConnection)\n" + worst + "                .z(take(1))"));
+    log('Patched ssb-conn scheduler to rank peers by version and shared replication');
+  } else {
+    log('ssb-conn scheduler patch skipped: unexpected conn-scheduler.js format');
+  }
+} else {
+  log('ssb-conn scheduler patch skipped: file not found');
+}
+
+// === Patch ssb-gossip (a pub known by an onion address and a normal one is kept on the normal one) ===
+if (fs.existsSync(ssbGossipPath)) {
+  const data = fs.readFileSync(ssbGossipPath, 'utf8');
+  const marker = "if (/^onion:/.test(String(f.address || '')) && /^net:/.test(String(addr.address || '')))";
+  const anchor = "        return f\n      }, 'string|object', 'string?'),";
+  if (data.includes(marker)) {
+    log('ssb-gossip address preference already patched');
+  } else if (data.includes(anchor)) {
+    fs.writeFileSync(ssbGossipPath, data.replace(anchor, `        ${marker} {\n          f.address = addr.address\n          f.host = addr.host\n          f.port = addr.port\n          f.failure = 0\n        }\n${anchor}`));
+    log('Patched ssb-gossip to prefer a normal address over an onion one for the same pub');
+  } else {
+    log('ssb-gossip address preference patch skipped: unexpected index.js format');
+  }
+}
+
 // === Patch ssb-gossip scheduler (no connection attempts while Oasis is paused) ===
 const ssbGossipSchedulePath = path.resolve(__dirname, '../src/server/node_modules/ssb-gossip/schedule.js');
 if (fs.existsSync(ssbGossipSchedulePath)) {
@@ -222,4 +259,17 @@ if (fs.existsSync(ssbLanPath)) {
   }
 } else {
   log('ssb-lan patch skipped: file not found');
+}
+
+// === Patch ssb-box (map leaks the index as libsodium's output format without native bindings) ===
+const ssbBoxPath = path.resolve(__dirname, '../src/server/node_modules/ssb-box/format.js');
+if (fs.existsSync(ssbBoxPath)) {
+  const data = fs.readFileSync(ssbBoxPath, 'utf8');
+  const target = '.map(sodium.crypto_sign_ed25519_pk_to_curve25519);';
+  if (data.includes(target)) {
+    fs.writeFileSync(ssbBoxPath, data.replace(target, '.map((pk) => sodium.crypto_sign_ed25519_pk_to_curve25519(pk));'));
+    log('Patched ssb-box so recipient keys are converted one argument at a time');
+  }
+} else {
+  log('ssb-box patch skipped: file not found');
 }

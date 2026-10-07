@@ -1,10 +1,33 @@
-const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [], versions = {}, paused = false }) => {
-  const { form, button, div, h2, p, section, a, hr, input, label, br, span, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
-  const { template, i18n } = require('./main_views');
+const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadcastActive = false, technicalPeers = [], versions = {}, staleKeys = [], onionKeys = [], ownVersion = '', lastErrors = {}, paused = false }) => {
+  const { form, button, div, h2, p, section, a, hr, input, label, br, span, table, tr, td, textarea, wbr } = require("../server/node_modules/hyperaxe");
+  const { template, i18n, renderStateChip } = require('./main_views');
+  const { NET_REASON_KEYS, canonicalKey } = require('../models/peer_health');
+  const majorMinor = (v) => String(v || '').split('.').slice(0, 2).map(n => parseInt(n, 10) || 0);
+  const isOutdated = (v) => {
+    if (!v || !ownVersion) return false;
+    const [a1, b1] = majorMinor(v), [a2, b2] = majorMinor(ownVersion);
+    return a1 < a2 || (a1 === a2 && b1 < b2);
+  };
+  const stale = new Set(staleKeys || []);
+  const outdatedKey = (k) => isOutdated((versions || {})[k]) || (!(versions || {})[k] && stale.has(k));
+  const versionCell = (k) => {
+    const v = (versions || {})[k];
+    if (!v) return [stale.has(k) ? span({ title: i18n.peerVersionUnannounced }, renderStateChip('closed', null, String(i18n.peerOutdated).toUpperCase())) : '—'];
+    const old = isOutdated(v);
+    return [span({ title: old ? i18n.peerOutdated : '' }, renderStateChip(old ? 'closed' : 'mutuals', null, String(v)))];
+  };
+  const stateCell = (tp) => {
+    const st = String(tp.state || '');
+    if (st === 'connected') return renderStateChip('mutuals', null, String(i18n.peerStateConnected).toUpperCase());
+    if (st === 'connecting') return renderStateChip('whole', null, String(i18n.peerStateConnecting).toUpperCase());
+    if (st === 'staged') return renderStateChip(outdatedKey(tp.key) ? 'whole' : 'mutuals', null, String(i18n.peerStateStaged).toUpperCase());
+    const err = (lastErrors || {})[canonicalKey(tp.key)];
+    return renderStateChip('hidden', null, String(i18n[err ? NET_REASON_KEYS[err.reason] : 'peerErrSilent'] || i18n.peerErrOther).toUpperCase());
+  };
 
   const pauseButton = paused
-    ? form({ action: "/peers/resume", method: "post" }, button({ type: "submit", class: "peers-resume-btn" }, i18n.peersResume || 'Resume'))
-    : form({ action: "/peers/pause", method: "post" }, button({ type: "submit", class: "peers-pause-btn" }, i18n.peersPause || 'Pause'));
+    ? form({ action: "/peers/resume", method: "post" }, button({ type: "submit", class: "tribe-action-btn success-btn" }, String(i18n.peersResume || 'Resume').toUpperCase()))
+    : form({ action: "/peers/pause", method: "post" }, button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.peersPause || 'Pause').toUpperCase()));
 
   const deduplicatePeers = (peers) => {
     const seen = new Set();
@@ -26,7 +49,13 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     return null;
   };
 
-  const overTor = (peerData) => /^onion:/i.test(String(peerData[0] || '')) || /\.onion$/i.test(String((peerData[1] || {}).host || ''));
+  const shortHost = (h) => {
+    const s = String(h || '');
+    const m = s.match(/^(?:onion:)?([a-z2-7]{16,56})\.onion(.*)$/i);
+    return m ? `${m[1].slice(0, 10)}….onion${m[2]}` : s;
+  };
+  const onion = new Set(onionKeys || []);
+  const overTor = (peerData) => /^onion:/i.test(String(peerData[0] || '')) || /\.onion$/i.test(String((peerData[1] || {}).host || '')) || onion.has(canonicalKey((peerData[1] || {}).key));
   const renderPeerRow = (peerData) => {
     const peer = peerData[1];
     const { name, users, key } = peer;
@@ -35,9 +64,9 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     const filteredUsers = (users || []).filter(u => u.id !== key);
     const userCount = Array.isArray(users) ? filteredUsers.length : null;
     return tr(
-      td({ 'data-label': i18n.peerHost || 'Pub' }, a({ href: peerUrl, class: "user-link" }, name || key.slice(0, 20) + '…')),
+      td({ 'data-label': i18n.peerHost || 'Pub' }, a({ href: peerUrl, class: "user-link", title: name || key }, name ? shortHost(name) : key.slice(0, 20) + '…')),
       td({ 'data-label': i18n.peersOasisId || 'Oasis ID' }, a({ href: peerUrl, class: 'user-link peer-key' }, key)),
-      td({ 'data-label': i18n.peersOasisVersion || 'Version' }, String((versions || {})[key] || '—')),
+      td({ 'data-label': i18n.peersOasisVersion || 'Version' }, ...versionCell(key)),
       td({ 'data-label': i18n.peersTorColumn }, tor
         ? span({ class: 'ubi-tick-ok', title: i18n.peersTorYes }, '✓')
         : span({ class: 'peer-tor-no', title: i18n.peersTorNo }, '—')),
@@ -73,12 +102,14 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     const action = connected ? 'disconnect' : 'connect';
     const btnLabel = connected ? (i18n.peerDisconnect || 'Disconnect') : (i18n.peerConnect || 'Connect');
     return tr(
-      td({ 'data-label': 'Key' }, a({ href: `/author/${encodeURIComponent(k)}`, class: 'user-link peer-key' }, k ? k.slice(0, 20) + '…' : '—')),
-      td({ 'data-label': 'Host' }, String(tp.host || '—')),
-      td({ 'data-label': i18n.peerPort || 'Port' }, String(tp.port || '—')),
-      td({ 'data-label': i18n.peersOasisVersion || 'Version' }, String((versions || {})[k] || '—')),
-      td({ 'data-label': 'State' }, String(tp.state || tp.source || '—')),
-      td({ 'data-label': 'Last change' }, String(tp.stateChange ? new Date(tp.stateChange).toISOString().slice(0, 16).replace('T', ' ') : '—')),
+      td({ 'data-label': i18n.peersOasisId }, a({ href: `/author/${encodeURIComponent(k)}`, class: 'user-link peer-key' }, k ? k.slice(0, 20) + '…' : '—')),
+      onion.has(canonicalKey(tp.key)) || /\.onion$/i.test(String(tp.host || ''))
+        ? td({ 'data-label': i18n.peerAddressLabel, class: 'peer-host' }, renderStateChip('fediverse', null, 'TOR'))
+        : td({ 'data-label': i18n.peerAddressLabel, title: String(tp.host || ''), class: 'peer-host' }, tp.host ? shortHost(tp.host).split(/(?<=\.)/).reduce((acc, part, i) => i ? [...acc, wbr(), part] : [part], []) : '—'),
+      td({ 'data-label': i18n.peerPort, class: 'peer-port' }, String(tp.port || '—')),
+      td({ 'data-label': i18n.peersOasisVersion || 'Version' }, ...versionCell(k)),
+      td({ 'data-label': i18n.peerStateLabel }, stateCell(tp)),
+      td({ 'data-label': i18n.peerLastChangeLabel }, String(tp.stateChange ? new Date(tp.stateChange).toISOString().slice(0, 16).replace('T', ' ') : '—')),
       td(
         form({ method: "POST", action: `/peers/${action}`, class: "inline-form" },
           input({ type: "hidden", name: "key", value: k }),
@@ -110,12 +141,12 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
     technicalPeers.length
       ? table({ class: 'block-info-table' },
           tr(
-            td({ class: 'card-label' }, 'Key'),
-            td({ class: 'card-label' }, 'Host'),
-            td({ class: 'card-label' }, i18n.peerPort || 'Port'),
+            td({ class: 'card-label' }, i18n.peersOasisId),
+            td({ class: 'card-label' }, i18n.peerAddressLabel),
+            td({ class: 'card-label peer-port' }, i18n.peerPort),
             td({ class: 'card-label' }, i18n.peersOasisVersion || 'Version'),
-            td({ class: 'card-label' }, 'State'),
-            td({ class: 'card-label' }, 'Last change'),
+            td({ class: 'card-label' }, i18n.peerStateLabel),
+            td({ class: 'card-label' }, i18n.peerLastChangeLabel),
             td({ class: 'card-label' }, '')
           ),
           ...technicalRows

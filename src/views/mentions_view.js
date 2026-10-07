@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderContentActions, renderModuleStats } = require("./main_views");
+const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE } = require("./main_views");
 const { getViewDetailsAction } = require("./activity_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -14,7 +14,7 @@ const excerpt = (text, max = 320) => {
 
 const typeLabel = (type) => i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)] || String(type || '').toUpperCase();
 
-const renderMentionCard = (item, readKeys) => {
+const renderMentionCard = (item, readKeys, params = {}) => {
   const href = getViewDetailsAction(item.type, { id: item.id, key: item.id, author: item.author, content: item.content });
   const isOwn = String(item.author) === String(userId);
   const read = readKeys.has(String(item.key));
@@ -26,7 +26,15 @@ const renderMentionCard = (item, readKeys) => {
         ),
         read ? null : span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip))
       ),
-      renderContentActions(item.id, href, { author: item.author, reportTitle: item.title || item.text })
+      renderContentActions(item.id, href, {
+        author: item.author,
+        reportTitle: item.title || item.text,
+        spread: CONTENT_SPREADABLE.has(item.type) ? ((params.spreadMap && params.spreadMap.get(item.id)) || null) : undefined,
+        ...(item.type === 'torrent' || item.type === 'file' ? { spreadTitle: i18n.seedAction } : {}),
+        ...(CONTENT_TORRENTABLE.has(item.type) && item.content && typeof item.content.url === 'string' && item.content.url.startsWith('&')
+          ? { torrentFrom: { blobId: item.content.url, name: item.content.title || item.content.fileName || '' } }
+          : {})
+      })
     ),
     div({ class: "card-section mention-card-body" },
       item.title
@@ -88,7 +96,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
     ),
     section(
       items.length
-        ? div({ class: "mentions-list" }, ...items.map(item => renderMentionCard(item, readKeys)))
+        ? div({ class: "mentions-list" }, ...items.map(item => renderMentionCard(item, readKeys, params)))
         : div({ class: "no-content-box" }, p({ class: "empty" }, i18n.noMentions))
     )
   );

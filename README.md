@@ -87,7 +87,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Forums: Module to discover and manage forums.
  + Games: Module to play and share your scores in various mini-games.	
  + Governance: Module to discover and manage votes.	
- + Graphos: Module to explore the network as an interactive map of peers.
+ + Graphos: Module to explore the network as an interactive map of peers, with a Federation view of the PUBs: which ones are connected, unreachable and why, outdated or reachable only over Tor, and how they follow each other.
  + Housing: Module to discover and manage places.
  + Images: Module to discover and manage images.
  + Industry: Module to manage the means of production collectively.
@@ -97,7 +97,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Logistics: Discover and manage logistic plans.
  + Logs: Module to keep a private diary of your experiences, written by hand or by the AI.
  + Mailing Lists: Discover and manage mailing lists.
- + Maps: Module to manage and share offline maps.
+ + Maps: Module to manage and share offline maps, drawn locally over a shaded-relief raster base with vector borders, coasts and places, all vendored in the repository so nothing is ever downloaded (made with Natural Earth, free vector and raster map data @ naturalearthdata.com).
  + Market: Module to exchange goods or services.
  + Matches: Module to explore and visualize the matches in the blockchain.
  + Melody: Module to generate and share the "sound" of your blockchain.
@@ -119,7 +119,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Torrents: Module to explore and manage torrents.
  + Transfers: Module to discover and manage smart-contracts (transfers).	
  + Trending: Module to explore the most popular content.	
- + Tribes: Module to explore or create tribes (groups).	
+ + Tribes: Module to explore or create tribes (groups), whose members choose how far each piece of content reaches: TRIBE, OASIS or CLEARNET.	
  + Videos: Module to discover and manage videos.	
  + Wallet: Module to manage your digital assets (ECOin).	
  + Wikis: Module to build shared knowledge pages, versioned and linked.
@@ -169,6 +169,8 @@ You can also receive a -Universal Basic Income- for taking part in the network.
 Oasis contains its own UBI (Universal Basic Income), distributed monthly in ECOin by the PUBs and weighted by each inhabitant's participation and trust (karma), following public rules that anyone can read in Banking → Rules.
 
   ![SNH](https://solarnethub.com/git/oasis-banking.png "SolarNET.HuB")
+
+Each claim is addressed to one PUB and paid only by it; the network's default PUB covers the claims another PUB leaves unpaid for days. How a PUB operator sets it up is in the [deploy guide](docs/PUB/deploy.md).
   
 ----------
 
@@ -230,11 +232,13 @@ Connect your accounts from **Settings → Multiverse**, then open them from **Mu
 
 Oasis contains its own telephone: voice calls between inhabitants, end-to-end encrypted, with no operator, server or account in between.
 
- + Every inhabitant has a phone number, derived from their Oasis ID and shown on their profile. Dial it (or an Oasis ID) from **Phone**, or call from a profile.
+ + Every inhabitant has a phone number, derived from their Oasis ID and shown on their profile. Dial it (or an Oasis ID) from **Phone**, or call from a profile; a number that belongs to one inhabitant is called straight away.
+ + A call shows **Connecting** until the other device has it, then rings for both. If the other side is busy or cannot be reached, you are told and can leave a message.
  + Call several inhabitants at once to make a joint call.
  + When nobody answers, leave a Private Audio Message (PaM).
  + Choose who can call you (everyone, or only mutual supporters) in **Settings → Phone**.
  + **Do not disturb** is published on your profile as a chip and can be switched from your profile or from Settings; callers are told before anything rings.
+ + The call lives in the bar at the top of every page, next to the other notices of Oasis, so you can keep browsing.
  + When two inhabitants cannot reach each other directly, the call is relayed by a PUB, which cannot listen to it.
 
 ## Rooms
@@ -242,9 +246,11 @@ Oasis contains its own telephone: voice calls between inhabitants, end-to-end en
 Rooms are encrypted meeting places, under **Community → Rooms**, that inhabitants join and leave whenever they want.
 
  + A room is OPEN or INVITE-ONLY (entered with an invite code); tribes and sub-tribes have rooms of their own.
- + Each room has a phone number, and its creator chooses **Do not disturb** or **Switchboard**: with Switchboard, dialling the number from Phone enters the room.
+ + Entering a room joins its call: you hear whoever is talking, with no second step.
+ + Each room has a phone number, and its creator chooses **Do not disturb** or **Switchboard**: with Switchboard, dialling the number from Phone enters the room; a room with nobody inside cannot be called.
  + Everything is encrypted end to end: the PUB of the room's creator relays it without being able to read it.
  + Mute yourself whenever you want.
+ + An OPEN room can be published as CLEARNET: its public page shows only its name and number.
 
 See [docs/phone/README.md](docs/phone/README.md) for both.
 
@@ -257,6 +263,38 @@ See [docs/phone/README.md](docs/phone/README.md) for both.
 ## PDF export
 
 Many content pages offer **Generate PDF** and **Share via PM** (the PDF travels encrypted, attached to a new private message): reports, votes, events, tasks, calendars, CVs, emergencies, campaigns, logistics routes, mailing lists, the Pixelia canvas and transfers (as smart contracts). Pads, wiki pages and school certificates can be downloaded as PDF too.
+
+## Writing
+
+Long writings (blogs, private messages, mailing lists, forums, comments, tribe content) are stored as several linked messages and always read back as one document, so no text is ever cut.
+
+## Withdrawing content
+
+Your own comments and L.A.R.P. wall posts can be deleted by you: they are hidden for everyone. A vote can no longer be edited or deleted once it has received votes or opinions, or when it belongs to Parliament or Courts.
+
+----------
+
+## Clearnet
+
+Everything you publish is created as **OASIS** (visible to the inhabitants of Oasis only) or **CLEARNET** (also served on the public web pages of every PUB that replicates you, under `/c`). You choose when you create the item and can switch it later from the item's page. Private, hidden, closed, invite-only, paid or tribe content can never be CLEARNET; if an item is later hidden or closed it leaves the CLEARNET and does not come back on its own.
+
+ + Modules with the choice: audios, videos, images, documents, files, torrents, bookmarks, blogs, feed, wiki, podcasts, market, shops, school, jobs, events, projects, rooms, maps, calendars, emergencies, campaigns and housing.
+ + Public pages show what the author published, never what other inhabitants added (confirmations, signatures, requests, comments).
+ + Your public page lists what you put on the CLEARNET; the hub `/c` and its sitemap list everything public, including the public tribes.
+
+ + Clearnet guide: [docs/PUB/clearnet.md](docs/PUB/clearnet.md)
+
+----------
+
+## Tribes
+
+Tribes are groups with their own encrypted content. In a public tribe (and in the public sub-tribes of a public tribe) every piece of content has a reach level that any member can change:
+
+ + **TRIBE** (default): members only, encrypted.
+ + **OASIS**: a readable copy is visible to every inhabitant, on the tribe page, in the general module lists and in Activity, with a chip naming the tribe.
+ + **CLEARNET**: also on the tribe's public web page, `/c/tribe/…`.
+
+Opening leaves a readable copy outside the tribe: moving it back to TRIBE hides it, and that stays so even if the member who closed it leaves the tribe, but copies already shared cannot be erased. The copy carries no votes, attendees, assignees or opinions; editing refreshes it while it is open and deleting withdraws it. Private tribes allow TRIBE only, and a tribe that becomes private withdraws everything it had opened.
 
 ----------
   
@@ -278,7 +316,7 @@ So you'll need to know someone, or participate in a collective action that distr
 
 ## TOR
 
-PUBs can also be reached as Tor onion addresses, even a PUB with no public IP at all. With Tor running on your device and onion connections allowed, Oasis connects to them like to any other PUB, and the **TOR** column in **Peers** shows which peers are reachable over Tor.
+PUBs can also be reached as Tor onion addresses, even a PUB with no public IP at all. With Tor running on your device and onion connections allowed, Oasis connects to them like to any other PUB, and the **TOR** column in **Peers** shows which peers are reachable over Tor. Nobody is forced to use Tor: nodes and PUBs with and without it work together, and a PUB that only accepts Tor connections says so in Peers. Peers also shows the Oasis version each peer announces and, when a connection fails, a readable reason.
 
  + Tor guide: [docs/PUB/TOR.md](docs/PUB/TOR.md)
 
@@ -339,7 +377,7 @@ Visit ['Settings'](https://wiki.solarnethub.com/socialnet/snh#settings_minimal) 
 
 ## SNH-Hub (for HackLabs):
 
-The public content of the ['PUB: "La Plaza"'](https://wiki.solarnethub.com/socialnet/snh-pub) can be visited from outside the [project network](https://wiki.solarnethub.com/socialnet/overview), through the [World Wide Web](https://en.wikipedia.org/wiki/World_Wide_Web) (aka [Clearnet](https://en.wikipedia.org/wiki/Clearnet_(networking))).
+The CLEARNET content of the ['PUB: "La Plaza"'](https://wiki.solarnethub.com/socialnet/snh-pub) can be visited from outside the [project network](https://wiki.solarnethub.com/socialnet/overview), through the [World Wide Web](https://en.wikipedia.org/wiki/World_Wide_Web) (aka [Clearnet](https://en.wikipedia.org/wiki/Clearnet_(networking))).
 
   ![SNH](https://solarnethub.com/git/snh-pub-feed.png "SolarNET.HuB") 
   
